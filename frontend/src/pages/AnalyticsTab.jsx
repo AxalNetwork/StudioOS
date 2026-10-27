@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { api } from '../lib/api';
 import { TechnicalDepthRow } from './DepthCount';
+import Sheet from '../ui/Sheet.jsx';
 
 const SUB_TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -417,7 +418,7 @@ function UsersSub({ anonymized, onExport, busy, onFiltersChange }) {
   );
 }
 
-function UserDrillDown({ id, anonymized, onClose }) {
+export function UserDrillDown({ id, anonymized, onClose }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   const [errStatus, setErrStatus] = useState(null);
@@ -430,69 +431,64 @@ function UserDrillDown({ id, anonymized, onClose }) {
       .catch(e => { if (alive) { setErr(e?.message || 'Failed'); setErrStatus(e?.status || null); } });
     return () => { alive = false; };
   }, [id, reloadKey]);
+  // D1317: one user's drill-down is a detail panel, the shared Sheet (640px, its max-w-2xl).
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-          <div className="font-semibold text-gray-900 text-sm dark:text-gray-100">User drill-down · #{id}</div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-sm">Close</button>
-        </div>
-        <div className="p-4 space-y-3 text-xs">
-          {err && <RetryCard tab="user detail" status={errStatus} message={err} onRetry={() => setReloadKey(k => k + 1)} />}
-          {!data && !err && <div className="text-gray-500">Loading…</div>}
-          {data && (
-            <>
-              <div className="text-sm">
-                <div className="font-semibold">{anonymized ? maskName(data.user.name, data.user.id) : (data.user.name || '—')}</div>
-                <div className="text-gray-500">{anonymized ? maskEmail(data.user.email, data.user.id) : data.user.email} · {data.user.role}</div>
-                <div className="text-gray-500 mt-1">
-                  Plan: {data.user.sub_plan || 'free'} · Status: {data.user.sub_status || '—'} · LTV: ${data.lifetime_value_usd}
-                </div>
+    <Sheet label={`User drill-down · #${id}`} title={`User drill-down · #${id}`} width={640} onClose={onClose} testId="analytics-user-drilldown">
+      <div className="p-4 space-y-3 text-xs">
+        {err && <RetryCard tab="user detail" status={errStatus} message={err} onRetry={() => setReloadKey(k => k + 1)} />}
+        {!data && !err && <div className="text-gray-500">Loading…</div>}
+        {data && (
+          <>
+            <div className="text-sm">
+              <div className="font-semibold">{anonymized ? maskName(data.user.name, data.user.id) : (data.user.name || '—')}</div>
+              <div className="text-gray-500">{anonymized ? maskEmail(data.user.email, data.user.id) : data.user.email} · {data.user.role}</div>
+              <div className="text-gray-500 mt-1">
+                Plan: {data.user.sub_plan || 'free'} · Status: {data.user.sub_status || '—'} · LTV: ${data.lifetime_value_usd}
               </div>
-              <div>
-                <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Feature usage (last 90d)</div>
-                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-40 overflow-y-auto dark:border-gray-800">
-                  {data.feature_usage.map((f, i) => (
-                    <div key={i} className="flex justify-between px-2 py-1">
-                      <span className="font-mono text-gray-700 dark:text-gray-300">{f.action}</span>
-                      <span className="text-gray-500">{f.c}</span>
-                    </div>
-                  ))}
-                  {data.feature_usage.length === 0 && <div className="text-gray-400 px-2 py-2">No activity.</div>}
-                </div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Feature usage (last 90d)</div>
+              <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-40 overflow-y-auto dark:border-gray-800">
+                {data.feature_usage.map((f, i) => (
+                  <div key={i} className="flex justify-between px-2 py-1">
+                    <span className="font-mono text-gray-700 dark:text-gray-300">{f.action}</span>
+                    <span className="text-gray-500">{f.c}</span>
+                  </div>
+                ))}
+                {data.feature_usage.length === 0 && <div className="text-gray-400 px-2 py-2">No activity.</div>}
               </div>
-              <div>
-                <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Support tickets ({data.support_tickets.length})</div>
-                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-32 overflow-y-auto dark:border-gray-800">
-                  {data.support_tickets.map(t => (
-                    <div key={t.id} className="flex justify-between px-2 py-1">
-                      <span className="text-gray-700 truncate dark:text-gray-300">{t.subject}</span>
-                      <span className="text-gray-500">{t.status}</span>
-                    </div>
-                  ))}
-                  {data.support_tickets.length === 0 && <div className="text-gray-400 px-2 py-2">No tickets.</div>}
-                </div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Support tickets ({data.support_tickets.length})</div>
+              <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-32 overflow-y-auto dark:border-gray-800">
+                {data.support_tickets.map(t => (
+                  <div key={t.id} className="flex justify-between px-2 py-1">
+                    <span className="text-gray-700 truncate dark:text-gray-300">{t.subject}</span>
+                    <span className="text-gray-500">{t.status}</span>
+                  </div>
+                ))}
+                {data.support_tickets.length === 0 && <div className="text-gray-400 px-2 py-2">No tickets.</div>}
               </div>
-              <div>
-                <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Billing history ({data.billing_history?.length || 0})</div>
-                <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-32 overflow-y-auto dark:border-gray-800">
-                  {(data.billing_history || []).map((b, i) => (
-                    <div key={i} className="flex items-center justify-between px-2 py-1">
-                      <span className="text-gray-700 dark:text-gray-300">{b.event_type} · {b.plan}</span>
-                      <span className="text-gray-500">${b.amount_usd} · {b.status}</span>
-                    </div>
-                  ))}
-                  {(!data.billing_history || data.billing_history.length === 0) && (
-                    <div className="text-gray-400 px-2 py-2">No billing events.</div>
-                  )}
-                </div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-700 mb-1 dark:text-gray-300">Billing history ({data.billing_history?.length || 0})</div>
+              <div className="border border-gray-200 rounded divide-y divide-gray-100 max-h-32 overflow-y-auto dark:border-gray-800">
+                {(data.billing_history || []).map((b, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1">
+                    <span className="text-gray-700 dark:text-gray-300">{b.event_type} · {b.plan}</span>
+                    <span className="text-gray-500">${b.amount_usd} · {b.status}</span>
+                  </div>
+                ))}
+                {(!data.billing_history || data.billing_history.length === 0) && (
+                  <div className="text-gray-400 px-2 py-2">No billing events.</div>
+                )}
               </div>
-              <div className="text-gray-600">Errors logged (90d): <strong>{data.error_count_90d}</strong></div>
-            </>
-          )}
-        </div>
+            </div>
+            <div className="text-gray-600">Errors logged (90d): <strong>{data.error_count_90d}</strong></div>
+          </>
+        )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 

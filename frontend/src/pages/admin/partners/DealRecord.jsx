@@ -13,6 +13,7 @@ import {
 import { itemsOf, useRead } from './usePartnerDesk';
 import { useDealRead } from './useDealsReferrals';
 import { AMBER, CopyButton, DealStatePill, Done, EYE, Fact, LINK, MONO, ReadState, Refusal, SUB, Unread } from './parts';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D923 (#2370) — one deal (PI6), at `/admin/partner-invitations/deals/:id`:
@@ -94,7 +95,7 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
 
   if (!deal) {
     return (
-      <Lightbox label="Deal" title="Deal" eyebrow="Deals" onClose={onClose} width={560} pageBelow="lg" testId="partners-deal">
+      <Sheet label="Deal" title="Deal" eyebrow="Deals" onClose={onClose} width={560} pageBelow="lg" testId="partners-deal">
         <div className="flex flex-col gap-2 px-5 py-4" data-testid="partners-deal-absent">
           {found.state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{READING}</span> : null}
           {found.state === 'unreadable' ? (
@@ -102,7 +103,7 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
           ) : null}
           {found.state === 'none' ? <p className="m-0 text-[14px] font-extrabold text-axal-ink dark:text-gray-100" data-testid="partners-deal-absent-reason">{NO_SUCH_DEAL}</p> : null}
         </div>
-      </Lightbox>
+      </Sheet>
     );
   }
 
@@ -123,7 +124,7 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
 
   return (
     <>
-      <Lightbox label={`Deal ${deal.id} with ${partnerName}`} title={partnerName}
+      <Sheet label={`Deal ${deal.id} with ${partnerName}`} title={partnerName}
         sub={`Deal #${deal.id}${partnerEmail ? ` · ${partnerEmail}` : ' · address not recorded'}`} eyebrow="Deals"
         onClose={onClose} width={940} pageBelow="lg" testId="partners-deal" footer={footer}>
         <div className="flex flex-col gap-4 px-5 py-4" data-testid="partners-deal-body">
@@ -264,7 +265,7 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
             </div>
           </div>
         </div>
-      </Lightbox>
+      </Sheet>
       {rerun ? <RerunDialog deal={deal} onClose={() => setRerun(false)} onDone={reads.reload} /> : null}
     </>
   );

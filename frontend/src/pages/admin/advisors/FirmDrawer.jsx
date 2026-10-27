@@ -10,6 +10,7 @@ import FirmAttachDialog from './FirmAttachDialog';
 import {
   DEALS_ELSEWHERE, LIST_FIRST, SETTLEMENTS_ELSEWHERE, detachCopy, detachDone, directoryCopy, directorySavedLine, drawerOf, profileOwner,
 } from './firmsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D979 (#2765) — AP6, one firm's drawer on Advisors & Partners › Firms, from
@@ -122,7 +123,7 @@ export default function FirmDrawer({ firmId, links, onClose, onChanged }) {
   };
 
   return (
-    <Lightbox label={title} eyebrow="Firm" title={title} sub={d ? [d.sub, d.specialization].filter(Boolean).join(' · ') || null : null} onClose={onClose} width={720} testId="ap-firm-drawer"
+    <Sheet label={title} eyebrow="Firm" title={title} sub={d ? [d.sub, d.specialization].filter(Boolean).join(' · ') || null : null} onClose={onClose} width={720} testId="ap-firm-drawer"
       footer={<div className="flex justify-end"><button type="button" className={actionGhost} onClick={onClose}>Close</button></div>}>
       <div className="flex flex-col gap-3.5 px-5 py-4">
         {read.status === 'loading' && !d ? <span className="font-mono text-[12px] text-axal-muted" data-testid="ap-firm-reading">Reading…</span> : null}
@@ -220,6 +221,6 @@ export default function FirmDrawer({ firmId, links, onClose, onChanged }) {
 
       {ask ? <Confirm copy={ask.copy} onClose={() => setAsk(null)} onConfirm={ask.run} danger={ask.kind === 'detach'} testId={`ap-firm-${ask.kind}-confirm`} /> : null}
       {attaching && links ? <FirmAttachDialog links={links} firm={firm} onClose={() => setAttaching(false)} onDone={changed} /> : null}
-    </Lightbox>
+    </Sheet>
   );
 }

@@ -254,6 +254,10 @@ test('the investor lightbox reads the record; its next step, step and feedback g
     await v.flush();
     assert.ok(v.calls.some((c) => /\/modules\/capital-relationships\/records\/41\?project=3/.test(c.url)));
     assert.ok(v.text('caprel-investor-record').includes('Timeline'));
+    const sheet = Object.entries(v.by('caprel-investor')).find(([k]) => k.startsWith('__reactProps$'))[1];
+    assert.equal(sheet.role, 'dialog', 'D1317: the investor opens as the shared Sheet');
+    assert.ok(sheet['aria-labelledby']);
+    assert.equal(sheet['data-width'], 760, 'its 860 takes the Sheet’s widest');
     await v.click('caprel-investor-next');
     await v.change('caprel-next-step', 'Partner meeting');
     await v.change('caprel-next-due', '2026-11-02');

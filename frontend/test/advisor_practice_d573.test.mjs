@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { AdvisorCard } from '../src/pages/AdvisorsPage.jsx';
+import { AdvisorCard, AdvisorDetail } from '../src/pages/AdvisorsPage.jsx';
 import { AdvisorProfileView } from '../src/pages/advisor/AdvisorProfilePage.jsx';
 import { DeliverableEditor } from '../src/pages/advisor/practice/DeliverablesByClient.jsx';
 import { LinkCard } from '../src/pages/advisor/practice/BookingLinksPanel.jsx';
@@ -20,6 +20,16 @@ test('D573: the directory renders the Worker name, rate and active state without
   const unknown = html(h(AdvisorCard, { advisor: { ...row, hourly_rate_usd: null } }));
   assert.match(unknown, /Not recorded — no rate set/);
   assert.doesNotMatch(unknown, />Free</);
+});
+
+test('D1317: an advisor opens as the shared right-side Sheet at 640px, named by their name', () => {
+  const out = html(h(AdvisorDetail, { advisor: { uid: 'a1', display_name: 'Practice One', headline: 'Product advisor', hourly_rate_usd: 175 }, onClose() {} }));
+  const id = out.match(/<h2 id="([^"]+)"[^>]*>Practice One<\/h2>/)?.[1];
+  assert.ok(id);
+  assert.match(out, new RegExp(`role="dialog" aria-modal="true" aria-labelledby="${id}"[^>]*data-testid="advisor-detail" data-width="640"`));
+  assert.match(out, /data-testid="advisor-detail-scrim"/);
+  assert.match(out, /Product advisor/);
+  assert.match(out, /\$175\/hr/);
 });
 
 test('D573: due date and manual status reach the editor and payload, while receipt stamps determine delivery and acceptance', () => {

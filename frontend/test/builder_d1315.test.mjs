@@ -139,13 +139,14 @@ test('the pane: the eyebrow trail, one h2 "Builder", the page line, and honest w
   const keysHtml = html(h(BuilderSection, { view: builderViewFor('/account/builder/keys'), storage }), '/account/builder/keys');
   const keys = text(keysHtml);
   assert.match(keys, /^Builder › API keys Builder Keys your own scripts use to call StudioOS\./);
-  // D1317 (#2480): API keys is live, so its page draws instead of a wait.
+  // #2480: API keys is live, so its page draws instead of a wait.
   assert.match(keysHtml, /data-testid="apik-page"/);
   assert.doesNotMatch(keysHtml, /builder-wait-keys/);
   const drawer = html(h(BuilderSection, { view: builderViewFor('/account/builder/assistants/g1'), storage }), '/account/builder/assistants/g1');
   assert.match(text(drawer), /^Builder › AI assistants Builder/);
   assert.match(drawer, /data-testid="builder-drawer-assistant"/);
-  assert.match(drawer, /href="\/account\/builder"[^>]*>‹ MCP and services</);
+  assert.match(drawer, /role="dialog" aria-modal="true" aria-labelledby="[^"]+"[^>]*data-testid="builder-drawer-assistant"[^>]*data-width="560"/, 'D1317: the drawer is the shared Sheet, 560px');
+  assert.match(drawer, /data-testid="builder-wait-services"/, 'the page stays drawn under the sheet');
   assert.doesNotMatch(drawer, /builder-moved-notice/, 'the notice is the page’s, not a drawer’s');
   // Never sample data: no bracketed canvas placeholder reaches the page.
   for (const m of [services, keys, drawer]) assert.doesNotMatch(m, /\[(Assistant|Vendor|Northwind|Deploy bot|CRM)/);

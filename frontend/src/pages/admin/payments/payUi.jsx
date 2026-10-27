@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { Lightbox, usePhoneWidth } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1014 (#2833) — the Payments page's shared pieces, so Catalogue, Stripe
@@ -55,12 +56,17 @@ export function Unread({ text, onRetry, testId }) {
   );
 }
 
-/** Every Payments dialog: the shared lightbox, a bottom sheet on a phone (PAY12). */
-export function PayDialog({ label, title, sub, onClose, footer, children, testId }) {
+/**
+ * Every Payments dialog: the shared lightbox, a bottom sheet on a phone (PAY12).
+ * D1317: `sheet` draws a record (the product) as the shared right Sheet instead;
+ * the Stripe dialogs, which change something, stay centred.
+ */
+export function PayDialog({ label, title, sub, onClose, footer, children, testId, sheet = false }) {
+  const Frame = sheet ? Sheet : Lightbox;
   return (
-    <Lightbox label={label || title} title={title} sub={sub} onClose={onClose} footer={footer} phone="sheet" width={520} testId={testId}>
+    <Frame label={label || title} title={title} sub={sub} onClose={onClose} footer={footer} phone="sheet" width={520} testId={testId}>
       <div className="flex flex-col gap-3 px-5 py-4">{children}</div>
-    </Lightbox>
+    </Frame>
   );
 }
 
