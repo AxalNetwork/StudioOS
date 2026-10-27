@@ -269,9 +269,13 @@ async function prototype(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
     sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
-    // D1083 (#2948): From Lovable, the project's one app link, under From GitHub. D1098 (#2963): Vercel's Live strip and previews.
-    parts: { github: await prototypeGithub(env, p), vercel: await fromVercel('prototype_mvp', async () => mvpVercel(env, p.id, await projectMember(env, p, viewer))),
-      lovable: await lovablePart(env, p.id, 'build', [{ id: p.id, label: 'Prototype / MVP' }]) } };
+    // D1083 (#2948): From Lovable, the project's one app link, under From GitHub.
+    // D1098 (#2963): From Vercel, the Live strip and each must-have's preview.
+    parts: {
+      github: await prototypeGithub(env, p),
+      lovable: await lovablePart(env, p.id, 'build', [{ id: p.id, label: 'Prototype / MVP' }]),
+      vercel: await fromVercel('prototype_mvp', async () => mvpVercel(env, p.id, await projectMember(env, p, viewer))),
+    } };
 }
 
 /** GitHub's state for a fed must-have, in the module's words (D782, #2112). */
@@ -505,15 +509,17 @@ async function fromGithub(module: 'founding_team' | 'company_creation', read: ()
 }
 
 /**
- * A module's part from Vercel: Prototype / MVP's and Product roadmap's
- * (D1098, #2963, `services/vercel/buildReads.ts`) and Company creation's
- * (D1099, #2964). A read that names its own state keeps it. Its own failure
- * leaves the module readable; the log names the module only.
+ * A module's part from Vercel. Its own failure leaves the module readable.
+ * D1098 (#2963): Prototype / MVP and Product roadmap already set `state`, and the log names the module only.
+ * D1099 (#2964): Company creation wraps the reader and names the failure.
  */
 async function fromVercel(module: 'prototype_mvp' | 'product_roadmap' | 'company_creation', read: () => Promise<Record<string, unknown>>) {
-  try { return { state: 'ok', ...(await read()) }; }
-  catch {
-    console.error('[cycle_build] vercel %s read failed', module);
+  try {
+    const part = await read();
+    return module === 'company_creation' ? { state: 'ok', ...part } : part;
+  } catch (error) {
+    if (module === 'company_creation') console.error('[cycle_build] vercel company_creation read failed', (error as Error)?.message);
+    else console.error('[cycle_build] vercel %s read failed', module);
     return { state: 'unreadable', reason: 'What Vercel brought could not be read.' };
   }
 }

@@ -147,7 +147,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/pipeline      → pipeline.ts
 /api/search        → search.ts
 /api/kyc           → kyc_governance.ts, kyc.ts  (D1232: renewals, renewal periods, the audit read and its export, mounted first so `/admin/:userId` does not read them as ids)
-/api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*; D1216: a closing line's paper under /staged — preview, start, read, the line's envelopes and the Super Admin's step-up countersign, `closing.countersign`)
+/api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*; D1216: a closing line's paper under /staged — preview, start, read, the line's envelopes, signed in order (company, investor, then Axal), and the Super Admin's step-up countersign, `closing.countersign`)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts
 /api/profiling     → profiling.ts
@@ -410,6 +410,8 @@ only) store the founder's NDA choice, migration 608.
 
 D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: scoped chosen files, draft mapping, Stop using and ephemeral five-row preview. Calendar adds `/google/workspace-files/connect`; Google tokens stay in its one store. Support sessions are refused. See `../services/google/README.md`.
 D1093 (#2958): `build_google.ts` mounts `/api/cycles/build/google` before the Build cycle's routes: From Google on Solution design and Product roadmap, the sync, and a spec Doc's Accept and Dismiss, on `google_workspace.ts`'s scope check. See `../services/google/README.md`.
+
+D1086 (#2951): `notion.ts` mounts `/api/connectors/notion` (search, the sources a founder picks with their field map, Stop using, a five-row preview that stores nothing) ahead of the integrations router, and its `notionCycleRoutes` on `/api/cycles` (`/:section/notion`: the read, Sync, Accept, Dismiss and Delete) ahead of the section routers. The sync itself is `../services/notion/sync.ts`. Every write checks the owner, the venture and the company; a support session is refused.
 
 D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 

@@ -43,23 +43,9 @@ export const articleHref = (id) => `${QUEUE_BASE}/${id}`;
 export const PAGE_LINE = 'Articles members propose, from submission to publish. Each decision is an admin’s, and the author is told.';
 
 /**
- * What each tab waits on, until its slot task lands (D1290 §4). Each says
- * where today's version of the block is, never an empty board or a zero.
- * D1296 (#3392) built Calendar, so its wait is gone (`contentQueue/Calendar.jsx`).
+ * What a tab waits on, until its slot task lands (D1290 §4). Calendar is
+ * D1296's and Authors and Performance are D1297's, all in `contentQueue/`,
+ * so none of the four tabs waits. A later tab says where today's version of
+ * the block is, never an empty board or a zero.
  */
-export const WAITS = Object.freeze({
-  authors: {
-    title: 'Authors is not built yet',
-    lines: [
-      'It lists each author with their articles by stage, followers, this week’s submissions against the cap, and approval rate. It needs an authors read (D1294) and is built by D1297.',
-      'Until then, each article’s author shows in its review panel on Pipeline.',
-    ],
-  },
-  performance: {
-    title: 'Performance is not built yet',
-    lines: [
-      'Views per week: Not recorded. Article views are counted as one all-time number today, with no date, so there is no week to show. D1294 adds a daily count with no personal data; D1297 draws it.',
-      'Decisions per week and time to a decision come from the queue’s own dates once D1291 serves them.',
-    ],
-  },
-});
+export const WAITS = Object.freeze({});

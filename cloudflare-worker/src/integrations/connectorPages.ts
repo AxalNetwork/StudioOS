@@ -598,7 +598,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     tagline: 'Choose Google files for your modules. Coming soon.',
     long_description: [
       'Axal VC reads only files you choose. It cannot browse the rest of your Drive.',
-      'Connect Google first at /account/connectors/google. File selection and the chosen-files screen await their approved design.',
+      'Connect Google first at /account/connectors/google, then allow Google files and choose them on this page, for a venture and a module. Google’s file picker opens once Axal VC’s Google Cloud project is set up for it.',
       'Validate reads what you map: a Doc of interview notes becomes a session’s text, and a Form’s qualifying responses wait as signals for you to confirm. No respondent name or email is kept. Build, Raise and Grow imports ship in later parts.',
       'Stopping use or disconnecting keeps accepted facts; linked source records are removed.',
     ],
@@ -624,7 +624,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
       'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
-      'Google Docs, Sheets, Slides, Forms and Drive file choosing is coming soon on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
+      'Google Docs, Sheets, Slides, Forms and Drive files are chosen on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
     ],
     tools: [
       tool('remove_gmail_access', 'Google account access', 'account', 'Revokes an earlier Google grant that included Gmail, then starts a fresh consent without Gmail.', null, ['https://oauth2.googleapis.com/revoke']),
