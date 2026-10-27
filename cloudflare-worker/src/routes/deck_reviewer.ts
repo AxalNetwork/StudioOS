@@ -13,6 +13,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { canAccessProject } from '../services/projectAccess';
 import { ensureDeckReviewSchema } from '../services/deckReviewSchema';
 import { railFor } from '../util/railContext';
@@ -162,6 +163,8 @@ deckReviewer.post('/upload', async (c) => {
   const r2Key = `deck-reviews/${user.id}/${id}.${ext}`;
   let rawRetained = 0;
 
+  // D1170 — a kept deck counts to the member who uploaded it (D1169 §1).
+  const storage = c.env.FILES ? await assertStorageRoom(c.env, { userId: user.id }, bytes.byteLength, user) : null;
   // Archive the raw bytes in R2 (private; never served publicly). Best-effort:
   // extraction/review still proceed if the bucket isn't configured (dev).
   if (c.env.FILES) {
@@ -178,6 +181,7 @@ deckReviewer.post('/upload', async (c) => {
 
   await sql`INSERT INTO deck_reviews (id, user_id, project_id, source, filename, mime, size, r2_key, raw_retained, extraction_status, status, title, created_at, updated_at)
     VALUES (${id}, ${user.id}, ${projectId}, 'upload', ${file.name || 'deck'}, ${mime}, ${file.size}, ${rawRetained ? r2Key : null}, ${rawRetained}, 'pending', 'processing', ${(file.name || 'Pitch deck').replace(/\.[^.]+$/, '').slice(0, 200)}, ${nowIso()}, ${nowIso()})`;
+  if (storage && rawRetained) await noteStorageLanded(c.env, storage);
 
   const extraction = await extractDeck(c.env, bytes, mime, file.name || 'deck');
   if (extraction.status !== 'ok') {

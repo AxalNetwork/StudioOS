@@ -66,7 +66,7 @@ export const STRIPE_BRIDGE = {
  * The card form failed to load (Stripe.js blocked, or offline): the sheet says
  * so, and that nothing was charged, instead of a blank column.
  */
-class CardFormBoundary extends React.Component {
+export class CardFormBoundary extends React.Component {
   constructor(props) { super(props); this.state = { failed: false }; }
   static getDerivedStateFromError() { return { failed: true }; }
   componentDidCatch() { this.props.onFailed?.(); }
@@ -78,8 +78,8 @@ class CardFormBoundary extends React.Component {
   }
 }
 
-/** Esc closes, focus moves in and stays inside, and returns to the opener on close. */
-function useDialog(onClose) {
+/** Esc closes, focus moves in and stays inside, and returns to the opener on close. Pack mode (D1287) shares it. */
+export function useDialog(onClose) {
   const box = useRef(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;

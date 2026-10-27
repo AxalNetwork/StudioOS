@@ -16,6 +16,7 @@ import { ventureScoresApi } from '../../../lib/api/ventureScores.js';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Unreadable, Unrecorded, usePhoneWidth } from '../../../ui';
+import WeightingControl from '../../../components/scoring/scorecard/Weighting';
 import {
   NOT_YET, SCOPE_SWITCH, WAITS,
   compareHref, dealRow, inviteRow, viewHref,
@@ -62,6 +63,8 @@ export function DealFlowToolbar({ view, scope, hrefFor = viewHref }) {
           <Link to={hrefFor({ view: 'table', scope })} aria-current={view === 'table' ? 'page' : undefined} className={pill(view === 'table')} data-testid="dealflow-view-table">Table</Link>
         </nav>
       )}
+      {/* D1258 (#3281): SC7, the caller's weighting for the scorecard sort. */}
+      {scope !== 'new' && <WeightingControl />}
     </div>
   );
 }

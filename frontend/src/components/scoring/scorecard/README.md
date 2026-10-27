@@ -6,6 +6,10 @@ The scope strip and the scorecard panel from the owner's canvas "Venture scoreca
 |---|---|
 | `scorecardModel.js` | The eleven scopes in their one order, the evidence grades, the Source-to-grade mapping, the band and risk words, the scope strip's bar rule and bar text, the pages' addresses, and the words of every block no read carries yet |
 | `Scorecard.jsx` | `ScopeStrip` (eleven bars, no numbers), `VentureScorecard` (SC1's panel) and `ScorecardWait` |
+| `founderModel.js` | D1258: the founder's, staff's and an advisor's rows and inputs, reviews, weighting, sharing changes, what investors see and the trajectory, as pure rules |
+| `FounderScorecard.jsx` | D1258: `ScopeList` (inputs, Ask to correct, Add review), `InvestorPreview`, `SharingCard` and `Trajectory` |
+| `ScorecardDialogs.jsx` | D1258: Ask to correct (SC9), Add review (SC10), Your weighting (SC7) and a sharing change, each an in-page dialog |
+| `Weighting.jsx` | D1258: Deal flow's "Your weighting" and Edit weighting (SC7) |
 
 Mounted by `../../../pages/DealRoomPage.jsx` (the Scorecard tab), `../../../pages/investor/dealflow/DealFlow.jsx` (the table's Scorecard column) and `../../../pages/scoring/` (the method, the founder's page and HQ's).
 
