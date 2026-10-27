@@ -478,6 +478,54 @@ export async function stampNewCase(env: Env, caseId: number, opts: { blocking?: 
   }
 }
 
+/**
+ * D1245 (#3260): what every newly opened case seeds — its sections, its
+ * template version and its checklist at its depth — then `stampNewCase`.
+ * Both openers call it, so a partner-deal case (D1245) gets the checklist a
+ * case opened from the desk gets. A section in `notApplicable` is seeded
+ * completed with the verdict `n_a` and seeds no items: nobody works it.
+ */
+export async function seedNewCase(
+  env: Env, caseId: number, subjectType: DDSubjectType, depth: ChecklistDepth,
+  opts: { notApplicable?: ReadonlySet<string> } = {},
+): Promise<{ templateVersion: number; sections: number; items: number }> {
+  // D1249: the depth's latest template version, or the built-in catalog
+  // (version 0) when HQ has saved none. The case keeps the version.
+  const template = await latestTemplate(env, depth);
+  const seed = template ? seedFromTemplate(subjectType, template.body) : null;
+  const sections = seed ? seed.sections : sectionsFor(subjectType).map((s) => ({ ...s, blocking: false }));
+  const notApplicable = opts.notApplicable ?? new Set<string>();
+  const sectionIdByKey = new Map<string, number>();
+  for (const s of sections) {
+    const row = notApplicable.has(s.key)
+      ? await env.DB.prepare(
+        `INSERT INTO dd_sections (case_id, section_key, title, weight, blocking, status, verdict, completed_at)
+         VALUES (?, ?, ?, ?, ?, 'completed', 'n_a', CURRENT_TIMESTAMP) RETURNING id`,
+      ).bind(caseId, s.key, s.title, s.weight, s.blocking ? 1 : 0).first<{ id: number }>()
+      : await env.DB.prepare(
+        'INSERT INTO dd_sections (case_id, section_key, title, weight, blocking) VALUES (?, ?, ?, ?, ?) RETURNING id',
+      ).bind(caseId, s.key, s.title, s.weight, s.blocking ? 1 : 0).first<{ id: number }>();
+    if (row?.id) sectionIdByKey.set(s.key, Number(row.id));
+  }
+  if (template) await env.DB.prepare('UPDATE dd_cases SET template_id = ? WHERE id = ?').bind(template.id, caseId).run();
+  // Items land 'pending'; reviewers work them to pass/flag/fail and the
+  // flagged/failed severities feed the composite score alongside connector
+  // findings (see recomputeAndStoreScore).
+  const checklist = seed ? seed.checklist : checklistFor(subjectType, depth);
+  let items = 0;
+  for (const it of checklist) {
+    if (notApplicable.has(it.section_key)) continue;
+    const sid = sectionIdByKey.get(it.section_key);
+    if (!sid) continue;
+    await env.DB.prepare('INSERT INTO dd_checklist_items (case_id, section_id, item_key, title, depth) VALUES (?, ?, ?, ?, ?)')
+      .bind(caseId, sid, it.key, it.title, it.depth).run();
+    items++;
+  }
+  // D1246: the opener leads it, and its blocking sections are stamped.
+  await stampNewCase(env, caseId, { blocking: !template });
+  return { templateVersion: template ? template.version : 0, sections: sections.length, items };
+}
+
 // ---------- Versioned templates (D1249, #3264) ----------
 //
 // #2385 owner question 3: HQ owns the templates and a studio picks one. A

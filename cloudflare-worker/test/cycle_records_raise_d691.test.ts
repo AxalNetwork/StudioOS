@@ -26,7 +26,7 @@ import { SignJWT } from 'jose';
 
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
-import { MODULES, TOOL_HREF, fundFit, capIdOf, NEVER_EXPIRES } from '../src/services/raiseCycle.ts';
+import { MODULES, TOOL_HREF, DATA_ROOM_ACCESS, fundFit, capIdOf, NEVER_EXPIRES } from '../src/services/raiseCycle.ts';
 import { saveScenario } from '../src/services/capTableWrites.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -412,8 +412,10 @@ test('2: a scenario saved before keys reads with id null, and the read writes no
 // Test 14 (links out)
 // ---------------------------------------------------------------------------
 
-test('14: the data-room Add opens Upload, Manage access opens the file tool, and every list links its rows to the record route', async () => {
-  assert.equal(TOOL_HREF.dataRoom, '/raise/data-room?mode=workspace');
+test('14: the data-room Add opens Upload, Manage access opens the tool\'s Access tab, and every list links its rows to the record route', async () => {
+  // D1109 (#2989): the files tool is retired; grants and the NDA are the Data room tool's Access tab.
+  assert.equal(DATA_ROOM_ACCESS, '/raise/data-room/access');
+  assert.equal((TOOL_HREF as any).dataRoom, undefined, 'a link to the retired files tool is left behind');
   const empty = fixture();
   const card = (await overview(empty)).cards.find((c: any) => c.slug === 'data-room');
   // D695 (#1657) decision 11: Upload is Data room's form, so both open its address; #1658's
@@ -427,10 +429,10 @@ test('14: the data-room Add opens Upload, Manage access opens the file tool, and
     const first = (await read(db, m.slug)).body.records.rows.find((r: any) => r.id != null);
     assert.equal((await rec(db, m.slug, first.id)).status, 200, `${m.slug} ${first.id} opens`);
   }
-  // Manage access opens the file tool on this venture; Model a round opens the Scenarios tab on it (D1016).
+  // Manage access opens Access on this venture; Model a round opens the Scenarios tab on it (D1016).
   const links = async (slug: string, id: string | number) => (await rec(db, slug, id)).body.actions
     .filter((a: any) => a.kind === 'link').map((a: any) => [a.key, a.kind, a.href]);
-  assert.deepEqual(await links('data-room', 12), [['manage-access', 'link', `${TOOL_HREF.dataRoom}&project_id=${P}`]]);
+  assert.deepEqual(await links('data-room', 12), [['manage-access', 'link', `/raise/data-room/access?project_id=${P}`]]);
   assert.deepEqual(await links('cap-table', 'e-3'), [['model-a-round', 'link', `/raise/cap-table/scenarios?project_id=${P}`]]);
 });
 
