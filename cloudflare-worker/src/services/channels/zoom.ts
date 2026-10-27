@@ -498,7 +498,7 @@ export async function verifyHostedMeeting(env: Env, conn: ZoomConnection, meetin
  * has required since 2026-03-02. It is minted for the founder whose Zoom
  * connection this is, with `user:read:token`, and Zoom mints it only while
  * that founder is in the meeting: until then the notetaker waits
- * (`zoom_waiting_for_host`, "Join the call first; the notetaker follows").
+ * (`zoom_waiting_for_host`, "Join the call first; Eadwyn AI follows").
  *
  * THE TOKEN IS THE CALLER'S FOR ONE RUN. It is returned and nothing else:
  * never stored, never logged, never in an error. Its endpoint and its

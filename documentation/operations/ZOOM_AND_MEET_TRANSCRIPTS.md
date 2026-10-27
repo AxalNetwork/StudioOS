@@ -62,8 +62,8 @@ that turns out different is a one-line PR.
    - **Scope** `user:read:token`: mint the notetaker's OBF ("on behalf of")
      join token. Zoom requires it since 2026-03-02 for a Meeting SDK app
      joining a meeting outside Axal's Zoom account. Zoom mints it only while
-     the founder is in the call, so the notetaker says "Join the call first;
-     the notetaker follows."
+     the founder is in the call, so the founder's panel says "Join the call
+     first; Eadwyn AI follows."
    - **Feature**: Features → Embed → **Meeting SDK**, on the same General app.
      *Unverified*: whether Zoom gives the SDK its own key and secret, or the
      app's Client ID and Secret sign the SDK's JWT. If separate, they are
@@ -311,8 +311,10 @@ verification.
 
 The SDK orchestration in `meeting-bot/src/zoomAdapter.ts` is fake-tested and
 not wired for live dispatch. Follow §1's app feature/scope/reconnect steps.
-B8 must supply a Linux `ZoomSdkBridge` and confirm the deployed SDK version;
-B1 supplies the founder-scoped OBF mint and the `waiting_for_host` update.
+B8 supplies the Linux `ZoomSdkBridge` and confirms the deployed SDK version.
+B1's founder-scoped OBF mint shipped with #2671; while it answers
+`waitingForHost`, the founder's panel says "Join the call first; Eadwyn AI
+follows." (#2582).
 The existing Worker helper holds/refreshed OAuth stays in the Worker. Supply
 only a fresh OBF for each attempt, never credentials in process arguments or
 logs. Confirm the actual SDK signing credentials before configuring secrets.
@@ -324,6 +326,7 @@ active-speaker/silence, Stop and founder departure. The native bridge must
 stop audio when recording privilege or the authorizing user's presence ends.
 No live success is claimed by the synthetic SDK tests.
 
-Current B2 transport carries mixed audio only. Per-participant streams require
-a shared participant-key extension before they can be uploaded without losing
-attribution. Keep that limitation explicit during testing and rollout.
+Per-participant audio is wired (#2582): each participant's own stream is sent
+as voiced-only parts keyed by their participant id, with mixed audio as the
+fallback, never both for one stretch. The run's `audio_paths` log line says
+which path ran, in counts. Record that count with M4.

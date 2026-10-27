@@ -77,8 +77,13 @@ export class StubCallback implements CallbackTransport {
     this.batches.push([...batch]);
   }
 
-  async putChunk(seq: number, wav: Uint8Array<ArrayBuffer>): Promise<void> {
+  /** #2582: each stored chunk's start and participant, as B1's chunk event would carry them. */
+  readonly starts = new Map<number, number | undefined>();
+  readonly participants = new Map<number, string | undefined>();
+
+  async putChunk(seq: number, wav: Uint8Array<ArrayBuffer>, startMs?: number, participant?: string): Promise<void> {
     this.chunkSends += 1;
+    if (!this.starts.has(seq)) { this.starts.set(seq, startMs); this.participants.set(seq, participant); }
     const left = this.failChunk.get(seq) ?? 0;
     if (left > 0) { this.failChunk.set(seq, left - 1); throw new Error('connection reset'); }
     if (!this.chunks.has(seq)) this.chunks.set(seq, wav);

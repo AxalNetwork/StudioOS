@@ -95,9 +95,11 @@ export function httpTransport(opts: HttpTransportOptions): CallbackTransport {
         await event(payload,`event:${e.n}`);
       }
     },
-    async putChunk(chunkSeq: number,wav: Uint8Array<ArrayBuffer>,startMs=0) {
+    async putChunk(chunkSeq: number,wav: Uint8Array<ArrayBuffer>,startMs=0,participant?: string) {
       const key=`chunk:${chunkSeq}`;
-      const data=await event({type:'chunk',chunk_seq:chunkSeq,size_bytes:wav.byteLength,start_ms:startMs},key,operations.has(key));
+      // #2582: a per-participant part names its stream; B1 admits an id of at most 128 characters.
+      if (participant!==undefined && (typeof participant!=='string' || !participant || participant.length>128)) throw new TransportError(0);
+      const data=await event({type:'chunk',chunk_seq:chunkSeq,size_bytes:wav.byteLength,start_ms:startMs,...(participant===undefined?{}:{participant_id:participant})},key,operations.has(key));
       if (data.code==='chunk_already_uploaded') return;
       let target: URL;
       try {target=new URL(data.upload_path,base);}catch{throw new TransportError(0);}

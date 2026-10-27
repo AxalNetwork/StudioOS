@@ -121,7 +121,8 @@ export class FakeAdapter implements MeetingAdapter {
     this.rosterTopic.emit({ kind: 'leave', key, name });
   }
   speak(key: string | null): void { this.speakerTopic.emit({ key }); }
-  say(samples: Int16Array): void { this.audioTopic.emit({ samples }); }
+  /** #2582: `participant` makes it one person's own stream, as Zoom's one-way audio is. */
+  say(samples: Int16Array, participant?: string): void { this.audioTopic.emit(participant === undefined ? { samples } : { samples, participant }); }
   end(): void { this.endTopic.emit(); }
 
   /** Listeners still attached; zero once the bot has left. */
