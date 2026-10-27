@@ -2686,6 +2686,9 @@ function AppInner() {
       <Route path="/validate/record/whatsapp/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/whatsapp/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/telegram" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      {/* D869 (#2515): Telegram's tabs are paths under its address, as WhatsApp's are. */}
+      <Route path="/validate/record/telegram/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/telegram/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/calls" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
