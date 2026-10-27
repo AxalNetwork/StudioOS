@@ -42,6 +42,7 @@ import ValidateFromGoogle from './ValidateFromGoogle';
 import FromNotion from './FromNotion';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
+import ContentCalendar from './ContentCalendar';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -342,9 +343,14 @@ const CYCLE_DEFS = {
       </>),
       // The replies customer and partner asks brought in, beside the rows.
       distribution: (data, ctx) => (<>
+        {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
+        <ContentCalendar part={data?.parts?.content_calendar} channels={data?.records?.rows} projectId={ctx.projectId} reload={ctx.reload} />
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
         {fromMercury('distribution', data, ctx)}
+        <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
       </>),
+      // D1090 (#2955): a feedback database in Notion, as product feedback.
+      'product-improvement': (_data, ctx) => <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />,
       'partner-network': (data, ctx) => (<>
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />
         {fromMercury('partner-network', data, ctx)}

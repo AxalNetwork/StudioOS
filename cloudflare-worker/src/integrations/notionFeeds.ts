@@ -29,4 +29,7 @@ export const NOTION_FEEDS: readonly NotionFeed[] = Object.freeze([
   // D1089 (#2954): Raise. CRM rows wait for Add or Link, then their stage follows; pages wait as snapshots (NDA by default).
   { key: 'notion_investor_crm', what: 'An investor CRM database, as investors you add or link, then their stage', module: 'capital_relationships', tools: ['notion-query-data-sources'], decision: 'D1089' },
   { key: 'notion_data_room', what: 'Pages, as dated snapshots you add to the data room (NDA by default)', module: 'data_room', tools: ['notion-fetch'], decision: 'D1089' },
+  // D1090 (#2955): Grow. Calendar rows land as planned pieces; feedback rows land as product feedback.
+  { key: 'notion_content_calendar', what: 'A content-calendar database, as planned pieces on Distribution (a plan, never what was sent)', module: 'distribution', tools: ['notion-query-data-sources'], decision: 'D1090' },
+  { key: 'notion_feedback', what: 'A feedback database, as product feedback (a name or email only when you map one)', module: 'product_improvement', tools: ['notion-query-data-sources'], decision: 'D1090' },
 ]);

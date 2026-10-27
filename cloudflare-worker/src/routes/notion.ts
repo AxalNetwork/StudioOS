@@ -42,6 +42,7 @@ import { AcceptRefused, acceptProposal, deleteFact, dismissProposal, factWriterF
 // D1087–D1090: each section's writers and acceptors register themselves on import.
 import '../services/notion/validate';
 import '../services/notion/raise';
+import '../services/notion/grow';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -77,6 +78,7 @@ const SENTENCES: Record<string, string> = {
   invalid_value: 'That value is not one this module accepts.',
   required_field: 'Map every required field.',
   invalid_default_source: 'Choose a source from the list.',
+  source_required: 'Map a Source column, or choose where this feedback comes from.',
   invalid_section: 'Choose Validate, Build, Raise or Grow.',
   proposal_not_found: 'That proposal is not on this venture.',
   proposal_decided: 'That proposal was already decided.',
