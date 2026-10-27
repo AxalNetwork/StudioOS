@@ -49,7 +49,9 @@ async function mount(path) {
   return { container, async done() { await act(async () => root.unmount()); restore(); } };
 }
 
-for (const c of RECORD_CHANNELS) {
+// D862 (#2507) and D869 (#2515) build WhatsApp's and Telegram's boards, so their pages draw the tool;
+// record_whatsapp_d862.test.mjs and record_telegram_d869.test.mjs mount them.
+for (const c of RECORD_CHANNELS.filter((x) => x.key === 'calls')) {
   test(`${c.label}: its tabs, where today's version is, and the task that builds the rest`, async () => {
     const w = await mount(c.to);
     try {

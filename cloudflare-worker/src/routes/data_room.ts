@@ -63,6 +63,7 @@
  * INVESTOR SIDE (holder of a grant; admins use support-read instead)
  *   GET    /shared                            rooms shared with me
  *   GET    /shared/:projectUid                the room as I may see it
+ *   GET    /shared/:projectUid/evidence       the founder's shared evidence as I may see it (D1265)
  *   POST   /shared/:projectUid/files/:uid/download   one-time signed URL
  *
  * THE LOG (D374). `open_room`, `download`, and `blocked` — a download the NDA
@@ -105,8 +106,10 @@ import {
 import { CHECKLIST_KEYS } from '../services/raiseCycle';
 import { activityCsv, activityRead, checklistRead, investorOfGrant, parseActivityQuery, CSV_MAX_ROWS } from '../services/dataRoomActivity';
 import { logCycleWrite } from '../services/cycleActivity';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { WriterError } from '../services/validateWriters';
 import { DECLINE_REASON_MAX, readRequests } from '../services/dataRoomRequests';
+import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -347,6 +350,23 @@ r.get('/shared/:projectUid', async (c) => {
     delete room.hidden_from_grant;
     return c.json(room);
   } catch (e) { return mapError(c, e); }
+});
+
+// D1265 (#3288): the founder's shared Raise evidence, as this investor may see it. Who counts as an
+// investor in the raise, the NDA, each item's sharing, the file gate and quote consent are all
+// `investorEvidence`'s; an outsider and a missing venture answer alike. Each open logs `open_evidence`.
+r.get('/shared/:projectUid/evidence', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (user.role === 'admin') return refuse(c, 403, { code: 'support_read_required', message: 'Use an audited support read to open this room.' });
+    const project = await c.env.DB.prepare('SELECT id FROM projects WHERE uid = ? AND deleted_at IS NULL')
+      .bind(c.req.param('projectUid')).first<{ id: number }>();
+    if (!project) return c.json({ detail: 'Data room not found' }, 404);
+    return c.json(await investorEvidence(c.env, project.id, user.id));
+  } catch (e) {
+    if (e instanceof RaiseEvidenceError) return e.code === 'not_found' ? c.json({ detail: 'Data room not found' }, 404) : c.json({ code: e.code, detail: e.sentence }, e.status);
+    return mapError(c, e);
+  }
 });
 
 /**
@@ -834,6 +854,8 @@ r.post('/:projectUid/files', async (c) => {
 
     // The key is derived, never taken from the request: a caller-supplied key
     // is a path-traversal write into another project's prefix.
+    // D1170 — a data room file counts to the venture's owner (D1169 §1).
+    const storage = await assertStorageRoom(c.env, { projectId: project.id }, bytes.byteLength, user);
     const uid = newUid();
     const key = `data-room/${project.uid}/${uid}`;
     await c.env.FILES.put(key, bytes, {
@@ -861,6 +883,7 @@ r.post('/:projectUid/files', async (c) => {
     }
     // D1248 — a file uploaded as a request's answer answers it.
     if (access.values.dd_request_id != null) await markRequestAnsweredByFile(c.env, Number(access.values.dd_request_id), Number(user.id));
+    await noteStorageLanded(c.env, storage);
     return c.json({ uid, size_bytes: bytes.byteLength }, 201);
   } catch (e) { return mapError(c, e); }
 });
@@ -875,7 +898,7 @@ r.post('/:projectUid/files', async (c) => {
  */
 export async function replaceDataRoomFile(
   env: Env,
-  a: { project: { id: number; uid: string }; userId: number; fileId: number; bytes: Uint8Array; contentType: string | null },
+  a: { project: { id: number; uid: string }; userId: number; fileId: number; bytes: Uint8Array; contentType: string | null; caller?: { id: number; role: string } | null },
 ): Promise<{ id: number; version: number; size_bytes: number }> {
   const { project } = a;
   if (!env.FILES) throw new WriterError(503, 'storage_not_configured');
@@ -890,6 +913,8 @@ export async function replaceDataRoomFile(
   const version = Number(last?.v ?? 0) + 1;
   const contentType = typeof a.contentType === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(a.contentType) ? a.contentType : 'application/octet-stream';
 
+  // D1170 — the kept version still counts, so the new object is weighed whole.
+  const room = await assertStorageRoom(env, { projectId: project.id }, a.bytes.byteLength, a.caller ?? { id: a.userId, role: 'member' });
   // The key is derived, never taken from the request.
   const uid = newUid();
   const key = `data-room/${project.uid}/${uid}`;
@@ -907,6 +932,7 @@ export async function replaceDataRoomFile(
   ]);
   await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
     entityId: file.id, action: 'file_replaced', summary: `File replaced; version ${version} kept` });
+  await noteStorageLanded(env, room);
   return { id: file.id, version, size_bytes: a.bytes.byteLength };
 }
 

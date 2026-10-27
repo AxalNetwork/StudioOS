@@ -294,6 +294,10 @@ export const QUEUE_WORDS = { waiting: '○ Waiting', sending: '⇪ Sending', don
 /** A Worker refusal, as one sentence. */
 export function uploadRefusal(error) {
   const status = Number(error?.status);
+  // D1171 (STG4): the plan's storage is full. The sentence is the shared one,
+  // drawn by `StorageRefusal` under the file, the same as in Messages and
+  // Record a Session; this is its short form for the queue.
+  if (error?.code === 'storage_full') return 'Refused: no room left on the storage plan';
   if (status === 413) return `Refused: larger than ${MAX_UPLOAD_MB} MB`;
   if (status === 403 && error?.code === 'owner_only') return 'Refused: only the owner sets a gate';
   if (status === 503) return 'Refused: storage is not configured here';
@@ -318,7 +322,7 @@ export function storageLine(room) {
   const known = sizes.filter((s) => s != null && Number.isFinite(Number(s)));
   const total = known.reduce((t, s) => t + Number(s), 0);
   const counted = known.length === sizes.length ? sizeText(total) : `${sizeText(total)} over the ${known.length} of ${sizes.length} files whose size is recorded`;
-  return `Current files: ${counted}. Earlier versions are not totalled here, and no plan limit is recorded, so storage left is not shown. Each file can be up to ${MAX_UPLOAD_MB} MB.`;
+  return `Current files: ${counted}. Earlier versions are not totalled here. What your plan holds, and what is left, is on Usage › Storage. Each file can be up to ${MAX_UPLOAD_MB} MB.`;
 }
 
 /* ------------------------------------------------------------------ *

@@ -1,5 +1,21 @@
 /** Fictional, in-process API. Non-GET rejected unless explicitly auth/uninstall. */
-export function fakeVercel({ scopes = ['read:project', 'read:deployment', 'read:domain'], projects = [{ id: 'prj_fixture', name: 'fixture-web', framework: 'nextjs' }], teamId = 'team_fixture', status = 200, allowAccountWrites = false } = {}) {
+export function fakeVercel({
+  scopes = ['read:project', 'read:deployment', 'read:domain'],
+  projects = [{ id: 'prj_fixture', name: 'fixture-web', framework: 'nextjs' }],
+  teamId = 'team_fixture',
+  status = 200,
+  allowAccountWrites = false,
+  // D1096: what the installation reaches ('all', or only `selected`), each project's domains, and paths answered 429.
+  selection = 'all',
+  selected = [],
+  domains = { default: [{ name: 'fixture.example', verified: true }] },
+  rateLimited = () => false,
+  // D1098: each project's deployments, newest first, read 100 at a time with `until`.
+  // D1097 passes a function instead: it returns that project's list, or a status number to fail the read.
+  deployments = { default: [{ uid: 'dpl_fixture', readyState: 'READY', target: 'production', createdAt: 1792886400000 }] },
+  domainConfig = () => ({ misconfigured: false }),
+  accountDomains = () => [{ name: 'fixture.example' }],
+} = {}) {
   const calls = [];
   const json = (body, s = 200) => new Response(JSON.stringify(body), { status: s, headers: { 'content-type': 'application/json' } });
   const fetcher = async (input, init = {}) => {
@@ -12,15 +28,29 @@ export function fakeVercel({ scopes = ['read:project', 'read:deployment', 'read:
       throw new Error('fake_vercel_method_refused');
     }
     if (status !== 200) return json({ error: { message: 'fixture_secret_must_never_escape' } }, status);
-    if (url.pathname === '/v1/integrations/configuration/icfg_fixture') return json({ id: 'icfg_fixture', scopes, teamId, projectSelection: 'all' });
+    if (rateLimited(url.pathname)) return json({ error: { code: 'too_many_requests' } }, 429);
+    if (url.pathname === '/v1/integrations/configuration/icfg_fixture') return json({ id: 'icfg_fixture', scopes, teamId, projectSelection: selection, projects: selected });
     if (url.pathname === '/v10/projects') return json({ projects, pagination: { next: null } });
-    if (/^\/v9\/projects\/[^/]+$/.test(url.pathname)) return json(projects.find(p => p.id === url.pathname.split('/').pop()) || {});
-    if (/^\/v9\/projects\/[^/]+\/domains$/.test(url.pathname)) return json({ domains: [{ name: 'fixture.example', verified: true }] });
-    if (url.pathname === '/v7/deployments') return json({ deployments: [{ uid: 'dpl_fixture', readyState: 'READY', target: 'production', createdAt: 1792886400000 }] });
+    if (/^\/v9\/projects\/[^/]+$/.test(url.pathname)) {
+      const p = projects.find(x => x.id === url.pathname.split('/').pop());
+      return p ? json(p) : json({ error: { code: 'not_found' } }, 404);
+    }
+    if (/^\/v9\/projects\/[^/]+\/domains$/.test(url.pathname)) return json({ domains: domains[url.pathname.split('/')[3]] ?? domains.default ?? [] });
+    if (url.pathname === '/v7/deployments') {
+      const projectId = url.searchParams.get('projectId');
+      if (typeof deployments === 'function') {
+        const d = deployments(projectId);
+        return typeof d === 'number' ? json({}, d) : json({ deployments: d });
+      }
+      const until = Number(url.searchParams.get('until') ?? Infinity);
+      const list = (deployments[projectId] ?? deployments.default ?? []).filter(d => d.createdAt < until);
+      const page = list.slice(0, 100);
+      return json({ deployments: page, pagination: { next: list.length > 100 ? page.at(-1).createdAt : null } });
+    }
     if (/^\/v13\/deployments\/[^/]+$/.test(url.pathname)) return json({ id: 'dpl_fixture', readyState: 'READY' });
     if (/\/aliases$/.test(url.pathname)) return json({ aliases: [{ alias: 'fixture.example' }] });
-    if (/^\/v6\/domains\/[^/]+\/config$/.test(url.pathname)) return json({ misconfigured: false });
-    if (url.pathname === '/v5/domains') return json({ domains: [{ name: 'fixture.example' }] });
+    if (/^\/v6\/domains\/[^/]+\/config$/.test(url.pathname)) { const c = domainConfig(decodeURIComponent(url.pathname.split('/')[3])); return typeof c === 'number' ? json({}, c) : json(c); }
+    if (url.pathname === '/v5/domains') { const a = accountDomains(); return typeof a === 'number' ? json({}, a) : json({ domains: a }); }
     if (/\/events$/.test(url.pathname)) return json([]);
     if (/\/runtime-logs$/.test(url.pathname) || url.pathname.startsWith('/v1/query/web-analytics/visits/')) return json({});
     throw new Error('fake_vercel_unknown_endpoint');

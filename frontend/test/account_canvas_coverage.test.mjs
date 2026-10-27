@@ -87,9 +87,14 @@ test('the four cards folded into the account pane are all still rendered', () =>
     settings.indexOf("safeActive === 'account' && ("),
     settings.indexOf("safeActive === 'security-privacy'"),
   );
-  for (const card of ['<ProfileTabs', '<EmailSection', '<YourCompaniesSection', '<RolesAccessCard', '<DocumentsAgreementsSection']) {
+  // D1140 (#3020): "Your companies" moved to Companies and projects; the
+  // account pane keeps a moved notice in its place, and the card renders on
+  // the Companies tab, so it is still drawn, one pane over.
+  for (const card of ['<ProfileTabs', '<EmailSection', '<ProfileMovedNotice', '<RolesAccessCard', '<DocumentsAgreementsSection']) {
     assert.ok(pane.includes(card), `${card} left the account pane`);
   }
+  assert.ok(!pane.includes('<YourCompaniesSection'), 'Your companies is back on Profile and identity');
+  assert.match(settings, /entityRecords=\{<YourCompaniesSection /, 'Your companies is no longer drawn on Companies and projects');
 });
 
 test('Profile, Legal entity and Identity & tax are the three profile sub-tabs', () => {
@@ -280,7 +285,8 @@ test('Company Settings still owns the company half of the split', () => {
 // rules are asserted by calling them, and the effect by its source.
 // D753 (#1876) — the path also carries a connector page's key.
 const syncEffect = () => {
-  const i = settings.indexOf('const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid });');
+  // D1315 — and Builder's page or drawer.
+  const i = settings.indexOf('const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid, builderView });');
   assert.ok(i > 0, 'the URL-sync effect must still exist — nothing else keeps the URL honest');
   return settings.slice(i, i + 500);
 };
@@ -299,7 +305,7 @@ test('the landing pane has no segment of its own', () => {
   assert.equal(accountPathFor({ section: 'billing', phone: false }), '/account/billing');
   assert.equal(accountViewFor({ pathname: '/account/account' }), 'account', 'the old segment still opens the pane, and the effect tidies it');
   // D807 — and the Usage page, so /account/usage/limits is kept.
-  assert.match(syncEffect(), /^const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid \}\);/);
+  assert.match(syncEffect(), /^const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid, builderView \}\);/);
 });
 
 test('the canonicalising rewrite keeps the query and the anchor', () => {

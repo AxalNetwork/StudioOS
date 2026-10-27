@@ -26,6 +26,7 @@ import { logCycleWriteStatement } from '../cycleActivity';
 import { mintDownloadToken } from '../signedDownload';
 import { customKpis, KPI_KEYS, KPI_LABEL, CUSTOM_PREFIX } from '../growKpis';
 import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row, Store } from './types';
+import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
 
 type Any = Record<string, any>;
 type Section = { rows: Row[]; empty?: string; action?: string };
@@ -390,6 +391,8 @@ async function uploadProof(ctx: RecordContext, id: string, f: Filing, body: Body
   const files = ctx.env.FILES;
   if (!files) refuse(503, 'File storage is not configured');
   const key = `${proofPrefix(ctx.projectId)}${crypto.randomUUID().replace(/-/g, '')}.${type.ext}`;
+  // D1170 — a Build proof counts to the venture's owner (D1169 §1); a replaced proof is weighed whole.
+  const storage = await assertStorageRoom(ctx.env, { projectId: ctx.projectId }, bytes.byteLength, ctx.user as any);
   await files.put(key, bytes, { httpMetadata: { contentType: type.mime }, customMetadata: { project_id: String(ctx.projectId) } });
   const write = f.source === 'step'
     ? ctx.env.DB.prepare('UPDATE formation_steps SET proof_file_key = ?, size_bytes = ?, size_missing_at = NULL, size_unmeasurable_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(key, bytes.byteLength, f.stepId, ctx.projectId)
@@ -401,6 +404,7 @@ async function uploadProof(ctx: RecordContext, id: string, f: Filing, body: Body
     try { await files.delete(key); } catch { /* the object is unreferenced either way */ }
     throw e;
   }
+  await noteStorageLanded(ctx.env, storage);
   if (f.proofKey && f.proofKey.startsWith(proofPrefix(ctx.projectId))) {
     try { await files.delete(f.proofKey); } catch (e) { console.warn('[build records] old proof not deleted:', (e as Error)?.message); }
   }

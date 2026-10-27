@@ -19,6 +19,9 @@ import {
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import GithubRepositoriesSection from './GithubRepositoriesSection';
+import NotionSourcesSection from './NotionSourcesSection';
+import GoogleWorkspaceFiles from './GoogleWorkspaceFiles';
+import VercelProjectsSection from './VercelProjectsSection';
 import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -156,6 +159,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
   return (
     <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} repositories={!!returned?.repositories} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
       {p.key === 'zoom' && <ZoomValidate p={p} />}
+      {/* D1091 (GW1, GW2, GW8): Google Workspace's own section draws its permission and the files chosen. */}
+      {p.key === 'google_workspace' && <GoogleWorkspaceFiles />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
         : (
@@ -226,7 +231,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {keyOpen && <InlineKeyForm p={p} flow={flow} view={view} connector={connector} />}
         </section>
       )}
-      {p.connection && <YourConnection p={p} flow={flow} role={role} onChanged={onChanged} repositories={repositories} />}
+      {p.connection && <YourConnection p={p} flow={flow} role={role} onChanged={onChanged} repositories={repositories} phone={phone} />}
       {flow.confirming && (
         <Lightbox label={`Disconnect ${name}?`} title={`Disconnect ${name}?`} onClose={() => flow.setConfirming(false)} width={440} testId="connector-page-disconnect-dialog"
           footer={(
@@ -256,7 +261,7 @@ const ACCOUNT_MISSING = 'The service did not name the account this connection si
  * lands and what it reads, in place of Companies; Now fed by is a founder's
  * only; and the attention line says how to fix it, never the raw error.
  */
-function YourConnection({ p, flow, role = null, onChanged, repositories = false }) {
+function YourConnection({ p, flow, role = null, onChanged, repositories = false, phone = false }) {
   const conn = p.connection;
   const status = connectionStatus(conn, p);
   const mercury = isPersonalMercury(p);
@@ -284,6 +289,10 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false 
       </div>
       {/* The provider's own section goes here: GitHub's repositories (F4, #1957), Mercury (F5, below), the channel cards (C1). */}
       {p.key === 'github' && <GithubRepositoriesSection p={p} focus={repositories} onChanged={onChanged} />}
+      {/* D1086 (#2951): the pages a founder shared with Axal VC, and Add a source. */}
+      {p.key === 'notion' && <NotionSourcesSection p={p} phone={phone} />}
+      {/* D1096 (#2961): Vercel's Choose projects. */}
+      {p.key === 'vercel' && <VercelProjectsSection p={p} onChanged={onChanged} />}
       <div className="-mx-5">
         {mercury ? (
           <div data-testid="connector-page-mercury">

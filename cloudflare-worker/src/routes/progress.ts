@@ -1972,9 +1972,15 @@ function serializeSnap(s: MetricsSnapshot): SerializedSnap {
 /**
  * D691 (`services/growKpis.ts`): a typed figure is never stored under a
  * connected source's name. D752: those names are `stripe` and `mercury`, each
- * written only by its own import, compared trimmed and lower-cased.
+ * written only by its own import, compared trimmed and lower-cased. D1095 adds
+ * `google_sheets`, written only by a mapped metrics Sheet's sync.
+ *
+ * NOT SHEET_ONLY: a Sheet writes only columns Stripe and Mercury never write
+ * (`services/google/growFeeds.ts`), so a reader that takes "the latest row"
+ * and reads a Stripe or Mercury column from it skips `google_sheets` rows
+ * (`COALESCE(source, '') <> 'google_sheets'`, written out in each statement); otherwise a Sheet row dated later would hide their figures.
  */
-export const CONNECTED_METRIC_SOURCES = Object.freeze(['stripe', 'mercury']);
+export const CONNECTED_METRIC_SOURCES = Object.freeze(['stripe', 'mercury', 'google_sheets']);
 export const isConnectedSource = (v: unknown): boolean =>
   typeof v === 'string' && CONNECTED_METRIC_SOURCES.includes(v.trim().toLowerCase());
 
@@ -2040,9 +2046,9 @@ progress.post('/metrics/:projectId', async (c) => {
   ensureCanEdit(project, user);
   await ensureProjectMetricsSchema(c.env);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
-  // D752: a typed snapshot cannot claim Stripe or Mercury.
+  // D752: a typed snapshot cannot claim Stripe or Mercury; D1095: nor Google Sheets.
   if (isConnectedSource(body?.source)) {
-    return c.json({ detail: { code: 'source_reserved', message: 'Stripe and Mercury figures come only from their own imports. Save this one without a source and it is recorded as typed. Nothing was saved.' } }, 400);
+    return c.json({ detail: { code: 'source_reserved', message: 'Stripe, Mercury and Google Sheets figures come only from their own imports. Save this one without a source and it is recorded as typed. Nothing was saved.' } }, 400);
   }
   // D367 — THE DATE IS THE CALLER'S, NEVER TODAY BY DEFAULT. A snapshot's
   // date is the period its figures describe. Defaulting a missing one to
@@ -2134,6 +2140,11 @@ progress.put('/metrics/snapshot/:id', async (c) => {
   if (String(existing.source ?? '').trim().toLowerCase() === 'mercury'
     && fields.some(([k, v]) => k !== 'notes' && v !== undefined)) {
     return c.json({ detail: { code: 'mercury_figure_locked', message: 'This snapshot was read from your Mercury, so its date and figures cannot be edited. Delete it and save a new one. Nothing was changed.' } }, 409);
+  }
+  // D1095: a Google Sheets row is what the founder's Sheet holds; change the Sheet and sync again.
+  if (String(existing.source ?? '').trim().toLowerCase() === 'google_sheets'
+    && fields.some(([k, v]) => k !== 'notes' && v !== undefined)) {
+    return c.json({ detail: { code: 'sheet_figure_locked', message: 'This snapshot was read from your Google Sheet, so its date and figures cannot be edited here. Change the Sheet and sync again. Nothing was changed.' } }, 409);
   }
   const sets: string[] = [];
   const binds: unknown[] = [];
@@ -2711,14 +2722,14 @@ progress.get('/metrics/:projectId/series', async (c) => {
     if (granularity === 'month') {
       const rows = await c.env.DB.prepare(
         `SELECT substr(snapshot_date, 1, 7) AS bucket, AVG(${safeMetric}) AS v
-           FROM project_metrics WHERE project_id = ?
+           FROM project_metrics WHERE project_id = ? AND (COALESCE(source, '') <> 'google_sheets' OR ${safeMetric} IS NOT NULL)
            GROUP BY bucket ORDER BY bucket ASC`,
       ).bind(projectId).all<{ bucket: string; v: number | null }>();
       series = (rows.results || []).map((r) => ({ date: r.bucket, value: r.v }));
     } else {
       const rows = await c.env.DB.prepare(
         `SELECT snapshot_date AS date, ${safeMetric} AS v
-           FROM project_metrics WHERE project_id = ?
+           FROM project_metrics WHERE project_id = ? AND (COALESCE(source, '') <> 'google_sheets' OR ${safeMetric} IS NOT NULL)
            ORDER BY snapshot_date ASC, id ASC`,
       ).bind(projectId).all<{ date: string; v: number | null }>();
       series = (rows.results || []).map((r) => ({ date: r.date, value: r.v }));
@@ -2750,7 +2761,7 @@ progress.get('/metrics/:projectId/summary', async (c) => {
   try {
     const res = await c.env.DB.prepare(
       `SELECT snapshot_date, mrr, arr, cac, ltv, monthly_churn_pct, active_users, new_users
-         FROM project_metrics WHERE project_id = ?
+         FROM project_metrics WHERE project_id = ? AND COALESCE(source, '') <> 'google_sheets'
          ORDER BY snapshot_date ASC, id ASC LIMIT 500`,
     ).bind(projectId).all<SaasSnapshot>();
     rows = res.results || [];
@@ -2917,7 +2928,7 @@ async function computeLifecycleSignals(env: Env, projectId: number): Promise<Lif
     await ensureProjectMetricsSchema(env);
     const ms = await env.DB.prepare(
       `SELECT mrr, active_users, monthly_churn_pct, new_users
-         FROM project_metrics WHERE project_id = ?
+         FROM project_metrics WHERE project_id = ? AND COALESCE(source, '') <> 'google_sheets'
         ORDER BY snapshot_date DESC, id DESC LIMIT 1`,
     ).bind(projectId).first<{
       mrr: number | null; active_users: number | null;

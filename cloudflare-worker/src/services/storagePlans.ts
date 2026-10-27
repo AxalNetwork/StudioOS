@@ -40,6 +40,22 @@ export const STORAGE_PLANS = Object.freeze({
 } satisfies Record<string, StoragePlan>);
 export type StoragePlanKey = keyof typeof STORAGE_PLANS;
 
+/**
+ * D1172 (#3085) — the owner's table on #2449 rows, by price (D1166 §5,
+ * question 1): which plans share an allowance, as HQ › Platform › Storage
+ * (STG20) groups them. Staff (`admin`) hold no plan and are not counted. Each
+ * tier's plans share one allowance, read from STORAGE_PLANS above, never here.
+ */
+export const STORAGE_TIERS = Object.freeze([
+  { key: 'free', label: 'Free', plans: ['founder:free', 'investor:free', 'advisor:free', 'partner:free', 'other'] },
+  { key: 'usd_20', label: '$20 a month', plans: ['founder:growth', 'advisor:pro', 'partner:pro'] },
+  { key: 'usd_50', label: '$50 a month', plans: ['investor:plus'] },
+  { key: 'usd_100', label: '$100 a month', plans: ['founder:studio'] },
+  { key: 'usd_150', label: '$150 a month', plans: ['investor:professional'] },
+  { key: 'lp_access', label: 'LP Access', plans: ['lp_access'] },
+  { key: 'negotiated', label: 'Negotiated', plans: ['investor:institutional'] },
+] as const satisfies ReadonlyArray<{ key: string; label: string; plans: ReadonlyArray<StoragePlanKey> }>);
+
 export function storagePlan(key: string | null | undefined): StoragePlan | null {
   return key && Object.hasOwn(STORAGE_PLANS, key) ? STORAGE_PLANS[key as StoragePlanKey] : null;
 }
@@ -51,6 +67,33 @@ export function storageFields(key: string | null | undefined) {
     storage_reason: plan?.allowance_reason ?? (plan ? null : 'Storage follows the member’s profile plan.'),
     best_suited: plan?.best_suited ?? null,
     best_suited_reason: plan?.best_suited_reason ?? (plan ? null : 'Best suited for follows the member’s profile plan.') };
+}
+
+type SubRow = { plan_group: string | null; plan: string | null; status: string; period_end: string | null };
+
+/**
+ * D1170 — the choice itself, from facts already read: the member's profile
+ * licence, their subscriptions and whether a fund has admitted them. Shared by
+ * `storagePlanKey` (one member) and HQ's storage read (every member at once),
+ * so both apply one rule. The largest measured allowance wins; ties keep the
+ * profile plan; a negotiated allowance is never replaced by a measured one.
+ */
+export function chooseStoragePlanKey(licence: string, subs: ReadonlyArray<SubRow>, admitted: boolean): StoragePlanKey {
+  if (licence === 'admin') return 'admin';
+  let key: StoragePlanKey = licence === 'advisor' || licence === 'partner' ? `${licence}:free`
+    : Object.hasOwn(STORAGE_PLANS, licence) ? licence as StoragePlanKey : 'other';
+  const candidates: StoragePlanKey[] = [key];
+  for (const sub of subs) {
+    if ((sub.plan_group === 'advisor' || sub.plan_group === 'partner') && sub.plan === `${sub.plan_group}_pro`
+        && inGrace(sub.status, sub.period_end)) candidates.push(`${sub.plan_group}:pro`);
+  }
+  if (admitted) candidates.push('lp_access');
+  for (const candidate of candidates) {
+    const current = STORAGE_PLANS[key].allowance_bytes;
+    const next = STORAGE_PLANS[candidate].allowance_bytes;
+    if (current !== null && (next === null || next > current)) key = candidate;
+  }
+  return key;
 }
 
 /**
@@ -66,15 +109,9 @@ export async function storagePlanKey(env: Env, user: User): Promise<StoragePlanK
     // tier helpers themselves use that catalogue. No eager dependency cycle.
     const { aiLicenceKey } = await import('./aiBudget');
     const licence = aiLicenceKey(user);
-    let key: StoragePlanKey = licence === 'advisor' || licence === 'partner' ? `${licence}:free` : licence;
-    const candidates: StoragePlanKey[] = [key];
     const subs = await env.DB.prepare('SELECT plan_group, plan, status, period_end FROM account_subscriptions WHERE user_id = ?')
-      .bind(user.id).all<{ plan_group: string | null; plan: string | null; status: string; period_end: string | null }>();
+      .bind(user.id).all<SubRow>();
     if (subs.success !== true) throw new Error('Storage plan unreadable');
-    for (const sub of subs.results ?? []) {
-      if ((sub.plan_group === 'advisor' || sub.plan_group === 'partner') && sub.plan === `${sub.plan_group}_pro`
-          && inGrace(sub.status, sub.period_end)) candidates.push(`${sub.plan_group}:pro`);
-    }
     // The existing LP reader owns membership (lpSelfScope), including legacy
     // verified-email matches. Pair its grant with the canonical one-time claim
     // so an email address never becomes a standing transferable entitlement.
@@ -95,13 +132,7 @@ export async function storagePlanKey(env: Env, user: User): Promise<StoragePlanK
       WHERE date(a.admitted_on) <= date('now') LIMIT 1`)
       .bind(JSON.stringify(ids)).all<{ admitted: number }>();
     if (lps.success !== true) throw new Error('Storage plan unreadable');
-    if (lps.results?.length) candidates.push('lp_access');
-    for (const candidate of candidates) {
-      const current = STORAGE_PLANS[key].allowance_bytes;
-      const next = STORAGE_PLANS[candidate].allowance_bytes;
-      if (current !== null && (next === null || next > current)) key = candidate;
-    }
-    return key;
+    return chooseStoragePlanKey(licence, subs.results ?? [], Boolean(lps.results?.length));
   } catch {
     throw new Error('Storage plan unreadable');
   }

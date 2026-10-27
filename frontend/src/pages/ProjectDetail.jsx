@@ -26,6 +26,7 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const isInvestor = (user?.role || '').toLowerCase() === 'investor';
   const { toast, showToast } = useToast();
   const [project, setProject] = useState(null);
   const [scores, setScores] = useState([]);
@@ -46,7 +47,8 @@ export default function ProjectDetail() {
     setLoadError('');
     Promise.all([
       api.getProject(id),
-      api.getScores(id).catch(() => []),
+      // D1260 (#3283): the Lab scorer is practice. An investor reads a venture's scores in its scorecard, through a deal.
+      (isInvestor ? Promise.resolve([]) : api.getScores(id).catch(() => [])),
       api.listDocuments(id).catch(() => []),
       api.listProjectMembers(id).catch(() => null),
     ]).then(([p, s, d, m]) => {
@@ -374,7 +376,12 @@ export default function ProjectDetail() {
           <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 dark:text-gray-100">
             <Target size={14} className="text-violet-600" /> Latest Score
           </h3>
-          {latestScore ? (
+          {isInvestor ? (
+            <div className="text-sm text-gray-600 dark:text-gray-400" data-testid="project-score-investor">
+              A venture&rsquo;s scores are its scorecard, which you read through a deal you are on.{' '}
+              <Link to="/deals" className="underline">Your deals</Link>
+            </div>
+          ) : latestScore ? (
             <div>
               <div className={`text-4xl font-bold ${
                 latestScore.tier === 'TIER_1' ? 'text-emerald-600' :

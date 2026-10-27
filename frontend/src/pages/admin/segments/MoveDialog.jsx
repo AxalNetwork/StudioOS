@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { personaSegmentsApi } from '../../../lib/api/personaSegments';
 import { reportError } from '../../../lib/log';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
+import { PHONE_QUERY } from './segModel';
 import { moveView, profileWord } from './segmentPageModel';
 
 /**
@@ -22,12 +24,20 @@ import { moveView, profileWord } from './segmentPageModel';
  * The move answers each member's outcome, which `onMoved(reply, target)`
  * puts in words; a refusal stays in the dialog. Never a browser pop-up.
  *
+ * D1007 (#2822, SEG14b): on a phone it is a full-screen sheet. Its own bar
+ * says where Back goes ("‹ Members", `back`) in place of the shell's 36px
+ * close, the body scrolls under it, and Cancel and Move stay at the foot,
+ * side by side and 44px tall.
+ *
  * `members`: `{ user_id, name, email, profile, is_admin?, segment: { key, name } | null, howSet?, confidence? }`.
  */
 
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const SEC = 'flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline px-3.5 py-3 dark:border-gray-700';
-const FIELD = 'h-10 w-full rounded-[8px] border border-axal-hairline bg-white px-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const FIELD = 'h-10 max-sm:h-11 w-full rounded-[8px] border border-axal-hairline bg-white px-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+
+/** 44px on a phone (SEG14), the shell's own size above. */
+const PHONE_BTN = 'max-sm:min-h-[44px]';
 
 function useSegments() {
   const [read, setRead] = useState({ status: 'loading', segments: [] });
@@ -44,8 +54,9 @@ function useSegments() {
   return { ...read, retry: () => setTick((t) => t + 1) };
 }
 
-export default function MoveDialog({ members, superAdmin = false, onClose, onMoved, testId = 'seg-move-dialog' }) {
+export default function MoveDialog({ members, superAdmin = false, onClose, onMoved, back = 'Back', testId = 'seg-move-dialog' }) {
   const segs = useSegments();
+  const phone = usePhoneWidth(PHONE_QUERY);
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
@@ -67,10 +78,10 @@ export default function MoveDialog({ members, superAdmin = false, onClose, onMov
 
   const footer = (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" className={actionGhost} onClick={close} data-testid={`${testId}-cancel`}>{v.blocked ? 'Close' : 'Cancel'}</button>
+      <div className={phone ? 'flex gap-2' : 'flex flex-wrap justify-end gap-2'} data-testid={`${testId}-buttons`}>
+        <button type="button" className={`${actionGhost} ${PHONE_BTN}${phone ? ' flex-1' : ''}`} onClick={close} data-testid={`${testId}-cancel`}>{v.blocked ? 'Close' : 'Cancel'}</button>
         {!v.blocked && v.canMove ? (
-          <button type="button" className={actionPrimary} onClick={move} disabled={busy} data-testid={`${testId}-go`}>{busy ? 'Moving…' : 'Move'}</button>
+          <button type="button" className={`${actionPrimary} ${PHONE_BTN}${phone ? ' flex-[1.4]' : ''}`} onClick={move} disabled={busy} data-testid={`${testId}-go`}>{busy ? 'Moving…' : 'Move'}</button>
         ) : null}
       </div>
       {refusal ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid={`${testId}-refusal`}>{refusal}</p> : null}
@@ -78,7 +89,13 @@ export default function MoveDialog({ members, superAdmin = false, onClose, onMov
   );
 
   return (
-    <Lightbox phone="sheet" label={v.title} title={v.title} onClose={close} testId={testId} footer={footer}>
+    <Lightbox phone="full" label={v.title} title={phone ? undefined : v.title} onClose={close} testId={testId} footer={footer}>
+      {phone ? (
+        <header className="flex flex-col gap-0.5 border-b border-axal-hairline px-4 pb-3 pt-1 dark:border-gray-800" data-testid={`${testId}-phone-bar`}>
+          <button type="button" onClick={close} className="inline-flex min-h-[44px] items-center self-start font-mono text-[11px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400" data-testid={`${testId}-back`}>‹ {back}</button>
+          <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{v.title}</h2>
+        </header>
+      ) : null}
       <div className="flex flex-col gap-3 px-5 py-4">
         {v.blocked ? (
           <p role="alert" className="m-0 flex gap-2 rounded-[10px] border border-red-200 bg-red-50 px-3.5 py-3 text-[13px] font-semibold text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" data-testid={`${testId}-admin`}>
@@ -96,7 +113,7 @@ export default function MoveDialog({ members, superAdmin = false, onClose, onMov
               {segs.status === 'error' ? (
                 <span role="alert" className="flex flex-wrap items-center gap-2 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid={`${testId}-segments-failed`}>
                   The segments could not be read. Nothing can be moved until they are.
-                  <button type="button" className={actionGhost} onClick={segs.retry}>Try again</button>
+                  <button type="button" className={`${actionGhost} ${PHONE_BTN}`} onClick={segs.retry}>Try again</button>
                 </span>
               ) : null}
               {segs.status === 'ready' ? (

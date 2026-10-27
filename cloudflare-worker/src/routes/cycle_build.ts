@@ -8,9 +8,13 @@ import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
 import { lovableRepositories } from '../integrations/providers/github/lovableMark';
+import { lovablePart } from '../services/lovableAppLinks';
 import { foundingTeamFromCode, mapLogin, unmapLogin } from '../integrations/providers/github/team';
 import { acceptCompanyProposal, companyFromCode, dismissCompanyProposal } from '../integrations/providers/github/company';
+import { acceptVercelProposal, companyFromVercel, dismissVercelProposal } from '../services/vercel/company';
 import { validateConnectorSettings } from '../integrations/connectorRules';
+import { dismissHealthEvent } from '../services/vercel/health';
+import { UNREADABLE as VERCEL_UNREADABLE, hostingSystems, vercelRuntime } from '../services/vercel/hosting';
 import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
@@ -22,6 +26,7 @@ import { ownedRow } from '../services/records/owned';
 import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, moveRoadmapItem, roadmapCreateChecks } from './progress';
 import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
+import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
@@ -177,7 +182,7 @@ function reconnect(providerKey: string, failedAt: unknown, projectId: number, fa
   return { text: `Reconnect ${name}${since ? ` · failing since ${since}` : ''}`, href: connectHref(providerKey, projectId) };
 }
 
-async function solution(env: Env, p: Project): Promise<ModuleRead> {
+async function solution(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
             pg.title AS pain_theme, h.claim AS hypothesis
@@ -211,7 +216,16 @@ async function solution(env: Env, p: Project): Promise<ModuleRead> {
     cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
     list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
       sort: { key: 'impact', label: 'Impact' }, orders: { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } },
-    facts: { features: features.length, risks }, parts: { from_code: await fromCode(env, p.id) } };
+    facts: { features: features.length, risks }, parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } };
+}
+
+/** D1097 (#2962): Solution design's "Runs on" from Vercel (VC4a). Its own read, Unreadable on its own. */
+async function runsOnVercel(env: Env, p: Project, viewer: Viewer) {
+  try { return await vercelRuntime(env, p, viewer, await projectMember(env, p, viewer)); }
+  catch (error) {
+    console.error('[cycle_build] vercel runtime read failed', (error as Error)?.message);
+    return { state: 'unreadable', items: [], reason: VERCEL_UNREADABLE };
+  }
 }
 
 /**
@@ -227,7 +241,7 @@ async function fromCode(env: Env, projectId: number) {
   }
 }
 
-async function prototype(env: Env, p: Project): Promise<ModuleRead> {
+async function prototype(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.is_must_have, f.delivery_status, f.done_at, f.updated_at,
             f.hypothesis_id, f.due_date, u.name AS owner, h.claim AS test_hypothesis
@@ -264,7 +278,13 @@ async function prototype(env: Env, p: Project): Promise<ModuleRead> {
       { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
     sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
-    parts: { github: await prototypeGithub(env, p) } };
+    // D1083 (#2948): From Lovable, the project's one app link, under From GitHub.
+    // D1098 (#2963): From Vercel, the Live strip and each must-have's preview.
+    parts: {
+      github: await prototypeGithub(env, p),
+      lovable: await lovablePart(env, p.id, 'build', [{ id: p.id, label: 'Prototype / MVP' }]),
+      vercel: await fromVercel('prototype_mvp', async () => mvpVercel(env, p.id, await projectMember(env, p, viewer))),
+    } };
 }
 
 /** GitHub's state for a fed must-have, in the module's words (D782, #2112). */
@@ -321,7 +341,7 @@ async function prototypeGithub(env: Env, p: Project) {
   }
 }
 
-async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
+async function roadmap(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const items = rows(await env.DB.prepare(
     `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id,
             u.name AS owner
@@ -356,7 +376,7 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
     list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
       sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
     facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 },
-    parts: { github: await roadmapGithub(env, p) } };
+    parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } };
 }
 
 /** How many releases the strip shows, newest first; `releases_total` gives the rest's count. */
@@ -497,6 +517,22 @@ async function fromGithub(module: 'founding_team' | 'company_creation', read: ()
   }
 }
 
+/**
+ * A module's part from Vercel. Its own failure leaves the module readable.
+ * D1098 (#2963): Prototype / MVP and Product roadmap already set `state`, and the log names the module only.
+ * D1099 (#2964): Company creation wraps the reader and names the failure.
+ */
+async function fromVercel(module: 'prototype_mvp' | 'product_roadmap' | 'company_creation', read: () => Promise<Record<string, unknown>>) {
+  try {
+    const part = await read();
+    return module === 'company_creation' ? { state: 'ok', ...part } : part;
+  } catch (error) {
+    if (module === 'company_creation') console.error('[cycle_build] vercel company_creation read failed', (error as Error)?.message);
+    else console.error('[cycle_build] vercel %s read failed', module);
+    return { state: 'unreadable', reason: 'What Vercel brought could not be read.' };
+  }
+}
+
 async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
@@ -541,7 +577,10 @@ async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null },
-    parts: { github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))) } };
+    parts: {
+      github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
+      vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
+    } };
 }
 
 const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'] as const;
@@ -623,6 +662,10 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   });
   const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));
   const code = p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
+  // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
+  let hosting: any;
+  try { hosting = await hostingSystems(env, p, viewer, viewerMember, connectHref('vercel', p.id)); }
+  catch { hosting = { state: 'unreadable', systems: [], reason: VERCEL_UNREADABLE, syncs: { state: 'unreadable', rows: [], reason: null } }; }
 
   const rituals = rows(await env.DB.prepare(
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?
@@ -654,6 +697,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
       code: code?.code ?? { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.' },
       syncs: code?.syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
+      hosting,
     } } };
 
 }
@@ -994,6 +1038,23 @@ app.post('/solution-design/proposals/:id/dismiss', async c => {
   return c.json({ ok: true });
 });
 
+// D1097 (#2962): the founder dismisses an open Vercel health event. It stays dismissed: the next sync finds it open and opens nothing new.
+const HEALTH_DISMISS = {
+  not_found: [404, 'That health event is not on this venture.'],
+  closed: [409, 'That health event has closed, so there is nothing to dismiss.'],
+  already: [409, 'That health event is already dismissed.'],
+} as const;
+
+app.delete('/vercel/health-events/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: HEALTH_DISMISS.not_found[1] }, 404);
+  const out = await dismissHealthEvent(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'operating-systems', entityId: null,
+    action: 'build_vercel_health_dismissed', summary: 'A Vercel health event dismissed' })]);
+  if (out !== 'ok') return c.json({ detail: HEALTH_DISMISS[out][1] }, HEALTH_DISMISS[out][0]);
+  return c.json({ ok: true });
+});
+
 // D782 (#2115): the founder maps a GitHub login to a founder, once; it is never guessed.
 // The activity line never names the login: it is personal data.
 const LOGIN_OUTCOME = {
@@ -1040,6 +1101,27 @@ app.post('/company-creation/proposals/:id/dismiss', async c => {
   const out = await dismissCompanyProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
     projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
     action: 'build_ip_step_dismissed', summary: 'Proposed filing from GitHub dismissed' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+// D1099 (#2964): the founder's decision on the step Vercel's facts proposed. Accept changes nothing on Vercel.
+app.post('/company-creation/vercel-proposals/:id/accept', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await acceptVercelProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
+    action: 'build_hosting_step_accepted', summary: 'Filing added from Vercel: move the production project to the company’s team on a paid plan' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+app.post('/company-creation/vercel-proposals/:id/dismiss', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await dismissVercelProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
+    action: 'build_hosting_step_dismissed', summary: 'Proposed filing from Vercel dismissed' })]);
   if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
   return c.json({ ok: true });
 });

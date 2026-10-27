@@ -25,6 +25,7 @@ import { loadSession, replaceWithFinal, type SessionRow, type StoredSegment } fr
 import { CALL_PROVIDERS, markInterviewHeld } from './sessionSetup';
 import { PROVIDER_LABEL, type ChannelProvider, type ImportedSegment } from './channels/types';
 import { interviewCapRefusal } from '../middleware/requireTier';
+import { assertStorageRoom } from './storageRoom';
 
 export class IntakeError extends Error {
   status: number;
@@ -129,6 +130,18 @@ export async function openSession(
   env: Env, scoped: ScopedInterview, provider: ChannelProvider, channel: 'text' | 'video' | 'in_person',
   consent: { method: string } | null = null,
 ): Promise<SessionRow> {
+  // D1170 — a call or an in-person recording stores audio: it checks storage
+  // once, at its start (Record a Session's rule). A text chat stores no file
+  // of its own. The refusal is this file's own error, so a channel's handler
+  // answers it as it answers every other.
+  if (channel !== 'text') {
+    try {
+      await assertStorageRoom(env, { projectId: scoped.project.id }, 0, scoped.member);
+    } catch (e) {
+      if (e instanceof Response) throw new IntakeError(413, 'storage_full', String(((await e.json().catch(() => null)) as any)?.message || 'Storage is full.'));
+      throw e;
+    }
+  }
   const uid = crypto.randomUUID();
   const callProvider = (CALL_PROVIDERS[channel] ?? []).includes(provider) ? provider : null;
   const [inserted] = await env.DB.batch([

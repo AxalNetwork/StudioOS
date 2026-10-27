@@ -107,8 +107,9 @@ test('the two calls go to the Worker\'s routes, and Solution design mounts the p
     ['/cycles/build/solution-design/proposals/7/accept?project=101', 'POST'],
     ['/cycles/build/solution-design/proposals/8/dismiss?project=101', 'POST'],
   ]);
-  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.match(route, /'solution-design': \(data, ctx\) => <SolutionDesignFromCode part=\{data\?\.parts\?\.from_code\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
+  // D1311: Build's parts live in buildParts.jsx, one line per connector.
+  const route = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
+  assert.match(route, /\['github', \(data, ctx\) => <SolutionDesignFromCode part=\{data\?\.parts\?\.from_code\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
   const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/cycle_build.ts', import.meta.url), 'utf8');
   for (const how of ['accept', 'dismiss']) assert.ok(worker.includes(`app.post('/solution-design/proposals/:id/${how}'`), how);
 });

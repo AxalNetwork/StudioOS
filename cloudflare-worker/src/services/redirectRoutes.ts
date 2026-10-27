@@ -57,10 +57,14 @@ export const ADMIN_TAB_REDIRECTS: readonly RedirectRoute[] = Object.freeze([
  * `/funds` and `/funds/performance` forward an admin to Fund administration
  * and remain an investor's pages, so the address-bar beacon skips them; the
  * forward itself (`FundOpsRedirect`) sends the key, counted until #2319.
+ * D1243 (#3256): `/pipeline` forwards an investor to Deal flow's table and
+ * stays the partner's bucket and the founder's and an admin's board; its
+ * forward (`DealsPipelineRedirect`) sends the key.
  */
-export const ROLE_REDIRECTS: readonly (RedirectRoute & { role: 'admin' })[] = Object.freeze([
+export const ROLE_REDIRECTS: readonly (RedirectRoute & { role: 'admin' | 'investor' })[] = Object.freeze([
   { path: '/funds', role: 'admin' },
   { path: '/funds/performance', role: 'admin' },
+  { path: '/pipeline', role: 'investor' },
 ]);
 
 /**
@@ -74,12 +78,16 @@ export const FORWARD_REDIRECTS: readonly (RedirectRoute & { forward: true })[] =
   { path: '/raise/data-room?mode=workspace', forward: true },
   { path: '/raise/data-room?mode=access', forward: true },
   { path: '/raise/data-room/:id', forward: true },
+  // D1180 (#3107): the retired Capital workspace's default tab (the financial model); `/raise/capital` itself is a page.
+  { path: '/raise/capital?mode=workspace', forward: true },
 ]);
 
 export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/for-mentors' },
   { path: '/pricing/investor' },
   { path: '/settings', keep: true },
+  // D1140 (#3020): Company Settings moved under Companies and projects. No sent mail carries it, so its count decides.
+  { path: '/company-settings' },
   { path: '/settings/:section', keep: true },
   { path: '/dashboard' },
   { path: '/product-testing', keep: true }, // #2314: historical member notifications
@@ -123,7 +131,10 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/products/:productId' },
   { path: '/market-intel' },
   { path: '/grow/updates' },
-  { path: '/grow/capital-match' },
+  { path: '/grow/capital-match' }, // D1194: → /raise/capital-relationships/match?moved=match
+  { path: '/raise/capital-match' }, // D1194: → /raise/capital-relationships/match?moved=match
+  { path: '/raise/capital/pipeline' }, // D1194: → /raise/capital-relationships/pipeline?moved=pipeline
+  { path: '/deals/pipeline' }, // D1243 (#3256): the Pipeline zone retired → /deals?view=table, query kept
   { path: '/grow/brand' }, // #2343: Grow's Brand page folded into /build/brand
   { path: '/build/discovery' }, // #2335: → Validate · Customer research
   { path: '/build/metrics' }, // #2336: → /build/kpi
@@ -166,6 +177,9 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/pipeline/transactions' },
   { path: '/contacts' },
   { path: '/raise/calls' },
+  { path: '/raise/calls/:uid' }, // D1227 (#3226): one call, now /raise/capital-relationships/calls/:uid
+  { path: '/account/developer' }, // D1315 (#2418): Account › Developer, now /account/builder
+  { path: '/account/developer/*' }, // D1315 (#2418): its pages and drawers, now under /account/builder
   { path: '/refer' },
   { path: '/integrations', keep: true }, // every provider's OAuth sign-in returns here
   { path: '/account/integrations' },

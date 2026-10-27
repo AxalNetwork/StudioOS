@@ -11,9 +11,15 @@ to the owner's canvas: `design/incoming/Companies Projects Page.dc.html` and
 | `CompanyLightbox.jsx` | The company lightbox (CMP2, D1139) at `/account/companies/<uid>`: facts, ventures in the company, members, invitations, and the buttons the caller's place in the company allows. |
 | `VentureLightbox.jsx` | The venture lightbox (CMP4, CMP4b, D1139): facts, team, invitations or the Worker's Lab lock, and the owner's or a team member's acts. |
 | `LifecycleDialogs.jsx` | The lifecycle dialogs (CMP6–CMP8, D1139) on one shell, `ActionDialog`: Rename, Make active, Invite people, Transfer primary admin, Archive, Restore, Leave and its refusal, Move, Transfer ownership, Leave a venture, Move to trash, Remove. |
+| `CompaniesMoved.jsx` | D1140 (#3020, CMP19): `CompanySettingsRedirect`, which forwards `/company-settings` to the active company's page (or the Companies tab) with the query and hash kept and `?moved=company-settings`; the notice that draws on arrival; and Profile and identity's line where "Your companies" was, shown until dismissed on this device. |
+| `CompanySettingsAt.jsx` | D1140: the full company settings (`CompanySettingsPage`, unchanged) at `/account/companies/<uid>/settings` for the company active on this device. `/account/companies/settings` opens the active company's, or with none, Firm or Practice Settings and the on-ramp. Lazy-loaded by `App.jsx`. |
 | `companiesModel.js` | Pure: the profiles and their tabs, the tab and company addresses, the words, and the derivations from the reads (the cards, the ventures grouped, the invitations, the funds by firm, the engagements, the tab counts); D1139's `LIFECYCLE` words and who may do what (`companyPowers`, `ventureTeam`). |
 
 ## The rules for adding here
+
+- **`settings` is reserved** (D1140). It is never a company uid or a tab:
+  `companyUidFor` and `settingsUidFor` both refuse it, and its two routes sit
+  before `/account/companies/:tab` in `App.jsx`.
 
 - **The active company is this device's.** It lives in the browser
   (`active_company_id`); `/me` carries none. Say "Active on this device".

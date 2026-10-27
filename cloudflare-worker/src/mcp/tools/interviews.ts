@@ -28,7 +28,9 @@ export const INTERVIEW_TOOLS: McpTool[] = [
     run: ({ env, props, args }) => proposePlacements(env, grant(props), args as any),
   },
   {
-    name: 'structure_with_studioos', title: 'Structure an interview with StudioOS', description: TOOLS.structure_with_studioos.description,
+    // D1315: renamed from structure_with_studioos, which still calls it (unlisted) and stays the stored name.
+    name: 'structure_with_axalvc', storedAs: 'structure_with_studioos', aliases: ['structure_with_studioos'],
+    title: 'Structure an interview with Axal VC', description: TOOLS.structure_with_studioos.description,
     requiredScope: 'validate:write', source: 'axal', version: '1.0.0', company: false, readOnly: false,
     inputSchema: { session_id: z.number().int().positive(), model: z.string().optional() },
     run: ({ env, props, args }) => structureWithStudioos(env, grant(props), args as any),

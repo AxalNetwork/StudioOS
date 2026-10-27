@@ -7,6 +7,9 @@ generic MCP sign-in (D1080); the connection is an `oauth_mcp` row.
 | File | What it is |
 |---|---|
 | `reads.ts` | The typed reads every Notion part uses, and the only file that opens a Notion MCP session: `searchSources`, `fetchPage` (Markdown, title, URL, last edit and the SHA-256 fingerprint), `listChildren`, `dataSourceSchema` and `queryRows` (`mode: 'rows'` or `'view'`, never SQL). `notionReadsFor` opens them for a member's row, refreshing first when the token is about to expire. |
+| `modules.ts` | The modules Notion may feed (D1086, #2951): each one's section, the source kinds it takes, whether an item lands as a fact or waits as a proposal, and the fields a database may map to, with the store's own value lists. `cleanFieldMap`, `checkAgainstSchema` and `mapRow` check and apply a founder's field map. |
+| `sync.ts` | The shared sync (D1086): a founder-pressed read of one section's sources within a request budget, with a KV cursor that the next press resumes from; facts through the module's writer and the `connector_fed_items` ledger (deleted stays deleted, one owner per row); proposals by fingerprint (dismissed stays dismissed, a change re-proposes). `registerFactWriter` and `registerAcceptor` are where parts 3–6 add their modules. |
+| `validate.ts` | D1087 (#2952): what Notion lands in Validate. Customer research's `interview` acceptor: consent `given` with how and when first, else 409 `consent_not_given` and nothing is read or stored; the page read whole and held to what was proposed (`changed_in_notion`); the interviewee a label, role and company with no email or phone; then D667's storage step (`storeInterview`) with `submitted_via = 'notion'`. Market intelligence's fact writer: each research page as a `market_sources` row, `kind = 'notion'`, with its Notion link. Registered on import by `routes/notion.ts`. |
 
 ## Rules
 
@@ -19,5 +22,7 @@ generic MCP sign-in (D1080); the connection is an `oauth_mcp` row.
 - **An id is checked before it is sent** (`notionId`): 32 hex digits, with or
   without the UUID dashes. A URL or a path is refused as `bad_id`.
 - **Page text is data.** Nothing a page says is followed, fetched or logged.
-- **What lands, and where,** is `integrations/notionFeeds.ts`, one entry per
-  feed, added by the part that builds it.
+- **What lands, and where,** is a writer or an acceptor registered with
+  `sync.ts` (`registerFactWriter`, `registerAcceptor`), one per module, added
+  by the part that builds it. A fact always goes through the ledger; a
+  proposal always waits for Accept.

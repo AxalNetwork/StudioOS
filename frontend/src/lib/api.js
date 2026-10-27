@@ -75,6 +75,7 @@ export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
+export * from './api/fills.js';
 export * from './api/fundAdmin.js';
 export * from './api/fundBooklets.js';
 export * from './api/fundFees.js';
@@ -86,6 +87,7 @@ export * from './api/fundReports.js';
 export * from './api/fundStructure.js';
 export * from './api/googleSignIn.js';
 export * from './api/googleWorkspace.js';
+export * from './api/googleWorkspaceBuild.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
@@ -102,6 +104,7 @@ export * from './api/licenceFeeInvoices.js';
 export * from './api/licencePrograms.js';
 export * from './api/licenceRequests.js';
 export * from './api/licenceTerms.js';
+export * from './api/lovableAppLinks.js';
 export * from './api/mcpOauth.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
@@ -111,6 +114,7 @@ export * from './api/narrative.js';
 export * from './api/network.js';
 export * from './api/newDeck.js';
 export * from './api/newsletter.js';
+export * from './api/notion.js';
 export * from './api/partnerDealReads.js';
 export * from './api/partnerDealTypes.js';
 export * from './api/partnerProfiles.js';
@@ -217,6 +221,8 @@ function getCsrfHeader(method) {
 // done(true) so the original request is retried once. Concurrent 403s share one
 // in-flight prompt. If no modal is mounted (e.g. nothing listening), we fail
 // fast via the synchronous `ack` flag so the request never hangs.
+// D1287: `request(path, { noStepUp: true })` skips the prompt and throws the 403,
+// for a read that is only shown (the checkout sheet's auto-reload line).
 let _stepUpInFlight = null;
 function requestStepUp(ttlMinutes) {
   if (_stepUpInFlight) return _stepUpInFlight;
@@ -834,6 +840,7 @@ export async function request(path, options = {}) {
         res.status === 403 &&
         err && err.code === 'step_up_required' &&
         !options.__steppedUp &&
+        !options.noStepUp &&
         !path.startsWith('/auth/step-up')
       ) {
         try {
@@ -1628,10 +1635,9 @@ export const api = {
   // `{ matches, note?, k_min }`; cells with n<5 are suppressed server-side.
   miFitFounder: (projectId) => request(`/market-intel/fit/founder/${projectId}`),
 
-  // Task #26 — Financial Model Builder
-  getFinancialModel: (projectId) => request(`/financials/${projectId}`),
-  saveFinancialModel: (projectId, assumptions) => request(`/financials/${projectId}`, { method: 'PUT', body: JSON.stringify({ assumptions }) }),
-  recomputeFinancialModel: (projectId) => request(`/financials/${projectId}/recompute`, { method: 'POST' }),
+  // Task #26 — the financial model's export. D1180 (#3107): the builder page
+  // is retired; Use of funds › Runway › Forecast reads and saves the same
+  // store through `api/useOfFunds.js` and keeps this export.
   // Returns a promise so callers can await it and surface real errors in
   // their own UI instead of relying on alert(). The previous version
   // swallowed the backend's actual reason ("Project not found", "No
@@ -2524,7 +2530,8 @@ export const api = {
   kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
   // D634 — one masked KYC field in clear; the Worker logs the showing first.
   kycAdminShowField: (userId, field) => request(`/kyc/admin/${userId}/sensitive/${encodeURIComponent(field)}`),
-  // D1303: full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  // D1303 (#3400): full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  // D1306 (#3403): the drawer's full-access dialog sends both, from the one reason it asks for.
   kycAdminApprove: (userId, body) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH', ...(body ? { body: JSON.stringify(body) } : {}) }),
   kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
@@ -2763,6 +2770,8 @@ export const api = {
   // D383 — the partner interview on an applicant (schedule replaces the live one).
   adminCohortScheduleInterview: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/interview`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortCancelInterview: (applicantId) => request(`/admin/cohort/applications/${applicantId}/interview/cancel`, { method: 'POST' }),
+  // D1123: held or missed, once the interview's time has passed.
+  adminCohortInterviewOutcome: (applicantId, outcome) => request(`/admin/cohort/applications/${applicantId}/interview/outcome`, { method: 'POST', body: JSON.stringify({ outcome }) }),
   adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),
@@ -2961,6 +2970,20 @@ export const api = {
   // Response, like deckExport: the caller reads the file or the refusal.
   deckExportHtml: (id, { notes = false, sources = false } = {}) =>
     fetch(`${BASE}/decks/${id}/export/html`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
+  // D904 (#2683) — the version as a new presentation in the member's own
+  // Google Drive; the answer is `{created, url, converted, …}` or `{error}`.
+  // Raw Response, like deckExport: the caller reads the answer or the refusal.
+  deckExportGoogleSlides: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/google-slides`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -3667,6 +3690,9 @@ export const api = {
   // D209 — H14, the topology stated once. Super admin; a branch reads its own
   // half through branchDeployment() below.
   hqPlatformTopology: () => request('/admin/platform/topology'),
+  // D1170 — HQ › Platform › Storage: every member's stored bytes as totals by
+  // kind, plan and state; no name, email, id or file name. Super admin.
+  hqPlatformStorage: () => request('/admin/platform/storage'),
   hqSetPlatformSwitch: (key, action, reason) =>
     request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
       method: 'POST',
@@ -4214,9 +4240,9 @@ export const api = {
   // Worker-only (D1); the dev FastAPI backend 404s on the whole prefix.
   // Reads gate to admin/partner/investor; analyst writes (override/recompute)
   // gate to admin/partner.
-  ventureRiskByProject: (projectId) => request(`/venture-risk/by-project/${projectId}`),
-  ventureRiskRecompute: (projectId) =>
-    request(`/venture-risk/${projectId}/recompute`, { method: 'POST' }),
+  // D1260 (#3283): the venture-risk READ (its automatic layer scores) has no
+  // caller: VentureRiskPanel reads the scorecard. Analyst reviews are still
+  // written here, and feed the scorecard's Risk scope.
   ventureRiskSetLayer: (projectId, layerKey, body) =>
     request(`/venture-risk/${projectId}/layers/${layerKey}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
   ventureRiskClearLayer: (projectId, layerKey) =>

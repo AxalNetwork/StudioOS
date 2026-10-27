@@ -111,6 +111,8 @@ const SOURCES: Record<string, string[]> = {
   telegram: ['services/channels/telegram.ts', 'services/channels/outbound.ts'],
   // D1085: a member's sign-in reads through Notion's typed reads; its provider revokes on disconnect.
   notion: ['services/notion/reads.ts', 'integrations/providers/notion.ts'],
+  // D1096: Vercel's only transport is its typed client; the provider calls it.
+  vercel: ['services/vercel/api.ts', 'integrations/providers/vercel.ts'],
 };
 const NOT_SCANNED = new Set(['services/notify.ts']);
 const TEXT = new Map<string, string[]>();
@@ -120,7 +122,7 @@ const linesOf = (file: string) => {
 };
 
 /** The sign-in's own token exchange and refresh: not tools (D753 decision 3). */
-const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint'];
+const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint', '/v2/oauth/access_token'];
 /** A read that is a POST. */
 const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
 /** Connection plumbing: a revoke, a deauthorize, a webhook subscription or listener, a signing key. */
@@ -135,6 +137,8 @@ const ACCOUNT_CALLS: Record<string, string[]> = {
   docusign: ["'/connect'", '/hmac`', '`/connect/${encodeURIComponent(connectId)}`', '/oauth/revoke`'],
   stripe: ['/oauth/deauthorize'],
   zoom: ['/oauth/revoke`'],
+  // D1096: the transport's only non-GET is the uninstall's DELETE.
+  vercel: ["`/v1/integrations/configuration/${key(auth.configuration_id)}`, {}, 'DELETE'", "method: 'GET' | 'DELETE' = 'GET'"],
   whatsapp: ['/subscribed_apps`'],
 };
 
@@ -289,7 +293,7 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 const ADDED: Record<string, string | null> = {
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
-  github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10', notion: '2026-10',
+  github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10', notion: '2026-10', vercel: '2026-10',
   google_workspace: null,
 
   lovable: null,
@@ -349,6 +353,8 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
   telegram: { file: 'services/channels/telegram.ts', sign_in: null, api: 'TELEGRAM_API' },
   // D1085: the page names the MCP server a member's sign-in reads through.
   notion: { file: 'services/notion/reads.ts', sign_in: ['NOTION_MCP_URL', ''], api: null },
+  // D1096: the install page is built from the Integration's slug, so there is no sign-in constant.
+  vercel: { file: 'services/vercel/api.ts', sign_in: null, api: 'VERCEL_API' },
 };
 
 test('9. endpoints equal the providers\' own constants', () => {

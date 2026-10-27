@@ -16,6 +16,7 @@ import { TIER_PLANS } from '../../components/PaywallModal';
 import { planSummary } from './accountCenterModel';
 import { codeWord } from './connectorsModel.js';
 import { usagePathFor } from './limitsModel.js';
+import { BUILDER_PAGES, builderPathFor } from './builder/builderModel.js';
 import { companiesPathFor, companyPathFor } from './companies/companiesModel.js';
 
 /**
@@ -27,7 +28,8 @@ import { companiesPathFor, companyPathFor } from './companies/companiesModel.js'
 export const ACCOUNT_PHONE_PAGES = {
   account: {
     route: '/account', title: 'Account', sub: 'Settings you manage for yourself.',
-    sections: ['Settings', 'Developer'],
+    // D1315: the canvas's "Developer" section is Builder.
+    sections: ['Settings', 'Builder'],
   },
   usage: {
     route: '/account/usage', title: 'Usage', sub: 'What you have used across all your companies.',
@@ -83,6 +85,9 @@ export const ACCOUNT_PHONE_COPY = {
   modelsNote: 'Estimated from the run log. Runs still in progress are not in these yet.',
   allFiles: 'All your files',
   noSizeFiles: 'Files with no size recorded',
+  // D1171 (STG15): A2m's Storage opens Usage › Storage, which draws the figures.
+  storageMoved: 'Open Storage',
+  storageMovedSub: 'Your plan, your files by kind and company, and the largest. It has its own page now.',
   browseConnectors: 'Browse connectors',
 };
 
@@ -117,7 +122,8 @@ export const PATH_TO_SECTION = {
   // ones (`/account#sign-in`, `#billing` in ops-data.js), and Activity Log,
   // which the nav could open but a reload of its URL could not.
   following: 'following',
-  developer: 'developer',
+  // D1315 — Builder, which was Developer. `/account/developer…` is redirected before this page renders.
+  builder: 'builder',
   usage: 'usage',
   'sign-in': 'security-privacy',
   orders: 'billing',
@@ -170,8 +176,10 @@ export function connectorKeyFor(pathname = '') {
  * D807 — Usage with `usagePage` is that Usage page (`/account/usage/limits`).
  * D1138 — Companies and projects with `companiesTab` is that tab (`/account/companies/invitations`).
  * D1139 — with `companyUid` it is that company's lightbox (`/account/companies/<uid>`).
+ * D1315 — Builder with `builderView` is that page or drawer (`/account/builder/keys`).
  */
-export function accountPathFor({ section, phone = false, key = null, usagePage = null, companiesTab = null, companyUid = null } = {}) {
+export function accountPathFor({ section, phone = false, key = null, usagePage = null, companiesTab = null, companyUid = null, builderView = null } = {}) {
+  if (section === 'builder') return builderPathFor(builderView ?? {});
   if (section === 'connectors' && key && connectorKeyFor(`/account/connectors/${key}`) === key) return `/account/connectors/${key}`;
   if (section === 'usage' && usagePage) return usagePathFor(usagePage);
   // D1138 — Companies and projects with a tab is that tab's own address (`/account/companies/projects`).
@@ -228,8 +236,9 @@ export function planLine(role, billing) {
 }
 
 /**
- * A1m's rows: the canvas's Settings section, Developer for the one role
- * `SECTIONS` admits, and More for the three panes the board does not draw.
+ * A1m's rows: the canvas's Settings section, Builder for every role (D1315;
+ * the canvas's Developer for admins only), and More for the three panes the
+ * board does not draw.
  * Usage and Connectors are not repeated: they are A2m and A3m, opened from
  * the account sheet (founders) or the user menu (everyone else).
  */
@@ -247,14 +256,8 @@ export function accountIndexGroups({ role, follows, billing } = {}) {
       ],
     },
   ];
-  if (String(role || '').toLowerCase() === 'admin') {
-    groups.push({
-      label: 'Developer',
-      // Reworded (decision 10): the board's "Shown when developer mode is on"
-      // names a switch that does not exist. The admin role is the switch.
-      rows: [{ title: 'API and search indexes', description: 'Feature flags, account fields and the search indexes', to: '/account/developer' }],
-    });
-  }
+  // D1315 (#2418): Builder, for every role, one row per page.
+  groups.push({ label: 'Builder', rows: BUILDER_PAGES.map((p) => ({ title: p.label, to: p.path })) });
   groups.push({
     label: MORE_SECTION,
     rows: [

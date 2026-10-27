@@ -13,6 +13,7 @@ through `/api/venture-scores` (`../../routes/venture_scores.ts`).
 | `countryIndex.ts` | D1259: the country index sources with their recorded licences (`INDEX_SOURCES`), the WGI fetch and list import into migration 627's editions and values, and HQ's source read. A source without a recorded licence is neither imported nor read. |
 | `publish.ts` | D1259: `publishModel` makes a newer version live; `continuePublication` rescores every venture in claimed batches from the every-minute job; `modelVersions` and `modelChanges` feed HQ › Scoring. |
 | `access.ts` | D1256: who reads a scorecard and what they see (founder, staff, shared advisor; an investor through a deal, masked before the NDA, never when the founder's switch is off), the logged reads, reviews, corrections, weighting and sharing (migration 626). |
+| `riskLayers.ts` | D1260: the ten venture-risk layers as Risk's sub-rows (SC5): each layer's analyst review from `venture_risk_overrides`, or Not reviewed, never 0. Read with every scorecard read and never stored; the analyst's note is staff's only, and an investor gets the layers only after the NDA. The old automatic layer score is not read. |
 | `jobs.ts` | D1256: the nightly recompute, the recompute after a connector sync, and the quarterly fairness aggregate (cells under five ventures suppressed). |
 
 Rules for adding to it:

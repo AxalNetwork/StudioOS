@@ -56,7 +56,8 @@ const PROFILES = {
     // (D894): `raise/pitch` became the Pitch deck studio, excluded below. 24 → 23
     // (D1109): `raise/data-room`'s access view is retired for the Data room
     // tool, which draws its own tabs; excluded below.
-    zones: 23,
+    // 23 → 22 (D1194): `raise/capital-match` retired into Capital relationships › Match; excluded below.
+    zones: 22,
     // 17 → 22 → 23. Five ops that were `unbuilt` became links because their
     // destination already existed and the reader may open it: `Send to Problem
     // slide` on two zones, `Configure zone`, `Edit templates` and `Send for
@@ -97,7 +98,8 @@ const PROFILES = {
     // the same `kind: 'export'` every other zone uses. 21 → 20: `raise/liquidity`'s
     // `Export` went with that zone (owner, 2026-10-20). 20 → 19 (D1109):
     // `raise/data-room`'s `Export log`; Activity's Export (CSV) is the tool's.
-    exports: 19,
+    // 19 → 18 (D1194): `raise/capital-match`'s `Export shortlist` went with that zone.
+    exports: 18,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
     // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
@@ -152,7 +154,7 @@ const PROFILES = {
     // D894: `raise/pitch` is the Pitch deck studio, drawn by its own canvas
     // ("Pitch Deck Studio", PD1-PD28) with its own tabs and actions; the zone
     // artboard stays drawn and no table may declare it.
-    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity', 'raise/pitch', 'raise/data-room'],
+    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity', 'raise/pitch', 'raise/data-room', 'raise/capital-match'],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
     // #1539 moves FG5's existing body/controls to Raise; its artboard remains the visual source.
@@ -164,7 +166,8 @@ const PROFILES = {
     call: 'investorZoneActions',
     canvas: /^Pages · Investor /,
     buckets: /^(deals|funds|portfolio|network|research)\//,
-    zones: 19,
+    // 18 since D1243 (#3256): Deals · Pipeline retired into Deal flow's table.
+    zones: 18,
     // Was 1: `network/introductions`'s `Request an intro` → `/matches`. The AI
     // Matching Engine and its page were removed, and the op is a gap now.
     links: 0,
@@ -172,7 +175,8 @@ const PROFILES = {
     // no support history to export", which was TRUE — see the handler note.
     // Fifteenth: `funds/calls`'s `Export wires`, whose reason "no wire schedule
     // is stored to export" was true until migration 312's receipts (D371).
-    exports: 15,
+    // 14 since D1243: `deals/pipeline`'s Export left with its zone.
+    exports: 14,
     // Five page-supplied ops: `research/ask`'s `New brief`,
     // `research/library`'s `Upload`, `portfolio/positions`'s `Mark history`,
     // and `portfolio/value-add`'s `Log support` and `Per-company view`. Was 0,
@@ -239,7 +243,8 @@ const PROFILES = {
     // Reviewed elsewhere-claims, by label — see the assertion below.
     // `New deep-dive` left when Markets became the sector directory.
     elsewhere: ['Edit rubric', 'Merge duplicates'],
-    excluded: [],
+    // D1243 (#3256): the canvas still draws ID1; its zone is retired and `/deals/pipeline` forwards to Deal flow's table.
+    excluded: ['deals/pipeline'],
     embeddedGuards: 1,
     // `Pages · Investor Fund` names /fund/*; the router and shellConfig.js both
     // say /funds/*, and "accounting" is mounted at the slug "ledger". The

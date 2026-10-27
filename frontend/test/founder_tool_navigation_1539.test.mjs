@@ -14,7 +14,7 @@ async function changed(kind,old,replacement,index) {
   const source=readFileSync(paths[kind],'utf8');
   if(!source.includes(old))throw Error('Stale #1539 mutation: '+old);
   const sources={...actual.sources,[kind]:source.replace(old,replacement)};
-  if(['app','route','match'].includes(kind))return {...actual,sources};
+  if(['app','route','moved'].includes(kind))return {...actual,sources};
   const overrides=new Map();
   if(kind==='navigation')overrides.set(resolve(paths.navigation),sources.navigation);
   if(kind==='module')overrides.set(resolve(paths.module),sources.module);
@@ -61,11 +61,11 @@ const probes=[
  ['cleanup','app','const founderEditor =','const FounderWorkspaceTabs = lazy(() => import("./pages/founder/FounderWorkspaceTabs")); const founderEditor ='],
  ['bindings','app','<FounderModuleBackLink user={user} />','<span />'],
  ['bindings','route','tools={moduleToolLinks(cycle, slug, user, q)}','tools={[]}'],
- ['redirect','app',"pathname: '/raise/capital-match'","pathname: '/grow/capital-match'"],
- // Anchored on its own route: #2335–#2343's forwards also keep the hash, earlier in App.jsx.
- ['redirect','app',"pathname: '/raise/capital-match', search: location.search, hash: location.hash","pathname: '/raise/capital-match', search: location.search, hash: \"\""],
- ['match','match','workspace="Raise"','workspace="Grow"'],
- ['match','match','<FounderModuleBackLink user={user} />','<span />'],
+ ['redirect','app','<CapRelMovedRedirect tab="pipeline" moved="pipeline" />','<CapRelMovedRedirect tab="match" moved="pipeline" />'],
+ ['redirect','app','path="/grow/capital-match" element={<CapRelMovedRedirect tab="match" moved="match" />}','path="/grow/capital-match" element={<CapRelMovedRedirect tab="match" />}'],
+ ['redirect','moved','capRelMovedTo(tab, loc.search, moved)',"capRelMovedTo(tab, '', moved)"],
+ ['redirect','moved','hash: loc.hash',"hash: ''"],
+ ['guards','app',"<Route path=\"/raise/:slug/:id\" element={guard(labRoles(['admin', 'founder'])","<Route path=\"/raise/:slug/:id\" element={guard(labRoles(['admin'])"],
  ['shell','shell',"prefix: '/raise', tagline:","prefix: '/grow', tagline:"],
  ['guards','navigation',"roles: ['admin', 'founder', 'partner', 'investor', 'advisor']","roles: ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring']"],
  ['doors','module','className={MODULE_LINK_CLASS}','className="rounded-xl border bg-white"'],

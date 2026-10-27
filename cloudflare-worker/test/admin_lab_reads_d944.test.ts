@@ -24,6 +24,9 @@ function fixture() {
   }
   db.exec(readFileSync('cloudflare-worker/sql/migrations/315_spinout_application_lifecycle.sql','utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/316_spinout_application_interviews.sql','utf8'));
+  // D1123: outcome recording (migration 602) began on 25 Oct, before this fixture's interviews.
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/602_lab_interview_outcome_and_reached_weeks.sql','utf8'));
+  db.exec("UPDATE lab_metric_capture SET started_at='2026-10-25 00:00:00'");
   db.exec(`INSERT INTO cohort_cycles (id,year,month,start_at,end_at,status,app_status) VALUES
     (10,2026,10,'2026-10-01T04:00:00Z','2026-10-29T04:00:00Z','completed','active'),
     (11,2026,11,'2026-11-01T04:00:00Z','2026-11-29T05:00:00Z','active','active');
@@ -61,8 +64,10 @@ test('D944: cohort counts use uncapped pool records; grants and distinct grace c
   for(const [k,v] of Object.entries({applied:9,approved:3,undecided:2,waiting:1,interview_set:1,waitlisted:1,declined:1,withdrawn:1,carried_forward:1,started:2,in_grace:1,incorporated:1,certificates_issued:1}))assert.deepEqual(c[k],{available:true,value:v},k);
   const november=r.body.blocks.cohorts.items.find((c:any)=>c.cohort==='2026-11');assert.equal(november.carried_in.value,1);
   assert.equal(c.weeks.items[0].passed,1);assert.equal(c.weeks.items[0].failed,1);assert.equal(c.weeks.items[3].passed,1);
-  assert.equal(c.weeks.items[0].reached.recorded,false);
-  assert.equal(c.interviewed.recorded,false);assert.match(c.interviewed.reason,/does not prove/);
+  // D1123: no deadline of October's was processed with the ledger, so no week says who reached it.
+  assert.equal(c.weeks.items[0].reached.recorded,false);assert.match(c.weeks.items[0].reached.reason,/before reached weeks were recorded/);
+  // A scheduled interview is not an interviewed one: nothing is recorded held, so the count is 0, and the 5 Nov one is not due yet.
+  assert.deepEqual(c.interviewed,{available:true,value:0,awaiting:0});
   assert.equal(r.body.blocks.funnel.cohort,'2026-10');assert.equal(r.body.blocks.funnel.steps.started_week_1.value,2);assert.equal(r.body.blocks.funnel.steps.passed_week_4.value,1);
   f.db.close();
 });

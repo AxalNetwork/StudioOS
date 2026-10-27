@@ -372,12 +372,11 @@ test('read-only: every section calls only read tools, and the logs hold counts, 
   }
 });
 
-test('the page lists exactly what is built: Trust, Pipeline (D884) and the five fed sections, from part 1\'s one list; Portfolio gets nothing', async () => {
+test('the page lists exactly what is built: Trust and the five fed sections, from part 1\'s one list; Portfolio gets nothing (D884\'s Pipeline retired with its zone, D1243)', async () => {
   const h = harness();
   const r = await h.call('GET', '', INVESTOR);
   assert.deepEqual(r.body.sections.map((s: any) => [s.section, s.module, s.href, s.lands]), [
     ['Trust', null, '/trust', 'statement'],
-    ['Deals · Pipeline', 'deals_pipeline', '/deals/pipeline', 'shown'],
     ['Deals · Commit', 'deals_commit', '/deals/commit', 'fact'],
     ['Deals · Closing', 'deals_closing', '/deals/closing', 'proposal'],
     ['Fund · Calls', 'fund_calls', '/funds/calls', 'proposal'],

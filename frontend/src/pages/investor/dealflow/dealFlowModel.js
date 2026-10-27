@@ -5,12 +5,10 @@
  * words, and the words of every block no read carries yet. Pure, so
  * `frontend/test/deal_flow_d1236.test.mjs` holds each rule.
  *
- * WHAT IS READ TODAY. `GET /api/deals` (every round, or `scope=mine`: the
- * deals the investor is invited to or committed on) and
- * `GET /api/deals/invitations/mine`. The investor's own stages, the scores by
- * scope (SCORING #2428), fit to the thesis, saved views and the other ways a
- * venture reaches the investor have no read, so those blocks say "Not read
- * here yet" with their reason and never draw a zero (D1236 §2).
+ * WHAT IS READ. D1236 read `GET /api/deals` and the pending invitations.
+ * D1240 (#3253) adds the firm's own flow, SCORING's batch, the fit and saved
+ * views; their rules are `flowModel.js`'s. New for you's other ways in and
+ * Compare's chart still say "Not read here yet" (part 5, #3254).
  */
 
 import { SCOPE_LABELS } from '../../../components/scoring/scorecard/scorecardModel.js';
@@ -46,6 +44,18 @@ export function viewHref({ view = 'board', scope = 'mine' } = {}) {
   if (scope !== 'mine') q.set('scope', scope);
   const s = q.toString();
   return s ? `${BASE}?${s}` : BASE;
+}
+
+/**
+ * D1243 (#3256): where `/deals/pipeline` and an investor's `/pipeline` land —
+ * the table, with the address's own query and hash kept. The view is the
+ * table whatever the old query said; every other word travels as it was.
+ */
+export function pipelineMovedHref(search = '', hash = '') {
+  const q = new URLSearchParams(String(search));
+  q.set('view', 'table');
+  const h = String(hash || '');
+  return `${BASE}?${q.toString()}${h && h !== '#' ? (h.startsWith('#') ? h : `#${h}`) : ''}`;
 }
 
 export const MAX_COMPARE = 4;
@@ -120,12 +130,8 @@ export function inviteRow(i = {}) {
 
 export const NOT_YET = 'Not read here yet';
 
-/** What the canvas draws that no read carries yet. Never a zero, never "none". */
+/** What the canvas draws that no read carries yet. Never a zero, never "none". D1240 retired the board's, the scores', fit's and views' waits. */
 export const WAITS = Object.freeze({
-  stages: 'Your own stages (Sourced to Closing), moves and passes are not stored yet; today’s zones below follow the round’s status.',
-  scores: 'Scores by scope with their confidence are not read here yet: they come from the scoring engine (#2428).',
-  fit: 'Fit to your thesis is not read here yet.',
-  views: 'Saved views, filters and sort by score are not stored yet.',
   entered: 'Matches to your thesis, introductions, open syndicates and your watchlist do not reach this list yet.',
   compare: 'The compare chart and its table wait for the scores by scope; the ventures you picked are listed.',
 });

@@ -111,6 +111,73 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-27 — Validate › Record a session › the ring visualiser (D1330)
+
+The owner's artifact `3xHppg2QRN4HD78fR2VmW1` ("Recording View Canvas"):
+- `Recording View Canvas · Boards.dc.html`, RV1 to RV13, which imports the page by name;
+- `Recording View.dc.html`, the page;
+- `ring-viz.js`, the reference visualiser the page draws with.
+
+Decoded by `scripts/read-canvas.mjs`. **One edit, named.** The grid's `x-import` of the
+visualiser points at `ring-viz.js` instead of its asset id. No other value was edited. The bundle also carried AI Rail, Cycle Action and Cycle Overview pages that
+the grid does not draw; they are not landed here.
+
+**Grade: UPGRADE.** D1330 ports `ring-viz.js`'s maths into `frontend/src/lib/ringViz.js`.
+
+## Landed 2026-10-27 — Grow › Publish to… and sent history (#2400)
+
+The owner's artifacts came from the prompt on #2400:
+- `Publish Sheet Page.dc.html` (`E1DVsKDVPjraAxCM7NFV4F`) is the page;
+- `Publish · Boards.dc.html` (`RoUFfKU17q28BMT4hPoBTi`) is the board grid, PUB1
+  to PUB12; it imports the page by name.
+
+**Two edits, named.** In both files the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. No other value was
+edited.
+
+**Grade: NEW.** No founder publish exists yet, and nothing is mounted: a
+Publish to… with no Worker behind it would be a dead control. S21's decision
+(D1318) records what the canvas settles (#2400's A, B, E and G) and splits the
+build into four parts, D1319 to D1322. The sheet is D1317's shared `Sheet`.
+
+## Landed 2026-10-27 — Google Workspace and Notion in the four cycles (#2402, #2405)
+
+The owner's four artifacts came from the prompts on #2402 and #2405. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Google Workspace Page.dc.html` (`P8PKaJFr8nh7bCc9uHtj7E`) and
+  `Google Workspace · Boards.dc.html` (`HrTskQMmPN7mKgiKnXzWoh`), GW1 to GW8;
+- `Notion Page.dc.html` (`CrMqvY6NSNKNei6BAs1aZM`) and `Notion · Boards.dc.html`
+  (`GsbtRkWwA8ScSE8ayxGsj2`), NT1 to NT8.
+Each grid imports its page by name.
+
+**One edit, named.** In both pages the Axal VC mark points at `/axal-mark.png`.
+No other value was edited. NT6's proposal keeps Google's "Version 7 stays as it
+is." line; it is recorded in D1314, not edited.
+
+**Grade: UPGRADE.** S21's integration (D1314) adds their lines to Build's
+connector parts; the build tasks are #2951–#2960.
+## Landed 2026-10-27 — Lovable and Vercel in Validate and Build (#2398, #2408)
+
+The owner's artifacts came from the prompts on #2398 and #2408. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Lovable Page.dc.html` (`VzvyBQScibFwCmPhwzqHvd`) is Lovable's page, LV1 to
+  LV8, as variants of one page; the owner re-exported it the same day with the
+  Build in Lovable dialog drawn (the first export left its body as
+  `%%DLGBODY%%`);
+- `Lovable · Boards.dc.html` (`C1Mmza6h8wpj3mukzvfUKx`) is its board grid; it
+  imports the page by name;
+- `From Vercel Page.dc.html` (`QyfJJphpixYJXkkGEsDLVL`) is Vercel's page;
+- `From Vercel · Boards.dc.html` (`LwXtNrAiHcBPt1zsH86xuK`) is the board grid,
+  VC1 to VC7; it imports the page by name.
+
+**Two edits, named.** In both pages, the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. No other value was
+edited.
+
+**Grade: UPGRADE.** The parts go on module pages that are live. S21's
+integration (D1311) gives Build's modules one line per connector part, in the
+canvases' order; the parts are #2947, #2948 (Lovable) and #2962, #2963,
+#2964 (Vercel).
 ## Landed 2026-10-26 — Validate › Record a session › WhatsApp, Telegram, Calls (#2507, #2515, #2525)
 
 The owner's four artifacts came from the prompts on #2507, #2515 and #2525.

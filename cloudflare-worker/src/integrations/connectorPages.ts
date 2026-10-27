@@ -133,8 +133,6 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
   // D840 part 4 (#2349): a signed-in investor's sections, each read through the MCP server only.
   if (variant === 'investor') {
     tools.push(
-      // D884 (#2557): Pipeline shows the capacity Commit read, beside the cheques you intend; it calls no tool of its own.
-      tool('pipeline_capacity', 'your capacity beside your pipeline', 'read', 'Shows the capacity read for Deals › Commit beside the cheques you intend on the live deals in your pipeline. Only you see it.', 'deals_pipeline', [...mcp('getAccounts')]),
       tool('read_capacity', 'available balances of the accounts you pick', 'read', 'Reads the available balance of the accounts you pick, as your capacity beside your own commitments. Only you see it.', 'deals_commit', [...mcp('getAccounts')]),
       tool('list_payments_out', 'outgoing wires and ACH payments', 'read', 'Lists your outgoing payments, to propose the one that funded a commitment. Nothing is recorded until you accept it.', 'deals_closing', [...mcp('listTransactions')]),
       tool('list_payments_in', 'incoming payments', 'read', 'Lists the credits into your fund’s accounts, to propose the capital-call line each one pays. A receipt is recorded only when you accept it.', 'fund_calls', [...mcp('listTransactions')]),
@@ -164,7 +162,7 @@ const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s
 function mercuryPage(variant: MercuryVariant): ConnectorPage {
   return {
     tagline: variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
-      : variant === 'investor' ? 'Your capacity in Deals › Pipeline and Commit, and the wire that funded a commitment. Read-only; only you see a balance.'
+      : variant === 'investor' ? 'Your capacity in Deals › Commit, and the wire that funded a commitment. Read-only; only you see a balance.'
         : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
     long_description: [...(variant === 'founder'
         ? [
@@ -176,7 +174,7 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
           // D884 (#2557): what it reads, then Deals and Pipeline first, then Fund, then proof of funds.
           ? [
             'Your own Mercury account, read-only, on HQ or in a branch. Axal VC reads your accounts’ names, kinds and last four digits, their available balances, your transactions and your statements. A balance is shown to you alone, and it never sends, transfers or requests money.',
-            'Deals first. Deals › Pipeline shows your capacity beside the cheques you intend on your live deals. Deals › Commit reads that capacity from the accounts you pick, beside your commitments. Deals › Closing proposes the wire that funded a commitment, for you to accept.',
+            'Deals first. Deals › Commit reads your capacity from the accounts you pick, beside your commitments. Deals › Closing proposes the wire that funded a commitment, for you to accept.',
             'Then Fund › Calls, Accounting and Reporting, whose proposals write nothing until you accept them. Portfolio gets nothing from Mercury. On HQ, a proof of funds: Axal’s admins see only a dated statement of at least an amount you choose, never a balance.',
           ]
           : [
@@ -532,6 +530,36 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app' },
     verified_on: null,
   },
+  // D1096 (#2961): each tool names its call site in `services/vercel/api.ts`; part 1's sync calls the installation, projects and domains reads.
+  vercel: {
+    tagline: 'Your Vercel projects, deployments and domains, for the venture you choose. Read-only.',
+    long_description: [
+      'Connect Vercel through its own install screen, pick a personal account or a team, and choose the projects that feed one venture. Read-only: Axal VC cannot deploy, cancel, roll back or change anything.',
+      'Each sync records the projects you chose: name, framework, Node version, production branch, linked repository, production domain, plan, and whether production is live, failing, building or not deployed. In Build › Operating systems, Vercel is the Hosting system, with each sync and its production health: a failed deploy, a rollback, a domain unverified, misconfigured or expiring. Solution design shows what the product runs on. The same sync keeps each project\'s newest 200 deployments: production deploys feed Product roadmap, and previews feed Prototype / MVP.',
+      'Axal VC asks Vercel for Read on projects, deployments and domains, nothing else. If Vercel grants more, Axal VC uninstalls the integration and refuses the connection. Disconnecting uninstalls it on Vercel and deletes what Axal VC read.',
+    ],
+    tools: [
+      tool('read_installation', 'the installation', 'read', 'Reads which account and projects the installation covers, and the permissions it holds.', null,
+        ['`/v1/integrations/configuration/${key(auth.configuration_id)}`)']),
+      tool('read_projects', 'project names and settings', 'read', 'Lists the projects the installation reaches, so you can choose, and reads each chosen project.', 'operating_systems',
+        ["'/v10/projects'", '`/v9/projects/${key(id)}`)']),
+      tool('read_domains', 'domains', 'read', 'Reads each chosen project\'s domains, to record its production domain, and each domain\'s configuration and the account\'s registered domains, for production health.', 'operating_systems',
+        ['`/v9/projects/${key(id)}/domains`', '`/v6/domains/${key(name)}/config`', "'/v5/domains'"]),
+      tool('read_deployments', 'deployments', 'read', 'Reads each chosen project\'s newest 200 deployments: state, times, build length, commit, branch and pull request. Never who made one or its commit message. Production deploys feed Product roadmap; previews feed Prototype / MVP. The sync also reads one page of production deployments per project for production health (D1097).', 'prototype_mvp',
+        ["'/v7/deployments'", '`/v13/deployments/${key(id)}`']),
+      tool('uninstall', 'the installation', 'account', 'Uninstalls the integration on Vercel when you disconnect, and when Vercel grants more than read.', null,
+        ["`/v1/integrations/configuration/${key(auth.configuration_id)}`, {}, 'DELETE'", "method: 'GET' | 'DELETE' = 'GET'"]),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Vercel'),
+    made_by: AXAL,
+    service: { name: 'Vercel', href: 'https://vercel.com' },
+    sign_in: { kind: 'oauth', label: 'Install the Vercel integration and choose projects', key_help_href: null },
+    endpoints: { sign_in: null, api: 'https://api.vercel.com' },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://vercel.com/docs/integrations/create-integration/vercel-api-integrations' },
+    verified_on: null,
+  },
   zoom: {
     tagline: 'Interview calls on your own Zoom, and their cloud transcripts.',
     long_description: [
@@ -568,16 +596,17 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     tagline: 'Choose Google files for your modules. Coming soon.',
     long_description: [
       'Axal VC reads only files you choose. It cannot browse the rest of your Drive.',
-      'Connect Google first at /account/connectors/google. File selection and the chosen-files screen await their approved design.',
-      'Stopping use or disconnecting keeps accepted facts; linked source records are removed. Module imports ship in later parts.',
+      'Connect Google first at /account/connectors/google, then allow Google files and choose them on this page, for a venture and a module. Google’s file picker opens once Axal VC’s Google Cloud project is set up for it.',
+      'Validate reads what you map: a Doc of interview notes becomes a session’s text, and a Form’s qualifying responses wait as signals for you to confirm. No respondent name or email is kept. Build, Raise and Grow imports ship in later parts.',
+      'Stopping use or disconnecting keeps accepted facts; linked source records are removed.',
     ],
     tools: [
       tool('pick_files', 'Choose files', 'read', 'Confirms each file chosen in Google’s Picker.', null, ["'files.get'"]),
       tool('read_form', 'Form questions', 'read', 'Previews the chosen Form’s questions without respondent identity.', null, ["'forms.get'"]),
-      tool('read_doc', 'Documents', 'read', 'Reads a chosen document; module imports are not built yet.', null, ["'documents.get'"]),
+      tool('read_doc', 'Documents', 'read', 'Reads a chosen Doc of interview notes into the session of the interview you map it to.', null, ["'documents.get'"]),
       tool('read_sheet', 'Sheets', 'read', 'Previews up to five rows; stores no cells.', null, ["'spreadsheets.values.get'"]),
       tool('read_slides', 'Slides', 'read', 'Reads chosen slides; deck imports are not built yet.', null, ["'presentations.get'"]),
-      tool('read_form_responses', 'Forms', 'read', 'Read-only Forms reader; importing responses is not built yet.', null, ["'forms.responses.list'"]),
+      tool('read_form_responses', 'Forms', 'read', 'Reads each response’s answer to the question you mapped, never who sent it, and proposes the qualifying ones as signals to confirm.', null, ["'forms.responses.list'"]),
       tool('copy_file_to_data_room', 'Data room', 'read', 'Not built yet: a future import may read an exported or downloaded copy.', null, ["'files.export'", "'alt=media'"]),
       tool('revoke_grant', 'Disconnect Google', 'account', 'Revokes the combined Google grant at your request.', null, ['clearWorkspaceConnection(']),
     ],
@@ -593,7 +622,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
       'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
-      'Google Docs, Sheets, Slides, Forms and Drive file choosing is coming soon on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
+      'Google Docs, Sheets, Slides, Forms and Drive files are chosen on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
     ],
     tools: [
       tool('remove_gmail_access', 'Google account access', 'account', 'Revokes an earlier Google grant that included Gmail, then starts a fresh consent without Gmail.', null, ['https://oauth2.googleapis.com/revoke']),
@@ -786,7 +815,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
 
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
-  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build',
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting',
 ] as const);
 
 /** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */

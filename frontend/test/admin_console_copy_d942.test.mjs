@@ -121,9 +121,11 @@ test('error reports name the console file, not the retired AdminPage', () => {
   for (const [name, tags] of Object.entries({
     GithubSyncConsole: ['githubConfigLoad'],
     KycConsole: ['loadKycQueue', 'kycFigures'],
-    UsersConsole: ['loadUsers', 'trustScoreBatch', 'loadAdminData'],
   })) {
     const src = fs.readFileSync(`${ROOT}/${consoles}/${name}.jsx`, 'utf8');
     for (const tag of tags) assert.ok(src.includes(`reportError('${name}:${tag}'`), `${name}:${tag}`);
   }
+  // D1305: the Users console's table is All accounts' own file, and reports under its name.
+  const table = fs.readFileSync(`${ROOT}/pages/admin/accounts/AllAccounts.jsx`, 'utf8');
+  for (const tag of ['list', 'views']) assert.ok(table.includes(`reportError('AllAccounts:${tag}'`), `AllAccounts:${tag}`);
 });
