@@ -111,6 +111,55 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-26 — Validate › Record a session › WhatsApp, Telegram, Calls (#2507, #2515, #2525)
+
+The owner's four artifacts came from the prompts on #2507, #2515 and #2525.
+Each was decoded by `scripts/read-canvas.mjs`:
+- `Session Channels Page.dc.html` (`4v3ggoUM2D5gY9GbLZJ6fD`) is the page every
+  board imports;
+- `Record a session · WhatsApp Boards.dc.html` (`BkEkumPjoAYAJcjBgPw8Uk`),
+  WA1 to WA13;
+- `Record a session · Telegram Boards.dc.html` (`UBBGXNbpe1szG7Be38UPeo`),
+  TG1 to TG7;
+- `Record a session · Calls Boards.dc.html` (`4SjVojdrMwaPzreH3nq9fC`), MC1 to
+  MC7.
+
+**Two edits, named.** In the page, the Axal VC mark points at `/axal-mark.png`
+and the Eadwyn mark at `/eadwyn-ai.png`. No other value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1309) gives each channel its address
+under `/validate/record/`, pointing at today's connector page, chats inbox and
+session page. The boards are #2507, #2515 and #2525 (S09).
+## Landed 2026-10-26 — Admin › Accounts (#2377)
+
+The owner's artifacts `7DW4GaGy3yFbJaiVcj6NDm` (the board grid) and
+`S6bXhbUabNViWFDrFzJu9t` (the page) came from S21's prompt on #2377. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Accounts · Boards.dc.html` is the board grid (ACC1 to ACC14); it imports
+  the page by name;
+- `Accounts Page.dc.html` is the page.
+## Landed 2026-10-26 — HQ › Content › Content queue (#2383)
+
+The owner's artifacts `TLvMuife2sYnh4BtEpo39B` (the board grid) and
+`XBryVcPJkeVM6D3SQKeR4b` (the page) came from S21's prompt on #2383. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Content queue · Boards.dc.html` is the board grid (ART1 to ART18); it
+  imports the page by name;
+- `Content Queue Page.dc.html` is the page.
+
+**Two edits, named.** The reader left two image asset uuids in the page. The
+Axal VC mark now points at `/axal-mark.png` and the Eadwyn mark at
+`/eadwyn-ai.png`, both served from `frontend/public/`. No other value was
+edited.
+
+**Grade: UPGRADE.** S21's integration (D1299) gives Accounts its two tabs at
+their own addresses, a widget per profile from the glance, and one account's
+record at `/admin/accounts/all/:id`. The boards and their reads wait for
+D1300–D1307, so this canvas stays in the queue until they land.
+**Grade: UPGRADE.** S21's integration (D1290) gives the queue four tabs at
+their own addresses and one address per article, under the shared header, and
+the review notices open the article. The boards themselves wait for
+D1291–D1298, so this canvas stays in the queue until they land.
 ## Landed 2026-10-26 — Pricing › Models › Add tokens (#2452)
 
 The owner's artifacts `Tq2eoropBxcFAJm2tHMVhH` (the board grid) and

@@ -128,8 +128,16 @@ test('the two dependencies the delete strands go with it', () => {
   }
   const ARTICLE_NOTIFY = raw('cloudflare-worker/src/services/articleNotify.ts');
   const surviving = [...ARTICLE_NOTIFY.matchAll(/^ {2}\| '([a-z_]+)'/gm)].map((m) => m[1]);
-  assert.equal(surviving.length, 7,
-    'articleNotify no longer carries the seven transitions — the narrowing above lost real behaviour');
+  for (const k of ['author_submitted', 'admin_submitted', 'author_in_review', 'author_changes_requested',
+                   'author_approved', 'author_published', 'author_rejected']) {
+    assert.ok(surviving.includes(k),
+      `articleNotify no longer carries ${k} — the narrowing above lost real behaviour`);
+  }
+  // D1292 added `author_back_to_submitted` (an edit sent the article back).
+  // D1293 (#3389) adds unpublish's notice, which had borrowed "Changes requested".
+  assert.deepEqual(surviving.filter((k) => !kinds.includes(k) && !['author_in_review', 'author_changes_requested',
+    'author_approved', 'author_published', 'author_rejected'].includes(k)),
+    ['author_unpublished', 'author_back_to_submitted']);
 
   // And every kind the narrowed union still declares must have a caller,
   // which is the rule the five broke.
@@ -158,6 +166,10 @@ test("the admin queue alert points at a route the SPA registers — a standalone
 
   const link = body.match(/const link = `([^`]+)`/);
   assert.ok(link, 'the admin alert no longer builds a link');
-  assert.ok(APP.includes(`path="${link[1]}"`),
-    `the admin alert links to ${link[1]}, which App.jsx does not register`);
+  // D1290 (#2383): the link names the article, `/admin/articles/${id}`, which
+  // App.jsx registers through `/admin/articles/:view`. Mutation checked: drop that
+  // route → this fails.
+  const shape = link[1].replace(/\$\{[^}]+\}/g, ':');
+  const registered = [...APP.matchAll(/path="([^"]+)"/g)].some(([, p]) => p.replace(/:\w+/g, ':') === shape);
+  assert.ok(registered, `the admin alert links to ${link[1]}, which App.jsx does not register`);
 });

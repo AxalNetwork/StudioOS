@@ -24,4 +24,6 @@ export const checkoutApi = {
       ...(paymentMethod ? { payment_method: paymentMethod } : {}),
     }) }),
   status: (ref) => request(`/billing/checkout/status?ref=${encodeURIComponent(ref)}`),
+  // D1053 (#2904): the sheet's "Pay with" list. Worker: routes/payments.ts GET /methods.
+  methods: () => request('/payments/methods'),
 };

@@ -22,13 +22,23 @@
  */
 import type { Env } from '../../types';
 import { signHmac } from '../scoreIntegrity';
-import { recomputePmf } from '../scoring/pmfStore';
+import { recomputePmf, storedPmfInputs } from '../scoring/pmfStore';
 import { collectScope, readVenture } from './collectors';
 import { scoreScope, type InputFacts, type ScopeResult } from './engine';
-import { SCORED_SCOPES, SCOPE_ORDER, VENTURE_MODEL_V1, type AnyScopeKey, type ScopeKey } from './model';
+import { DEFAULT_MODEL_VERSION, SCORED_SCOPES, SCOPE_ORDER, VENTURE_MODEL_V1, modelFor, type AnyScopeKey, type ScopeKey, type VentureModel } from './model';
 
-export const TRIGGERS = ['read', 'rescore', 'sync', 'nightly'] as const;
+export const TRIGGERS = ['read', 'rescore', 'sync', 'nightly', 'publish'] as const;
 export type Trigger = (typeof TRIGGERS)[number];
+/** D1256: the jobs' triggers. They run with no person behind them, so they carry no actor. */
+export const SYSTEM_TRIGGERS: ReadonlySet<Trigger> = new Set(['sync', 'nightly']);
+
+/** A confidence's word from SCORING's cut-offs; null below the floor. */
+export function confidenceWord(confidence: number | null | undefined): 'High' | 'Medium' | 'Low' | null {
+  const c = Number(confidence);
+  if (!Number.isFinite(c)) return null;
+  for (const [cut, word] of VENTURE_MODEL_V1.confidence) if (c >= cut) return word;
+  return null;
+}
 
 type Row = {
   id: number; uid: string; project_id: number; scope: string; value: number | null; band: string | null;
@@ -48,9 +58,9 @@ async function sha256(text: string): Promise<string> {
 }
 
 /** What a scope's score rests on. The day is not an input; crossing a freshness window is. */
-export async function scopeHash(scope: ScopeKey, facts: readonly InputFacts[], result: ScopeResult): Promise<string> {
+export async function scopeHash(scope: ScopeKey, facts: readonly InputFacts[], result: ScopeResult, model: VentureModel = VENTURE_MODEL_V1): Promise<string> {
   return sha256(JSON.stringify(canonical({
-    model: { version: VENTURE_MODEL_V1.version, floor: VENTURE_MODEL_V1.floor, freshness: VENTURE_MODEL_V1.freshness_days, scope: VENTURE_MODEL_V1.scopes[scope] },
+    model: { version: model.version, floor: model.floor, freshness: model.freshness_days, scope: model.scopes[scope] },
     facts, state: result.state, stale: result.inputs.map((i) => ({ key: i.key, stale: i.stale })),
   })));
 }
@@ -81,8 +91,7 @@ const AUDIT = `INSERT INTO activity_logs (project_id, user_id, entity_type, enti
   SELECT ?, ?, 'venture.scorecard', ?, 'venture_score_recomputed', ?, ? WHERE EXISTS (SELECT 1 FROM venture_scorecards WHERE uid = ?)`;
 
 /** The scope's model as stored with its first row. A stored copy that differs is refused: versions are frozen. */
-function modelJson(scope: ScopeKey): string {
-  const m = VENTURE_MODEL_V1;
+function modelJson(scope: ScopeKey, m: VentureModel): string {
   return JSON.stringify(canonical({ version: m.version, published: m.published, floor: m.floor, confidence: m.confidence, bands: m.bands,
     freshness_days: m.freshness_days, scope: m.scopes[scope] }));
 }
@@ -92,11 +101,11 @@ export type ScopeAnswer = (ScopeResult | { scope: 'pmf'; state: string; value: n
   & { changed: boolean; computed_at: string | null };
 
 /** Keeps one scope's result if it changed. Returns whether a row was written. */
-async function keep(env: Env, projectId: number, result: ScopeResult, hash: string, trigger: Trigger, actorId: number): Promise<{ changed: boolean; computed_at: string }> {
+async function keep(env: Env, projectId: number, result: ScopeResult, hash: string, trigger: Trigger, actorId: number | null, model: VentureModel): Promise<{ changed: boolean; computed_at: string }> {
   const scope = result.scope;
   const stored = await env.DB.prepare("SELECT model_json FROM scoring_model_versions WHERE scope = ? AND version = ?")
-    .bind(scope, VENTURE_MODEL_V1.version).first<{ model_json: string }>();
-  const json = modelJson(scope);
+    .bind(scope, model.version).first<{ model_json: string }>();
+  const json = modelJson(scope, model);
   if (stored && stored.model_json !== json) throw new Error('scorecard_model_mismatch');
   const uid = crypto.randomUUID();
   const at = new Date().toISOString();
@@ -108,43 +117,78 @@ async function keep(env: Env, projectId: number, result: ScopeResult, hash: stri
   };
   const signature = await signatureFor(env, row);
   await env.DB.batch([
-    env.DB.prepare(MODEL).bind(scope, VENTURE_MODEL_V1.version, json, VENTURE_MODEL_V1.published),
+    env.DB.prepare(MODEL).bind(scope, model.version, json, model.published),
     env.DB.prepare(INSERT).bind(uid, projectId, scope, row.value, row.band, row.confidence, row.coverage, row.inputs_json, hash, signature,
       row.model_version, trigger, actorId, at, row.state, projectId, scope, hash),
-    env.DB.prepare(AUDIT).bind(projectId, actorId, scope, JSON.stringify({ scope, model_version: row.model_version, trigger, inputs_hash: hash }), `user:${actorId}`, uid),
+    env.DB.prepare(AUDIT).bind(projectId, actorId, scope, JSON.stringify({ scope, model_version: row.model_version, trigger, inputs_hash: hash }),
+      actorId == null ? `system:${trigger}` : `user:${actorId}`, uid),
   ]);
   const changed = !!await env.DB.prepare('SELECT 1 AS present FROM venture_scorecards WHERE uid = ?').bind(uid).first();
   return { changed, computed_at: at };
 }
 
 /**
+ * D1259: the live model is the latest version a Super Admin published
+ * (`venture_model_publications`, migration 627); before any publication it is
+ * v1, as D1255 shipped it. A read that fails throws: scoring on a guessed
+ * version would write rows the live model never computed.
+ */
+export async function liveModel(env: Env): Promise<VentureModel> {
+  const row = await env.DB.prepare('SELECT version FROM venture_model_publications ORDER BY id DESC LIMIT 1').first<{ version: string }>();
+  const model = modelFor(row?.version ?? DEFAULT_MODEL_VERSION);
+  if (!model) throw new Error('scorecard_model_unknown');
+  return model;
+}
+
+/**
  * Recomputes every scope for one venture and keeps each that changed.
  * `actorId` is the signed-in person whose read or Re-score asked for it.
+ * D1256: the nightly and post-sync jobs pass `null`; their rows carry no
+ * actor and their audit names `system:<trigger>`. A job leaves Product-market
+ * fit to its own writer (`recomputePmf` needs a person) and answers its stored row.
  */
-export async function scoreVenture(env: Env, projectId: number, opts: { actorId: number; trigger: Trigger; today: string }) {
+export async function scoreVenture(env: Env, projectId: number, opts: { actorId: number | null; trigger: Trigger; today: string }) {
   const { actorId, trigger, today } = opts;
-  if (!Number.isSafeInteger(projectId) || projectId < 1 || !Number.isSafeInteger(actorId) || actorId < 1
+  const system = actorId === null;
+  if (!Number.isSafeInteger(projectId) || projectId < 1
+    || (system ? !SYSTEM_TRIGGERS.has(trigger) : !Number.isSafeInteger(actorId) || (actorId as number) < 1 || SYSTEM_TRIGGERS.has(trigger))
     || !(TRIGGERS as readonly string[]).includes(trigger) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) throw new Error('invalid_scorecard_context');
   const venture = await readVenture(env, projectId);
   if (!venture) throw new Error('venture_not_found');
+  const model = await liveModel(env);
   const answers = new Map<AnyScopeKey, ScopeAnswer>();
   for (const scope of SCORED_SCOPES) {
     let facts: InputFacts[];
     try {
-      facts = await collectScope(env, scope, projectId, venture, today);
+      facts = await collectScope(env, scope, projectId, venture, today, model);
     } catch {
       console.warn(`[ventureScoring] scope unreadable scope=${scope}`);
-      answers.set(scope, { scope, model: VENTURE_MODEL_V1.version, state: 'unreadable', value: null, band: null, confidence: 0, confidence_word: null,
+      answers.set(scope, { scope, model: model.version, state: 'unreadable', value: null, band: null, confidence: 0, confidence_word: null,
         coverage: { present: 0, applies: 0 }, partial: true, reason: 'Could not be read', inputs: [], changed: false, computed_at: null });
       continue;
     }
-    const result = scoreScope(scope, facts, today, { stage: venture.stage });
+    const result = scoreScope(scope, facts, today, { stage: venture.stage, model });
     if (result.partial) { answers.set(scope, { ...result, changed: false, computed_at: null }); continue; }
-    const kept = await keep(env, projectId, result, await scopeHash(scope, facts, result), trigger, actorId);
+    const kept = await keep(env, projectId, result, await scopeHash(scope, facts, result, model), trigger, actorId, model);
     answers.set(scope, { ...result, ...kept });
   }
+  if (system) {
+    try {
+      const stored = (await storedScorecard(env, projectId)).find((r) => r.scope === 'pmf')!;
+      answers.set('pmf', stored.state === 'not_read'
+        ? { scope: 'pmf', model: '1.0', state: 'not_enough', value: null, band: null, confidence: 0, confidence_word: null,
+          coverage: { present: 0, applies: 0 }, partial: false, reason: 'Not scored yet', inputs: [], changed: false, computed_at: null }
+        : { scope: 'pmf', model: stored.model ?? '1.0', state: stored.state, value: stored.value ?? null, band: stored.band ?? null,
+          confidence: stored.confidence ?? 0, confidence_word: stored.confidence_word ?? null, coverage: { present: 0, applies: 0 },
+          partial: false, reason: stored.state === 'scored' ? null : 'Not enough recorded', inputs: [], changed: false, computed_at: stored.computed_at ?? null });
+    } catch {
+      answers.set('pmf', { scope: 'pmf', model: '1.0', state: 'unreadable', value: null, band: null, confidence: 0, confidence_word: null,
+        coverage: { present: 0, applies: 0 }, partial: true, reason: 'Could not be read', inputs: [], changed: false, computed_at: null });
+    }
+    return { model: model.version, stage: venture.stage, scopes: SCOPE_ORDER.map((k) => answers.get(k)!) };
+  }
   try {
-    const pmf = await recomputePmf(env, projectId, actorId, trigger === 'rescore' ? 'rescore' : 'module_read', today);
+    const pmf = await recomputePmf(env, projectId, actorId as number, trigger === 'rescore' || trigger === 'publish' ? 'rescore' : 'module_read', today);
     answers.set('pmf', 'inputs' in pmf
       ? { scope: 'pmf', model: pmf.model, state: pmf.state, value: pmf.value, band: pmf.band, confidence: pmf.confidence, confidence_word: pmf.confidence_word,
         coverage: pmf.coverage, partial: Boolean((pmf as { partial?: boolean }).partial), reason: pmf.state === 'scored' ? null : 'Not enough recorded',
@@ -156,25 +200,44 @@ export async function scoreVenture(env: Env, projectId: number, opts: { actorId:
     answers.set('pmf', { scope: 'pmf', model: '1.0', state: 'unreadable', value: null, band: null, confidence: 0, confidence_word: null,
       coverage: { present: 0, applies: 0 }, partial: true, reason: 'Could not be read', inputs: [], changed: false, computed_at: null });
   }
-  return { model: VENTURE_MODEL_V1.version, stage: venture.stage, scopes: SCOPE_ORDER.map((k) => answers.get(k)!) };
+  return { model: model.version, stage: venture.stage, scopes: SCOPE_ORDER.map((k) => answers.get(k)!) };
 }
 
-/** The latest stored row of each scope, verified, without recomputing. Part 3's reads build on this. */
-export async function storedScorecard(env: Env, projectId: number) {
-  const out = [];
+export type StoredScope = {
+  scope: AnyScopeKey; state: 'not_read' | 'scored' | 'not_enough' | 'not_expected' | string;
+  value?: number | null; band?: string | null; confidence?: number; confidence_word?: 'High' | 'Medium' | 'Low' | null;
+  coverage?: number; model?: string; computed_at?: string; uid?: string;
+  /** With `{ inputs: true }`: the stored result's inputs, verified. */
+  inputs?: unknown[];
+};
+
+/**
+ * The latest stored row of each scope, verified, without recomputing. Part 3's
+ * reads build on this (D1256): `{ inputs: true }` adds each scope's stored
+ * inputs, read from the signed row (PMF's through `storedPmfInputs`, which
+ * verifies its own). A row that does not verify throws `scorecard_unreadable`.
+ */
+export async function storedScorecard(env: Env, projectId: number, opts: { inputs?: boolean } = {}): Promise<StoredScope[]> {
+  const out: StoredScope[] = [];
   for (const scope of SCOPE_ORDER) {
     const row = await env.DB.prepare(LATEST).bind(projectId, scope).first<Row>();
     if (!row) { out.push({ scope, state: 'not_read' as const }); continue; }
+    const base = { scope, value: row.value, band: row.band, confidence: row.confidence, confidence_word: confidenceWord(row.confidence),
+      coverage: row.coverage, model: row.model_version, computed_at: row.computed_at, uid: row.uid };
     if (scope === 'pmf') {
       // D1144's rows are signed by pmfStore; it verifies its own on read.
-      out.push({ scope, state: row.value == null ? 'not_enough' : 'scored', value: row.value, band: row.band, confidence: row.confidence,
-        model: row.model_version, computed_at: row.computed_at });
+      const entry: StoredScope = { ...base, state: row.value == null ? 'not_enough' : 'scored' };
+      if (opts.inputs) entry.inputs = (await storedPmfInputs(env, projectId))?.inputs ?? [];
+      out.push(entry);
       continue;
     }
     await verify(env, row);
-    out.push({ scope, state: row.state ?? (row.value == null ? 'not_enough' : 'scored'), value: row.value, band: row.band, confidence: row.confidence,
-      model: row.model_version, computed_at: row.computed_at });
+    const entry: StoredScope = { ...base, state: row.state ?? (row.value == null ? 'not_enough' : 'scored') };
+    if (opts.inputs) {
+      const parsed = JSON.parse(row.inputs_json) as { result?: ScopeResult };
+      entry.inputs = Array.isArray(parsed?.result?.inputs) ? parsed.result!.inputs : [];
+    }
+    out.push(entry);
   }
   return out;
 }
-

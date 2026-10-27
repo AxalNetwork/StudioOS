@@ -149,7 +149,7 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
   </div>;
 }
 
-export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '' }) {
+export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant }) {
   const id = useId();
   const initialFields = useMemo(() => formFields(base, {}, current), [base, current]);
   const queryValues = useMemo(() => typeof base?.fromQuery === 'function' ? base.fromQuery(new URLSearchParams(search)) : {}, [base, search]);
@@ -255,6 +255,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
       </div> : <>
         {loaded === undefined && <p data-testid="cycle-form-loading" className="m-0 text-xs text-axal-muted dark:text-gray-400">Reading the choices…</p>}
         {loaded && fields.map((field) => <Field key={field.name} field={field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy} search={finder} />)}
+        {loaded && renderAssistant?.({ fields, values, setValue, busy })}
       </>}
     </form>
   </Lightbox>;

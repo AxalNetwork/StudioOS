@@ -3,7 +3,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireBranchNotSuspended, createJWT, hashToken, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES, IMPERSONATION_CEILING_MINUTES } from '../auth';
+import { requireAdmin, requireBranchNotSuspended, createJWT, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES, IMPERSONATION_CEILING_MINUTES } from '../auth';
 import { notify } from '../services/notify';
 import {
   serializeTranscriptCsv,
@@ -12,6 +12,8 @@ import {
   type WriteMap,
 } from './admin.conversations.helpers';
 import { runTotpRemediation } from '../services/totpRemediation';
+import { resendVerification } from '../services/verificationResend';
+import { noteSaveStatement, notesSavedOf } from '../services/accountNotes';
 import { hasTotpConfigured } from '../services/authTotp';
 import { assignFounderPublicId, assignPartnerPublicId, ensurePublicIdColumns } from '../services/publicIds';
 // Task #9 follow-up — lets the generic role-change endpoint move a user
@@ -22,8 +24,10 @@ import { ensureExploringSchema } from '../services/exploringSchema';
 // unlocks from the shared milestone catalog (single source of truth).
 import { MILESTONES as SPINOUT_MILESTONES, unlockedFeaturesThrough } from '../services/spinoutLabCatalog';
 import { bindingKey } from '../util/schemaBootstrap';
-import { likeNeedle } from '../util/likeSearch';
 import { refuse } from '../util/refusal';
+import { branchOf } from '../util/branch';
+import { HQ_ONLY_MESSAGE } from '../services/insightsScope';
+import { AccountsReadError, listAccounts, narrowed, parseAccountsQuery } from '../services/accountsList';
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -48,102 +52,67 @@ async function ensureProfileColumns(env: Env): Promise<void> {
 }
 
 admin.get('/users', async (c) => {
-  await requireAdmin(c);
+  const user = await requireAdmin(c);
   // Make sure access_level (and other admin-only columns) exist on the row
   // shape before we SELECT them — older databases predate these adds.
   await ensureProfileColumns(c.env);
-  const sql = getSQL(c.env);
-  // T17 — pagination. Default 100 (existing UX), max 200. The previous
-  // implementation returned EVERY user with no limit — fine for a 50-user
-  // workspace but a foot-gun once the directory grows.
-  const limit = clampLimit(c.req.query('limit'), 100, 200);
-  const offset = parseOffset(c.req.query('offset'));
 
-  // SEARCH (D128). Until now the only way to find an account was to scroll the
-  // newest hundred: the Admin Console's Users panel filters by ROLE and
-  // nothing else, so nobody could look a member up by name or email on either
-  // tier. That is also S0 wall rule 2 — "search says what it searches" — which
-  // a branch cannot honour without a route behind it.
-  //
-  // The escaping is `util/likeSearch`'s, not a fourth copy of the four lines
-  // that already existed in `rpc/branchOps.ts`, `admin_partners.ts` and
-  // `public.ts`.
-  const rawQ = c.req.query('q');
-  const asked = rawQ !== undefined && String(rawQ).trim().length > 0;
-  const like = asked ? likeNeedle(rawQ) : null;
-  // A ONE-CHARACTER QUERY IS REFUSED SERVER-SIDE, not merely discouraged in the
-  // UI. `likeNeedle` returns null there, and falling through would run the
-  // unfiltered list — a search that silently becomes "everyone" is the failure
-  // its docblock exists for. The SPA gates the call at two characters so this
-  // is not hit in normal use; the rule lives here because a UI-only rule is a
-  // convention, not a control.
-  if (asked && like === null) {
-    return c.json({ error: 'query_too_short', message: 'Type at least two characters to search.' }, 400);
+  // D1300 — ANOTHER STUDIO'S ACCOUNTS ARE NEVER READ HERE. A branch is its own
+  // Worker over its own D1, so this table holds this deployment's accounts
+  // only. A `scope` naming another studio is refused before any read, as
+  // Insights refuses it (D893): a plain Admin, or any admin on a branch, gets
+  // 403 `hq_only`; HQ's Super Admin gets 400 `scope_unavailable`, because HQ
+  // does not fan a list of names and emails out of a subsidiary.
+  const scope = c.req.query('scope');
+  if (scope && scope !== (branchOf(c.env) ?? 'hq')) {
+    if (!isSuperAdmin(user as any)) return c.json({ code: 'hq_only', detail: HQ_ONLY_MESSAGE }, 403);
+    return c.json({ code: 'scope_unavailable', detail: 'A subsidiary\'s accounts are listed on its own console. HQ does not copy them here.' }, 400);
   }
 
-  // Include `kyc_status` and `access_level` so the admin user table can
-  // show who's been verified, who has a manual full-access grant, and who
-  // has limited (browse-only, can't sign legal docs) access. The UI uses
-  // these to decide which "Grant" buttons to render.
-  const rows = like === null
-    ? await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, access_level, created_at FROM users ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
-    // TWO SIBLING CALLS RATHER THAN ONE CONDITIONAL STATEMENT. `getSQL` is a
-    // template tag that turns `${}` into a bound `?`; a WHERE clause that
-    // appears only sometimes cannot be expressed in one call without building
-    // query text, and `sql.unsafe()` is what `check-sql-unsafe` guards. PR B
-    // just re-learned the cost of the alternative when `check-sql-prepare`
-    // refused an interpolation that could only ever emit placeholders.
-    : await sql`SELECT id, uid, email, name, role, is_active, email_verified, kyc_status, access_level, created_at FROM users WHERE name LIKE ${like} ESCAPE '\\' OR email LIKE ${like} ESCAPE '\\' ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
-
-  // THE ENVELOPE, AND WHY THE TOTALS ARE NOT OPTIONAL (D128). The panel's role
-  // tiles were computed in the browser as `users.filter(...).length` over
-  // whatever this route returned — which defaults to the newest 100 rows. Past
-  // a hundred accounts the "All Users" tile read 100 as though it were the
-  // total, and every role tile counted only that page. A plausible number
-  // standing in for an unmeasured one is what `<Unrecorded/>` exists to
-  // prevent, so the totals come from the table rather than from the page.
-  //
-  // This is the same `GROUP BY role` that `rpc/branchOps.ts` and
-  // `routes/licence.ts` run, which makes it three callers of one shape rather
-  // than a third shape.
-  const envelope = c.req.query('envelope') === '1';
-  if (!envelope) {
-    await sql.end();
-    // BACK-COMPAT. The envelope stays opt-in because removing a response shape
-    // is a breaking change for anything outside this repo, and because every
-    // caller that wants the totals already asks for them.
-    //
-    // D138 CORRECTION: this comment used to say the flat array was "load-
-    // bearing: `SuperAdminHolders.jsx` still reads this as a flat array." It
-    // does not any more — it was the last flat caller in the SPA, and it moved
-    // to `GET /admin/hq/admins` because reading a PAGE was the bug: it filtered
-    // the newest hundred accounts to `role === 'admin'` in the browser, and
-    // admins are among the oldest accounts, so its grant picker silently
-    // omitted them. A comment naming a reader that no longer reads is the same
-    // class of stale claim as a notice that outlived its fact, so it is
-    // corrected here rather than left to be cited by the next surface.
-    return c.json(rows);
+  // D128's search, and D1300's filters, sort, columns and paging
+  // (`services/accountsList.ts`, which states what each one reads). A value
+  // outside a filter's set is a 400, never ignored. The one-character search
+  // is still refused server-side: a search that silently becomes "everyone"
+  // is the failure `likeNeedle` exists for.
+  const p = parseAccountsQuery((k) => c.req.query(k));
+  if (!p.ok) {
+    if (p.code === 'query_too_short') return c.json({ error: 'query_too_short', message: p.detail }, 400);
+    return c.json({ code: p.code, detail: p.detail }, 400);
   }
-  const roleRows = await sql`SELECT role, COUNT(*) AS n FROM users GROUP BY role`;
-  await sql.end();
+  let page;
+  try {
+    page = await listAccounts(c.env, p.query);
+  } catch (e) {
+    if (e instanceof AccountsReadError) return c.json({ code: e.code, detail: e.detail }, e.status as 503);
+    // Counts and outcomes only: never a name, an email or a row.
+    console.error('[admin:users] list read failed', (e as Error)?.name || 'error');
+    return c.json({ code: 'accounts_unreadable', detail: 'The accounts could not be read. That is not the same as no accounts. Try again.' }, 500);
+  }
+
+  // BACK-COMPAT. With no `envelope`, the answer is the page as a flat array,
+  // as it always was: pickers across the SPA read it that way.
+  const rows = page.results;
+  const envelope = c.req.query('envelope') === '1' || c.req.query('envelope') === 'true';
+  if (!envelope) return c.json(rows);
+
+  // THE ENVELOPE (D128). `total` and `by_role` are counts over the whole
+  // table, never over `results`: the console's tiles read them. D1300 adds
+  // the totals over the filtered set (`matched`, "1–25 of 61"), which a
+  // filter or search changes and the whole-table counts do not.
+  const roleRows = (await c.env.DB.prepare('SELECT role, COUNT(*) AS n FROM users GROUP BY role').all<{ role: string; n: number }>()).results || [];
   const byRole: Record<string, number> = {};
   let total = 0;
-  for (const r of roleRows as Array<{ role: string; n: number }>) {
+  for (const r of roleRows) {
     const n = Number(r.n) || 0;
     byRole[String(r.role)] = n;
     total += n;
   }
   return c.json({
-    results: rows,
-    // Totals over the whole table, never over `results`.
+    ...page,
     total,
     by_role: byRole,
-    // What the caller is actually looking at, so the page can say so rather
-    // than let a tile and a table disagree in silence.
-    showing: (rows as unknown[]).length,
-    limit,
-    offset,
-    searched: asked,
+    searched: Boolean(p.query.q),
+    narrowed: narrowed(p.query),
   });
 });
 
@@ -428,6 +397,8 @@ admin.get('/users/:user_id/profile', async (c) => {
   return c.json({
     ok: true,
     user: userRow,
+    // D1303: who saved the notes and when, never their text twice.
+    notes_saved: await notesSavedOf(c.env, Number(userRow.id), String(userRow.admin_notes || '').length > 0),
     kyc: {
       status: userRow.kyc_status || 'not_started',
       provider: userRow.kyc_provider || null,
@@ -1069,6 +1040,9 @@ admin.patch('/users/:user_id/access-level', async (c) => {
 });
 
 // POST /api/admin/users/:user_id/notes — admin updates internal notes.
+// D1303: the save records who saved them and when (`account_note_saves`), in
+// one batch with the notes, and another administrator's notes are the Super
+// Admin's, as their record is (D133).
 admin.post('/users/:user_id/notes', async (c) => {
   const adminUser = await requireAdmin(c);
   await ensureProfileColumns(c.env);
@@ -1077,9 +1051,16 @@ admin.post('/users/:user_id/notes', async (c) => {
   const body: any = await c.req.json().catch(() => ({}));
   const notes = String(body?.admin_notes ?? '').slice(0, 8000);
 
-  const r: any = await c.env.DB.prepare(
-    `UPDATE users SET admin_notes = ? WHERE id = ?`
-  ).bind(notes, userId).run();
+  const target = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?').bind(userId).first<{ id: number; role: string }>();
+  if (!target) return c.json({ error: 'User not found' }, 404);
+  if (target.id !== adminUser.id && String(target.role).toLowerCase() === 'admin' && !isSuperAdmin(adminUser as any)) {
+    return c.json({ error: "Only a super admin can open another admin's record.", code: 'super_admin_required' }, 403);
+  }
+
+  const [r] = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE users SET admin_notes = ? WHERE id = ?`).bind(notes, userId),
+    noteSaveStatement(c.env, userId, Number(adminUser.id), notes.length),
+  ]);
   if ((r?.meta?.changes || 0) < 1) return c.json({ error: 'User not found' }, 404);
 
   try {
@@ -1091,7 +1072,7 @@ admin.post('/users/:user_id/notes', async (c) => {
       adminHash, adminUser.id).run();
   } catch {}
 
-  return c.json({ ok: true });
+  return c.json({ ok: true, notes_saved: await notesSavedOf(c.env, userId, notes.length > 0) });
 });
 
 // POST /api/admin/users/:user_id/resend-verification — re-send the email
@@ -1367,45 +1348,9 @@ admin.post('/users/:user_id/resend-verification', async (c) => {
   if (!target) return c.json({ error: 'User not found' }, 404);
   if (target.email_verified) return c.json({ ok: true, already_verified: true });
 
-  // Generate a fresh verification token + email it. The verify route in
-  // routes/auth.ts consumes `verification_token`. We mint a 32-byte token
-  // and a 24-hour TTL so the link doesn't immediately expire.
-  // The /auth/verify-email handler hashes the incoming token and compares
-  // against the hashed value in users.verification_token, so we must store
-  // the HASH (not the raw token) and email the raw token in the link.
-  const tokenBytes = new Uint8Array(32);
-  crypto.getRandomValues(tokenBytes);
-  const rawToken = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-  const tokenHash = await hashToken(rawToken);
-  const expires = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-  await c.env.DB.prepare(
-    `UPDATE users SET verification_token = ?, verification_token_expires = ? WHERE id = ?`
-  ).bind(tokenHash, expires, userId).run();
-
-  // Best-effort email send via Gmail OAuth helper (already used elsewhere).
-  // If creds aren't configured we still succeed at the DB write so the user
-  // can be verified manually.
-  let emailed = false;
-  try {
-    const { sendVerificationEmail } = await import('../services/email');
-    const verifyUrl = `${c.env.APP_URL || 'https://axal.vc'}/verify-email?token=${rawToken}`;
-    emailed = await sendVerificationEmail(c.env, target.email, target.name || '', verifyUrl);
-  } catch (e: any) {
-    console.error('[admin/resend-verification] email send failed', e);
-  }
-
-  try {
-    // Epic 11 — actor is email_hash. Details references user_id and
-    // target email_hash rather than the plaintext email so admin-only
-    // log readers still see who-was-touched without storing the address.
-    const adminHash = await hashEmail(adminUser.email);
-    const targetHash = await hashEmail(target.email);
-    await c.env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
-    ).bind('admin_resent_verification',
-      `Admin ${adminUser.name} re-sent verification email to user_id=${target.id} (email_hash=${targetHash})${emailed ? '' : ' (email send failed — token still rotated)'}`,
-      adminHash, adminUser.id).run();
-  } catch {}
+  // The token, the email and the activity row are `services/verificationResend.ts`'s,
+  // shared with the bulk resend (D1303).
+  const { emailed } = await resendVerification(c.env, adminUser as any, target);
 
   return c.json({ ok: true, already_verified: false, emailed });
 });

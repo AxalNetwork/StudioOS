@@ -4,10 +4,16 @@ The founder's Capital relationships tool at `/raise/capital-relationships` (D118
 
 | File | What it is |
 |---|---|
-| `CapRelTool.jsx` | The tool's tab bar (`CapRelTabBar`), Overview's tab bar (`CapRelHomeNav`), and its tab pages (`CapRelTabPage`). Pipeline and Calls draw the module read; Commitments draws today's closes and pro-rata (`../RoundClosesPanel.jsx`); Match, Outreach and Activity say what they wait for. |
-| `capRelModel.js` | Pure: the addresses, the canvas's seven tabs, `isCapRelTab`, the venture-only query, and each tab's wait. D1192: the board's columns and moves, the status rule, Overview's figures and Needs you, the import's rows, chunks and merged answer, and the moved notices. |
-| `CapRelPipeline.jsx` | D1192 (CRL2–CRL6): Pipeline's board and list, the investor lightbox, Add investor and Import, and the move, status, next step, step and feedback dialogs. Every write goes through `services/raiseWriters.ts`. |
+| `CapRelTool.jsx` | The tool's tab bar (`CapRelTabBar`), Overview's tab bar (`CapRelHomeNav`), and its tab pages (`CapRelTabPage`). Calls draws the module read; every other tab draws its own file below. |
+| `capRelModel.js` | Pure: the addresses, the canvas's seven tabs, `isCapRelTab`, and the venture-only query. D1192: the board's columns and moves, the status rule, Overview's figures and Needs you, the import's rows, chunks and merged answer, and the moved notices. |
+| `CapRelPipeline.jsx` | D1192 (CRL2–CRL6): Pipeline's board and list, the investor lightbox, Add investor and Import, and the move, status, next step, step and feedback dialogs. Every write goes through `cloudflare-worker/src/services/raiseWriters.ts`. |
 | `CapRelOverview.jsx` | D1192 (CRL1, CRL13): Overview's blocks above the module page's own, and the moved notice. |
+| `CapRelMatch.jsx` | D1193 (CRL7): Match, D1190's match read: each fund's Fit and why, warm paths from your own network, verified investors as a count only, and Add to pipeline with the fund filled in. |
+| `CapRelOutreach.jsx` | D1193 (CRL8): follow-ups (Done, Snooze, Draft a message), Eadwyn's drafts for the founder to send from their own email, materials sent per investor, and updates through Grow's share sheet. |
+| `CapRelCommitments.jsx` | D1193 (CRL9, CRL10): committed against the target with what is not counted, every commitment with its status and source, closes, Mercury's matched credits, pro-rata, and the Round settings and New close dialogs. |
+| `CapRelActivity.jsx` | D1193 (CRL12): every logged change across investors, the round and its closes, with who, when and its source; Export saves the rows on screen. |
+| `CapRelProposals.jsx` | D1193 (CRL11): Eadwyn's proposals from a note, each beside its words, accepted, edited or dismissed by a person. |
+| `capRelTabsModel.js` | D1193: pure rules for Match, Outreach, Commitments, the proposals and Activity. |
 
 ## Where the tool lives
 
@@ -23,5 +29,5 @@ The tool is the Capital relationships module, not a page beside it.
 
 - **Every row comes from a mounted read.** A read that fails says so where its block would be. A value nobody recorded says "Not recorded", never 0.
 - **A commitment with no status is not counted as committed** (#2457 owner question 4).
-- **Every write goes through the one writer** (`services/raiseWriters.ts`, `cyclesWrite.raise.*`, or the record's own actions), never `contacts.ts`' older PUT.
+- **Every write goes through the one writer** (`cloudflare-worker/src/services/raiseWriters.ts`, `cyclesWrite.raise.*`, or the record's own actions), never `contacts.ts`' older PUT.
 - **Eadwyn proposes next steps, stage moves and message drafts.** It never writes an amount, a status or a Fit.

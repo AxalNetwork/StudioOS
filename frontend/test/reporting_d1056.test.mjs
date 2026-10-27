@@ -114,9 +114,14 @@ test('mounted desk: History from the Durable company-building read beside part 2
   } finally { cyclesApi.module = was; reportingApi.desk = wasDesk; await t.close(); }
 });
 
-test('mounted company page: the header from the position, Reports from the company\'s updates, Figures and Terms waiting, a stranger\'s uid refused', async () => {
+// D1061 (#2931) moved Figures and Terms off their waits: with no duty owed (a 404 from part 2's company read)
+// and no report received, each says so, and neither claims a zero.
+test('mounted company page: the header from the position, Reports from the company\'s updates, Figures and Terms with nothing owed, a stranger\'s uid refused', async () => {
   const t = harness();
   const was = { positionsList: api.positionsList, portfolioUpdatesList: api.portfolioUpdatesList };
+  const wasR = { company: reportingApi.company, companyFigures: reportingApi.companyFigures };
+  const none = async () => { throw Object.assign(new Error('No such company.'), { status: 404 }); };
+  reportingApi.company = none; reportingApi.companyFigures = none;
   const asked = [];
   api.positionsList = async () => ({ items: [{ project_id: 4, project: { uid: 'p-abc', name: 'Acme Robotics', stage: 'Seed' }, total_invested: 250000, latest_round: 'Seed', first_date: '2026-03-12' }] });
   api.portfolioUpdatesList = async (o) => { asked.push(o); return { items: [{ uid: 'u2', project_id: 4, title: 'Q3 2026', submitted_at: '2026-10-02 10:00:00' }] }; };
@@ -131,19 +136,19 @@ test('mounted company page: the header from the position, Reports from the compa
   try {
     await at('/portfolio/companies/p-abc');
     assert.match(t.text(t.byId('company-holding')), /Seed · Your holding: Seed · \$250,000 invested · since 12 Mar 2026/);
-    assert.match(t.text(t.byId('company-wait-figures')), /Figures.*Not read here yet.*nothing here is a guessed or zero value/s);
+    assert.match(t.text(t.byId('company-figures-none')), /No report from this company has reached you yet.*Nothing here is estimated/s);
     assert.equal(asked.length, 0, 'Figures reads no update');
     await at('/portfolio/companies/p-abc/reports');
     assert.deepEqual(asked, [{ project_id: 4 }]);
     assert.match(t.text(t.byId('company-reports')), /Q3 2026.*Received 2 Oct 2026/s);
     await at('/portfolio/companies/p-abc/terms');
-    assert.match(t.text(t.byId('company-wait-terms')), /Terms.*Not read here yet/s);
+    assert.match(t.text(t.byId('company-terms-none')), /owes you no report under a document you signed/);
     await at('/portfolio/companies/p-zzz');
     assert.ok(t.byId('company-not-held'), 'a company you hold no position in shows nothing of it');
     api.positionsList = async () => { throw new Error('down'); };
     await at('/portfolio/companies/p-abc');
     assert.match(t.text(t.container), /not a claim that you hold nothing here/);
-  } finally { Object.assign(api, was); await t.close(); }
+  } finally { Object.assign(api, was); Object.assign(reportingApi, wasR); await t.close(); }
 });
 
 // ---------------------------------------------------------------- the wiring

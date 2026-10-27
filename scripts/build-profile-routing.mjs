@@ -52,8 +52,15 @@ const HEADER = /^\| Canvas \| Persona \| Proposed route \| Live route today \|/;
 
 export function parseRouteMap(src) {
   const out = [];
+  const rowOf = new Map();
   let inTable = false;
-  for (const line of src.split('\n')) {
+  for (const [i, line] of src.split('\n').entries()) {
+    // D1310: ROUTE_MAP merges with `union` (.gitattributes). A conflict marker
+    // can only come from a hand merge, and inside a table it would end the
+    // table early and drop every row after it without a word.
+    if (/^(<{7}|={7}|>{7})(\s|$)/.test(line)) {
+      throw new Error(`ROUTE_MAP line ${i + 1} is a conflict marker; finish the merge`);
+    }
     if (HEADER.test(line)) { inTable = true; continue; }
     if (!inTable) continue;
     if (/^\|\s*---/.test(line)) continue;
@@ -66,8 +73,16 @@ export function parseRouteMap(src) {
     if (cells.length < 7) {
       throw new Error(`ROUTE_MAP row has ${cells.length} cells, expected >= 7:\n  ${line.slice(0, 120)}`);
     }
+    // D1310: one row per canvas. When two branches change the same row,
+    // `union` keeps both versions, one under the other; keep one of them.
+    const canvas = cells[0].trim();
+    if (rowOf.has(canvas)) {
+      throw new Error(`ROUTE_MAP has two rows for "${canvas}" (lines ${rowOf.get(canvas)} and ${i + 1}): `
+        + 'a union merge kept both versions of a row two branches changed. Keep one.');
+    }
+    rowOf.set(canvas, i + 1);
     out.push({
-      canvas: cells[0].trim(),
+      canvas,
       persona: cells[1].trim(),
       proposed: cells[2].trim(),
       live: cells[3].trim(),

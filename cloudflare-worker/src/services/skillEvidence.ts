@@ -164,7 +164,7 @@ export const EVIDENCE_SOURCES: EvidenceSource[] = [
     key: 'financial_model', role: 'founder',
     sql: 'SELECT updated_at AS at FROM financial_models WHERE updated_by = ?1',
     axes: { fixed: ['finance_ops'] },
-    one: 'financial model kept', many: 'financial models kept',
+    one: 'forecast kept', many: 'forecasts kept',
   },
   {
     key: 'cap_table_security', role: 'founder',

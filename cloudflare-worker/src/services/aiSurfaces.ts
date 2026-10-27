@@ -50,10 +50,14 @@ export const AI_SURFACE = {
   raiseNarrative: '/raise/investor-narrative',
   /** D1147: PMF input explanation and interview questions, never score writes. */
   raiseReadiness: '/raise/fundraising-readiness',
+  /** D1179: sourced plan readings and roadmap milestone wording. */
+  raiseUseOfFunds: '/raise/use-of-funds',
   /** Build · Plan the build — Eadwyn's wording of the plan (`POST /api/cycles/build/plan/word`), D1071. */
   buildPlan: '/build/plan',
   /** Raise · Cap table — Eadwyn's read of a signed document (`POST /api/captable/record/:projectId/document-read`), D1021. */
   raiseCapTable: '/raise/cap-table',
+  /** Raise · Capital relationships — Eadwyn's proposals from a note and its message drafts (`POST /api/cycles/raise/capital-relationships/proposals`, `/drafts`), D1193. */
+  raiseCapitalRelationships: '/raise/capital-relationships',
   /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
   studio: '/studio',
   /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */
