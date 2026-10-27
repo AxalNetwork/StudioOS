@@ -459,3 +459,5 @@ D1051 (#2902): `billing_checkout.ts` mounts `/checkout/quote`, `/checkout/start`
 | `deal_insights.ts` | D1151: NDA-gated per-deal Team, Market and Traction reads. |
 
 D1319 (#3480, part 1 of #2400): `publish.ts` mounts `/api/publish`: founder publishing to an outside service — destinations and their per-company switches, drafts, a preview and check per destination, the confirm, the sent history, Retry, Check, Mark as not sent, Retract and Mark as removed. Only the venture's founder, through their own connection, never a support session; the team reads the history. The rules and the send's state machine are `../services/publishCore.ts`; the check is `../services/publishLint.ts`. Nothing sends unless the founder presses Send.
+
+D1322 (#3483, part 4 of #2400): `publish.ts`'s `POST /drafts/from-proposal/:proposalUid` is Use this draft — the founder's own `draft:publish` proposal (`../services/railProposals.ts`) becomes one `publish_drafts` row with `origin = 'eadwyn'`, once per proposal. It never previews, confirms or sends; Discard is D780's decide.
