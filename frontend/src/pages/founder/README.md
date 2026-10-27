@@ -75,3 +75,10 @@ remain B8/B9's gates. S1 authorized the existing screen look without a new canva
 `RecordChannelPage.jsx` is Record a session › WhatsApp, Telegram and Calls at
 `/validate/record/<channel>` (D1309); the channels and addresses are
 `recordChannels.js`'s.
+
+WhatsApp's boards (WA1–WA13, D862, #2507) are built. `RecordWhatsAppTool.jsx`
+draws its tabs as paths under `/validate/record/whatsapp` (Inbox, Sessions,
+Analytics, Proposals, Connection). `ChannelSessionParts.jsx` holds the parts
+Telegram (#2515) and Calls (#2525) reuse: the inbox, the transcript, the
+analytics, the proposals, the guided connect and the four states.
+`channelSessionModel.js` holds their rules, which are pure.
