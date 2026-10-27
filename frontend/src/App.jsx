@@ -312,6 +312,8 @@ const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
 // D1253 (#2428): the venture scorecard's method, the founder's page and HQ › Platform › Scoring.
 const ScoringMethodPage = lazy(() => import('./pages/scoring/ScoringMethodPage'));
 const FounderScorecardPage = lazy(() => import('./pages/scoring/FounderScorecardPage'));
+// D1258 (#3281): SC21, an advisor's read-only scorecard, when the founder has shared it.
+const AdvisorScorecardPage = lazy(() => import('./pages/scoring/AdvisorScorecardPage'));
 const HqScoringPage = lazy(() => import('./pages/scoring/HqScoringPage'));
 // D1261 (#2430): the founder's Evidence view and its drawers.
 const RaiseEvidence = lazy(() => import('./pages/cycles/evidence/RaiseEvidence'));
@@ -3650,6 +3652,8 @@ function AppInner() {
       <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/sessions" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/earnings" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      {/* D1258 (#3281): SC21, a venture scorecard a founder shared with this advisor, read only. */}
+      <Route path="/practice/scorecards/:projectId" element={guard(['admin', 'advisor'], <AdvisorScorecardPage />)} />
       {/* D571 — the Ops canvas's four practice addresses. Each is a SECTION of
           the zone that already reads its store, so each lands there rather than
           on a second page answering the same question: deliverables are the
@@ -3858,6 +3862,8 @@ function AppInner() {
       <Route path="/raise/cap-table/scenarios/:scenario" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableScenario />)} />
       {/* D1253 (#2428): the founder's own scorecard (SC8); a static path ranks above /raise/:slug. */}
       <Route path="/raise/scorecard" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage />)} />
+      {/* D1258 (#3281): the founder's trajectory across model versions (SC12). */}
+      <Route path="/raise/scorecard/trajectory" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage tab="trajectory" />)} />
       {/* D1261 (#2430): Evidence (VR1) and its item and claim drawers (VR2, VR3) as addresses, before /raise/:slug. */}
       <Route path="/raise/evidence" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/item/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
