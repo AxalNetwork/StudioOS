@@ -76,8 +76,8 @@ const ALL_KEYS = [...new Set(Object.values(SOURCES).flat())].sort();
 const canon = (k) => (Object.hasOwn(BRAND_ALIAS, k) ? BRAND_ALIAS[k] : k);
 const TABLES = { mark: BRAND_MARKS, generic: BRAND_GENERIC, monogram: BRAND_MONOGRAM };
 
-const SIMPLE_ICONS_KEYS = ['figma', 'hubspot', 'calendly', 'crunchbase', 'stripe', 'github', 'zoom', 'google_meet', 'telegram', 'whatsapp', 'signal', 'claude', 'gemini', 'x', 'facebook', 'instagram', 'youtube', 'tiktok'];
-const VENDOR_OR_MONOGRAM = ['lovable', 'google', 'salesforce', 'slack', 'docusign', 'carta', 'affinity', 'microsoft', 'teams', 'linkedin', 'chatgpt', 'grok', 'mercury', 'notion', 'vercel'];
+const SIMPLE_ICONS_KEYS = ['figma', 'hubspot', 'calendly', 'crunchbase', 'stripe', 'github', 'zoom', 'google_meet', 'telegram', 'whatsapp', 'signal', 'claude', 'gemini', 'x', 'facebook', 'instagram', 'youtube', 'tiktok', 'vercel', 'notion'];
+const VENDOR_OR_MONOGRAM = ['lovable', 'google', 'salesforce', 'slack', 'docusign', 'carta', 'affinity', 'microsoft', 'teams', 'linkedin', 'chatgpt', 'grok', 'mercury'];
 const GENERIC = { phone_speaker: 'Phone', sms: 'MessageSquare', paste: 'ClipboardPaste', other: 'Bot', website: 'Globe', email: 'Mail' };
 
 // ── 1. Every key is classified ──────────────────────────────────────────────
@@ -152,7 +152,9 @@ test('4. every mark records its path, colour, source and licence; every monogram
       assert.match(m.viewBox, /^[.0-9 -]+$/, `${k}: original coordinate system`);
     } else {
       assert.match(m.path, /^[MmZzLlHhVvCcSsQqTtAa0-9.,\s-]+$/, `${k}: SVG path characters only`);
-      assert.ok(m.path.length > 40, `${k}: a real path`);
+      // Vercel's official mark really is this short: a single filled
+      // triangle, Simple Icons 16.35.0's entire `icons/vercel.svg`.
+      assert.ok(m.path.length > (k === 'vercel' ? 15 : 40), `${k}: a real path`);
     }
     for (const c of ['hex', 'dark']) assert.match(m[c], /^#[0-9A-Fa-f]{6}$/, `${k}.${c}`);
     assert.ok(m.source && m.licence, `${k}: source and licence`);
@@ -185,7 +187,7 @@ test('5. each mark reads on its tile in light and in dark', () => {
     if (m.dark.toLowerCase() === '#ffffff') white.push(k);
     else assert.equal(m.dark, m.hex, `${k} keeps its brand colour in dark mode`);
   }
-  assert.deepEqual(white.sort(), ['chatgpt', 'github', 'grok', 'linkedin', 'mercury', 'signal', 'tiktok', 'x', 'zoom']);
+  assert.deepEqual(white.sort(), ['chatgpt', 'github', 'grok', 'linkedin', 'mercury', 'notion', 'signal', 'tiktok', 'vercel', 'x', 'zoom']);
 });
 
 // ── 6. Rendering ────────────────────────────────────────────────────────────
@@ -337,7 +339,7 @@ test('10. the LinkedIn CSV import draws LinkedIn\'s recorded treatment, through 
 });
 
 test('vendor follow-up: all recovered brands draw artwork, including catalogue aliases', () => {
-  assert.deepEqual(Object.keys(VENDOR_MARKS).sort(), ['carta', 'chatgpt', 'docusign', 'google', 'grok', 'linkedin', 'mercury', 'microsoft', 'salesforce', 'slack']);
+  assert.deepEqual(Object.keys(VENDOR_MARKS).sort(), ['carta', 'chatgpt', 'docusign', 'google', 'grok', 'linkedin', 'lovable', 'mercury', 'microsoft', 'salesforce', 'slack']);
   for (const provider of [...Object.keys(VENDOR_MARKS), 'google_calendar', 'microsoft_365']) {
     const resolved = resolveBrand(provider);
     const out = html(h(BrandIcon, { provider, name: provider }));
