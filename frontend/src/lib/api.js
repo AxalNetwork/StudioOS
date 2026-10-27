@@ -4240,9 +4240,9 @@ export const api = {
   // Worker-only (D1); the dev FastAPI backend 404s on the whole prefix.
   // Reads gate to admin/partner/investor; analyst writes (override/recompute)
   // gate to admin/partner.
-  ventureRiskByProject: (projectId) => request(`/venture-risk/by-project/${projectId}`),
-  ventureRiskRecompute: (projectId) =>
-    request(`/venture-risk/${projectId}/recompute`, { method: 'POST' }),
+  // D1260 (#3283): the venture-risk READ (its automatic layer scores) has no
+  // caller: VentureRiskPanel reads the scorecard. Analyst reviews are still
+  // written here, and feed the scorecard's Risk scope.
   ventureRiskSetLayer: (projectId, layerKey, body) =>
     request(`/venture-risk/${projectId}/layers/${layerKey}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
   ventureRiskClearLayer: (projectId, layerKey) =>
