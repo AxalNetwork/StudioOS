@@ -17,6 +17,12 @@ domain propose "last met <day>". Its one Calendar read is `GOOGLE_CALENDAR_READS
 (GET, fields limited to the start and attendees); only the day is stored,
 never an address. Each later part adds its own file here and its entries to
 `GOOGLE_WORKSPACE_FEEDS`.
+`growFeeds.ts` (D1095, #2960) is Grow's From Google. It lands a mapped metrics
+Sheet in `project_metrics` with `source = 'google_sheets'`, only in the columns
+no Stripe or Mercury writer owns. It turns `#board` and `#filing` events from
+the member's primary Calendar into proposals that Accept writes as obligations.
+Every landed row goes through D655's ledger, so Stop using and a founder's
+deletion both hold on the next sync.
 `buildFeeds.ts` (D1093, #2958) is the first module feed: spec Docs chosen for
 Solution design become proposals (title and headings only) that land as a
 design note on Accept, and a roadmap Sheet chosen for Product roadmap lands
@@ -30,4 +36,4 @@ a mapped Form's qualifying responses become `demand_signals` at `to_confirm`
 answer and never who sent it; signals the founder confirmed are offered as
 Experiments evidence in `google_workspace_proposals`. Every landed item has a
 `connector_fed_items` row, so a re-sync lands it once and a deleted one stays
-deleted. Parts 5 and 6 add their importers beside these.
+deleted. Raise (part 5, #2959) adds its importer beside these.

@@ -105,6 +105,10 @@ function freshDb() {
     db.exec(ddl(t));
   }
   db.exec(publicationsDdl());
+  // D484 (migration 346) added publish_at; D1298 splits approved by it.
+  db.exec(readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/sql/migrations/346_article_publish_at.sql'), 'utf8',
+  ));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   u.run(SUPER, 'admin', 'The Holder', 'holder@example.test');
   u.run(PLAIN_ADMIN, 'admin', 'Plain Admin', 'admin@example.test');
@@ -112,10 +116,10 @@ function freshDb() {
   return db;
 }
 
-const article = (db: any, slug: string, status: string) => db.prepare(
-  `INSERT INTO articles (slug, title, body_markdown, status, author_user_id, updated_at)
-   VALUES (?, ?, '', ?, ?, datetime('now'))`,
-).run(slug, slug, status, SUPER);
+const article = (db: any, slug: string, status: string, publishAt: string | null = null) => db.prepare(
+  `INSERT INTO articles (slug, title, body_markdown, status, author_user_id, updated_at, publish_at)
+   VALUES (?, ?, '', ?, ?, datetime('now'), ?)`,
+).run(slug, slug, status, SUPER, publishAt);
 
 async function call(app: any, db: any, actor: number) {
   const jwt = await new SignJWT({ user_id: actor, role: 'admin' })
@@ -138,7 +142,7 @@ test('a plain admin cannot read either HQ summary', async () => {
   }
 });
 
-test('the four lanes count the statuses the articles table actually uses', async () => {
+test('the five lanes count the statuses the articles table actually uses, splitting approved by publish time', async () => {
   const db = freshDb();
   article(db, 'a', 'draft');
   article(db, 'b', 'draft');
@@ -146,19 +150,38 @@ test('the four lanes count the statuses the articles table actually uses', async
   article(db, 'd', 'in_review');
   article(db, 'e', 'changes_requested');
   article(db, 'f', 'approved');
-  article(db, 'g', 'published');
-  article(db, 'h', 'rejected');
+  article(db, 'g_timed', 'approved', '2026-10-28T09:00:00Z');
+  article(db, 'h', 'published');
+  article(db, 'i', 'rejected');
 
   const r = await call(content, db, SUPER);
   assert.equal(r.status, 200, JSON.stringify(r.body));
   const lanes = Object.fromEntries(r.body.pipeline.lanes.map((l: any) => [l.key, l.n]));
   assert.equal(lanes.draft, 2);
   assert.equal(lanes.review, 3, 'submitted, in_review and changes_requested are one review lane');
-  assert.equal(lanes.scheduled, 1, 'approved is what queues a piece to go out');
+  assert.equal(lanes.ready_to_publish, 1, 'approved without a publish time is Ready to publish');
+  assert.equal(lanes.scheduled, 1, 'approved with a publish time is Scheduled');
   assert.equal(lanes.published, 1);
   // Rejected is not a lane and is not silently folded into one either.
   assert.equal(r.body.pipeline.rejected, 1);
-  assert.equal(r.body.pipeline.in_pipeline, 6, 'the pipeline count includes published, which it should not');
+  assert.equal(r.body.pipeline.in_pipeline, 7, 'in pipeline counts everything short of published');
+});
+
+test('the board splits approved articles into Ready to publish and Scheduled by publish time', async () => {
+  const db = freshDb();
+  article(db, 'ready', 'approved');
+  article(db, 'timed', 'approved', '2026-10-28T09:00:00Z');
+
+  const r = await call(content, db, SUPER);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const byKey = Object.fromEntries(r.body.board.lanes.map((l: any) => [l.key, l]));
+  assert.equal(byKey.ready_to_publish.total, 1, 'approved without a time lands in Ready to publish');
+  assert.equal(byKey.scheduled.total, 1, 'approved with a time lands in Scheduled');
+  assert.equal(byKey.ready_to_publish.parts[0].cards[0].title, 'ready');
+  assert.equal(byKey.scheduled.parts[0].cards[0].title, 'timed');
+  // The publish_time block agrees with the two lane counts.
+  assert.equal(r.body.board.publish_time.scheduled, 1);
+  assert.equal(r.body.board.publish_time.unscheduled, 1);
 });
 
 test('a status no lane names is reported, not dropped', async () => {

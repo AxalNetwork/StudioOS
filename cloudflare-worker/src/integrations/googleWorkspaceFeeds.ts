@@ -7,7 +7,7 @@
  * `google_workspace_feeds.test.ts` holds them to it.
  *
  * D1092 (#2957, part 3): Validate's three. D1093 (#2958, part 4): Build's two.
- * D1094 (#2959, part 5): Raise's three. Part 6 adds its own here.
+ * D1094 (#2959, part 5): Raise's three. D1095 (#2960, part 6): Grow's two.
  *
  * No side effects and no imports: the registry and the pages may read it.
  */
@@ -19,7 +19,7 @@ export interface GoogleWorkspaceFeed {
   module: string;
   file_kind: 'doc' | 'sheet' | 'slides' | 'form' | 'file' | 'calendar';
   lands: 'fact' | 'proposal';
-  /** The `GOOGLE_WORKSPACE_READS` names the feed calls (Calendar's are `GOOGLE_CALENDAR_READS` in `services/google/raise.ts`); none when it reads what another feed landed. */
+  /** The `GOOGLE_WORKSPACE_READS` names the feed calls (Calendar's are `GOOGLE_CALENDAR_READS` in `services/google/raise.ts`); none when it reads what another feed landed, or when the read is not a Workspace file read. */
   reads: readonly string[];
   decision: string;
 }
@@ -38,4 +38,16 @@ export const GOOGLE_WORKSPACE_FEEDS: readonly GoogleWorkspaceFeed[] = Object.fre
   { key: 'drive_data_room_copy', what: 'Drive files, copied into the data room', module: 'data_room', file_kind: 'file', lands: 'fact', reads: ['files.get', 'files.export', 'alt=media'], decision: 'D1094' },
   // D1094 (#2959): the day you last met an investor's firm, from your calendar, proposed as a meeting.
   { key: 'calendar_last_met', what: 'When you last met an investor’s firm, from your calendar', module: 'capital_relationships', file_kind: 'calendar', lands: 'proposal', reads: ['events.list'], decision: 'D1094' },
+  // D1095 (#2960): a metrics Sheet's mapped columns, as facts.
+  { key: 'grow_metrics_sheet', what: 'Metrics from a Sheet you map', module: 'revenue_and_traction', file_kind: 'sheet', lands: 'fact', reads: ['spreadsheets.values.get'], decision: 'D1095' },
+  // D1095 (#2960): #board and #filing events, proposed as obligations. The read is the Calendar API, not a Workspace file read.
+  { key: 'grow_calendar_obligations', what: 'Board meetings and filing deadlines you tag in Calendar', module: 'durable_company_building', file_kind: 'calendar', lands: 'proposal', reads: [], decision: 'D1095' },
 ].map((f) => Object.freeze({ ...f, reads: Object.freeze(f.reads) })) as GoogleWorkspaceFeed[]);
+
+/**
+ * The ledger module a chosen file's rows count under, where it differs from the
+ * module D1091 registers the file under. Stop using unlinks both.
+ */
+export const GOOGLE_WORKSPACE_LEDGER_MODULE: Readonly<Record<string, string>> = Object.freeze({
+  revenue_traction: 'revenue_and_traction',
+});

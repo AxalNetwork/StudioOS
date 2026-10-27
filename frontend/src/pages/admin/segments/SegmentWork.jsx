@@ -188,7 +188,7 @@ export function UnclassifiedTab({ superAdmin }) {
         {Array.isArray(read.data?.unreadable) && read.data.unreadable.length ? <span className={AMBER} data-testid="seg-unc-partial">Some columns could not be read and say Not recorded.</span> : null}
       </section>
       {dialog === 'ask' ? <AskDialog rows={chosen} onClose={() => setDialog(null)} onAsked={finish} /> : null}
-      {dialog === 'place' ? <MoveDialog members={chosen.map((m) => unclassifiedRow(m).member)} superAdmin={superAdmin} onClose={() => setDialog(null)} onMoved={(reply, target) => { setDialog(null); finish(movedLine(reply, target?.name).text); }} /> : null}
+      {dialog === 'place' ? <MoveDialog members={chosen.map((m) => unclassifiedRow(m).member)} superAdmin={superAdmin} back="Unclassified" onClose={() => setDialog(null)} onMoved={(reply, target) => { setDialog(null); finish(movedLine(reply, target?.name).text); }} /> : null}
     </div>
   );
 }

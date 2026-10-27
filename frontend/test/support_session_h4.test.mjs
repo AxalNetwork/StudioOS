@@ -63,7 +63,8 @@ test('scope and expiry are stated, not offered as choices', () => {
   const src = codeOnly(ADMIN_PAGE);
   const a = src.indexOf('function SupportSessionDialog(');
   assert.ok(a >= 0, 'the dialog is gone');
-  const body = src.slice(a, src.indexOf('const KYC_BADGES', a));
+  // D1305 retired KYC_BADGES with the old table; Change profile's dialog follows this one now.
+  const body = src.slice(a, src.indexOf('function ChangeProfileDialog(', a));
   assert.ok(body.length > 200, "the dialog's end marker moved");
   assert.match(body, /Read and write, as this account/, 'the scope is no longer stated');
   // D1306 (#3403, ACC7 F; #2377 item 11): the length and its ceiling, from the
