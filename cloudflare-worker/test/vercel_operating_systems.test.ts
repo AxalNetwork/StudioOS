@@ -275,3 +275,87 @@ test('one failed read costs one block: Hosting Unreadable on its own; GitHub’s
   assert.deepEqual(t.code, before.code);
   assert.deepEqual(t.rows, before.rows);
 });
+
+// ───────────────────────────────────────────────────────────── D1097: what part 1 records, drawn
+
+/** Part 1's rows for connection 50: acme-web on Hobby, chosen for venture 101, on a personal account. */
+function projects(db: any, account = 'personal') {
+  db.exec(`INSERT INTO vercel_installations (integration_id, configuration_id, team_id, account_kind) VALUES (50, 'icfg_fixture', ${account === 'team' ? "'team_acme'" : 'NULL'}, '${account}');
+    INSERT INTO vercel_projects (integration_id, project_id, vercel_project_id, name, framework, node_version, production_branch, git_repository, production_domain, plan, live_state, live_since, synced_at)
+      VALUES (50, 101, 'prj_1', 'acme-web', 'nextjs', '20.x', 'main', 'acme/web', 'app.acme.example', 'hobby', 'live', '2026-10-03T10:00:00.000Z', '2026-10-23 09:12:00');`);
+}
+const solution = async (env: any, id = 1) => (await call(env, '/api/cycles/build/modules/solution-design?project=101', id)).body.parts.vercel_runtime;
+
+test('D1097: VC1 draws each project’s facts, live state and the Hobby line; a team account says so', async () => {
+  const { db, env } = fixture(); vercel(db); projects(db);
+  const sys = (await tools(env)).hosting.systems[0];
+  assert.deepEqual(sys.projects, [{ project: 'acme-web', domain: 'app.acme.example', framework: 'nextjs', runtime: 'Node 20.x', branch: 'main', repository: 'acme/web', plan: 'Hobby',
+    live: { state: 'live', words: 'Live', since: '2026-10-03T10:00:00.000Z' } }]);
+  assert.deepEqual([sys.projects_total, sys.projects_reason], [1, null]);
+  assert.deepEqual(sys.hobby, { text: 'Production runs on a personal Vercel account, Hobby plan.',
+    link: { text: 'See the proposal in Company creation', href: '/build/company-creation?project_id=101#from-vercel' } });
+  assert.equal(sys.sync_uid, 'vc-1', 'Sync again for the owner');
+  assert.equal(sys.reconnect, null);
+  db.exec("UPDATE vercel_installations SET account_kind = 'team'");
+  assert.equal((await tools(env)).hosting.systems[0].hobby.text, 'Production runs on a Vercel team, Hobby plan.');
+  db.exec("UPDATE vercel_projects SET plan = 'pro', node_version = NULL, framework = NULL");
+  const pro = (await tools(env)).hosting.systems[0];
+  assert.equal(pro.hobby, null, 'nothing to propose off Hobby');
+  assert.deepEqual([pro.projects[0].plan, pro.projects[0].runtime, pro.projects[0].framework], ['Pro', null, null], 'what Vercel did not give stays null, never a guess');
+});
+
+test('D1097: Vercel’s sync lines: counts in words, the webhook’s re-reads, a failure in our words, never the stored message', async () => {
+  const { db, env } = fixture(); vercel(db); projects(db);
+  const log = db.prepare('INSERT INTO integration_logs (integration_id, provider_key, event_type, status, response_summary, payload_json, created_at) VALUES (50, ?, ?, ?, ?, ?, ?)');
+  log.run('vercel', 'sync', 'ok', 'Synced 1 project from Vercel.', JSON.stringify({ projects: 1, deployments: 14, health_events: 2 }), '2026-10-23 09:12:00');
+  log.run('vercel', 'webhook', 'ok', 'deployment.succeeded: Synced 1 project from Vercel.', JSON.stringify({ projects: 1, deployments: 1, health_events: 1, partial: true }), '2026-10-23 10:00:00');
+  log.run('vercel', 'sync', 'error', 'vercel_reconnect_required: secret-ish words that must not show', null, '2026-10-23 11:00:00');
+  log.run('vercel', 'connect', 'ok', 'connected', null, '2026-10-22 08:00:00');
+  const s = (await tools(env)).hosting.syncs;
+  assert.equal(s.state, 'ok');
+  assert.deepEqual(s.rows.map((r: any) => [r.by, r.state, r.text, r.error]), [
+    ['sync', 'failed', null, 'Vercel’s sign-in expired. Reconnect Vercel.'],
+    ['webhook', 'partial', 'Partly synced: 1 project, 1 deployment, 1 health event', null],
+    ['sync', 'done', 'Synced: 1 project, 14 deployments, 2 health events', null],
+  ], 'newest first; a connect row is no sync line');
+  assert.doesNotMatch(JSON.stringify(s), /secret-ish/);
+  assert.deepEqual(vercelSyncText('error', 'vercel_api_failed', null), { state: 'failed', text: 'The sync did not complete.' });
+  assert.deepEqual(vercelSyncText('ok', 'x', { projects: 0 }), { state: 'done', text: 'Synced: 0 projects' }, 'a measured zero is a count');
+});
+
+test('D1097: a sign-in that expired says which project’s figures are as of when; Sync again is the owner’s alone', async () => {
+  const { db, env } = fixture(); vercel(db); projects(db);
+  db.exec("UPDATE integrations SET status = 'error', last_error = 'vercel_reconnect_required: Reconnect Vercel.', last_error_at = '2026-10-20 08:00:00' WHERE id = 50");
+  const sys = (await tools(env)).hosting.systems[0];
+  assert.deepEqual([sys.state, sys.reconnect], ['Reconnect', { project: 'acme-web', expired_at: '2026-10-20 08:00:00', as_of: '2026-10-23 09:12:00' }]);
+  db.exec("UPDATE integrations SET last_error = 'vercel_api_failed' WHERE id = 50");
+  assert.deepEqual([(await tools(env)).hosting.systems[0].state, (await tools(env)).hosting.systems[0].reconnect], ['Failing', null], 'another failure is no expired sign-in');
+  db.exec('INSERT INTO user_company_links VALUES (3, 10)');
+  assert.equal((await tools(env, 101, 3)).hosting.systems[0].sync_uid, null, 'a member who does not own the connection cannot sync it');
+});
+
+test('D1097: the Tools rule hides projects, the Hobby line and the reconnect’s project from a non-member, who reads a count', async () => {
+  const { db, env } = fixture(); vercel(db); projects(db);
+  db.exec("UPDATE integrations SET status = 'error', last_error = 'vercel_removed: Removed in Vercel.' WHERE id = 50");
+  const sys = (await tools(env, 101, 4)).hosting.systems[0];
+  assert.deepEqual([sys.projects, sys.projects_total, sys.hobby, sys.reconnect.project, sys.sync_uid], [null, 1, null, null, null]);
+  assert.doesNotMatch(JSON.stringify(sys), /acme|app\.acme|Hobby/);
+});
+
+test('D1097: VC4a Runs on: each project’s runtime beside GitHub’s Built with; a count for a non-member; empty and Unreadable on its own', async () => {
+  const { db, env } = fixture();
+  assert.deepEqual([(await solution(env)).state, (await solution(env)).reason], ['empty', EMPTY]);
+  vercel(db);
+  assert.deepEqual([(await solution(env)).state, (await solution(env)).reason], ['empty', NO_PROJECTS]);
+  projects(db);
+  const r = await solution(env);
+  assert.deepEqual(r, { state: 'ok', reason: null, as_of: '2026-10-23 09:12:00', total: 1,
+    items: [{ project: 'acme-web', framework: 'nextjs', runtime: 'Node 20.x', hosting: 'Vercel', domain: 'app.acme.example', branch: 'main', repository: 'acme/web' }] });
+  const outside = await solution(env, 4);
+  assert.deepEqual([outside.items, outside.total], [null, 1]);
+  db.exec('DROP TABLE vercel_projects');
+  const down = await call(env, '/api/cycles/build/modules/solution-design?project=101');
+  assert.equal(down.status, 200, 'the module stays readable');
+  assert.deepEqual([down.body.parts.vercel_runtime.state, down.body.parts.vercel_runtime.reason], ['unreadable', 'Unreadable: Vercel could not be read. The rest of this page is current.']);
+  assert.ok('from_code' in down.body.parts, 'GitHub’s part is still drawn');
+});
