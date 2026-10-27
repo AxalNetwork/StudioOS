@@ -25,6 +25,7 @@ import { useViewMode } from '../contexts/ViewModeContext';
 import { aiBudgetApi } from '../lib/api/aiBudget';
 import { TOPUP_UNAVAILABLE, usageMoney } from '../lib/aiTokens';
 import CheckoutSheet from '../components/checkout/CheckoutSheet';
+import PackSheet from '../components/checkout/PackSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
 import {
   PRICING_TABS, compareCell, heldCard, initialTab, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
@@ -257,11 +258,10 @@ function Models({ read, onRetry }) {
  * D1285 (#2452): the "Your AI tokens" band, first on the Models tab for a
  * signed-in member (the "Add tokens" canvas's CRP1, CRP11 and CRP14). The
  * balance is `GET /api/ai-budget/me`'s; a failed read says so and never draws
- * a zero. Add tokens goes to the Token packs below until the checkout sheet's
- * pack mode opens in place (D1287). The plan's allowance, its storage and the
- * auto-reload line are D1286's.
+ * a zero. Add tokens opens the checkout sheet's pack mode in place (D1287).
+ * The plan's allowance, its storage and the auto-reload line are D1286's.
  */
-function TokensBand({ read, onRetry }) {
+function TokensBand({ read, onRetry, onAdd }) {
   const D = useContext(Face);
   const me = read.status === 'ready' ? read.body : null;
   const balance = me && Number.isSafeInteger(me.balance_microusd) ? usageMoney(me.balance_microusd) : null;
@@ -281,7 +281,7 @@ function TokensBand({ read, onRetry }) {
             </div>
           )}
         </div>
-        <a href="#token-packs" className="axp-btn is-primary axp-tokband-add" data-testid="pricing-tokens-add">{TOKENS_BAND.add}</a>
+        <button type="button" className="axp-btn is-primary axp-tokband-add" onClick={() => onAdd(null)} data-testid="pricing-tokens-add">{TOKENS_BAND.add}</button>
       </div>
     </section>
   );
@@ -289,11 +289,11 @@ function TokensBand({ read, onRetry }) {
 
 /**
  * D1285 (#2452): Token packs, above the model tables (CRP1, CRP6, CRP10–CRP12).
- * One Buy per pack, straight to the pack's checkout (D755's
- * `/checkout?token_pack=`), never a second pricing page; a visitor signs in
- * and comes back here. A failed read says so with Try again, never an empty list.
+ * One Buy per pack, which opens the checkout sheet's pack mode on that pack
+ * (D1287), never a second pricing page; a visitor signs in and comes back
+ * here. A failed read says so with Try again, never an empty list.
  */
-function Packs({ read, onRetry, signedIn }) {
+function Packs({ read, onRetry, signedIn, onBuy }) {
   const D = useContext(Face);
   const packs = read.status === 'ready' ? packCards(read.body) : [];
   const back = `/login?next=${encodeURIComponent('/pricing?for=models#token-packs')}`;
@@ -321,7 +321,7 @@ function Packs({ read, onRetry, signedIn }) {
               <span className={`axp-pack-n${D}`}>{p.price}</span>
               {p.offers.map((o) => <span key={o} className="axp-pill axp-pill-offer">{o}</span>)}
               {signedIn
-                ? <Link to={`/checkout?token_pack=${encodeURIComponent(p.uid)}`} className="axp-btn">Buy</Link>
+                ? <button type="button" className="axp-btn" onClick={() => onBuy(p.uid)} data-testid={`pricing-pack-buy-${p.uid}`}>Buy</button>
                 : <Link to={back} className="axp-btn">Sign in to buy</Link>}
             </div>
           ))}
@@ -363,6 +363,8 @@ export function PricingBody({ user = null }) {
   const [billing, setBilling] = useState('monthly');
   // D1048 (#2451): the card whose checkout sheet is open, over this page; no route change.
   const [checkout, setCheckout] = useState(null);
+  // D1287: Add tokens and a pack's Buy open the sheet's pack mode in place, on that pack.
+  const [packSheet, setPackSheet] = useState(null);
   const [plans, retryPlans] = useRead(publicPricingApi.plansAndPacks);
   const [models, retryModels] = useRead(publicPricingApi.aiModels);
   // D1285 (#2452): a member's token balance, read on the Models tab only.
@@ -465,8 +467,8 @@ export function PricingBody({ user = null }) {
 
       {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} />}
 
-      {!roleTab && user && <TokensBand read={me} onRetry={retryMe} />}
-      {!roleTab && <Packs read={plans} onRetry={retryPlans} signedIn={!!user} />}
+      {!roleTab && user && <TokensBand read={me} onRetry={retryMe} onAdd={(uid) => setPackSheet({ pack: uid })} />}
+      {!roleTab && <Packs read={plans} onRetry={retryPlans} signedIn={!!user} onBuy={(uid) => setPackSheet({ pack: uid })} />}
       {!roleTab && (
         <section className="axp-sec axp-models">
           <p className="axp-p">{MODELS_LINE}</p>
@@ -494,6 +496,7 @@ export function PricingBody({ user = null }) {
         <CheckoutSheet plan={checkout.plan} spec={specs.find((x) => x.id === checkout.id)} user={user} role={role}
           held={heldCard(user, role, tab, planRead)} planRead={wantPlan ? planRead : null} onRetryPlan={retryPlan} interval={billing} onClose={() => setCheckout(null)} />
       )}
+      {packSheet && user && <PackSheet pack={packSheet.pack} from="Models" onClose={() => { setPackSheet(null); retryMe(); }} />}
     </div>
     </Face.Provider>
   );

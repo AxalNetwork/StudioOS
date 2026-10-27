@@ -42,6 +42,9 @@ export const aiBudgetApi = {
   models: () => request('/ai/catalogue/hq'),
   // D794 — the member's own opt-in auto-reload: each call asks for a recent TOTP sign-in (the step-up prompt handles it).
   autoReload: () => request('/ai-budget/auto-reload'),
+  // D1287 — the same read where it is only shown (the checkout sheet's CRP7): a 403 asking for a fresh code is
+  // answered "on Billing" instead of opening the step-up prompt over a payment.
+  autoReloadState: () => request('/ai-budget/auto-reload', { noStepUp: true }),
   // `{ enabled, pack_uid, threshold_usd, setup_intent_id? }`; the card is read back from the SetupIntent on the Worker.
   saveAutoReload: (settings) => request('/ai-budget/auto-reload', { method: 'PUT', body: body(settings) }),
   autoReloadSetup: (nonce) => request('/ai-budget/auto-reload/setup', { method: 'POST', body: body({ nonce }) }),
