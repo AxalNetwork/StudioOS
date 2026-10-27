@@ -244,3 +244,47 @@ export const VENTURE_MODEL_V1: VentureModel = Object.freeze<VentureModel>({
     },
   },
 });
+
+/**
+ * D1259 (#3282, part 6) — model v1.1: v1 with the country indices read.
+ *
+ * #2428 owner question 4 took (a): the World Bank's Worldwide Governance
+ * Indicators and the FATF and EU high-risk lists, each read only once its
+ * licence is recorded (`countryIndex.ts` `INDEX_SOURCES`, D1259 §3). The three
+ * inputs v1 held with `source: null` now name their store. Every other input,
+ * weight, window and threshold is v1's, unchanged.
+ *
+ * A market's country is `markets.geography_ref`, the two-letter code of the
+ * market the venture serves, enters or considers: never a founder's country.
+ */
+const INDEXED: Readonly<Record<string, Partial<ModelInput>>> = {
+  country_environment: {
+    freshness: 'records', source: 'country_index_values (World Bank WGI)',
+    reads: 'The World Bank governance percentile ranks for government effectiveness and rule of law, for each market’s country, averaged across the markets with a country.',
+  },
+  high_risk_lists: {
+    source: 'country_index_values (FATF and EU lists)',
+    reads: 'The share of the markets with a country that are on no FATF or EU high-risk list. Only a list whose licence is recorded counts.',
+  },
+  stability: {
+    freshness: 'records', source: 'country_index_values (World Bank WGI)',
+    reads: 'The World Bank governance percentile ranks for political stability and regulatory quality, for each market’s country, averaged.',
+  },
+};
+
+function withIndices(scope: ScopeModel): ScopeModel {
+  return { ...scope, inputs: scope.inputs.map((i) => (INDEXED[i.key] ? { ...i, ...INDEXED[i.key] } : i)) };
+}
+
+export const VENTURE_MODEL_V1_1: VentureModel = Object.freeze<VentureModel>({
+  ...VENTURE_MODEL_V1,
+  version: '1.1',
+  published: '2026-10-26',
+  scopes: Object.freeze(Object.fromEntries(SCORED_SCOPES.map((k) => [k, withIndices(VENTURE_MODEL_V1.scopes[k])])) as Record<ScopeKey, ScopeModel>),
+});
+
+/** Every version the engine can score, oldest first. Publishing picks which one is live (D1259). */
+export const VENTURE_MODELS: readonly VentureModel[] = Object.freeze([VENTURE_MODEL_V1, VENTURE_MODEL_V1_1]);
+/** The version that scores before any publication is recorded: v1, as D1255 shipped it. */
+export const DEFAULT_MODEL_VERSION = VENTURE_MODEL_V1.version;
+export const modelFor = (version: string): VentureModel | null => VENTURE_MODELS.find((m) => m.version === version) ?? null;

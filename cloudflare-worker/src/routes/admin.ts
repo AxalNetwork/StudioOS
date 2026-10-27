@@ -3,7 +3,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, requireBranchNotSuspended, createJWT, hashToken, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES, IMPERSONATION_CEILING_MINUTES } from '../auth';
+import { requireAdmin, requireBranchNotSuspended, createJWT, requireFactor, requireStepUp, requireSuperAdminWriteBar, isSuperAdmin, hydrateSuperAdmin, IMPERSONATION_EXPIRY_MINUTES, IMPERSONATION_CEILING_MINUTES } from '../auth';
 import { notify } from '../services/notify';
 import {
   serializeTranscriptCsv,
@@ -12,6 +12,8 @@ import {
   type WriteMap,
 } from './admin.conversations.helpers';
 import { runTotpRemediation } from '../services/totpRemediation';
+import { resendVerification } from '../services/verificationResend';
+import { noteSaveStatement, notesSavedOf } from '../services/accountNotes';
 import { hasTotpConfigured } from '../services/authTotp';
 import { assignFounderPublicId, assignPartnerPublicId, ensurePublicIdColumns } from '../services/publicIds';
 // Task #9 follow-up — lets the generic role-change endpoint move a user
@@ -395,6 +397,8 @@ admin.get('/users/:user_id/profile', async (c) => {
   return c.json({
     ok: true,
     user: userRow,
+    // D1303: who saved the notes and when, never their text twice.
+    notes_saved: await notesSavedOf(c.env, Number(userRow.id), String(userRow.admin_notes || '').length > 0),
     kyc: {
       status: userRow.kyc_status || 'not_started',
       provider: userRow.kyc_provider || null,
@@ -1036,6 +1040,9 @@ admin.patch('/users/:user_id/access-level', async (c) => {
 });
 
 // POST /api/admin/users/:user_id/notes — admin updates internal notes.
+// D1303: the save records who saved them and when (`account_note_saves`), in
+// one batch with the notes, and another administrator's notes are the Super
+// Admin's, as their record is (D133).
 admin.post('/users/:user_id/notes', async (c) => {
   const adminUser = await requireAdmin(c);
   await ensureProfileColumns(c.env);
@@ -1044,9 +1051,16 @@ admin.post('/users/:user_id/notes', async (c) => {
   const body: any = await c.req.json().catch(() => ({}));
   const notes = String(body?.admin_notes ?? '').slice(0, 8000);
 
-  const r: any = await c.env.DB.prepare(
-    `UPDATE users SET admin_notes = ? WHERE id = ?`
-  ).bind(notes, userId).run();
+  const target = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?').bind(userId).first<{ id: number; role: string }>();
+  if (!target) return c.json({ error: 'User not found' }, 404);
+  if (target.id !== adminUser.id && String(target.role).toLowerCase() === 'admin' && !isSuperAdmin(adminUser as any)) {
+    return c.json({ error: "Only a super admin can open another admin's record.", code: 'super_admin_required' }, 403);
+  }
+
+  const [r] = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE users SET admin_notes = ? WHERE id = ?`).bind(notes, userId),
+    noteSaveStatement(c.env, userId, Number(adminUser.id), notes.length),
+  ]);
   if ((r?.meta?.changes || 0) < 1) return c.json({ error: 'User not found' }, 404);
 
   try {
@@ -1058,7 +1072,7 @@ admin.post('/users/:user_id/notes', async (c) => {
       adminHash, adminUser.id).run();
   } catch {}
 
-  return c.json({ ok: true });
+  return c.json({ ok: true, notes_saved: await notesSavedOf(c.env, userId, notes.length > 0) });
 });
 
 // POST /api/admin/users/:user_id/resend-verification — re-send the email
@@ -1334,45 +1348,9 @@ admin.post('/users/:user_id/resend-verification', async (c) => {
   if (!target) return c.json({ error: 'User not found' }, 404);
   if (target.email_verified) return c.json({ ok: true, already_verified: true });
 
-  // Generate a fresh verification token + email it. The verify route in
-  // routes/auth.ts consumes `verification_token`. We mint a 32-byte token
-  // and a 24-hour TTL so the link doesn't immediately expire.
-  // The /auth/verify-email handler hashes the incoming token and compares
-  // against the hashed value in users.verification_token, so we must store
-  // the HASH (not the raw token) and email the raw token in the link.
-  const tokenBytes = new Uint8Array(32);
-  crypto.getRandomValues(tokenBytes);
-  const rawToken = Array.from(tokenBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-  const tokenHash = await hashToken(rawToken);
-  const expires = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-  await c.env.DB.prepare(
-    `UPDATE users SET verification_token = ?, verification_token_expires = ? WHERE id = ?`
-  ).bind(tokenHash, expires, userId).run();
-
-  // Best-effort email send via Gmail OAuth helper (already used elsewhere).
-  // If creds aren't configured we still succeed at the DB write so the user
-  // can be verified manually.
-  let emailed = false;
-  try {
-    const { sendVerificationEmail } = await import('../services/email');
-    const verifyUrl = `${c.env.APP_URL || 'https://axal.vc'}/verify-email?token=${rawToken}`;
-    emailed = await sendVerificationEmail(c.env, target.email, target.name || '', verifyUrl);
-  } catch (e: any) {
-    console.error('[admin/resend-verification] email send failed', e);
-  }
-
-  try {
-    // Epic 11 — actor is email_hash. Details references user_id and
-    // target email_hash rather than the plaintext email so admin-only
-    // log readers still see who-was-touched without storing the address.
-    const adminHash = await hashEmail(adminUser.email);
-    const targetHash = await hashEmail(target.email);
-    await c.env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`
-    ).bind('admin_resent_verification',
-      `Admin ${adminUser.name} re-sent verification email to user_id=${target.id} (email_hash=${targetHash})${emailed ? '' : ' (email send failed — token still rotated)'}`,
-      adminHash, adminUser.id).run();
-  } catch {}
+  // The token, the email and the activity row are `services/verificationResend.ts`'s,
+  // shared with the bulk resend (D1303).
+  const { emailed } = await resendVerification(c.env, adminUser as any, target);
 
   return c.json({ ok: true, already_verified: false, emailed });
 });

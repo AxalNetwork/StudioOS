@@ -23,6 +23,9 @@ import { api } from '../lib/api';
 import { publicPricingApi } from '../lib/api/publicPricing';
 import { useViewMode } from '../contexts/ViewModeContext';
 import { aiBudgetApi } from '../lib/api/aiBudget';
+import { usageApi } from '../lib/api/usage';
+import { isSuperAdminUser } from '../lib/shellRole';
+import { addState, autoReloadLine, planBlock, storageLine } from './tokensBandModel';
 import { TOPUP_UNAVAILABLE, usageMoney } from '../lib/aiTokens';
 import CheckoutSheet from '../components/checkout/CheckoutSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
@@ -258,30 +261,85 @@ function Models({ read, onRetry }) {
  * signed-in member (the "Add tokens" canvas's CRP1, CRP11 and CRP14). The
  * balance is `GET /api/ai-budget/me`'s; a failed read says so and never draws
  * a zero. Add tokens goes to the Token packs below until the checkout sheet's
- * pack mode opens in place (D1287). The plan's allowance, its storage and the
- * auto-reload line are D1286's.
+ * pack mode opens in place (D1287).
+ *
+ * D1286 (#3369): the middle block (the plan, its allowance left and the reset
+ * day, or the profile's line, CRP13), the storage line from D1166's read, the
+ * allowance-then-tokens bar with each part labelled, the auto-reload line from
+ * D794's read, the Super Admin's pointer to HQ (CRP18), and Add tokens
+ * disabled with its line when nothing is on sale (CRP10). The words and rules
+ * are `tokensBandModel.js`'s; this only draws them.
  */
-function TokensBand({ read, onRetry }) {
+function TokensBand({ read, onRetry, storage, autoReload, packs, user }) {
   const D = useContext(Face);
   const me = read.status === 'ready' ? read.body : null;
   const balance = me && Number.isSafeInteger(me.balance_microusd) ? usageMoney(me.balance_microusd) : null;
+  const plan = me ? planBlock(me, { superAdmin: isSuperAdminUser(user) }) : null;
+  const store = plan?.state === 'ok' ? storageLine(storage) : null;
+  const auto = autoReloadLine(autoReload);
+  const add = addState({ meLoading: read.status === 'loading', packCount: packs.status === 'ready' ? packCards(packs.body).length : null });
   return (
     <section className="axp-sec axp-tokband" id="add-tokens" aria-label="Your AI tokens" data-testid="pricing-tokens-band">
       {me?.ai_paused && <p className="axp-tokband-note" role="status">{TOKENS_BAND.paused}</p>}
-      <div className="axp-tokband-row">
-        <div>
-          <div className="axp-kick">{TOKENS_BAND.kick}</div>
-          {read.status === 'loading' && <div className="axp-muted" aria-busy="true">Reading…</div>}
-          {balance != null && <div className={`axp-tokband-n axp-mono${D}`}>{balance}</div>}
-          {balance != null && <div className="axp-muted">{TOKENS_BAND.never}</div>}
-          {read.status !== 'loading' && balance == null && (
-            <div className="axp-tokband-bad" role="alert">
-              <span>{TOKENS_BAND.unreadable}</span>
-              <button type="button" className="axp-btn axp-btn-err" onClick={onRetry}>Try again</button>
+      <div className="axp-tokband-card">
+        <div className="axp-tokband-row">
+          <div className="axp-tokband-main">
+            <div>
+              <div className="axp-kick">{TOKENS_BAND.kick}</div>
+              {read.status === 'loading' && <div className="axp-muted" aria-busy="true">{TOKENS_BAND.reading}</div>}
+              {balance != null && <div className={`axp-tokband-n axp-mono${D}`}>{balance}</div>}
+              {balance != null && <div className="axp-muted">{TOKENS_BAND.never}</div>}
+              {read.status !== 'loading' && balance == null && (
+                <div className="axp-tokband-bad" role="alert">
+                  <span>{TOKENS_BAND.unreadable}</span>
+                  <button type="button" className="axp-btn axp-btn-err" onClick={onRetry}>Try again</button>
+                </div>
+              )}
             </div>
-          )}
+            {plan && (
+              <div className="axp-tokband-plan" data-testid="pricing-tokens-plan">
+                {plan.state === 'unreadable' ? <span className="axp-tokband-line">{plan.line}</span> : (<>
+                  <span className="axp-kick">{plan.eye}</span>
+                  {plan.plan && <span className="axp-tokband-name">{plan.plan}</span>}
+                  {plan.lines.map((l) => <span key={l} className="axp-tokband-line">{l}</span>)}
+                  {store && (
+                    <span className="axp-tokband-sub" data-testid="pricing-tokens-storage">
+                      {store.text}{store.state !== 'unreadable' && <> <Link to="/account/usage/storage" className="axp-tokband-link">{TOKENS_BAND.storageLink}</Link></>}
+                    </span>
+                  )}
+                  {plan.hq && (
+                    <span className="axp-tokband-sub" data-testid="pricing-tokens-hq">
+                      {TOKENS_BAND.hq} <Link to="/admin/platform/allowances" className="axp-tokband-link">{TOKENS_BAND.hqLink}</Link>
+                    </span>
+                  )}
+                </>)}
+              </div>
+            )}
+          </div>
+          <div className="axp-tokband-act">
+            {add.enabled
+              ? <a href="#token-packs" className="axp-btn is-primary axp-tokband-add" data-testid="pricing-tokens-add">{TOKENS_BAND.add}</a>
+              : (<>
+                <button type="button" className="axp-btn is-primary axp-tokband-add" disabled aria-disabled="true" aria-describedby="axp-tokband-off" data-testid="pricing-tokens-add">{TOKENS_BAND.add}</button>
+                <span id="axp-tokband-off" className="axp-tokband-sub" data-testid="pricing-tokens-add-off">{add.line}</span>
+              </>)}
+            {auto && (
+              <span className="axp-tokband-sub" data-testid="pricing-tokens-auto">
+                {auto.text} · <Link to="/account/billing#auto-reload" className="axp-tokband-link">{auto.link}</Link>
+              </span>
+            )}
+          </div>
         </div>
-        <a href="#token-packs" className="axp-btn is-primary axp-tokband-add" data-testid="pricing-tokens-add">{TOKENS_BAND.add}</a>
+        {plan?.state === 'ok' && (
+          <div className="axp-tokband-barwrap" data-testid="pricing-tokens-bar">
+            <div className="axp-tokband-bar" role="img" aria-label={plan.bar.label}>
+              {plan.bar.parts.map((p) => (p.pct > 0 ? <span key={p.id} className={`axp-tokband-seg is-${p.id}`} style={{ width: `${p.pct.toFixed(1)}%` }} /> : null))}
+            </div>
+            <div className="axp-tokband-legend">
+              {plan.bar.parts.map((p) => <span key={p.id} className="axp-tokband-key"><span className={`axp-tokband-dot is-${p.id}`} aria-hidden="true" />{p.label}</span>)}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -369,6 +427,11 @@ export function PricingBody({ user = null }) {
   const roleTab = tab !== 'models';
   const meFetch = useCallback(() => (user && !roleTab ? aiBudgetApi.mine() : Promise.resolve(null)), [user, roleTab]);
   const [me, retryMe] = useRead(meFetch);
+  // D1286 (#3369): the band's storage and auto-reload lines, read on the Models tab only.
+  const storageFetch = useCallback(() => (user && !roleTab ? usageApi.storage() : Promise.resolve(null)), [user, roleTab]);
+  const [storage] = useRead(storageFetch);
+  const autoFetch = useCallback(() => (user && !roleTab ? aiBudgetApi.autoReload() : Promise.resolve(null)), [user, roleTab]);
+  const [autoReload] = useRead(autoFetch);
   // D1049 (#2900): an Advisor's or Operating Partner's plan is in account_subscriptions,
   // read from their plan status only on their own tab.
   const wantPlan = needsPlanStatus(user, role, tab);
@@ -465,7 +528,7 @@ export function PricingBody({ user = null }) {
 
       {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} />}
 
-      {!roleTab && user && <TokensBand read={me} onRetry={retryMe} />}
+      {!roleTab && user && <TokensBand read={me} onRetry={retryMe} storage={storage} autoReload={autoReload} packs={plans} user={user} />}
       {!roleTab && <Packs read={plans} onRetry={retryPlans} signedIn={!!user} />}
       {!roleTab && (
         <section className="axp-sec axp-models">

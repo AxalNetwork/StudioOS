@@ -81,7 +81,7 @@ function resolveProjectSource(expr: string, project: any): string | null {
     }
     if (k === 'runway_target') {
       const runway = formatDeckRunway(project._recordedRunway);
-      return runway ? `${runway} runway` : null;
+      return runway ? `${runway} runway${project._runwayModelled ? ` · ${MODELLED_RUNWAY}` : ''}` : null;
     }
     return null;
   }
@@ -106,7 +106,7 @@ function resolveFinancialsSource(expr: string, fin: any): string | null {
   const k = expr.replace(/^financials\./, '');
   const v = fin?.[k];
   if (v == null) return null;
-  if (k === 'runway_months') return formatDeckRunway(v, 'mo');
+  if (k === 'runway_months') { const r = formatDeckRunway(v, 'mo'); return r && fin._runwayModelled ? `${r} · Modelled` : r; }
   if (k === 'breakeven_month') return v ? `month ${v}` : null;
   if (k === 'avg_monthly_burn' || k === 'ending_cash' || k === 'total_revenue_horizon' || k === 'ltv') {
     return fmtMoney(v);
@@ -318,6 +318,18 @@ function resolveScalarField(
 
 /** D895: a stored financial-model runway, otherwise the venture's measured Mercury fact. */
 export async function recordedDeckRunway(env: Env, projectId: number, mercuryOwnerUserId: number | null = null): Promise<number | null> {
+  return (await deckRunwayRead(env, projectId, mercuryOwnerUserId))?.months ?? null;
+}
+
+/**
+ * D1178 (#3105): the deck's runway with its source. The financial model is
+ * Use of funds › Runway › Forecast, a model the founder set (#2455 owner
+ * question 1), so its runway is Modelled and the deck says so; Mercury's
+ * measured fact is a Connector reading and prints as before.
+ */
+export type DeckRunway = { months: number; source: 'Modelled' | 'Connector' };
+export const MODELLED_RUNWAY = 'Modelled forecast';
+export async function deckRunwayRead(env: Env, projectId: number, mercuryOwnerUserId: number | null = null): Promise<DeckRunway | null> {
   const measured = (value: unknown): number | null => {
     if (value == null || value === '' || typeof value === 'boolean') return null;
     const number = Number(value);
@@ -326,12 +338,13 @@ export async function recordedDeckRunway(env: Env, projectId: number, mercuryOwn
   try {
     const row = await env.DB.prepare('SELECT computed_json FROM financial_models WHERE project_id = ? AND updated_by IS NOT NULL ORDER BY id DESC LIMIT 1').bind(projectId).first<{ computed_json: string }>();
     const runway = measured(row?.computed_json ? JSON.parse(row.computed_json)?.runway_months : null);
-    if (runway !== null) return runway;
+    if (runway !== null) return { months: runway, source: 'Modelled' };
   } catch { /* no readable recorded model */ }
   if (mercuryOwnerUserId == null) return null;
   try {
     const row = await env.DB.prepare("SELECT f.value FROM mercury_raise_facts f JOIN integrations i ON i.id = f.integration_id JOIN projects p ON p.id = f.project_id JOIN users u ON u.id = i.user_id AND u.founder_id = p.founder_id WHERE f.project_id = ? AND f.kind = 'runway' AND i.user_id = ? AND i.provider_key = 'mercury' AND i.status = 'active' AND u.role = 'founder' ORDER BY f.as_of DESC, f.id DESC LIMIT 1").bind(projectId, mercuryOwnerUserId).first<{ value: number | null }>();
-    return measured(row?.value);
+    const months = measured(row?.value);
+    return months === null ? null : { months, source: 'Connector' };
   } catch { return null; }
 }
 
@@ -344,7 +357,9 @@ export async function autofillDeck(
   // Load project + financials.computed_json + cap table holders.
   const project: any = await env.DB
     .prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>() || {};
-  project._recordedRunway = await recordedDeckRunway(env, projectId, who?.mercuryOwnerUserId ?? null);
+  const deckRunway = await deckRunwayRead(env, projectId, who?.mercuryOwnerUserId ?? null);
+  project._recordedRunway = deckRunway?.months ?? null;
+  project._runwayModelled = deckRunway?.source === 'Modelled';
   let fin: any = null;
   try {
     const fmRow = await env.DB
@@ -358,7 +373,7 @@ export async function autofillDeck(
     }
   } catch { /* table may not exist */ }
   // One recorded runway supplies both Ask cells, including the Mercury fallback.
-  fin = { ...(fin || {}), runway_months: project._recordedRunway };
+  fin = { ...(fin || {}), runway_months: project._recordedRunway, _runwayModelled: project._runwayModelled };
   let holders: Array<{ name: string; shares: number; kind: string }> = [];
   try {
     const hr = await env.DB.prepare(
