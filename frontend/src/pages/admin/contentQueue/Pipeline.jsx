@@ -213,7 +213,7 @@ export default function Pipeline({ viewer, drawer = null, refreshKey = 0 }) {
   const set = (change) => navigate({ pathname: location.pathname, search: searchOf({ ...state, page: 1, ...change }) });
   const go = (view) => navigate({ pathname: QUEUE_BASE, search: searchOf({ ...state, view, page: 1 }) });
   // A literal, so the admin reachability walk sees the door to `/admin/articles/:view`.
-  const open = (id) => navigate({ pathname: `/admin/articles/${id}`, search: location.search });
+  const open = (id) => navigate(`/admin/articles/${id}${location.search}`);
   const toStage = (stage) => navigate({ pathname: QUEUE_BASE, search: searchOf({ ...state, view: 'list', stage, page: 1 }) });
   const data = read.status === 'ready' ? read.data : null;
   const oldest = data && state.view === 'board' ? (data.items || []).find((a) => stageOf(a) === 'submitted') : null;
