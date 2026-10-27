@@ -88,7 +88,8 @@ test('an article address opens that article\'s review', async () => {
   } finally { await w.done(); }
 });
 
-for (const tab of ['calendar', 'authors', 'performance']) {
+// D1296 (#3392) builds Calendar, so only Authors and Performance still wait; content_calendar_d1296.test.mjs mounts Calendar.
+for (const tab of ['authors', 'performance']) {
   test(`${tab}: says what it waits on, and draws no queue`, async () => {
     const w = await mount(`/admin/articles/${tab}`);
     try {
