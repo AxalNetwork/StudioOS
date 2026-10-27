@@ -5,6 +5,7 @@ import { Lightbox } from '../../../ui';
 import {
   NOT_RECORDED, SECTIONS, centsFromTyped, dayText, money, roundSourceRows, sectionOf, splitCheck, sourceText,
 } from './useOfFundsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1177 (#3104) — the Use of funds tool's shared parts: the plan read, the
@@ -239,7 +240,7 @@ export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api
     setBusy(false);
   };
   return (
-    <Lightbox label="Edit split" title="Edit split" sub="Shares are whole percentages and add up to 100." onClose={onClose} width={620} phone="sheet" testId="uof-edit-split"
+    <Sheet label="Edit split" title="Edit split" sub="Shares are whole percentages and add up to 100." onClose={onClose} width={620} phone="sheet" testId="uof-edit-split"
       footer={<DialogButtons busy={busy} onClose={onClose} go={save} goLabel="Save split" disabled={!check.ok || cents == null || !monthsOk} testId="uof-split-save" />}>
       <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
         {viewer?.kind === 'admin' ? <p className={`m-0 text-[12px] ${MUTED}`} data-testid="uof-split-admin">You are saving as an Admin. The change is logged under your name.</p> : null}
@@ -284,7 +285,7 @@ export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api
         <p className={`m-0 text-[12px] ${MUTED}`}>The pitch deck’s Ask slide reads this split. Saving marks it out of sync.</p>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-split-error">{error}</p> : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 
@@ -343,7 +344,7 @@ export function RoundSizeDialog({ projectId, plan, onClose, onSaved, api = useOf
     setBusy(false);
   };
   return (
-    <Lightbox label="Choose the round size" title="Choose the round size" sub="The plan, the round and the cap-table scenario then read the same raise." onClose={onClose} width={620} phone="sheet" testId="uof-round-size"
+    <Sheet label="Choose the round size" title="Choose the round size" sub="The plan, the round and the cap-table scenario then read the same raise." onClose={onClose} width={620} phone="sheet" testId="uof-round-size"
       footer={<DialogButtons busy={busy} onClose={onClose} go={save} goLabel="Use this size" disabled={!chosen || !base?.id || chosen.cents === base?.amount_to_raise_cents} testId="uof-round-save" />}>
       <div className="flex flex-col gap-2 text-axal-ink dark:text-gray-100">
         {options.length ? options.map((o) => (
@@ -355,7 +356,7 @@ export function RoundSizeDialog({ projectId, plan, onClose, onSaved, api = useOf
         <p className={`m-0 text-[12px] ${MUTED}`}>Choosing a size changes this plan’s raise. Your split keeps its shares.</p>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-round-error">{error}</p> : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 
@@ -363,7 +364,7 @@ export function RoundSizeDialog({ projectId, plan, onClose, onSaved, api = useOf
 export function WhereUsedDialog({ plan, rows, onClose, onRound }) {
   const sources = roundSourceRows(plan);
   return (
-    <Lightbox label="Where this plan is used" title="Where this plan is used" onClose={onClose} width={720} testId="uof-where-used">
+    <Sheet label="Where this plan is used" title="Where this plan is used" onClose={onClose} width={720} testId="uof-where-used">
       <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] border-collapse text-left text-[12.5px]" data-testid="uof-round-table">
@@ -391,7 +392,7 @@ export function WhereUsedDialog({ plan, rows, onClose, onRound }) {
         ))}
         <p className={`m-0 text-[11.5px] ${MUTED}`}>No explicit link between this plan and a cap-table scenario is stored, so their dilution is not compared here.</p>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

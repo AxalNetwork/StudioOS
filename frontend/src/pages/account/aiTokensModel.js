@@ -47,7 +47,7 @@ export const KEYS_WAIT = 'Per API key: being built. Each key’s limit and what 
 /** The page's links, all to pages that exist. */
 export const LINKS = Object.freeze({
   cost: '/account/usage/cost', billing: '/account/billing', limits: '/account/usage/limits',
-  plans: '/pricing', keys: '/account/developer/keys',
+  plans: '/pricing', keys: '/account/builder/keys', // D1315: Builder › API keys
 });
 
 /** The Worker's own words for each stop (`aiRouter.ts` `budgetRefusalMessage`, `aiBudget.ts` `AI_PAUSED_MESSAGE`). */

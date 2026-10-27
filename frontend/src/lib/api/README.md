@@ -318,6 +318,11 @@ for a deal, its lines and their capital route, the evidence that money moved,
 the founder's cap-table decision and the close. An investor reads their own
 lines and the round's total. Nothing in it moves money.
 
+D1217 (#3214): `companyReceivingAccounts.js` reads the company's receiving
+account (always masked), saves it (the venture's founder), and reveals it once
+for an investor with a signed line, logged without the number
+(`/api/closings/company-receiving-accounts/:projectId`). No page calls it yet.
+
 D845 (#2471): `developerUsage.js` reads the caller's own usage reports over
 `api_usage_events` (D843): `report` (`GET /api/developer/usage`, grouped by day,
 key, provider, connector, tool or model, or by day and a second way) and `events`
@@ -413,6 +418,8 @@ Admin's write, which names the version it read. Counts leave admins out and
 come back suppressed from 1 to 4.
 
 `googleWorkspace.js` (D1091) calls the mounted Workspace consent, picked files, mapping, Stop using and preview routes. The files screen awaits its canvas.
+
+D1325 (#3486): `fills.js` (`fillsApi.sheet`) reads `GET /api/fills/sheet`: a form's fields with their values, marks, waiting values and triggers, its sources and Eadwyn's quote. No model runs.
 
 D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build. D1071 (#2941): `word` (one metered run, with the press's rail headers), `wording`, `keepWording` and `discardWording`; `edit(uid, payload, wording)` keeps an item's wording as its Save.
 

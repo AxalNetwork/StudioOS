@@ -25,8 +25,8 @@
  */
 export const INVESTOR_RAIL_OPTIONS = Object.freeze([
   // Deals
-  { page: 'Investor · Deals · Screening', key: 'draft:screening-memo', label: 'Draft the memo', kind: 'reason', handler: 'draft',
-    source: { file: 'pages/investor/deals/ScreeningZone.jsx', match: 'surface="deals/screening"' } },
+  // D1243 (#3256): Pipeline's stale-deal notes retired with the Pipeline zone.
+  // D1260 (#3283): Screening's memo is retired with the Lab scorer's scores it cited.
   { page: 'Investor · Deals · Commit', key: 'draft:ic-memo', label: 'Draft the memo', kind: 'reason', handler: 'draft',
     source: { file: 'pages/investor/deals/CommitZone.jsx', match: 'surface="deals/commit"' } },
   { page: 'Investor · Deals · Closing', key: 'draft:closing-cover-note', label: 'Draft the note', kind: 'write', handler: 'draft',

@@ -65,6 +65,8 @@ for(const phone of [false,true]) test(`requirement has its own URL, scoped facts
     assert.match(v.by('url').textContent,/requirement=investor_nda_v1/);
     assert.match(v.text(),/What this is/);assert.match(v.text(),/Why you are asked/);assert.match(v.text(),/Where it stands/);
     assert.match(v.text(),/3 Jan 2026/);assert.match(v.text(),/Open to sign/);
+    // D1317: the requirement opens as the shared Sheet over the page, 560px.
+    {const d=v.props(v.by('trust-requirement-dialog'));assert.equal(d.role,'dialog');assert.ok(d['aria-labelledby']);assert.equal(d['data-width'],560);}
     assert.match(textOf(v.by('trust-requirement-dialog')),/Synthetic evidence source/);assert.match(textOf(v.by('trust-requirement-dialog')),/Not recorded/);
     await v.escape();await v.flush();assert.equal(!!v.by('trust-requirement-dialog'),false);assert.doesNotMatch(v.by('url').textContent,/requirement=/);
   }finally{await v.unmount();}
@@ -106,8 +108,8 @@ test('deletion and cancellation require dialogs and read the server’s after-st
   }finally{await v.unmount();}
 });
 
-test('failed data reads are not opt-out or no-delete claims; Developer is not offered to a non-admin',async()=>{
-  const v=await mounted({fails:['/api/settings','/api/settings/privacy']});try{await v.click('Your data');await v.flush();assert.match(v.text(),/Unreadable.*deletion state/s);assert.match(v.text(),/matching consent could not be read/);assert.doesNotMatch(v.text(),/No open deletion|not opted into matching/);assert.equal(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/developer'),false);assert.ok(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/connectors'));}finally{await v.unmount();}
+test('failed data reads are not opt-out or no-delete claims; Builder (D1315) is offered to every profile',async()=>{
+  const v=await mounted({fails:['/api/settings','/api/settings/privacy']});try{await v.click('Your data');await v.flush();assert.match(v.text(),/Unreadable.*deletion state/s);assert.match(v.text(),/matching consent could not be read/);assert.doesNotMatch(v.text(),/No open deletion|not opted into matching/);assert.equal(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/developer'),false);assert.ok(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/builder'));assert.ok(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/connectors'));}finally{await v.unmount();}
 });
 
 

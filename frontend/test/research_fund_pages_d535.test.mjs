@@ -178,6 +178,17 @@ test('drawer: the fund\'s facts, stage and size "Not recorded" with reasons, rep
   assert.match(text, /Unreadable The reports could not be read\. This is not a fund with no reports\./);
   assert.match(text, /Add to my funds/, 'D593: the button is "Add to my funds"');
   assert.match(text, /Open full profile/);
+  // D1317: the drawer is the shared right-side Sheet at 480px, a bottom sheet on a phone.
+  const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(FundDirectoryView, {
+    query: EMPTY_QUERY, onQuery() {}, search: '', onSearch() {}, facets: DATA.facets, onSelect() {}, onClose() {},
+    result: { loading: false, error: null, data: DATA }, selected: ZETA,
+    drawer: { loading: false, error: null, data: { item: ZETA, reports: [], reports_status: 'ok' } },
+  })));
+  const id = html.match(/<h2 id="([^"]+)"[^>]*>Zeta[^<]*<\/h2>/)?.[1];
+  assert.ok(id, 'the fund names the sheet');
+  assert.match(html, new RegExp(`role="dialog" aria-modal="true" aria-labelledby="${id}"[^>]*data-testid="fd-drawer-sheet" data-width="480"`));
+  assert.match(html, /data-testid="fd-drawer-sheet-layer" data-phone="sheet"/);
+  assert.match(html, /<div id="fd-drawer"/, 'the rows’ aria-controls still name it');
 });
 
 const catalog = (props) => renderedText(renderToStaticMarkup(React.createElement(MemoryRouter, null,

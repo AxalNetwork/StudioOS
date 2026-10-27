@@ -133,7 +133,11 @@ test('D647 detail renders parties, history, fingerprint and confirmed reason/res
     { history: async () => ({ parties: [{ name: 'Founder', email: 'founder@example.test', signer_ip: '203.0.113.1', signed_at: '2026-10-08T00:00:00Z' }], timeline: [{ action: 'email_sent', ts: '2026-10-07T00:00:00Z' }], voids: [] }), signedPdf: async () => ({ available: true, sha256: 'signed-file-fingerprint', pdf_base64: btoa('%PDF-test') }) });
   const view = await mountContracts(React.createElement(Detail, { uid: 'env', onClose() {}, onChanged() {} }));
   try {
-    await view.flush(); assert.match(view.text(), /Founder.*203\.0\.113\.1/); assert.match(view.text(), /TimelineSent/); assert.match(view.text(), /SHA-256: signed-file-fingerprint/);
+    await view.flush();
+    // D1317: an agreement opens as the shared Sheet, 640px (SidePanel is the Sheet).
+    const sheet = view.props(view.nodes().find((n) => view.props(n)?.['data-testid'] === 'contract-agreement-sheet'));
+    assert.equal(sheet.role, 'dialog'); assert.ok(sheet['aria-labelledby']); assert.equal(sheet['data-width'], 640);
+    assert.match(view.text(), /Founder.*203\.0\.113\.1/); assert.match(view.text(), /TimelineSent/); assert.match(view.text(), /SHA-256: signed-file-fingerprint/);
     await view.click('Resend'); await view.flush(); assert.match(view.text(), /invitation could not be sent/);
     await view.click('Void…'); await view.fill('Reason for voiding', 'Sent to the wrong party'); await view.click('Confirm void'); await view.flush();
     assert.deepEqual(calls.find(([key]) => key === 'adminVoidContractWithReason')[1], ['env', 'Sent to the wrong party']); assert.match(view.text(), /reason is recorded/);

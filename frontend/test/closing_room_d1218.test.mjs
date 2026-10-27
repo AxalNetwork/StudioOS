@@ -227,6 +227,9 @@ test('mounted CP4: Review and sign shows the order and whose turn it is, and the
   try {
     await v.click('closing-line-paper-l2');
     assert.ok(v.has('closing-sign'));
+    assert.equal(v.props('closing-sign').role, 'dialog', 'D1317: Review and sign opens as the shared Sheet');
+    assert.ok(v.props('closing-sign')['aria-labelledby']);
+    assert.equal(v.props('closing-sign')['data-width'], 560);
     assert.match(v.text('closing-signer-1'), /Ada Founder.*The company · you.*Your turn/);
     assert.match(v.text('closing-signer-2'), /Harbor Ventures.*The investor.*Waiting/);
     assert.match(v.text('closing-sign-yours'), /sent to you on 17 Oct 2026.*e-sign page/);
@@ -242,6 +245,9 @@ test('mounted CP10: the receipt drawer lists the evidence newest first, with its
     assert.match(v.text('closing-receipt-status'), /Received/);
     assert.match(v.text('closing-evidence-e2'), /Matched in the company’s Mercury.*15 Oct 2026.*Receiving side/);
     assert.match(v.text('closing-evidence-e1'), /Matched in the investor’s Mercury.*Sending side/);
+    assert.equal(v.props('closing-receipt').role, 'dialog', 'D1317: the receipt opens as the shared Sheet');
+    assert.ok(v.props('closing-receipt')['aria-labelledby']);
+    assert.equal(v.props('closing-receipt')['data-width'], 560);
     const t = v.text('closing-receipt');
     assert.ok(t.indexOf('company’s Mercury 15 Oct') < t.indexOf('investor’s Mercury 14 Oct'), 'newest first');
   } finally { await v.close(); }
@@ -260,6 +266,9 @@ test('mounted CP11: the founder decides the cap-table change in a dialog, and no
   try {
     assert.match(v.text('closing-needs-you'), /Decide the cap table change/);
     await v.click('closing-captable-open');
+    assert.equal(v.props('closing-captable-dialog').role, 'dialog', 'D1317: the cap-table proposal opens as the shared Sheet');
+    assert.ok(v.props('closing-captable-dialog')['aria-labelledby']);
+    assert.equal(v.props('closing-captable-dialog')['data-width'], 640);
     assert.match(v.text('closing-captable-dialog'), /Add Nora Angel to the cap table\?.*Nora Angel · Post-money SAFE · \$250,000\.00/);
     assert.match(v.text('closing-captable-modelled'), /Not read here yet|before and after/);
     assert.deepEqual(v.writes(), [], 'opening the dialog writes nothing');
@@ -321,6 +330,9 @@ test('mounted CP9: payment instructions open with the warning first, and say the
   const v = await mount({ role: 'investor', routes: INVESTOR_ROUTES() });
   try {
     await v.click('closing-see-instructions');
+    assert.equal(v.props('closing-pay').role, 'dialog', 'D1317: the payment instructions opens as the shared Sheet');
+    assert.ok(v.props('closing-pay')['aria-labelledby']);
+    assert.equal(v.props('closing-pay')['data-width'], 520);
     const t = v.text('closing-pay');
     assert.ok(t.indexOf(PAY_WARNING('Acme Robotics')) >= 0 && t.indexOf(PAY_WARNING('Acme Robotics')) < t.indexOf('Not read here yet'), 'the warning comes first');
     assert.match(v.text('closing-pay-wait'), /not mounted yet \(#3214\).*Nothing here tells you where to pay/);
@@ -442,7 +454,9 @@ test('the wiring: no browser pop-up, every read is a mounted route, light classe
   assert.match(worker, /app\.route\('\/api\/reporting', reporting\)/);
   assert.match(read('cloudflare-worker/src/routes/esign.ts'), /esign\.get\('\/staged\/line\/:commitmentId'/);
   assert.match(read('cloudflare-worker/src/routes/mercury_investor.ts'), /app\.post\('\/proposals\/:uid\/accept'/);
-  assert.doesNotMatch(worker, /company_receiving_accounts/, 'the receiving-account route is still unmounted, so the room says so (D1218 §4)');
+  // D1217's follow-up (#3214) mounted the receiving-account route before the Closing router. The room
+  // reads it in a later part, and until then still says "Not read here yet" (D1218 §4).
+  assert.match(worker, /app\.route\('\/api\/closings\/company-receiving-accounts', companyReceivingAccounts\);\n(?:\/\/[^\n]*\n)?app\.route\('\/api\/closings', closings\)/);
   for (const src of files.slice(0, 3)) {
     for (const m of src.matchAll(/className="([^"]+)"/g)) {
       const c = m[1];

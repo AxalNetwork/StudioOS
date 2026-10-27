@@ -77,18 +77,18 @@ test('risk and screening: flagged/rejected/unsigned/tampered rows supply no comp
       const screeningResponse = await request(deals, f.env, 2, '/screening');
       assert.equal(screeningResponse.status, 200);
       const screening: any = await screeningResponse.json();
-      assert.equal(screening.scored.available, true);
-      const row = screening.scored.rows.find((r: any) => r.deal_id === 100);
-      assert.equal(row.total_score, kind === 'approved' ? 91 : null, kind);
-      assert.equal('flags' in row, false);
-      assert.equal('review_status' in row, false);
-      assert.equal(screening.flags.available, false);
+      // D1260 (#3283): Screening reads the scorecard; its desk carries no Lab score, of any review state.
+      assert.equal(screening.desk.available, true);
+      const row = screening.desk.rows.find((r: any) => r.deal_id === 100);
+      assert.deepEqual(Object.keys(row).sort(), ['company', 'deal_id', 'deal_status', 'sector'], kind);
+      assert.equal('scored' in screening || 'flags' in screening, false);
       const investorAssessment: any = await (await request(risk, f.env, 3, '/by-project/10')).json();
       assert.equal(investorAssessment.layers.find((l: any) => l.key === 'founder').auto_score, kind === 'approved' ? 100 : null, kind);
       const founder = assessment.layers.find((l: any) => l.key === 'founder');
       assert.equal(founder.auto_score, kind === 'approved' ? 100 : null, kind);
       const logs: any[] = f.db.prepare("SELECT * FROM activity_logs WHERE action='score_read'").all();
-      if (['approved', 'unsigned', 'tampered'].includes(kind)) assert.equal(logs.length, 3, kind);
+      // The two venture-risk reads; Screening no longer reads a snapshot (D1260).
+      if (['approved', 'unsigned', 'tampered'].includes(kind)) assert.equal(logs.length, 2, kind);
       if (kind === 'approved') assert.ok(logs.every(row => JSON.parse(row.details).integrity_valid === true));
       for (const id of [4, 6, 7]) assert.equal((await request(deals, f.env, id, '/screening')).status, 403);
       assert.equal((await request(deals, f.env, 1, '/screening')).status, 200);
@@ -181,11 +181,11 @@ test('bulk score reads: deduplicate deals and batch audit without weakening visi
     const response = await request(deals, f.env, 2, '/screening');
     assert.equal(response.status, 200);
     const body: any = await response.json();
-    assert.equal(body.scored.rows.filter((r: any) => r.total_score === 91).length, 2);
-    assert.equal(selections, 1);
-    assert.equal(auditBatches, 1);
-    assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='score_read'").get() as any).n, 1);
-    selections = 0; auditBatches = 0;
+    // D1260 (#3283): Screening lists both deals and reads no snapshot, so nothing is selected or audited.
+    assert.deepEqual(body.desk.rows.map((r: any) => r.deal_id).sort(), [100, 101, 200], 'staff read every deal');
+    assert.equal(selections, 0);
+    assert.equal(auditBatches, 0);
+    assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='score_read'").get() as any).n, 0);
     assert.equal((await request(risk, f.env, 2, '/matrix')).status, 200);
     assert.equal(selections, 1);
     assert.equal(auditBatches, 1);

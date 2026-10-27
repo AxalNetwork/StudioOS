@@ -438,6 +438,9 @@ test('the instrument drawer opens over Instruments at its own address, runs the 
   try {
     assert.ok(v.ids().includes('captable-instrument-over-instruments'));
     assert.ok(v.ids().includes('captable-instrument'));
+    assert.equal(v.props(v.by('captable-instrument')).role, 'dialog', 'D1317: the instrument opens as the shared Sheet over Instruments');
+    assert.ok(v.props(v.by('captable-instrument'))['aria-labelledby']);
+    assert.equal(v.props(v.by('captable-instrument'))['data-width'], 640);
     assert.deepEqual(v.posted(/\/simulate$/)[0][1], { rounds: [TODAY.model.inputs.rounds[0]] }, 'the model\'s planned round');
     assert.match(v.text(v.by('captable-instrument-steps')), /Cap price = \$10,000,000 ÷ 12,195,122 shares = \$0\.82 Discount price = \$1\.03 × \(1 − 15%\) = \$0\.88 Lower price wins: cap → 182,927 shares → 1\.32% after the round/);
     assert.match(v.text(v.by('captable-instrument-terms')), /Valuation cap \$10,000,000 post-money Mercury · Data room file/);

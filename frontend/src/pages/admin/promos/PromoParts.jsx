@@ -18,13 +18,14 @@ import { adminPromosApi } from '../../../lib/api/adminPromos.js';
 import { promoUsageApi } from '../../../lib/api/promoUsage.js';
 import { reportError } from '../../../lib/log';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Chart, ChartTable, Legend, Lightbox, actionGhost, actionPrimary } from '../../../ui';
+import { Chart, ChartTable, Legend, actionGhost, actionPrimary } from '../../../ui';
 import {
   ACTION_WORD, NOT_YET, RANGES, SOURCES, STATE_WORD, WAITS, appliesWord, blockState, codeHref, currencyRows, dayWord, discountWord,
   durationWord, historyRow, limitWord, minuteWord, nearEndRows, nearEndSentence, periodWord, productsChart, rangeProblem,
   redeemedLines, redemptionRow, rowActions, topCodesChart, usageHref, usageRangeOf, usageTiles, weekChart,
 } from './promoModel';
 import { memberPays, draftFrom } from './promoWizard';
+import Sheet from '../../../ui/Sheet.jsx';
 
 const box = 'flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -352,7 +353,7 @@ export function PromoDrawer({ id, row = null, names = {}, choices = null, onClos
   const count = red.kind === 'ok' && red.data?.stripe?.available ? red.data.stripe.times_redeemed
     : (red.kind === 'ok' && red.data?.redemptions?.available ? red.data.redemptions.rows.length : null);
   return (
-    <Lightbox label={`Promo code ${title}`} title={title} sub={p?.name || undefined} onClose={onClose} width={720} testId="promo-drawer"
+    <Sheet label={`Promo code ${title}`} title={title} sub={p?.name || undefined} onClose={onClose} width={720} testId="promo-drawer"
       footer={p && (
         <div className="flex flex-wrap items-center justify-end gap-2">
           {more.map((a) => <button key={a} type="button" className={actionGhost} onClick={() => onAction(a, p)} data-testid={`promo-drawer-${a}`}>{ACTION_WORD[a]}</button>)}
@@ -390,6 +391,6 @@ export function PromoDrawer({ id, row = null, names = {}, choices = null, onClos
           </>
         )}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }

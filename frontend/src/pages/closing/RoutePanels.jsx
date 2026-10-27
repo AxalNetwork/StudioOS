@@ -15,12 +15,13 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { closingsApi } from '../../lib/api/closings';
-import { Lightbox, Unreadable, Unrecorded } from '../../ui';
+import { Unreadable, Unrecorded } from '../../ui';
 import { BTN, INPUT } from '../account/AccountCenter';
 import { Err, NotYet } from './ClosingDialogs';
 import {
   DESK_WAITS, FUND_CALLS_PATH, NO_ROUTE_YET, actControl, lineStatus, moneyCents, paperWord, routeBody, syndicateIdOf,
 } from './deskModel';
+import Sheet from '../../ui/Sheet.jsx';
 
 const box = 'flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const EYEBROW = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-gray-500 dark:text-gray-400';
@@ -126,7 +127,7 @@ export function ThirdPartyDrawer({ closing, line, envelopes, onClose, onSaved })
     finally { setBusy(false); }
   };
   return (
-    <Lightbox label="Record a third-party fund" eyebrow="Third-party fund" title="Record a third-party fund" sub={`${line.investor_name || 'This line'} · sets the line’s route to Third-party fund`}
+    <Sheet label="Record a third-party fund" eyebrow="Third-party fund" title="Record a third-party fund" sub={`${line.investor_name || 'This line'} · sets the line’s route to Third-party fund`}
       testId="closing-third-party" onClose={onClose} width={560}>
       <div className="flex flex-col gap-3 px-5 py-4 text-[12.5px]">
         <p className="m-0 rounded-lg bg-sky-50 px-3 py-2 text-sky-900 dark:bg-sky-950/40 dark:text-sky-100">StudioOS keeps a record of this fund’s investment and its evidence. It does not run the fund’s calls or hold its money.</p>
@@ -147,6 +148,6 @@ export function ThirdPartyDrawer({ closing, line, envelopes, onClose, onSaved })
         <button type="button" className={BTN.ghost} onClick={onClose}>Cancel</button>
         <button type="button" className={BTN.primary} disabled={busy} onClick={save} data-testid="closing-third-party-save">Save the record</button>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }

@@ -72,6 +72,11 @@ export function LightboxBarProvider({ bar, children }) {
   return <LightboxBar.Provider value={typeof bar === 'function' ? bar : null}>{children}</LightboxBar.Provider>;
 }
 
+/** D1317: the phone form a page gave its drawers (`LightboxPhoneProvider`), so `Sheet` honours it too. */
+export function useLightboxPhone() {
+  return useContext(LightboxPhone);
+}
+
 /** True inside a `Lightbox` drawn as a page, false inside one drawn as a dialog (and outside any). */
 export function useLightboxPage() {
   return useContext(LightboxPage);

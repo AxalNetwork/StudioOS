@@ -6254,31 +6254,6 @@
    ]
   },
   {
-   "pageKey": "Investor · Deals · Screening",
-   "optionKey": "draft:screening-memo",
-   "optionLabel": "Draft the memo",
-   "kind": "reason",
-   "handler": "draft",
-   "routeTask": "rail_reason",
-   "models": [
-    {
-     "id": "@cf/openai/gpt-oss-120b",
-     "role": "Default",
-     "line": "Tests a claim against its evidence"
-    },
-    {
-     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
-     "line": "Reviews the first answer"
-    },
-    {
-     "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
-     "line": "Argues the other side"
-    }
-   ]
-  },
-  {
    "pageKey": "Investor · Deals · Commit",
    "optionKey": "draft:ic-memo",
    "optionLabel": "Draft the memo",

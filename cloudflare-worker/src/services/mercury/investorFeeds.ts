@@ -41,6 +41,7 @@ import { callLineFits, openLines, type OpenLine } from './match';
 import { recordReceipt } from '../fundCallLedger';
 import { LedgerRefusal, postLedgerEntry } from '../fundLedger';
 import { newUid } from './store';
+import { recompute as recomputeClosingLine } from '../closings';
 
 /** A reader of the investor's own Mercury: what this file uses. */
 export type InvestorReader = Pick<MercuryReads, 'accounts' | 'transactions' | 'statements' | 'statementPdf'>;
@@ -497,6 +498,28 @@ export async function acceptProposal(env: Env, user: User, p: ProposalRow, body:
       return no(409, 'closing_proposal_stale', 'This proposal no longer matches the open line. Read it again before accepting.');
     }
     const ref = `mercury:${p.mercury_id}`;
+    // D1217 (#3214) on D1215's line: the commitment's line on its deal's open closing, if one is open.
+    // Its evidence is the SENDING side (investor_mercury), so the line reads "Sent, not yet confirmed"
+    // and never Received. A commitment with no line keeps only the sent_* record below.
+    const closingLine = await env.DB.prepare(
+      `SELECT l.id, l.closing_id FROM closing_lines l JOIN closings c ON c.id = l.closing_id AND c.status = 'open'
+        WHERE l.commitment_id = ? AND l.status = 'open'`,
+    ).bind(p.target_id).first<{ id: number; closing_id: number }>();
+    const evidenceUid = newUid();
+    // D1215 names a Mercury record `mercury:<id>`; an id outside that shape is named by its proposal instead.
+    const evidenceRef = /^[A-Za-z0-9_-]{1,64}$/.test(p.mercury_id) ? ref : `mercury:proposal-${String(p.uid).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48)}`;
+    const lineWrites = closingLine ? [
+      env.DB.prepare(`INSERT INTO closing_evidence (uid, line_id, kind, side, source_ref, recorded_by, accepted_by, accepted_at, created_at)
+        SELECT ?, l.id, 'investor_mercury', 'sending', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+          FROM closing_lines l JOIN closings c ON c.id = l.closing_id AND c.status = 'open'
+         WHERE l.id = ? AND l.commitment_id = ? AND l.status = 'open'
+           AND EXISTS (SELECT 1 FROM commitments k WHERE k.id = ? AND k.investor_user_id = ? AND k.sent_proposal_uid = ?)`)
+        .bind(evidenceUid, evidenceRef, user.id, user.id, closingLine.id, p.target_id, p.target_id, user.id, p.uid),
+      recomputeClosingLine(env, Number(closingLine.id)),
+      env.DB.prepare(`INSERT INTO closing_events (closing_id, line_id, actor_user_id, event, source_ref, created_at)
+        SELECT ?, ?, ?, 'evidence_added', ?, CURRENT_TIMESTAMP WHERE EXISTS (SELECT 1 FROM closing_evidence WHERE uid = ?)`)
+        .bind(closingLine.closing_id, closingLine.id, user.id, `closing_evidence:${evidenceUid}`, evidenceUid),
+    ] : [];
     let writes: D1Result[];
     try {
       writes = await env.DB.batch([
@@ -521,6 +544,7 @@ export async function acceptProposal(env: Env, user: User, p: ProposalRow, body:
           WHERE changes() = 1 AND EXISTS (SELECT 1 FROM commitments WHERE id = ? AND investor_user_id = ? AND sent_proposal_uid = ?)
           ON CONFLICT(uid) DO NOTHING`)
           .bind(`closing-sent:${p.uid}`, user.id, p.target_id, user.id, p.uid),
+        ...lineWrites,
       ]);
     } catch {
       return no(503, 'sender_report_unavailable', 'Sent could not be recorded. No receipt was confirmed. Try again.');

@@ -39,6 +39,15 @@ test('uses canvas stylesheet without importing canvas sidebar', () => {
   assert.doesNotMatch(css, /\.side\b/);
 });
 
+test('D1317: a referral’s detail opens as the shared right-side Sheet at 480px; Submit stays its own drawer', () => {
+  assert.match(page, /^import Sheet from '\.\.\/ui\/Sheet\.jsx';$/m);
+  const detail = page.slice(page.indexOf('function DetailDrawer('), page.indexOf('function stop(e)'));
+  assert.match(detail, /<Sheet\s+label=\{detail\.referred_name\}\s+title=\{detail\.referred_name\}[\s\S]*?width=\{480\}\s+testId="rf-detail-drawer"/);
+  assert.match(detail, /<Sheet label="Referral" title="Referral" onClose=\{onClose\} width=\{480\} testId="rf-detail-drawer">/, 'loading, the same sheet');
+  assert.doesNotMatch(detail, /rf-drawer|addEventListener\('keydown'/, 'no own drawer and no own Escape');
+  assert.doesNotMatch(css, /\.rf-drawer-wide/);
+});
+
 test('/referrals is a flush full-width surface in App shell', () => {
   // Asserted through the LIST, not a path check in App.jsx, and the difference
   // matters. `fullWidthSurface` and `flushSurface` were once two hand-typed

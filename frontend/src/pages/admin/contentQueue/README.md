@@ -33,7 +33,7 @@ and `/admin/articles/performance`.
 - `statsModel.js` — pure. Each author's row, the tiles, search, filters, sort
   and pages; the periods and the range each asks for; the performance read as
   the page draws it. A figure a read does not carry is "Not recorded", never 0.
-- `AuthorsTab.jsx` — Authors (ART9) with the author drawer (ART10), from
+- `AuthorsTab.jsx` — Authors (ART9) with the author drawer (ART10, the shared Sheet, D1317), from
   D1294's `GET /api/admin/articles/authors`. A table from `md` up, cards and a
   bottom sheet for the filters below it.
 - `PerformanceTab.jsx` — Performance (ART11, ART12), from D1294's

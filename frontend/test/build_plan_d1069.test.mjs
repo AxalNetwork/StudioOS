@@ -194,6 +194,9 @@ test('VB4: Edit and accept in the module\'s own fields, the evidence kept, only 
     : response({ uid: FEAT, status: 'edited' })) } }) });
   try {
     await r.click(`plan-item-edit-${FEAT}`);
+    assert.equal(r.props('plan-edit').role, 'dialog', 'D1317: Edit and accept is the shared Sheet');
+    assert.ok(r.props('plan-edit')['aria-labelledby']);
+    assert.equal(r.props('plan-edit')['data-width'], 640, 'its 620px snaps to the owner’s 640');
     assert.match(r.textOf('plan-edit'), /Feature · One-day setup wizard.*The evidence stays with the item\. It cannot be removed here\..*Recorded · Problem discovery/s);
     for (const id of ['plan-edit-title', 'plan-edit-description', 'plan-edit-added_value-High', 'plan-edit-effort-XL']) assert.ok(r.has(id), id);
     await r.type('plan-edit-title', 'Setup wizard');

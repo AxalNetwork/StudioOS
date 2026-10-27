@@ -136,7 +136,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS; D1158: GET /lps, the LP roster)
 /api/closings      → closings.ts        (D1215: a closing as a record — open, lines, route, evidence, the cap-table proposal, complete; the admin desk `adminClosings` is mounted at /api/admin/closings)
-                                         (D1220: the operator's order through these routes, from Open to Mark Closed, is `documentation/operations/CLOSING.md`. Adding a line and recording or withdrawing evidence have no page control yet; the runbook's §10 says how they are sent. `company_receiving_accounts.ts` (D1217, receiving instructions at /api/closings/company-receiving-accounts) is prepared and NOT mounted until #3214)
+                                         (D1220: the operator's order through these routes, from Open to Mark Closed, is `documentation/operations/CLOSING.md`. Adding a line and recording or withdrawing evidence have no page control yet; the runbook's §10 says how they are sent. `company_receiving_accounts.ts` (D1217, receiving instructions) is mounted at /api/closings/company-receiving-accounts, before this router (#3214))
 /api/reporting     → reporting.ts       (D1058: reporting duties and periods — the founder's desk, the expected date and reminders; the investor's own duties, ask and waive)
 /api/reporting     → reporting_reports.ts (D1059: a report from the Grow modules — draft, choices, preview, send with frozen figures, correct as a revision, the open, and private statements)
 /api/fund-reporting → fund_reporting.ts
@@ -412,6 +412,8 @@ D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: 
 D1093 (#2958): `build_google.ts` mounts `/api/cycles/build/google` before the Build cycle's routes: From Google on Solution design and Product roadmap, the sync, and a spec Doc's Accept and Dismiss, on `google_workspace.ts`'s scope check. See `../services/google/README.md`.
 
 D1086 (#2951): `notion.ts` mounts `/api/connectors/notion` (search, the sources a founder picks with their field map, Stop using, a five-row preview that stores nothing) ahead of the integrations router, and its `notionCycleRoutes` on `/api/cycles` (`/:section/notion`: the read, Sync, Accept, Dismiss and Delete) ahead of the section routers. The sync itself is `../services/notion/sync.ts`. Every write checks the owner, the venture and the company; a support session is refused.
+
+D1325 (#3486): `fills.ts` mounts `/api/fills`: `GET /sheet?page=&form=&project=&record=`, the Fill with Eadwyn sheet's read. Per field of a FILL_FIELDS form: the value now and its mark (`../services/fills/provenance.ts`' `marksForRows`), what each source has waiting (`../services/fills/sources.ts`), the never-fill flag and the trigger; then each source's state and as-of, and Eadwyn's quote. A reader and a support session get marks and no trigger; each block that fails is `unreadable` on its own. No model runs; part 3 (D1326) adds the run, the record and the undo.
 
 D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 

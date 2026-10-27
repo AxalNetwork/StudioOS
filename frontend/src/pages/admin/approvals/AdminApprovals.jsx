@@ -21,6 +21,7 @@ import {
   itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart, cardAge, filterCount, sortLabel,
 } from './inboxModel';
 import { FOOT, PhoneBack } from './boardParts';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1038 (#2390) — Admin › Approvals at /admin/approvals, built to the owner's
@@ -273,7 +274,7 @@ function ItemDrawer({ at, onClose, onAssign }) {
   const v = itemView(read);
   const ready = v.state === 'ready';
   return (
-    <Lightbox label={ready ? `${v.who}, ${v.laneLabel}` : 'Item'} eyebrow="Item" title={ready ? v.who : 'Item'} onClose={onClose} testId="approvals-item" width={600}
+    <Sheet label={ready ? `${v.who}, ${v.laneLabel}` : 'Item'} eyebrow="Item" title={ready ? v.who : 'Item'} onClose={onClose} testId="approvals-item" width={600}
       sub={ready ? 'Esc to close' : null}
       footer={ready ? (
         <div className="flex flex-col gap-2">
@@ -328,7 +329,7 @@ function ItemDrawer({ at, onClose, onAssign }) {
           </>
         ) : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 
