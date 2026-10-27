@@ -59,7 +59,7 @@ export function dispatchOf(action) {
 
 export function rowView(row = {}) {
   // D1082 (#2947): an experiment row's Build in Lovable, as the Worker sent it.
-  return { a: row.a ?? '', b: row.b ?? '', c: row.c ?? '', tone: toneOf(row.tone), href: recordLink(row.href), action: row.action, lovable: row.lovable ?? null };
+  return { a: row.a ?? '', b: row.b ?? '', c: row.c ?? '', tone: toneOf(row.tone), href: recordLink(row.href), action: row.action, ...(row.lovable ? { lovable: row.lovable } : {}) };
 }
 
 export function pillView(pill) {

@@ -135,7 +135,7 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
     return <>
       <PhoneGroup id={sectionId(cycleName, moduleName, section.title)} testid="record-section" label={section.title} rows={phoneRows} />
       {lovable.map((row, index) => <div key={`lovable-${index}`} className="flex flex-col gap-1 text-[12.5px]" data-testid="record-lovable-row">
-        <span className="text-axal-ink dark:text-gray-200">{text(row.a)}</span><BuildInLovable lovable={row.lovable} /></div>)}
+        <p className="m-0 text-axal-ink dark:text-gray-200">{text(row.a)}</p><BuildInLovable lovable={row.lovable} /></div>)}
     </>;
   }
   return <section id={sectionId(cycleName, moduleName, section.title)} className={CARD}>
@@ -157,7 +157,7 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
           {side && row.c !== '' && <span className="ml-2"><Status value={row.c} tone={row.tone} /></span>}
           {side && ownAction && <span className="ml-2"><RecordAction action={ownAction} quiet {...handlers} /></span>}
         </div>
-        {!side && <div className="flex flex-wrap items-center justify-end gap-2"><Status value={row.c} tone={row.tone} />{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}
+        {!side && <div className="flex items-center gap-2"><Status value={row.c} tone={row.tone} />{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}
           {row.lovable && <BuildInLovable lovable={row.lovable} />}</div>}
       </div>;
     })}

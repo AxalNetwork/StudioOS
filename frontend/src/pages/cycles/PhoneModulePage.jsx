@@ -5,6 +5,7 @@ import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
+import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 
 /**
  * D703 (#1665) — a module as a pushed page on a phone (CMM:40, CO:259-261),
@@ -72,7 +73,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -140,8 +141,8 @@ export default function PhoneModulePage({
           <p className="m-0 flex min-h-[40px] items-center text-[10px] font-extrabold uppercase tracking-[.12em] text-violet-700 dark:text-violet-300">One next thing</p>
           <h2 id="phone-module-next-title" className="m-0 mt-2 text-[29px] font-black leading-[1.15] tracking-[-.032em] text-gray-900 [text-wrap:balance] dark:text-gray-100">{headline}</h2>
           {addOne && <Cta add={addOne} />}
-          {/* D1082 (LV8a): an entry that is its own control (Build in Lovable) follows the first Add. */}
-          {(Array.isArray(add) ? add : []).filter((a) => a?.node).map((a) => <div key={a.key || 'node'} className="mt-3 flex justify-center">{a.node}</div>)}
+          {/* D1082 (#2947, LV7, LV8a): Build in Lovable follows the first Add on the phone. */}
+          {lovable && <div className="mt-3 flex justify-center"><BuildInLovable lovable={lovable} /></div>}
         </section>
       )}
       <section className={`${headline ? 'mt-[22px]' : ''} min-w-0`.trim()} data-testid="phone-module-chart" data-state={view.state}>
