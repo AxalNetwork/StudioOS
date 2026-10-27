@@ -39,6 +39,8 @@ export const reportingApi = {
   setReminders: (body) => request('/reporting/reminders', { method: 'PUT', body: JSON.stringify(body) }),
   portfolio: () => request('/reporting/portfolio'),
   company: (projectUid) => request(`/reporting/companies/${encodeURIComponent(projectUid)}`),
+  /** D1061: the frozen figures of each report this investor received from one company; reading them records no open. */
+  companyFigures: (projectUid) => request(`/reporting/companies/${encodeURIComponent(projectUid)}/figures`),
   /** Once per period, while it is late or missing. */
   ask: (periodUid) => post(`${period(periodUid)}/ask`),
   waive: (periodUid) => post(`${period(periodUid)}/waive`),

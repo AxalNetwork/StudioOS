@@ -385,6 +385,37 @@ export const learningJoinOf = (d) => {
 export const testingLine = (d) => `${nf(d.open)} open · ${nf(d.applications)} applied, not withdrawn`;
 
 /**
+ * D963 (#2796): the Referral partners and Investor cohort access cards'
+ * figures (`dc:344-345`), each from its part's summary, in its own state.
+ * Under a studio's name each is "Not read here yet": neither summary has a
+ * per-studio form. A 403 is a studio's admin, for whom HQ holds the program.
+ */
+function summaryFigure(read, { perStudio, what, held, line }) {
+  if (perStudio) return { state: 'pending', reason: NOT_PER_STUDIO };
+  if (isLoading(read)) return { state: 'loading' };
+  if (isFailed(read)) {
+    return Number(read.error?.status) === 403 ? { state: 'pending', reason: held } : { state: 'unreadable', reason: `${what} could not be read. ${NONE_CLAIM}` };
+  }
+  const text = line(read.data || {});
+  return text ? { state: 'ready', text } : { state: 'unreadable', reason: `${what} came back without its figures. ${NONE_CLAIM}` };
+}
+const count = (v) => (Number.isFinite(Number(v)) && v !== null && v !== undefined ? Number(v) : null);
+export const partnersFigure = (read, opts = {}) => summaryFigure(read, {
+  ...opts, what: 'The referral partners', held: 'HQ holds referral partners.',
+  line: (d) => (count(d.active_partners) === null || count(d.with_signed_terms) === null ? null
+    : `${plural(count(d.active_partners), 'partner', 'partners')} · ${nf(count(d.with_signed_terms))} with signed terms`),
+});
+/** Investor cohort access keeps "Not running" until part 1's registry says it runs (`Live`). */
+export function investorsFigure(read, card, opts = {}) {
+  if (card?.status !== 'Live') return { state: 'not_running' };
+  return summaryFigure(read, {
+    ...opts, what: 'Investor cohort access', held: 'HQ holds investor cohort access.',
+    line: (d) => (count(d.investors_with_access) === null || count(d.cohorts_open) === null ? null
+      : `${plural(count(d.investors_with_access), 'investor', 'investors')} with access · ${plural(count(d.cohorts_open), 'cohort', 'cohorts')} open to investors`),
+  });
+}
+
+/**
  * Lab applications on the Spin-Out Lab card (S-LAB): `counts.pending` from
  * `GET /api/admin/spinout-applications` (D960), exact and uncapped. A failed
  * read is "Could not be read" on that line only. Under a studio's name it is

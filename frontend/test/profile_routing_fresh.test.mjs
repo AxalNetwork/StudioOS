@@ -14,8 +14,28 @@ import { resolve } from 'node:path';
 import {
   outputs, parseRouteMap, parseSidebar, routesIn, workspacesFor,
 } from '../../scripts/build-profile-routing.mjs';
+import { unionArtifacts } from '../../scripts/lib/readmeUnion.mjs';
 
 const read = (p) => readFileSync(resolve(p), 'utf8');
+
+/**
+ * D1310: ROUTE_MAP's canvas tables, walked without the parser — any table
+ * whose header starts `| Canvas | Persona |` (looser than the parser's
+ * HEADER, so a renamed column cannot hide a table), and its body rows: every
+ * line up to the blank line or heading that ends it, rule rows aside. It does
+ * not stop at a line that has lost its leading `|`, as the parser does, so a
+ * broken row in the middle of a table shows as rows the parser never read.
+ */
+function canvasTables(src) {
+  let tables = 0; let rows = 0; let inTable = false;
+  for (const line of src.split('\n')) {
+    if (/^\|\s*Canvas\s*\|\s*Persona\s*\|/.test(line)) { tables += 1; inTable = true; continue; }
+    if (!inTable) continue;
+    if (!line.trim() || line.startsWith('#')) { inTable = false; continue; }
+    if (!/^\|[\s:|-]+$/.test(line.trim())) rows += 1;
+  }
+  return { tables, rows };
+}
 
 test('the generated docs on disk match their sources', () => {
   for (const [path, expected] of outputs()) {
@@ -132,8 +152,24 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 176 (D1261, #2430): `Raise evidence`, the founder's view, its drawers and the investor block.
   // 177 (D1270, #2381): `Promo codes`, Codes, Usage and one code's drawer.
   // 178 (D1277, #2482): `AI tokens`, Usage's third page.
-  // 179 (D1309, #2507, #2515, #2525): `Validate · Record a session › channels`, WhatsApp, Telegram and Calls.
-  assert.equal(recs.length, 179);
+  // 179 (D1290, #2383): `Content queue`, its four tabs and one address per article.
+  // 180 (D1299, #2377): `Accounts`, Overview and All accounts at their own addresses.
+  // 181 (D1309, #2507, #2515, #2525): `Validate · Record a session › channels`, WhatsApp, Telegram and Calls.
+  //
+  // D1310 (2026-10-27): THE LEDGER ENDS AT 181. Every branch that added a row
+  // also changed this one line, so ROUTE_MAP and this file conflicted on every
+  // pair of such branches. ROUTE_MAP now merges with `union` (.gitattributes),
+  // and the count is read from the tables themselves instead: every table
+  // headed `| Canvas | Persona |` must be one the parser reads, and every body
+  // row of those tables must come out as a record. A parser that quietly
+  // stopped matching a header, or stopped partway through a table, still fails
+  // here; a branch adding a row no longer edits this file.
+  const src = read('documentation/architecture/ROUTE_MAP.md');
+  const { tables, rows } = canvasTables(src);
+  assert.ok(tables >= 5, `ROUTE_MAP has ${tables} canvas tables; it has had five since the P−1 audit`);
+  // Mutation checked: drop a row's leading `| ` → the parser ends the table, rows < walked rows.
+  assert.equal(recs.length, rows, 'the parser read a different number of canvas rows than the tables hold');
+  assert.ok(recs.length >= 107, 'fewer rows than the P−1 audit\'s 107: the parser has stopped matching');
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
@@ -181,4 +217,35 @@ test('a malformed ROUTE_MAP row fails loudly rather than shifting columns', () =
     '| Half a row | founder | `/x` |',
   ].join('\n');
   assert.throws(() => parseRouteMap(bad), /expected >= 7/);
+});
+
+const TABLE = [
+  '| Canvas | Persona | Proposed route | Live route today | Backend it wires to | STATUS | Notes |',
+  '| --- | --- | --- | --- | --- | --- | --- |',
+];
+const row = (canvas, status = 'CURRENT') => `| ${canvas} | founder | \`/x\` | \`/x\` | \`x.ts\` | ${status} | — |`;
+
+test('D1310: a canvas with two rows, as a union merge leaves them, fails and names both lines', () => {
+  // Two branches change the Promo codes row; `union` keeps both versions.
+  const both = [...TABLE, row('Promo codes'), row('Promo codes', 'UPGRADE'), row('AI tokens')].join('\n');
+  // Mutation checked: drop the rowOf check → two records for one canvas, no error.
+  assert.throws(() => parseRouteMap(both), /two rows for "Promo codes" \(lines 3 and 4\)/);
+  // Two branches each appending a different row is what union is for: both stay.
+  assert.deepEqual(parseRouteMap([...TABLE, row('Accounts'), row('Content queue')].join('\n')).map((r) => r.canvas), ['Accounts', 'Content queue']);
+});
+
+test('D1310: a conflict marker anywhere in ROUTE_MAP fails rather than ending a table early', () => {
+  const marked = [...TABLE, row('Accounts'), '<<<<<<< HEAD', row('Content queue'), '=======', row('Insights'), '>>>>>>> origin/main'].join('\n');
+  // Mutation checked: drop the marker check → 'Accounts' alone parses, the rest silently lost.
+  assert.throws(() => parseRouteMap(marked), /line 4 is a conflict marker/);
+});
+
+test('D1310: ROUTE_MAP and its two projections merge with union, and carry nothing a union leaves', () => {
+  // Whole lines, compared as text: no pattern is built from a path.
+  const attrs = read('.gitattributes').split('\n').map((l) => l.trim());
+  for (const f of ['documentation/architecture/ROUTE_MAP.md', 'documentation/architecture/PROFILE_ROUTING.md', 'documentation/architecture/PAGE_INVENTORY.md']) {
+    // Mutation checked: drop the ROUTE_MAP line → every pair of row-adding branches conflicts again.
+    assert.ok(attrs.includes(`${f} merge=union`), `${f} has no merge=union line`);
+    assert.deepEqual(unionArtifacts(read(f)), [], `${f} carries what a union merge left (scripts/lib/readmeUnion.mjs)`);
+  }
 });
