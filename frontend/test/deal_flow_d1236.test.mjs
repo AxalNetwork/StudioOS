@@ -73,6 +73,8 @@ test('the toolbar: the scope switch and the view switch are addresses; New for y
 
 // D1240 (#3253) replaced D1236's table with the firm's own flow, its scores and its
 // settings: `deal_flow_board_d1240.test.mjs` holds the table, the board and their states.
+// D1257's strip on a row list already read stays on `DealsTableView`, covered by
+// `venture_scorecard_panel_d1257.test.mjs`.
 
 test('New for you (DLS6): the studio’s invitations, and the other ways in waiting', () => {
   const out = html(h(InvitesView, { rows: [inviteRow({ deal_id: 9, project_name: 'Harbor AI', message: 'Fits your thesis.' })] }));

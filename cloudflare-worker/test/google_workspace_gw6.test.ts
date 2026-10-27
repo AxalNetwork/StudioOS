@@ -334,9 +334,15 @@ test('support sessions, admins and a disabled company are refused before Google 
 });
 
 test('the feed registry names both Grow feeds, and the directory reads them', () => {
-  assert.deepEqual(GOOGLE_WORKSPACE_FEEDS.map((f) => [f.key, f.module, f.kind]), [
+  const grow = GOOGLE_WORKSPACE_FEEDS.filter((f) => f.decision === 'D1095');
+  assert.deepEqual(grow.map((f) => [f.key, f.module, f.lands]), [
     ['grow_metrics_sheet', 'revenue_and_traction', 'fact'], ['grow_calendar_obligations', 'durable_company_building', 'proposal'],
   ]);
-  assert.deepEqual(CONNECTOR_METADATA.google_workspace.pulls, [...GOOGLE_WORKSPACE_FEEDS]);
-  assert.deepEqual(CONNECTOR_METADATA.google_workspace.feeds, ['revenue_and_traction', 'durable_company_building']);
+  assert.deepEqual(
+    CONNECTOR_METADATA.google_workspace.pulls.filter((p) => grow.some((f) => f.what === p.what && f.module === p.module)),
+    grow.map((f) => ({ what: f.what, module: f.module })),
+  );
+  for (const module of ['revenue_and_traction', 'durable_company_building']) {
+    assert.ok(CONNECTOR_METADATA.google_workspace.feeds.includes(module), module);
+  }
 });

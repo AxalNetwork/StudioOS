@@ -63,8 +63,9 @@ function routeBlock(path) {
 function liveRoute(path) {
   const own = routeBlock(path);
   if (own) return own;
-  const m = /^\/([a-z]+)\/([a-z-]+)$/.exec(path);
-  return m && MODULES[m[1]]?.some((x) => x.slug === m[2]) ? routeBlock(`/${m[1]}/:slug`) : null;
+  // D1194: a module's tab (`/raise/capital-relationships/match`) is its cycle's `/:slug/:id` route.
+  const m = /^\/([a-z]+)\/([a-z-]+)(\/[a-z-]+)?$/.exec(path);
+  return m && MODULES[m[1]]?.some((x) => x.slug === m[2]) ? routeBlock(`/${m[1]}/:slug${m[3] ? '/:id' : ''}`) : null;
 }
 const tier = (list, id) => list.find((t) => t.id === id);
 

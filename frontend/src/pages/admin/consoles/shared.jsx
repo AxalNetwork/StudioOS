@@ -5,14 +5,17 @@ import React from 'react';
  * Moved out of `pages/AdminPage.jsx` unchanged.
  */
 
+// D1306 (#2377 G1): each profile its own colour, as the Accounts canvas draws
+// them — Founder violet, Investor sky, Advisor amber, Operating Partner
+// emerald, Explorer and Admin each a grey of their own.
 export const ROLE_BADGES = {
-  admin: 'bg-violet-100 text-violet-700',
-  founder: 'bg-blue-100 text-blue-700',
+  admin: 'bg-slate-200 text-slate-800',
+  founder: 'bg-violet-100 text-violet-700',
   partner: 'bg-emerald-100 text-emerald-700',
-  investor: 'bg-amber-100 text-amber-700',
-  advisor: 'bg-sky-100 text-sky-700',
+  investor: 'bg-sky-100 text-sky-700',
+  advisor: 'bg-amber-100 text-amber-800',
   // Task #9 follow-up — new signups hold here pending admin review.
-  exploring: 'bg-sky-100 text-sky-700',
+  exploring: 'bg-stone-100 text-stone-700',
 };
 
 export function Field({ label, value, mono }) {

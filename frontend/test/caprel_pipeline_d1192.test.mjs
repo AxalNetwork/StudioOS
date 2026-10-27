@@ -19,7 +19,7 @@ import {
   IMPORT_CHUNK, MOVED, NO_STATUS, asksStatus, boardColumns, chunks, importRows, mergeImport, moveBody, moveSentence, moveTargets,
   needsYou, overviewFigures, statusCounts, statusLabel,
 } from '../src/pages/raise/caprel/capRelModel.js';
-import { parseCsv } from '../src/pages/RaisePipelinePage.jsx';
+import { parseCsv } from '../src/pages/raise/caprel/capRelModel.js';
 
 const h = React.createElement;
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
