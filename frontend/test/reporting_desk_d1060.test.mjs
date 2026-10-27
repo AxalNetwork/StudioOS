@@ -560,7 +560,7 @@ test('wiring: the report routes sit ahead of /grow/:slug, the guard widens only 
     assert.doesNotMatch(src, /window\.(alert|confirm|open)|\balert\(|\bconfirm\(/, f);
     assert.doesNotMatch(src, /dangerouslySetInnerHTML/, f);
     // Every light hover has its dark pair, in the same class string.
-    for (const m of src.matchAll(/['`"]([^'`"]*(?:^|\s)hover:(?:bg|text|border)-[^'`"]*)['`"]/g)) assert.match(m[1], /dark:hover:/, `${f}: ${m[1].slice(0, 90)}`);
+    for (const m of src.matchAll(/['`"]((?:[^'`"]*\s)?hover:(?:bg|text|border)-[^'`"]*)['`"]/g)) assert.match(m[1], /dark:hover:/, `${f}: ${m[1].slice(0, 90)}`);
   }
   // Lateness is never red: red is a refusal's colour only.
   const blocks = read('frontend/src/pages/cycles/reporting/DeskBlocks.jsx');
