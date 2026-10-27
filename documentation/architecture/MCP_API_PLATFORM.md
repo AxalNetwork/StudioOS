@@ -412,6 +412,12 @@ The UI task for AI tokens, added 2026-10-26 (S26):
 |---|---|---|---|
 | #2482 Usage › AI tokens (TOKB), step 1 | D1277 | the step-1 PR | in review; step 2 waits for #3304 (D1278) |
 
+The UI task for API keys, added 2026-10-27 (S22):
+
+| Task | Decision | PR | Where it is |
+|---|---|---|---|
+| #2480 Builder › API keys (APIK) | D1317 | the APIK PR | in review, built on #3477 (D1315); merges `main` once #3477 lands |
+
 ## 8. Progress log
 
 - **2026-10-21 (S21).**

@@ -9,6 +9,10 @@ import { Link } from 'react-router-dom';
 import { AssistantsSection, CopyUrl } from '../AssistantsGroup';
 import { assistantsApi } from '../../../lib/api/assistants.js';
 import { BUILDER_LINES, BUILDER_PAGES, BUILDER_WORDS, builderPathFor, builderTrailFor } from './builderModel';
+import ApiKeysPage from './ApiKeysPage';
+import { activeSupportSession } from '../../../lib/supportSession';
+import { useViewMode } from '../../../contexts/ViewModeContext';
+import { useAuth } from '../../../hooks/useAuthSync';
 
 const CARD = 'rounded-axal-lg border border-axal-hairline bg-white p-5 dark:border-gray-700 dark:bg-gray-900';
 const H3 = 'm-0 text-[15px] font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100';
@@ -22,12 +26,10 @@ export const WAITS = Object.freeze({
   tools: 'The tools on axal.vc/mcp, who can call them and what each may do. #2479 draws them from the tool read (D846).',
   limits: 'The server’s own limits per connection and per call. #2479 draws them from the overview read (D1316, #3474).',
   services: 'The services behind your tools and how each is doing. #2479 draws them from the connector reads and their health (D848).',
-  keys: 'Your API keys: create, reveal once, rotate and revoke. #2480 draws them from GET /api/developer/keys.',
   usage: 'Requests and AI tokens by day, where the tokens went, and your limits and alerts. #2481 draws them from GET /api/developer/usage.',
   activity: 'Every call your keys and assistants made, with its outcome. #2481 draws it from GET /api/developer/usage/events.',
   assistant: 'One assistant: where it signs in from, what it may do, its companies and its recent calls. #2479 draws it (MCPX5).',
   service: 'One service: its connection, its health and its last checks. #2479 draws it (MCPX3).',
-  key: 'One key: its scopes, companies, limit and last use. #2480 draws it (APIK5).',
   request: 'One request: its tool, company, outcome and cost. #2481 draws it (APIU4).',
 });
 
@@ -41,8 +43,8 @@ export function Wait({ id, title }) {
   );
 }
 
-const DRAWER_TITLES = { assistant: 'AI assistant', service: 'Service', key: 'API key', request: 'Request' };
-const BACK = { assistant: 'MCP and services', service: 'MCP and services', key: 'API keys', request: 'Activity' };
+const DRAWER_TITLES = { assistant: 'AI assistant', service: 'Service', request: 'Request' };
+const BACK = { assistant: 'MCP and services', service: 'MCP and services', request: 'Activity' };
 
 /** The once-per-member notice that AI assistants left Connectors (DEV14, MCPX13). */
 function MovedNotice({ storage }) {
@@ -80,6 +82,15 @@ export function BuilderHandoff({ api = assistantsApi }) {
       <Link to={builderPathFor({ page: 'services' })} className="inline-flex min-h-[44px] items-center rounded-axal-md border border-axal-hairline bg-white px-3.5 text-[13px] font-semibold text-axal-ink hover:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{BUILDER_WORDS.openBuilder}</Link>
     </section>
   );
+}
+
+/** API keys (D1317, #2480) with who is reading: a support or view-as session reads only, and the profile picks APIK9's card. */
+function KeysPage({ drawerUid }) {
+  const { user } = useAuth() || {};
+  const view = useViewMode();
+  const support = !!activeSupportSession() || !!view?.isImpersonating;
+  const role = user?.role === 'exploring' ? 'explorer' : Number(user?.is_super_admin) === 1 ? 'super_admin' : user?.role ?? null;
+  return <ApiKeysPage drawerUid={drawerUid} support={support} who={user?.name || null} role={role} />;
 }
 
 function ServicesPage() {
@@ -120,7 +131,9 @@ export default function BuilderSection({ view = { page: 'services', drawer: null
         ))}
       </nav>
       {page === 'services' && !drawer && <MovedNotice storage={storage} />}
-      {drawer ? (
+      {page === 'keys' ? (
+        <KeysPage drawerUid={drawer?.kind === 'key' ? drawer.id : null} />
+      ) : drawer ? (
         <section className={`${CARD} flex flex-col gap-2`} data-testid={`builder-drawer-${drawer.kind}`}>
           <Link to={builderPathFor({ page })} className="w-fit text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300">‹ {BACK[drawer.kind]}</Link>
           <Wait id={drawer.kind} title={DRAWER_TITLES[drawer.kind]} />
@@ -128,7 +141,6 @@ export default function BuilderSection({ view = { page: 'services', drawer: null
       ) : (
         <>
           {page === 'services' && <ServicesPage />}
-          {page === 'keys' && <Wait id="keys" title="API keys" />}
           {page === 'usage' && <Wait id="usage" title="Requests and AI tokens by day" />}
           {page === 'activity' && <Wait id="activity" title="Calls by day" />}
         </>
