@@ -74,6 +74,8 @@ export const FORWARD_REDIRECTS: readonly (RedirectRoute & { forward: true })[] =
   { path: '/raise/data-room?mode=workspace', forward: true },
   { path: '/raise/data-room?mode=access', forward: true },
   { path: '/raise/data-room/:id', forward: true },
+  // D1180 (#3107): the retired Capital workspace's default tab (the financial model); `/raise/capital` itself is a page.
+  { path: '/raise/capital?mode=workspace', forward: true },
 ]);
 
 export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([

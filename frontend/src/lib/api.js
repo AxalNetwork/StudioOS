@@ -1628,10 +1628,9 @@ export const api = {
   // `{ matches, note?, k_min }`; cells with n<5 are suppressed server-side.
   miFitFounder: (projectId) => request(`/market-intel/fit/founder/${projectId}`),
 
-  // Task #26 — Financial Model Builder
-  getFinancialModel: (projectId) => request(`/financials/${projectId}`),
-  saveFinancialModel: (projectId, assumptions) => request(`/financials/${projectId}`, { method: 'PUT', body: JSON.stringify({ assumptions }) }),
-  recomputeFinancialModel: (projectId) => request(`/financials/${projectId}/recompute`, { method: 'POST' }),
+  // Task #26 — the financial model's export. D1180 (#3107): the builder page
+  // is retired; Use of funds › Runway › Forecast reads and saves the same
+  // store through `api/useOfFunds.js` and keeps this export.
   // Returns a promise so callers can await it and surface real errors in
   // their own UI instead of relying on alert(). The previous version
   // swallowed the backend's actual reason ("Project not found", "No

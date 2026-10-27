@@ -2654,8 +2654,8 @@ function AppInner() {
               replace
             />)} />
       {/* #2339, #2335 (the owner's "Remove", #2297): two retired pages. The
-          Financial Model is Capital's tab, the same FinancialsPage; customer
-          discovery is Validate · Customer research. Each old address forwards,
+          Financial Model is Use of funds › Runway › Forecast (D1178; D1180
+          deleted FinancialsPage); customer discovery is Validate · Customer research. Each old address forwards,
           query and hash kept, until #2319 retires the redirects. */}
       <Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />
       <Route path="/build/discovery" element={<Navigate replace to={{ pathname: '/validate/customer-research', search: location.search, hash: location.hash }} />} />
@@ -3251,9 +3251,12 @@ function AppInner() {
       {/* D901 (#2680) — present mode (PD16): full screen, reads one version, writes nothing. */}
       <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchPresent />))} />
       <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="notes" />))} />
+      {/* D1180 (#3107): the workspace's default tab was the financial model, now retired, so
+          ?mode=workspace lands on Use of funds › Runway › Forecast as /raise/capital/model does,
+          counting itself (the address is also the Capital page). */}
       <Route path="/raise/capital" element={guard(['admin', 'founder'],
         new URLSearchParams(location.search).get('mode') === 'workspace'
-          ? founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />))
+          ? <UseOfFundsMovedRedirect count="/raise/capital?mode=workspace" />
           : <FounderRaiseCapital />)} />
       {/* D1178 (#3105): the financial model is Use of funds › Runway › Forecast; its old addresses land there with the venture. */}
       <Route path="/raise/capital/model" element={<UseOfFundsMovedRedirect />} />

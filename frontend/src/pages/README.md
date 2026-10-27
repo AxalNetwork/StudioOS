@@ -4,14 +4,13 @@ Every route declared in `App.jsx` resolves to a file here. Most are lazy-loaded,
 so the filename is usually the fastest way from a URL to its code: `/pricing` →
 `PricingPage.jsx`.
 
-D1174 (#3101): `FinancialsPage.jsx` has no Capital score. Its forecast is
-Modelled and follows the URL venture (`project_id` or `project`), including
-Back/Forward, without selecting the first of multiple ventures. Capital's tabs
-carry either alias; D1029 retired the Cap Table tab. Legacy Capital links keep
+D1180 (#3107): the old FinancialsPage is retired; the financial model is Use of
+funds › Runway › Forecast (`raise/useoffunds/`), on the same `/api/financials`
+store. `CapitalWorkspacePage.jsx` keeps one tab, Raise Pipeline, until #3128
+forwards it; its tab keeps either venture alias. D1029 retired the Cap Table tab. Legacy Capital links keep
 the venture through `raise/captable/CapTableMovedRedirect.jsx`, which normalizes
 `project` to `project_id`. The live cap table also reads both aliases through
-`raise/captable/capTableModel.js` (D1029). An unsaved model
-has no sensitivity table; export/recompute require a person-saved model.
+`raise/captable/capTableModel.js` (D1029).
 
 ## Finding a page
 

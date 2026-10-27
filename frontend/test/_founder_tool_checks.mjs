@@ -44,8 +44,8 @@ export const RETURNS = [
   ['/raise/pitch/review','/raise/pitch-deck','← Raise › Pitch deck'],
   ['/raise/pitch/edit','/raise/pitch-deck','← Raise › Pitch deck'],
   ['/raise/pitch/analytics','/raise/pitch-deck','← Raise › Pitch deck'],
-  ['/raise/capital','/raise/use-of-funds','← Raise › Use of funds'],
-  ['/raise/capital/model','/raise/use-of-funds','← Raise › Use of funds'],
+  // D1180 (#3107): /raise/capital's editor (the Capital workspace's model tab) is retired, and
+  // /raise/capital/model only forwards to Forecast (D1178), so neither has a module return.
   ['/raise/capital/pipeline','/raise/capital-relationships','← Raise › Capital relationships'],
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/incorporation','/build/company-creation','← Build › Company creation'],
