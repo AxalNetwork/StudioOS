@@ -14,7 +14,6 @@ through `/api/venture-scores` (`../../routes/venture_scores.ts`).
 | `publish.ts` | D1259: `publishModel` makes a newer version live; `continuePublication` rescores every venture in claimed batches from the every-minute job; `modelVersions` and `modelChanges` feed HQ › Scoring. |
 | `access.ts` | D1256: who reads a scorecard and what they see (founder, staff, shared advisor; an investor through a deal, masked before the NDA, never when the founder's switch is off), the logged reads, reviews, corrections, weighting and sharing (migration 626). |
 | `jobs.ts` | D1256: the nightly recompute, the recompute after a connector sync, and the quarterly fairness aggregate (cells under five ventures suppressed). |
-| `store.ts` | `scoreVenture` recomputes on read and keeps a signed row per scope only when its input hash changed, in migration 598's shared store (`state` from 625). PMF is recomputed by `../scoring/pmfStore.ts`, its one writer. `storedScorecard` reads without recomputing. |
 
 Rules for adding to it:
 
@@ -24,6 +23,6 @@ Rules for adding to it:
 - Each input feeds one scope only.
 - Never an input: name, email, photo, gender, age or date of birth,
   nationality, residence, ethnicity, religion, health, school or employer,
-  or `kyc_data`. `test/venture_scoring_d1255.test.ts` scans every statement.
+  or `kyc_data`. `../../../test/venture_scoring_d1255.test.ts` scans every statement.
 - No client sends a computed field, and no score sets a deal or venture
   status. Callers gate the venture first.
