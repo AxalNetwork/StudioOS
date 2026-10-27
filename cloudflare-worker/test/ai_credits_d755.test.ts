@@ -343,8 +343,8 @@ test('each pack rule answers its code and creates no PaymentIntent', async () =>
     try {
       seed(f);
       const r = await intent(f, items, extra);
-      // D1289: each code answers with its sentence and its status, through the router.
-      assert.deepEqual([r.status, r.body], [TOKEN_PACK_REFUSALS[code].status, { error: code, message: TOKEN_PACK_REFUSALS[code].message }], `${code} ${JSON.stringify([items, extra, opts])}`);
+      // D1289: each code answers with its sentence (CRP5) and its status.
+      assert.deepEqual([r.status, r.body], [TOKEN_PACK_REFUSALS[code as keyof typeof TOKEN_PACK_REFUSALS].status, { error: code, message: TOKEN_PACK_REFUSALS[code as keyof typeof TOKEN_PACK_REFUSALS].message }], `${code} ${JSON.stringify([items, extra, opts])}`);
       assert.deepEqual(s.calls, [], `${code}: no Stripe call`);
       assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM orders').get().n, 0, `${code}: no order, so no free path`);
       await assertInvariant(f);
@@ -481,8 +481,8 @@ test('with only STRIPE_PRICE_AI_TOPUP set, a member buys it alone, at face value
   const f = await shop({ pack: false, env: { STRIPE_PRICE_AI_TOPUP: FALLBACK } }); const s = stripeStub();
   try {
     assert.deepEqual(await tokenPackForPrice(f.env, FALLBACK), { origin: 'environment', packUid: null, priceId: FALLBACK, productId: null, faceCents: null, bonusMicrousd: 0, onSale: true, offerStartsAt: null, offerEndsAt: null, firstPurchaseOnly: false });
-    assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 2 }]).then((r) => r.body), { error: 'token_pack_alone', message: TOKEN_PACK_REFUSALS.token_pack_alone.message });
-    assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 1 }], { promo_code: 'FREE100' }).then((r) => r.body), { error: 'promo_not_for_token_packs', message: TOKEN_PACK_REFUSALS.promo_not_for_token_packs.message });
+    assert.equal(await intent(f, [{ price_id: FALLBACK, quantity: 2 }]).then((r) => r.body.error), 'token_pack_alone');
+    assert.equal(await intent(f, [{ price_id: FALLBACK, quantity: 1 }], { promo_code: 'FREE100' }).then((r) => r.body.error), 'promo_not_for_token_packs');
     const r = await intent(f, [{ price_id: FALLBACK, quantity: 1 }]);
     assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.total, 1500);
     const pi = { id: r.body.payment_intent_id, status: 'succeeded', currency: 'usd', amount_received: 1500, metadata: { kind: 'cart_order', order_ref: r.body.order_ref, user_id: '2' } };

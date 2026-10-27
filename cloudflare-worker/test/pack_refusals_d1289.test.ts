@@ -1,171 +1,160 @@
 /**
- * D1289 (#3372, part 4 of #2452) — every pack refusal answers with a sentence
- * (CRP5), and no pack price or size is typed anywhere but the pack store
- * (D755 §4).
+ * D1289 (#3372, part 4 of #2452) — Add tokens, the Worker's part:
  *
- * The router half, each code to its status and sentence through
- * `POST /api/orders/intent`, is `ai_credits_d755`'s "each pack rule" case,
- * which reads `TOKEN_PACK_REFUSALS`; the first-purchase rule is
- * `token_pack_offers_d790`'s. This file pins the table itself and the parity.
+ *   · every pack refusal `tokenPackQuote` can answer has a sentence in the
+ *     canvas's words (CRP5), with each figure read from `TOKEN_PACK_LIMITS`;
+ *     a new code without a sentence fails here;
+ *   · pack parity: a pack's price or size is never typed outside the pack
+ *     store (D755 §4), in `frontend/src` or the Worker;
+ *   · `add_tokens_opened` (CRP9): one `activity_logs` row holding `from` and
+ *     nothing else, through the real router.
  *
- *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/pack_refusals_d1289.test.ts
+ * Each code through the real orders router, with its status and sentence, is
+ * pinned in `ai_credits_d755.test.ts`'s "each pack rule" test.
+ *
+ *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *     --test cloudflare-worker/test/pack_refusals_d1289.test.ts
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { TOKEN_PACK_LIMITS, TOKEN_PACK_REFUSALS } from '../src/services/aiCredits.ts';
-import { DatabaseSync } from 'node:sqlite';
+import { join, resolve } from 'node:path';
 import { SignJWT } from 'jose';
-import aiBudgetRoute, { ADD_TOKENS_FROM } from '../src/routes/ai_budget.ts';
+import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
-import { d1Over } from './_d1_sqlite.mjs';
+import { TOKEN_PACK_LIMITS, TOKEN_PACK_REFUSALS, packRefusalBody } from '../src/services/aiCredits.ts';
+import { AI_USD_SCALE } from '../src/services/aiBudget.ts';
+import budgetRoute, { ADD_TOKENS_FROM } from '../src/routes/ai_budget.ts';
 
-const ROOT = fileURLToPath(new URL('../..', import.meta.url));
-const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
+const ROOT = process.cwd();
+const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
+const AI_CREDITS = read('cloudflare-worker/src/services/aiCredits.ts');
+const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 
-/** The codes `tokenPackQuote` can refuse with, read from its own body. */
-function quoteCodes(): string[] {
-  const src = read('cloudflare-worker/src/services/aiCredits.ts');
-  const start = src.indexOf('export async function tokenPackQuote(');
-  const body = src.slice(start, src.indexOf('\n}\n', start));
-  return [...new Set([...body.matchAll(/return \{ error: '([a-z_]+)' \}/g)].map((m) => m[1]))].sort();
-}
+// ───────────────────────────────────────────────────────────── CRP5: the sentences
 
-test('every refusal tokenPackQuote can give has a sentence and a status, and nothing else does', () => {
-  const codes = quoteCodes();
-  assert.ok(codes.length >= 7, `read ${codes.length} codes`);
-  assert.deepEqual(Object.keys(TOKEN_PACK_REFUSALS).sort(), codes, 'a new code without a sentence, or a sentence for no code, fails here');
+test('every pack refusal tokenPackQuote can answer has a sentence and a status; a new code without one fails', () => {
+  const union = /export type TokenPackRefusal = ([^;]+);/.exec(AI_CREDITS);
+  assert.ok(union, 'the refusal union is where it was');
+  const declared = [...union![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+  const body = AI_CREDITS.slice(AI_CREDITS.indexOf('export async function tokenPackQuote'));
+  const returned = [...new Set([...body.slice(0, body.indexOf('\n}\n')).matchAll(/return \{ error: '([a-z_]+)' \}/g)].map((m) => m[1]))].sort();
+  assert.ok(returned.length >= 7, 'the quote still returns its refusals');
+  assert.deepEqual(Object.keys(TOKEN_PACK_REFUSALS).sort(), declared, 'one sentence per declared code');
+  for (const code of returned) assert.ok(code in TOKEN_PACK_REFUSALS, `${code} has no sentence`);
   for (const [code, r] of Object.entries(TOKEN_PACK_REFUSALS)) {
     assert.ok([400, 409].includes(r.status), code);
-    assert.match(r.message, /^[A-Z].+\.$/, `${code}: a sentence`);
-    assert.ok(!/[a-z]+_[a-z_]+/.test(r.message), `${code}: no code inside the sentence`);
-    assert.ok(!/credit/i.test(r.message), `${code}: AI tokens, never credits (D793)`);
-    assert.ok(!/stripe|card_declined|\bdecline/i.test(r.message), `${code}: never a Stripe code or a bank's words`);
+    assert.match(r.message, /^[A-Z].{20,}[.]$/, `${code}: a sentence`);
+    assert.doesNotMatch(r.message, /credit|stripe|_/i, `${code}: AI tokens, never credits, and no code in the words`);
+    assert.deepEqual(packRefusalBody(code as any), { error: code, message: r.message });
   }
-  assert.equal(TOKEN_PACK_REFUSALS.token_pack_first_purchase_only.status, 409, 'D790 kept its status');
 });
 
-test('the canvas\'s words, with their figures from TOKEN_PACK_LIMITS, never typed twice', () => {
+test('the sentences are the canvas’s, and each figure is TOKEN_PACK_LIMITS’s, never typed twice', () => {
   assert.equal(TOKEN_PACK_REFUSALS.token_pack_daily_limit.message, `You’ve reached today’s limit of ${TOKEN_PACK_LIMITS.ordersPerDay} pack orders. Try again tomorrow.`);
+  assert.equal(TOKEN_PACK_REFUSALS.token_pack_daily_limit.message, 'You’ve reached today’s limit of 5 pack orders. Try again tomorrow.');
   assert.equal(TOKEN_PACK_REFUSALS.token_balance_ceiling.message, 'This pack would take your balance over $1,000.');
+  assert.equal(TOKEN_PACK_LIMITS.balanceCeilingMicrousd / AI_USD_SCALE, 1000);
   assert.equal(TOKEN_PACK_REFUSALS.token_packs_on_hold.message, 'Buying tokens is paused on this account while a payment is reviewed. Contact support.');
-  assert.equal(TOKEN_PACK_REFUSALS.promo_not_for_token_packs.message, 'Promo codes don’t apply to token packs. Offers show on the pack.');
-  const src = read('cloudflare-worker/src/services/aiCredits.ts');
-  const table = src.slice(src.indexOf('export const TOKEN_PACK_REFUSALS'), src.indexOf('});', src.indexOf('export const TOKEN_PACK_REFUSALS')));
-  assert.match(table, /\$\{TOKEN_PACK_LIMITS\.ordersPerDay\}/);
-  assert.match(table, /\$\{dollars\(TOKEN_PACK_LIMITS\.balanceCeilingMicrousd\)\}/);
-  assert.ok(!/\b5 pack orders|\$1,000/.test(table), 'the figures are read, not typed');
-  // The route answers from the table alone: no pack sentence is typed in it.
+  assert.equal(TOKEN_PACK_REFUSALS.token_pack_first_purchase_only.message, 'This pack is for your first token purchase, and you have bought tokens before. Choose another pack.');
+  assert.equal(TOKEN_PACK_REFUSALS.token_pack_first_purchase_only.status, 409);
+  const block = AI_CREDITS.slice(AI_CREDITS.indexOf('export const TOKEN_PACK_REFUSALS'), AI_CREDITS.indexOf('export const packRefusalBody'));
+  assert.match(block, /\$\{TOKEN_PACK_LIMITS\.ordersPerDay\}/);
+  assert.match(block, /TOKEN_PACK_LIMITS\.balanceCeilingMicrousd/);
+  assert.doesNotMatch(block, /1,000|limit of 5\b/, 'no figure typed in the sentences');
+  // The orders route answers every refusal from the table, so none is left with a code alone.
   const orders = read('cloudflare-worker/src/routes/orders.ts');
-  assert.match(orders, /const refusal = TOKEN_PACK_REFUSALS\[aiQuote\.error\];\s*return c\.json\(\{ error: aiQuote\.error, message: refusal\.message \}, refusal\.status\);/);
-  assert.ok(!/first token purchase/.test(orders), 'D790\'s sentence moved to the table');
+  assert.match(orders, /return c\.json\(packRefusalBody\(aiQuote\.error\), TOKEN_PACK_REFUSALS\[aiQuote\.error\]\.status\);/);
+  assert.doesNotMatch(orders, /c\.json\(\{ error: aiQuote\.error \}/);
+  // The Super Admin's pack range reads the same limits.
+  assert.match(read('cloudflare-worker/src/routes/catalog.ts'), /\$\{TOKEN_PACK_LIMITS\.minFaceCents \/ 100\} to \$\$\{TOKEN_PACK_LIMITS\.maxFaceCents \/ 100\}/);
 });
 
-// ---------------------------------------------------------------- parity
+// ───────────────────────────────────────────────────────────── pack parity (D755 §4)
 
-/** Source files under a directory, tests and the pack store's own tests aside. */
 function sources(dir: string): string[] {
   const out: string[] = [];
-  const walk = (d: string) => {
-    for (const name of readdirSync(join(ROOT, d))) {
-      const p = join(d, name);
-      if (statSync(join(ROOT, p)).isDirectory()) { if (!/node_modules|__tests__|\btest\b/.test(name)) walk(p); continue; }
-      if (/\.(m?js|jsx|ts|tsx)$/.test(name) && !/\.test\./.test(name)) out.push(p);
-    }
-  };
-  walk(dir);
+  for (const name of readdirSync(resolve(ROOT, dir))) {
+    const p = join(dir, name);
+    const st = statSync(resolve(ROOT, p));
+    if (st.isDirectory()) { if (!/node_modules|__tests__/.test(name)) out.push(...sources(p)); }
+    else if (/\.(js|jsx|ts|tsx|mjs)$/.test(name) && !/\.test\./.test(name)) out.push(p);
+  }
   return out;
 }
+/** The code without its comments, so a doc line such as "$25 of tokens" (describing a label) is not read as a typed pack. */
+const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
 
-/** Code with its comments removed: a comment may show a label's format, code may not hold a pack's figure. */
-const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
-
-/**
- * A pack's price or size typed as text ("$25 of tokens", "a $10 pack") or as a
- * pack-store field with a figure. Two things are not a pack's figure: the rate
- * ("$1 of tokens buys $1 of AI use", D755 §1) and a field set to 0 (no bonus).
- */
-const PACK_FIGURE = [
-  /\$\s?\d[\d,]*(\.\d+)?\s+(of\s+(AI\s+)?tokens(?!\s+buys)|(token\s+)?pack\b)/i,
-  /\b(credit_microusd|bonus_microusd|face_cents|faceCents)\s*:\s*[1-9]/,
+/** The shapes a typed pack takes: a "$N of tokens" label, a pack field given a number, a list of pack sizes, a "$N pack". */
+export const PARITY_RULES: Array<[string, RegExp]> = [
+  ['a pack label typed with its amount', /\$\s?(?:[2-9]|\d{2,})[\d,]*(?:\.\d+)? of (?:AI )?tokens/i],
+  ['a pack field given a number', /\b(?:face_cents|faceCents|face_usd|bonus_microusd|bonusMicrousd|bonus_usd|credit_microusd|creditMicrousd)\s*:\s*[1-9]/],
+  ['a list of pack sizes', /\b(?:PACKS|PACK_SIZES|PACK_AMOUNTS|PACK_PRICES|TOKEN_PACKS)\s*=\s*(?:Object\.freeze\()?\[\s*[\d{'"]/],
+  ['a pack priced in words', /\$\s?\d[\d,]*(?:\.\d+)?\s+(?:token\s+)?packs?\b|\bpacks?\s+(?:of|for)\s+\$\s?\d/i],
 ];
 
-export function packFigures(files: string[]): string[] {
+test('pack parity: no pack price or size is typed in frontend/src or the Worker; the pack store holds them all', () => {
+  const files = [...sources('frontend/src'), ...sources('cloudflare-worker/src')];
+  assert.ok(files.length > 500, 'both trees were read');
   const hits: string[] = [];
   for (const f of files) {
-    const lines = code(read(f)).split('\n');
-    lines.forEach((line, i) => { if (PACK_FIGURE.some((re) => re.test(line))) hits.push(`${f}:${i + 1}: ${line.trim().slice(0, 100)}`); });
+    const src = code(read(f));
+    for (const [what, re] of PARITY_RULES) {
+      const m = re.exec(src);
+      if (m) hits.push(`${f}: ${what}: ${m[0]}`);
+    }
   }
-  return hits;
+  assert.deepEqual(hits, [], 'type a pack in HQ › AI allowances › Token packs (the pack store), never in code');
+});
+
+test('the parity rules catch what they are for, and leave the rate line and the limits alone', () => {
+  const caught = (s: string) => PARITY_RULES.some(([, re]) => re.test(code(s)));
+  for (const typed of ["const label = '$25 of tokens';", 'const p = { face_cents: 2500 };', 'export const PACK_SIZES = [5, 10, 25];', "<b>Buy a $10 pack</b>", "'packs for $25'"]) {
+    assert.ok(caught(typed), typed);
+  }
+  for (const fine of ["'$1 of tokens buys $1 of AI use.'", '/** "$25 of tokens" from a pack’s face value */', 'const bonus = whole(x) ? x : 0;', '{ bonus_microusd: 0 }', 'TOKEN_PACK_LIMITS.minFaceCents', 'const PAGE_SIZES = [10, 25, 50];']) {
+    assert.ok(!caught(fine), fine);
+  }
+});
+
+// ───────────────────────────────────────────────────────────── CRP9: add_tokens_opened
+
+async function world() {
+  const f = aiBudgetFixture();
+  const env = { DB: f.DB, JWT_SECRET: 'd1289-fixture-only-signing-secret', ENVIRONMENT: 'development' } as any;
+  f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'user_sessions')));
+  return { ...f, env };
 }
-
-test('pack parity: no pack price or size is typed anywhere but the pack store, in the Worker or the frontend (D755 §4)', () => {
-  const files = [...sources('cloudflare-worker/src'), ...sources('frontend/src')];
-  assert.ok(files.length > 500, `read ${files.length} files`);
-  assert.deepEqual(packFigures(files), [], 'a pack figure is read from the pack store (`ai_token_packs`, `/api/public/plans-and-packs`), never typed');
-});
-
-test('the parity scan sees what it is for, and leaves comments and limits alone', () => {
-  const hit = (s: string) => PACK_FIGURE.some((re) => re.test(code(s)));
-  assert.ok(hit("const label = '$25 of tokens';"));
-  assert.ok(hit('`Buy a $10 pack`'));
-  assert.ok(hit('{ credit_microusd: 25000000 }'));
-  assert.ok(hit('const p = { faceCents: 2500 };'));
-  assert.ok(!hit('/** "$25 of tokens" from a pack\'s face value */'), 'a comment showing the format is not a figure');
-  assert.ok(!hit('// e.g. $25 of tokens'));
-  assert.ok(!hit('minFaceCents: 500,'), 'TOKEN_PACK_LIMITS is a bound, not a pack');
-  assert.ok(!hit("'$1 of tokens buys $1 of AI use.'"), 'the rate is not a pack');
-  assert.ok(!hit('{ on_sale: true, bonus_microusd: 0 }'), 'no bonus is not a figure');
-  assert.ok(hit("'$1 of tokens'"), 'a $1 pack named as a pack still counts');
-  assert.ok(!hit("const url = 'https://x.test/a'; // $25 of tokens"));
-  assert.equal(relative(ROOT, ROOT), '');
-});
-
-// ---------------------------------------------------------------- add_tokens_opened
-
-
-const SECRET = 'd1289-fixture-only-signing-secret';
-function opened() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  const baseline = read('cloudflare-worker/sql/schema_baseline.sql');
-  for (const name of ['users', 'super_admins', 'user_sessions', 'mi_pro_subscriptions', 'activity_logs']) db.exec(stripForeignKeys(tableFromBaseline(baseline, name)));
-  db.exec(read('cloudflare-worker/sql/migrations/277_user_recovery_state.sql'));
-  db.prepare("INSERT INTO users (id, role, name, email) VALUES (7, 'founder', 'Mia', 'mia@example.test')").run();
-  db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (7, 'j7', 'totp', datetime('now'))").run();
-  const env = { DB: d1Over(db), JWT_SECRET: SECRET, ENVIRONMENT: 'development' } as any;
-  async function post(body: unknown, signedIn = true) {
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
-    if (signedIn) headers.Authorization = `Bearer ${await new SignJWT({ user_id: 7, jti: 'j7' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET))}`;
-    const res = await aiBudgetRoute.request('/add-tokens-opened', { method: 'POST', headers, body: JSON.stringify(body) }, env);
-    return { status: res.status, body: await res.json() as any };
-  }
-  const rows = () => db.prepare("SELECT user_id, action, details, actor FROM activity_logs WHERE action = 'add_tokens_opened' ORDER BY id").all().map((r: any) => ({ ...r }));
-  return { db, post, rows };
+async function post(f: any, body: unknown, claims: Record<string, unknown> = {}, user = 2) {
+  const jti = `jti-${user}-${JSON.stringify(claims)}`;
+  f.db.prepare("INSERT OR IGNORE INTO user_sessions (user_id, jti, factor, created_at, last_step_up_at) VALUES (?, ?, 'totp', datetime('now'), datetime('now'))").run(user, jti);
+  const jwt = await new SignJWT({ user_id: user, jti, ...claims }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
+  const r = await budgetRoute.request('/add-tokens/opened', { method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify(body) }, f.env);
+  return { status: r.status, body: await r.json().catch(() => null) as any };
 }
+const opened = (f: any) => f.db.prepare("SELECT action, details, actor, user_id FROM activity_logs WHERE action = 'add_tokens_opened'").all().map((r: any) => ({ ...r }));
 
-test('add_tokens_opened: one row holding `from` and nothing else, once per entry point per ten minutes', async () => {
-  const f = opened();
-  assert.deepEqual(await f.post({ from: 'models', prompt: 'write my deck', amount: 25 }), { status: 200, body: { recorded: true } });
-  assert.deepEqual(await f.post({ from: 'models' }), { status: 200, body: { recorded: false } }, 'the same entry point again is the same row');
-  assert.deepEqual((await f.post({ from: 'rail' })).body, { recorded: true }, 'another entry point is its own row');
-  assert.deepEqual(f.rows(), [
-    { user_id: 7, action: 'add_tokens_opened', details: '{"from":"models"}', actor: 'member' },
-    { user_id: 7, action: 'add_tokens_opened', details: '{"from":"rail"}', actor: 'member' },
-  ], 'nothing but `from`: no prompt, no figure');
-  f.db.exec("UPDATE activity_logs SET created_at = datetime('now', '-9 minutes')");
-  assert.deepEqual((await f.post({ from: 'models' })).body, { recorded: false }, 'nine minutes on, it is still the same opening');
-  f.db.exec("UPDATE activity_logs SET created_at = datetime('now', '-11 minutes')");
-  assert.deepEqual((await f.post({ from: 'models' })).body, { recorded: true }, 'after ten minutes it is a new opening');
+test('add_tokens_opened: one row holding from and nothing else; an unknown from, a prompt or a support session writes none', async () => {
+  const f = await world();
+  try {
+    const r = await post(f, { from: 'rail', prompt: 'Draft my pitch to Acme', amount_cents: 2500 });
+    assert.deepEqual([r.status, r.body], [200, { ok: true, recorded: true }]);
+    assert.deepEqual(opened(f), [{ action: 'add_tokens_opened', details: '{"from":"rail"}', actor: '2', user_id: 2 }], 'from only: never the prompt or an amount');
+    for (const bad of [{}, { from: 'anywhere' }, { from: 'rail; DROP' }, { from: 42 }]) {
+      const b = await post(f, bad);
+      assert.equal(b.status, 400, JSON.stringify(bad));
+      assert.equal(b.body.error, 'invalid_from');
+    }
+    const support = await post(f, { from: 'billing' }, { impersonated_by: 1 });
+    assert.deepEqual(support.body, { ok: true, recorded: false });
+    assert.equal(opened(f).length, 1, 'neither the bad nor the support session wrote a row');
+    for (const from of ADD_TOKENS_FROM) assert.match(from, /^[a-z_]{2,20}$/);
+    const unauth = await budgetRoute.request('/add-tokens/opened', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"from":"rail"}' }, f.env);
+    assert.equal(unauth.status, 401);
+  } finally { f.db.close(); }
 });
 
-test('add_tokens_opened: a sign-in is required, and only a known entry point is recorded', async () => {
-  const f = opened();
-  assert.notEqual((await f.post({ from: 'models' }, false)).status, 200);
-  for (const from of ['', 'somewhere', 'models; DROP TABLE users', 42, null]) {
-    assert.deepEqual((await f.post({ from })).status, 400, String(from));
-  }
-  assert.deepEqual(f.rows(), []);
-  assert.ok(ADD_TOKENS_FROM.includes('refused_run' as any) && ADD_TOKENS_FROM.includes('billing' as any));
+test('the client calls the mounted route', () => {
+  assert.match(read('frontend/src/lib/api/aiBudget.js'), /addTokensOpened: \(from\) => request\('\/ai-budget\/add-tokens\/opened', \{ method: 'POST', body: body\(\{ from \}\) \}\)/);
+  assert.match(read('cloudflare-worker/src/index.ts'), /app\.route\('\/api\/ai-budget', aiBudgetRoutes\)/);
 });

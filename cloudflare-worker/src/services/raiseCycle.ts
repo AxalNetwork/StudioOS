@@ -77,7 +77,8 @@ export const TOOL_HREF = {
   pitch: '/raise/pitch',
   capTable: '/raise/cap-table',
   pipeline: '/raise/capital/pipeline',
-  model: '/raise/capital/model',
+  // D1178 (#3105): the financial model is Use of funds › Runway › Forecast.
+  model: '/raise/use-of-funds/runway/forecast',
   metrics: '/build/kpi',
 } as const;
 

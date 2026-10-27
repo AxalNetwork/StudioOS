@@ -13,6 +13,8 @@ export const aiBudgetApi = {
   holds: () => request('/ai-budget/holds'),
   // D755 — the packs on sale, the hold and the latest purchase; D750's `configured`/`product` stay until CR4 and CR7.
   topUp: () => request('/ai-budget/top-up'),
+  // D1289 (CRP9): an Add tokens sheet was opened, from one entry point; the row holds `from` only.
+  addTokensOpened: (from) => request('/ai-budget/add-tokens/opened', { method: 'POST', body: body({ from }) }),
   // D755 — the member's own top-up history, newest first; `runs` adds each run's hold, release and spend.
   history: ({ before, limit, runs } = {}) => {
     const q = new URLSearchParams();
@@ -42,8 +44,6 @@ export const aiBudgetApi = {
   models: () => request('/ai/catalogue/hq'),
   // D794 — the member's own opt-in auto-reload: each call asks for a recent TOTP sign-in (the step-up prompt handles it).
   autoReload: () => request('/ai-budget/auto-reload'),
-  // D1289 — an Add tokens was opened, from one entry point (`models`, `rail`, `billing`, `usage`, …); the row holds `from` only.
-  addTokensOpened: (from) => request('/ai-budget/add-tokens-opened', { method: 'POST', body: body({ from }) }),
   // `{ enabled, pack_uid, threshold_usd, setup_intent_id? }`; the card is read back from the SetupIntent on the Worker.
   saveAutoReload: (settings) => request('/ai-budget/auto-reload', { method: 'PUT', body: body(settings) }),
   autoReloadSetup: (nonce) => request('/ai-budget/auto-reload/setup', { method: 'POST', body: body({ nonce }) }),

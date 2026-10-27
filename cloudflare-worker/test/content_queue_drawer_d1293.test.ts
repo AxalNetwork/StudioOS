@@ -213,7 +213,12 @@ test('unpublish: a reason is required; the author gets its own notice with it; f
 
   const audit = audits(db, 'article.unpublish');
   assert.equal(audit.length, 1);
-  assert.deepEqual(JSON.parse(audit[0].details), { article_id: id, was_featured: true });
+  const details = JSON.parse(audit[0].details);
+  assert.equal(details.article_id, id);
+  assert.equal(details.was_featured, true);
+  // D1292's transition row: both statuses, never a second row.
+  assert.equal(details.from, 'published');
+  assert.equal(details.to, 'approved');
   assert.ok(!audit[0].details.includes('figures'), 'the reason stays out of the audit row');
 
   const twice = await admin(db, 'POST', `/${id}/unpublish`, ADMIN, { reason: REASON });
