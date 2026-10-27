@@ -5,7 +5,7 @@ import { api } from '../../../lib/api';
 import { cyclesApi } from '../../../lib/api/cycles';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
+import { Lightbox, Pill, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
 import ExportDialog from './ExportDialog';
 import PitchNotes from './PitchNotes';
 import PitchReview from './PitchReview';
@@ -19,6 +19,8 @@ import {
   NEW_DATA_FAILED, NOTHING_BOUND, NOTHING_NEW, REFRESH_THE_DECK, VERSION_SORTS, audienceOptions, newInData,
 } from './pitchStudioModel';
 import { deckSourcesApi } from '../../../lib/api/deckSources';
+import { deckCheckApi } from '../../../lib/api/deckCheck';
+import { NOT_CHECKED, checkPills, checksByDeck, checksCell } from './checkModel';
 import { presentHref } from './presentExportModel';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { newDeckApi } from '../../../lib/api/newDeck';
@@ -263,6 +265,8 @@ export function StudioDecks({ reads, readOnly, q }) {
   // D898 group D (PD15): the version chosen to compare with the current one.
   const [compare, setCompare] = useState(null);
   const pair = compare ? comparePair(versions, compare) : null;
+  // D900 (#2679): each version's last check, for PD2's pills and the Checks column.
+  const checks = useDeckChecks(reads.versions.status === 'ok' ? reads.project?.id : null, versions.length);
 
   let left;
   if (busy) left = <><Skeleton h="h-44" testId="pitch-studio-loading" /><Skeleton h="h-40" /></>;
@@ -277,8 +281,8 @@ export function StudioDecks({ reads, readOnly, q }) {
   } else {
     left = (
       <>
-        <CurrentDeck project={reads.project} current={current} versions={versions} deck={reads.deck} q={q} phone={phone} readOnly={readOnly} />
-        <Versions versions={versions} phone={phone} onCompare={setCompare} />
+        <CurrentDeck project={reads.project} current={current} versions={versions} deck={reads.deck} q={q} phone={phone} readOnly={readOnly} checks={checks} />
+        <Versions versions={versions} phone={phone} onCompare={setCompare} checks={checks} />
         {pair && !phone ? (
           <VersionCompare key={`${pair.older.id}-${pair.newer.id}`} older={pair.older} newer={pair.newer} versions={versions} readOnly={readOnly}
             onClose={() => setCompare(null)} onRestored={() => { setCompare(null); reads.reload(); }} />
@@ -356,7 +360,43 @@ function FastPath({ projectId, q }) {
   );
 }
 
-function CurrentDeck({ project, current, versions, deck, q, phone, readOnly }) {
+/**
+ * D900 (#2679): `GET /api/decks/checks` — each version's last check. `null`
+ * while it reads, `'error'` when it failed (the cells then say Not read, never
+ * Not checked), else a Map by deck id.
+ */
+function useDeckChecks(projectId, count) {
+  const [state, setState] = useState(null);
+  useEffect(() => {
+    if (projectId == null) { setState(null); return undefined; }
+    let live = true;
+    setState(null);
+    deckCheckApi.versions(projectId).then(
+      (r) => { if (live) setState(checksByDeck(r) ?? 'error'); },
+      (e) => { if (live) setState('error'); reportError('pitch-studio:checks', e); },
+    );
+    return () => { live = false; };
+  }, [projectId, count]);
+  return state;
+}
+
+/** PD2's check pills for the current version: its counts, Not checked, or the read's failure. */
+function CheckPills({ checks, current, q }) {
+  if (checks == null) return null;
+  if (checks === 'error') return <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-checks-error">The check could not be read.</span>;
+  const mine = checks.get(Number(current.id));
+  const pills = mine?.checked ? checkPills(mine.counts) : [];
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" data-testid="pitch-studio-checks">
+      {!mine?.checked ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{NOT_CHECKED}</span> : null}
+      {mine?.checked && !pills.length ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">Checked · no figures</span> : null}
+      {pills.map((p) => <Pill key={p.key} tone={p.tone}>{p.label}</Pill>)}
+      <Link to={`${EDIT_PATH}${q}`} className="text-[11.5px] font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid="pitch-studio-checks-open">Open the check ›</Link>
+    </div>
+  );
+}
+
+function CurrentDeck({ project, current, versions, deck, q, phone, readOnly, checks }) {
   const [exporting, setExporting] = useState(false);
   const sources = useDeckSources(project?.id);
   const cover = deck.status === 'ok' ? coverOf(deck.data) : null;
@@ -388,6 +428,7 @@ function CurrentDeck({ project, current, versions, deck, q, phone, readOnly }) {
             <CoverageMeter coverage={sources.data?.coverage} status={sources.status} size="M" onRetry={sources.retry} />
           </div>
         ) : null}
+        <CheckPills checks={checks} current={current} q={q} />
         <div className="mt-auto flex flex-wrap gap-2">
           <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-open">Open</Link>
           {/* D901 (#2680): present reads, so a read-only viewer presents too (PD21); export writes the ledger. */}
@@ -449,7 +490,8 @@ function NewInData({ current, q }) {
 
 const SELECT = 'min-h-[30px] rounded-[8px] border border-axal-hairline bg-white px-2 font-mono text-[11px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
-function Versions({ versions, phone, onCompare }) {
+function Versions({ versions, phone, onCompare, checks }) {
+  const checkCell = (id) => (checks == null ? '…' : checks === 'error' ? 'Not read' : checksCell(checks.get(Number(id))));
   const [audience, setAudience] = useState('all');
   const [sort, setSort] = useState('newest');
   const options = useMemo(() => audienceOptions(versions), [versions]);
@@ -477,7 +519,7 @@ function Versions({ versions, phone, onCompare }) {
           {rows.map((r) => (
             <li key={r.id} className="flex min-h-[44px] items-center justify-between gap-3 border-b border-axal-hairline px-4 text-[12.5px] last:border-b-0 dark:border-gray-700">
               <span className={INK}><b>{r.label}</b> · {r.title} <span className="text-axal-muted dark:text-gray-400">· {r.audience}</span></span>
-              <span className="font-mono text-axal-muted dark:text-gray-400">{r.saved} · {r.links} link{r.links === '1' ? '' : 's'}</span>
+              <span className="font-mono text-axal-muted dark:text-gray-400">{r.saved} · {r.links} link{r.links === '1' ? '' : 's'} · {checkCell(r.id)}</span>
             </li>
           ))}
         </ul>
@@ -492,6 +534,7 @@ function Versions({ versions, phone, onCompare }) {
               <th className="px-4 py-2 font-semibold">Saved</th>
               <th className="px-4 py-2 font-semibold">By</th>
               <th className="px-4 py-2 font-semibold">Shared links</th>
+              <th className="px-4 py-2 font-semibold">Checks</th>
               <th className="px-4 py-2 font-semibold"><span className="sr-only">Compare</span></th>
             </tr>
           </thead>
@@ -505,6 +548,7 @@ function Versions({ versions, phone, onCompare }) {
                 <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{r.saved}</td>
                 <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{r.by}</td>
                 <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-version-links-${r.id}`}>{r.links}</td>
+                <td className="px-4 py-2.5 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-version-checks-${r.id}`}>{checkCell(r.id)}</td>
                 <td className="px-4 py-2.5 text-right">
                   {!r.current && onCompare ? (
                     <button type="button" className="text-[12px] font-bold text-axal-violet hover:underline dark:text-violet-300" onClick={() => onCompare(r.id)} data-testid={`pitch-studio-compare-${r.id}`}>Compare</button>

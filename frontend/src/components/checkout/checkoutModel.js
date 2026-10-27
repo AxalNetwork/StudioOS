@@ -191,6 +191,41 @@ export function quoteView(quote) {
   };
 }
 
+/**
+ * D1055 (PAYX20): the phone's one-row summary, "[Plan] · [$20]/month", from the
+ * interval's own price line. Null without a price: the row then names the plan.
+ */
+export function summaryRow(plan, spec, price) {
+  const name = plan?.plan_name || spec?.name || plan?.catalogue?.label || 'Plan';
+  const line = typeof price?.line === 'string' ? price.line.split(',')[0].replace(' / ', '/').trim() : '';
+  return line ? `${name} · ${line}` : name;
+}
+
+/** D1055 (PAYX20): the total beside the phone's Pay, only when the Worker sent it. */
+export function payTotal(view) {
+  return view?.due ? { label: 'Due today', value: view.due } : null;
+}
+
+/**
+ * D1055 (PAYX21): the Payment Element's dark style on the sheet. The shared
+ * appearance (`lib/stripe.js`, used by six forms) is left as it is. In dark it
+ * draws a selected tab's label and icon in the deep brand violet, which does
+ * not read on the dark card, so the sheet gives them their dark pair
+ * (violet-300), and gives the tabs a hairline and a violet-400 edge that read
+ * on its gray-900 ground. Light is unchanged.
+ */
+export const SHEET_DARK_RULES = Object.freeze({
+  '.Tab': { backgroundColor: '#111827', border: '1px solid #374151', boxShadow: 'none' },
+  '.Tab:hover': { border: '1px solid #4b5563' },
+  '.Tab--selected': { border: '1px solid #a78bfa', boxShadow: '0 0 0 1px #a78bfa' },
+  '.TabLabel, .TabIcon': { color: '#e5e7eb' },
+  '.TabLabel--selected, .TabIcon--selected': { color: '#c4b5fd' },
+});
+export function sheetAppearance(base, isDark) {
+  if (!isDark || !base) return base;
+  return { ...base, rules: { ...(base.rules || {}), ...SHEET_DARK_RULES } };
+}
+
 export const STEP_UP_LINE = 'Plan changes need a fresh code from your authenticator app.';
 export const STORAGE_DOWNGRADE = 'The new plan’s storage applies from that day. Check Usage › Storage first: nothing is deleted, but new uploads wait while you are over it.';
 export const FREE_FIRST = 'Your code covers the first payment. Your card is saved for renewals.';

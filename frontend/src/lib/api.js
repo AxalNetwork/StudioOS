@@ -71,6 +71,7 @@ export * from './api/dealStaff.js';
 export * from './api/dealViews.js';
 export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
+export * from './api/deckCheck.js';
 export * from './api/deckEditor.js';
 export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
@@ -3444,9 +3445,6 @@ export const api = {
   updateNotificationSettings: (data) => request('/settings/notifications', { method: 'PUT', body: JSON.stringify(data) }),
   getSecuritySettings: () => request('/settings/security'),
   getIntegrationSettings: () => request('/settings/integrations'),
-  getDeveloperSettings: () => request('/settings/developer'),
-  updateDeveloperSettings: (data) => request('/settings/developer', { method: 'PUT', body: JSON.stringify(data) }),
-  resyncDeveloperIndices: () => request('/settings/developer/resync-indices', { method: 'POST', body: JSON.stringify({}) }),
   listFounderInvites: () => request('/settings/founder/invites'),
   createFounderInvite: (data) =>
     request('/settings/founder/invites', { method: 'POST', body: JSON.stringify(data) }),

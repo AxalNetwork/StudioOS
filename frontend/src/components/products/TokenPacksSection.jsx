@@ -1,7 +1,7 @@
 // D755 CR7: the public pack read is the only source of purchase links.
 import React, { useCallback, useEffect, useState } from 'react';
 import { publicPricingApi } from '../../lib/api/publicPricing';
-import { TOPUP_UNAVAILABLE, TOKENS_LINE, TOKEN_PACKS_PATH, packLabel, packOfferLines, sellableLine } from '../../lib/aiTokens';
+import { TOPUP_UNAVAILABLE, TOKENS_LINE, TOKEN_PACKS_PATH, addTokensHref, packLabel, packOfferLines, sellableLine } from '../../lib/aiTokens';
 import { useAuth } from '../../hooks/useAuthSync';
 
 /** Keep pack products, including the environment fallback, out of the shared cart. */
@@ -39,7 +39,7 @@ export default function TokenPacksSection({ onPacksRead }) {
           <p className="text-sm">{TOKENS_LINE}</p>
           {packOfferLines(pack).map(line => <p key={line} className="text-sm">{line}</p>)}
           <a className="inline-flex rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white"
-            href={user ? '/checkout?token_pack=' + encodeURIComponent(pack.uid || pack.price_id)
+            href={user ? addTokensHref(pack.uid || pack.price_id)
               : '/login?next=' + encodeURIComponent(TOKEN_PACKS_PATH)}>{user ? 'Buy' : 'Sign in to buy'}</a>
         </article>)}</div>}
     <p className="text-xs text-gray-500 dark:text-gray-400">Sold by Axal VC Management LLC. Paid by card through Stripe; Axal never stores your card details. VAT, where it applies, is added at checkout and is not part of the tokens.</p>

@@ -18,12 +18,23 @@ import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard 
 import { NO_CARD, NO_PLAN, TOKENS_FOOTNOTE, allowanceView, balanceText, nextReset, packCards, paymentCard } from '../src/pages/account/billingModel.js';
 import { AutoReloadForm } from '../src/pages/account/AutoReloadCard.jsx';
 import { limitLine, pausedLine } from '../src/pages/account/autoReloadModel.js';
+import { ADD_TOKENS_EVENT } from '../src/lib/aiTokens.js';
 
 const h = React.createElement;
 const NOW = new Date('2026-10-20T12:00:00Z');
 const ready = (data) => ({ status: 'ready', data, reload: () => {} });
 const LOADING = { status: 'loading', data: null, reload: () => {} };
 const UNREADABLE = { status: 'unreadable', data: null, message: '', reload: () => {} };
+
+/** The Add tokens asks `fn` makes (D1288's event), by its detail. */
+function asked(fn) {
+  const seen = [];
+  const w = globalThis.window;
+  const prev = w.dispatchEvent;
+  w.dispatchEvent = (e) => { if (e.type === ADD_TOKENS_EVENT) seen.push(e.detail); return true; };
+  try { fn(); } finally { w.dispatchEvent = prev; }
+  return seen;
+}
 
 async function mount(element) {
   const restoreDoc = installDocument();
@@ -68,9 +79,9 @@ test('Buy tokens: each pack to the existing checkout, an offer only while the Wo
     { uid: null, price_id: 'price_env', unit_amount: 1500, credit_microusd: 15_000_000, bonus_microusd: 1_000_000 },
   ] });
   assert.deepEqual(cards, [
-    { key: 'pack25', amount: '$25', offer: '+10% bonus, ends 12 Nov', firstOnly: false, href: '/checkout?token_pack=pack25' },
-    { key: 'pack10', amount: '$10', offer: null, firstOnly: true, href: '/checkout?token_pack=pack10' },
-    { key: 'price_env', amount: '$15', offer: '+6.7% bonus', firstOnly: false, href: '/checkout?token_pack=price_env' },
+    { key: 'pack25', amount: '$25', offer: '+10% bonus, ends 12 Nov', firstOnly: false, href: '/pricing?for=models&pack=pack25#add-tokens' },
+    { key: 'pack10', amount: '$10', offer: null, firstOnly: true, href: '/pricing?for=models&pack=pack10#add-tokens' },
+    { key: 'price_env', amount: '$15', offer: '+6.7% bonus', firstOnly: false, href: '/pricing?for=models&pack=price_env#add-tokens' },
   ]);
   assert.deepEqual(packCards({ packs: [{ uid: 'x', unit_amount: 0 }] }), [], 'a pack with no price is not offered');
   assert.deepEqual(packCards(null), []);
@@ -106,7 +117,8 @@ test('Token balance: loading, unreadable (never a zero), and the balance with Bu
   m = await mount(h(TokenBalanceCard, { me: ready({ balance_microusd: 27_500_000 }) }));
   try {
     assert.equal(m.textOf('value-token-balance'), '$27.50 AI tokens');
-    assert.equal(m.props(m.byTestId('link-buy-tokens')).href, '#buy-tokens');
+    // D1288: Buy tokens opens Add tokens' sheet over Billing.
+    assert.deepEqual(asked(() => m.props(m.byTestId('link-buy-tokens')).onClick()), [{ from: 'Billing', pack_uid: null }]);
     assert.doesNotMatch(m.text(), /credit/i, 'AI tokens are never credits (D793)');
   } finally { await m.unmount(); }
 });
@@ -132,7 +144,8 @@ test('Buy tokens: the pack cards, the offer and first-purchase pills only where 
     assert.equal(m.byTestId('pack-offer-pack10'), undefined, 'no live offer, no pill');
     assert.equal(m.textOf('pack-first-pack10'), 'First purchase only');
     assert.equal(m.byTestId('pack-first-pack25'), undefined);
-    assert.equal(m.props(m.byTestId('pack-buy-pack25')).href, '/checkout?token_pack=pack25');
+    // D1288: a pack's Buy opens the sheet on that pack.
+    assert.deepEqual(asked(() => m.props(m.byTestId('pack-buy-pack25')).onClick()), [{ from: 'Billing', pack_uid: 'pack25' }]);
     assert.ok(m.text().includes(TOKENS_FOOTNOTE), 'the footnote under the packs');
   } finally { await m.unmount(); }
   m = await mount(h(BuyTokensCard, { topUp: ready({ packs: [] }) }));
