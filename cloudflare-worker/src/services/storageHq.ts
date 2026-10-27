@@ -23,7 +23,8 @@
  */
 import type { Env } from '../types';
 import { aiLicenceKey } from './aiBudget';
-import { chooseStoragePlanKey, storagePlan, STORAGE_PLANS, type StoragePlanKey } from './storagePlans';
+import { chooseStoragePlanKey, storagePlan, STORAGE_PLANS, STORAGE_TIERS, type StoragePlanKey } from './storagePlans';
+import { planByKey } from './planCatalogue';
 import { readStorageByOwner, storageState, STORAGE_KINDS, type StorageState } from './storageUsage';
 
 export const STATES: ReadonlyArray<StorageState> = ['ok', 'near_80', 'near_95', 'full', 'over', 'no_allowance'];
@@ -83,16 +84,51 @@ export async function readPlatformStorage(env: Env) {
     }
   }
 
+  // D1172 (#3085): STG20's rows — the owner's table by price. Per tier: its
+  // plans' names, members, members with files, bytes (in all, by kind, and the
+  // median member's), and members by state. Bytes and states are null while an
+  // area is unreadable, as above; members stand, since they need no bytes.
+  const byTier = plans === null ? null : STORAGE_TIERS.map((tier) => {
+    const keys = tier.plans as ReadonlyArray<StoragePlanKey>;
+    const plan = storagePlan(keys[0])!;
+    const ids = [...plans].filter(([, k]) => keys.includes(k)).map(([id]) => id);
+    const used = ids.map((id) => owners.get(id)?.measured_bytes ?? 0).sort((a, b) => a - b);
+    const tierKinds = Object.fromEntries(STORAGE_KINDS.map((k) => [k, 0])) as Record<string, number>;
+    const states = Object.fromEntries([...STATES, 'not_measured'].map((s) => [s, 0])) as Record<string, number>;
+    for (const id of ids) {
+      const t = owners.get(id);
+      if (t) for (const k of STORAGE_KINDS) tierKinds[k] += t.kinds[k];
+      states[storageState(t?.measured_bytes ?? 0, plan.allowance_bytes, keys[0]) ?? 'not_measured'] += 1;
+    }
+    const mid = used.length ? (used.length % 2 ? used[(used.length - 1) / 2] : Math.round((used[used.length / 2 - 1] + used[used.length / 2]) / 2)) : null;
+    return {
+      tier: tier.key, label: tier.label, plan_keys: keys, plan_names: keys.map((k) => planByKey(k)?.name ?? k),
+      allowance_bytes: plan.allowance_bytes, allowance_reason: plan.allowance_reason,
+      members: ids.length, members_with_files: ids.filter((id) => (owners.get(id)?.files ?? 0) > 0).length,
+      measured_bytes: complete ? used.reduce((a, b) => a + b, 0) : null,
+      median_bytes: complete ? mid : null,
+      by_kind: complete ? STORAGE_KINDS.map((key) => ({ key, measured_bytes: tierKinds[key] })) : null,
+      by_state: complete ? states : null,
+    };
+  });
+  let withFiles: number | null = null;
+  if (plans !== null) {
+    withFiles = 0;
+    for (const [id, key] of plans) if (key !== 'admin' && (owners.get(id)?.files ?? 0) > 0) withFiles += 1;
+  }
+
   return {
     complete,
     unreadable_areas: unreadable,
     reason: complete ? null : AREAS_UNREADABLE,
-    totals: { members: plans?.size ?? null, files, measured_bytes: measured, unknown_size_files: unknown, complete },
+    totals: { members: plans?.size ?? null, members_with_files: withFiles, files, measured_bytes: measured, unknown_size_files: unknown, complete },
     by_kind: STORAGE_KINDS.map((key) => ({ key, measured_bytes: kinds[key] })),
     by_plan: byPlan,
     by_plan_reason: plans === null ? PLANS_UNREADABLE : complete ? null : AREAS_UNREADABLE,
     by_state: byState,
     by_state_reason: plans === null ? PLANS_UNREADABLE : complete ? null : AREAS_UNREADABLE,
+    by_tier: byTier,
+    by_tier_reason: plans === null ? PLANS_UNREADABLE : complete ? null : AREAS_UNREADABLE,
     // A negotiated plan has no allowance to measure against; it is counted apart.
     not_measured_means: 'A negotiated plan, whose allowance is agreed with the member rather than set in the table.',
   };
