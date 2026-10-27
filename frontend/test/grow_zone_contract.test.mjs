@@ -39,7 +39,6 @@ const FILTERS = raw('frontend/src/workspaces/founderZoneFilters.js');
 const ACTIONS = raw('frontend/src/workspaces/founderZoneActions.js');
 const TALENT = read('frontend/src/pages/founder/FounderGrowTalent.jsx');
 const CUSTOMERS = read('frontend/src/pages/founder/FounderGrowCustomers.jsx');
-const CAPITAL = read('frontend/src/pages/founder/FounderGrowCapitalMatch.jsx');
 const APP = raw('frontend/src/App.jsx');
 const API = raw('frontend/src/lib/api.js');
 const PROGRESS = raw('cloudflare-worker/src/routes/progress.ts');
@@ -101,21 +100,8 @@ test('Stalled is live, and computed from the stamps the route returns', () => {
   assert.match(CUSTOMERS, /return at != null && Date\.now\(\) - at > STALL_DAYS/);
 });
 
-test('Warm path only is live, and a warm path is the stored warm_path', () => {
-  const block = zoneBlock(FILTERS, 'raise/capital-match');
-  assert.match(block, /canvas: 'Warm path only', key: 'warm'/);
-  assert.ok(CAPITAL.includes("view === 'warm'"), 'nothing branches on the warm view');
-  // Nothing is inferred from a shared domain or a similar name — the path is a
-  // stored column, and migration 442 is what put it there. D1189 (#3123): a
-  // linked contact (`contact_id`) is not an introduction, so it no longer counts.
-  assert.match(CAPITAL, /typeof row\?\.warm_path === 'string' && row\.warm_path\.trim\(\) !== ''/);
-  assert.doesNotMatch(CAPITAL, /row\?\.contact_id != null/);
-  assert.match(
-    raw('cloudflare-worker/sql/migrations/442_raise_cycle_stores.sql'),
-    /ALTER TABLE raise_prospects ADD COLUMN warm_path TEXT/,
-    'the column this chip rests on is gone',
-  );
-});
+// D1194 (#3128): `raise/capital-match` (Investor match) is retired into Capital relationships ›
+// Match, which draws its own filters; its Warm path only chip and stage chips left with it.
 
 test('the two dynamic-group reasons are the correct use of one, not a leftover', () => {
   // THE DISTINCTION THIS WHOLE PASS TURNS ON. A dynamic group with an `unbuilt`
@@ -123,13 +109,11 @@ test('the two dynamic-group reasons are the correct use of one, not a leftover',
   // are the stored ones, and the reason covers the empty case. It is WRONG when
   // the page supplies nothing ever — then the reason is about the page.
   //
-  // Both of Grow's survived this check: each page passes a `dynamic:` map built
-  // from rows it has loaded. Deleting either as "false" would have been the error
+  // Both of Grow's survived this check: each page passed a `dynamic:` map built
+  // from rows it had loaded. Investor match's left with the page (D1194); Talent's stays. Deleting either as "false" would have been the error
   // in the opposite direction from the four above.
   assert.match(TALENT, /dynamic: \{ roles: jobs\./, 'the talent page stopped supplying role chips');
-  assert.match(CAPITAL, /dynamic: \{ stages: stages\./, 'the capital page stopped supplying stage chips');
   assert.match(zoneBlock(FILTERS, 'grow/talent'), /unbuilt: 'no job post is linked to this startup yet'/);
-  assert.match(zoneBlock(FILTERS, 'raise/capital-match'), /unbuilt: 'no prospect records a stage yet'/);
 });
 
 test('the refusals that survive still describe something absent', () => {
@@ -142,7 +126,7 @@ test('the refusals that survive still describe something absent', () => {
     ['no market segment is stored on a customer record', 'a record stores its capture source, not a segment'],
     ['segments are not stored', 'same'],
     ['no sequence store exists', 'nothing sends mail from here'],
-    ['no outreach drafting runs on this desk', 'no outreach store'],
+    // D1194: 'no outreach drafting runs on this desk' left with Investor match.
     ['a calendar event has no publication state', 'calendar_events.status is cancelled-semantics'],
     ['no article or content record is connected to this startup', 'articles has author_user_id and no project_id'],
   ]) {

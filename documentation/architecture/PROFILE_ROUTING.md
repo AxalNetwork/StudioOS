@@ -39,7 +39,7 @@ it, where in their nav, and how do they get there.*
 | Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/history` · `/raise/cap-table/h-<n>` · `/new` · `/raise/cap-table/proposal/<id>` · `/raise/cap-table/instrument/<uid>` · `/raise/cap-table/scenarios/<uid>` · `/raise/cap-table/scenarios/compare?ids=` · `/share/captable/:token` · `/raise/capital/cap-table` · `/build/captable` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Cap Table | `/spinout-lab/captable` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Capital | `/spinout-lab/capital` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Capital relationships | `/raise/capital-relationships` · `/raise/capital/pipeline` · `/raise/capital-match` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Capital relationships | `/raise/capital-relationships` · `/raise/capital/pipeline` · `/raise/capital-match` · `/grow/capital-match` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
 | Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
@@ -96,7 +96,7 @@ it, where in their nav, and how do they get there.*
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Revenue | `/spinout-lab/revenue` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Round Manager | `/raise/capital/pipeline` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Round Manager | `/raise/capital-relationships/pipeline?moved=pipeline` | Headerless | Full page | Sidebar → Headerless → Raise | RETIRED | High |
 | Scoring Engine | `/spinout-lab/scoring` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 | Spin-Out Lab · Intro | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |
@@ -225,7 +225,7 @@ it, where in their nav, and how do they get there.*
 | Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/history` · `/raise/cap-table/h-<n>` · `/new` · `/raise/cap-table/proposal/<id>` · `/raise/cap-table/instrument/<uid>` · `/raise/cap-table/scenarios/<uid>` · `/raise/cap-table/scenarios/compare?ids=` · `/share/captable/:token` · `/raise/capital/cap-table` · `/build/captable` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Admin | Full page (proposed) | Sidebar → Admin → Contracts | NEW | Low |
-| Content queue | `/admin/articles` · `/admin/articles/calendar` · `/admin/articles/authors` · `/admin/articles/performance` · `/admin/articles/:id` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| Content queue | `/admin/articles/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Contracts · Subsidiary | `/admin/contracts` · `/admin?tab=legal` · `/esign/:token` | Admin | Full page | Sidebar → Admin → Contracts | UPGRADE | High |
 | Deal flow list | `/deals` · `/deals?view=table` · `/deals?scope=all\|new` · `/deals/compare?ids=` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Due diligence desk | `/admin/due-diligence` · `/my-reviews` · `/templates` · `/:uid` · `/:uid/:tab` · `/due-diligence` | Admin | Full page (proposed) | Sidebar → Admin → Approvals | UPGRADE | Low |
@@ -267,7 +267,7 @@ it, where in their nav, and how do they get there.*
 | Admin page header | `/admin/programs/spinout-lab` | HQ | Full page (proposed) | Sidebar → HQ → Programs | UPGRADE | Low |
 | Advisors & Partners | `/admin?tab=network-profiles` · `/admin/network-profiles` · `/deck` · `/admin/partner-invitations/firm-links` · `/firms` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Approvals (admin) | `/admin/held/approvals` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Content queue | `/admin/articles` · `/admin/articles/calendar` · `/admin/articles/authors` · `/admin/articles/performance` · `/admin/articles/:id` | HQ | Full page (proposed) | Sidebar → HQ → Content | UPGRADE | Low |
+| Content queue | `/admin/articles/:id` | HQ | Full page | Sidebar → HQ → Content | UPGRADE | High |
 | Contracts · Super | `/admin/contracts` · `/admin/contracts/registry` | HQ | Full page | Sidebar → HQ → Contracts | UPGRADE | High |
 | Deal flow list | `/deals` · `/deals?view=table` · `/deals?scope=all\|new` · `/deals/compare?ids=` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Due diligence desk | `/admin/due-diligence` · `/my-reviews` · `/templates` · `/:uid` · `/:uid/:tab` · `/due-diligence` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
@@ -362,9 +362,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 116 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 79 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 86 | Not routed. Proposed route only. |
+| High | 117 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 80 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Low | 84 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

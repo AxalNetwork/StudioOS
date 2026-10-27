@@ -119,6 +119,7 @@ import adminMercury from './routes/admin_mercury';
 import adminMercurySafeBasis from './routes/admin_mercury_safe_basis';
 import adminGithub from './routes/admin_github';
 import githubWebhook from './routes/github';
+import vercelWebhook from './routes/vercel_webhook';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
 import adminCohort from './routes/admin_cohort';
@@ -178,6 +179,8 @@ void _registerCrunchbase;
 import './integrations/providers/stripe';
 // D655 (#1467) — GitHub: read-only issues, pull requests and releases from chosen repositories.
 import './integrations/providers/github';
+// D1096: the read-only Vercel Integration.
+import './integrations/providers/vercel';
 // D713 (#1778) — a founder's or partner's own Mercury, read-only: `connect` only.
 import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
@@ -233,6 +236,8 @@ import googleWorkspaceRoutes from './routes/google_workspace';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
+import lovableAppLinks from './routes/lovable_app_links';
+import buildGoogleRoutes from './routes/build_google';
 import buildPlanRoutes, { buildEvidenceRoutes } from './routes/build_plan';
 import buildPlanStateRoutes from './routes/build_plan_state';
 import metricsRoutes from './routes/metrics';
@@ -408,6 +413,8 @@ import { adminPartnerSettlements, partnerSettlements } from './routes/partner_se
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
+// D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
+import notionRoutes, { notionCycleRoutes } from './routes/notion';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
@@ -1330,6 +1337,8 @@ app.route('/api/research/overview', researchOverview);
 app.route('/api/research', researchMarkets);
 app.route('/api/research', researchSectors);
 // D664 (#1477): the Grow cycle's overview, module reads and store writes.
+// D1086 (#2951): each section's Notion sync, ahead of the cycle routers so `/:section/notion` is never read as a module.
+app.route('/api/cycles', notionCycleRoutes);
 app.route('/api/cycles/grow', cycleGrow);
 app.route('/api/research', research);
 // D642 — usage is keyed on the caller, across all their companies.
@@ -1424,6 +1433,10 @@ app.route('/api/developer/limits', developerLimits);
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
 // D1080 (#2945): Sign in with <Provider> for every other MCP record, and its client ID metadata documents.
 app.route('/api/integrations/mcp', connectorMcpOauthRoutes);
+// D1086 (#2951): Notion's sources, ahead of the integrations router so `notion` is never read as a connection uid.
+app.route('/api/connectors/notion', notionRoutes);
+// D1096 (#2961): Vercel signs every installation's events to one URL; ahead of the per-connection receiver.
+app.route('/api/connectors/webhook/vercel', vercelWebhook);
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
@@ -1448,10 +1461,15 @@ app.route('/api/founder-risk', founderRiskRoutes);
 // Task #9 — Venture Risk (internal deal-team 10-layer rating).
 app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
+// D1083 (#2948): the Lovable app link on an experiment or on Prototype / MVP,
+// at /api/cycles/{validate,build}/lovable/app-link, before either cycle's router.
+app.route('/api/cycles', lovableAppLinks);
 // D1067: pause, resume and "new evidence since" before D1065's plan router.
 app.route('/api/cycles/build/plan', buildPlanStateRoutes);
 app.route('/api/cycles/build/plan', buildPlanRoutes);
 app.route('/api/cycles/build/evidence', buildEvidenceRoutes);
+// D1093 (#2958): Google Workspace on Build — sync, From Google and the spec Doc decisions.
+app.route('/api/cycles/build/google', buildGoogleRoutes);
 app.route('/api/cycles/build', cycleBuildRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);

@@ -428,7 +428,7 @@ async function kpiHistory(rc: RecordContext, row: KpiRow): Promise<Array<{ month
     for (const r of res.results || []) put(r.day, r.v);
   } else if (row.id === 'runway') {
     const res = await rc.env.DB.prepare(
-      'SELECT snapshot_date AS day, cash_balance AS cash, net_burn AS burn FROM project_metrics WHERE project_id = ? ORDER BY snapshot_date, id',
+      `SELECT snapshot_date AS day, cash_balance AS cash, net_burn AS burn FROM project_metrics WHERE project_id = ? AND COALESCE(source, '') <> 'google_sheets' ORDER BY snapshot_date, id`,
     ).bind(rc.projectId).all<{ day: string; cash: number | null; burn: number | null }>();
     let cash: number | null = null; let burn: number | null = null;
     for (const r of res.results || []) {

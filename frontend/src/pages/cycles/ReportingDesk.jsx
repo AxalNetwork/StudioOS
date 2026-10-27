@@ -10,7 +10,7 @@ import UpdatesHistory from './UpdatesHistory';
 import { DESK_TABS, DUTIES_LINE, LINE, TITLE, deskHref, deskSearch } from './reportingModel';
 import { EMPTY, NOT_SHARED, dueNext, prepareLabel, readOnlyLine } from './reporting/deskModel.js';
 import { reportHref } from './reporting/builderModel.js';
-import { CARD, Calendar, DueNext, DutiesTable, DutyDrawer, H2, MUTED, NeedsYou } from './reporting/DeskBlocks.jsx';
+import { BAR_PRIMARY, CARD, Calendar, DueNext, DutiesTable, DutyDrawer, H2, MUTED, NeedsYou, PinnedBar } from './reporting/DeskBlocks.jsx';
 import { ExpectedDateDialog, ReminderDialog } from './reporting/ReportingDialogs.jsx';
 import ReportPage from './reporting/ReportPage.jsx';
 
@@ -30,6 +30,10 @@ import ReportPage from './reporting/ReportPage.jsx';
  * never an admin) decides; anyone else the desk admits — an advisor, an
  * Operating Partner of the venture, an admin — reads it with "Read only" and
  * no Prepare, expected date or reminders (RPT14, RPT15).
+ *
+ * D1062 (#2932), the founder at 390 (RPT20a): Due next, Needs you, the
+ * periods as a list with their pills, and "Prepare [period] report" in a bar
+ * pinned to the bottom of the page instead of the header's primary.
  */
 
 const PILL = 'w-fit rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-700 dark:text-gray-400';
@@ -42,7 +46,7 @@ export function DeskTabBar({ active, search = '', counts = {} }) {
       <nav aria-label={TITLE} className="-mb-px flex gap-1 overflow-x-auto">
         {DESK_TABS.map((t) => (
           <Link key={t.id} to={deskHref(t.id, search)} aria-current={t.id === active ? 'page' : undefined}
-            className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.id === active
+            className={`inline-flex min-h-11 items-center whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.id === active
               ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-100'
               : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
             data-testid={`reporting-tab-${t.id}`}>
@@ -210,9 +214,9 @@ export default function ReportingDesk({ tab = 'desk', projectId, projectStatus =
         <div className="flex flex-col gap-[14px]" data-testid="reporting-desk">
           {deskBody || (
             <>
-              {!readOnly && <DueNext desk={desk} canWrite={canWrite} onPrepare={prepare} busy={preparing} />}
+              {!readOnly && <DueNext desk={desk} canWrite={canWrite} onPrepare={prepare} busy={preparing} phone={phone} />}
               {canWrite && <NeedsYou desk={desk} onPrepare={prepare} onExpect={(p) => setDialog({ kind: 'expected', period: p })} busy={preparing} />}
-              <Calendar desk={desk} canWrite={canWrite} onPrepare={prepare} onExpect={(p) => setDialog({ kind: 'expected', period: p })} busy={preparing} />
+              <Calendar desk={desk} canWrite={canWrite} onPrepare={prepare} onExpect={(p) => setDialog({ kind: 'expected', period: p })} busy={preparing} phone={phone} />
             </>
           )}
           <History projectId={projectId} onShare={readOnly ? undefined : action?.onOpen || action?.onClick} />
@@ -230,6 +234,11 @@ export default function ReportingDesk({ tab = 'desk', projectId, projectStatus =
       {prepareError && <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" role="alert" data-testid="reporting-prepare-refused">{prepareError}</p>}
       <DeskTabBar active={tab} search={s} counts={status === 'ready' ? { duties: (desk?.duties || []).length } : {}} />
       {body}
+      {phone && tab === 'desk' && deskAction && next && (
+        <PinnedBar testId="reporting-prepare-bar">
+          <button type="button" className={BAR_PRIMARY} onClick={deskAction.onClick} disabled={deskAction.disabled} data-testid="reporting-prepare-pinned">{deskAction.label}</button>
+        </PinnedBar>
+      )}
       {dialog?.kind === 'expected' && (
         <ExpectedDateDialog period={dialog.period} today={desk?.today} onClose={() => setDialog(null)} onDone={() => { setDialog(null); reload(); }} />
       )}

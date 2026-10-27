@@ -214,9 +214,10 @@ test('mounted: a refusal is printed under its own prospect', async () => {
   } finally { await v.unmount(); }
 });
 
-test('Capital relationships draws the panel under the Calls history, with the viewer\'s role and the module\'s re-read', () => {
+test('Capital relationships draws the panel first on Overview, with the viewer\'s role and the module\'s re-read', () => {
   const src = codeOnly(readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8'));
-  assert.match(src, /'capital-relationships': \(data, ctx\) => \(\s*<>\s*<CallsHistory calls=\{data\?\.parts\?\.calls\} \/>\s*<RaiseReceiptMatches role=\{ctx\.role\} onChanged=\{ctx\.reload\} \/>/);
+  // D1227 (#3226): the Calls history left Overview, so the panel comes first.
+  assert.match(src, /'capital-relationships': \(data, ctx\) => \(\s*<>\s*<RaiseReceiptMatches role=\{ctx\.role\} onChanged=\{ctx\.reload\} \/>/);
   assert.match(src, /openDialog, role: user\?\.role \?\? null \}\)/);
 });
 

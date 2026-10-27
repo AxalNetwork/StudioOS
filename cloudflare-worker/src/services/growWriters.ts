@@ -537,7 +537,8 @@ function remindDays(v: unknown): string | null {
   return unique.length ? JSON.stringify(unique) : null;
 }
 
-export async function addObligation(env: Env, pid: number, user: User, b: Body): Promise<{ id: number }> {
+/** `source` is `manual` for a typed obligation; D1095's Calendar proposal writes `google_calendar`. */
+export async function addObligation(env: Env, pid: number, user: User, b: Body, source: 'manual' | 'google_calendar' = 'manual'): Promise<{ id: number }> {
   const title = str(b.title, 200);
   if (!title) throw new Refused(400, 'An obligation has a title', 'title');
   const due = obligationDue(b.due_at);
@@ -553,9 +554,9 @@ export async function addObligation(env: Env, pid: number, user: User, b: Body):
     const ins = await env.DB.prepare(
       `INSERT INTO compliance_events (project_id, entity_id, jurisdiction, event_type, title, due_date,
         completion_status, recurrence, source, kind, owner_name, owner_user_id, created_by_user_id, created_by,
-        completed_at, completed_by_user_id, remind_days_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        completed_at, completed_by_user_id, remind_days_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(pid, entity?.id ?? null, entity?.jurisdiction || 'Unspecified', OBLIGATION_EVENTS[kind], title, due,
-      completion, REPEATS[repeats], kind, str(b.owner_name, 120), null, user.id, user.id,
+      completion, REPEATS[repeats], source, kind, str(b.owner_name, 120), null, user.id, user.id,
       completion === 'completed' ? nowIso() : null, completion === 'completed' ? user.id : null, remind).run();
     id = ins.meta.last_row_id;
   } catch (error) { obligationClash(error, kind, due); }

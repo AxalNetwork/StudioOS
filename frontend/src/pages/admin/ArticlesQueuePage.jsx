@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { adminArticles as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -7,6 +8,9 @@ import { isSuperAdminUser } from '../../lib/shellRole';
 import { RailFrame, WorkerRail } from '../../ui';
 import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
 import { PAGE_LINE, QUEUE_BASE, QUEUE_TABS, WAITS, viewOf } from './contentQueueModel';
+import AuthorsTab from './contentQueue/AuthorsTab';
+import ContentCalendar from './contentQueue/Calendar';
+import PerformanceTab from './contentQueue/PerformanceTab';
 import Pipeline from './contentQueue/Pipeline';
 import ReviewDrawer from './contentQueue/ReviewDrawer';
 
@@ -15,7 +19,8 @@ import ReviewDrawer from './contentQueue/ReviewDrawer';
 // D1290 (#2383): four tabs at their own addresses (`contentQueueModel.js`).
 // D1295 (#3391): Pipeline is `contentQueue/` — the board and list, the review
 // drawer at `/admin/articles/<id>` and its in-page dialogs (ART1–ART6,
-// ART13–ART16). Every change opens a dialog; there is no browser pop-up.
+// ART13–ART16). Calendar is D1296 and Authors and Performance are D1297.
+// Every change opens a dialog; there is no browser pop-up.
 
 /** D1290: a tab whose build is a slot task says what it waits on and where today's version is (D1290 §4). */
 function QueueWait({ tab }) {
@@ -59,7 +64,7 @@ export default function ArticlesQueuePage() {
         data-testid="content-queue-header"
       />
 
-      {view.tab !== 'pipeline' ? <QueueWait tab={view.tab} /> : (
+      {view.tab === 'calendar' ? <ContentCalendar api={api} /> : view.tab === 'authors' ? <AuthorsTab /> : view.tab === 'performance' ? <PerformanceTab /> : view.tab !== 'pipeline' ? <QueueWait tab={view.tab} /> : (
         <Pipeline
           viewer={viewer}
           refreshKey={changed}

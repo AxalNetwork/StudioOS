@@ -467,6 +467,7 @@ export const PROVIDER_LABEL = {
   stripe: 'Stripe',
   carta: 'Carta',
   github: 'GitHub',
+  vercel: 'Vercel',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',
