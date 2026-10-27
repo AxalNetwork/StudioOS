@@ -104,10 +104,9 @@ regexes = [
   # looser rides on it.
   '''\bsegment-test-secret-0123456789-abcdef\b''',
   # D1082 (#2947): the synthetic JWT signing key in
-  # cloudflare-worker/test/lovable_launch.test.ts, which signs the test's
-  # own tokens against an in-memory database. Not a credential and not the
-  # Worker's JWT_SECRET; pinned to the exact literal so nothing looser rides
-  # on it.
+  # cloudflare-worker/test/lovable_launch.test.ts, which signs the test's own
+  # tokens against an in-memory database. Not a credential and not the
+  # Worker's JWT_SECRET; pinned to the exact literal so nothing looser rides on it.
   '''\blovable-launch-test-secret-0123456789-abcdef\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
