@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { LogIn, ChevronDown, MessageSquare, X, Check } from 'lucide-react';
+import { LogIn, ChevronDown, MessageSquare, Check } from 'lucide-react';
 import { useToast } from '../../../components/useToast';
 import { useEscapeClose } from '../../../components/useEscapeClose';
 import { useAuth } from '../../../hooks/useAuthSync';
