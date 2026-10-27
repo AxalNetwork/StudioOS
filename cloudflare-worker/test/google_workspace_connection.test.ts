@@ -189,11 +189,15 @@ test('all file-operation replies exclude server tokens; unsupported mapping and 
  const scan=async(res:Response)=>{const raw=await res.text();assert.doesNotMatch(raw,/server-refresh-only|browser-must-never-see-server-access|access_token|refresh_token/);return JSON.parse(raw);};
  try{
   await scan(await call(env,base+'/picker-config?project=1'));
+  // D1092: a Customer research Doc maps to its interview; a Doc in any other module still takes no mapping.
+  await scan(await call(env,base+'/files','POST',{project:1,module:'solution_design',ids:['doc']}));
   await scan(await call(env,base+'/files','POST',{project:1,module:'customer_research',ids:['doc']}));
   await scan(await call(env,base+'/files','POST',{project:1,module:'demand_signals',ids:['form']}));
   const list=await scan(await call(env,base+'/files?project=1'));
-  const doc=list.items.find((r:any)=>r.kind==='doc'),form=list.items.find((r:any)=>r.kind==='form');
+  const doc=list.items.find((r:any)=>r.kind==='doc'&&r.module==='solution_design'),form=list.items.find((r:any)=>r.kind==='form');
   assert.equal((await scan(await call(env,base+`/files/${doc.uid}/mapping`,'PUT',{mapping:{}}))).error,'mapping_not_supported');
+  const notes=list.items.find((r:any)=>r.kind==='doc'&&r.module==='customer_research');
+  assert.equal((await scan(await call(env,base+`/files/${notes.uid}/mapping`,'PUT',{mapping:{interview_id:101}}))).saved,true);
   assert.equal((await scan(await call(env,base+`/files/${doc.uid}/preview`,'POST',{}))).error,'preview_not_supported');
   assert.equal((await scan(await call(env,base+`/files/${form.uid}/mapping`,'PUT',{mapping:[]}))).error,'invalid_mapping');
   assert.equal((await scan(await call(env,base+`/files/${form.uid}/mapping`,'PUT',{mapping:{question:'q1'}}))).saved,true);
@@ -201,4 +205,27 @@ test('all file-operation replies exclude server tokens; unsupported mapping and 
   assert.deepEqual(preview.rows,[{question_id:'q1',title:'Would you pay?'}]);assert.equal(preview.stored,false);
   assert.equal((await scan(await call(env,base+`/files/${form.uid}`,'DELETE'))).facts_kept,true);
  }finally{globalThis.fetch=old;db.close();}
+});
+test('D1091 GW1/GW2: /mine lists the member\'s own chosen files across ventures with the state and the Google account, and never a token', async()=>{
+ const {db,env}=await fixture();const fake=googleWorkspaceFake(files);const old=globalThis.fetch;globalThis.fetch=fake.fetcher;
+ try {
+  assert.equal((await call(env,base+'/files','POST',{project:1,module:'revenue_traction',ids:['sheet']})).status,201);
+  const before=fake.calls.length;
+  const mine=await (await call(env,base+'/mine')).json() as any;
+  assert.equal(fake.calls.length,before,'nothing is read from Google');
+  assert.deepEqual([mine.state,mine.account_email,mine.ventures,mine.items.length],['ready','founder@example.test',1,1]);
+  assert.deepEqual([mine.items[0].name,mine.items[0].venture_name,mine.items[0].module,mine.items[0].kind],['Synthetic metrics','Synthetic project','revenue_traction','sheet']);
+  assert.doesNotMatch(JSON.stringify(mine),/server-refresh-only|refresh_token|access_token/);
+  // Another member sees only their own: none chosen, no Google sign-in.
+  const other=await (await call(env,base+'/mine','GET',undefined,2)).json() as any;
+  assert.deepEqual([other.state,other.account_email,other.items,other.ventures],['google_not_connected',null,[],0]);
+  // A stopped file leaves the list.
+  await call(env,base+`/files/${mine.items[0].uid}`,'DELETE');
+  assert.equal((await (await call(env,base+'/mine')).json() as any).items.length,0);
+  // Without drive.file the state says so.
+  db.prepare("UPDATE google_oauth_tokens SET scope = 'openid' WHERE user_id = 1").run();
+  assert.equal((await (await call(env,base+'/mine')).json() as any).state,'workspace_not_allowed');
+  assert.equal((await call(env,base+'/mine','GET',undefined,1,true)).status,403,'a support session is refused');
+  assert.equal((await call(env,base+'/mine','GET',undefined,null)).status,401);
+ } finally {globalThis.fetch=old;db.close();}
 });

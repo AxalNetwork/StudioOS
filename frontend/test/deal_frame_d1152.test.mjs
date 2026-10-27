@@ -172,7 +172,8 @@ test('an investor\'s Overview: one h1, the key strip, the track at Diligence wit
     assert.equal(v.textOf('deal-next-action'), 'Open the diligence case');
     assert.match(v.textOf('deal-track-why'), /Step 3 of 8 · Diligence/);
     for (const id of ['deal-score-slot', 'deal-whats-new', 'deal-terms', 'deal-round', 'deal-next-step', 'deal-deck-slot']) assert.ok(v.has(id), id);
-    assert.match(v.textOf('deal-score-slot'), /not a score of zero/);
+    // D1257: the slot is the strip, read through the batch; a deal the batch does not return is closed, never a zero.
+    assert.match(v.textOf('deal-score-slot'), /opens once you are invited to this deal/);
     assert.equal(v.requests.filter((r) => /whats-new/.test(r)).length, 1);
   } finally { await v.close(); }
 });

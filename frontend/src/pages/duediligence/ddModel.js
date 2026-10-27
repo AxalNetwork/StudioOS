@@ -86,29 +86,10 @@ export const DECISION_WORD = Object.freeze({
 });
 export const decisionWord = (d) => DECISION_WORD[d] || 'Not recorded';
 
-/** Where each case tab's blocks are drawn today, until part 7 draws the tab itself. */
-export const ON_OVERVIEW = Object.freeze({
-  checklist: 'The checklist’s progress and each section’s items are on Overview today.',
-  flags: 'The findings and the severity heat map are on Overview today.',
-  requests: 'The requests to the subject, with Compose and Mark reviewed, are on Overview today.',
-  documents: 'Reviewer NDAs are recorded on each section on Overview today.',
-  'cross-checks': 'The external sources and their state are on Overview today.',
-  team: 'The reviewer queue and Assign are on Overview today.',
-  'sign-off': 'Each section’s verdict and sign-off line, and Generate report, are on Overview today.',
-  activity: 'The audit log opens from the case header today.',
-});
-
 export const NOT_YET = 'Not read here yet';
 
-/** What the canvas draws that no read carries yet. Never a zero, never "none". */
-export const WAITS = Object.freeze({
-  decision: 'The case decision, its reason and who recorded it are not stored yet (part 2).',
-  flags: 'Flags raised by hand, with an owner, a state and a resolution, are not stored yet (part 3).',
-  documents: 'Files the subject filed against a request, evidence on checklist items and NDA downloads are not read here yet (part 4).',
-  'cross-checks': 'Platform checks (KYC & KYB, Partner profiles) and what is taken on trust are not read here yet (part 5).',
-  team: 'Conflict declarations, invitation expiry and Remove are not stored yet (part 5).',
-  'sign-off': 'The deal team’s memo, the decision, the hand-off to IC and the list of past reports are not stored yet (part 2).',
-  activity: 'The activity timeline with filters is drawn in part 7; the audit log already reads it.',
-  checklist: 'Evidence per item and bulk changes are not stored yet (part 4).',
-  requests: 'Due dates, reminders and withdraw are not stored yet (part 4).',
-});
+/**
+ * What the canvas draws that no read carries yet. Never a zero, never "none".
+ * D1251 (#3266) drew the last of the case tabs, so nothing waits today.
+ */
+export const WAITS = Object.freeze({});

@@ -175,8 +175,8 @@ export default function DealRoomPage() {
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
-      {/* D1253 (#2428): SC1's panel; each scope waits for the per-deal read. */}
-      {tab === 'scorecard' && <VentureScorecard />}
+      {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. */}
+      {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}
       {/* D1261 (#2430): VR8, VR9's investor block; its read is PIPE-RAISE part 4. */}
       {tab === 'evidence' && <EvidenceSummary />}
       {tab === 'team' && <DealTeam deal={deal} />}

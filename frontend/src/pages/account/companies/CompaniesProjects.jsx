@@ -9,11 +9,12 @@ import { useCompanySwitch } from '../../../ui/CompanySwitcher';
 import { HeaderTab, Unreadable, actionPrimary, usePhoneWidth } from '../../../ui';
 import { ConfirmDialog, NewCompanyDialog } from './CompaniesDialogs';
 import CompanyLightbox from './CompanyLightbox';
+import { CompaniesMovedNotice } from './CompaniesMoved';
 import VentureLightbox from './VentureLightbox';
 import {
   ACTIVE_HERE, ACTIVE_LINE, ADMIN_LINE, ADVISOR_LINE, EXPLORER_LINE, LINE, SHARED_LINE, TAB_LABELS, TITLE,
   answerCopy, canCreate, companiesTabFor, companyCards, companyPathFor, companyUidFor, engagementRows, filterCards, filterVentures, fundGroups,
-  invitationRows, profileOf, projectGroups, tabCount, tabsFor,
+  invitationRows, profileOf, projectGroups, tabCount, tabsFor, SETTINGS_PATH, companySettingsPathFor,
 } from './companiesModel';
 
 /**
@@ -108,7 +109,7 @@ function CompanyCard({ c, profile, funds, phone }) {
           <span className={`text-[12px] ${MUTED}`}>{[c.stage, c.title].filter(Boolean).join(' · ') || 'Stage not recorded'}</span>
         </div>
         <span className="flex items-center gap-3">
-          {c.active && !phone ? <Link className={LINK} to="/company-settings">Company Settings</Link> : null}
+          {c.active && !phone ? <Link className={LINK} to={companySettingsPathFor(c.uid)}>Company Settings</Link> : null}
           <Link className={BTN} to={companyPathFor(c.uid)} data-testid={`company-open-${c.uid}`}>Open</Link>
         </span>
       </div>
@@ -273,7 +274,7 @@ function InvitationsTab({ read, retry, summary, onAnswer }) {
         <section className={`${CARD} flex flex-col gap-1.5 px-4 py-3`} data-testid="invitations-sent">
           <h3 className={`m-0 text-[13.5px] font-extrabold ${INK}`}>Invitations you sent</h3>
           {editing.map((c) => <span key={c.uid} className={`text-[12.5px] ${INK}`}>{c.company_name} · {c.pending_invitations.value} pending</span>)}
-          <p className={`m-0 text-[12px] ${MUTED}`}>Resend and revoke them in <Link className={LINK} to="/company-settings">Company Settings</Link> for the company that is active.</p>
+          <p className={`m-0 text-[12px] ${MUTED}`}>Resend and revoke them in <Link className={LINK} to={SETTINGS_PATH}>Company Settings</Link> for the company that is active.</p>
         </section>
       ) : null}
     </div>
@@ -334,7 +335,7 @@ function EngagementsTab({ read, retry }) {
 
 // ---------------------------------------------------------------- the pane
 
-export default function CompaniesProjects({ role }) {
+export default function CompaniesProjects({ role, entityRecords = null }) {
   const loc = useLocation();
   const phone = usePhoneWidth();
   const auth = useAuth();
@@ -394,6 +395,8 @@ export default function CompaniesProjects({ role }) {
         ) : null}
       </header>
 
+      <CompaniesMovedNotice />
+
       <nav className="flex gap-4 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" aria-label={TITLE} data-testid="companies-tabs">
         {visible.includes('companies') && <HeaderTab to="/account/companies" count={counts.companies} data-testid="companies-tab-companies">{TAB_LABELS.companies}</HeaderTab>}
         {visible.includes('projects') && <HeaderTab to="/account/companies/projects" count={counts.projects} data-testid="companies-tab-projects">{TAB_LABELS.projects}</HeaderTab>}
@@ -413,6 +416,8 @@ export default function CompaniesProjects({ role }) {
           <CompaniesTab read={companies} retry={retry} profile={profile} cards={cards} phone={phone}
             funds={profile === 'investor' && funds.status === 'ready' ? fundsByFirm : null} onNew={() => setAdding(true)} />
           {cards.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="companies-shared">{SHARED_LINE}</p> : null}
+          {/* D1140 (#3020, CMP19b): "Your companies", with each company's entity record, moved here from Profile and identity. */}
+          {entityRecords && profile !== 'explorer' && profile !== 'admin' && profile !== 'hq' ? <div data-testid="companies-entity-records">{entityRecords}</div> : null}
         </>
       )}
       {tab === 'projects' && <ProjectsTab read={projects} retry={retry} summary={companies.status === 'ready' ? companies.data : null} profile={profile} onOpen={setVenture} />}

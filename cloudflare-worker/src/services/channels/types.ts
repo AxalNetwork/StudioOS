@@ -6,6 +6,10 @@
  *   whatsapp    — the member's own business number (Cloud API, Embedded Signup)
  *   zoom        — a Zoom meeting an interview scheduled; its cloud transcript
  *   google_meet — a Meet call an interview scheduled; its transcript entries
+ *   google_docs — a Doc of interview notes the member chose (D1092, #2957);
+ *                 not a channel connection, so it has no secrets, webhook or
+ *                 job: `services/google/validateFeeds.ts` reads it through the
+ *                 member's Google Workspace grant
  *
  * An adapter (S19: telegram.ts, whatsapp.ts; S18: zoom.ts, googleMeet.ts) does
  * three things and nothing else: verify a request, normalise a payload into the
@@ -15,7 +19,7 @@
  * encryption and idempotency. An adapter never writes interview tables itself.
  */
 
-export const CHANNEL_PROVIDERS = ['telegram', 'whatsapp', 'zoom', 'google_meet'] as const;
+export const CHANNEL_PROVIDERS = ['telegram', 'whatsapp', 'zoom', 'google_meet', 'google_docs'] as const;
 export type ChannelProvider = typeof CHANNEL_PROVIDERS[number];
 export const MESSAGING_PROVIDERS = ['telegram', 'whatsapp'] as const;
 export type MessagingProvider = typeof MESSAGING_PROVIDERS[number];
@@ -78,6 +82,7 @@ export const PROVIDER_LABEL: Record<ChannelProvider, string> = {
   whatsapp: 'WhatsApp',
   zoom: 'Zoom',
   google_meet: 'Google Meet',
+  google_docs: 'Google Docs',
 };
 
 /** Limits shared by every messaging adapter (the paste-in path's own limits). */

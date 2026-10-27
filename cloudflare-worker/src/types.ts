@@ -274,6 +274,11 @@ export interface Env {
   GITHUB_APP_CLIENT_SECRET?: string;
   // D655 follow-up (#1884): public App slug; empty or invalid means no install link.
   GITHUB_APP_SLUG?: string;
+  // D1096 — the read-only Vercel Integration's client (Connectors) and its public slug;
+  // an empty or invalid slug means no install page, so Vercel reads as not set up.
+  VERCEL_CLIENT_ID?: string;
+  VERCEL_CLIENT_SECRET?: string;
+  VERCEL_INTEGRATION_SLUG?: string;
   // D542 — GitHub logins whose bounty labels the webhook acts on (services/bugBounties.ts).
   BOUNTY_GRANTERS?: string;
   PERSONA_API_KEY?: string;
