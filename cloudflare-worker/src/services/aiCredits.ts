@@ -170,6 +170,27 @@ export type TokenPackRefusal = 'token_pack_alone' | 'promo_not_for_token_packs' 
   | 'token_pack_daily_limit' | 'token_balance_ceiling' | 'token_packs_on_hold' | 'token_pack_first_purchase_only';
 export type TokenPackQuote = { priceId: string; packUid: string | null; creditMicrousd: number; bonusMicrousd: number; firstPurchaseOnly: boolean };
 
+const dollarsOf = (microusd: number) => `$${(microusd / AI_USD_SCALE).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+
+/**
+ * D1289 (#3372, CRP5): the sentence the checkout sheet shows for each pack
+ * refusal, in the canvas's words, with its status. Every code keeps its name,
+ * and every figure is read from `TOKEN_PACK_LIMITS`, never typed again here.
+ * A new refusal without a sentence fails `pack_refusals_d1289.test.ts`.
+ */
+export const TOKEN_PACK_REFUSALS: Readonly<Record<TokenPackRefusal, { status: 400 | 409; message: string }>> = Object.freeze({
+  token_pack_alone: { status: 400, message: 'A token pack is bought on its own, one at a time. Remove the other items and try again.' },
+  promo_not_for_token_packs: { status: 400, message: 'Promo codes don’t apply to token packs. Remove the code to buy this pack.' },
+  token_pack_not_on_sale: { status: 400, message: 'This pack is no longer on sale at this price. Choose a pack from the list.' },
+  token_pack_first_purchase_only: { status: 409, message: 'This pack is for your first token purchase, and you have bought tokens before. Choose another pack.' },
+  token_pack_daily_limit: { status: 400, message: `You’ve reached today’s limit of ${TOKEN_PACK_LIMITS.ordersPerDay} pack orders. Try again tomorrow.` },
+  token_balance_ceiling: { status: 400, message: `This pack would take your balance over ${dollarsOf(TOKEN_PACK_LIMITS.balanceCeilingMicrousd)}.` },
+  token_packs_on_hold: { status: 400, message: 'Buying tokens is paused on this account while a payment is reviewed. Contact support.' },
+});
+
+/** A pack refusal's body: its code and its sentence. Never a Stripe code or a figure from the member's account. */
+export const packRefusalBody = (code: TokenPackRefusal) => ({ error: code, message: TOKEN_PACK_REFUSALS[code].message });
+
 /**
  * D805 (#2243): the member's pack orders in the rolling window
  * (`TOKEN_PACK_LIMITS.orderWindowHours`), counted once, for the purchase check

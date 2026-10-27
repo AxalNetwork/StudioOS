@@ -33,6 +33,7 @@ import { ensureArticleCovers } from '../services/articleCovers';
 import { computeAuthorTrust } from '../services/newsTrust';
 import { lintForSend } from '../services/telegramRedactCheck';
 import { notifyArticle, notifyCommentReply } from '../services/articleNotify';
+import { hashEmail } from '../util/hashEmail';
 import { countDailyView } from '../services/articleMetrics';
 import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes, isValidArticleImageName } from '../services/newsRender';
 import { SECTORS, isValidSector } from '../data/sectors';
@@ -132,6 +133,8 @@ function authorArticleShape(row: any) {
     sector: row.sector,
     tags,
     status: row.status,
+    // D1292 — the author page asks whether the reader wrote it (the self-approval rule).
+    author_user_id: row.author_user_id ?? null,
     cover_url: row.cover_r2_key ? `/api/articles/cover/${row.id}` : null,
     submitted_at: row.submitted_at,
     reviewed_at: row.reviewed_at,
@@ -538,17 +541,59 @@ articles.put('/:id', async (c) => {
     }
   }
   if (Object.keys(patch).length === 0) return c.json({ error: 'no_changes' }, 400);
+  // D1292 — a submitted or approved text is the one an admin reads or
+  // approved. A field that matches what is stored changes nothing (the
+  // editor saves every field, the admin publish chain included), so only a
+  // real change counts, and a real change sends the article back to
+  // Submitted: an approval, and any publish time on it, was of a text that
+  // no longer exists.
+  const locked = row.status === 'submitted' || row.status === 'approved';
+  if (locked) {
+    for (const k of Object.keys(patch)) if ((patch[k] ?? null) === (row[k] ?? null)) delete patch[k];
+    if (Object.keys(patch).length === 0) return c.json({ article: authorArticleShape(row), returned_to_queue: null });
+  }
   if (patch.body_markdown !== undefined) {
     const wm = wordsAndMinutes(patch.body_markdown);
     patch.word_count = wm.words;
     patch.read_minutes = wm.minutes;
   }
   if (row.status === 'changes_requested') patch.status = 'draft';
+  if (locked) {
+    patch.status = 'submitted';
+    if (row.status === 'approved') Object.assign(patch, { approved_at: null, approved_by: null });
+    Object.assign(patch, { publish_at: null, publish_at_set_by: null });
+  }
+  // `patch`'s keys are the literals above. The status guard keeps an edit
+  // from landing on an article an admin moved (approved, published) since it
+  // was read.
   const sets = Object.keys(patch).map((k) => `${k} = ?`).join(', ');
-  const binds = [...Object.values(patch), new Date().toISOString(), id];
-  await c.env.DB.prepare(`UPDATE articles SET ${sets}, updated_at = ? WHERE id = ?`).bind(...binds).run();
+  const binds = [...Object.values(patch), new Date().toISOString(), id, row.status];
+  const res = await c.env.DB.prepare(`UPDATE articles SET ${sets}, updated_at = ? WHERE id = ? AND status = ?`).bind(...binds).run();
+  if (!res?.meta?.changes) {
+    return c.json({ error: 'status_changed', detail: 'This article moved on while you were editing. Reload it; nothing was saved.' }, 409);
+  }
   const updated: any = await c.env.DB.prepare(`SELECT * FROM articles WHERE id = ?`).bind(id).first();
-  return c.json({ article: authorArticleShape(updated) });
+  let returned: { from: string; publish_at_cleared: boolean } | null = null;
+  if (locked) {
+    returned = { from: row.status, publish_at_cleared: !!row.publish_at };
+    // One audit row for the transition: ids and statuses, never the text.
+    try {
+      await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)').bind(
+        'article.returned_to_submitted',
+        JSON.stringify({ article_id: id, from: row.status, to: 'submitted', publish_at_cleared: !!row.publish_at, fields: Object.keys(patch).length }),
+        await hashEmail(user.email || ''), user.id,
+      ).run();
+    } catch (e) {
+      console.warn('[articles] returned_to_submitted audit failed', (e as Error).message);
+    }
+    if (row.status === 'approved') {
+      await snapshotRevision(c.env, id, user.id, 'manual');
+      await notifyArticle(c.env, 'author_back_to_submitted', {
+        articleId: id, slug: updated.slug, title: updated.title, authorUserId: row.author_user_id,
+      });
+    }
+  }
+  return c.json({ article: authorArticleShape(updated), returned_to_queue: returned });
 });
 
 articles.post('/:id/submit', async (c) => {
