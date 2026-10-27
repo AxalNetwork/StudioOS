@@ -41,6 +41,7 @@ function freshDb() {
   exec(db, migration('068_news_articles.sql'));
   exec(db, migration('092_article_editor_fields.sql'));
   exec(db, migration('093_article_views.sql'));
+  exec(db, migration('636_article_featured_and_comment_threads.sql')); // D1293: replies, resolved_by, edited_at
   const article = db.prepare(
     `INSERT INTO articles (slug, title, status, author_user_id, body_markdown) VALUES ('round-note', 'Round note', 'in_review', ?, '# Hello')`,
   ).run(AUTHOR);
