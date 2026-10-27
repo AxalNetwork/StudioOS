@@ -12,8 +12,9 @@
  *   partner                      — no blanket access (#2460; tie pending #2438)
  *   anyone else                  — 403
  *
- * Response shapes match the FastAPI source EXACTLY so FinancialsPage
- * needs no changes (modulo the .xlsx → .csv export tweak documented in
+ * Response shapes match the FastAPI source EXACTLY. FinancialsPage was
+ * built on them; D1180 retired it, and Use of funds › Runway › Forecast
+ * reads and saves the same shapes (modulo the .xlsx → .csv export tweak documented in
  * the export handler below).
  */
 import { Hono } from 'hono';

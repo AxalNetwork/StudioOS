@@ -158,7 +158,8 @@ test('D1160: a role\'s forward is counted by the forward itself, never by the ad
 });
 
 test('D1109: the Data room\'s old addresses are counted by their forward, never by the address bar, and land on the tool', async () => {
-  assert.deepEqual(FORWARD_REDIRECTS.map((r) => r.path), ['/raise/data-room?mode=workspace', '/raise/data-room?mode=access', '/raise/data-room/:id']);
+  // D1180 (#3107) adds the retired Capital workspace's default tab; its own test is below.
+  assert.deepEqual(FORWARD_REDIRECTS.map((r) => r.path), ['/raise/data-room?mode=workspace', '/raise/data-room?mode=access', '/raise/data-room/:id', '/raise/capital?mode=workspace']);
   for (const { path } of FORWARD_REDIRECTS) assert.ok(isRedirectKey(`redirect:${path}`), `${path} is countable`);
   // The tool's own pages share these shapes, so the address bar counts none of them.
   for (const page of ['/raise/data-room', '/raise/data-room/files', '/raise/data-room/12']) assert.equal(redirectPatternFor(page, '?mode=workspace'), null, page);
