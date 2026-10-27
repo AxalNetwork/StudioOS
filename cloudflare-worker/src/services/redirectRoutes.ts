@@ -57,10 +57,14 @@ export const ADMIN_TAB_REDIRECTS: readonly RedirectRoute[] = Object.freeze([
  * `/funds` and `/funds/performance` forward an admin to Fund administration
  * and remain an investor's pages, so the address-bar beacon skips them; the
  * forward itself (`FundOpsRedirect`) sends the key, counted until #2319.
+ * D1243 (#3256): `/pipeline` forwards an investor to Deal flow's table and
+ * stays the partner's bucket and the founder's and an admin's board; its
+ * forward (`DealsPipelineRedirect`) sends the key.
  */
-export const ROLE_REDIRECTS: readonly (RedirectRoute & { role: 'admin' })[] = Object.freeze([
+export const ROLE_REDIRECTS: readonly (RedirectRoute & { role: 'admin' | 'investor' })[] = Object.freeze([
   { path: '/funds', role: 'admin' },
   { path: '/funds/performance', role: 'admin' },
+  { path: '/pipeline', role: 'investor' },
 ]);
 
 /**
@@ -130,6 +134,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/grow/capital-match' }, // D1194: → /raise/capital-relationships/match?moved=match
   { path: '/raise/capital-match' }, // D1194: → /raise/capital-relationships/match?moved=match
   { path: '/raise/capital/pipeline' }, // D1194: → /raise/capital-relationships/pipeline?moved=pipeline
+  { path: '/deals/pipeline' }, // D1243 (#3256): the Pipeline zone retired → /deals?view=table, query kept
   { path: '/grow/brand' }, // #2343: Grow's Brand page folded into /build/brand
   { path: '/build/discovery' }, // #2335: → Validate · Customer research
   { path: '/build/metrics' }, // #2336: → /build/kpi

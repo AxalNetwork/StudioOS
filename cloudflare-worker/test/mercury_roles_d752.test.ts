@@ -93,13 +93,13 @@ test('publicDescriptor serves the investor\'s variant on HQ and never the audien
   assert.equal(own.description, PERSONAL_MERCURY.investor.description);
   assert.deepEqual(own.capabilities, ['Capacity', 'Closing proposals', 'Fund calls, accounting and reporting proposals', 'Proof of funds']);
   assert.deepEqual(own.permissions, PERSONAL_MERCURY.investor.permissions);
-  assert.deepEqual(own.feeds, ['deals_pipeline', 'deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
+  assert.deepEqual(own.feeds, ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
   assert.equal(own.has_implementation, true);
   for (const field of ['preview_roles', 'personal_roles', 'personal_hq_only_roles']) assert.ok(!(field in own), field);
   const founder = publicDescriptor(mercury, { role: 'founder', hq: false }) as any;
   assert.equal(founder.description, FOUNDER_DESCRIPTION);
   assert.deepEqual(founder.feeds, mercuryFedModules('founder'));
-  assert.deepEqual(connectorFeeds('mercury', 'investor'), ['deals_pipeline', 'deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
+  assert.deepEqual(connectorFeeds('mercury', 'investor'), ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
   assert.deepEqual(connectorFeeds('mercury', 'founder'), mercuryFedModules('founder'));
   assert.ok(connectorFeeds('mercury', 'founder').includes('revenue_and_traction'));
   assert.deepEqual(connectorFeeds('mercury', 'partner'), []);
