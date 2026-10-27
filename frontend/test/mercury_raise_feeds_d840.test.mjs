@@ -33,7 +33,8 @@ const SLUGS = ['fundraising-readiness', 'investor-narrative', 'pitch-deck', 'dat
 
 test('every Raise module draws From Mercury from its read, and nothing without the part', () => {
   // Mutations checked: the part map dropped for a module; the part drawn with no `parts.mercury`.
-  assert.match(ROUTE, /MODULES\.raise\.map\(\(m\) => \[m\.slug, \(data, ctx\) => mercuryPart\(m\.slug, data, ctx\)\]\)/);
+  // D1267 (#3290): each module's part is From Mercury, then its Evidence part.
+  assert.match(ROUTE, /MODULES\.raise\.map\(\(m\) => \[m\.slug, \(data, ctx\) => \(\s*<>\s*\{mercuryPart\(m\.slug, data, ctx\)\}/);
   assert.match(ROUTE, /\{mercuryPart\('capital-relationships', data, ctx\)\}/, 'beside the calls and the receipt matches');
   assert.match(ROUTE, /part=\{data\?\.parts\?\.mercury\}/);
   for (const slug of SLUGS) assert.equal(render({ slug, part: undefined }), '', slug);

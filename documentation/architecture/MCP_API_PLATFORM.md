@@ -411,6 +411,7 @@ The UI task for AI tokens, added 2026-10-26 (S26):
 | Task | Decision | PR | Where it is |
 |---|---|---|---|
 | #2482 Usage › AI tokens (TOKB), step 1 | D1277 | the step-1 PR | in review; step 2 waits for #3304 (D1278) |
+| #2481 Builder › API usage and Activity (APIU), S17 | D1320 | the APIU PR | in review; built on #3477 (D1315); adds `events/:execution_id`, `grant=`, `outcome=failed` and `group=category` to D845's reads |
 
 The UI task for API keys, added 2026-10-27 (S22):
 

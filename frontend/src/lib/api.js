@@ -131,6 +131,7 @@ export * from './api/programs.js';
 export * from './api/promoUsage.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
+export * from './api/publish.js';
 export * from './api/railPrefs.js';
 export * from './api/railProposals.js';
 export * from './api/raiseEvidence.js';
@@ -3443,9 +3444,6 @@ export const api = {
   updateNotificationSettings: (data) => request('/settings/notifications', { method: 'PUT', body: JSON.stringify(data) }),
   getSecuritySettings: () => request('/settings/security'),
   getIntegrationSettings: () => request('/settings/integrations'),
-  getDeveloperSettings: () => request('/settings/developer'),
-  updateDeveloperSettings: (data) => request('/settings/developer', { method: 'PUT', body: JSON.stringify(data) }),
-  resyncDeveloperIndices: () => request('/settings/developer/resync-indices', { method: 'POST', body: JSON.stringify({}) }),
   listFounderInvites: () => request('/settings/founder/invites'),
   createFounderInvite: (data) =>
     request('/settings/founder/invites', { method: 'POST', body: JSON.stringify(data) }),

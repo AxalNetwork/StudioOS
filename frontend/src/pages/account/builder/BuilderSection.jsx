@@ -14,6 +14,9 @@ import ApiKeysPage from './ApiKeysPage';
 import { activeSupportSession } from '../../../lib/supportSession';
 import { useViewMode } from '../../../contexts/ViewModeContext';
 import { useAuth } from '../../../hooks/useAuthSync';
+// D1320 (#2481): API usage, and Activity's request history with its drawer.
+import ApiUsagePage from './ApiUsagePage';
+import ActivityPage from './ActivityPage';
 
 const CARD = 'rounded-axal-lg border border-axal-hairline bg-white p-5 dark:border-gray-700 dark:bg-gray-900';
 const H3 = 'm-0 text-[15px] font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100';
@@ -27,11 +30,8 @@ export const WAITS = Object.freeze({
   tools: 'The tools on axal.vc/mcp, who can call them and what each may do. #2479 draws them from the tool read (D846).',
   limits: 'The server’s own limits per connection and per call. #2479 draws them from the overview read (D1316, #3474).',
   services: 'The services behind your tools and how each is doing. #2479 draws them from the connector reads and their health (D848).',
-  usage: 'Requests and AI tokens by day, where the tokens went, and your limits and alerts. #2481 draws them from GET /api/developer/usage.',
-  activity: 'Every call your keys and assistants made, with its outcome. #2481 draws it from GET /api/developer/usage/events.',
   assistant: 'One assistant: where it signs in from, what it may do, its companies and its recent calls. #2479 draws it (MCPX5).',
   service: 'One service: its connection, its health and its last checks. #2479 draws it (MCPX3).',
-  request: 'One request: its tool, company, outcome and cost. #2481 draws it (APIU4).',
 });
 
 export function Wait({ id, title, bare = false }) {
@@ -44,7 +44,7 @@ export function Wait({ id, title, bare = false }) {
   );
 }
 
-const DRAWER_TITLES = { assistant: 'AI assistant', service: 'Service', request: 'Request' };
+const DRAWER_TITLES = { assistant: 'AI assistant', service: 'Service' };
 
 /** The once-per-member notice that AI assistants left Connectors (DEV14, MCPX13). */
 function MovedNotice({ storage }) {
@@ -134,13 +134,14 @@ export default function BuilderSection({ view = { page: 'services', drawer: null
       {page === 'services' && !drawer && <MovedNotice storage={storage} />}
       {page === 'services' && <ServicesPage />}
       {page === 'keys' && <KeysPage drawerUid={drawer?.kind === 'key' ? drawer.id : null} />}
-      {page === 'usage' && <Wait id="usage" title="Requests and AI tokens by day" />}
-      {page === 'activity' && <Wait id="activity" title="Calls by day" />}
+      {page === 'usage' && <ApiUsagePage />}
+      {/* One mount for the log and its drawer, so opening and closing a request keeps the log as read. */}
+      {page === 'activity' && <ActivityPage drawerId={drawer?.kind === 'request' ? drawer.id : null} />}
       {/* A waiting drawer's address opens the shared Sheet over its page
-          (560px). The API keys drawer is the keys page's own. Closing returns
-          to the page's address. Builder has no Eadwyn rail, so the sheet
-          meets the window's edge. */}
-      {drawer && drawer.kind !== 'key' && (
+          (560px). The API keys drawer is the keys page's own, and a request
+          is Activity's own drawer (D1320). Closing returns to the page's
+          address. Builder has no Eadwyn rail, so the sheet meets the window's edge. */}
+      {drawer && drawer.kind !== 'key' && drawer.kind !== 'request' && (
         <Sheet eyebrow={builderTrailFor(view)} title={DRAWER_TITLES[drawer.kind]} width={560}
           testId={`builder-drawer-${drawer.kind}`} onClose={() => navigate(builderPathFor({ page }))}>
           <Wait id={drawer.kind} bare />
