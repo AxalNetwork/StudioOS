@@ -22,10 +22,15 @@
 //   keepDigest       POST   /sessions/:id/digest/keep   keep the summary draft as it stands → { digest } (D757, #1924)
 //   editDigest       PATCH  /sessions/:id/digest        { overview?, next_steps?, key_quotes? } → { digest }; a quote is removed, never rewritten
 //   setSpeaker       PATCH  /sessions/:id/segments/:segId
+//   renameSpeaker    PATCH  /sessions/:id/speakers      D878 (#2525): { from, to } in every passage → { speaker_label, renamed }
 //   sessionReceipt   GET    /sessions/:id/receipt
 //   deleteSession    DELETE /sessions/:id
 // D690 (#1692), for D697's record (#1659):
 //   audio            GET    /sessions/:id/audio         { parts: [{ seq, url, mime, start_ms, expires_at }] }, one single-use signed URL per chunk
+// D877 (#2524), drawn by D878 (#2525):
+//   audioRetention   GET    /sessions/audio-retention   { days, chosen, default_days, min_days, max_days }
+//   setAudioRetention PUT   /sessions/audio-retention   { days: 1..3650 | null } → { days, chosen }
+//   removeAudio      DELETE /sessions/:id/audio         the audio only; the transcript stays
 // D658 (#1494), the review step:
 //   placements       GET    /sessions/:id/placements    every run's placements, and compare
 //   structure        POST   /sessions/:id/structure     { model? } → a new run
@@ -103,6 +108,13 @@ export const interviewSessionsApi = {
   setSpeaker: (id, segmentId, speakerLabel) => request(`${P}/sessions/${enc(id)}/segments/${enc(segmentId)}`, {
     method: 'PATCH', body: JSON.stringify({ speaker_label: speakerLabel }),
   }),
+  /** D878: one speaker's name in every passage of the session. */
+  renameSpeaker: (id, from, to) => request(`${P}/sessions/${enc(id)}/speakers`, {
+    method: 'PATCH', body: JSON.stringify({ from, to }),
+  }),
+  audioRetention: () => request(`${P}/sessions/audio-retention`),
+  setAudioRetention: (days) => request(`${P}/sessions/audio-retention`, { method: 'PUT', body: JSON.stringify({ days: days == null ? null : Number(days) }) }),
+  removeAudio: (id) => request(`${P}/sessions/${enc(id)}/audio`, { method: 'DELETE' }),
   receipt: (id) => request(`${P}/sessions/${enc(id)}/receipt`),
   /** One signed, single-use download per recorded chunk (D690): fetch each once, and ask again for fresh URLs. */
   audio: (id) => request(`${P}/sessions/${enc(id)}/audio`),
