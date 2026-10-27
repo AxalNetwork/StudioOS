@@ -5,7 +5,7 @@ The scope strip and the scorecard panel from the owner's canvas "Venture scoreca
 | File | What it is |
 |---|---|
 | `scorecardModel.js` | The eleven scopes in their one order, the evidence grades, the Source-to-grade mapping, the band and risk words, the scope strip's bar rule and bar text, the pages' addresses, and the words of every block no read carries yet. D1257: `scopeOf`, `inputOf`, `gradeMix`, `panelOf` and `stripOf` turn the Worker's reads into what the panel and the strip draw |
-| `Scorecard.jsx` | `ScopeStrip` (eleven bars, no numbers), `VentureScorecard` (SC1's panel, reading `GET /deal/:dealId`, D1257), `ScopeDrawer` (SC2–SC5, SC22), `useScopeStrips`, `DealStrip` and `DealScoreStrip` (the batch, SC6 and DL24a), and `ScorecardWait` |
+| `Scorecard.jsx` | `ScopeStrip` (eleven bars, no numbers), `VentureScorecard` (SC1's panel, reading `GET /deal/:dealId`, D1257), `ScopeDrawer` (SC2–SC5, SC22; Risk's drawer draws the ten venture-risk layers as sub-rows, D1260), `useScopeStrips`, `DealStrip` and `DealScoreStrip` (the batch, SC6 and DL24a), and `ScorecardWait` |
 | `founderModel.js` | D1258: the founder's, staff's and an advisor's rows and inputs, reviews, weighting, sharing changes, what investors see and the trajectory, as pure rules |
 | `FounderScorecard.jsx` | D1258: `ScopeList` (inputs, Ask to correct, Add review), `InvestorPreview`, `SharingCard` and `Trajectory` |
 | `ScorecardDialogs.jsx` | D1258: Ask to correct (SC9), Add review (SC10), Your weighting (SC7) and a sharing change, each an in-page dialog |

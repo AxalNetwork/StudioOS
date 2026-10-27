@@ -52,138 +52,60 @@ function id2() {
   return CANVAS.slice(a, b);
 }
 
-/** `score_snapshots`' CREATE TABLE, verbatim. The claim is checked, not repeated. */
-function snapshotDdl() {
-  const at = SCHEMA.indexOf('CREATE TABLE score_snapshots (');
-  assert.ok(at >= 0, 'score_snapshots is no longer in the baseline');
-  const end = SCHEMA.indexOf(');', at);
-  assert.ok(end > at, 'score_snapshots’ definition is unterminated');
-  return SCHEMA.slice(at, end);
+/** The screening handler alone, so a score read elsewhere in deals.ts cannot satisfy or fail it. */
+function screeningHandler() {
+  const at = ROUTE.indexOf("deals.get('/screening'");
+  assert.ok(at >= 0, 'the screening route is gone');
+  return ROUTE.slice(at, ROUTE.indexOf('\ndeals.', at + 10));
 }
 
-test('the six dimensions the page claims are the six the schema stores', () => {
-  // THE CLAIM THAT REPLACED A FALSE ONE, verified against the column list
-  // rather than asserted. Every dimension must have a `<dim>_total` column.
-  const ddl = snapshotDdl();
-  const DIMS = ['market', 'team', 'product', 'capital', 'fit', 'distribution'];
-  for (const d of DIMS) {
-    assert.ok(ddl.includes(`${d}_total`), `score_snapshots has no ${d}_total — recheck the rubric claim`);
+test('D1260: Screening reads the venture scorecard, and no Lab score reaches it', () => {
+  // Owner question 8 A of #2428: the Lab scorer is practice; Screening reads the scorecard.
+  const handler = screeningHandler();
+  for (const lab of [/score_snapshots/, /total_score/, /\btier\b/, /anomaly_flags/, /getVerifiedLatestSnapshots/, /RUBRIC/]) {
+    assert.doesNotMatch(handler, lab, `the screening route reads the Lab scorer again (${lab})`);
   }
-  assert.ok(ddl.includes('total_score') && ddl.includes('tier'));
-  // The artboard asks for six, and six is what is there.
-  assert.match(id2(), /label:'Rubric', value:'6 dims'/);
-  const at = ROUTE.indexOf('const RUBRIC = [');
-  assert.ok(at >= 0, 'the rubric is no longer declared in the route');
-  const block = ROUTE.slice(at, ROUTE.indexOf('];', at));
-  assert.deepEqual(
-    [...block.matchAll(/key: '(\w+)'/g)].map((m) => m[1]),
-    DIMS,
-    'the route’s rubric drifted from the columns the scorer writes',
-  );
+  assert.match(handler, /desk = \{\s*available: true,/, 'the desk is no longer sent');
+  for (const lab of [/total_score/, /\.tier\b/, /anomaly|flags\?\./, /dimensions/, /ZoneDraft/]) {
+    assert.doesNotMatch(Z, lab, `the page draws the Lab scorer again (${lab})`);
+  }
+  assert.match(Z, /const strips = useScopeStrips\(dealRows\.map\(\(r\) => r\.deal_id\)\)/, 'the strips are not read through the batch');
+  assert.match(Z, /<DealStrip read=\{strips\} dealId=\{r\.deal_id\} \/>/, 'a row draws something other than its scorecard strip');
+  // The memo that cited the Lab scorer for every deal, to any reader, is retired with it.
+  assert.ok(!RESEARCH.includes("'deals/screening': {"), 'the screening memo surface is back');
 });
 
-test('a flag store exists and is read, rather than being called absent', () => {
-  const ddl = snapshotDdl();
-  assert.ok(ddl.includes('anomaly_flags'), 'score_snapshots no longer carries anomaly_flags');
-  assert.ok(ddl.includes('admin_review_status'), 'score_snapshots no longer carries a review status');
-  assert.match(ROUTE, /r\.admin_review_status \?\? null/, 'the route stopped reading the review status');
-  assert.match(ROUTE, /review_status === 'flagged'/, 'nothing counts an open flag');
-  assert.match(Z, /flags\?\.available \? String\(flags\.open\)/, 'the strip stopped showing open flags');
-  // A flag is shown with what it IS, not as a colour nobody can act on.
-  assert.match(Z, /\$\{f\.type\} · \$\{f\.severity\}/, 'a flag renders without its type and severity');
-  assert.match(ZONE, /never a verdict on the company/i,
-    'the page no longer says what a flag is not, so it reads as a finding about the company');
-  assert.match(ZONE, /the scorer disagreeing with itself/i,
-    'the page no longer says what a flag actually is');
-});
-
-test('the two unbuilt reasons are the narrow true ones, not the wide false ones', () => {
+test('D1260: the ops row and chips are the scorecard\'s, not the Lab scorer\'s', () => {
   const ops = INVESTOR_ZONE_ACTIONS['deals/screening'];
-  assert.ok(Array.isArray(ops) && ops.length === 3, 'the screening ops row changed shape');
-  const byLabel = Object.fromEntries(ops.map((o) => [o.label, o]));
-  // THE EXACT SENTENCES THAT WERE WRONG. Either coming back is the regression.
-  for (const [label, banned] of [
-    ['New batch run', /no scoring run is stored/],
-    ['Edit rubric', /^no rubric is stored$/],
-  ]) {
-    assert.doesNotMatch(byLabel[label].unbuilt, banned,
-      `${label} is back to the reason the schema contradicts`);
-  }
-  // And the replacements have to name the real, narrower gap.
-  assert.match(byLabel['New batch run'].unbuilt, /one project/, 'the batching gap is no longer named');
-  assert.match(byLabel['Edit rubric'].unbuilt, /weights/, 'the weighting gap is no longer named');
-  assert.match(byLabel['Edit rubric'].unbuilt, /six dimensions are real/,
-    'the row no longer concedes that the dimensions exist');
-  assert.equal(byLabel.Export.kind, 'export');
-});
-
-test('every chip is live, matches the artboard, and narrows something', () => {
-  const board = id2();
-  const labels = /fil\(\[([^\]]*)\]/.exec(board);
+  assert.deepEqual(ops.map((o) => o.label), ['New batch run', 'Edit rubric', 'Export'], 'the ops row drifted from the canvas');
+  const by = Object.fromEntries(ops.map((o) => [o.label, o]));
+  // The two the Lab scorer offered stay unbuilt, for the scorecard's reasons, never the old ones.
+  assert.match(by['New batch run'].unbuilt, /recomputes each venture from its own records/);
+  assert.match(by['Edit rubric'].unbuilt, /chosen in Deal flow’s Your weighting dialog/);
+  for (const o of ops.slice(0, 2)) assert.doesNotMatch(o.unbuilt, /six dimensions are real|rubric answers/, `${o.label} kept the Lab scorer's reason`);
+  assert.equal(by.Export.kind, 'export');
+  // The artboard still draws four chips; two of them were the Lab scorer's.
+  const labels = /fil\(\[([^\]]*)\]/.exec(id2());
   assert.ok(labels, 'the ID2 artboard no longer declares a filter row');
-  const canvasLabels = labels[1].split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
-  assert.deepEqual(canvasLabels, ['Scored', 'Rubric', 'Red flags', 'Pass reasons']);
-
-  // The one memo that chooses what the instrument draws.
-  const at = Z.indexOf('const rows = useMemo(() => {');
-  assert.ok(at >= 0, 'the narrowing memo is gone');
-  const narrowing = Z.slice(at, Z.indexOf('}, [', at));
-
+  assert.deepEqual(labels[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')), ['Scored', 'Rubric', 'Red flags', 'Pass reasons']);
   const rows = INVESTOR_ZONE_FILTERS['deals/screening'];
-  assert.ok(Array.isArray(rows), 'the screening chip row is gone from the table');
-  assert.deepEqual(rows.map((r) => r.canvas), canvasLabels, 'the chip row drifted from the artboard');
-  for (const r of rows) {
-    assert.ok(r.key, `${r.canvas} is not a live key — this zone has a store for all four`);
-    assert.ok(!r.unbuilt, `${r.canvas} is live and unbuilt at once`);
-    // READ INSIDE THE NARROWING MEMO, not anywhere in the file. `view ===
-    // 'flags'` also appears in a render condition, so deleting the branch that
-    // actually narrows left the string present and the mutation escaped.
-    assert.ok(narrowing.includes(`view === '${r.key}'`) || Z.includes(`useState('${r.key}')`),
-      `the ${r.key} chip is never read where the rows are chosen, so it selects nothing`);
-  }
-  // The instrument draws the narrowed set. There are now TWO narrowings — the
-  // chip and, on the two per-deal views, search — so what it draws is
-  // `visible`. Pinning only that would be weaker than what was here, because
-  // a `visible` built from `scoredRows` directly would satisfy it while
-  // silently ignoring the chip. So pin the composition: search narrows the
-  // chip's output, never the raw list.
+  assert.deepEqual(rows.map((r) => [r.canvas, r.key ?? null]), [['Scored', 'scorecards'], ['Rubric', null], ['Red flags', null], ['Pass reasons', 'passes']]);
+  for (const r of rows.filter((x) => !x.key)) assert.match(r.unbuilt, /Lab scorer’s/, `${r.canvas} lost its reason`);
+  const at = Z.indexOf('const rows = useMemo(');
+  assert.ok(at >= 0, 'the narrowing memo is gone');
+  assert.match(Z.slice(at, Z.indexOf('}, [', at)), /view === 'scorecards'/, 'the Scorecards chip selects nothing');
   assert.match(Z, /rows=\{visible\.map/, 'the instrument draws something other than the narrowed set');
-  const vAt = Z.indexOf('const visible = useMemo(');
-  assert.ok(vAt >= 0, 'the search narrowing is gone');
-  const search = Z.slice(vAt, Z.indexOf('}, [', vAt));
-  assert.match(search, /\brows\b/, 'search reads past the chip instead of narrowing what it chose');
-  assert.doesNotMatch(search, /\bscoredRows\b|\bflagRows\b/,
-    'search bypasses the chip by reaching for a raw list');
 });
 
-test('a sandbox run is excluded and the exclusion is said out loud', () => {
-  // A rehearsal that moved the desk's numbers would make them untrustworthy.
-  assert.match(ROUTE, /WHERE is_sandbox = 0/, 'sandbox snapshots are back in the desk’s counts');
-  assert.match(ROUTE, /sandbox_excluded: true/);
-  assert.match(ROUTE, /A rehearsal is not a screening result/);
-  assert.match(Z, /sandbox runs excluded/, 'the strip no longer says what it left out');
-  // And the AI band reads the same way, or the memo would cite a rehearsal.
-  const at = RESEARCH.indexOf("'deals/screening': {");
-  assert.ok(at >= 0, 'the screening surface is not allow-listed, so the band 400s');
-  const surface = RESEARCH.slice(at, RESEARCH.indexOf('\n  },', at));
-  assert.match(surface, /is_sandbox = 0/, 'the memo can be drafted from a practice run');
-});
-
-test('an unscored dimension is never a zero, on the page or in the prompt', () => {
-  // The single most likely wrong answer on this artboard: six numbers with a
-  // gap, filled in as 0. A zero is a verdict nobody gave.
+test('D1260: a scorecard with nothing to show is never a zero', () => {
   assert.doesNotMatch(Z, /\|\|\s*0\b/, 'an absent figure falls back to 0');
   assert.doesNotMatch(Z, /\?\?\s*0\b/, 'an absent figure falls back to 0');
-  assert.match(Z, /r\.total_score === null \? \{ nr: true \}/, 'an unscored deal renders as a zero');
-  assert.match(ROUTE, /\? null : Number\(r\[`\$\{dim\.key\}_total`\]\)/,
-    'a missing dimension total is coerced to a number');
-  const at = RESEARCH.indexOf("'deals/screening': {");
-  const surface = RESEARCH.slice(at, RESEARCH.indexOf('\n  },', at));
-  assert.match(surface, /Do NOT score it zero/, 'the prompt lets a silent dimension be scored zero');
-  assert.match(surface, /NOT SCORED/, 'the gathered row hides an unscored dimension');
-  // And it must not invent a citation the product cannot support.
-  assert.match(surface, /Never cite a page, a slide or a document/,
-    'the memo may cite a page number nothing records');
+  // An unreadable desk says so, rather than drawing no deals.
+  assert.match(Z, /data-testid="screening-deals-unreadable"/);
+  assert.match(ZONE, /That is not a claim that there are none/);
+  // The scorecards tile counts only open scorecards with a scored scope, and is Not recorded while unread.
+  assert.match(Z, /s\.state === 'open' && s\.scopes\.some\(\(x\) => x\.state === 'scored'\)/);
+  assert.match(Z, /value=\{scoredCount === null \? null :/);
 });
 
 test('the pass taxonomy is the artboard’s instrument, with its re-entry conditions', () => {
