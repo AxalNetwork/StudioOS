@@ -84,13 +84,15 @@ test('the strip: unread is one outlined strip read as Not read here yet; locked 
   assert.ok(locked.includes('data-testid="scope-strip-locked"') && !locked.includes('height:'), 'a locked strip draws no bar');
 });
 
-test('the method page draws the scopes and grades, and says model v1 is not published; HQ waits on each part', () => {
+test('the method page draws the scopes and grades, and says model v1 is not published; HQ reads its part 6 blocks and waits on part 3', () => {
   const m = html(h(ScoringMethodPage));
   assert.match(m, /It is not published yet, so no venture carries a score from it today\./);
   for (const s of SCOPE_LABELS) assert.ok(m.includes(s), s);
   assert.match(m, /Measured<\/b> · 1\.0/);
   const hq = html(h(HqScoringPage));
-  for (const id of ['models', 'indices', 'fairness']) assert.ok(hq.includes(`data-testid="scorecard-wait-${id}"`), id);
+  // D1259 (part 6) reads the model versions and the indices; only the fairness check still waits, on part 3.
+  assert.ok(hq.includes('data-testid="scorecard-wait-fairness"'));
+  for (const id of ['models', 'indices']) assert.ok(!hq.includes(`data-testid="scorecard-wait-${id}"`) && hq.includes(`data-testid="hq-scoring-${id}-loading"`), id);
   assert.match(hq, /HQ only/);
 });
 
