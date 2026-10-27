@@ -18,7 +18,34 @@ export const LOVABLE_WORDS = {
   notChecked: 'Not checked yet. Check now reads the address once.',
   hostedOnVercel: 'Hosted on Vercel',
   remove: 'Remove…',
+  // D1312 (#3432): LV5's "With a sign-up address".
+  signupTitle: 'With a sign-up address',
+  signupNote: 'Point the app’s form at this address. Only the count is kept, never the names or emails.',
+  signupNone: 'No sign-up address yet. Make one, and the app’s form can count sign-ups here.',
+  signupMake: 'Make a sign-up address',
+  signupOff: 'Turn off…',
+  signupUnreadable: 'The sign-up address could not be read. That is not the same as none.',
+  copy: 'Copy',
+  copied: 'Copied',
 };
+
+/**
+ * D1312: what a slot's sign-up block draws: `none` (Validate gives no field,
+ * e.g. Build), `unreadable`, `empty` (no address), or `live` with the count and,
+ * for the venture's writers only, the address. The count is never invented:
+ * a count the read did not carry is "Not recorded".
+ */
+export function signupView(slot, writer) {
+  if (!slot || !('signup' in slot)) return { kind: 'none' };
+  if (slot.signup_unreadable) return { kind: 'unreadable' };
+  const s = slot.signup;
+  if (!s || !s.live) return { kind: 'empty', canMake: !!writer };
+  const n = Number.isSafeInteger(s.count) ? s.count : null;
+  return {
+    kind: 'live', canChange: !!writer, address: typeof s.address === 'string' ? s.address : null,
+    count: n == null ? 'Not recorded: the count could not be read' : `${n} ${n === 1 ? 'sign-up' : 'sign-ups'} received`,
+  };
+}
 
 /** "2026-10-23 14:05" (UTC), the canvas's form; null when there is no time. */
 export function checkedAt(iso) {

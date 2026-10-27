@@ -72,6 +72,8 @@ export function csrfMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
 
     // Task #2 (IB) — RFC 8058 one-click unsubscribe exemption.
     if (CSRF_PATH_EXEMPT.has(c.req.path)) return next();
+    // D1312 — a Lovable page's sign-up form posts from another site; the token in the address is the authorisation.
+    if (c.req.path.startsWith('/api/validate/lovable-signups/')) return next();
 
     // Bearer flow: no ambient credentials → no CSRF concern.
     const authHeader = c.req.header('Authorization');

@@ -10,6 +10,7 @@
  * A part that cannot be read is `{ state: 'unreadable' }`, never an empty
  * list: an empty list says "No app linked yet", which would be false.
  */
+import { signupViews, type SignupView } from './lovable/signups';
 import type { Env } from '../types';
 import { isSafePublicUrl } from './webFetch';
 import { hostOf, liveLineOwner } from './liveHost';
@@ -72,8 +73,10 @@ export function linkView(row: LinkRow, vercelProductionDomains: ReadonlyArray<st
   };
 }
 
-export type LovableSlot = { record_id: number; label: string; link: LinkView | null };
-export type LovablePart = { state: 'ok'; slots: LovableSlot[] } | { state: 'unreadable' };
+/** D1312: an experiment's sign-up address (`services/lovable/signups.ts`); absent on Build, `null` when it has none. */
+export type LovableSlot = { record_id: number; label: string; link: LinkView | null; signup?: SignupView | null; signup_unreadable?: true };
+/** `signup_writer` (D1312, Validate only): whether this reader may make or turn off a sign-up address. */
+export type LovablePart = { state: 'ok'; slots: LovableSlot[]; signup_writer?: boolean } | { state: 'unreadable' };
 
 /**
  * The Vercel production domains that own a Live line on this project: each
@@ -95,7 +98,7 @@ export async function vercelProductionDomains(env: Env, projectId: number): Prom
 
 /** One slot per record, each with its link or none. */
 export async function lovablePart(env: Env, projectId: number, cycle: LinkCycle,
-  records: ReadonlyArray<{ id: number; label: string }>): Promise<LovablePart> {
+  records: ReadonlyArray<{ id: number; label: string }>, opts: { writer?: boolean } = {}): Promise<LovablePart> {
   try {
     const target = LINK_TARGETS[cycle];
     const rows = (await env.DB.prepare(
@@ -104,11 +107,21 @@ export async function lovablePart(env: Env, projectId: number, cycle: LinkCycle,
     ).bind(projectId, target.module, target.recordTable).all<LinkRow>()).results || [];
     const domains = await vercelProductionDomains(env, projectId);
     const byRecord = new Map(rows.map((r) => [Number(r.record_id), r]));
+    // D1312: each experiment's sign-up address; one that cannot be read is null, and the link still draws.
+    const signups = cycle === 'validate'
+      ? await signupViews(env, projectId, records.map((r) => Number(r.id)), !!opts.writer).catch(() => null)
+      : null;
     return {
       state: 'ok',
+      ...(cycle === 'validate' ? { signup_writer: !!opts.writer } : {}),
       slots: records.map((r) => {
         const row = byRecord.get(Number(r.id));
-        return { record_id: Number(r.id), label: r.label, link: row ? linkView(row, domains) : null };
+        const slot: LovableSlot = { record_id: Number(r.id), label: r.label, link: row ? linkView(row, domains) : null };
+        if (cycle === 'validate') {
+          slot.signup = signups ? signups.get(Number(r.id)) ?? null : null;
+          if (!signups) slot.signup_unreadable = true;
+        }
+        return slot;
       }),
     };
   } catch (e) {
