@@ -48,7 +48,8 @@ test('the Content section keeps H18–H25 except retired H21, and each board\'s 
 
 test('each record view on the section names its record, with its type', () => {
   const VIEWS = [
-    ['pages/admin/ArticlesQueuePage.jsx', /useRecordCrumb\(detail\?\.article\?\.title, 'article', detail\?\.article\?\.id\)/],
+    // D1295: the article's review is the drawer at /admin/articles/<id>.
+    ['pages/admin/contentQueue/ReviewDrawer.jsx', /useRecordCrumb\(article\?\.title, 'article', article\?\.id\)/],
     ['pages/admin/PublicationDetail.jsx', /useRecordCrumb\(data\?\.publication\?\.title, 'publication', /],
     ['pages/admin/AdminTeam.jsx', /useRecordCrumb\(isNew \? null : initial\?\.name, 'team-member', initial\?\.id\)/],
   ];
