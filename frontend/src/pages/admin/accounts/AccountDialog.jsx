@@ -47,7 +47,7 @@ export default function AccountDialog({ spec, onCancel, onConfirm, onDone }) {
               {spec.reason.label}{spec.reason.required ? ' · required' : ' · optional'}
             </label>
             <textarea id="account-dialog-reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)}
-              placeholder={spec.reason.placeholder} data-testid="account-dialog-reason"
+              placeholder={spec.reason.placeholder} maxLength={spec.reason.max || undefined} data-testid="account-dialog-reason"
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" />
             <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
               {spec.reasonNote || (spec.reason.required ? 'At least ten characters. It is recorded with the change.' : 'Recorded with the change if you give one.')}

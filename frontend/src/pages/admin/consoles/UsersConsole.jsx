@@ -563,8 +563,9 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
   // a refusal comes back into the dialog that asked.
   const SENDS = {
     role: (c) => api.adminUpdateRole(c.user.id, c.nextRole),
-    // D1303 (#3400) keeps the reason on the approval's case event.
-    full_access: (c, reason) => api.kycAdminApprove(c.user.id, { reason }),
+    // D1303: with no submission on file the Worker requires `reason`; after a
+    // reviewed submission it keeps `note`. The one reason serves both.
+    full_access: (c, reason) => api.kycAdminApprove(c.user.id, { reason, note: reason }),
     limited_grant: (c) => api.adminSetAccessLevel(c.user.id, 'limited'),
     limited_revoke: (c) => api.adminSetAccessLevel(c.user.id, null),
     deactivate: (c, reason) => api.adminToggleActive(c.user.id, reason || undefined),
@@ -924,7 +925,9 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
   const saveNotes = async () => {
     setSaving(true);
     try {
-      await api.adminUpdateNotes(userRow.id, notes);
+      const r = await api.adminUpdateNotes(userRow.id, notes);
+      // D1303 answers who saved them and when; the line below the notes takes it.
+      if (r && r.notes_saved !== undefined) setData((d) => (d ? { ...d, notes_saved: r.notes_saved } : d));
       flash('ok', 'Notes saved');
     } catch (e) { flash('err', e.message || 'Failed to save'); }
     finally { setSaving(false); }

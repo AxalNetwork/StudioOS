@@ -46,6 +46,12 @@ async function mount({ user = {}, me = async () => ({ balance_microusd: 3_400_00
   publicPricingApi.plansAndPacks = async () => { calls.packs += 1; return packs(); };
   publicPricingApi.aiModels = async () => MODELS;
   aiBudgetApi.mine = async () => { calls.me += 1; return me(); };
+  // D1287: Add tokens and Buy open the sheet's pack mode, which reads these.
+  aiBudgetApi.topUp = async () => ({ state: 'ready', packs: [
+    { uid: 'k10', price_id: 'price_k10', unit_amount: 1000, currency: 'usd', credit_microusd: 10_000_000, bonus_microusd: 0, first_purchase_only: true },
+    { uid: 'k25', price_id: 'price_k25', unit_amount: 2500, currency: 'usd', credit_microusd: 25_000_000, bonus_microusd: 0 },
+  ], on_hold: false, latest: null });
+  aiBudgetApi.autoReloadState = async () => ({ enabled: false });
   const container = document.createElement('div');
   const root = createRoot(container);
   await act(async () => root.render(React.createElement(MemoryRouter, { initialEntries: ['/pricing?for=models'] },
@@ -64,22 +70,29 @@ test('a member: the band reads the balance, then Token packs, then the model tab
     // Mutation checked: drop the band → undefined.
     assert.ok(band, 'the band is drawn');
     assert.ok(text(band).includes('$3.40') && text(band).includes(TOKENS_BAND.never), text(band));
-    assert.equal(props(byId(w.container, 'pricing-tokens-add')).href, '#token-packs');
     // Mutation checked: keep Packs after the model tables → the order fails.
     const order = walk(w.container).filter((n) => props(n)['data-testid'] === 'pricing-tokens-band' || props(n)['data-testid'] === 'pricing-token-packs'
       || (props(n).className || '').split(' ').includes('axp-models'));
     assert.deepEqual(order.map((n) => props(n)['data-testid'] || 'models'), ['pricing-tokens-band', 'pricing-token-packs', 'models']);
     assert.equal(w.calls.me, 1);
+    // D1287 replaced D1285's "#token-packs" link: Add tokens opens the sheet's pack mode in place.
+    // Mutation checked: keep the link → no onClick, and no sheet.
+    await w.click(byId(w.container, 'pricing-tokens-add'));
+    assert.ok(byId(w.container, 'pack-sheet'), 'Add tokens opens the pack sheet');
   } finally { await w.done(); }
 });
 
-test('one Buy per pack, straight to its checkout; never the old storefront', async () => {
+test('one Buy per pack, which opens the sheet on that pack; never the old storefront', async () => {
   const w = await mount();
   try {
     const packs = byId(w.container, 'pricing-token-packs');
-    const buys = walk(packs).filter((n) => n.tagName === 'A' && text(n) === 'Buy');
-    // Mutation checked: link Buy to /pricing/products#token-packs → both hrefs fail.
-    assert.deepEqual(buys.map((n) => props(n).href), ['/checkout?token_pack=k10', '/checkout?token_pack=k25']);
+    const buys = walk(packs).filter((n) => n.tagName === 'BUTTON' && text(n) === 'Buy');
+    // D1287 replaced D1285's `/checkout?token_pack=` link: Buy opens the sheet's pack mode on that pack.
+    // Mutation checked: open the sheet with no pack → k10, the first, is chosen instead of k25.
+    assert.equal(buys.length, 2);
+    await w.click(byId(w.container, 'pricing-pack-buy-k25'));
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    assert.equal(props(byId(w.container, 'pack-pick-k25')).checked, true, 'the sheet opens on the pack bought');
     assert.ok(text(byId(w.container, 'pricing-pack-k10')).includes('$10 of AI tokens'));
     assert.ok(text(byId(w.container, 'pricing-pack-k10')).includes('First purchase only'));
     assert.ok(!walk(w.container).some((n) => String(props(n).href || '').startsWith('/pricing/products')), 'no link to the old storefront');

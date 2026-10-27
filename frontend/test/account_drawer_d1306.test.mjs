@@ -55,6 +55,10 @@ test('ACC7: each dialog says what it changes and who is told; reasons where the 
   assert.equal(reasonReady(full, 'too short'), false);
   assert.equal(reasonReady(full, '   checked by video call   '), true);
   assert.equal(reasonReady(full, '          '), false, 'spaces are not a reason');
+  // D1303's Worker refuses a full-access reason longer than FULL_ACCESS_REASON_MAX.
+  assert.equal(Number(read('cloudflare-worker/src/routes/kyc.ts').match(/export const FULL_ACCESS_REASON_MAX = (\d+);/)[1]), full.reason.max);
+  assert.equal(reasonReady(full, 'x'.repeat(500)), true);
+  assert.equal(reasonReady(full, 'x'.repeat(501)), false, 'a reason the Worker refuses as too long was ready');
   assert.equal(accountDialog('deactivate', adminRow).reason.required, true);
   assert.equal(accountDialog('deactivate', member).reason.required, false);
   assert.equal(reasonReady(accountDialog('deactivate', member), ''), true, 'a member’s deactivation waits on an optional reason');
@@ -103,6 +107,9 @@ test('the onboarding-profile line, the notes line, and the sub-accounts lines sa
   assert.equal(notesSavedLine({ saved_at: '2026-10-12 09:00:00', saved_by: { name: 'Ada Sample' } }), 'Last saved on 12 Oct 2026 by Ada Sample');
   assert.equal(notesSavedLine({ recorded: false, reason: 'Not recorded: these notes were saved before who saved them was kept.' }), 'Not recorded: these notes were saved before who saved them was kept.');
   assert.match(notesSavedLine({ available: false }), /could not be read/);
+  // D1303's own shape (`services/accountNotes.ts`): who and when, or why not.
+  assert.equal(notesSavedLine({ recorded: true, by: { id: 1, name: 'Ada Sample' }, at: '2026-10-12 09:00:00', chars: 40 }), 'Last saved on 12 Oct 2026 by Ada Sample');
+  assert.equal(notesSavedLine({ recorded: false, unreadable: true, reason: 'Who saved these notes could not be read.' }), 'Who saved these notes could not be read.');
 
   assert.equal(testerLine({ available: true, record: null }).kind, 'none');
   assert.equal(testerLine({ available: true, record: { status: 'active', decided_at: '2026-08-14', decided_by: { name: 'Ada Sample' } } }).text, 'Active since 14 Aug 2026 by Ada Sample.');
@@ -177,7 +184,7 @@ test('Grant full access: an in-page dialog that asks for a reason and sends it; 
     const w = writes(v);
     assert.equal(w.length, 1);
     assert.match(w[0].url, /\/kyc\/admin\/5\/approve$/);
-    assert.deepEqual([w[0].method, w[0].body], ['PATCH', { reason: 'Checked by video call' }]);
+    assert.deepEqual([w[0].method, w[0].body], ['PATCH', { reason: 'Checked by video call', note: 'Checked by video call' }]);
     assert.ok(!v.has('account-dialog'), 'the dialog stayed open after it succeeded');
   } finally { await v.close(); }
 });

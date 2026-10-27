@@ -1,4 +1,5 @@
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 /**
  * T12 — Cap-table simulator routes (port of backend/app/api/routes/captable.py).
  *
@@ -1427,6 +1428,8 @@ captable.post('/register/:projectId/snapshot', async (c) => {
   const uid = crypto.randomUUID().replace(/-/g, '');
   const key = `data-room/${venture.uid}/${uid}`;
   const name = `Cap table as of ${asOf}.pdf`;
+  // D1170 — a filed snapshot is a data room file: it counts to the venture's owner (D1169 §1).
+  const storage = await assertStorageRoom(c.env, { projectId }, bytes.byteLength, user);
   await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: venture.uid, uploaded_by: String(user.id) } });
   try {
     await c.env.DB.batch([
@@ -1444,6 +1447,7 @@ captable.post('/register/:projectId/snapshot', async (c) => {
     await c.env.FILES.delete(key).catch(() => {});
     return refuse(c, 500, { code: 'cap_snapshot_not_filed', message: 'The snapshot could not be added to the data room. Nothing was filed; try again in a moment.', raw: e });
   }
+  await noteStorageLanded(c.env, storage);
   return c.json({ ok: true, file: { uid, name, as_of: asOf, visibility: 'nda', access_tier: 'nobody' } }, 201);
 });
 

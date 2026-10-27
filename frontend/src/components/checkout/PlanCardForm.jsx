@@ -40,7 +40,7 @@ function Inner({ onReady, onChange }) {
   );
 }
 
-export default function PlanCardForm({ amount, currency, onReady, onChange }) {
+export default function PlanCardForm({ amount, currency, onReady, onChange, mode = 'subscription' }) {
   const { effectiveTheme } = useSettings() || {};
   const isDark = effectiveTheme === 'dark';
   const stripePromise = useMemo(() => getStripe(), []);
@@ -60,9 +60,10 @@ export default function PlanCardForm({ amount, currency, onReady, onChange }) {
   if (configured === null) return <div className="h-[150px] animate-pulse rounded-[10px] bg-axal-ground dark:bg-gray-800" data-testid="checkout-card-loading" />;
   if (!configured) return null;
   // A deferred intent needs an amount above zero; the charge itself is the Worker's intent.
-  const options = { mode: 'subscription', amount: Math.max(50, Number(amount) || 0), currency: String(currency || 'usd').toLowerCase(), appearance: buildAppearance(isDark) };
+  // D1287: a token pack is a one-time payment (`mode: 'payment'`) on the order's PaymentIntent.
+  const options = { mode: mode === 'payment' ? 'payment' : 'subscription', amount: Math.max(50, Number(amount) || 0), currency: String(currency || 'usd').toLowerCase(), appearance: buildAppearance(isDark) };
   return (
-    <Elements key={`${isDark ? 'd' : 'l'}:${options.amount}:${options.currency}`} stripe={stripePromise} options={options}>
+    <Elements key={`${options.mode}:${isDark ? 'd' : 'l'}:${options.amount}:${options.currency}`} stripe={stripePromise} options={options}>
       <Inner onReady={ready} onChange={onChange} />
     </Elements>
   );

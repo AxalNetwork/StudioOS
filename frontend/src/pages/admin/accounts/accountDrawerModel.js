@@ -29,6 +29,8 @@ export const SUPPORT_SESSION_CEILING_MINUTES = 120;
 
 /** The reason floor every audited change shares with the Worker's own (ten characters). */
 export const REASON_MIN = 10;
+/** D1303's `FULL_ACCESS_REASON_MAX` (kyc.ts): a full-access reason is at most 500 characters. */
+export const FULL_ACCESS_REASON_MAX = 500;
 
 /** The drawer's tabs, in ACC4's order. The keys are the drawer's own state; `kyc` is Identity. */
 export const DRAWER_TABS = Object.freeze([
@@ -85,7 +87,7 @@ export function accountDialog(kind, user, extra = {}) {
         paras: [`This marks ${who}’s identity check approved. Use it only when you have checked their identity another way.`],
         note: 'It asks for a fresh sign-in check and is recorded in their activity.',
         told: `${who} is told their access changed.`,
-        reason: { label: 'Reason', required: true, min: REASON_MIN, placeholder: 'How did you check their identity?' },
+        reason: { label: 'Reason', required: true, min: REASON_MIN, max: FULL_ACCESS_REASON_MAX, placeholder: 'How did you check their identity?' },
         confirm: { label: 'Grant full access', tone: 'pri' },
       };
     case 'limited_grant':
@@ -142,6 +144,7 @@ export function accountDialog(kind, user, extra = {}) {
 export function reasonReady(spec, reason) {
   if (!spec?.reason) return true;
   const n = String(reason ?? '').trim().length;
+  if (spec.reason.max && n > spec.reason.max) return false;
   return spec.reason.required ? n >= spec.reason.min : true;
 }
 
