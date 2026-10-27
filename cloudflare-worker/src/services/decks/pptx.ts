@@ -18,7 +18,7 @@ import type { DeckBrand } from './branding';
 // ---------------------------------------------------------------------
 // Tiny store-mode zip writer (CRC-32 + central directory).
 // ---------------------------------------------------------------------
-type ZipEntry = { name: string; data: Uint8Array };
+export type ZipEntry = { name: string; data: Uint8Array };
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -54,7 +54,7 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function buildZip(entries: ZipEntry[]): Uint8Array {
+export function buildZip(entries: ZipEntry[]): Uint8Array {
   const enc = new TextEncoder();
   const local: Uint8Array[] = [];
   const central: Uint8Array[] = [];
@@ -91,12 +91,12 @@ function buildZip(entries: ZipEntry[]): Uint8Array {
 // ---------------------------------------------------------------------
 // OOXML helpers.
 // ---------------------------------------------------------------------
-function xmlEsc(s: any): string {
+export function xmlEsc(s: any): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c] as string));
 }
 
-function tf(text: string, opts: { bold?: boolean; size?: number; color?: string; italic?: boolean } = {}): string {
+export function tf(text: string, opts: { bold?: boolean; size?: number; color?: string; italic?: boolean } = {}): string {
   const sz = opts.size ?? 18;
   const b = opts.bold ? '1' : '0';
   const it = opts.italic ? '1' : '0';
@@ -105,7 +105,7 @@ function tf(text: string, opts: { bold?: boolean; size?: number; color?: string;
   return `<a:r><a:rPr lang="en-US" sz="${sz * 100}" b="${b}" i="${it}"><a:solidFill><a:srgbClr val="${col}"/></a:solidFill></a:rPr><a:t>${xmlEsc(text)}</a:t></a:r>`;
 }
 
-function shape(id: number, name: string, x: number, y: number, cx: number, cy: number, paragraphs: string[]): string {
+export function shape(id: number, name: string, x: number, y: number, cx: number, cy: number, paragraphs: string[]): string {
   // EMU = English metric unit = 914400 / inch.
   const emu = (n: number) => Math.round(n * 914400);
   const body = paragraphs.map((p) => `<a:p>${p}</a:p>`).join('');
@@ -146,7 +146,7 @@ function fieldToParagraphs(f: RenderableField): string[] {
   return [];
 }
 
-function buildSlideXml(slide: RenderableSlide, brand: DeckBrand, idx: number, total: number): string {
+export function buildSlideXml(slide: RenderableSlide, brand: DeckBrand, idx: number, total: number): string {
   const shapes: string[] = [];
   let id = 2;
   // Title bar.
@@ -198,7 +198,7 @@ function buildSlideXml(slide: RenderableSlide, brand: DeckBrand, idx: number, to
 // Plain-text speaker-notes payload extracted from a fielded slide so the
 // rendered image stays the source of truth visually but the underlying
 // text is still searchable / accessible.
-function slideToNotesText(slide: RenderableSlide): string {
+export function slideToNotesText(slide: RenderableSlide): string {
   const lines: string[] = [];
   if (slide.title) lines.push(slide.title);
   if (slide.subtitle) lines.push(slide.subtitle);
@@ -253,7 +253,7 @@ function buildSlideImageXml(idx: number): string {
 </p:sld>`;
 }
 
-function buildNotesSlideXml(idx: number, text: string): string {
+export function buildNotesSlideXml(idx: number, text: string): string {
   const paras = (text || '').split('\n').map((line) =>
     `<a:p>${tf(line, { size: 12, color: '111827' })}</a:p>`
   ).join('');
@@ -274,36 +274,25 @@ function buildNotesSlideXml(idx: number, text: string): string {
 }
 
 /**
- * Task #2 — alternate PPTX renderer that embeds one full-bleed PNG per
- * slide (captured by Cloudflare Browser Rendering against the SPA print
- * template) and stores the slide's text in speaker notes. Falls through
- * to the text-only `renderDeckPPTX` path when image capture is
- * unavailable (no BROWSER binding, render error, etc.) so the export
- * never silently fails.
+ * The package around the slides, with speaker notes: content types, the
+ * presentation and its rels, theme, master, layout and notes master. The
+ * image-mode writer and D904's editable writer share it. `defaults` are extra
+ * `<Default Extension=…/>` lines (the media the slides embed).
  */
-export function renderDeckPPTXWithImages(
-  deck: RenderableDeck,
-  brand: DeckBrand,
-  slideImages: Uint8Array[],
-): Uint8Array {
+export function notesPackageParts(slideCount: number, defaults: string[]): ZipEntry[] {
   const enc = new TextEncoder();
-  const slideCount = deck.slides.length;
-  if (slideImages.length !== slideCount) {
-    throw new Error(`renderDeckPPTXWithImages: expected ${slideCount} images, got ${slideImages.length}`);
-  }
   const entries: ZipEntry[] = [];
 
   const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
-  <Default Extension="png" ContentType="image/png"/>
-  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+${defaults.map((d) => `  ${d}\n`).join('')}  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
   <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
   <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
   <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
   <Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>
-  ${deck.slides.map((_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/notesSlides/notesSlide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>`).join('')}
+  ${Array.from({ length: slideCount }, (_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/notesSlides/notesSlide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>`).join('')}
 </Types>`;
   entries.push({ name: '[Content_Types].xml', data: enc.encode(contentTypes) });
 
@@ -315,9 +304,9 @@ export function renderDeckPPTXWithImages(
 </Relationships>`),
   });
 
-  const slideIds = deck.slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('');
+  const slideIds = Array.from({ length: slideCount }, (_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('');
   // rId(slides+2) → notesMaster.
-  const notesMasterRid = `rId${deck.slides.length + 2}`;
+  const notesMasterRid = `rId${slideCount + 2}`;
   const presentation = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
                 xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -334,7 +323,7 @@ export function renderDeckPPTXWithImages(
   const presRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
-  ${deck.slides.map((_, i) => `<Relationship Id="rId${i + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i + 1}.xml"/>`).join('')}
+  ${Array.from({ length: slideCount }, (_, i) => `<Relationship Id="rId${i + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i + 1}.xml"/>`).join('')}
   <Relationship Id="${notesMasterRid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="notesMasters/notesMaster1.xml"/>
 </Relationships>`;
   entries.push({ name: 'ppt/_rels/presentation.xml.rels', data: enc.encode(presRels) });
@@ -427,6 +416,31 @@ export function renderDeckPPTXWithImages(
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>
 </Relationships>`),
   });
+
+  return entries;
+}
+
+/**
+ * Task #2 — alternate PPTX renderer that embeds one full-bleed PNG per
+ * slide (captured by Cloudflare Browser Rendering against the SPA print
+ * template) and stores the slide's text in speaker notes. Falls through
+ * to the text-only `renderDeckPPTX` path when image capture is
+ * unavailable (no BROWSER binding, render error, etc.) so the export
+ * never silently fails.
+ */
+export function renderDeckPPTXWithImages(
+  deck: RenderableDeck,
+  brand: DeckBrand,
+  slideImages: Uint8Array[],
+): Uint8Array {
+  const enc = new TextEncoder();
+  const slideCount = deck.slides.length;
+  if (slideImages.length !== slideCount) {
+    throw new Error(`renderDeckPPTXWithImages: expected ${slideCount} images, got ${slideImages.length}`);
+  }
+  const entries: ZipEntry[] = [];
+
+  entries.push(...notesPackageParts(slideCount, ['<Default Extension="png" ContentType="image/png"/>']));
 
   // Slides — image-only + notes + media + per-slide rels.
   deck.slides.forEach((slide, i) => {

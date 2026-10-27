@@ -17,8 +17,9 @@
  * `validateConfig` accepts.
  *
  * THE SYNC records the connection's installation (the webhook's lookup) and,
- * per chosen project, its facts in `vercel_projects`. It reads no deployment
- * list, no log and no analytics: parts 2-4 add their own reads. A 429 stops it
+ * per chosen project, its facts in `vercel_projects`. D1098 (part 3) adds each
+ * project's newest 200 deployments (`services/vercel/deployments.ts`). It reads
+ * no log and no analytics. A 429 stops it
  * "Partly synced"; the next Sync starts over and only updates.
  *
  * `clearVercelRows` deletes every `vercel_*` row of a connection; parts 2-4
@@ -32,6 +33,7 @@ import { oauthCallbackUrl } from '../../util/url';
 import { projectEnabled } from '../companyScope';
 import { decryptCredentials } from '../secrets';
 import { registerProvider, type ConnectInput, type ConnectResult, type IntegrationRow, type SyncResult } from '../registry';
+import { DEPLOYMENT_PAGES, deploymentRow, landDeployments, pruneDeployments, retainDeployments } from '../../services/vercel/deployments';
 import { VercelError, exchangeVercelCode, vercelClient, type Installation, type VercelAuth, type VercelProject, type Deployment, type Domain } from '../../services/vercel/api';
 
 const PROVIDER_KEY = 'vercel';
@@ -126,6 +128,8 @@ export async function recordInstallation(env: Env, integrationId: number, auth: 
 /** Every `vercel_*` row of a connection. Parts 2-4 add the tables they own. */
 export async function clearVercelRows(env: Env, integrationId: number): Promise<void> {
   await env.DB.batch([
+    // D1098 (part 3): deployments.
+    env.DB.prepare('DELETE FROM vercel_deployments WHERE integration_id = ?').bind(integrationId),
     env.DB.prepare('DELETE FROM vercel_projects WHERE integration_id = ?').bind(integrationId),
     env.DB.prepare('DELETE FROM vercel_installations WHERE integration_id = ?').bind(integrationId),
   ]);
@@ -209,7 +213,7 @@ export async function syncVercel(env: Env, row: IntegrationRow): Promise<SyncRes
   const client = vercelClient(auth);
   const inst = await client.installation();
   const allowed = inst.projectSelection === 'selected' ? new Set(ids(inst.projects)) : null;
-  const counts: Record<string, number | boolean> = { projects: 0, not_reachable: 0 };
+  const counts: Record<string, number | boolean> = { projects: 0, not_reachable: 0, deployments: 0 };
   const kept: string[] = [];
   const stmts: D1PreparedStatement[] = [];
   let partial = false;
@@ -226,6 +230,16 @@ export async function syncVercel(env: Env, row: IntegrationRow): Promise<SyncRes
       ));
       kept.push(id);
       counts.projects = Number(counts.projects) + 1;
+      // D1098 (part 3): the project's newest deployments, kept as `vercel_deployments` and ledger rows.
+      let until: number | undefined;
+      for (let page = 0; page < DEPLOYMENT_PAGES; page += 1) {
+        const body = await client.deployments(id, until);
+        const found = (body.deployments ?? []).map((d) => deploymentRow(d, repositoryOf(p))).filter((r): r is NonNullable<typeof r> => r !== null);
+        counts.deployments = Number(counts.deployments) + await landDeployments(env, row.id, projectId, id, found);
+        const next = body.pagination?.next;
+        if (typeof next !== 'number') break;
+        until = next;
+      }
     } catch (e) {
       if (e instanceof VercelError && e.code === 'vercel_rate_limited') { partial = true; break; }
       if (e instanceof VercelError && e.status === 404) { counts.not_reachable = Number(counts.not_reachable) + 1; continue; }
@@ -234,7 +248,11 @@ export async function syncVercel(env: Env, row: IntegrationRow): Promise<SyncRes
   }
   if (stmts.length) await env.DB.batch(stmts);
   // A partly synced run keeps the rows it did not reach this time.
-  if (!partial) await env.DB.prepare(PRUNE_PROJECTS).bind(row.id, projectId, JSON.stringify(kept)).run();
+  if (!partial) {
+    await env.DB.prepare(PRUNE_PROJECTS).bind(row.id, projectId, JSON.stringify(kept)).run();
+    await pruneDeployments(env, row.id, projectId, kept);
+  }
+  await retainDeployments(env, row.id, projectId);
   if (partial) counts.partial = true;
   const n = Number(counts.projects);
   const what = `${n} ${n === 1 ? 'project' : 'projects'}`;

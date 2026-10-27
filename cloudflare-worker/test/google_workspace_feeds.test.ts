@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GOOGLE_WORKSPACE_FEEDS } from '../src/integrations/googleWorkspaceFeeds.ts';
 import { GOOGLE_WORKSPACE_READS } from '../src/services/google/workspace.ts';
+import { GOOGLE_CALENDAR_READS } from '../src/services/google/raise.ts';
 import { getDescriptor, CONNECTOR_METADATA } from '../src/integrations/registry.ts';
 import { pageDescriptor } from '../src/integrations/connectorPages.ts';
 import { writesProjectData } from '../src/integrations/companyScope.ts';
@@ -12,18 +13,21 @@ test('Workspace exposes the read foundation honestly: its claims are the feeds l
  const page=pageDescriptor(row,{role:'founder',hq:true,venture:true})!;
  assert.equal(row.auth_type,'oauth2');assert.equal(row.audience_rule,'venture');assert.equal(row.status,'coming_soon');
  assert.equal(CONNECTOR_METADATA.google_workspace.category,'Docs');
- // D1092's Validate feeds, then D1093's Build feeds, then D1095's Grow feeds. The registry's claims are the list.
+// D1092's Validate feeds, D1093's Build feeds, D1094's Raise feeds, then D1095's Grow feeds. The registry's claims are the list.
  assert.deepEqual(GOOGLE_WORKSPACE_FEEDS.map(f=>[f.key,f.module,f.file_kind,f.lands]),[
   ['validate_interview_notes','customer_research','doc','fact'],
   ['validate_demand_signals','demand_signals','form','proposal'],
   ['validate_signal_evidence','experiments','form','proposal'],
   ['spec_doc','solution_design','doc','proposal'],
   ['roadmap_sheet','product_roadmap','sheet','fact'],
+  ['slides_deck_version','pitch_deck','slides','proposal'],
+  ['drive_data_room_copy','data_room','file','fact'],
+  ['calendar_last_met','capital_relationships','calendar','proposal'],
   ['grow_metrics_sheet','revenue_and_traction','sheet','fact'],
   ['grow_calendar_obligations','durable_company_building','calendar','proposal'],
  ]);
  assert.ok(Object.isFrozen(GOOGLE_WORKSPACE_FEEDS)&&GOOGLE_WORKSPACE_FEEDS.every(f=>Object.isFrozen(f)&&Object.isFrozen(f.reads)));
- for(const f of GOOGLE_WORKSPACE_FEEDS){assert.ok(MODULE_LABELS[f.module],f.module);for(const r of f.reads) assert.ok(Object.hasOwn(GOOGLE_WORKSPACE_READS,r),`${f.key}: ${r}`);}
+ for(const f of GOOGLE_WORKSPACE_FEEDS){assert.ok(MODULE_LABELS[f.module],f.module);for(const r of f.reads) assert.ok(Object.hasOwn(f.file_kind==='calendar'?GOOGLE_CALENDAR_READS:GOOGLE_WORKSPACE_READS,r),`${f.key}: ${r}`);}
  assert.deepEqual(CONNECTOR_METADATA.google_workspace.pulls,GOOGLE_WORKSPACE_FEEDS.map(f=>({what:f.what,module:f.module})));
  assert.deepEqual(CONNECTOR_METADATA.google_workspace.feeds,[...new Set(GOOGLE_WORKSPACE_FEEDS.map(f=>f.module))]);assert.deepEqual(CONNECTOR_METADATA.google_workspace.sends,[]);
  assert.match(page.long_description.join(' '),/No respondent name or email is kept/);
