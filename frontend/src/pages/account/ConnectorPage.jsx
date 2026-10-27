@@ -19,6 +19,7 @@ import {
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import GithubRepositoriesSection from './GithubRepositoriesSection';
+import GoogleWorkspaceFiles from './GoogleWorkspaceFiles';
 import VercelProjectsSection from './VercelProjectsSection';
 import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
@@ -157,6 +158,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
   return (
     <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} repositories={!!returned?.repositories} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
       {p.key === 'zoom' && <ZoomValidate p={p} />}
+      {/* D1091 (GW1, GW2, GW8): Google Workspace's own section draws its permission and the files chosen. */}
+      {p.key === 'google_workspace' && <GoogleWorkspaceFiles />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
         : (

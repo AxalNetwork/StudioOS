@@ -7,6 +7,8 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 
 | File | What it holds |
 | --- | --- |
+| `FromGoogle.jsx` | D1091 (#2956, D1314 §3: GW3's frame, GW7's states): the one From Google section a module mounts for its chosen Google file. It reads the file itself; the feed hands it the rows, columns, `deleted`, `partly`, `onSync` and `onDeleteRow`. Loading, Empty (Choose from Google Drive), Unreadable (rows kept, Choose again), Partly synced (Sync again), and Delete's in-page dialog. Parts 3–6 (#2957–#2960) mount it |
+| `MapColumnsDialog.jsx` | D1091 (#2956, D1314 §3: GW4): Map columns, used by both Sheet feeds (#2958, #2960): the Sheet's preview, a field or Don’t use per column, a date or number field checked against the preview's rows with the rows named, and the mapping saved as a draft |
 | `cyclePaths.js` | D694's pure predicate for cycle roots, modules, actions, new pages and records; App gives each one the cycle's own inset |
 | `recordModel.js` | D696 PR 1's pure record rules: safe record links, Worker id checks, row/tone mapping, section anchors, declared-action dispatch and the client export registry. PR 2 maps the merged Worker forms and confirmations, filters unsaveable forms, and builds JSON or multipart action bodies. |
 | `RecordView.jsx` | D696's record body: pills/actions, four facts, main/side sections and real activity. Exports `RecordActions`, `RecordFacts`, `RecordSection` and `RecordActivity`; the caller supplies cycle/module names and callbacks, and owns reads and every dialog. |

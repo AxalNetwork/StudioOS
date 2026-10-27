@@ -206,3 +206,26 @@ test('all file-operation replies exclude server tokens; unsupported mapping and 
   assert.equal((await scan(await call(env,base+`/files/${form.uid}`,'DELETE'))).facts_kept,true);
  }finally{globalThis.fetch=old;db.close();}
 });
+test('D1091 GW1/GW2: /mine lists the member\'s own chosen files across ventures with the state and the Google account, and never a token', async()=>{
+ const {db,env}=await fixture();const fake=googleWorkspaceFake(files);const old=globalThis.fetch;globalThis.fetch=fake.fetcher;
+ try {
+  assert.equal((await call(env,base+'/files','POST',{project:1,module:'revenue_traction',ids:['sheet']})).status,201);
+  const before=fake.calls.length;
+  const mine=await (await call(env,base+'/mine')).json() as any;
+  assert.equal(fake.calls.length,before,'nothing is read from Google');
+  assert.deepEqual([mine.state,mine.account_email,mine.ventures,mine.items.length],['ready','founder@example.test',1,1]);
+  assert.deepEqual([mine.items[0].name,mine.items[0].venture_name,mine.items[0].module,mine.items[0].kind],['Synthetic metrics','Synthetic project','revenue_traction','sheet']);
+  assert.doesNotMatch(JSON.stringify(mine),/server-refresh-only|refresh_token|access_token/);
+  // Another member sees only their own: none chosen, no Google sign-in.
+  const other=await (await call(env,base+'/mine','GET',undefined,2)).json() as any;
+  assert.deepEqual([other.state,other.account_email,other.items,other.ventures],['google_not_connected',null,[],0]);
+  // A stopped file leaves the list.
+  await call(env,base+`/files/${mine.items[0].uid}`,'DELETE');
+  assert.equal((await (await call(env,base+'/mine')).json() as any).items.length,0);
+  // Without drive.file the state says so.
+  db.prepare("UPDATE google_oauth_tokens SET scope = 'openid' WHERE user_id = 1").run();
+  assert.equal((await (await call(env,base+'/mine')).json() as any).state,'workspace_not_allowed');
+  assert.equal((await call(env,base+'/mine','GET',undefined,1,true)).status,403,'a support session is refused');
+  assert.equal((await call(env,base+'/mine','GET',undefined,null)).status,401);
+ } finally {globalThis.fetch=old;db.close();}
+});
