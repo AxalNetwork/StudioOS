@@ -496,7 +496,9 @@ function offerTime(v: unknown): string | null | undefined {
 }
 const wholeDollarsInRange = (cents: number) =>
   Number.isSafeInteger(cents) && cents % 100 === 0 && cents >= TOKEN_PACK_LIMITS.minFaceCents && cents <= TOKEN_PACK_LIMITS.maxFaceCents;
-const PACK_AMOUNT = { error: 'token_pack_amount_invalid', message: 'A pack is whole dollars from $5 to $500.' } as const;
+// D1289: the range is TOKEN_PACK_LIMITS's, never typed twice.
+const PACK_AMOUNT = { error: 'token_pack_amount_invalid',
+  message: `A pack is whole dollars from $${TOKEN_PACK_LIMITS.minFaceCents / 100} to $${TOKEN_PACK_LIMITS.maxFaceCents / 100}.` } as const;
 
 // POST /token-packs — §4: the Worker creates the product and its one-time USD
 // price with its own key, each with an Idempotency-Key, so a retried press
