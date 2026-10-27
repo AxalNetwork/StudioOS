@@ -7,7 +7,15 @@
 //   apply            POST /testing/programmes/:uid/apply          { answers: string[], availability?, consent_email? } → { application };
 //                                                                 409 not_open | programme_full | already_applied, 403 not_eligible
 //   withdraw         POST /testing/applications/:uid/withdraw     → { application }
-//   summary          GET  /testing/summary                        → { open_count, picked: [...] }
+//   summary          GET  /testing/summary                        → { open_count, picked: [...] }; open_count counts for an active tester only (D1336)
+//   tester           GET  /testing/tester                          → D1336: { tester: { status, applied_at, decided_at, reason, reapply_after,
+//                                                                 left_by_member, availability, consent_version, consent_current } | { status: null },
+//                                                                 consent: { version, text }, can_apply, cannot_apply: { code, message } | null }; 403 admin_account
+//   joinPool         POST /testing/tester/apply                    { consent_version, availability? } → the same, 201;
+//                                                                 400 consent_required, 409 already_applied | already_tester | reapply_later | removed_by_hq
+//   leavePool        POST /testing/tester/leave                    → the same; 409 not_in_pool. Picked places carry on.
+//   programmes and apply answer 403 not_active_tester to anyone not an active tester (D1336).
+//   myApplications rows carry finished, decides_by and withdrawn_by ('member' | 'hq' | null) (D1336).
 //   logoSrc          GET  /testing/programmes/:uid/logo            the image for an <img>; 404 when there is none (D1199)
 //
 // `partnerTestingApi`, a partner on their firm's programmes:
@@ -67,6 +75,11 @@ export const productTestingApi = {
     }) }),
   withdraw: (uid) => request(`/testing/applications/${enc(uid)}/withdraw`, { method: 'POST' }),
   summary: () => request('/testing/summary'),
+  tester: () => request('/testing/tester'),
+  joinPool: ({ consentVersion, availability = null } = {}) => request('/testing/tester/apply', { method: 'POST', body: JSON.stringify({
+    consent_version: consentVersion, availability,
+  }) }),
+  leavePool: () => request('/testing/tester/leave', { method: 'POST' }),
   logoSrc: (uid) => `/api/testing/programmes/${enc(uid)}/logo`,
 };
 
