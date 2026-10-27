@@ -13,8 +13,8 @@
  * Two of them had drifted, on the same two decks. The worker filed
  * `sequoia_classic` and `narrative_brand` under a fourth value, `'narrative'`,
  * while the registry called them `fundraising` and `commercial` — and because
- * `PitchDeckPage.jsx:1570` merges the two as `m.category || tpl.category`, the
- * worker won: the Sequoia template, which is the one founders raise money with,
+ * the old builder's picker (`PitchDeckPage.jsx`, retired by D898 group E)
+ * merged the two as `m.category || tpl.category`, the worker won: the Sequoia template, which is the one founders raise money with,
  * displayed "NARRATIVE" on its card and fell out of the Fundraising chip
  * entirely. A founder filtering the picker could not find it.
  *
@@ -43,6 +43,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { shareDeckFlow } from '../src/lib/shareDeckAudience.js';
+import { startOptions } from '../src/pages/raise/pitch/newDeckModel.js';
 
 const WORKER = 'cloudflare-worker/src/services/decks/methods.ts';
 const REGISTRY = 'frontend/src/decks/templates/index.ts';
@@ -167,26 +168,19 @@ test('every category any source emits is one a share link can actually route', (
   }
 });
 
-test('the picker offers a chip for every category a deck can hold', () => {
-  // THE SYMPTOM #207 WAS REPORTED AS, guarded from the other side. The filter
-  // row is a hard-coded list; `PitchDeckPage.jsx:1580` keeps a card only when
-  // `filter === 'all' || c.category === filter`. A category with no chip is
-  // therefore reachable ONLY under "All" — which is exactly what happened to
-  // Sequoia Classic and Narrative/Brand, and it looked like the templates had
-  // gone missing rather than like a filter row being one entry short.
-  //
-  // Agreeing tables do not fix this on their own: three sources could agree on
-  // a new category tomorrow and it would still be unfindable in the picker.
-  const src = stripComments(raw('frontend/src/pages/PitchDeckPage.jsx'));
-  const row = /\[\s*'all'((?:\s*,\s*'[a-z_]+')+)\s*\]\s*\.map/.exec(src);
-  assert.ok(row, 'could not find the picker filter row in PitchDeckPage.jsx');
-  const chips = new Set([...row[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]));
-
-  for (const [id, category] of workerTable()) {
-    assert.ok(chips.has(category),
-      `"${id}" is categorised "${category}" and the picker has no chip for it — the deck is `
-      + 'reachable only under "All"');
-  }
+test('New deck offers every template the Worker serves, and no category filter can hide one', () => {
+  // THE SYMPTOM #207 WAS REPORTED AS, guarded from the other side. The old
+  // builder's picker had a hard-coded row of category chips and kept a card
+  // only when `filter === 'all' || c.category === filter`, so a category with
+  // no chip was reachable only under "All". D898 group E retired that picker:
+  // templates are started from New deck's Start from, which lists every
+  // template the methods read returns, with no filter. This pins that it stays
+  // that way, or that whoever adds a filter adds this test's chip check back.
+  const methods = [...workerTable()].map(([id, category]) => ({ id, label: id, category }));
+  const offered = startOptions([], methods).filter((o) => o.kind === 'template').map((o) => o.id);
+  assert.deepEqual(offered, methods.map((m) => m.id), 'a template the Worker serves is not offered');
+  const src = stripComments(raw('frontend/src/pages/raise/pitch/NewDeck.jsx'));
+  assert.doesNotMatch(src, /\.category\s*===/, 'New deck filters templates by category: give every category a chip');
 });
 
 test('`narrative` is retired, and no source may quietly bring it back', () => {

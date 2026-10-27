@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { narrativeApi } from '../../../lib/api/narrative';
+import { api } from '../../../lib/api';
 import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import { railPressHeaders } from '../../../lib/railPage';
 import { useRailOption } from '../../../ui/railCrumbs';
@@ -16,6 +17,7 @@ import {
 } from './storyModel';
 import { OBJECTION_OPTION, answerSaveLines, versionHref } from './narrativeModel';
 import { ObjectionsPanel } from './ObjectionsPanel';
+import { FIX_PROPOSAL_NOTE, appendFix, fixParts } from './claimsModel';
 
 /**
  * D910 (#2694) — NAR2, Story: the sections rail with its dots, reorderable by
@@ -103,7 +105,7 @@ function Proposal({ run, onAccept, onDiscard }) {
       <span className={EYEBROW}>Proposed by Eadwyn</span>
       <p className={`m-0 whitespace-pre-line text-[13.5px] leading-relaxed ${INK}`} data-testid="story-proposal-text">{run.text}</p>
       {run.removed > 0 ? <p role="status" className={`m-0 text-[12px] ${INK}`} data-testid="story-proposal-removed">{DRAFT_REMOVED}</p> : null}
-      <span className={`text-[11.5px] ${MUTED}`}>{PROPOSAL_NOTE}</span>
+      <span className={`text-[11.5px] ${MUTED}`}>{run.fix ? FIX_PROPOSAL_NOTE : PROPOSAL_NOTE}</span>
       <span className="flex gap-2">
         <button type="button" className={BTN} onClick={onAccept} data-testid="story-proposal-accept">Accept</button>
         <button type="button" className={GHOST} onClick={onDiscard} data-testid="story-proposal-discard">Discard</button>
@@ -271,6 +273,21 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   }, [read.data]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (insertOnly && !roleReadOnly) { setOnlyKey(insertOnly); setInserting(true); } }, [insertOnly, roleReadOnly]);
   useEffect(() => { if (sectionParam) setActive(sectionParam); }, [sectionParam]);
+  // D912 (#2696, NAR9): the Check tab's "Accept into [section]" arrives as `?fix=<draft uid>&section=<key>`
+  // and places Eadwyn's wording here as a proposal. Nothing is written until Accept and Save version.
+  const fixParam = useMemo(() => new URLSearchParams(search).get('fix') || null, [search]);
+  useEffect(() => {
+    if (!fixParam || roleReadOnly || !sectionParam) return undefined;
+    let live = true;
+    api.research.zoneDrafts('raise/narrative-fix').then(
+      (r) => {
+        const d = (Array.isArray(r?.items) ? r.items : []).find((x) => x.uid === fixParam);
+        if (live && d) setRun({ section: sectionParam, text: fixParts(d.body).wording, removed: 0, fix: true });
+      },
+      () => { if (live) setRefusal({ kind: 'other', text: 'Eadwyn’s fix could not be read. Phrase it again from Check.', sub: null }); },
+    );
+    return () => { live = false; };
+  }, [fixParam, sectionParam, roleReadOnly]);
 
   if (read.status === 'loading') return <div className="h-40 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="narrative-loading" />;
   if (read.status === 'refused') return <p className={`m-0 text-[13px] ${INK}`}>{read.message || 'This version could not be opened.'}</p>;
@@ -336,6 +353,8 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
     } finally { setAsking(null); }
   };
   const accept = () => {
+    // A fix is added to the section's words, which keep their provenance: the founder edits the sentence it fixes.
+    if (run.fix) { patch(run.section, { body: appendFix(draft.byKey[run.section]?.body, run.text) }); setRun(null); return; }
     patch(run.section, { body: run.text, source: 'eadwyn' });
     if (run.objection) setPending((p) => ({ ...p, [run.objection.key]: { section: run.section, text: run.objection.text } }));
     setRun(null);

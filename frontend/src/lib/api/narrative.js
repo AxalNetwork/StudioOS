@@ -4,9 +4,6 @@ import { request } from '../api.js';
 // Every call names the venture (`?project=`); the venture's founder or an admin.
 //   read               GET  /cycles/raise/narrative/:version → sections and bindings
 //   saveSection        PUT  /cycles/raise/narrative/:version/sections/:section → changed fields
-// D912 (#2696) — one version's claims (NAR6, NAR7) and its check (NAR8), from D1264's store:
-//   claims             GET  /cycles/raise/narrative/:version/claims → { version, founder, checked_at, claims }
-//   runCheck           POST /cycles/raise/narrative/:version/check  → the same, after the check (the founder only)
 // D914 (#2698) — the Investor narrative's admin read: the reasons an admin
 // gives for opening a venture's narrative, and its notes thread. Worker:
 // routes/cycle_raise.ts (`services/narrative/adminRead.ts`).
@@ -38,8 +35,6 @@ const enc = encodeURIComponent;
 
 export const narrativeApi = {
   read: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}?project=${enc(projectId)}`),
-  claims: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}/claims?project=${enc(projectId)}`),
-  runCheck: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}/check?project=${enc(projectId)}`, { method: 'POST', body: '{}' }),
   saveSection: (projectId, version, section, body) => request(`/cycles/raise/narrative/${enc(version)}/sections/${enc(section)}?project=${enc(projectId)}`, {
     method: 'PUT', body: JSON.stringify(body),
   }),
@@ -67,6 +62,18 @@ export const narrativeApi = {
   narrativeNotes: (projectId) => request(`/cycles/raise/narrative/notes?${q(projectId)}`),
   narrativePostNote: (projectId, body, version = null) => request(`/cycles/raise/narrative/notes?${q(projectId)}`, {
     method: 'POST', body: JSON.stringify(version == null ? { body } : { body, version }),
+  }),
+
+  // D912 (#2696): Claims (NAR6, NAR7) and the check (NAR8), the states D1264's.
+  //   claims     GET  /cycles/raise/narrative/:version/claims → { version, claims, counts, by_source, checked_at, can_check }
+  //   check      GET  /cycles/raise/narrative/:version/check  → { against, deck, rows, compared, mismatches, checked_at, can_check }
+  //   runCheck   POST /cycles/raise/narrative/:version/check  → the check, with `claims`   (the venture's founder)
+  //   useRecord  POST /cycles/raise/narrative/:version/claims/:uid/use-record { record_value } → { version, section }
+  claims: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}/claims?${q(projectId)}`),
+  check: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}/check?${q(projectId)}`),
+  runCheck: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}/check?${q(projectId)}`, { method: 'POST', body: '{}' }),
+  useRecord: (projectId, version, uid, recordValue) => request(`/cycles/raise/narrative/${enc(version)}/claims/${enc(uid)}/use-record?${q(projectId)}`, {
+    method: 'POST', body: JSON.stringify({ record_value: recordValue }),
   }),
 
   positioning: (projectId, version) => request(`/cycles/raise/narrative/positioning${query(projectId, version)}`),

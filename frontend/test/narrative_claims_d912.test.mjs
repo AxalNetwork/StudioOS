@@ -1,8 +1,21 @@
 /**
- * D912 (#2696) — the Investor narrative's Claims (NAR6), the claim lightbox
- * (NAR7, NAR7b; the phone sheet NAR19c), the check (NAR8) and Phrase the fix
- * (NAR9), on `GET /narrative/:version/claims` and `POST /narrative/:version/check`.
- * Every API is stubbed; every figure is invented.
+ * D912 (#2696, part 6 of #2454) — the narrative's Claims tab (NAR6), the
+ * claim drawer (NAR7, NAR7b, NAR15c, NAR19c), the Check tab (NAR8) and Phrase
+ * the fix (NAR9):
+ *
+ *   - each claim state from the Worker's store; "Needs you first", the State,
+ *     Source and Section filters; the 100% bar with a dashed Not backed
+ *     segment, its legend and Table;
+ *   - Not backed: the Evidence candidates and Eadwyn's proposed links on
+ *     lavender, each linked behind a confirmation; none says so (NAR15c);
+ *   - Mismatch: both figures and both sources, Use the record's figure and
+ *     Keep mine, with a note, each behind a confirmation;
+ *   - the check against the deck and the metrics, Run the check, Last checked,
+ *     and "Nothing compared yet.";
+ *   - the fix is for the row clicked, carries no number, and Accept places it
+ *     in Story.
+ *
+ * Every name and figure is synthetic; the APIs are stubbed.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/narrative_claims_d912.test.mjs
  */
@@ -11,208 +24,281 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import { CheckPanel, ClaimsTab } from '../src/pages/raise/narrative/ClaimsTab.jsx';
+
+import ClaimsTab from '../src/pages/raise/narrative/ClaimsTab.jsx';
+import CheckTab from '../src/pages/raise/narrative/CheckTab.jsx';
+import { narrativeApi } from '../src/lib/api/narrative.js';
+import { raiseEvidenceApi } from '../src/lib/api/raiseEvidence.js';
+import { api } from '../src/lib/api.js';
 import {
-  checkLine, claimFilters, claimRows, claimSheet, claimsLine, filterClaims, fixScopeKey, lastChecked, sourceBar, stateOf,
+  NOTHING_COMPARED, NO_RECORDS, acceptFixHref, againstLine, appendFix, checkLine, claimLine, filterClaims, fixParts, fixScope, sectionOptions, sourceBar,
 } from '../src/pages/raise/narrative/claimsModel.js';
 
-const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
-const text = (n) => n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '';
-const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
-const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
-const byId = (root, id) => walk(root).find((n) => props(n)['data-testid'] === id);
+const h = React.createElement;
+const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 
-const claim = (id, o = {}) => ({
-  id, section: { key: 'traction', label: 'Traction' }, figure: 'MRR', kind: 'mrr', stated: '$18,400', state: 'mismatch', checked_at: '2026-10-27 10:00:00',
-  source: { label: 'connector', provider: 'stripe', observed_on: '2026-10-20', record: '$16,950' }, linked: 0, note: null, note_outdated: false, ...o,
+const item = (uid, label, extra = {}) => ({ uid, kind: 'kpi-snapshot', source_label: label, provider: null, observed_on: '2026-10-20', summary: `Synthetic ${uid}.`, version: 1, ...extra });
+const MISMATCH = {
+  uid: 'c1', figure: 'paying_customers', label: 'Paying customers', section: 'traction', section_label: 'Traction', state: 'mismatch', best_source: 'connector',
+  stated_value: '42', stated_shown: '42', record: { value: 38, shown: '38', source_label: 'connector', provider: 'stripe', observed_on: '2026-10-20' },
+  links: [], candidates: [], eadwyn: [], note: null, note_outdated: false,
+};
+const NOT_BACKED = {
+  uid: 'c2', figure: 'headcount', label: 'Headcount', section: 'team', section_label: 'Team', state: 'not_backed', best_source: null,
+  stated_value: '7', stated_shown: '7', record: null, links: [],
+  candidates: [item('item4', 'typed')], eadwyn: [{ proposal_uid: 'prop1', item: item('item5', 'document') }], note: null,
+};
+const BARE = { ...NOT_BACKED, uid: 'c3', figure: 'raise', label: 'The raise', section: 'ask', section_label: 'The ask', candidates: [], eadwyn: [] };
+const BACKED = { ...MISMATCH, uid: 'c4', figure: 'mrr', label: 'MRR', state: 'backed', stated_shown: '$10,000', record: { value: 10000, shown: '$10,000', source_label: 'connector', provider: 'stripe', observed_on: '2026-10-20' } };
+const CLAIMS = (over = {}) => ({
+  version: 1, can_check: true, checked_at: '2026-10-27 14:05:00',
+  claims: [BACKED, NOT_BACKED, MISMATCH, BARE], counts: { backed: 1, founders_figure: 0, mismatch: 1, not_backed: 2 },
+  by_source: { connector: 2, signed: 0, document: 0, recorded: 0, typed: 0, not_backed: 2 }, ...over,
 });
-const READ = { version: 4, founder: true, checked_at: '2026-10-27 10:00:00', claims: [
-  claim('c-back', { figure: 'Paying customers', kind: 'paying_customers', stated: '38', state: 'backed', source: { label: 'connector', provider: 'stripe', observed_on: '2026-10-20', record: '38' } }),
-  claim('c-mrr'),
-  claim('c-raise', { section: { key: 'ask', label: 'The ask' }, figure: 'The raise', kind: 'raise', stated: '$2,000,000', state: 'not_backed', source: null, candidates: [{ id: 'item7', kind: 'kpi-snapshot', source_label: 'connector', provider: 'stripe', observed_on: '2026-10-20' }] }),
-  claim('c-typed', { section: { key: 'team', label: 'Team' }, figure: 'Headcount', kind: 'headcount', stated: '6', state: 'founders_figure', source: { label: 'typed', provider: null, observed_on: null, record: '6' } }),
-] };
-
-/* ------------------------------------------------------------------ *
- * The model
- * ------------------------------------------------------------------ */
-
-test('NAR6 rows: needs-you first (Mismatch, then Not backed), then the rest; a state the store does not send is Not recorded', () => {
-  const rows = claimRows(READ);
-  assert.deepEqual(rows.map((r) => r.id), ['c-mrr', 'c-raise', 'c-typed', 'c-back']);
-  assert.deepEqual(rows.map((r) => r.needs), [true, true, false, false]);
-  assert.equal(rows[1].source, 'No record');
-  assert.equal(rows[0].record, '$16,950');
-  assert.equal(stateOf('weird').label, 'Not recorded');
-  assert.equal(claimsLine(rows), '4 claims · 2 need you');
-});
-
-test('NAR6 filters: State, Source and Section from the rows, each counted; Needs you keeps only what needs the founder', () => {
-  const rows = claimRows(READ);
-  const f = claimFilters(rows);
-  assert.deepEqual(f.state.map((o) => [o.key, o.n]), [['mismatch', 1], ['not_backed', 1], ['founders_figure', 1], ['backed', 1]]);
-  assert.deepEqual(f.source.map((o) => [o.key, o.n]).sort(), [['connector', 2], ['none', 1], ['typed', 1]]);
-  assert.deepEqual(filterClaims(rows, { source: 'none' }).map((r) => r.id), ['c-raise']);
-  assert.deepEqual(filterClaims(rows, { section: 'team' }).map((r) => r.id), ['c-typed']);
-  // Mutation checked: ignore `needsFirst` → Backed and Founder's figure stay.
-  assert.deepEqual(filterClaims(rows, { needsFirst: true }).map((r) => r.id), ['c-mrr', 'c-raise']);
+const CHECK = (over = {}) => ({
+  version: 1, against: ['deck', 'metrics'], deck: { version: 6, state: 'ok' }, checked_at: '2026-10-27 14:05:00', can_check: true, compared: 1, mismatches: 1,
+  rows: [
+    { figure: 'paying_customers', label: 'Paying customers', section: 'traction', section_label: 'Traction', narrative: { value: 42, shown: '42' },
+      deck: { side: 'deck', value: 40, shown: '40', source: 'Pitch deck v6 · card 1' }, metrics: { side: 'metrics', value: 38, shown: '38', source: 'Stripe (measured) · project_metrics.paying_accounts on 2026-10-20' },
+      result: 'mismatch', differs: ['deck', 'metrics'] },
+    { figure: 'lois', label: 'Letters of intent', section: 'traction', section_label: 'Traction', narrative: { value: 3, shown: '3' }, deck: null, metrics: null, result: 'not_compared', differs: [] },
+  ], ...over,
 });
 
-test('NAR6 bar: by best source, a dashed "No record" of its own, widths adding to 100', () => {
-  const bar = sourceBar(claimRows(READ));
-  assert.deepEqual(bar.map((p) => [p.key, p.n, p.dashed]), [['connector', 2, false], ['typed', 1, false], ['none', 1, true]]);
-  assert.equal(bar.reduce((n, p) => n + p.pct, 0), 100);
-  assert.deepEqual(sourceBar([]), []);
-});
-
-test('NAR8 summary: counts by state, or "Nothing compared yet." with nothing compared — never "no mismatch"', () => {
-  assert.equal(checkLine(claimRows(READ)), '1 mismatch · 1 not backed · 1 founder’s figure · 1 backed');
-  assert.equal(checkLine([]), 'Nothing compared yet.');
-  assert.equal(lastChecked(READ), 'Last checked 2026-10-27 10:00');
-  assert.equal(lastChecked({ checked_at: null }), 'Not checked yet');
-});
-
-test('NAR7b Mismatch: both figures and both sources, neither presumed right; staff read no record', () => {
-  const s = claimSheet(claimRows(READ)[0], 4, '?project_id=3');
-  assert.equal(s.kind, 'mismatch');
-  assert.deepEqual(s.stated, { value: '$18,400', where: 'The narrative, v4, Traction' });
-  assert.deepEqual(s.record, { value: '$16,950', where: 'Connector · stripe · 2026-10-20' });
-  assert.equal(s.useRecord, '/raise/investor-narrative/story?project_id=3&version=4');
-  assert.equal(s.canNote, true);
-  const staff = claimSheet(claimRows({ ...READ, founder: false, claims: [claim('x', { source: { label: 'connector', provider: 'stripe', observed_on: '2026-10-20' } })] })[0], 4);
-  assert.equal(staff.record, null);
-  assert.equal(staff.canNote, false, 'no record figure, no note against it');
-});
-
-test('NAR7 Not backed: the records that could back it, and Link a record on Evidence; the fix scope names the claim', () => {
-  const s = claimSheet(claimRows(READ)[1], 4);
-  assert.equal(s.kind, 'not_backed');
-  assert.deepEqual(s.candidates.map((c) => c.id), ['item7']);
-  assert.equal(s.evidence, '/raise/evidence/claim/c-raise');
-  assert.equal(fixScopeKey(7, 'c-mrr'), '7|c-mrr');
-});
-
-/* ------------------------------------------------------------------ *
- * Mounted
- * ------------------------------------------------------------------ */
-
-function stubApi(o = {}) {
+function stub(over = {}) {
   const calls = [];
-  const rec = (name, value) => (...a) => { calls.push([name, ...a]); return typeof value === 'function' ? value(...a) : Promise.resolve(value); };
-  return {
-    calls,
-    api: {
-      narrative: { claims: rec('claims', o.claims ?? READ), runCheck: rec('runCheck', READ) },
-      evidence: { note: rec('note', { ok: true }), clearNote: rec('clearNote', { ok: true }) },
-      app: {
-        zoneDraftRun: rec('zoneDraftRun', o.draft ?? { item: { uid: 'd1', body: 'Bring the narrative to the stored figure, or correct the stored metric if yours is current.\n\nAs the check found them: MRR: $18,400 in the narrative, $16,950 in Connector.' } }),
-        zoneDraftAccept: rec('zoneDraftAccept', { ok: true }),
-      },
-    },
-  };
+  const rec = (name, f) => async (...args) => { calls.push([name, ...args]); return (over[name] || f)(...args); };
+  Object.assign(narrativeApi, {
+    claims: rec('claims', async () => CLAIMS()),
+    check: rec('check', async () => CHECK()),
+    runCheck: rec('runCheck', async () => CHECK({ checked_at: '2026-10-27 15:00:00' })),
+    useRecord: rec('useRecord', async () => ({ version: 1 })),
+  });
+  Object.assign(raiseEvidenceApi, { link: rec('link', async () => ({ linked: true })), note: rec('note', async () => ({ ok: true })) });
+  api.research.zoneDraftRun = rec('zoneDraftRun', async () => ({ item: { uid: 'd1', body: 'Bring the traction line to the measured count, or correct the record.\n\nAs the check found them: Paying customers: 42 in Narrative · traction.takeaway, 38 in Stripe.' } }));
+  return calls;
 }
 
-async function mount(el) {
+async function mount(el, url = '/raise/investor-narrative/claims?project_id=7&version=1') {
   const restore = installDocument();
-  const create = document.createElement.bind(document);
-  document.createElement = (tag) => { const n = create(tag); n.querySelector = () => null; n.querySelectorAll = () => []; n.focus = () => {}; return n; };
-  document.body.style = { overflow: 'auto', paddingRight: '' };
+  if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
+  globalThis.addEventListener = () => {}; globalThis.removeEventListener = () => {}; globalThis.dispatchEvent = () => true;
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
-  await act(async () => root.render(React.createElement(MemoryRouter, null, el)));
-  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
-  return { container, async done() { await act(async () => root.unmount()); restore(); } };
+  const at = { path: '', search: '' };
+  function Probe() { const l = useLocation(); at.path = l.pathname; at.search = l.search; return null; }
+  const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  await act(async () => { root.render(h(MemoryRouter, { initialEntries: [url] }, el, h(Probe))); });
+  await settle();
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  const all = (prefix) => walk(container).map((n) => pr(n)['data-testid']).filter((id) => id && id.startsWith(prefix));
+  const txt = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(txt).join(' ') : n.textContent || '');
+  const need = (id) => { const n = by(id); if (!n) throw new Error(`Missing ${id}`); return n; };
+  return {
+    at, by, all, props: (id) => pr(need(id)),
+    text: (id) => txt(id ? need(id) : container).replace(/\s+/g, ' ').trim(),
+    async click(id) { await act(async () => { await pr(need(id)).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
+    async type(id, value) { await act(async () => { pr(need(id)).onChange({ target: { value, checked: value } }); }); await settle(); },
+    async close() { await act(async () => root.unmount()); restore(); },
+  };
 }
-const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
-const click = async (n) => act(async () => { await props(n).onClick?.({ preventDefault() {} }); await new Promise((r) => setTimeout(r, 0)); });
-const change = async (n, target) => act(async () => { await props(n).onChange?.({ target }); await new Promise((r) => setTimeout(r, 0)); });
+const claims = (props = {}) => h(ClaimsTab, { projectId: 7, version: 1, search: '?project_id=7&version=1', ...props });
+const check = (props = {}) => h(CheckTab, { projectId: 7, version: 1, search: '?project_id=7&version=1', ...props });
+const named = (calls, n) => calls.filter((c) => c[0] === n).map((c) => c.slice(1));
 
-test('Claims mounted: the bar, the filters, needs-you first; a Mismatch opens both figures; Keep mine writes only after its form', async () => {
-  const { api, calls } = stubApi();
-  const w = await mount(React.createElement(ClaimsTab, { projectId: 3, version: 4, search: '?project_id=3', api }));
-  try {
-    assert.deepEqual(calls[0], ['claims', 3, 4]);
-    assert.match(text(byId(w.container, 'claims-line')), /4 claims · 2 need you/);
-    assert.ok(byId(w.container, 'claims-bar-none'), 'a dashed segment for claims with no record');
-    await change(byId(w.container, 'claims-needs'), { checked: true });
-    assert.equal(byId(w.container, 'claim-row-c-back'), undefined);
-    await click(byId(w.container, 'claim-row-c-mrr'));
-    assert.match(text(byId(w.container, 'claim-stated')), /\$18,400/);
-    assert.match(text(byId(w.container, 'claim-record')), /\$16,950/);
-    await click(byId(w.container, 'claim-keep'));
-    assert.equal(calls.filter((c) => c[0] === 'note').length, 0, 'Keep mine asks why first');
-    assert.equal(props(byId(w.container, 'claim-note-save')).disabled, true, 'no reason, no note');
-    await change(byId(w.container, 'claim-note-input'), { value: 'Our count includes annual pilots.' });
-    await click(byId(w.container, 'claim-note-save'));
-    assert.deepEqual(calls.find((c) => c[0] === 'note').slice(1), [3, 'c-mrr', 'Our count includes annual pilots.']);
-    assert.equal(calls.filter((c) => c[0] === 'claims').length, 2, 'the claims are read again after the note');
-  } finally { await w.done(); }
+// ------------------------------------------------------------------ the model
+
+test('the model: Needs you first, the filters, the 100% bar with Not backed dashed, and nothing compared said plainly', () => {
+  const all = CLAIMS().claims;
+  assert.deepEqual(filterClaims(all).map((c) => c.uid), ['c1', 'c2', 'c3', 'c4']);
+  assert.deepEqual(filterClaims(all).map((c) => c.state), ['mismatch', 'not_backed', 'not_backed', 'backed'], 'Mismatch, then Not backed, then Backed');
+  assert.deepEqual(filterClaims(all, { needsFirst: false }).map((c) => c.uid), ['c4', 'c2', 'c1', 'c3'], 'the store\'s order otherwise');
+  assert.deepEqual(filterClaims(all, { state: 'not_backed' }).map((c) => c.uid), ['c2', 'c3']);
+  assert.deepEqual(filterClaims(all, { source: 'not_backed' }).map((c) => c.uid), ['c2', 'c3']);
+  assert.deepEqual(filterClaims(all, { source: 'connector' }).map((c) => c.uid), ['c1', 'c4']);
+  assert.deepEqual(filterClaims(all, { section: 'team' }).map((c) => c.uid), ['c2']);
+  assert.deepEqual(sectionOptions(all).map((s) => s.label), ['Traction', 'Team', 'The ask']);
+  const bar = sourceBar({ connector: 1, document: 1, not_backed: 1 });
+  assert.deepEqual(bar.segments.map((s) => [s.key, s.pct, s.dashed]), [['connector', 34, false], ['document', 33, false], ['not_backed', 33, true]]);
+  assert.equal(bar.segments.reduce((t, s) => t + s.pct, 0), 100);
+  assert.equal(bar.summary, 'Claims by best source: Connector 1, Document 1, Not backed 1.');
+  assert.equal(sourceBar({ connector: 0 }), null, 'no claims, no bar');
+  assert.equal(claimLine(MISMATCH), 'Traction says 42. Stripe says 38 as of 2026-10-20. Neither figure is presumed right.');
+  assert.equal(checkLine(CHECK()), '1 compared · 1 mismatch · 1 not compared');
+  assert.equal(checkLine(CHECK({ compared: 0, mismatches: 0 })), NOTHING_COMPARED, 'never "no mismatch"');
+  assert.equal(againstLine(CHECK()), 'Check against: Pitch deck v6 and the metrics.');
+  assert.equal(againstLine({ against: [] }), 'Check against: nothing chosen, so nothing is compared.');
+  assert.equal(fixScope(7, 1, 'paying_customers'), '7:v1:paying_customers');
+  assert.deepEqual(fixParts('Words.\n\nAs the check found them: A: 1 in X, 2 in Y.'), { wording: 'Words.', found: 'A: 1 in X, 2 in Y.' });
+  assert.equal(acceptFixHref('?project_id=7&version=1', 1, 'traction', 'd1'), '/raise/investor-narrative/story?project_id=7&version=1&section=traction&fix=d1');
+  assert.equal(appendFix('We serve 42 paying customers.', 'Bring it to the record.'), 'We serve 42 paying customers.\n\nBring it to the record.');
+  assert.equal(appendFix('', 'Only this.'), 'Only this.');
 });
 
-test('Claims mounted: Not backed lists the records that could back it; none reads "No records to back a claim yet" (NAR15c)', async () => {
-  const { api } = stubApi();
-  const w = await mount(React.createElement(ClaimsTab, { projectId: 3, version: 4, api }));
+// ------------------------------------------------------------------ NAR6
+
+test('NAR6: each claim with its state and best source, Needs you first, the bar dashed for Not backed, its legend and Table', async () => {
+  const calls = stub();
+  const v = await mount(claims());
   try {
-    await click(byId(w.container, 'claim-row-c-raise'));
-    assert.ok(byId(w.container, 'claim-candidate-item7'));
-    assert.equal(props(byId(w.container, 'claim-link')).href, '/raise/evidence/claim/c-raise');
-  } finally { await w.done(); }
-  const none = stubApi({ claims: { ...READ, claims: [READ.claims[2] && { ...READ.claims[2], candidates: [] }] } });
-  const n = await mount(React.createElement(ClaimsTab, { projectId: 3, version: 4, api: none.api }));
-  try {
-    await click(byId(n.container, 'claim-row-c-raise'));
-    assert.match(text(byId(n.container, 'claim-no-records')), /No records to back a claim yet/);
-  } finally { await n.done(); }
+    assert.deepEqual(named(calls, 'claims'), [[7, 1]]);
+    assert.deepEqual(v.all('narrative-claim-c'), ['narrative-claim-c1', 'narrative-claim-c2', 'narrative-claim-c3', 'narrative-claim-c4'], 'Mismatch first');
+    assert.match(v.text('narrative-claim-c1'), /Paying customers · 42 Traction · Connector Mismatch/);
+    assert.match(v.text('narrative-claim-c2'), /Team · No record Not backed/);
+    assert.ok(v.by('narrative-claims-seg-connector') && v.by('narrative-claims-seg-not_backed'));
+    assert.match(String(v.props('narrative-claims-seg-not_backed').className), /border-dashed/);
+    assert.match(v.text('narrative-claims-legend'), /Connector · 2 Not backed · 2/);
+    await v.click('narrative-claims-table-toggle');
+    assert.match(v.text('narrative-claims-bar-table'), /Connector 2 50% Not backed 2 50%/);
+    await v.type('narrative-claims-state', 'backed');
+    assert.deepEqual(v.all('narrative-claim-c'), ['narrative-claim-c4']);
+    await v.type('narrative-claims-state', '');
+    await v.type('narrative-claims-needs', false);
+    assert.deepEqual(v.all('narrative-claim-c'), ['narrative-claim-c4', 'narrative-claim-c2', 'narrative-claim-c1', 'narrative-claim-c3']);
+  } finally { await v.close(); }
 });
 
-test('Claims mounted: an unreadable store says so (NAR17a); an empty, unchecked version says it has not been checked', async () => {
-  const broken = stubApi({ claims: () => Promise.reject(Object.assign(new Error('x'), { status: 503 })) });
-  let w = await mount(React.createElement(ClaimsTab, { projectId: 3, version: 4, api: broken.api }));
-  try { assert.match(text(w.container), /could not be read/); } finally { await w.done(); }
-  w = await mount(React.createElement(ClaimsTab, { projectId: 3, version: 4, api: stubApi({ claims: { version: 4, founder: true, checked_at: null, claims: [] } }).api }));
-  try { assert.match(text(byId(w.container, 'claims-none')), /has not been checked yet/); } finally { await w.done(); }
+test('NAR7b: a Mismatch shows both figures and both sources; Use the record\'s figure and Keep mine each confirm first', async () => {
+  const calls = stub();
+  const v = await mount(claims());
+  try {
+    await v.click('narrative-claim-c1');
+    assert.match(v.text('narrative-claim-figures'), /Traction 42 Stripe 38 · 2026-10-20/);
+    assert.match(v.text('narrative-claim-line'), /Neither figure is presumed right\./);
+    await v.click('narrative-claim-use');
+    assert.match(v.text('narrative-claim-use-confirm'), /42 becomes 38 in Traction, and the section is saved in v1\. The rest of its words stay as they are\./);
+    assert.equal(named(calls, 'useRecord').length, 0, 'asked first');
+    await v.click('narrative-claim-use-go');
+    assert.deepEqual(named(calls, 'useRecord'), [[7, 1, 'c1', 38]]);
+    assert.equal(named(calls, 'claims').length, 2, 'read again');
+    await v.click('narrative-claim-c1');
+    await v.click('narrative-claim-keep');
+    await v.click('narrative-claim-keep-go');
+    assert.equal(v.text('narrative-claim-error'), 'Say why you keep your figure.');
+    await v.type('narrative-claim-keep-note', ' Trials convert after the sync. ');
+    await v.click('narrative-claim-keep-go');
+    assert.deepEqual(named(calls, 'note'), [[7, 'c1', 'Trials convert after the sync.']]);
+  } finally { await v.close(); }
+  // A kept figure shows its note and is not offered Keep again; it is still a Mismatch.
+  stub({ claims: async () => CLAIMS({ claims: [{ ...MISMATCH, note: { text: 'Trials convert after the sync.', at: '2026-10-27' } }] }) });
+  const kept = await mount(claims());
+  try {
+    await kept.click('narrative-claim-c1');
+    assert.equal(kept.text('narrative-claim-note'), 'Kept, with your note: Trials convert after the sync.');
+    assert.ok(!kept.by('narrative-claim-keep'));
+    assert.ok(kept.by('narrative-claim-use'), 'the record\'s figure is still offered');
+  } finally { await kept.close(); }
 });
 
-test('Check mounted: Run the check re-reads; Phrase the fix runs on the clicked claim and keeps a wording only on press', async () => {
-  const { api, calls } = stubApi();
-  const w = await mount(React.createElement(CheckPanel, { projectId: 3, version: 4, api }));
+test('NAR7: Not backed offers the candidates and Eadwyn\'s proposed link on lavender; none says so (NAR15c)', async () => {
+  const calls = stub();
+  const v = await mount(claims());
   try {
-    assert.match(text(byId(w.container, 'narrative-check-summary')), /1 mismatch/);
-    await click(byId(w.container, 'narrative-check-run'));
-    assert.deepEqual(calls.find((c) => c[0] === 'runCheck').slice(1), [3, 4]);
-    await settle();
-    await click(byId(w.container, 'check-fix-c-mrr'));
-    assert.equal(calls.filter((c) => c[0] === 'zoneDraftRun').length, 0, 'the fix runs only on its own press');
-    await click(byId(w.container, 'fix-run'));
-    // Mutation checked: send the project alone → Eadwyn phrases the newest version's first mismatch instead.
-    assert.deepEqual(calls.find((c) => c[0] === 'zoneDraftRun').slice(1, 3), ['raise/narrative-fix', '3|c-mrr']);
-    assert.match(text(byId(w.container, 'fix-draft')), /As the check found them/);
-    await click(byId(w.container, 'fix-keep'));
-    assert.deepEqual(calls.find((c) => c[0] === 'zoneDraftAccept').slice(1), ['d1']);
-  } finally { await w.done(); }
-  const refused = stubApi({ draft: () => Promise.reject(Object.assign(new Error('draft_unfaithful'), { status: 503, code: 'draft_unfaithful' })) });
-  const r = await mount(React.createElement(CheckPanel, { projectId: 3, version: 4, api: refused.api }));
-  try {
-    await click(byId(r.container, 'check-fix-c-mrr'));
-    await click(byId(r.container, 'fix-run'));
-    assert.match(text(byId(r.container, 'fix-none')), /stated a number/, 'a numbered wording is no wording, said plainly');
-  } finally { await r.done(); }
-  const empty = await mount(React.createElement(CheckPanel, { projectId: 3, version: 4, api: stubApi({ claims: { version: 4, founder: true, checked_at: null, claims: [] } }).api }));
-  try { assert.match(text(byId(empty.container, 'narrative-check-none')), /Nothing compared yet\./); } finally { await empty.done(); }
+    await v.click('narrative-claim-c2');
+    assert.match(v.text('narrative-claim-eadwyn-prop1'), /Proposed by Eadwyn Document · 2026-10-20/);
+    assert.match(v.text('narrative-claim-candidate-item4'), /Typed · 2026-10-20/);
+    await v.click('narrative-claim-link-item4');
+    assert.match(v.text('narrative-claim-link-confirm'), /Link Typed · 2026-10-20 to Headcount in v1\?/);
+    await v.click('narrative-claim-link-go');
+    assert.deepEqual(named(calls, 'link'), [[7, 'c2', 'item4', 1, undefined]]);
+    await v.click('narrative-claim-c2');
+    await v.click('narrative-claim-accept-prop1');
+    await v.click('narrative-claim-link-go');
+    assert.deepEqual(named(calls, 'link')[1], [7, 'c2', 'item5', 1, 'prop1'], 'Eadwyn\'s link is accepted as his');
+    await v.click('narrative-claim-c3');
+    assert.equal(v.text('narrative-claim-no-records'), NO_RECORDS);
+    assert.equal(v.props('narrative-claim-evidence').to ?? v.props('narrative-claim-evidence').href, '/raise/evidence/claim/c3?project_id=7&version=1');
+  } finally { await v.close(); }
 });
 
-test('the house rules on the new files', () => {
-  const src = ['ClaimsTab.jsx', 'claimsModel.js'].map((f) => read(`frontend/src/pages/raise/narrative/${f}`)).join('\n');
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-  assert.doesNotMatch(code, /window\.(alert|confirm|prompt)\(/);
-  assert.doesNotMatch(code, /\b(advisor|advice|recommendation)s?\b/i);
-  assert.doesNotMatch(code, /Northwind|\[\$/, 'no canvas sample');
-  for (const m of code.matchAll(/['`"]((?:[^'`"]*\s)?hover:(?:bg|text|border)-[^'`"]*)['`"]/g)) {
-    assert.match(m[1], /dark:hover:/, m[1].slice(0, 90));
-  }
-  const api = read('frontend/src/lib/api/narrative.js');
-  assert.match(api, /claims: \(projectId, version\) => request\(`\/cycles\/raise\/narrative\/\$\{enc\(version\)\}\/claims\?project=/);
-  assert.match(read('cloudflare-worker/src/routes/cycle_raise.ts'), /cycleRaise\.get\('\/narrative\/:version\/claims'/);
+test('an admin, or a reader who cannot check, reads and changes nothing; a failed read says so (NAR17a)', async () => {
+  stub();
+  const a = await mount(claims({ admin: true }));
+  try {
+    await a.click('narrative-claim-c1');
+    assert.ok(!a.by('narrative-claim-use') && !a.by('narrative-claim-keep'));
+    await a.click('narrative-claim-c2');
+  } finally { await a.close(); }
+  stub({ claims: async () => CLAIMS({ can_check: false }) });
+  const r = await mount(claims());
+  try {
+    await r.click('narrative-claim-c2');
+    assert.ok(!r.by('narrative-claim-link-item4'), 'no link without the check');
+  } finally { await r.close(); }
+  stub({ claims: async () => { throw new Error('down'); } });
+  const f = await mount(claims());
+  try { assert.match(f.text('narrative-claims-unreadable'), /The claims could not be read\. This is not a claim that there are none\./); } finally { await f.close(); }
+});
+
+// ------------------------------------------------------------------ NAR8 and NAR9
+
+test('NAR8: each figure against the deck and the metrics; Run the check stamps Last checked; one place only is Not compared', async () => {
+  const calls = stub();
+  const v = await mount(check(), '/raise/investor-narrative/check?project_id=7&version=1');
+  try {
+    assert.deepEqual(named(calls, 'check'), [[7, 1]]);
+    assert.equal(v.text('narrative-check-against'), 'Check against: Pitch deck v6 and the metrics.');
+    assert.equal(v.text('narrative-check-summary'), '1 compared · 1 mismatch · 1 not compared');
+    assert.match(v.text('narrative-check-deck-paying_customers'), /40 Pitch deck v6 · card 1/);
+    assert.match(v.text('narrative-check-metrics-paying_customers'), /38 Stripe/);
+    assert.equal(v.text('narrative-check-deck-lois'), 'Not stated');
+    assert.equal(v.text('narrative-check-last'), 'Last checked 27 Oct 2026, 14:05 UTC');
+    assert.ok(!v.by('narrative-check-fix-lois'), 'Not compared has nothing to fix');
+    await v.click('narrative-check-run');
+    assert.equal(named(calls, 'runCheck').length, 1);
+    assert.equal(v.text('narrative-check-last'), 'Last checked 27 Oct 2026, 15:00 UTC');
+  } finally { await v.close(); }
+  stub({ check: async () => CHECK({ rows: [], compared: 0, mismatches: 0 }) });
+  const none = await mount(check(), '/raise/investor-narrative/check?project_id=7&version=1');
+  try { assert.equal(none.text('narrative-check-none'), NOTHING_COMPARED); } finally { await none.close(); }
+  stub({ check: async () => CHECK({ can_check: false }) });
+  const admin = await mount(check({ admin: true }), '/raise/investor-narrative/check?project_id=7&version=1');
+  try { assert.ok(!admin.by('narrative-check-run') && !admin.by('narrative-check-fix-paying_customers')); } finally { await admin.close(); }
+  // Not the founder, not an admin either (a cofounder): the Worker says it cannot check, so neither control is drawn.
+  const team = await mount(check(), '/raise/investor-narrative/check?project_id=7&version=1');
+  try { assert.ok(!team.by('narrative-check-run') && !team.by('narrative-check-fix-paying_customers')); } finally { await team.close(); }
+  // A figure that agrees is OK and has nothing to fix, though it has a metric.
+  stub({ check: async () => CHECK({ rows: [{ ...CHECK().rows[0], result: 'ok', differs: [] }], mismatches: 0 }) });
+  const ok = await mount(check(), '/raise/investor-narrative/check?project_id=7&version=1');
+  try { assert.ok(!ok.by('narrative-check-fix-paying_customers')); } finally { await ok.close(); }
+});
+
+test('NAR9: the fix is for the row clicked, carries no number, shows the check\'s figures under it, and Accept places it in Story', async () => {
+  const calls = stub();
+  const v = await mount(check(), '/raise/investor-narrative/check?project_id=7&version=1');
+  try {
+    await v.click('narrative-check-fix-paying_customers');
+    assert.match(v.text('narrative-fix-dialog'), /Eadwyn’s wording carries no number/);
+    assert.match(v.text('narrative-fix-figures'), /Narrative 42 Metrics 38/);
+    await v.click('narrative-fix-ask');
+    assert.equal(named(calls, 'zoneDraftRun')[0][0], 'raise/narrative-fix');
+    assert.equal(named(calls, 'zoneDraftRun')[0][1], '7:v1:paying_customers', 'the mismatch clicked');
+    assert.equal(v.text('narrative-fix-wording'), 'Bring the traction line to the measured count, or correct the record.');
+    assert.match(v.text('narrative-fix-found'), /As the check found them: Paying customers: 42/);
+    assert.equal(v.text('narrative-fix-accept'), 'Accept into Traction');
+    await v.click('narrative-fix-accept');
+    assert.equal(v.at.path, '/raise/investor-narrative/story');
+    assert.equal(v.at.search, '?project_id=7&version=1&section=traction&fix=d1');
+  } finally { await v.close(); }
+  stub({ zoneDraftRun: async () => { throw Object.assign(new Error('the wording held a number'), { code: 'draft_unfaithful', status: 503 }); } });
+  const r = await mount(check(), '/raise/investor-narrative/check?project_id=7&version=1');
+  try {
+    await r.click('narrative-check-fix-paying_customers');
+    await r.click('narrative-fix-ask');
+    assert.equal(r.text('narrative-fix-error'), 'Eadwyn’s wording held a number, so none was kept. Write the fix yourself in Story.');
+  } finally { await r.close(); }
+});
+
+test('the source: Claims is mounted after Positioning, Story places a fix from ?fix=, and every write confirms in place', () => {
+  const tool = read('../src/pages/raise/narrative/NarrativeTool.jsx');
+  assert.match(tool, /<ClaimsTab /);
+  assert.match(tool, /<CheckTab /);
+  const story = read('../src/pages/raise/narrative/StoryTab.jsx');
+  assert.match(story, /get\('fix'\)/);
+  assert.match(story, /appendFix\(/);
+  for (const f of ['ClaimsTab.jsx', 'CheckTab.jsx']) assert.doesNotMatch(read(`../src/pages/raise/narrative/${f}`), /window\.(confirm|prompt|alert)/, f);
 });

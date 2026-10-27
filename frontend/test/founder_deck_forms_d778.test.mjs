@@ -2,112 +2,111 @@
  * D778 part 5 (#2103) — the pitch deck's two form fills through the run path:
  * `form:deck` ("Fill from project") and `form:deck-template` ("Use this
  * template"). A press sends its own option with the run (`X-Rail-Option`),
- * keeping the mounted rail's page. A template the model fills comes back as a
- * proposal, kept or discarded like a fill, so nothing is written before Keep.
- * A run answers only the project it was pressed for.
+ * keeping the mounted rail's page. Either fill comes back as a proposal, kept
+ * card by card, so nothing is written before Keep.
+ *
+ * D898 group E (#2676) retired the template builder these were first wired in.
+ * Fill from project is the studio's Decks tab (`StudioActions.jsx`), and its
+ * proposal is reviewed at New deck's step 4; a template is started from New
+ * deck (`NewDeck.jsx`), which this file reads.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/founder_deck_forms_d778.test.mjs
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
-import PitchDeckPage from '../src/pages/PitchDeckPage.jsx';
+import { Route, Routes, useLocation } from 'react-router-dom';
+import { FillFromProject } from '../src/pages/raise/pitch/StudioActions.jsx';
 import { api } from '../src/lib/api.js';
 import { clearRailPage, railPressHeaders, setRailPage } from '../src/lib/railPage.js';
 import { installDocument, mountContracts } from './_contracts_dom.mjs';
+import { codeOnly } from './_codeOnly.mjs';
 
 const DECK = { id: 10, project_id: 7, version: 1, title: 'Seed deck', slides: [{ title: 'Problem', method_id: 'yc_seed', spec_id: 'problem', body: 'Old', fields: [] }] };
 const PROPOSAL = { id: 55, project_id: 7, base_deck_id: 10, method_id: 'yc_seed', slides: [{ title: 'Problem', body: 'Freight teams reconcile by hand.', fields: [] }] };
-const textOf = (n) => (n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join('') : n.textContent || '');
+const h = React.createElement;
+
+function Landed() {
+  const loc = useLocation();
+  return h('p', { 'data-testid': 'landed' }, `${loc.pathname}${loc.search}`);
+}
 
 async function mount() {
   const original = { ...api };
   const calls = [];
   const pending = [];
-  const wait = (name) => (...args) => { calls.push([name, ...args]); return new Promise((ok, no) => pending.push({ ok, no })); };
-  api.deckMethods = async () => ({ methods: [{ id: 'yc_seed', label: 'YC Seed' }], premium_method_ids: [], user_tier: 'studio' });
-  api.deckListVersions = async (pid) => { calls.push(['versions', pid]); return { versions: [{ ...DECK, project_id: pid }], proposal: null }; };
-  api.deckGet = async () => ({ deck: DECK });
-  api.deckRecommend = async () => ({ method_id: 'yc_seed' });
-  api.deckApplyMethod = wait('apply');
-  api.deckAutofill = wait('autofill');
-  api.deckKeepProposal = async (id) => { calls.push(['keep', id]); return { deck: { ...DECK, id: 11, version: 2 } }; };
+  api.deckAutofill = (...args) => { calls.push(['autofill', ...args]); return new Promise((ok, no) => pending.push({ ok, no })); };
+  api.deckKeepProposal = async (id) => { calls.push(['keep', id]); return {}; };
   api.deckUpdate = async (...args) => { calls.push(['update', ...args]); return {}; };
-  const projects = [{ id: 7, name: 'Kestrel' }, { id: 8, name: 'Osprey' }];
-  const m = await mountContracts(React.createElement(PitchDeckPage, { embedded: true, initialProjects: projects, initialProjectId: 7 }), '/raise/pitch?mode=workspace');
-  for (let i = 0; i < 4; i += 1) await m.flush();
-  const button = (pred) => m.nodes().find((n) => n.tagName === 'BUTTON' && pred(textOf(n).trim(), m.props(n) || {}));
-  const press = async (pred) => { const b = button(pred); assert.ok(b, 'button present'); await act(async () => { m.props(b).onClick({ preventDefault() {}, stopPropagation() {} }); }); };
+  const m = await mountContracts(h(Routes, null,
+    h(Route, { path: '/raise/pitch', element: h(FillFromProject, { deck: DECK, q: '?project_id=7' }) }),
+    h(Route, { path: '/raise/pitch/new', element: h(Landed) })), '/raise/pitch?project_id=7');
+  const byId = (id) => m.nodes().find((n) => m.props(n)?.['data-testid'] === id);
+  const press = async (id) => { const b = byId(id); assert.ok(b, `${id} present`); await act(async () => { m.props(b).onClick({ preventDefault() {}, stopPropagation() {} }); }); };
   return {
-    ...m, calls, pending,
-    text: () => m.nodes().map(textOf).join(' '),
-    useTemplate: () => press((t) => t === 'Use'),
-    fill: () => press((t) => t === 'Fill from project'),
-    keep: () => press((_, p) => p['data-testid'] === 'button-deck-proposal-keep'),
-    disabled: (label) => m.props(button((t) => t === label))?.disabled === true,
-    async answer(i, value) { await act(async () => { pending[i].ok(value); }); for (let k = 0; k < 3; k += 1) await m.flush(); },
-    async refuse(i, message) { await act(async () => { pending[i].no(Object.assign(new Error(message), { status: 503 })); }); for (let k = 0; k < 3; k += 1) await m.flush(); },
-    async select(id) {
-      const n = m.nodes().find((x) => x.tagName === 'SELECT');
-      await act(async () => { m.props(n).onChange({ target: { value: String(id) } }); });
-      for (let k = 0; k < 3; k += 1) await m.flush();
-    },
+    ...m, calls, pending, byId,
+    fill: async () => { await press('pitch-studio-fill'); await press('pitch-studio-fill-dialog-confirm'); },
+    async answer(value) { await act(async () => { pending[0].ok(value); }); for (let k = 0; k < 3; k += 1) await m.flush(); },
+    async refuse(err) { await act(async () => { pending[0].no(err); }); for (let k = 0; k < 3; k += 1) await m.flush(); },
     writes: () => calls.filter((c) => ['keep', 'update'].includes(c[0])),
     async close() { await m.unmount(); Object.assign(api, original); },
   };
 }
 
-test('each press sends its own option with the run, before any re-render, keeping the mounted rail\'s page', async () => {
-  // Mutation checked: drop the press headers from either call → the request carries no option.
+test('each press sends its own option with the run, keeping the mounted rail\'s page', async () => {
+  // Mutation checked: drop the press headers from the fill → the request carries no option.
   for (const mounted of [null, 'raise']) {
     const token = mounted ? setRailPage(mounted, 'draft:old') : null;
     const m = await mount();
     try {
-      await m.useTemplate();
+      assert.deepEqual(m.calls, [], 'the button runs nothing until its dialog is confirmed');
       await m.fill();
-      const [apply, autofill] = [m.calls.find((c) => c[0] === 'apply'), m.calls.find((c) => c[0] === 'autofill')];
-      assert.deepEqual(apply.slice(1, 3), [7, 'yc_seed']);
-      assert.equal(apply[3]['X-Rail-Option'], encodeURIComponent('form:deck-template'));
+      const autofill = m.calls.find((c) => c[0] === 'autofill');
       assert.equal(autofill[1], 10);
       assert.equal(autofill[2]['X-Rail-Option'], encodeURIComponent('form:deck'));
-      for (const h of [apply[3], autofill[2]]) {
-        assert.equal(h['X-Rail-Page'], mounted || undefined, 'the mounted page holds the Manual switch; with none the Worker names the inventory\'s');
-      }
+      assert.equal(autofill[2]['X-Rail-Page'], mounted || undefined, 'the mounted page holds the Manual switch; with none the Worker names the inventory\'s');
     } finally { if (token) clearRailPage(token); await m.close(); }
   }
+  // A template start is New deck's: the same press headers, its own option.
+  const newDeck = codeOnly(readFileSync(new URL('../src/pages/raise/pitch/NewDeck.jsx', import.meta.url), 'utf8'));
+  assert.match(newDeck, /const RAIL = \{ outline: 'deck:outline', build: 'deck:build', template: 'form:deck-template' \};/);
+  assert.match(newDeck, /api\.deckApplyMethod\(projectId, start\.id, railPressHeaders\(RAIL\.template\)\)/);
 });
 
-test('a template the model fills is shown as a proposal: the deck and its versions wait for Keep', async () => {
-  // Mutation checked: set the deck from a proposal answer → the editor draws the proposal as current.
+test('a fill is a proposal: it lands on New deck\'s review of it, and writes nothing', async () => {
+  // Mutation checked: navigate without the proposal id → New deck opens on step 1, not the proposal.
   const m = await mount();
   try {
-    await m.useTemplate();
-    await m.answer(0, { proposal: PROPOSAL, method_id: 'yc_seed', coverage_pct: 80 });
-    assert.ok(m.text().includes('Freight teams reconcile by hand.'), 'the proposal is drawn beside the current version');
-    assert.ok(m.text().includes('Keep as new version'));
-    assert.deepEqual(m.writes(), [], 'nothing is written on arrival');
-    assert.equal(m.calls.filter((c) => c[0] === 'versions').length, 1, 'no version list refresh: no version was written');
-    await m.keep();
-    for (let k = 0; k < 3; k += 1) await m.flush();
-    assert.deepEqual(m.writes(), [['keep', 55]], 'Keep is the only write');
-  } finally { await m.close(); }
-});
-
-test('a run answers only the project it was pressed for: another project drops it, and switching back does not revive it', async () => {
-  // Mutation checked: drop the stale check → the old project's proposal or refusal is drawn over the new one.
-  const m = await mount();
-  try {
-    await m.useTemplate();
-    await m.select(8);
-    await m.answer(0, { proposal: PROPOSAL, method_id: 'yc_seed', coverage_pct: 80 });
-    assert.ok(!m.text().includes('Freight teams reconcile by hand.'), 'a stale proposal is never drawn');
-    assert.equal(m.disabled('Fill from project'), false, 'and the page is pressable again');
     await m.fill();
-    await m.select(7);
-    await m.refuse(1, 'Project eight could not be filled.');
-    assert.ok(!m.text().includes('Project eight'), 'a stale refusal is never drawn either');
-    assert.deepEqual(m.writes(), []);
+    await m.answer({ proposal: PROPOSAL, method_id: 'yc_seed', coverage_pct: 80 });
+    assert.ok(m.byId('landed'), 'the fill lands on New deck');
+    assert.ok(m.text().includes('/raise/pitch/new?project_id=7&proposal=55'), m.text());
+    assert.deepEqual(m.writes(), [], 'nothing is kept on arrival');
   } finally { await m.close(); }
+});
+
+test('a refused fill says why, and where to fix it', async () => {
+  // Mutation checked: treat every 402 as the plan → a token shortfall points at Plans, not Add tokens.
+  const cases = [
+    [Object.assign(new Error('Deck has no template.'), { status: 409, code: 'no_method_id' }), 'no template to fill', 'New deck'],
+    [Object.assign(new Error('paywall'), { status: 402, code: 'PAYWALL_PREMIUM_METHOD' }), 'on a paid plan', 'Plans'],
+    [Object.assign(new Error('Not enough AI tokens.'), { status: 402, code: 'insufficient_tokens' }), 'Not enough AI tokens.', 'Add tokens'],
+  ];
+  for (const [err, says, fix] of cases) {
+    const m = await mount();
+    try {
+      await m.fill();
+      await m.refuse(err);
+      const alert = m.byId('pitch-studio-fill-refusal');
+      assert.ok(alert, `${err.code}: the refusal is drawn`);
+      const text = m.text();
+      assert.ok(text.includes(says), `${err.code}: ${says}`);
+      assert.ok(text.includes(fix), `${err.code}: ${fix}`);
+      assert.equal(m.byId('landed'), undefined, 'a refused fill stays on the studio');
+      assert.deepEqual(m.writes(), []);
+    } finally { await m.close(); }
+  }
 });
 
 test('the existing API methods send the press\'s headers on the request itself', async () => {

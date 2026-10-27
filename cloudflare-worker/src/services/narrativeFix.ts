@@ -11,69 +11,38 @@
  *
  * - the material is the row and nothing else — no other figure, no project
  *   name, no narrative text the check did not read;
- * - `unfoundFigures` refuses a draft that quotes any figure the row does not
- *   carry, so a model that "helpfully" rounds, projects or invents a third
- *   number writes no draft at all;
- * - `finishNarrativeFix` ends every kept draft with the check's own sentence,
- *   so both figures and both sources are cited whatever the model wrote.
- *
- * D912 (#2696, NAR9): THE WORDING CARRIES NO NUMBER. Eadwyn phrases; the
- * figures under the wording come from the check alone (`finishNarrativeFix`
- * appends them). A draft holding any number, even one that agrees with a
- * figure, is no draft (map E5: `unfoundFigures` let agreeing numbers through).
- * And it phrases the mismatch the founder clicked on the Check tab: the band's
- * scope key carries that claim (`<project>|<claim uid>`, `claimMismatch`),
- * read from D1264's store; with no claim, the newest version's first
- * mismatch, as before.
+ * - D912 (#2696): THE WORDING CARRIES NO NUMBER. The model reads which figure
+ *   and where each side was read, never the figures themselves, and
+ *   `finishNarrativeFix` refuses any draft with a digit in it
+ *   (`unfoundFigures` let a number that agreed with either figure through,
+ *   map E5). The figures enter only from the check: every kept draft ends with
+ *   the check's own sentence, which the page draws under the wording;
+ * - D912: the founder picks the mismatch (`narrativeMismatch`'s `pick`), so
+ *   the fix is for the row they clicked, not always the newest version's first.
  *
  * NEITHER SIDE IS PICKED. The stored metric is not presumed right: a narrative
  * written last week can be newer than a snapshot from last quarter. The
  * instruction offers both corrections and says which record each one changes.
  */
 import type { Env } from '../types';
-import { agrees, FIGURE_LABEL, fmtFigure, mismatchSentence, type FigureKey, type Mismatch } from './raiseCycle';
-import { figureClaim, pinnedItems, signalKinds } from './raiseClaims';
-import { sectionOf } from './narrativeClaims';
-
-const SOURCE_WORD: Record<string, string> = { connector: 'Connector', signed: 'Signed', document: 'Document', recorded: 'Recorded', typed: 'Typed' };
-
-/** The band's scope key, split: the project's key and, when the Check tab sent one, the claim clicked. */
-export function fixScope(scope: string): { project: string; claim: string | null } {
-  const [project, claim] = String(scope ?? '').split('|');
-  return { project, claim: claim && /^[A-Za-z0-9_-]{1,64}$/.test(claim) ? claim : null };
-}
-
-/**
- * D912: the narrative claim the founder clicked, as a mismatch the fix can
- * phrase, or null when it is not one of this venture's narrative mismatches.
- * The record's figure is recomputed by the claim check's own rule
- * (`figureClaim`), in the figure's unit, from the founder's pinned evidence.
- */
-export async function claimMismatch(env: Env, projectId: number, claimUid: string): Promise<Mismatch | null> {
-  const c = await env.DB.prepare(
-    `SELECT field_key, claim_kind, stated_value, surface_version FROM raise_claims
-      WHERE uid = ? AND project_id = ? AND surface = 'narrative' AND state = 'mismatch'`,
-  ).bind(claimUid, projectId).first<{ field_key: string; claim_kind: string; stated_value: string | null; surface_version: string }>();
-  if (!c || !Object.hasOwn(FIGURE_LABEL, c.claim_kind) || c.stated_value == null) return null;
-  const stated = Number(c.stated_value);
-  const items = await pinnedItems(env, projectId);
-  const { state, record } = figureClaim(c.claim_kind as FigureKey, stated, items, await signalKinds(env, projectId, items));
-  if (state !== 'mismatch' || !record || record.value == null) return null;
-  const section = sectionOf(c.field_key)?.label;
-  const source = [SOURCE_WORD[record.label] ?? record.label, record.provider, record.observed_on].filter(Boolean).join(' · ');
-  return {
-    figure: c.claim_kind as FigureKey,
-    stated_value: stated, stated_source: `the narrative, ${c.surface_version}${section ? `, ${section}` : ''}`,
-    metric_value: Number(record.value), metric_source: source,
-  };
-}
+import { agrees, FIGURE_LABEL, mismatchSentence, type FigureKey, type Mismatch } from './raiseCycle';
 
 export const NARRATIVE_FIX_INSTRUCTION = [
-  'Phrase the fix for the one mismatch below, between what the founder\'s narrative states and what the stored metrics hold.',
-  'Name both sources as given, and the figure by its name only.',
-  'Do not say or imply which figure is right: give one wording that brings the narrative to the stored figure, and say that if the narrative\'s figure is the current one, the stored metric is the record to correct instead.',
-  'Write no figure, date or number at all: the two figures are printed under your wording from the check. Nothing else was checked.',
+  'Phrase the fix for the one mismatch below, between what the founder\'s narrative states and what the stored records hold.',
+  'Write words only: no figure, date, percentage or other number at all. The two figures are shown beside your wording, from the check.',
+  'Do not say or imply which figure is right: give one wording for the sentence that would carry the record\'s figure, and say that if the narrative\'s figure is the current one, the record is what to correct instead.',
+  'Nothing else was checked.',
 ].join(' ');
+
+/** Which mismatch the founder clicked: a saved version and one figure. */
+export type FixPick = { version: number; figure: FigureKey };
+
+/** `<project>` or `<project>:v<version>:<figure>`, as the band's scope key carries it. */
+export function parseFixScope(scope: string): { project: string; pick: FixPick | null } {
+  const m = /^(\d+):v([1-9]\d{0,8}):([a-z_]+)$/.exec(String(scope ?? ''));
+  if (m && Object.hasOwn(FIGURE_LABEL, m[3])) return { project: m[1], pick: { version: Number(m[2]), figure: m[3] as FigureKey } };
+  return { project: String(scope ?? ''), pick: null };
+}
 
 /**
  * The first mismatch the check stored for the project's newest narrative
@@ -81,14 +50,19 @@ export const NARRATIVE_FIX_INSTRUCTION = [
  * version has none. Another project's rows are never read: the caller passes a
  * project the ownership check already resolved.
  */
-export async function narrativeMismatch(env: Env, projectId: number): Promise<Mismatch | null> {
-  const row = await env.DB.prepare(
-    `SELECT c.figure, c.stated_value, c.stated_source, c.metric_value, c.metric_source
-       FROM narrative_checks c
-      WHERE c.project_id = ?
-        AND c.version = (SELECT MAX(o.version) FROM spinout_deck_overrides o WHERE o.project_id = ? AND o.version > 0)
-      ORDER BY c.id ASC LIMIT 1`,
-  ).bind(projectId, projectId).first<Mismatch>();
+export async function narrativeMismatch(env: Env, projectId: number, pick: FixPick | null = null): Promise<Mismatch | null> {
+  const row = pick
+    ? await env.DB.prepare(
+      `SELECT c.figure, c.stated_value, c.stated_source, c.metric_value, c.metric_source
+         FROM narrative_checks c WHERE c.project_id = ? AND c.version = ? AND c.figure = ? ORDER BY c.id ASC LIMIT 1`,
+    ).bind(projectId, pick.version, pick.figure).first<Mismatch>()
+    : await env.DB.prepare(
+      `SELECT c.figure, c.stated_value, c.stated_source, c.metric_value, c.metric_source
+         FROM narrative_checks c
+        WHERE c.project_id = ?
+          AND c.version = (SELECT MAX(o.version) FROM spinout_deck_overrides o WHERE o.project_id = ? AND o.version > 0)
+        ORDER BY c.id ASC LIMIT 1`,
+    ).bind(projectId, projectId).first<Mismatch>();
   if (!row || !Object.hasOwn(FIGURE_LABEL, row.figure)) return null;
   return {
     figure: row.figure as FigureKey,
@@ -97,15 +71,21 @@ export async function narrativeMismatch(env: Env, projectId: number): Promise<Mi
   };
 }
 
-/** The lines the model reads: the row, and that it is all there is. */
+/** A source's words with every number taken out: the model never reads a figure or a date. */
+const wordsOnly = (s: string) => String(s ?? '').replace(/[\d][\d,.:/-]*/g, '').replace(/\s{2,}/g, ' ').replace(/\s+([,.)])/g, '$1').trim();
+
+/** The lines the model reads: which figure, where each side was read, and that it is all there is. No number. */
 export function narrativeFixMaterial(m: Mismatch): string[] {
   return [
     `Figure: ${FIGURE_LABEL[m.figure]}`,
-    `The narrative states ${fmtFigure(m.figure, m.stated_value)} (source: ${m.stated_source}).`,
-    `The stored metrics hold ${fmtFigure(m.figure, m.metric_value)} (source: ${m.metric_source}).`,
+    `The narrative states one figure for it (read in: ${wordsOnly(m.stated_source)}).`,
+    `The stored records hold a different figure (read in: ${wordsOnly(m.metric_source)}).`,
     'Nothing records which of the two is current.',
   ];
 }
+
+/** The sentence a kept draft ends with, which the page draws under the wording. */
+export const FIX_SEPARATOR = '\n\nAs the check found them: ';
 
 const SCALE: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6, b: 1e9, billion: 1e9 };
 const NUMBER = /(\d[\d,]*(?:\.\d+)?)\s*(k|m|b|thousand|million|billion)?\b/gi;
@@ -128,17 +108,12 @@ export function unfoundFigures(text: string, m: Mismatch): string[] {
   return out;
 }
 
-/** Every number the drafted wording states. D912: the wording carries none; the figures come from the check. */
-export function statedNumbers(text: string): string[] {
-  return [...String(text ?? '').matchAll(NUMBER)].map(([whole]) => whole.trim());
-}
-
 /**
  * What is stored for a drafted fix: the model's wording followed by the
  * check's own sentence, or null — no draft — when the wording states any
  * number (D912), whether or not it agrees with a figure the check found.
  */
 export function finishNarrativeFix(text: string, m: Mismatch): string | null {
-  if (statedNumbers(text).length) return null;
-  return `${text.trim()}\n\nAs the check found them: ${mismatchSentence(m)}.`;
+  if (/\d/.test(String(text ?? ''))) return null;
+  return `${text.trim()}${FIX_SEPARATOR}${mismatchSentence(m)}.`;
 }

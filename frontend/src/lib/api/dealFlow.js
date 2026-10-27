@@ -9,6 +9,10 @@ import { request } from '../api.js';
 //   events(dealId)                 GET   /deals/flow/:dealId/events → { items }
 //   inbox()                        GET   /deals/flow/inbox → { items, sources }
 //   dismiss(key, reason?)          POST  /deals/flow/inbox/:key/dismiss { reason? } → { ok, key }
+// D1241 (#3254): Compare's Eadwyn note, drafted from SCORING's bands and saved only on press.
+//   compareNotes(ids)              GET   /deals/flow/compare-note?ids= → { items, unreadable }
+//   draftCompareNote(ids)          POST  /deals/flow/compare-note { deal_ids } → { note, receipt }
+//   keepCompareNote(receipt)       POST  /deals/flow/compare-note/keep { receipt } → { saved }
 // A pass is the investor's alone and never closes the round; Closing follows a commitment.
 const id = (v) => encodeURIComponent(String(v));
 export const dealFlowApi = {
@@ -19,5 +23,8 @@ export const dealFlowApi = {
   pass: (dealId, body) => request(`/deals/flow/${id(dealId)}/pass`, { method: 'POST', body: JSON.stringify(body) }),
   events: (dealId) => request(`/deals/flow/${id(dealId)}/events`),
   inbox: () => request('/deals/flow/inbox'),
+  compareNotes: (ids) => request(`/deals/flow/compare-note?ids=${ids.map(id).join(',')}`),
+  draftCompareNote: (ids) => request('/deals/flow/compare-note', { method: 'POST', body: JSON.stringify({ deal_ids: ids }) }),
+  keepCompareNote: (receipt) => request('/deals/flow/compare-note/keep', { method: 'POST', body: JSON.stringify({ receipt }) }),
   dismiss: (key, reason) => request(`/deals/flow/inbox/${id(key)}/dismiss`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
 };

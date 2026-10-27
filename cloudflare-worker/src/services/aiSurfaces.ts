@@ -52,6 +52,8 @@ export const AI_SURFACE = {
   raiseReadiness: '/raise/fundraising-readiness',
   /** D1179: sourced plan readings and roadmap milestone wording. */
   raiseUseOfFunds: '/raise/use-of-funds',
+  /** D1241: Deal flow · Compare — Eadwyn's comparison note from SCORING's bands, saved only on press (`POST /api/deals/flow/compare-note`). */
+  dealsCompare: '/deals/compare',
   /** Build · Plan the build — Eadwyn's wording of the plan (`POST /api/cycles/build/plan/word`), D1071. */
   buildPlan: '/build/plan',
   /** Raise · Cap table — Eadwyn's read of a signed document (`POST /api/captable/record/:projectId/document-read`), D1021. */

@@ -1,160 +1,145 @@
 /**
- * D912 (#2696) — the Investor narrative's Claims (NAR6), the claim lightbox
- * (NAR7, NAR7b) and the Check (NAR8), from `GET /narrative/:version/claims`
- * (D1264's store). Pure: no React and no fetch, so
- * `frontend/test/narrative_claims_d912.test.mjs` holds each rule.
+ * D912 (#2696, part 6 of #2454) — Claims (NAR6, NAR7) and the check (NAR8,
+ * NAR9): their words and derivations, with no React.
  *
- * THE STATES ARE THE CHECK'S. Nothing here decides one: a claim is Backed,
- * Founder's figure, Mismatch or Not backed because D1264 said so. A Mismatch
- * keeps both figures and both sources; neither is presumed right. A record's
- * figure is drawn only when the read carries it (the founder's); staff read
- * the state alone.
+ * Every state is the Worker's (D1264's claim check). A claim with no record
+ * has no best source and is drawn as the bar's dashed Not backed segment. A
+ * check with nothing compared reads "Nothing compared yet.", never "no
+ * mismatch". Eadwyn's fix carries no number: the figures under it come from
+ * the check.
  */
-import { HOME_PATH, NOT_RECORDED, tabSearch } from './narrativeModel';
+import { STATE_LABELS, STATE_TONE } from '../pitch/checkModel.js';
 
-export { NOT_RECORDED };
+export { STATE_LABELS, STATE_TONE };
 
-export const STATES = Object.freeze([
-  { key: 'mismatch', label: 'Mismatch', tone: 'bad', rank: 0 },
-  { key: 'not_backed', label: 'Not backed', tone: 'amber', rank: 1 },
-  { key: 'founders_figure', label: 'Founder’s figure', tone: 'lav', rank: 2 },
-  { key: 'backed', label: 'Backed', tone: 'ok', rank: 3 },
-]);
-const STATE = new Map(STATES.map((s) => [s.key, s]));
-/** A state the store does not send is Not recorded, never a guess. */
-export const stateOf = (key) => STATE.get(key) || { key, label: NOT_RECORDED, tone: 'grey', rank: 9 };
+export const CLAIM_STATES = ['mismatch', 'not_backed', 'founders_figure', 'backed'];
+export const SOURCE_ORDER = ['connector', 'signed', 'document', 'recorded', 'typed'];
+export const SOURCE_LABELS = { connector: 'Connector', signed: 'Signed', document: 'Document', recorded: 'Recorded', typed: 'Typed', not_backed: 'Not backed' };
+const PROVIDER = { stripe: 'Stripe', mercury: 'Mercury', hubspot: 'HubSpot', carta: 'Carta' };
 
-/** The best source's word, best first (D1264's ranking). */
-export const SOURCES = Object.freeze([
-  { key: 'connector', label: 'Connector' },
-  { key: 'signed', label: 'Signed' },
-  { key: 'document', label: 'Document' },
-  { key: 'recorded', label: 'Recorded' },
-  { key: 'typed', label: 'Typed' },
-]);
-const SOURCE = new Map(SOURCES.map((s) => [s.key, s.label]));
-export const sourceWord = (src) => (src?.label ? SOURCE.get(src.label) || NOT_RECORDED : 'No record');
+export const NOTHING_COMPARED = 'Nothing compared yet.';
+export const NO_CLAIMS = 'This version states no figure the check reads.';
+export const NO_RECORDS = 'No record in your Evidence pack could back this figure yet. Pin one on Evidence, or keep it as your figure.';
+export const CLAIMS_UNREADABLE = 'The claims could not be read. This is not a claim that there are none.';
+export const SOURCE_UNREADABLE = 'The check could not read its sources. Nothing was changed; try again.';
+export const FIX_NO_NUMBER = 'Eadwyn’s wording carries no number. The figures under it come from the check, and accepting changes the narrative only.';
+export const FIX_SEPARATOR = '\n\nAs the check found them: ';
+export const RESULT_LABELS = { ok: 'OK', mismatch: 'Mismatch', not_compared: 'Not compared' };
+export const RESULT_TONE = { ok: 'ok', mismatch: 'warn', not_compared: 'neutral' };
 
-/** A state that needs the founder: a Mismatch, then a Not-backed claim. */
-export const needsYou = (c) => c?.state === 'mismatch' || c?.state === 'not_backed';
-
-/** The rows as NAR6 draws them: needs-you first, then by section, then by figure. */
-export function claimRows(read) {
-  const claims = Array.isArray(read?.claims) ? read.claims : [];
-  return claims
-    .map((c) => ({
-      id: c.id,
-      section: c.section?.label || 'Elsewhere in the narrative',
-      sectionKey: c.section?.key || 'other',
-      figure: c.figure || NOT_RECORDED,
-      stated: c.stated ?? NOT_RECORDED,
-      state: stateOf(c.state),
-      source: sourceWord(c.source),
-      sourceKey: c.source?.label || null,
-      provider: c.source?.provider || null,
-      observed: c.source?.observed_on || null,
-      record: c.source?.record ?? null,
-      needs: needsYou(c),
-      note: c.note || null,
-      noteOutdated: c.note_outdated === true,
-      candidates: Array.isArray(c.candidates) ? c.candidates : null,
-      raw: c,
-    }))
-    .sort((a, b) => Number(b.needs) - Number(a.needs) || a.state.rank - b.state.rank || a.section.localeCompare(b.section) || a.figure.localeCompare(b.figure));
+/** Who holds a record: the provider's name, else its source label. */
+export function recordSource(record) {
+  if (!record) return null;
+  return PROVIDER[String(record.provider || '').toLowerCase()] || (record.provider ? String(record.provider) : SOURCE_LABELS[record.source_label] || 'the record');
 }
 
-/** The filter choices for State, Source and Section, each with its count, from the rows themselves. */
-export function claimFilters(rows) {
-  const count = (pick) => {
-    const m = new Map();
-    for (const r of rows) { const [k, l] = pick(r); const e = m.get(k) || { key: k, label: l, n: 0 }; e.n += 1; m.set(k, e); }
-    return [...m.values()];
-  };
+/** "Needs you first": Mismatch, then Not backed, then Founder's figure, then Backed. */
+const rank = (s) => { const i = CLAIM_STATES.indexOf(s); return i < 0 ? 9 : i; };
+
+/** The table's rows under its filters; `needsFirst` orders by what needs the founder. */
+export function filterClaims(claims, { state = '', source = '', section = '', needsFirst = true } = {}) {
+  const rows = (claims || []).filter((c) => (!state || c.state === state)
+    && (!source || (source === 'not_backed' ? c.best_source == null : c.best_source === source))
+    && (!section || c.section === section));
+  return needsFirst ? [...rows].sort((a, b) => rank(a.state) - rank(b.state)) : rows;
+}
+
+/** The sections the claims fall in, in the order first met, for the Section filter. */
+export function sectionOptions(claims) {
+  const seen = new Map();
+  for (const c of claims || []) if (c.section && !seen.has(c.section)) seen.set(c.section, c.section_label || c.section);
+  return [...seen].map(([id, label]) => ({ id, label }));
+}
+
+/**
+ * The 100% bar of claims by best source: one segment per source with any
+ * claim, Not backed last and dashed. The shares are whole percents that add
+ * to 100 (largest remainder). No claims, no bar.
+ */
+export function sourceBar(bySource) {
+  const keys = [...SOURCE_ORDER, 'not_backed'];
+  const counts = keys.map((k) => ({ key: k, n: Number(bySource?.[k]) || 0 })).filter((x) => x.n > 0);
+  const total = counts.reduce((t, x) => t + x.n, 0);
+  if (!total) return null;
+  const raw = counts.map((x) => ({ ...x, exact: (x.n / total) * 100 }));
+  const floors = raw.map((x) => ({ ...x, pct: Math.floor(x.exact) }));
+  let left = 100 - floors.reduce((t, x) => t + x.pct, 0);
+  [...floors].sort((a, b) => (b.exact - b.pct) - (a.exact - a.pct)).forEach((x) => { if (left > 0) { x.pct += 1; left -= 1; } });
   return {
-    state: count((r) => [r.state.key, r.state.label]).sort((a, b) => stateOf(a.key).rank - stateOf(b.key).rank),
-    source: count((r) => [r.sourceKey || 'none', r.source]),
-    section: count((r) => [r.sectionKey, r.section]).sort((a, b) => a.label.localeCompare(b.label)),
+    total,
+    segments: floors.map((x) => ({ key: x.key, label: SOURCE_LABELS[x.key], n: x.n, pct: x.pct, dashed: x.key === 'not_backed' })),
+    summary: `Claims by best source: ${floors.map((x) => `${SOURCE_LABELS[x.key]} ${x.n}`).join(', ')}.`,
   };
 }
 
-/** The rows a filter leaves; `needsFirst` keeps only what needs the founder. */
-export function filterClaims(rows, { state = 'all', source = 'all', section = 'all', needsFirst = false } = {}) {
-  return rows.filter((r) => (state === 'all' || r.state.key === state)
-    && (source === 'all' || (r.sourceKey || 'none') === source)
-    && (section === 'all' || r.sectionKey === section)
-    && (!needsFirst || r.needs));
-}
-
-/**
- * The 100% bar of claims by best source. A claim with no record is its own
- * dashed segment, "No record", never folded into a source. Widths add to 100.
- */
-export function sourceBar(rows) {
-  const total = rows.length;
-  if (!total) return [];
-  const parts = [...SOURCES.map((s) => ({ key: s.key, label: s.label, n: rows.filter((r) => r.sourceKey === s.key).length, dashed: false })),
-    { key: 'none', label: 'No record', n: rows.filter((r) => !r.sourceKey).length, dashed: true }]
-    .filter((p) => p.n > 0);
-  let used = 0;
-  return parts.map((p, i) => {
-    const pct = i === parts.length - 1 ? 100 - used : Math.round((p.n / total) * 100);
-    used += pct;
-    return { ...p, pct };
-  });
-}
-
-/** The line over the table: how many claims, how many need the founder. */
-export function claimsLine(rows) {
-  if (!rows.length) return '';
-  const need = rows.filter((r) => r.needs).length;
-  return `${rows.length} claim${rows.length === 1 ? '' : 's'} · ${need ? `${need} need${need === 1 ? 's' : ''} you` : 'none needs you'}`;
-}
-
-/** When the version was last checked, or that it never was. */
-export function lastChecked(read) {
-  const at = read?.checked_at;
-  return at ? `Last checked ${String(at).replace('T', ' ').slice(0, 16)}` : 'Not checked yet';
-}
-
-/**
- * NAR8's summary: counts by state, or "Nothing compared yet." when no figure
- * was compared. A version with no claim compared nothing; it is never "no mismatch".
- */
-export function checkLine(rows) {
-  if (!rows.length) return 'Nothing compared yet.';
-  return STATES.map((s) => [s, rows.filter((r) => r.state.key === s.key).length])
-    .filter(([, n]) => n > 0).map(([s, n]) => `${n} ${s.label.toLowerCase()}`).join(' · ');
-}
-
-/** The lightbox's content for one claim: Not backed lists records that could back it; Mismatch shows both figures. */
-export function claimSheet(row, version, search = '') {
-  if (!row) return null;
-  const story = `${HOME_PATH}/story${tabSearch(search, version)}`;
-  const evidence = `/raise/evidence/claim/${encodeURIComponent(row.id)}`;
-  if (row.state.key === 'mismatch') {
-    return {
-      kind: 'mismatch',
-      title: `${row.figure} · Mismatch`,
-      sub: 'Both figures with their sources. Neither is presumed right.',
-      stated: { value: row.stated, where: `The narrative, v${version}, ${row.section}` },
-      record: row.record != null ? { value: row.record, where: [row.source, row.provider, row.observed].filter(Boolean).join(' · ') } : null,
-      useRecord: row.record != null ? story : null,
-      canNote: row.record != null,
-      note: row.note,
-      noteOutdated: row.noteOutdated,
-    };
+/** What a claim's drawer says first. */
+export function claimLine(c) {
+  if (c.state === 'mismatch' && c.record) {
+    return `${c.section_label || 'The narrative'} says ${c.stated_shown ?? 'a figure'}. ${recordSource(c.record)} says ${c.record.shown ?? 'another'}${c.record.observed_on ? ` as of ${c.record.observed_on}` : ''}. Neither figure is presumed right.`;
   }
-  if (row.state.key === 'not_backed') {
-    return {
-      kind: 'not_backed',
-      title: `${row.figure} · Not backed`,
-      sub: 'No pinned record backs this figure. These records in your Evidence pack could back it.',
-      candidates: row.candidates,
-      evidence,
-    };
-  }
-  return { kind: 'state', title: `${row.figure} · ${row.state.label}`, sub: row.state.key === 'founders_figure' ? 'Only a figure you typed agrees with this one.' : 'A record agrees with this figure.', evidence };
+  if (c.state === 'not_backed') return 'No pinned record measures this figure yet.';
+  if (c.state === 'founders_figure') return 'Only a figure you typed agrees with it. It is your figure, not backed by a record.';
+  if (c.state === 'backed' && c.record) return `Backed by ${recordSource(c.record)}${c.record.observed_on ? `, as of ${c.record.observed_on}` : ''}.`;
+  return '';
 }
 
-/** The scope key Phrase the fix runs on: the venture and the claim clicked (`narrativeFix.ts`'s `fixScope`). */
-export const fixScopeKey = (projectId, claimId) => `${Number(projectId)}|${claimId}`;
+/** One record as a line: its source, provider and date. */
+export function itemLine(item) {
+  if (!item) return '';
+  const who = PROVIDER[String(item.provider || '').toLowerCase()] || item.provider;
+  return [SOURCE_LABELS[item.source_label] || item.source_label, who, item.observed_on].filter(Boolean).join(' · ');
+}
+
+/** NAR8's line over the table. */
+export function checkLine(view) {
+  if (!view || !Array.isArray(view.rows)) return null;
+  if (!view.compared) return NOTHING_COMPARED;
+  return `${view.compared} compared · ${view.mismatches} ${view.mismatches === 1 ? 'mismatch' : 'mismatches'}${view.rows.length > view.compared ? ` · ${view.rows.length - view.compared} not compared` : ''}`;
+}
+
+/** Which sides the version is checked against, in words. */
+export function againstLine(view) {
+  const a = view?.against || [];
+  if (!a.length) return 'Check against: nothing chosen, so nothing is compared.';
+  const deck = a.includes('deck') ? (view.deck?.version ? `Pitch deck v${view.deck.version}` : 'the pitch deck (none yet)') : null;
+  return `Check against: ${[deck, a.includes('metrics') ? 'the metrics' : null].filter(Boolean).join(' and ')}.`;
+}
+
+/** The scope a fix is asked for: the venture, the version and the figure clicked. */
+export const fixScope = (projectId, version, figure) => `${projectId}:v${version}:${figure}`;
+
+/** A kept fix: Eadwyn's wording, and the check's own sentence under it. */
+export function fixParts(body) {
+  const s = String(body || '');
+  const i = s.indexOf(FIX_SEPARATOR);
+  return i < 0 ? { wording: s.trim(), found: null } : { wording: s.slice(0, i).trim(), found: s.slice(i + FIX_SEPARATOR.length).trim() };
+}
+
+export const FIX_PROPOSAL_NOTE = 'Proposed by Eadwyn for the mismatch you chose. Accept adds this wording to the section: change the sentence it fixes, then Save version.';
+
+/** The section's words with an accepted fix added after them. */
+export function appendFix(body, wording) {
+  const a = String(body || '').trim();
+  const b = String(wording || '').trim();
+  return a ? (b ? `${a}\n\n${b}` : a) : b;
+}
+
+/** The Story address that places a fix as a proposal in its section. */
+export function acceptFixHref(search, version, section, uid) {
+  const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  const out = new URLSearchParams();
+  const project = from.get('project_id') || from.get('project');
+  if (project) out.set('project_id', project);
+  out.set('version', String(version));
+  if (section) out.set('section', section);
+  out.set('fix', uid);
+  return `/raise/investor-narrative/story?${out}`;
+}
+
+/** "Last checked …", or Not checked. */
+export function lastChecked(at) {
+  if (!at) return 'Not checked';
+  const d = new Date(String(at).replace(' ', 'T') + (String(at).includes('Z') ? '' : 'Z'));
+  if (Number.isNaN(d.getTime())) return 'Not checked';
+  return `Last checked ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}, ${d.toISOString().slice(11, 16)} UTC`;
+}

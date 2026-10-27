@@ -8,7 +8,7 @@
 <x-dc>
 <helmet>
   <meta name="design_doc_mode" content="canvas">
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <style>body{margin:0;background:#eeedf2;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b}a{color:#7c3aed}a:hover{color:#6d28d9}</style>
 </helmet>
 <div style="display:flex;flex-direction:column">
@@ -39,7 +39,7 @@ class Component extends DCLogic {
     return { rows: [
       R('INS1', 'Insights overview · Admin · light', '/admin/insights', 'KPI row, who your accounts are, plan, growth, activity (previous period on), activation, still active, where they are, account health, support and AI use. The moved notice shows once under the title. Any bar, slice or point opens the group lightbox (INS3); every block title opens "How is this counted?" (INS4).', [{ compare: true, notice: true }]),
       R('INS2', 'Insights overview · Super Admin', '/admin/insights?scope=hq', 'The HQ badge and the Scope select. Left: the select open, with the note that only HQ-held accounts exist today. Right: a subsidiary picked, so the scope chip reads "[Branch North] · counts read from its own database". The link to HQ Analytics sits at the right of the filter bar.', [{ cap: 'Scope select open', role: 'super', scopeOpen: true }, { cap: 'A subsidiary picked', role: 'super', scopePicked: true }]),
-      R('INS3', 'Group lightbox', '/admin/insights?group=founders', 'Opened by clicking the Founders bar, as a centred lightbox over the page; no side panel slides in. Close with × or Esc. Counts only; the primary button opens the same 512 accounts in Accounts, with the same filters.', [{ drawer: true }]),
+      R('INS3', 'Group drawer', '/admin/insights?group=founders', 'Opened by clicking the Founders bar. A 480px drawer opens beside the Eadwyn rail, which stays visible; only the page behind it dims. Close with × or Esc. Counts only; the primary button opens the same 512 accounts in Accounts, with the same filters.', [{ drawer: true }]),
       R('INS4', '"How is this counted?"', '/admin/insights', 'The definition dialog for Active accounts, with the source, the as-of time, and two more definitions.', [{ dialog: 'count' }]),
       R('INS5', 'Export', '/admin/insights', 'What, format and the read-only range; counts only and logged. After export, the toast with Download.', [{ dialog: 'export', toast: true }]),
       R('INS6', 'Insights overview · Admin · dark', '/admin/insights', 'INS1 in dark colours. Only violet changes (#a78bfa); sky, amber, emerald and muted keep their values on #111827. The rail is collapsed to its spine.', [{ dark: true, compare: true }]),
@@ -52,6 +52,4 @@ class Component extends DCLogic {
   }
 }
 </script>
-
-
 </body></html>

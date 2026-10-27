@@ -43,18 +43,8 @@ const COMPARE = { a: 3, b: 4, pairs: [
   { key: 'team', label: 'Team', a: { body: null }, b: { body: null }, state: 'not_recorded' },
 ] };
 
-// D912 (#2696): a version's claims, as `GET /narrative/:version/claims` sends them to the founder.
-const CLAIMS = (v, founder = true) => ({ version: Number(v), founder, checked_at: '2026-10-27 10:00:00', claims: [
-  { id: 'c-mrr', section: { key: 'traction', label: 'Traction' }, figure: 'MRR', kind: 'mrr', stated: '$18,400', state: 'mismatch', checked_at: '2026-10-27 10:00:00',
-    source: { label: 'connector', provider: 'stripe', observed_on: '2026-10-20', ...(founder ? { record: '$16,950' } : {}) }, linked: 0, note: null, note_outdated: false },
-  { id: 'c-raise', section: { key: 'ask', label: 'The ask' }, figure: 'The raise', kind: 'raise', stated: '$2,000,000', state: 'not_backed', checked_at: '2026-10-27 10:00:00',
-    source: null, linked: 0, note: null, note_outdated: false, ...(founder ? { candidates: [] } : {}) },
-] });
-
 function handler(url) {
   if (url.includes('/form-options')) return response(OPTIONS);
-  const claims = url.match(/\/narrative\/(\d+)\/claims\?/);
-  if (claims) return response(CLAIMS(claims[1]));
   if (url.includes('/narrative/compare?')) return response(COMPARE);
   const m = url.match(/\/records\/([^/?]+)\?/);
   if (m) return /^\d+$/.test(m[1]) ? response(version(m[1], `Close the month in a day (v${m[1]}).`)) : response({ detail: 'Not found' }, 404);
@@ -95,7 +85,7 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
  * The model
  * ------------------------------------------------------------------ */
 
-test('the tabs are the canvas\'s six, Claims included (D912), and only their words are tabs; a version is a number', () => {
+test('the tabs are the canvas\'s (D912 adds Claims after Positioning), and only their words are tabs; a version is a number', () => {
   assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Home', ''], ['Story', '/story'], ['Positioning', '/positioning'], ['Claims', '/claims'], ['Check', '/check'], ['Versions', '/versions']]);
   for (const word of ['story', 'positioning', 'claims', 'check', 'versions']) assert.equal(isNarrativeTab('investor-narrative', word), true, word);
   for (const id of ['4', 'new', 'home', '']) assert.equal(isNarrativeTab('investor-narrative', id), false, id);
@@ -148,16 +138,16 @@ test('compare lines up two versions section by section and marks what changed', 
  * Mounted: CycleRoute draws the tabs, and never reads a tab as a record
  * ------------------------------------------------------------------ */
 
-test('Check reads the saved versions and the newest version\'s claims (D912), never a record called "check"', async () => {
+test('Check reads the saved versions and the newest version\'s check (D912), never a record called "check"', async () => {
   const view = await mounted('/raise/investor-narrative/check?project_id=3');
   try {
     assert.ok(view.requests.some((u) => u.includes('/cycles/raise/modules/investor-narrative/form-options?project=3')), 'the saved versions');
-    assert.ok(view.requests.some((u) => u.includes('/cycles/raise/narrative/4/claims?project=3')), 'the newest version\'s claims');
-    assert.ok(!view.requests.some((u) => u.includes('/records/')), 'the check no longer reads the record');
+    assert.ok(view.requests.some((u) => u.includes('/cycles/raise/narrative/4/check?project=3')), 'the newest version\'s check');
+    assert.ok(!view.requests.some((u) => u.includes('/records/check')), 'a tab word is never read as a record');
     const t = view.text();
-    assert.match(t, /Check against the records/);
-    assert.match(t, /1 mismatch · 1 not backed/);
-    assert.match(t, /Stated \$18,400 · record \$16,950/);
+    assert.match(t, /Check against the deck and the metrics/);
+    // D912 keeps D906's words for a check with nothing compared.
+    assert.match(t, /Nothing compared yet\./);
     assert.ok(view.testIds().includes('narrative-tabs'));
     assert.ok(view.testIds().includes('cycle-header'), 'the Raise header, with its modules rail, heads the tab');
     for (const href of view.hrefs().filter((x) => x?.startsWith(HOME_PATH))) assert.match(href, /project_id=3/, href);
@@ -268,24 +258,14 @@ test('a refused versions read is another venture\'s narrative (D914, NAR14b), wi
   } finally { await view.close(); }
 });
 
-test('Check offers Phrase the fix on each mismatch the founder reads, in any version (D912, NAR9); never to staff', async () => {
-  const newest = await mounted('/raise/investor-narrative/check?project_id=3');
+// D912 (#2696): Phrase the fix moved into the Check tab, per mismatch; frontend/test/narrative_claims_d912.test.mjs covers it.
+test('D912: Claims is a tab: it reads the chosen version\'s claims, never a record called "claims"', async () => {
+  const view = await mounted('/raise/investor-narrative/claims?project_id=3');
   try {
-    assert.ok(newest.testIds().includes('check-fix-c-mrr'), 'the mismatch row carries its own fix');
-    assert.ok(!newest.testIds().includes('check-fix-c-raise'), 'a Not-backed claim has nothing to phrase');
-    assert.ok(newest.testIds().includes('narrative-check-run'), 'the founder runs the check');
-  } finally { await newest.close(); }
-  const older = await mounted('/raise/investor-narrative/check?project_id=3&version=3');
-  try {
-    assert.ok(older.requests.some((u) => u.includes('/cycles/raise/narrative/3/claims?project=3')), 'the version the address names');
-    assert.ok(older.testIds().includes('check-fix-c-mrr'), 'the fix is the clicked claim\'s, not only the newest version\'s');
-  } finally { await older.close(); }
-  const staff = await mounted('/raise/investor-narrative/check?project_id=3', { handle: (u) => (/\/narrative\/4\/claims\?/.test(u) ? response(CLAIMS(4, false)) : handler(u)) });
-  try {
-    assert.ok(!staff.testIds().includes('check-fix-c-mrr'), 'staff read states only');
-    assert.ok(!staff.testIds().includes('narrative-check-run'));
-    assert.doesNotMatch(staff.text(), /16,950/, 'no record figure for staff');
-  } finally { await staff.close(); }
+    assert.ok(view.requests.some((u) => u.includes('/cycles/raise/narrative/4/claims?project=3')), 'the newest version\'s claims');
+    assert.ok(!view.requests.some((u) => u.includes('/records/claims')));
+    assert.ok(view.testIds().includes('narrative-tab-claims'));
+  } finally { await view.close(); }
 });
 
 test('the check\'s line says what the Worker compares today, and Home\'s tabs keep the version', async () => {

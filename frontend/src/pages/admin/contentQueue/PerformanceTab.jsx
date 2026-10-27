@@ -12,8 +12,11 @@ import { NOT_RECORDED, NOT_RECORDED_LINE, PERIODS, performanceView, rangeFor } f
  *   - A period (the Worker's twelve weeks, or 30 days, 90 days, 12 months).
  *   - Four tiles: Published, Views, Median time to a decision, Followers told.
  *   - Charts per week, each with "View as table" and a sentence that says it:
- *     published; submitted and decided; views. Views by sector and the top
- *     articles come from the daily count.
+ *     published; submitted and decided; views. Views by sector comes from
+ *     the daily count.
+ *   - The top articles (D1332) are every published article ranked by its
+ *     views all time, with views per day since publish; the period does not
+ *     change them.
  *   - What is not recorded yet is listed as such, never drawn as a zero.
  *
  * Before the daily count starts, views say Not recorded with the Worker's own
@@ -24,6 +27,8 @@ const CARD = 'rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-
 const MUTED = 'text-slate-500 dark:text-slate-400';
 const LINK = 'inline-flex min-h-[44px] items-center text-sm font-semibold text-violet-700 hover:underline dark:text-violet-300 md:min-h-0';
 const TICK = { fontSize: 10, fill: '#64748b' };
+const TOP_SORTED = 'Views, all time';
+const TOP_COLUMNS = ['Rank', 'Title', 'Author', 'Published', TOP_SORTED, 'Views per day since publish', 'Read time'];
 
 const SERIES = {
   published: [{ key: 'published', label: 'Published', color: '#7c3aed' }],
@@ -147,18 +152,21 @@ export default function PerformanceTab({ load = adminArticles.performance, today
       </div>
 
       <section className={CARD} data-testid="perf-top">
-        <h3 className="m-0 text-sm font-semibold text-slate-900 dark:text-slate-100">Top articles</h3>
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="m-0 text-sm font-semibold text-slate-900 dark:text-slate-100">Top articles</h3>
+          {view.topOf && <span className={`text-xs ${MUTED}`} data-testid="perf-top-of">{view.topOf}</span>}
+        </div>
         {view.top == null ? (
           <p className={`m-0 mt-2 text-sm ${MUTED}`} data-testid="perf-nr-top">{view.viewsReason}</p>
         ) : view.top.length === 0 ? (
-          <p className={`m-0 mt-2 text-sm ${MUTED}`} data-testid="perf-top-none">No article was read in this period.</p>
+          <p className={`m-0 mt-2 text-sm ${MUTED}`} data-testid="perf-top-none">No article is published yet.</p>
         ) : (
           <>
             <div className="mt-3 hidden overflow-x-auto md:block">
               <table className="w-full text-left text-sm" data-testid="perf-top-table">
                 <thead>
                   <tr className={`text-xs font-semibold ${MUTED}`}>
-                    {['Rank', 'Title', 'Author', 'Published', 'Views', 'Read time'].map((h) => <th key={h} className="whitespace-nowrap px-2 py-1">{h}</th>)}
+                    {TOP_COLUMNS.map((h) => <th key={h} aria-sort={h === TOP_SORTED ? 'descending' : undefined} className="whitespace-nowrap px-2 py-1">{h === TOP_SORTED ? `${h} ↓` : h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -169,6 +177,7 @@ export default function PerformanceTab({ load = adminArticles.performance, today
                       <td className={`px-2 py-1 ${MUTED}`}>{t.author}</td>
                       <td className="whitespace-nowrap px-2 py-1">{t.published}</td>
                       <td className="px-2 py-1 tabular-nums">{t.views}</td>
+                      <td className="px-2 py-1 tabular-nums">{t.perDay}</td>
                       <td className="px-2 py-1">{t.read}</td>
                     </tr>
                   ))}
@@ -179,7 +188,7 @@ export default function PerformanceTab({ load = adminArticles.performance, today
               {view.top.map((t) => (
                 <li key={t.id} className="border-t border-slate-100 pt-2 text-sm dark:border-slate-800">
                   <span className="font-semibold text-slate-900 dark:text-slate-100">{`${t.rank}. ${t.title}`}</span>
-                  <span className={`block text-xs ${MUTED}`}>{`${t.author} · ${t.views} views · ${t.read}`}</span>
+                  <span className={`block text-xs ${MUTED}`}>{`${t.author} · ${t.views} views all time · ${t.perDay} a day · ${t.read}`}</span>
                 </li>
               ))}
             </ol>

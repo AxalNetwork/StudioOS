@@ -39,7 +39,9 @@ and `/admin/articles/performance`.
 - `PerformanceTab.jsx` — Performance (ART11, ART12), from D1294's
   `GET /api/admin/articles/performance`: the period, the tiles, the weekly
   charts each with View as table, views by sector, the top articles and what
-  is not recorded yet.
+  is not recorded yet. The top articles rank every published article by its
+  views all time, with views per day since publish; the period does not
+  change them (D1332).
 
 A tab of the Content queue that is its own slot task goes in this folder,
 takes its read as a `load` prop so a test can answer it, and keeps its rules

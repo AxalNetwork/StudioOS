@@ -49,8 +49,9 @@ export const TITLE = 'Investor narrative';
 export const LINE = 'The story you tell investors, one version per kind of investor.';
 
 /**
- * The canvas's six tabs. Claims (NAR6) is D912's (#2696), on D1264's claim check.
- * `path` is the tab's segment under HOME_PATH; Home is the module page itself.
+ * The canvas's six tabs; D912 (#2696) adds Claims after Positioning, over
+ * #2430's claim store. `path` is the tab's segment under HOME_PATH; Home is
+ * the module page itself.
  */
 export const TABS = [
   { id: 'home', label: 'Home', path: '' },

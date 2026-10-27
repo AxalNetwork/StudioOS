@@ -143,7 +143,7 @@ test('another founder\'s mismatch is never phrased, and never read', async () =>
   assert.equal(r.prompt, null);
 });
 
-test('the model reads the one row: both figures, both sources, and nothing that picks a side', async () => {
+test('the model reads the one row: which figure and where each side was read, never a number, and nothing that picks a side', async () => {
   const db = freshDb();
   version(db, MY_PROJECT, 1);
   check(db, MY_PROJECT, 1, ROW);
@@ -153,7 +153,10 @@ test('the model reads the one row: both figures, both sources, and nothing that 
   const r = await draft(db, MINE, String(MY_PROJECT));
   assert.equal(r.status, 201);
   const prompt = String(r.prompt);
-  for (const part of ['$12,000', '$9,500', STATED, STORED]) assert.ok(prompt.includes(part), `the model was not given ${part}`);
+  // D912 (#2696): the wording carries no number, so the model reads none: not the figures, not the snapshot's date.
+  for (const part of ['MRR', 'Narrative · traction.summary', 'Metrics · project_metrics.mrr on']) assert.ok(prompt.includes(part), `the model was not given ${part}`);
+  const material = prompt.slice(prompt.indexOf('Figure: '));
+  assert.doesNotMatch(material, /\d/, 'a number reached the model');
   // One mismatch: the first stored, never the rest.
   assert.ok(!prompt.includes('Paying customers') && !prompt.includes('traction.customers'), 'more than one mismatch reached the model');
   assert.ok(!prompt.includes('77,000') && !prompt.includes('their.summary'), 'another founder\'s check reached the model');
@@ -197,9 +200,25 @@ test('finishNarrativeFix appends the check\'s sentence, or refuses', () => {
   const kept = finishNarrativeFix('  Use one of the two.  ', ROW);
   assert.equal(kept, `Use one of the two.\n\nAs the check found them: MRR: $12,000 in ${STATED}, $9,500 in ${STORED}.`);
   assert.equal(finishNarrativeFix('Say $11,000.', ROW), null);
-  // D912 (#2696, NAR9): the wording carries no number at all, even one that agrees with a figure.
-  // Mutation checked: refuse only unfound figures again → this draft is kept.
+  // D912 (map E5): a number that agrees with either figure is refused too; the figures come from the check alone.
+  assert.equal(finishNarrativeFix('Say $12,000.', ROW), null);
   assert.equal(finishNarrativeFix('Either $12,000 or $9,500 is current.', ROW), null);
-  assert.match(NARRATIVE_FIX_INSTRUCTION, /Write no figure, date or number at all/);
-  assert.doesNotMatch(NARRATIVE_FIX_INSTRUCTION, /Name both figures/, 'the instruction never asks for a figure');
+  assert.equal(finishNarrativeFix('Write nine thousand five hundred dollars in 2026.', ROW), null);
+  assert.match(NARRATIVE_FIX_INSTRUCTION, /no figure, date, percentage or other number at all/);
+});
+
+test('D912: the fix is for the mismatch the founder clicked, on the version it is in', async () => {
+  const db = freshDb();
+  version(db, MY_PROJECT, 1);
+  check(db, MY_PROJECT, 1, ROW);
+  check(db, MY_PROJECT, 1, { figure: 'paying_customers', stated_value: 40, stated_source: 'Narrative · traction.customers', metric_value: 31, metric_source: 'Metrics · project_metrics.paying_accounts' });
+  version(db, MY_PROJECT, 2);
+  const r = await draft(db, MINE, `${MY_PROJECT}:v1:paying_customers`);
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+  assert.ok(String(r.prompt).includes('Paying customers'), 'the clicked figure');
+  assert.ok(!String(r.prompt).includes('Figure: MRR'), 'not the first row');
+  assert.match(stored(db)[0], /As the check found them: Paying customers: 40 in Narrative · traction\.customers, 31 in/);
+  // A pick that names no stored mismatch phrases nothing, and another venture's project refuses.
+  assert.equal((await draft(db, MINE, `${MY_PROJECT}:v2:paying_customers`)).status, 409);
+  assert.equal((await draft(db, MINE, `${THEIR_PROJECT}:v1:mrr`)).status, 409);
 });

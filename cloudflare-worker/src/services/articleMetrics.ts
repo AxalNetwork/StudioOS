@@ -226,9 +226,21 @@ export function rangeOf(from: string | undefined, to: string | undefined, now: D
 }
 
 /**
+ * Views per day since publish (D1332): the all-time views over the whole days
+ * since the article was published, at least one, to one decimal place. An
+ * article with no publish date has no rate: null, never a guess.
+ */
+export function perDaySincePublish(views: number, publishedAt: string | null | undefined, now: Date = new Date()): number | null {
+  const at = publishedAt ? Date.parse(String(publishedAt).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(publishedAt)) ? '' : 'Z')) : NaN;
+  if (!Number.isFinite(at)) return null;
+  const days = Math.max(1, Math.floor((now.getTime() - at) / 86_400_000));
+  return Math.round((views / days) * 10) / 10;
+}
+
+/**
  * `GET /api/admin/articles/performance?from=&to=`: per Monday week, the
  * articles published, submitted and decided, and the views counted that week;
- * views by sector and the top articles over the range; the median time to a
+ * views by sector over the range; the top articles by views all time; the median time to a
  * decision; and the followers the range's publishes reached.
  */
 export async function performanceRead(env: Env, fromQ: string | undefined, toQ: string | undefined, now: Date = new Date()) {
@@ -279,13 +291,12 @@ export async function performanceRead(env: Env, fromQ: string | undefined, toQ: 
   for (const s of changes) { const x = weekFor(s.day); if (x) x.changes_requested += Number(s.n); }
   for (const v of daily) { const x = weekFor(v.day); if (x && x.views != null) x.views += Number(v.views); }
 
-  // Views by sector and the top articles, from the daily rows only.
+  // Views by sector, from the daily rows only.
   const byArticle = new Map<number, number>();
   for (const v of daily) byArticle.set(Number(v.article_id), (byArticle.get(Number(v.article_id)) || 0) + Number(v.views));
   const ids = [...byArticle.keys()];
   const meta = ids.length ? ((await env.DB.prepare(
-    `SELECT a.id, a.title, a.sector, a.published_at, a.read_minutes, u.name AS author_name
-       FROM articles a LEFT JOIN users u ON u.id = a.author_user_id WHERE a.id IN (SELECT value FROM json_each(?))`,
+    'SELECT id, sector FROM articles WHERE id IN (SELECT value FROM json_each(?))',
   ).bind(JSON.stringify(ids)).all<any>()).results || []) : [];
   const metaOf = new Map(meta.map((m: any) => [Number(m.id), m]));
   const sectors = new Map<string, number>();
@@ -294,6 +305,14 @@ export async function performanceRead(env: Env, fromQ: string | undefined, toQ: 
     sectors.set(key, (sectors.get(key) || 0) + n);
   }
   const viewsRecorded = since != null && to >= since;
+  // D1332: the top articles are every published article ranked by its views
+  // all time (the counter Authors reads), not by the range's daily rows.
+  const top = ((await env.DB.prepare(
+    `SELECT a.id, a.title, a.published_at, a.read_minutes, a.views, u.name AS author_name
+       FROM articles a LEFT JOIN users u ON u.id = a.author_user_id
+      WHERE a.status = 'published' ORDER BY a.views DESC, a.published_at DESC, a.id DESC LIMIT 10`,
+  ).all<any>()).results || []);
+  const publishedCount = await env.DB.prepare("SELECT COUNT(*) AS n FROM articles WHERE status = 'published'").first<{ n: number }>();
   const decided = articles.map(decisionMs).filter((x): x is NonNullable<typeof x> => !!x && inRange(dayOf(x.at)));
   return {
     from, to,
@@ -303,12 +322,11 @@ export async function performanceRead(env: Env, fromQ: string | undefined, toQ: 
     views_by_sector: viewsRecorded
       ? [...sectors.entries()].map(([sector, views]) => ({ sector, views })).sort((a, b) => b.views - a.views)
       : null,
-    top_articles: viewsRecorded
-      ? [...byArticle.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, views]) => {
-        const m = metaOf.get(id) || {};
-        return { id, title: m.title ?? null, author_name: m.author_name ?? null, published_at: m.published_at ?? null, read_minutes: m.read_minutes ?? null, views };
-      })
-      : null,
+    top_articles: top.map((t) => ({
+      id: Number(t.id), title: t.title ?? null, author_name: t.author_name ?? null, published_at: t.published_at ?? null,
+      read_minutes: t.read_minutes ?? null, views_all_time: Number(t.views) || 0, views_per_day: perDaySincePublish(Number(t.views) || 0, t.published_at, now),
+    })),
+    top_articles_of: Number(publishedCount?.n ?? 0),
     decisions: {
       median_hours_to_decision: hours(median(decided.map((d) => d.ms))),
       timed: decided.length,

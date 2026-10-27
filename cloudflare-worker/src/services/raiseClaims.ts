@@ -230,11 +230,13 @@ async function surface(name: ClaimSurface, run: () => Promise<{ version: string 
 }
 
 /**
- * A narrative version's figures, one claim per field and figure: the newest
- * version, or (D912, #2696) the one the founder checks from its Check tab.
+ * A narrative version's figures, one claim per field and figure (D1264). With
+ * no version, the newest saved one; D912's check passes the version asked about.
+ * Solution, Business model and Team keep their words in `narrative_sections`;
+ * a figure there is a claim too, under `section:<key>`.
  */
-const narrative = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<string, string>, at?: number) => surface('narrative', async () => {
-  const latest = at != null ? { v: at } : await env.DB.prepare('SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0')
+export const narrative = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<string, string>, asked?: number | null) => surface('narrative', async () => {
+  const latest = asked != null ? { v: asked } : await env.DB.prepare('SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0')
     .bind(projectId).first<{ v: number | null }>();
   if (latest?.v == null) return { version: null, claims: [] };
   const version = `v${latest.v}`;
@@ -399,9 +401,8 @@ export async function checkDeckVersion(env: Env, projectId: number, row: DeckRow
 }
 
 /**
- * D912 (#2696): one narrative version, checked and written from its Check tab
- * ("Run the check"), as D900 checks one deck version. Other surfaces and
- * other versions are untouched.
+ * D912 (#2696): one narrative version, checked and written as the Evidence
+ * read checks the newest. Other surfaces and other versions are untouched.
  */
 export async function checkNarrativeVersion(env: Env, projectId: number, version: number, now = new Date().toISOString()): Promise<ClaimCheck> {
   const items = await pinnedItems(env, projectId);
@@ -409,7 +410,7 @@ export async function checkNarrativeVersion(env: Env, projectId: number, version
   return writeSurfaces(env, projectId, [await narrative(env, projectId, items, kinds, version)], now);
 }
 
-/** Writes what changed for the surfaces given; the one writer every check shares. */
+/** Writes what changed for the surfaces given; the one writer the checks share. */
 export async function writeSurfaces(env: Env, projectId: number, surfaces: Surface[], now = new Date().toISOString()): Promise<ClaimCheck> {
   const read = surfaces.filter((s) => s.state === 'recorded');
   const computed = read.flatMap((s) => s.claims).slice(0, MAX_WRITES);

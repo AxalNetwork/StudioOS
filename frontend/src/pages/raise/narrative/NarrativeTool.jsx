@@ -13,7 +13,8 @@ import StoryTab from './StoryTab';
 import { NarrativeNotes, NarrativeOtherVenture, NarrativeReads } from './NarrativeAdmin';
 import PositioningTab from './PositioningTab';
 import { ObjectionsCard } from './ObjectionsPanel';
-import { CheckPanel, ClaimsTab } from './ClaimsTab';
+import ClaimsTab from './ClaimsTab';
+import CheckTab from './CheckTab';
 
 
 /**
@@ -37,16 +38,19 @@ const PILL = {
 };
 const NOT_SET = 'rounded-full border border-dashed border-gray-300 bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400';
 
+/** The tabs that act on one chosen version (D912 adds Claims). */
+const VERSIONED = ['story', 'claims', 'check'];
+
 /** The tool's own tabs, a second level under the Raise modules: text with an underline. */
 export function NarrativeTabBar({ active, search = '', versions = [], version = null }) {
   const navigate = useNavigate();
-  const picks = active === 'story' || active === 'claims' || active === 'check';
+  const picks = VERSIONED.includes(active);
   const here = TABS.find((t) => t.id === active) || TABS[0];
   return (
     <div className="flex flex-wrap items-end justify-between gap-2 border-b border-axal-hairline dark:border-gray-700" data-testid="narrative-tabs">
       <nav aria-label={TITLE} className="-mb-px flex gap-1 overflow-x-auto">
         {TABS.map((t) => (
-          <Link key={t.id} to={tabHref(t, search, t.id === 'story' || t.id === 'claims' || t.id === 'check' ? version : null)} aria-current={t.id === active ? 'page' : undefined}
+          <Link key={t.id} to={tabHref(t, search, VERSIONED.includes(t.id) ? version : null)} aria-current={t.id === active ? 'page' : undefined}
             className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.id === active
               ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-100'
               : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
@@ -83,7 +87,6 @@ function useVersions(projectId, reload) {
   return state;
 }
 
-
 function Skeleton({ testId }) {
   return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid={testId} />;
 }
@@ -96,7 +99,6 @@ function NoVersion({ search, admin }) {
     </div>
   );
 }
-
 
 /** The module read, for its `parts.narrative` (D909): Home draws it from CycleRoute's read; the Versions tab reads it here. */
 function useHomeRead(projectId, reload) {
@@ -319,7 +321,7 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   const list = useVersions(projectId, reload);
   const wanted = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('version');
   const version = chosenVersion(list.versions, wanted);
-  // Story reads the narrative's own stores (D910, StoryTab); Claims and Check read the version's claims (D912).
+  // Story reads the narrative's own stores (D910); Claims and Check read D912's claim routes.
   const here = TABS.find((t) => t.id === tab) || TABS[0];
 
   let body;
@@ -343,9 +345,8 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
       {admin ? null : <NarrativeReads projectId={projectId} />}
     </>
   );
-  // D912 (#2696): Claims (NAR6) and the check (NAR8) read the version's claims from D1264's store.
-  else if (tab === 'claims') body = <ClaimsTab key={`claims-${version}`} projectId={projectId} version={version} search={search} />;
-  else body = <CheckPanel key={`check-${version}`} projectId={projectId} version={version} search={search} fixOn={fixOn && !admin} />;
+  else if (tab === 'claims') body = <ClaimsTab key={version} projectId={projectId} version={version} search={search} admin={admin} phone={phone} />;
+  else body = <CheckTab key={version} projectId={projectId} version={version} search={search} admin={admin} fixOn={fixOn && !admin} />;
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`narrative-${tab}-page`}>

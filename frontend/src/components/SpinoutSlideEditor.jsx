@@ -17,7 +17,7 @@ import { reportError } from '../lib/log';
  *   - exposes only the few narrative fields that are genuinely editable as
  *     inputs that WRITE BACK to the underlying project (api.updateProject).
  *     On save it bumps the parent's deck-data reload (onSaved) so the live
- *     preview + PPTX export refresh — the same pattern as UseOfFundsEditor.
+ *     preview + PPTX export refresh.
  *
  * Other deck templates keep the generic SlideEditor; this component is only
  * mounted when the active deck is `axal_spinout_demoday`.

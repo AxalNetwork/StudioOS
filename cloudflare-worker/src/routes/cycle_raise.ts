@@ -122,18 +122,19 @@
  * company, outside a support session, from their own connection. Anyone
  * else's module read has no `parts.mercury`, and the routes answer 403.
  */
+import { checkNarrativeVersion, narrative as narrativeSurface, pinnedItems, signalKinds } from '../services/raiseClaims';
+import { narrativeCheckRows, narrativeClaims, sectionOfField, sectionWords } from '../services/narrative/claims';
+import { swapFigure } from '../services/deckCheck';
 import { ClaimNoteError, noteText, setClaimNote } from '../services/raiseClaimNotes';
-import { narrativeClaims } from '../services/narrativeClaims';
-import { checkNarrativeVersion } from '../services/raiseClaims';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
-import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, figures, nonCapitalFigures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
+import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, FIGURE_LABEL, figures, nonCapitalFigures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type FigureKey, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
   addCapHolder, updateCapHolder, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
-  importProspects,
+  importProspects, runCheck,
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
 import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
@@ -889,42 +890,109 @@ cycleRaise.get('/narrative/:version', async (c) => {
   } catch (e) { return unreadable(c, e); }
 });
 
-// D912 (#2696): one version's claims (NAR6, NAR7) and its check (NAR8). The
-// narrative's own gate first (an Admin gives a reason and only reads), then
-// the Evidence gate: claims are evidence, so only the founder reads a record's
-// figure and runs the check; an Admin reads states. A support session reads
-// no claims at all, as it reads no Evidence.
-const narrativeVersionNumber = async (c: any, projectId: number): Promise<number | Response> => {
-  const raw = c.req.param('version');
-  if (!/^[1-9][0-9]{0,8}$/.test(raw)) return c.json({ detail: 'Version not found' }, 404);
-  try { return await readableVersion(c.env, projectId, raw); } catch (e) { return writeFailed(c, e); }
+// D912 (#2696): the narrative's claims (NAR6, NAR7) and its check (NAR8).
+// The states are D1264's; reading them as the founder checks the version, as
+// the Evidence read checks the newest. An admin with a reason reads states.
+async function narrativeFounder(c: any, user: User, projectId: number): Promise<boolean> {
+  if (isAdmin(user) || await isSupportSession(c)) return false;
+  try {
+    const company = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+    return (await raiseEvidenceContext(c.env, user, projectId, company)).founder;
+  } catch (e) {
+    if (e instanceof RaiseEvidenceError) return false;
+    throw e;
+  }
+}
+const founderOnlyCheck = (c: any) => c.json({ code: 'founder_only', detail: 'Only the venture’s founder checks the narrative against the records.' }, 403);
+const savedVersion = async (c: any, projectId: number): Promise<number | Response> => {
+  try {
+    const v = await readableVersion(c.env, projectId, c.req.param('version'));
+    return v === 0 ? c.json({ detail: 'Version 0 is the live deck’s wording; claims are checked on a saved version.' }, 409) : v;
+  } catch (e) { return writeFailed(c, e); }
 };
 
 cycleRaise.get('/narrative/:version/claims', async (c) => {
   const s = await narrativeScope(c, 'read');
   if (s instanceof Response) return s;
+  const version = await savedVersion(c, s.projectId);
+  if (version instanceof Response) return version;
   try {
-    const ctx = await evidenceScope(c, false);
-    if (ctx instanceof Response) return ctx;
-    const version = await narrativeVersionNumber(c, s.projectId);
-    if (version instanceof Response) return version;
-    return c.json(await narrativeClaims(c.env, s.projectId, version, ctx.founder));
-  } catch (error) { return evidenceFailure(c, error); }
+    const founder = await narrativeFounder(c, s.user, s.projectId);
+    const check = founder ? await checkNarrativeVersion(c.env, s.projectId, version) : null;
+    return c.json({ ...(await narrativeClaims(c.env, s.projectId, version, { founder, computed: check?.claims })), can_check: founder });
+  } catch (e) { return unreadable(c, e); }
+});
+
+cycleRaise.get('/narrative/:version/check', async (c) => {
+  const s = await narrativeScope(c, 'read');
+  if (s instanceof Response) return s;
+  const version = await savedVersion(c, s.projectId);
+  if (version instanceof Response) return version;
+  try {
+    const at = await c.env.DB.prepare(`SELECT MAX(checked_at) AS at FROM raise_claims WHERE project_id = ? AND surface = 'narrative' AND surface_version = ?`)
+      .bind(s.projectId, `v${version}`).first<{ at: string | null }>();
+    return c.json({ ...(await narrativeCheckRows(c.env, s.projectId, version)), checked_at: at?.at ?? null, can_check: await narrativeFounder(c, s.user, s.projectId) });
+  } catch (e) { return unreadable(c, e); }
 });
 
 cycleRaise.post('/narrative/:version/check', async (c) => {
   const s = await narrativeScope(c, 'write');
   if (s instanceof Response) return s;
+  const version = await savedVersion(c, s.projectId);
+  if (version instanceof Response) return version;
+  if (!(await narrativeFounder(c, s.user, s.projectId))) return founderOnlyCheck(c);
   try {
-    const ctx = await evidenceScope(c, true);
-    if (ctx instanceof Response) return ctx;
-    const version = await narrativeVersionNumber(c, s.projectId);
-    if (version instanceof Response) return version;
-    const check = await checkNarrativeVersion(c.env, s.projectId, version);
-    if (check.outcome === 'unreadable') return c.json({ code: 'unreadable', detail: 'This version could not be read, so nothing was checked. Try again.' }, 503);
-    await logCycleWrite(c.env, { projectId: s.projectId, userId: Number(s.user.id), cycle: 'raise', module: 'investor-narrative', entityId: null, action: 'narrative_checked', summary: `Version ${version} checked against the records` });
-    return c.json(await narrativeClaims(c.env, s.projectId, version, true));
-  } catch (error) { return evidenceFailure(c, error); }
+    await runCheck(c.env, s.projectId, version);
+    const now = new Date().toISOString();
+    const check = await checkNarrativeVersion(c.env, s.projectId, version, now);
+    // "Last checked" is this run, whether or not a state changed.
+    const at = now.slice(0, 19).replace('T', ' ');
+    await c.env.DB.prepare(`UPDATE raise_claims SET checked_at = ? WHERE project_id = ? AND surface = 'narrative' AND surface_version = ?`)
+      .bind(at, s.projectId, `v${version}`).run();
+    await logCycleWrite(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), cycle: 'raise', module: 'investor-narrative', entityId: version,
+      action: 'narrative_checked', summary: `Version ${version} checked against the records`,
+    });
+    return c.json({
+      ...(await narrativeCheckRows(c.env, s.projectId, version)), checked_at: at, can_check: true,
+      claims: await narrativeClaims(c.env, s.projectId, version, { founder: true, computed: check.claims }),
+    });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.post('/narrative/:version/claims/:uid/use-record', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  const version = await savedVersion(c, s.projectId);
+  if (version instanceof Response) return version;
+  if (!(await narrativeFounder(c, s.user, s.projectId))) return founderOnlyCheck(c);
+  const b = await body(c);
+  const expected = Number(b.record_value);
+  if (b.record_value == null || !Number.isFinite(expected)) return c.json({ code: 'record_value_required', detail: 'Say which record figure to use.' }, 400);
+  try {
+    const claim = await c.env.DB.prepare(`SELECT field_key, claim_kind, stated_value FROM raise_claims WHERE uid = ? AND project_id = ? AND surface = 'narrative' AND surface_version = ?`)
+      .bind(String(c.req.param('uid')), s.projectId, `v${version}`).first<{ field_key: string; claim_kind: string; stated_value: string | null }>();
+    if (!claim) return c.json({ code: 'claim_not_found', detail: 'That figure is not in this version.' }, 404);
+    const items = await pinnedItems(c.env, s.projectId);
+    const now = await narrativeSurface(c.env, s.projectId, items, await signalKinds(c.env, s.projectId, items), version);
+    const current = now.claims.find((x) => x.field_key === claim.field_key);
+    if (!current || current.state !== 'mismatch' || current.record?.value == null) {
+      return c.json({ code: 'claim_not_mismatch', detail: 'This figure no longer differs from the record. Run the check again.' }, 409);
+    }
+    if (Math.abs(Number(current.record.value) - expected) > 1e-9) {
+      return c.json({ code: 'record_changed', detail: 'The record’s figure changed since you opened this. Run the check again.' }, 409);
+    }
+    const field = claim.field_key.split('#')[0];
+    const section = sectionOfField(field);
+    const words = await sectionWords(c.env, s.projectId, version, field);
+    const swapped = section && words != null && claim.claim_kind in FIGURE_LABEL
+      ? swapFigure(words, claim.claim_kind as FigureKey, Number(current.stated_value), Number(current.record.value)) : null;
+    if (!section || swapped == null) return c.json({ code: 'figure_not_found', detail: 'The figure could not be found in its section. Change it in Story.' }, 409);
+    // The section's own save: its limits, its log row and the consistency check.
+    const saved = await saveNarrativeSection(c.env, { projectId: s.projectId, userId: Number(s.user.id), version, section: section.key, body: { body: swapped } });
+    await checkNarrativeVersion(c.env, s.projectId, version);
+    return c.json({ version, section: saved.section });
+  } catch (e) { return writeFailed(c, e); }
 });
 
 cycleRaise.put('/narrative/:version/sections/:section', async (c) => {

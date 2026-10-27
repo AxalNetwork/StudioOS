@@ -36,7 +36,7 @@ import { Hono } from 'hono';
 import { logAdminAction } from '../services/adminAudit';
 import researchCollections from './research_collections';
 import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
-import { NARRATIVE_FIX_INSTRUCTION, claimMismatch, finishNarrativeFix, fixScope, narrativeFixMaterial, narrativeMismatch } from '../services/narrativeFix';
+import { NARRATIVE_FIX_INSTRUCTION, finishNarrativeFix, narrativeFixMaterial, narrativeMismatch, parseFixScope } from '../services/narrativeFix';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
@@ -1319,6 +1319,10 @@ async function founderProject(
   ).bind(userId).all<{ id: number }>();
   const ids = (owned.results || []).map((r) => Number(r.id));
   if (!ids.length) return null;
+  // D912: the narrative-fix band's scope is `<project>:v<version>:<figure>`.
+  // The project id is still the key that was sent; the rest names the mismatch.
+  const picked = /^(\d+):v[1-9]\d{0,8}:[a-z_]+$/.exec(scope);
+  if (picked) return founderProject(c, userId, picked[1]);
   // A SCOPE KEY THAT WAS SENT MUST RESOLVE OR REFUSE — it may never fall
   // through to the lone-project branch below. An earlier draft tested
   // `Number.isFinite(Number(scope))` first, so `scope_key: "null"`, or any
@@ -3519,19 +3523,19 @@ const DRAFT_SURFACES: Record<string, {
   // `accept` hook: accepting keeps the wording and changes neither record.
   'raise/narrative-fix': {
     instruction: NARRATIVE_FIX_INSTRUCTION,
-    // D912 (#2696): the Check tab sends `<project>|<claim>`, the mismatch the founder clicked.
-    gather: async (c, userId, key) => {
-      const { project: scope, claim } = fixScope(key);
+    // D912 (#2696): the scope may name the mismatch clicked, `<project>:v<n>:<figure>`.
+    gather: async (c, userId, scope) => {
       const pid = await founderProject(c, userId, scope);
       if (pid == null) return [];
-      const m = claim ? await claimMismatch(c.env, pid, claim) : await narrativeMismatch(c.env, pid);
+      const { pick } = parseFixScope(scope);
+      const m = await narrativeMismatch(c.env, pid, pick);
       return m ? narrativeFixMaterial(m) : [];
     },
-    finish: async (c, userId, key, text) => {
-      const { project: scope, claim } = fixScope(key);
+    finish: async (c, userId, scope, text) => {
       const pid = await founderProject(c, userId, scope);
       if (pid == null) return null;
-      const m = claim ? await claimMismatch(c.env, pid, claim) : await narrativeMismatch(c.env, pid);
+      const { pick } = parseFixScope(scope);
+      const m = await narrativeMismatch(c.env, pid, pick);
       return m ? finishNarrativeFix(text, m) : null;
     },
   },

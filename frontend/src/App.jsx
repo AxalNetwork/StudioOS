@@ -114,7 +114,6 @@ const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucke
 const NetworkWorkspace = lazy(() => import('./workspaces/NetworkWorkspace'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
-const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
 const LegalEnginePage = lazy(() => import('./pages/LegalEnginePage'));
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
 const AcceptCompanyInvitePage = lazy(() => import('./pages/AcceptCompanyInvitePage'));
@@ -470,6 +469,7 @@ const FounderBuildCadence = lazy(() => import('./pages/founder/FounderBuildCaden
 // D894 (#2434): the Pitch deck studio, its home and Share & analytics tabs, and the old editor address's redirect.
 const PitchStudio = lazy(() => import('./pages/raise/pitch/PitchStudio'));
 const PitchWorkspaceMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceMoved'));
+const PitchBuilderMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceMoved').then((m) => ({ default: m.PitchBuilderMoved })));
 const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
 const PitchEditor = lazy(() => import('./pages/raise/pitch/PitchEditor'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
@@ -2711,6 +2711,9 @@ function AppInner() {
       <Route path="/validate/record/telegram/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/telegram/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/calls" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      {/* D878 (#2525): Calls' tabs are paths under its address, as WhatsApp's and Telegram's are. */}
+      <Route path="/validate/record/calls/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/calls/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
       {/* D695: every Add has an address. Customer research's Add stays Record a session, the query kept. */}
@@ -3275,11 +3278,11 @@ function AppInner() {
            ? <PitchWorkspaceMoved />
            : founderEditor(<PitchStudio tab="decks" />))} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
-      {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. Today's
-          template builder moves to /raise/pitch/builder until the editor covers
-          its templates and fills, when #2676's last part retires it. */}
+      {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. The
+          template builder retired with group E: its four actions are the
+          studio's, and /raise/pitch/builder opens the studio with a moved notice. */}
       <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchEditor />)))} />
-      <Route path="/raise/pitch/builder" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
+      <Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />
       {/* D897 (#2677), PD3–PD6: New deck. A static path, so `/raise/:slug/new` never takes it. */}
       <Route path="/raise/pitch/new" element={guard(labRoles(['admin', 'founder']), founderEditor(<NewDeck />))} />
       <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />

@@ -145,6 +145,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/advisor/banks', 'its question banks'],
   ['cloudflare-worker/src/services/email',    'transactional mail — canvas chrome, Gmail send, persona invites'],
   ['cloudflare-worker/src/services/decks',    'deck assembly and export'],
+  ['cloudflare-worker/src/services/narrative', 'the Investor narrative stores, claims and check'],
   ['cloudflare-worker/src/services/market_intel', 'market-intelligence ingestion'],
   ['cloudflare-worker/src/services/market_intel/extractors', 'what is pulled out of a source'],
   ['cloudflare-worker/src/services/market_intel/sources',    'where signals come from'],

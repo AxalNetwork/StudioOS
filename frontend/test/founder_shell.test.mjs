@@ -4,7 +4,7 @@
  *
  * Founder is the hardest of the four roles. Investor collapsed cleanly because
  * three workspaces already tabbed across their whole subtrees. Founder has no
- * such thing: `PitchWorkspacePage`, `CapitalWorkspacePage` and
+ * such thing: `PitchWorkspacePage` (retired by D898 group E), `CapitalWorkspacePage` and
  * `LegalEnginePage` each tab only within themselves and nothing links one to
  * another, while `ExecutionPage`, `FounderTeamPage`, `DiscoveryPage` and
  * `FounderMarketplacePage` have no tab bar at all.
@@ -101,7 +101,9 @@ test('A4 owns the founder Raise landing while workspace mode retains its detaile
   assert.match(app, /founderRaiseLanding = effectiveRole === 'founder'[\s\S]*?get\('mode'\) !== 'workspace'/);
   // D661 (#1474): the landing a founder gets is the Raise cycle overview now.
   assert.match(zone, /founderRaiseLanding\s*\?\s*guard\([^)]*\), <CycleRoute cycle="raise" \/>\)/);
-  assert.match(app, /founderEditor\(<PitchWorkspacePage \/>\)/);
+  // D898 group E: the template builder retired; the editor is the studio's, at /raise/pitch/edit.
+  assert.match(app, /founderEditor\(<PitchEditor \/>\)/);
+  assert.doesNotMatch(app, /PitchWorkspacePage/);
   // The desk is an overview OVER the sections, not instead of them. D894:
   // the Pitch section page is the Pitch deck studio's home now.
   assert.match(routeBlock(app, '/raise/pitch'), /<PitchStudio tab="decks" \/>/,
