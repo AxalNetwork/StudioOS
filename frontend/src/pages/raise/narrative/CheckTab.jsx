@@ -31,7 +31,7 @@ const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const BTN = 'inline-flex w-fit items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50';
-const GHOST = 'inline-flex w-fit items-center rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const GHOST = 'inline-flex w-fit items-center rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink hover:bg-axal-ground dark:hover:bg-gray-800 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const LAVENDER = 'rounded-[10px] border border-axal-lavender-edge bg-axal-lavender p-3 dark:border-violet-800 dark:bg-violet-950/40';
 
 /** The Worker's sentence, or ours when it sent a bare code (`draft_unavailable`). */
@@ -122,8 +122,7 @@ function FixDialog({ projectId, version, row, search, onClose }) {
       const r = await api.research.zoneDraftRun('raise/narrative-fix', fixScope(projectId, version, row.figure), '/raise/investor-narrative/check', railPressHeaders('draft:raise/narrative-fix'));
       setState({ status: 'done', draft: r?.item || null, error: null });
     } catch (e) {
-      const detail = e?.code || e?.message || '';
-      setState({ status: 'error', draft: null, error: detail === 'draft_unfaithful' ? 'Eadwyn’s wording held a number, so none was kept. Write the fix yourself in Story.' : refusal(e, 'Eadwyn could not phrase the fix just now. Nothing was charged.') });
+      setState({ status: 'error', draft: null, error: e?.code === 'draft_unfaithful' ? 'Eadwyn’s wording held a number, so none was kept. Write the fix yourself in Story.' : refusal(e, 'Eadwyn could not phrase the fix just now. Nothing was charged.') });
     }
   };
   const parts = state.draft ? fixParts(state.draft.body) : null;

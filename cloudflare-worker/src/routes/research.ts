@@ -1319,6 +1319,10 @@ async function founderProject(
   ).bind(userId).all<{ id: number }>();
   const ids = (owned.results || []).map((r) => Number(r.id));
   if (!ids.length) return null;
+  // D912: the narrative-fix band's scope is `<project>:v<version>:<figure>`.
+  // The project id is still the key that was sent; the rest names the mismatch.
+  const picked = /^(\d+):v[1-9]\d{0,8}:[a-z_]+$/.exec(scope);
+  if (picked) return founderProject(c, userId, picked[1]);
   // A SCOPE KEY THAT WAS SENT MUST RESOLVE OR REFUSE — it may never fall
   // through to the lone-project branch below. An earlier draft tested
   // `Number.isFinite(Number(scope))` first, so `scope_key: "null"`, or any
@@ -3521,16 +3525,16 @@ const DRAFT_SURFACES: Record<string, {
     instruction: NARRATIVE_FIX_INSTRUCTION,
     // D912 (#2696): the scope may name the mismatch clicked, `<project>:v<n>:<figure>`.
     gather: async (c, userId, scope) => {
-      const { project, pick } = parseFixScope(scope);
-      const pid = await founderProject(c, userId, project);
+      const pid = await founderProject(c, userId, scope);
       if (pid == null) return [];
+      const { pick } = parseFixScope(scope);
       const m = await narrativeMismatch(c.env, pid, pick);
       return m ? narrativeFixMaterial(m) : [];
     },
     finish: async (c, userId, scope, text) => {
-      const { project, pick } = parseFixScope(scope);
-      const pid = await founderProject(c, userId, project);
+      const pid = await founderProject(c, userId, scope);
       if (pid == null) return null;
+      const { pick } = parseFixScope(scope);
       const m = await narrativeMismatch(c.env, pid, pick);
       return m ? finishNarrativeFix(text, m) : null;
     },

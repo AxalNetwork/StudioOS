@@ -284,7 +284,7 @@ test('NAR9: the fix is for the row clicked, carries no number, shows the check\'
     assert.equal(v.at.path, '/raise/investor-narrative/story');
     assert.equal(v.at.search, '?project_id=7&version=1&section=traction&fix=d1');
   } finally { await v.close(); }
-  stub({ zoneDraftRun: async () => { throw Object.assign(new Error('draft_unfaithful'), { status: 503 }); } });
+  stub({ zoneDraftRun: async () => { throw Object.assign(new Error('the wording held a number'), { code: 'draft_unfaithful', status: 503 }); } });
   const r = await mount(check(), '/raise/investor-narrative/check?project_id=7&version=1');
   try {
     await r.click('narrative-check-fix-paying_customers');
