@@ -9,6 +9,9 @@ import { Link } from 'react-router-dom';
 import { AssistantsSection, CopyUrl } from '../AssistantsGroup';
 import { assistantsApi } from '../../../lib/api/assistants.js';
 import { BUILDER_LINES, BUILDER_PAGES, BUILDER_WORDS, builderPathFor, builderTrailFor } from './builderModel';
+// D1320 (#2481): API usage, and Activity's request history with its drawer.
+import ApiUsagePage from './ApiUsagePage';
+import ActivityPage from './ActivityPage';
 
 const CARD = 'rounded-axal-lg border border-axal-hairline bg-white p-5 dark:border-gray-700 dark:bg-gray-900';
 const H3 = 'm-0 text-[15px] font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100';
@@ -23,12 +26,9 @@ export const WAITS = Object.freeze({
   limits: 'The server’s own limits per connection and per call. #2479 draws them from the overview read (D1316, #3474).',
   services: 'The services behind your tools and how each is doing. #2479 draws them from the connector reads and their health (D848).',
   keys: 'Your API keys: create, reveal once, rotate and revoke. #2480 draws them from GET /api/developer/keys.',
-  usage: 'Requests and AI tokens by day, where the tokens went, and your limits and alerts. #2481 draws them from GET /api/developer/usage.',
-  activity: 'Every call your keys and assistants made, with its outcome. #2481 draws it from GET /api/developer/usage/events.',
   assistant: 'One assistant: where it signs in from, what it may do, its companies and its recent calls. #2479 draws it (MCPX5).',
   service: 'One service: its connection, its health and its last checks. #2479 draws it (MCPX3).',
   key: 'One key: its scopes, companies, limit and last use. #2480 draws it (APIK5).',
-  request: 'One request: its tool, company, outcome and cost. #2481 draws it (APIU4).',
 });
 
 export function Wait({ id, title }) {
@@ -120,7 +120,8 @@ export default function BuilderSection({ view = { page: 'services', drawer: null
         ))}
       </nav>
       {page === 'services' && !drawer && <MovedNotice storage={storage} />}
-      {drawer ? (
+      {/* One mount for the log and its drawer, so opening and closing a request keeps the log as read. */}
+      {page === 'activity' ? <ActivityPage drawerId={drawer?.kind === 'request' ? drawer.id : null} /> : drawer ? (
         <section className={`${CARD} flex flex-col gap-2`} data-testid={`builder-drawer-${drawer.kind}`}>
           <Link to={builderPathFor({ page })} className="w-fit text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300">‹ {BACK[drawer.kind]}</Link>
           <Wait id={drawer.kind} title={DRAWER_TITLES[drawer.kind]} />
@@ -129,8 +130,7 @@ export default function BuilderSection({ view = { page: 'services', drawer: null
         <>
           {page === 'services' && <ServicesPage />}
           {page === 'keys' && <Wait id="keys" title="API keys" />}
-          {page === 'usage' && <Wait id="usage" title="Requests and AI tokens by day" />}
-          {page === 'activity' && <Wait id="activity" title="Calls by day" />}
+          {page === 'usage' && <ApiUsagePage />}
         </>
       )}
     </div>

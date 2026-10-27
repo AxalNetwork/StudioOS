@@ -10,8 +10,11 @@ import { request } from '../api.js';
 //                                              errors, refused, rate_limited, insufficient_tokens, error,
 //                                              charged_microusd|null, refunded_microusd|null,
 //                                              metered_calls, p50_ms|null }], next_cursor }
-//   events  GET /developer/usage/events   { from, to, key, outcome, surface, operation, provider,
+//   events  GET /developer/usage/events   { from, to, key, grant, outcome, surface, operation, provider,
 //                                           connector, company, cursor } → { range, events, next_cursor }
+//                                           (D1320: `grant`, and `outcome=failed` for every call that did not succeed)
+//   event   GET /developer/usage/events/:execution_id → { event }; 404 `unknown_request` when it is not the caller's
+//   group=category (D1320) groups by why a call did not succeed
 //   keys    GET /developer/usage/keys     { month }  → { month, near_limit_percent, keys: [{ uid, name,
 //                                              key_id, live, monthly_limit_microusd|null, calls,
 //                                              charged_microusd|null, metered_calls, used_percent|null,
@@ -27,5 +30,6 @@ function query(params = {}) {
 export const developerUsageApi = {
   report: (params) => request(`/developer/usage${query(params)}`),
   events: (params) => request(`/developer/usage/events${query(params)}`),
+  event: (executionId) => request(`/developer/usage/events/${encodeURIComponent(executionId)}`),
   keys: (params) => request(`/developer/usage/keys${query(params)}`),
 };

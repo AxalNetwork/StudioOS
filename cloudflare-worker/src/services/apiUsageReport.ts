@@ -28,7 +28,8 @@
 import type { Env } from '../types';
 import { isLive, listKeys, ownKey } from './apiKeys';
 
-export const REPORT_GROUPS = Object.freeze(['day', 'key', 'provider', 'connector', 'tool', 'model'] as const);
+/** `category` (D1320, #2481) groups by the reason a call did not succeed (D843's list); a call that succeeded has none. */
+export const REPORT_GROUPS = Object.freeze(['day', 'key', 'provider', 'connector', 'tool', 'model', 'category'] as const);
 export type ReportGroup = typeof REPORT_GROUPS[number];
 /** The second axis of a two-way report, with `group=day` only. */
 export const REPORT_BY = Object.freeze(['key', 'provider', 'connector', 'tool'] as const);
@@ -162,7 +163,8 @@ function stats(r: Record<string, unknown>): Stats {
 const GROUPED_SQL = `WITH rowset AS (
   SELECT
     CASE ?1 WHEN 'day' THEN substr(e.created_at, 1, 10) WHEN 'key' THEN e.api_key_uid WHEN 'provider' THEN e.provider
-      WHEN 'connector' THEN e.connector WHEN 'tool' THEN e.operation WHEN 'model' THEN e.model END AS g1,
+      WHEN 'connector' THEN e.connector WHEN 'tool' THEN e.operation WHEN 'model' THEN e.model
+      WHEN 'category' THEN e.error_category END AS g1,
     CASE ?2 WHEN 'key' THEN e.api_key_uid WHEN 'provider' THEN e.provider WHEN 'connector' THEN e.connector
       WHEN 'tool' THEN e.operation END AS g2,
     CASE WHEN e.outcome <> 'ok' AND e.error_category = 'insufficient_tokens' THEN 'insufficient_tokens' ELSE e.outcome END AS result,
@@ -216,7 +218,7 @@ export interface ReportQuery {
 /** `GET /api/developer/usage`. Throws ReportInputError for a parameter the member must fix. */
 export async function usageReport(env: Env, userId: number, q: ReportQuery, now = new Date()): Promise<Report> {
   const range = parseRange(q.from, q.to, now);
-  const group = oneOf(q.group, REPORT_GROUPS, 'invalid_group', 'Group by day, key, provider, connector, tool or model.') ?? 'day';
+  const group = oneOf(q.group, REPORT_GROUPS, 'invalid_group', 'Group by day, key, provider, connector, tool, model or category.') ?? 'day';
   const by = oneOf(q.by, REPORT_BY, 'invalid_by', 'Split days by key, provider, connector or tool.');
   if (by && group !== 'day') throw new ReportInputError('invalid_by', 'Only a report by day splits a second way.');
   const offset = groupOffset(q.cursor);
@@ -280,6 +282,8 @@ export interface UsageEventRow {
 export interface EventsQuery {
   from?: string; to?: string; key?: string; outcome?: string; surface?: string; operation?: string;
   provider?: string; connector?: string; company?: string; cursor?: string;
+  /** D1320 (#2481): one assistant connection's calls. Only the caller's rows are read, so another member's grant reads as none. */
+  grant?: string;
 }
 
 /** A `(created_at, id)` position, newest first. Opaque to the client. */
@@ -310,20 +314,23 @@ const EVENTS_SQL = `SELECT e.id, e.execution_id, e.created_at, e.surface, e.oper
   LEFT JOIN ai_budget_reservations r ON r.uid = e.reservation_uid AND r.user_id = e.user_id
   WHERE e.user_id = ?1 AND e.created_at >= ?2 AND e.created_at < ?3
     AND (?4 IS NULL OR e.api_key_uid = ?4)
-    AND (?5 IS NULL OR (CASE WHEN e.outcome <> 'ok' AND e.error_category = 'insufficient_tokens' THEN 'insufficient_tokens' ELSE e.outcome END) = ?5)
+    AND (?5 IS NULL OR (?5 = 'failed' AND e.outcome <> 'ok')
+      OR (CASE WHEN e.outcome <> 'ok' AND e.error_category = 'insufficient_tokens' THEN 'insufficient_tokens' ELSE e.outcome END) = ?5)
     AND (?6 IS NULL OR e.surface = ?6)
     AND (?7 IS NULL OR e.operation = ?7)
     AND (?8 IS NULL OR e.provider = ?8)
     AND (?9 IS NULL OR e.connector = ?9)
     AND (?10 IS NULL OR e.company_id = ?10)
     AND (?11 IS NULL OR e.created_at < ?11 OR (e.created_at = ?11 AND e.id < ?12))
+    AND (?14 IS NULL OR e.grant_id = ?14)
   ORDER BY e.created_at DESC, e.id DESC
   LIMIT ?13`;
 
 /** `GET /api/developer/usage/events`: the member's own calls, newest first, never an argument or a result. */
 export async function usageEvents(env: Env, userId: number, q: EventsQuery, now = new Date()) {
   const range = parseRange(q.from, q.to, now);
-  const outcome = oneOf(q.outcome, REPORT_OUTCOMES, 'invalid_outcome', 'Filter by ok, refused, rate_limited, insufficient_tokens or error.');
+  // D1320 (#2481): `failed` is every call that did not succeed, for Activity's Errors view (APIU6).
+  const outcome = oneOf(q.outcome, [...REPORT_OUTCOMES, 'failed'] as const, 'invalid_outcome', 'Filter by ok, failed, refused, rate_limited, insufficient_tokens or error.');
   const surface = oneOf(q.surface, ['mcp', 'api'] as const, 'invalid_surface', 'Filter by mcp or api.');
   let company: number | null = null;
   if (q.company !== undefined && q.company !== '') {
@@ -334,39 +341,72 @@ export async function usageEvents(env: Env, userId: number, q: EventsQuery, now 
   const provider = text(q.provider, 'provider');
   const connector = text(q.connector, 'connector');
   const after = decodeCursor(q.cursor);
+  const grant = text(q.grant, 'grant');
   const key = await checkedKey(env, userId, q.key);
 
   const res = await env.DB.prepare(EVENTS_SQL).bind(
     userId, range.fromTs, range.toTs, key, outcome, surface, operation, provider, connector, company,
-    after?.[0] ?? null, after?.[1] ?? null, EVENT_PAGE + 1,
+    after?.[0] ?? null, after?.[1] ?? null, EVENT_PAGE + 1, grant,
   ).all<Record<string, unknown>>();
   const rows = res.results ?? [];
   const page = rows.slice(0, EVENT_PAGE);
   const last = page[page.length - 1];
   return {
     range: { from: range.from, to: range.to },
-    events: page.map((r): UsageEventRow => ({
-      execution_id: String(r.execution_id),
-      created_at: String(r.created_at),
-      surface: String(r.surface),
-      operation: String(r.operation),
-      outcome: r.result as ReportOutcome,
-      error_category: (r.error_category as string | null) ?? null,
-      duration_ms: int(r.duration_ms),
-      api_key_uid: (r.api_key_uid as string | null) ?? null,
-      grant_id: (r.grant_id as string | null) ?? null,
-      client: (r.client as string | null) ?? null,
-      company_id: intOrNull(r.company_id),
-      model: (r.model as string | null) ?? null,
-      provider: (r.provider as string | null) ?? null,
-      connector: (r.connector as string | null) ?? null,
-      reservation_uid: (r.reservation_uid as string | null) ?? null,
-      reserved_microusd: intOrNull(r.reserved),
-      charged_microusd: intOrNull(r.charged),
-      refunded_microusd: intOrNull(r.refunded),
-    })),
+    events: page.map(eventRow),
     next_cursor: rows.length > EVENT_PAGE && last ? encodeCursor(String(last.created_at), int(last.id)) : null,
   };
+}
+
+/** One row of `EVENTS_SQL` or `EVENT_SQL` as the member reads it. */
+function eventRow(r: Record<string, unknown>): UsageEventRow {
+  return {
+    execution_id: String(r.execution_id),
+    created_at: String(r.created_at),
+    surface: String(r.surface),
+    operation: String(r.operation),
+    outcome: r.result as ReportOutcome,
+    error_category: (r.error_category as string | null) ?? null,
+    duration_ms: int(r.duration_ms),
+    api_key_uid: (r.api_key_uid as string | null) ?? null,
+    grant_id: (r.grant_id as string | null) ?? null,
+    client: (r.client as string | null) ?? null,
+    company_id: intOrNull(r.company_id),
+    model: (r.model as string | null) ?? null,
+    provider: (r.provider as string | null) ?? null,
+    connector: (r.connector as string | null) ?? null,
+    reservation_uid: (r.reservation_uid as string | null) ?? null,
+    reserved_microusd: intOrNull(r.reserved),
+    charged_microusd: intOrNull(r.charged),
+    refunded_microusd: intOrNull(r.refunded),
+  };
+}
+
+/**
+ * D1320 (#2481): one of the member's own calls, by its execution id, for the
+ * request drawer (APIU4). The same columns as the history; another member's
+ * id reads exactly as an id that does not exist.
+ */
+const EVENT_SQL = `SELECT e.id, e.execution_id, e.created_at, e.surface, e.operation,
+    CASE WHEN e.outcome <> 'ok' AND e.error_category = 'insufficient_tokens' THEN 'insufficient_tokens' ELSE e.outcome END AS result,
+    e.error_category, e.duration_ms, e.api_key_uid, e.grant_id, e.client, e.company_id, e.model, e.provider, e.connector,
+    e.reservation_uid,
+    CASE WHEN e.reservation_uid IS NULL THEN e.held_microusd ELSE r.included_microusd + r.topup_microusd END AS reserved,
+    CASE WHEN e.reservation_uid IS NULL THEN e.charged_microusd
+      WHEN r.status IN ('settled', 'refunded') THEN r.actual_included_microusd + r.actual_topup_microusd END AS charged,
+    CASE WHEN r.status IN ('settled', 'refunded')
+      THEN (r.included_microusd + r.topup_microusd) - (r.actual_included_microusd + r.actual_topup_microusd) END AS refunded
+  FROM api_usage_events e
+  LEFT JOIN ai_budget_reservations r ON r.uid = e.reservation_uid AND r.user_id = e.user_id
+  WHERE e.user_id = ?1 AND e.execution_id = ?2
+  LIMIT 1`;
+
+/** `GET /api/developer/usage/events/:execution_id`. Throws `unknown_request` for an id that is not the member's. */
+export async function usageEvent(env: Env, userId: number, executionId: string): Promise<UsageEventRow> {
+  if (!/^[A-Za-z0-9_.:-]{1,80}$/.test(executionId)) throw new ReportInputError('unknown_request', 'This request is not on your account.');
+  const row = await env.DB.prepare(EVENT_SQL).bind(userId, executionId).first<Record<string, unknown>>();
+  if (!row) throw new ReportInputError('unknown_request', 'This request is not on your account.');
+  return eventRow(row);
 }
 
 /** The share of a key's monthly cap at which a key is flagged `near_limit`. */
