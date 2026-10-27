@@ -375,6 +375,18 @@ Worker routes in `routes/newsletter.ts`, backed by `services/newsletter.ts` and 
 
 The old `GET /api/insights/newsletter` and `POST /api/insights/newsletter/{subscribe,unsubscribe}` keep answering: the toggle writes the `insights` topic as well, and the GET reads the topic once the member has a subscriber row (D813 retires them).
 
+### Email drafts Worker contract (D1341, #3549)
+
+Worker routes in `routes/mail_drafts.ts`, mounted at `/api/mail`, backed by `services/mail/` and migration 648 (`mail_drafts`). The client is `lib/api/mail.js`. There is no page yet: the composer is #3552. Every route needs sign-in, and a support session is refused 403 `support_session_refused`. A person is a ref, `kind:id`: `interviewee`, `prospect`, `cofounder` (`h-<n>`), `growth_partner`, `advisor` (an engagement the member is the client of) or `partner` (an engagement on the member's venture). `member` is part 3's (#3550). A ref the member cannot read is 404 "Record not found.", the same body as one that does not exist.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/mail/context?person=[&project=]` | signed in | `{ person, intents, items }`. `items[0]` is the person's record, `selected`, read through its module's record gate, store check and section gates. The company's one-liner and KPI board follow, not selected, only when each has something to say. `project` names the company for an advisor, who has none. |
+| `POST /api/mail/blocks` | signed in | Takes `{ kind, ref?, project? }`, where `kind` is `kpis`, `raise_status`, `project_progress`, `interview_insights` or `one_liner`. Answers `{ block: { kind, text, as_of, link } }`, computed now under the module's own gate, or `{ block: null }` when nothing is recorded or readable. An unknown kind is 400 `block_invalid`; no venture is 400 `project_required`. |
+| `POST /api/mail/drafts` | signed in | Takes `{ person, intent, tone, length, refs[], blocks[], project?, estimate? }`. With `estimate: true` it answers `{ estimate: { hold_microusd, model }, sources, blocks }` and runs nothing. Otherwise it runs one `mail_draft` run, charged in AI tokens by the router, and answers 201 `{ draft }`, with the draft's sources and its `cost.charged_microusd`. A short balance is 402 in the top-up sentence. An answer that is not an email is 503 `draft_unreadable`. |
+| `POST /api/mail/drafts/:uid/revise` | the draft's author | Takes `{ instruction: 'shorter' \| 'warmer' \| free text, project?, estimate? }`. It reads the parent's records again and answers 201 with a new row whose `parent_uid` is the parent. |
+| `GET /api/mail/drafts[?person=]`, `GET /api/mail/drafts/:uid`, `DELETE /api/mail/drafts/:uid` | the draft's author | The member's own drafts, newest first. Another member's draft is 404. |
+
 ### Annual licence-fee invoices Worker contract (D802, #2238)
 
 HQ invoices a territory licensee's annual fee, one invoice per licence year, the year running from the licence's anniversary (`starts_on`). Backed by `services/licenceFeeInvoices.ts` and migration 513 (`licence_fee_invoices`). The PDF is the generated-document type `territory_licence_fee_invoice`, drawn from the figures frozen at issue; Holdings is the sender, and the payment block is the `territory_licence_fee` purpose, masked.

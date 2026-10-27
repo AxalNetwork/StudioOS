@@ -76,7 +76,8 @@ const MODULES: Record<string, { cycle: string; slug: string; module: string; sql
   },
   cofounder: {
     cycle: 'build', slug: 'founding-team', module: 'Founding team',
-    sql: 'SELECT project_id, updated_at FROM cap_table_holders WHERE id = ? AND founder_role IS NOT NULL',
+    // A holder with no founder role is no co-founder: `ownedRow` refuses it, as the record page does.
+    sql: 'SELECT project_id, updated_at FROM cap_table_holders WHERE id = ?',
     id: (id) => (id.startsWith('h-') && NUMERIC.test(id.slice(2)) ? Number(id.slice(2)) : null),
     link: (id, p) => `/build/founding-team/${id}?project=${p}`,
   },

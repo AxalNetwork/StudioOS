@@ -53,6 +53,13 @@ async function fixture(answer: () => string = () => ANSWER) {
   db.exec("INSERT INTO project_metrics(id,project_id,snapshot_date,source,mrr,paying_accounts) VALUES (1,1,'2026-10-10','manual',12000,42)");
   db.exec("INSERT INTO narrative_positioning(project_id,version,kind,position,text,updated_at) VALUES (1,NULL,'one_liner',0,'Books closed in a day for small finance teams.','2026-10-06 10:00:00')");
   db.exec("INSERT INTO roadmap_okrs(project_id,objective,kanban_status,sort_order,updated_at) VALUES (1,'Ship the close checklist','now',1,'2026-10-07 10:00:00'),(1,'Bank feeds','done',2,'2026-10-01 10:00:00')");
+  db.exec("INSERT INTO cap_table_holders(id,user_id,project_id,name,security_type,shares,founder_role) VALUES (6,2,1,'Synthetic Angel Holder','common',10,NULL)");
+  db.exec("UPDATE growth_partners SET contact_name = 'Synthetic Contact Person' WHERE uid = 'gp1abc'");
+  db.exec("INSERT INTO interview_sessions(id,uid,interview_id,project_id,created_by_user_id,channel,status,consent_status) VALUES (40,'sess40',11,1,2,'video','transcribed','given')");
+  db.exec("INSERT INTO interview_transcript_segments(session_id,source,start_ms,end_ms,speaker_label,text) VALUES (40,'final',0,1000,'A','Synthetic raw transcript line')");
+  db.exec("INSERT INTO partners(id,uid,name,company,email) VALUES (5,'pt5','Synthetic Operator','Synthetic Ops','synthetic-ops@example.invalid')");
+  db.exec(`INSERT INTO engagements(id,uid,need_id,quote_id,partner_id,founder_id,project_id,price,status,created_at,updated_at)
+           VALUES (90,'g90',1,1,5,100,1,0,'accepted','2026-09-15','2026-09-15'),(91,'g91',2,2,5,300,3,0,'accepted','2026-09-15','2026-09-15')`);
   db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,5000000)').run();
   for (const key of ['founder:free', 'founder:studio']) db.prepare('INSERT OR IGNORE INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES(?,0,0,1)').run(key);
   const calls: Array<{ model: string; prompt: string }> = [];
@@ -65,6 +72,7 @@ async function fixture(answer: () => string = () => ANSWER) {
   });
   const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', AI };
   await ensureProjectMembershipSchema(env);
+  db.exec("INSERT INTO project_members (project_id, user_id, role, status) VALUES (1, 7, 'advisor', 'accepted')");
   const app = new Hono<any>().route('/api/mail', mail);
   app.onError((err, c) => c.json({ detail: err.message }, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
   const real = globalThis.fetch;
@@ -137,6 +145,17 @@ test('the pack: the person\'s record selected, read through its module; the comp
     assert.match(a.body.items[0].text, /Last session: 2026-10-10 · Pricing/);
     assert.equal(a.body.items.length, 1, 'an advisor has no venture: no company items unless one is named');
     assert.equal((await call(f, 2, 'GET', '/api/mail/context?person=advisor:70&project=1')).body.items.length, 3);
+    assert.ok(!own.text.includes('Synthetic raw transcript line'), 'a raw transcript is never pack text');
+    const pe = await call(f, 2, 'GET', '/api/mail/context?person=partner:90');
+    assert.equal(pe.status, 200, JSON.stringify(pe.body));
+    assert.deepEqual([pe.body.person.name, pe.body.person.project_id, pe.body.items.length], ['Synthetic Operator · Synthetic Ops', 1, 3]);
+    const pinned = await call(f, 2, 'GET', '/api/mail/context?person=interviewee:11&project=3');
+    assert.deepEqual(pinned.body.items.map((i: any) => i.ref), ['interviewee:11', 'one_liner:1', 'kpis:1'], 'the person\'s own venture wins over a named one');
+    const writer = (await call(f, 2, 'GET', '/api/mail/context?person=growth_partner:gp1abc')).body.items[0].text;
+    assert.match(writer, /Synthetic Contact Person/);
+    const reader = await call(f, 7, 'GET', '/api/mail/context?person=growth_partner:gp1abc');
+    assert.equal(reader.status, 200, JSON.stringify(reader.body));
+    assert.ok(!reader.body.items[0].text.includes('Synthetic Contact Person'), 'a writers-only section stays hidden from a reader');
   } finally { f.close(); }
 });
 
@@ -146,7 +165,7 @@ test('a ref the member cannot read is 404 in exactly the words of one that does 
     const missing = await call(f, 2, 'GET', '/api/mail/context?person=interviewee:999');
     assert.equal(missing.status, 404);
     assert.equal(missing.body.detail, 'Record not found.');
-    for (const [who, ref] of [[2, 'interviewee:31'], [6, 'interviewee:11'], [7, 'interviewee:11'], [2, 'advisor:80'], [3, 'prospect:21'], [2, 'member:3'], [2, 'cofounder:5'], [2, 'nope'], [2, '']] as const) {
+    for (const [who, ref] of [[2, 'interviewee:31'], [6, 'interviewee:11'], [7, 'interviewee:11'], [2, 'advisor:80'], [3, 'prospect:21'], [2, 'member:3'], [2, 'cofounder:5'], [2, 'cofounder:h-6'], [2, 'partner:91'], [3, 'partner:90'], [2, 'nope'], [2, '']] as const) {
       const r = await call(f, who, 'GET', `/api/mail/context?person=${ref}`);
       assert.equal(r.status, 404, `${who} ${ref}`);
       assert.deepEqual(r.body, missing.body, `${who} ${ref}: the same body`);
@@ -275,6 +294,9 @@ test('each block is computed now under its module\'s gate; nothing recorded or u
     assert.match(raise.text, /Committed: \$25,000/);
     assert.match(raise.text, /1 investor committed/);
     assert.equal(raise.as_of, '2026-10-08');
+    assert.equal((await call(f, 3, 'POST', '/api/mail/blocks', { kind: 'raise_status', project: 1 })).body.block, null, 'another venture\'s raise');
+    assert.equal((await call(f, 1, 'POST', '/api/mail/blocks', { kind: 'raise_status', project: 1 })).body.block, null, 'staff never read the pipeline through a draft');
+    assert.equal((await call(f, 3, 'POST', '/api/mail/blocks', { kind: 'project_progress', project: 3 })).body.block, null, 'an empty roadmap');
     assert.equal((await call(f, 2, 'POST', '/api/mail/blocks', { kind: 'kpis', ref: 'interviewee:31' })).status, 404);
     assert.equal((await call(f, 2, 'POST', '/api/mail/blocks', { kind: 'kpis' })).status, 400);
     assert.equal((await call(f, 2, 'POST', '/api/mail/blocks', { kind: 'weather', project: 1 })).status, 400);
