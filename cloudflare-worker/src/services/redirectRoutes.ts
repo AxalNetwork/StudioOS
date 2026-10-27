@@ -80,6 +80,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/for-mentors' },
   { path: '/pricing/investor' },
   { path: '/settings', keep: true },
+  // D1140 (#3020): Company Settings moved under Companies and projects. No sent mail carries it, so its count decides.
+  { path: '/company-settings' },
   { path: '/settings/:section', keep: true },
   { path: '/dashboard' },
   { path: '/product-testing', keep: true }, // #2314: historical member notifications
