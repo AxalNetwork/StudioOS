@@ -36,7 +36,14 @@ export function guessMapping(header, fields, saved = null) {
   return out;
 }
 
-export default function MapColumnsDialog({ file, fields, onClose, onSaved }) {
+/**
+ * D1095 (#2960): a feed whose Worker keeps its mapping in another shape hands
+ * `encode(mapping, header)` (the dialog's column → field, into the body it
+ * saves) and `decode(saved, header)` (back into column → field). Without them
+ * the dialog saves what it shows.
+ */
+const asIs = (m) => m;
+export default function MapColumnsDialog({ file, fields, onClose, onSaved, encode = asIs, decode = asIs }) {
   const [read, setRead] = useState({ status: 'loading', rows: null });
   const [tick, setTick] = useState(0);
   const [mapping, setMapping] = useState(null);
@@ -53,7 +60,7 @@ export default function MapColumnsDialog({ file, fields, onClose, onSaved }) {
 
   const header = useMemo(() => (read.rows?.[0] || []).map((c, i) => String(c ?? '').trim() || `Column ${i + 1}`), [read.rows]);
   const body = useMemo(() => (read.rows || []).slice(1), [read.rows]);
-  useEffect(() => { if (read.status === 'ready') setMapping(guessMapping(header, fields, file.mapping)); }, [read.status, header, fields, file.mapping]);
+  useEffect(() => { if (read.status === 'ready') setMapping(guessMapping(header, fields, file.mapping ? decode(file.mapping, header) : null)); }, [read.status, header, fields, file.mapping, decode]);
   const problems = mapping ? mappingProblems(header, body, mapping, fields) : [];
   const skipped = new Set(problems.flatMap((p) => p.rows.map((r) => r.row)));
   const used = mapping ? Object.values(mapping).filter((v) => v !== DONT_USE) : [];
@@ -63,7 +70,7 @@ export default function MapColumnsDialog({ file, fields, onClose, onSaved }) {
 
   const save = async () => {
     setBusy(true); setRefusal('');
-    try { await googleWorkspace.mapping(file.uid, mapping); onSaved(mapping); }
+    try { const saved = encode(mapping, header); await googleWorkspace.mapping(file.uid, saved); onSaved(saved); }
     catch (e) { setRefusal(workspaceRefusal(e)); setBusy(false); }
   };
 
