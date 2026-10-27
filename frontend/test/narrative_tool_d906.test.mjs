@@ -280,7 +280,7 @@ test('Check offers Phrase the fix on each mismatch the founder reads, in any ver
     assert.ok(older.requests.some((u) => u.includes('/cycles/raise/narrative/3/claims?project=3')), 'the version the address names');
     assert.ok(older.testIds().includes('check-fix-c-mrr'), 'the fix is the clicked claim\'s, not only the newest version\'s');
   } finally { await older.close(); }
-  const staff = await mounted('/raise/investor-narrative/check?project_id=3', { handle: (u, o) => (/\/narrative\/4\/claims\?/.test(u) ? response(CLAIMS(4, false)) : handler(u, o)) });
+  const staff = await mounted('/raise/investor-narrative/check?project_id=3', { handle: (u) => (/\/narrative\/4\/claims\?/.test(u) ? response(CLAIMS(4, false)) : handler(u)) });
   try {
     assert.ok(!staff.testIds().includes('check-fix-c-mrr'), 'staff read states only');
     assert.ok(!staff.testIds().includes('narrative-check-run'));
