@@ -50,6 +50,7 @@ import HqTeamActions, { HQ_ONLY_ACTIONS, ADMIN_ACTIONS, SUPPORT_SESSION_CEILING_
 import { drawsAccountControls } from '../src/lib/accountControls.js';
 import { UserDetailModal } from '../src/pages/admin/consoles/UsersConsole.jsx';
 import { adminConsoleSource } from './_adminConsoles.mjs';
+import { accountDialog } from '../src/pages/admin/accounts/accountDrawerModel.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
@@ -381,10 +382,12 @@ test('D247: deactivating an administrator takes demote\'s bar, and the card says
     'the bar is no longer scoped to an administrator target');
 
   // The page asks for the reason on an administrator's row, and forwards what
-  // was typed.
-  assert.match(ADMIN, /if \(user\.role === 'admin'\) \{\s*reason = window\.prompt\(/,
-    'the directory no longer asks for a reason before toggling an administrator');
-  assert.match(ADMIN, /await api\.adminToggleActive\(user\.id, reason\)/, 'the typed reason is not sent');
+  // was typed. D1306 (#3403): in ACC7 I's in-page dialog, not a window.prompt.
+  const admin = accountDialog('deactivate', { role: 'admin', name: 'A. Admin' });
+  assert.equal(admin.reason?.required, true, 'the directory no longer asks for a reason before deactivating an administrator');
+  assert.equal(admin.reason?.min, 10, 'the reason floor is not the route\'s ten characters');
+  assert.equal(accountDialog('deactivate', { role: 'founder' }).reason?.required, false, 'a member\'s deactivation now demands a reason');
+  assert.match(ADMIN, /deactivate: \(c, reason\) => api\.adminToggleActive\(c\.user\.id, reason \|\| undefined\)/, 'the typed reason is not sent');
   const method = API.slice(API.indexOf('adminToggleActive:'), API.indexOf('adminSetAccessLevel:'));
   assert.match(method, /adminToggleActive: \(userId, reason\) =>/, 'adminToggleActive takes no reason');
   assert.match(method, /\.\.\.\(reason \? \{ body: JSON\.stringify\(\{ reason \}\) \} : \{\}\)/,
@@ -486,18 +489,17 @@ test('drawsAccountControls: an admin row is the Super Admin\'s alone, and the vi
 test('the directory draws View As and Disable only inside the one guard, on the row and in the drawer', () => {
   assert.match(ADMIN, /import \{ drawsAccountControls \} from '(?:\.\.\/){3}lib\/accountControls';/);
 
-  // The row: both controls between the guard and the fragment it opens.
-  const guard = '{drawsAccountControls(u, viewer) && (';
-  assert.equal(count(ADMIN, guard), 1, 'the row guard is missing or doubled');
-  const g = ADMIN.indexOf(guard);
-  const close = ADMIN.indexOf('</>', g);
+  // The row (D1305): All accounts' ⋯ menu draws the two items only where the
+  // console's `controlsFor` says so, and that is this one rule. Each item runs
+  // the console's handler from one place.
+  assert.equal(count(ADMIN, 'controlsFor={(u) => drawsAccountControls(u, viewer)}'), 1, 'the row guard is missing or doubled');
+  const MODEL = codeOnly(raw('frontend/src/pages/admin/accounts/allAccountsModel.js'));
+  assert.match(MODEL, /if \(controls\) \{\s*items\.push\(\{ id: 'support'[^\n]*\n\s*items\.push\(\{ id: 'toggle'/,
+    'Start a support session or Deactivate is drawn outside the guard');
   // D247 — the toggle takes the ROW, not its id, because an admin row asks for
-  // a reason and the handler has to see the role to know. The count still
-  // pins one call from the directory.
-  for (const call of ['handleImpersonate(u)', 'handleToggleActive(u)']) {
-    assert.equal(count(ADMIN, call), 1, `${call} is called from more than one place in the directory`);
-    const at = ADMIN.indexOf(call);
-    assert.ok(at > g && at < close, `${call} is drawn outside the guard`);
+  // a reason and the handler has to see the role to know.
+  for (const call of ["else if (id === 'support') handleImpersonate(u);", "else if (id === 'toggle') handleToggleActive(u);"]) {
+    assert.equal(count(ADMIN, call), 1, `${call} is not the one place the directory calls it`);
   }
 
   // The drawer is handed no handler where the rule says no.
@@ -520,8 +522,10 @@ test('the directory draws View As and Disable only inside the one guard, on the 
 
 test('the Admin role badge no longer says the role changes only through SQL', () => {
   assert.ok(!ADMIN.includes('direct database SQL'), 'the picker still claims SQL is the only way to change the admin role');
-  assert.ok(ADMIN.includes('title="An administrator is opened and demoted on the licence they hold (Licences → Administrators), by the Super Admin — not from this picker"'),
-    'the badge no longer names where an administrator is opened and demoted');
+  // D1305: the table has no role picker; an administrator's row menu says where they are removed (ACC12).
+  assert.ok(codeOnly(raw('frontend/src/pages/admin/accounts/allAccountsModel.js'))
+    .includes("export const ADMIN_ROW_NOTE = 'Administrators are removed on their licence (Licences › Administrators).';"),
+    'the administrator row no longer names where an administrator is removed');
 });
 
 test('the transfer asks for the reason the worker requires, at the same floor, and sends it', () => {

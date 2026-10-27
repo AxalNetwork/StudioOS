@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e9e7ee}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Founder › Build</span><h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">From Vercel</h1><p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">VC1 to VC7. What runs in production, read from Vercel into the Build modules beside the From GitHub parts. Read-only: nothing deploys, rolls back or changes from StudioOS.</p></header>
+<sc-for list="{{ rows }}" as="r" hint-placeholder-count="7"><section id="{{ r.id }}" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ r.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ r.t }}</h2></div><sc-if value="{{ r.n }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:13px;line-height:1.55;color:#3f3a47">{{ r.n }}</p></sc-if><div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap"><sc-for list="{{ r.f }}" as="f" hint-placeholder-count="1"><div style="display:flex;flex-direction:column;gap:8px"><sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if><div style="{{ f.st }}"><dc-import name="From Vercel Page" v="{{ f.v }}" hint-size="100%,800px"></dc-import></div></div></sc-for></div></section></sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const S = (w, r) => 'width:' + w + 'px;border-radius:' + (r || 14) + 'px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)';
+    const f = (v, cap, w, r) => ({ v, cap: cap || '', st: S(w || 1440, r) });
+    const R = (id, t, n, fr) => ({ id, t, n: n || '', f: fr });
+    return { rows: [
+      R('VC1', 'Operating systems › Tools', 'GitHub’s Code system is a placeholder. The Hosting block holds the Vercel part, with its sync line, the live state and the health events.', [f('vc1')]),
+      R('VC2', 'Prototype / MVP', 'The must-haves table is a placeholder. From Vercel shows the Live strip and each must-have’s preview.', [f('vc2')]),
+      R('VC3', 'Product roadmap', 'The Deploys strip sits above GitHub’s Releases strip, whose chips say which release is live. A week with no deploys is a measured zero.', [f('vc3')]),
+      R('VC4', 'Solution design and Company creation', 'Accepting the proposal opens the dialog. It adds a formation step; nothing changes on Vercel.', [f('vc4a', 'Solution design · Runs on'), f('vc4b', 'Company creation · Where production runs'), f('vc4d', 'Accept dialog', 600, 16)]),
+      R('VC5', 'States', 'Loading, empty, unreadable, not recorded and reconnect. A failed read blanks nothing else on the page.', [f('vc5')]),
+      R('VC6', 'Dark · VC1 and VC2', '', [f('vc6a', 'VC1'), f('vc6b', 'VC2')]),
+      R('VC7', 'Phone 390 · VC2 and VC3 stacked', 'The Deploys strip scrolls inside its card, never the page.', [f('vc7', '', 390, 28)]),
+    ] };
+  }
+}
+</script>
+</body></html>

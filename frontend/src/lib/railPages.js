@@ -126,10 +126,11 @@ const FOUNDER = [
   alias('/raise/status', key(F, 'Raise', 'Fundraising readiness'), 'The legacy Status zone: where the raise stands.'),
   alias('/raise/pitch', key(F, 'Raise', 'Pitch deck'), 'The Pitch deck studio, its tabs and the deck builder (D894).'),
   alias('/raise/capital', key(F, 'Raise', 'Capital relationships'), 'The legacy Capital zone: investors and rounds.'),
-  alias('/raise/capital-match', key(F, 'Raise', 'Capital relationships'), 'Investor match finds capital relationships.'),
+  // D1194: /raise/capital-match forwards to Capital relationships › Match, which the module key covers.
   // D1189 (#3123): a Call for Capital is Raise's call to investors (D686), not a phone call.
-  alias('/raise/calls', key(F, 'Raise', 'Capital relationships'), 'The history of Calls for Capital, on Capital relationships’ Calls tab.'),
-  alias('/raise/call', key(F, 'Raise'), 'Call for Capital opens over Raise’s overview; its history is /raise/calls.'),
+  // D1227 (#3226): /raise/calls and /raise/calls/:uid forward to Capital relationships › Calls.
+  alias('/raise/calls', key(F, 'Raise', 'Capital relationships'), 'The history of Calls for Capital: Capital relationships’ Calls tab, where each sent call has its own page.'),
+  alias('/raise/call', key(F, 'Raise'), 'Call for Capital opens over Raise’s overview; sent Calls for Capital are on Capital relationships’ Calls tab.'),
   alias('/raise/legal', key(F, 'Build', 'Company creation'), 'The legal zone holds the company’s formation documents.'),
   alias('/raise/legal-engine', key(F, 'Build', 'Company creation'), 'The legal engine: incorporation, founders, compliance and equity.'),
   ...CYCLE('Grow', '/grow', [

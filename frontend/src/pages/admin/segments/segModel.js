@@ -35,17 +35,18 @@ export function movedNotices(superAdmin) {
   return { personas: superAdmin ? 'Personas is now Persona segments, under Content.' : 'Personas is now Persona segments, under Accounts.' };
 }
 
-/** The tabs this integration draws (D997 §1). Activity, Suggestions and one segment's page wait for their parts. */
+/** The page's tabs (D997 §1; D1006 adds Activity and, for HQ's Super Admin, Suggestions). */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: '' },
   { key: 'unclassified', label: 'Unclassified', path: '/unclassified' },
+  { key: 'activity', label: 'Activity', path: '/activity' },
+  { key: 'suggestions', label: 'Suggestions', path: '/suggestions', superAdmin: true },
 ];
 
 export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === SEG_PATH) return 'overview';
-  if (p === SEG_UNCLASSIFIED_PATH) return 'unclassified';
-  return null;
+  return TABS.find((t) => t.path && p === `${SEG_PATH}${t.path}`)?.key ?? null;
 }
 
 /** The profiles, in the canvas's order and colours. `exploring` is Explorers; an unknown role is Other. */
@@ -295,4 +296,23 @@ export function needsTable(coverage, { profile = 'all', q = '' } = {}) {
 export function profileLine(profile, status) {
   const label = profile === 'any' ? 'Any profile' : profileLabel(profile);
   return status && status !== 'active' ? `${label} · ${STATUS_WORD[status] || status}` : label;
+}
+
+// ─── D1007 (#2822): the phone layout ────────────────────────────────────────
+
+/** Below `sm`, as the admin page header reads it: the phone layout (SEG14). */
+export const PHONE_QUERY = '(max-width: 639px)';
+
+/**
+ * One needs and offers row as the phone's single line (SEG14a): the segment,
+ * its needs met (or Not recorded), and how many offer kinds have a gap. An
+ * offer kind that could not be read is said, never counted as no gap.
+ */
+export function needsLine(row) {
+  const gaps = row.cells.filter((c) => c.gap).length;
+  const unreadable = row.cells.filter((c) => c.unreadable).length;
+  const parts = [row.name, row.needs.recorded ? `Needs met ${row.needs.text}` : 'Needs: Not recorded'];
+  if (gaps) parts.push(`${gaps} ${gaps === 1 ? 'gap' : 'gaps'}`);
+  if (unreadable) parts.push(`${unreadable} ${unreadable === 1 ? 'kind' : 'kinds'} could not be read`);
+  return { key: row.key, text: parts.join(' · '), gaps, unreadable };
 }

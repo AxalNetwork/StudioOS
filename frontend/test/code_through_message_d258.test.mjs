@@ -467,6 +467,12 @@ const FINDINGS = [...FILES].flatMap(([rel, src]) => scan(rel, src));
  */
 const ALLOWED = [
   {
+    rule: 'lookup',
+    file: 'pages/account/vercelProjectsModel.js',
+    phrase: 'SENTENCES[detail]',
+    why: "D1096: `detail` is the refusal BODY's `message` (`e.data.message`), which `PATCH /:uid/config` fills with the provider's validateConfig code (`invalid_config` + `project_not_accessible`), or the owner's `upstream` code — never `e.message`'s sentence",
+  },
+  {
     rule: 'hand-built',
     file: 'components/advisor/PersonalAdvisor.jsx',
     phrase: "data.message || 'explain stream error'",

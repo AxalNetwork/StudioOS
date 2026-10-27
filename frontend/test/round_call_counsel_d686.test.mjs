@@ -20,7 +20,6 @@ import RoundCallSheet, {
   matchLine, AUDIENCE_REASONS, counselRequested, ROUND_ROWS,
 } from '../src/pages/founder/RoundCallSheet.jsx';
 import { CounselQueueView } from '../src/pages/hq/CounselQueue.jsx';
-import CallsHistory, { callLine, callHref, CALL_STATES } from '../src/pages/cycles/CallsHistory.jsx';
 
 const h = React.createElement;
 const ssr = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
@@ -162,31 +161,8 @@ test('HQ: the Counsel review tab lists the queue, each row to the call\'s counse
   assert.match(page, /counsel \? <section className="mt-4" aria-live="polite"><CounselQueue \/><\/section>/);
 });
 
-const ITEM = { uid: 'k1', name: 'Seed round', state: 'sent', effective_state: 'open', sent_at: '2026-10-01 09:00:00', target_close: '2027-01-15', amount_cents: 150000000, committed_cents: 10000000, responded: 3 };
-test('Capital relationships: Calls for Capital, on, off, unreadable and empty', () => {
-  const html = ssr(h(CallsHistory, { calls: { enabled: true, items: [ITEM, { ...ITEM, uid: 'k2', name: 'Draft round', state: 'draft', effective_state: 'draft', sent_at: null, responded: 1, committed_cents: 0 }] } }));
-  assert.match(html, /<section id="calls"/);
-  assert.match(html, /<h2[^>]*>Calls for Capital<\/h2>/);
-  assert.match(html, /href="\/raise\/calls\/k1"[^>]*>Seed round</);
-  assert.match(html, /href="\/round-calls\/k2"[^>]*>Draft round</);
-  const text = renderedText(html);
-  assert.match(text, /Sent 01\/10\/2026 · closes 15\/01\/2027 · committed \$100,000 of \$1,500,000 · 3 responses/);
-  assert.match(text, /Not sent · closes 15\/01\/2027 · committed \$0 of \$1,500,000 · 1 response/);
-  assert.match(text, /Open/);
-  assert.match(text, /Draft/);
-  assert.deepEqual(Object.values(CALL_STATES), ['Draft', 'Awaiting counsel', 'Open', 'Expired', 'Closed']);
-  assert.match(ssr(h(CallsHistory, { calls: { enabled: false } })), /Coming soon\. Round calls are not enabled\./);
-  const bad = ssr(h(CallsHistory, { calls: { state: 'unreadable' } }));
-  assert.match(bad, /Unreadable/);
-  assert.doesNotMatch(bad, /No call for capital yet/);
-  assert.match(ssr(h(CallsHistory, { calls: { enabled: true, items: [] } })), /No call for capital yet\./);
-  assert.equal(ssr(h(CallsHistory, { calls: null })), '');
-  assert.equal(callHref({ uid: 'a b', state: 'closed' }), '/raise/calls/a%20b');
-  assert.match(callLine({ ...ITEM, responded: 0 }), /0 responses$/);
-  assert.match(callLine({ ...ITEM, responded: 1 }), /· 1 response$/);
-  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /'capital-relationships': \(data, ctx\) => \(\s*<>\s*<CallsHistory calls=\{data\?\.parts\?\.calls\} \/>/);
-});
+// D1227 (#3226): CallsHistory, the Calls history on Capital relationships' Overview, is retired;
+// Calls for Capital is the Calls tab (D1221), tested in calls_for_capital_d1221 and calls_part6_d1227.
 
 test('Preview reads the structured terms as an investor sees them, else the free text', () => {
   const structured = renderedText(view({ step: 3, page: PAGE({ instrument: 'convertible_note', valuation_cap_cents: 800000000, discount_bps: 2000, terms: 'MFN' }) }));
