@@ -3472,8 +3472,12 @@ function AppInner() {
       {/* D686 §5.1: Share an update, the Grow page with its lightbox open; /grow/updates is the history's address. */}
       <Route path="/grow/update" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" lightbox />)} />
       {/* D1056 (#2427): the Reporting desk, Grow's history tab; /grow/updates is its old address. */}
-      <Route path="/grow/reporting" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" reporting="desk" />)} />
-      <Route path="/grow/reporting/duties" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" reporting="duties" />)} />
+      {/* D1060 (#2930): the desk, Duties and a sent report read for an advisor and an Operating Partner of the venture too, as the
+          Worker's desk and report reads admit them (`canAccessProject`); the builder stays the founders' (an admin's draft is refused). */}
+      <Route path="/grow/reporting" element={guard(['admin', 'founder', 'advisor', 'partner'], <CycleRoute cycle="grow" reporting="desk" />)} />
+      <Route path="/grow/reporting/duties" element={guard(['admin', 'founder', 'advisor', 'partner'], <CycleRoute cycle="grow" reporting="duties" />)} />
+      <Route path="/grow/reporting/:id" element={guard(['admin', 'founder', 'advisor', 'partner'], <CycleRoute cycle="grow" reporting="report" />)} />
+      <Route path="/grow/reporting/:id/edit" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" reporting="edit" />)} />
       <Route path="/grow/updates" element={guard(['admin', 'founder'], <HistoryRedirect to="/grow/reporting" hash="" />)} />
       <Route path="/grow/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" />)} />
       <Route path="/grow/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" record />)} />
