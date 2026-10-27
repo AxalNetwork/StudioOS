@@ -168,6 +168,11 @@ async function mount(el, { deal = () => OPEN, batch = (ids) => ({ items: ids.map
     if (p === '/api/client-error') return json({});
     if (p === '/api/venture-scores/deal/4') { const r = deal(); return r instanceof Response ? r : json(r); }
     if (p === '/api/deals') return json([{ id: 4, project_name: 'Acme', status: 'active' }, { id: 5, project_name: 'Bluefern', status: 'active' }]);
+    // D1240: the live table reads the firm's flow, then one batch for those ids.
+    if (p === '/api/deals/flow') return json({ items: [{ deal_id: 4, venture: 'Acme', stage: 'screening', can_open: true }, { deal_id: 5, venture: 'Bluefern', stage: 'screening', can_open: true }] });
+    if (p === '/api/deals/views') return json({ items: [] });
+    if (p === '/api/venture-scores/weights') return json({ weights: null });
+    if (p === '/api/deals/fit') return json({ items: [] });
     if (p === '/api/venture-scores/batch') { const r = batch(body.deal_ids); return r instanceof Response ? r : json(r); }
     return json({ detail: 'Not found' }, 404);
   };
@@ -323,7 +328,10 @@ test('SC6: Deal flow’s strips come from one batch; locked and closed rows draw
 });
 
 test('SC6 mounted: Deal flow’s table reads its deals, then one batch for their ids', async () => {
-  const v = await mount(h(DealFlow, { view: 'table', scope: 'mine' }), { path: '/deals?view=table', batch: (ids) => ({ items: [strip(ids[0])], not_readable: ids.length - 1 }) });
+  const v = await mount(h(DealFlow, { view: 'table', scope: 'mine' }), {
+    path: '/deals?view=table',
+    batch: (ids) => ({ items: [strip(ids[0]), { deal_id: ids[1], locked: true, reason: 'The founder has not shared this scorecard with investors.' }], not_readable: 0 }),
+  });
   try {
     const calls = v.calls.filter((c) => c.path === '/api/venture-scores/batch');
     assert.equal(calls.length, 1);
@@ -331,7 +339,7 @@ test('SC6 mounted: Deal flow’s table reads its deals, then one batch for their
     const four = v.by('dealflow-row-4'); const five = v.by('dealflow-row-5');
     assert.match(v.text(four), /Acme/);
     assert.ok(v.all().some((n) => v.props(n)['data-testid'] === 'scope-strip'), 'the readable deal draws its strip');
-    assert.ok(v.all().some((n) => v.props(n)['data-testid'] === 'scope-strip-locked'), 'the deal the batch left out is locked');
+    assert.ok(v.all().some((n) => v.props(n)['data-testid'] === 'scope-strip-locked'), 'a locked scorecard draws no bar');
     assert.ok(five);
   } finally { await v.close(); }
 });

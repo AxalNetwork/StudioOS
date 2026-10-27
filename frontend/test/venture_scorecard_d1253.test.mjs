@@ -110,6 +110,9 @@ test('the wiring: the three routes, the deal tab, the deal flow column, HQ’s s
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
   assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}"), 'D1257: the tab reads its deal');
   assert.ok(!deal.includes("['scorecard', 'evidence'"), 'the scorecard tab is no longer a wait card');
+  // D1240 (#3253): the live table's Scorecard column draws the strip from SCORING's batch.
+  assert.ok(read('frontend/src/pages/investor/dealflow/FlowTable.jsx').includes('<ScopeStrip scopes={stripScopes(row.scores)} />'));
+  // D1257: a row list already read still draws each strip from that same batch.
   assert.ok(read('frontend/src/pages/investor/dealflow/DealFlow.jsx').includes('<td><DealStrip read={strips} dealId={r.id} /></td>'), 'D1257: the column reads the batch');
   assert.ok(read('frontend/src/lib/hqStrips.js').includes("['Scoring', '/admin/platform/scoring']"));
   assert.ok(app.includes('<StripLink to="/admin/platform/scoring">Scoring</StripLink>'), 'HQ’s Platform strip in the shell holds the door');

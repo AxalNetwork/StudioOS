@@ -108,6 +108,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/payments',       'Payments under Platform, HQ only (D1008)'],
   ['frontend/src/pages/admin/partners',       'the admin Partner invitations desk (D923): its tabs, the records, the dialogs and the model they read'],
   ['frontend/src/pages/deal',                 'the deal page’s frame, working and reading tabs, staff views and who sees what (D1152–D1155)'],
+  ['frontend/src/pages/investor/dealflow',     'Deal flow for an Investor and the Studio lens: the board, the table, their rules and controls (D1236, D1240, D1242)'],
   ['frontend/src/pages/duediligence',         'Due diligence (D1244): the list and case tabs as addresses, and the list tabs D1250 draws — Cases, Templates and their dialogs'],
   ['frontend/src/pages/admin/programs',       'Admin › Programs (D953): the catalogue, each program page with its tabs, the redirects and the model they read'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
