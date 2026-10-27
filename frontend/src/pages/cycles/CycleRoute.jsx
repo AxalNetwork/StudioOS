@@ -343,9 +343,9 @@ const CYCLE_DEFS = {
       </>),
       // The replies customer and partner asks brought in, beside the rows.
       distribution: (data, ctx) => (<>
+        <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
         {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
         <ContentCalendar part={data?.parts?.content_calendar} channels={data?.records?.rows} projectId={ctx.projectId} reload={ctx.reload} />
-        <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
         {fromMercury('distribution', data, ctx)}
         <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
       </>),
