@@ -88,20 +88,9 @@ test('an article address opens that article\'s review', async () => {
   } finally { await w.done(); }
 });
 
-// D1296 (#3392) builds Calendar, so only Authors and Performance still wait; content_calendar_d1296.test.mjs mounts Calendar.
-for (const tab of ['authors', 'performance']) {
-  test(`${tab}: says what it waits on, and draws no queue`, async () => {
-    const w = await mount(`/admin/articles/${tab}`);
-    try {
-      const wait = byId(w.container, `content-queue-wait-${tab}`);
-      // Mutation checked: render Pipeline on every tab → the wait card is missing.
-      assert.ok(wait, 'the wait card');
-      assert.ok(text(wait).includes(WAITS[tab].title));
-      assert.ok(!text(w.container).includes('Pricing before product'), 'no queue list on this tab');
-    } finally { await w.done(); }
-  });
-}
-
-test('Performance never draws a zero for views it does not record', () => {
-  assert.match(WAITS.performance.lines[0], /^Views per week: Not recorded\./);
+// D1296 builds Calendar and D1297 builds Authors and Performance, so none of the four tabs waits.
+// content_calendar_d1296.test.mjs mounts Calendar; content_queue_stats_d1297.test.mjs holds the other two.
+test('D1296 and D1297 drew Calendar, Authors and Performance: none of them waits', () => {
+  // Mutation checked: put calendar back into WAITS → this key list is no longer empty.
+  assert.deepEqual(Object.keys(WAITS), []);
 });
