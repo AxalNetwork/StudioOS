@@ -61,6 +61,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src',           'the production worker'],
   ['cloudflare-worker/src/routes',    'the production API surface'],
   ['cloudflare-worker/src/services',  'logic the routes call; no HTTP in here'],
+  ['cloudflare-worker/src/services/fills', 'Fill with Eadwyn: the fill classes, FILL_FIELDS, the sources, provenance, the form run and what is kept'],
   ['cloudflare-worker/src/services/mercury', 'Mercury, read-only: D710\'s bank client, D840\'s MCP client and its typed reads'],
   ['cloudflare-worker/src/services/calendar', 'personal sources, external copies and calendar sync state'],
   ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
