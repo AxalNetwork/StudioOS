@@ -67,7 +67,7 @@ const FOUNDER_FILES = [...new Set([
   'frontend/src/pages/founder/FounderNetworkOrganizations.jsx',
   'frontend/src/pages/research/FundsZone.jsx',
   'frontend/src/pages/research/MarketDirectoryZone.jsx',
-  'frontend/src/pages/FinancialsPage.jsx',
+  // D1180 (#3107): FinancialsPage.jsx is retired; Forecast makes no model call of its own.
   // D1109 (#2989): DataRoomPage.jsx is retired; the Data room tool makes no model call of its own.
   // D1194 (#3128): RaisePipelinePage.jsx is retired into Capital relationships › Pipeline.
 ])].sort();

@@ -44,8 +44,8 @@ export const RETURNS = [
   ['/raise/pitch/review','/raise/pitch-deck','← Raise › Pitch deck'],
   ['/raise/pitch/edit','/raise/pitch-deck','← Raise › Pitch deck'],
   ['/raise/pitch/analytics','/raise/pitch-deck','← Raise › Pitch deck'],
-  ['/raise/capital','/raise/use-of-funds','← Raise › Use of funds'],
-  ['/raise/capital/model','/raise/use-of-funds','← Raise › Use of funds'],
+  // D1180 (#3107) and D1194 (#3128): /raise/capital, /raise/capital/model and
+  // /raise/capital/pipeline only forward, so none has a module return.
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/incorporation','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/founders','/build/company-creation','← Build › Company creation'],

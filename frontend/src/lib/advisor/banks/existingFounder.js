@@ -89,7 +89,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'number',
     explainer: 'Drives the runway gauge on the founder dashboard.',
     doc_anchor: 'capital/metrics',
-    page_target: '/raise/capital/model',
+    page_target: '/raise/use-of-funds/runway/forecast', // D1180: the model is Forecast
     validate: all(required, nonNegativeNumber),
   },
   {
@@ -98,7 +98,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'number',
     explainer: 'Used by the financial model builder to estimate fundraise timing.',
     doc_anchor: 'capital/metrics',
-    page_target: '/raise/capital/model',
+    page_target: '/raise/use-of-funds/runway/forecast', // D1180: the model is Forecast
     validate: all(required, nonNegativeNumber),
   },
   {
@@ -107,7 +107,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'number',
     explainer: 'Feeds MRR into your metrics + portfolio-health colour rating.',
     doc_anchor: 'capital/metrics',
-    page_target: '/raise/capital/model',
+    page_target: '/raise/use-of-funds/runway/forecast', // D1180: the model is Forecast
     validate: nonNegativeNumber,
   },
 
