@@ -386,7 +386,7 @@ test('mounted Activity: this segment\'s own, filtered by kind, and failing in wo
 
 // ── The sources ───────────────────────────────────────────────────────────────
 
-test('the routes, the Overview cards\' doors, PersonasPanel retired, the dialog a sheet, and no browser pop-up', () => {
+test('the routes, the Overview cards\' doors, PersonasPanel retired, the dialog a full-screen sheet (D1007), and no browser pop-up', () => {
   const app = read('frontend/src/App.jsx');
   for (const p of ['/admin/persona-segments/:key', '/admin/persona-segments/:key/members', '/admin/persona-segments/:key/activity']) {
     assert.ok(app.includes(`<Route path="${p}" element={guard(['admin'], <PersonaSegmentPage />)} />`), p);
@@ -396,7 +396,7 @@ test('the routes, the Overview cards\' doors, PersonasPanel retired, the dialog 
   assert.ok(overview.includes('<Link to={`/admin/persona-segments/${c.key}`}'), 'a card does not open its segment');
   assert.ok(!/PersonasPanel|PersonasConsole/.test(overview), 'the re-tag table is still on Overview');
   const dialog = read('frontend/src/pages/admin/segments/MoveDialog.jsx');
-  assert.match(dialog, /<Lightbox phone="sheet"/);
+  assert.match(dialog, /<Lightbox phone="full"/, 'D1007 (SEG14b): a full-screen sheet on a phone');
   for (const f of ['SegmentPage.jsx', 'MoveDialog.jsx', 'segmentPageModel.js', 'PersonaSegments.jsx']) {
     assert.ok(!/\b(?:window\.)?(alert|confirm|prompt)\(/.test(read(`frontend/src/pages/admin/segments/${f}`)), `a browser pop-up in ${f}`);
   }

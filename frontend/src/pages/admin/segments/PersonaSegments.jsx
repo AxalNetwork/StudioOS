@@ -7,13 +7,14 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import { Chart, ChartTable } from '../../../ui/Charts';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import AdminBoardFrame from '../AdminBoardFrame';
 import { ActivityTab } from './SegmentPage';
 import { AcceptedEdit, SuggestChangeDialog, SuggestionsList, UnclassifiedTab, useSegmentProfiles } from './SegmentWork';
 import {
   ACCOUNTS_PATH, ADMIN_RAIL_NOTE, ALL_FAILED, ALL_FAILED_LINE, BLOCK_FAILED, CONTENT_PATH, NOT_PER_PROFILE, NOT_YET, OFFER_KINDS,
-  PAGE_LINE, PROFILE_FILTERS, RAIL_NOTE, SCOPE_LINE, SEG_TITLE, STATUS_WORD,
-  advisorsWithout, confidenceRead, failed, howSetRead, movedNotices, needsTable, overviewTiles, profileLine,
+  PAGE_LINE, PHONE_QUERY, PROFILE_FILTERS, RAIL_NOTE, SCOPE_LINE, SEG_TITLE, STATUS_WORD,
+  advisorsWithout, confidenceRead, failed, howSetRead, movedNotices, needsLine, needsTable, overviewTiles, profileLine,
   segmentCardsRead, segmentsByProfileRead, subAccountChips, tabOf, weeklyRead,
 } from './segModel';
 
@@ -33,9 +34,16 @@ import {
  * that segment's own page (D1005, `SegmentPage.jsx`), where its members move
  * by SEG4's Move dialog; D1005 retired the re-tag table that stood at the
  * foot of Overview.
+ *
+ * D1007 (#2822, part 10) is the phone (SEG14a), below `sm` as the header reads
+ * it: the header's "‹ Accounts", tiles two by two, every chart full width
+ * with "View as table", one card a row, needs and offers one line a segment,
+ * and every control at least 44 by 44 px (`max-sm:` here, `TAP` for a text
+ * button). The Move dialog is a full-screen sheet with its buttons fixed at
+ * the foot (`MoveDialog.jsx`, SEG14b).
  */
 
-const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
+const BTN = 'inline-flex min-h-[36px] max-sm:min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
 const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
@@ -43,6 +51,8 @@ const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const TAG = 'self-start rounded-full border border-dashed border-axal-muted px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
 const MONO = 'font-mono tabular-nums';
+/** A text button or link: 44px tall on a phone (SEG14), its own size above. */
+const TAP = 'inline-flex min-h-[44px] items-center sm:min-h-0';
 const FILL = {
   violet: 'bg-axal-violet dark:bg-violet-400',
   sky: 'bg-sky-500',
@@ -77,6 +87,29 @@ function Bar({ label, count, max, tone = 'violet', hollow = false }) {
       </span>
       <span className={`${MONO} text-right text-axal-ink dark:text-gray-100`}>{count.toLocaleString('en-US')}</span>
     </li>
+  );
+}
+
+/** D1007: a chart's "View as table" (SEG14a), the same words as the weekly chart's. */
+function ViewToggle({ table, onToggle, id }) {
+  return <button type="button" className={`${TAP} shrink-0 text-[12px] font-semibold text-axal-violet underline dark:text-violet-300`} onClick={onToggle} aria-pressed={table} data-testid={`seg-${id}-view`}>{table ? 'View as chart' : 'View as table'}</button>;
+}
+
+/** A bar chart's rows as a table: the same labels and counts, nothing added. */
+function BarTable({ caption, rows, id }) {
+  return (
+    <table className="w-full border-collapse text-left text-[12.5px]" data-testid={`seg-${id}-table`}>
+      <caption className="sr-only">{caption}</caption>
+      <thead><tr className={EYE}><th scope="col" className="py-1.5 pr-3 font-bold">{rows.some((r) => r.group) ? 'Profile · segment' : 'Group'}</th><th scope="col" className="py-1.5 text-right font-bold">Members</th></tr></thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={`${r.group || ''}|${r.label}`} className="border-t border-axal-hairline dark:border-gray-700">
+            <th scope="row" className="py-1.5 pr-3 font-normal text-axal-ink dark:text-gray-100">{r.group ? `${r.group} · ${r.label}` : r.label}</th>
+            <td className={`py-1.5 text-right ${MONO} text-axal-ink dark:text-gray-100`}>{r.count.toLocaleString('en-US')}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -125,7 +158,7 @@ function Figure({ v, onRetry }) {
     return (
       <>
         <span className={`${MONO} text-[26px] font-medium text-axal-muted dark:text-gray-400`}>—</span>
-        <span className="text-[12px] font-semibold text-amber-800 dark:text-amber-300">{BLOCK_FAILED} <button type="button" className="underline" onClick={onRetry}>Try again</button></span>
+        <span className="text-[12px] font-semibold text-amber-800 dark:text-amber-300">{BLOCK_FAILED} <button type="button" className={`${TAP} underline`} onClick={onRetry} data-testid="seg-tile-retry">Try again</button></span>
       </>
     );
   }
@@ -143,7 +176,7 @@ function Chip({ on, onClick, children, disabled, title, role = 'radio', 'data-te
   const aria = role === 'radio' ? { role: 'radio', 'aria-checked': on } : { 'aria-pressed': on };
   return (
     <button type="button" {...aria} disabled={disabled} title={title} onClick={onClick} data-testid={id}
-      className={`inline-flex min-h-[32px] items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-70 ${on ? 'border-axal-lavender-edge bg-axal-lavender text-axal-ink dark:border-violet-700 dark:bg-violet-900/40 dark:text-gray-100' : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`}>
+      className={`inline-flex min-h-[32px] max-sm:min-h-[44px] items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-70 ${on ? 'border-axal-lavender-edge bg-axal-lavender text-axal-ink dark:border-violet-700 dark:bg-violet-900/40 dark:text-gray-100' : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`}>
       {children}
     </button>
   );
@@ -159,7 +192,7 @@ function Filters({ superAdmin, profile, setProfile, lpOn, setLpOn, seg }) {
           <>
             <label className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-axal-ink dark:text-gray-100">
               <span>Scope</span>
-              <select className="h-8 rounded-full border border-axal-hairline bg-white px-2.5 text-[12px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value="hq" disabled data-testid="seg-scope-select">
+              <select className="h-8 max-sm:h-11 rounded-full border border-axal-hairline bg-white px-2.5 text-[12px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value="hq" disabled data-testid="seg-scope-select">
                 <option value="hq">HQ-held accounts</option>
               </select>
             </label>
@@ -199,7 +232,7 @@ function WeeklyBlock({ seg, onRetry }) {
     <section className={`${CARD} col-span-12 flex flex-col gap-2.5 px-[18px] py-4 lg:col-span-6`} aria-labelledby="seg-h-weekly" data-testid="seg-weekly">
       <div className="flex items-start justify-between gap-2">
         <h2 id="seg-h-weekly" className={H2}>New segment tags per week</h2>
-        <button type="button" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" onClick={() => setTable(!table)}>{table ? 'View as chart' : 'View as table'}</button>
+        <button type="button" className={`${TAP} text-[12px] font-semibold text-axal-violet underline dark:text-violet-300`} onClick={() => setTable(!table)} data-testid="seg-weekly-view">{table ? 'View as chart' : 'View as table'}</button>
       </div>
       <span className={SUB} data-testid="seg-weekly-summary">{w.summary}</span>
       {table ? <ChartTable chart={w.chart} caption="New segment tags per week" />
@@ -214,7 +247,7 @@ function SegmentCard({ c, lpOn }) {
   const n = c.needs;
   return (
     <div className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline bg-white px-3.5 py-3 dark:border-gray-700 dark:bg-gray-900" data-testid={`seg-card-${c.key}`}>
-      <Link to={`/admin/persona-segments/${c.key}`} className="text-[13.5px] font-extrabold text-axal-ink underline-offset-2 hover:underline dark:text-gray-100" data-testid={`seg-card-open-${c.key}`}>{c.name}</Link>
+      <Link to={`/admin/persona-segments/${c.key}`} className={`${TAP} text-[13.5px] font-extrabold text-axal-ink underline-offset-2 hover:underline dark:text-gray-100`} data-testid={`seg-card-open-${c.key}`}>{c.name}</Link>
       {c.who ? <span className={SUB}>{c.who}</span> : null}
       <div className="flex items-baseline gap-2 border-t border-axal-hairline pt-2 dark:border-gray-700">
         {c.members === null
@@ -283,6 +316,7 @@ function CardsBlock({ seg, profiles, coverage, profile, lpOn, superAdmin, onRetr
 
 function NeedsBlock({ coverage, profile, onRetry }) {
   const [q, setQ] = useState('');
+  const phone = usePhoneWidth(PHONE_QUERY);
   if (coverage.status === 'loading') return <Loading id="needs" />;
   if (coverage.status === 'error') return <BlockFailed id="needs" title="Needs and offers" onRetry={onRetry} />;
   const t = needsTable(coverage.data, { profile, q });
@@ -293,11 +327,24 @@ function NeedsBlock({ coverage, profile, onRetry }) {
         <label className="flex-1">
           <span className="sr-only">Search a segment</span>
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a segment"
-            className="h-9 w-full max-w-[320px] rounded-[7px] border border-axal-hairline px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="seg-needs-search" />
+            className="h-9 max-sm:h-11 w-full max-w-[320px] rounded-[7px] border border-axal-hairline px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="seg-needs-search" />
         </label>
         <span className={`${MONO} text-[12px] text-axal-muted dark:text-gray-400`} data-testid="seg-needs-count">Gaps first · {t.rows.length} of {t.total}</span>
       </div>
-      {t.rows.length === 0 ? <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">No segment matches. Clear the search or pick All.</p> : (
+      {t.rows.length === 0 ? <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">No segment matches. Clear the search or pick All.</p> : phone ? (
+        // SEG14a: one line a segment; the table's kinds stay a tap away on the segment's own page.
+        <ul className="m-0 flex list-none flex-col p-0" data-testid="seg-needs-lines">
+          {t.rows.map((r) => {
+            const l = needsLine(r);
+            return (
+              <li key={r.key} className="flex items-start gap-2 border-t border-axal-hairline py-2.5 dark:border-gray-700" data-testid="seg-needs-line">
+                <Link to={`/admin/persona-segments/${r.key}`} className={`${TAP} flex-1 text-[13px] font-semibold leading-[1.45] text-axal-ink dark:text-gray-100`}>{l.text}</Link>
+                {l.gaps > 0 && <span className="mt-3 shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 font-mono text-[11px] font-bold text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200" aria-hidden="true">{l.gaps} {l.gaps === 1 ? 'gap' : 'gaps'}</span>}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] border-collapse text-left text-[12.5px]">
             <thead>
@@ -334,6 +381,9 @@ function Overview({ superAdmin, tick }) {
   const { seg, profiles, coverage, retry } = useOverviewReads(tick);
   const [profile, setProfile] = useState('all');
   const [lpOn, setLpOn] = useState(false);
+  const [tables, setTables] = useState({});
+  const asTable = (id) => Boolean(tables[id]);
+  const flip = (id) => () => setTables((t) => ({ ...t, [id]: !t[id] }));
   const data = seg.status === 'ready' ? seg.data : null;
   const t = useMemo(() => overviewTiles(data, profile), [data, profile]);
   const by = useMemo(() => segmentsByProfileRead(data, profile), [data, profile]);
@@ -364,7 +414,7 @@ function Overview({ superAdmin, tick }) {
         <Tile id="tagged" label="In a segment">{tileOf(t.tagged)}</Tile>
         <Tile id="untagged" label="No segment">
           {tileOf(t.untagged)}
-          {!loading && !t.untagged.failed && <Link to="/admin/persona-segments/unclassified" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300">Open Unclassified ›</Link>}
+          {!loading && !t.untagged.failed && <Link to="/admin/persona-segments/unclassified" className={`${TAP} text-[12px] font-semibold text-axal-violet underline dark:text-violet-300`} data-testid="seg-tile-open-unclassified">Open Unclassified ›</Link>}
         </Tile>
         <Tile id="differ" label="Segment and profile differ">{tileOf(t.differ)}</Tile>
         <Tile id="moved30" label="Moved by an admin, 30 days">{tileOf(t.moved)}</Tile>
@@ -393,9 +443,9 @@ function Overview({ superAdmin, tick }) {
         <div className="grid grid-cols-12 gap-3.5">
           {loading ? <Loading id="by-profile" span="lg:col-span-8" /> : by.failed ? <BlockFailed id="by-profile" title="Segments by profile" onRetry={() => retry('seg')} span="lg:col-span-8" /> : (
             <section className={`${CARD} col-span-12 flex flex-col gap-3 px-[18px] py-4 lg:col-span-8`} aria-labelledby="seg-h-by-profile" data-testid="seg-by-profile">
-              <h2 id="seg-h-by-profile" className={H2}>Segments by profile</h2>
+              <div className="flex items-start justify-between gap-2"><h2 id="seg-h-by-profile" className={H2}>Segments by profile</h2><ViewToggle id="by-profile" table={asTable('by-profile')} onToggle={flip('by-profile')} /></div>
               <span className={SUB}>By each member&apos;s account profile. A hollow bar is members of that profile with no segment.</span>
-              {by.groups.map((g) => (
+              {asTable('by-profile') ? <BarTable id="by-profile" caption="Segments by profile" rows={by.groups.flatMap((g) => [...g.bars.map((b) => ({ group: g.label, label: b.label, count: b.count })), { group: g.label, label: 'No segment', count: g.none }])} /> : by.groups.map((g) => (
                 <div key={g.role || 'other'} className="flex flex-col gap-1.5" data-testid={`seg-group-${g.role || 'other'}`}>
                   <span className={EYE}>{g.label} · {g.total.toLocaleString('en-US')}</span>
                   {g.total === 0 ? <span className={SUB}>No {g.label.toLowerCase()} yet.</span> : (
@@ -411,8 +461,9 @@ function Overview({ superAdmin, tick }) {
           )}
           {loading ? <Loading id="how-set" span="lg:col-span-4" /> : set.failed ? <BlockFailed id="how-set" title="How segments were set" onRetry={() => retry('seg')} span="lg:col-span-4" /> : (
             <section className={`${CARD} col-span-12 flex flex-col gap-2.5 px-[18px] py-4 lg:col-span-4`} aria-labelledby="seg-h-set" data-testid="seg-how-set">
-              <h2 id="seg-h-set" className={H2}>How segments were set</h2>
-              <ul className="m-0 flex list-none flex-col gap-1 p-0">{set.rows.map((r) => <Bar key={r.key} label={r.label} count={r.count} max={setMax} />)}</ul>
+              <div className="flex items-start justify-between gap-2"><h2 id="seg-h-set" className={H2}>How segments were set</h2><ViewToggle id="how-set" table={asTable('how-set')} onToggle={flip('how-set')} /></div>
+              {asTable('how-set') ? <BarTable id="how-set" caption="How segments were set" rows={set.rows} />
+                : <ul className="m-0 flex list-none flex-col gap-1 p-0">{set.rows.map((r) => <Bar key={r.key} label={r.label} count={r.count} max={setMax} />)}</ul>}
               {set.other > 0 && <span className={SUB} data-testid="seg-how-set-other">Not recorded for {set.other}: the source stored is not one of the three.</span>}
               {profile !== 'all' && <span className={SUB}>{NOT_PER_PROFILE}</span>}
               <span className={SUB}>Suggested at sign-up: the sign-up chat suggested it and the member accepted.</span>
@@ -420,9 +471,10 @@ function Overview({ superAdmin, tick }) {
           )}
           {loading ? <Loading id="confidence" span="lg:col-span-6" /> : bands.failed ? <BlockFailed id="confidence" title="How sure the sign-up suggestion was" onRetry={() => retry('seg')} span="lg:col-span-6" /> : (
             <section className={`${CARD} col-span-12 flex flex-col gap-2.5 px-[18px] py-4 lg:col-span-6`} aria-labelledby="seg-h-sure" data-testid="seg-confidence">
-              <h2 id="seg-h-sure" className={H2}>How sure the sign-up suggestion was</h2>
+              <div className="flex items-start justify-between gap-2"><h2 id="seg-h-sure" className={H2}>How sure the sign-up suggestion was</h2><ViewToggle id="confidence" table={asTable('confidence')} onToggle={flip('confidence')} /></div>
               <span className={SUB}>Over the {bands.total.toLocaleString('en-US')} members whose segment was suggested at sign-up.</span>
-              <ul className="m-0 flex list-none flex-col gap-1 p-0">{bands.counts.map((b) => <Bar key={b.label} label={b.label} count={b.count} max={bandMax} />)}</ul>
+              {asTable('confidence') ? <BarTable id="confidence" caption="How sure the sign-up suggestion was" rows={bands.counts} />
+                : <ul className="m-0 flex list-none flex-col gap-1 p-0">{bands.counts.map((b) => <Bar key={b.label} label={b.label} count={b.count} max={bandMax} />)}</ul>}
               {bands.unrecorded > 0 && <span className={SUB} data-testid="seg-confidence-unrecorded">No confidence recorded for {bands.unrecorded}.</span>}
               {profile !== 'all' && <span className={SUB}>{NOT_PER_PROFILE}</span>}
             </section>
@@ -483,7 +535,7 @@ export function PersonaSegmentsPage({ superAdmin }) {
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="seg-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
       </span>
-      <button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>
+      <button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 max-sm:h-11 max-sm:w-11 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700" data-testid="seg-refresh"><RefreshCw size={16} aria-hidden="true" /></button>
     </>
   );
   const crumb = superAdmin
