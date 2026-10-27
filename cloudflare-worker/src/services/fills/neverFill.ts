@@ -1,6 +1,6 @@
 /**
  * The fields Eadwyn never fills — the Worker's copy of
- * `frontend/src/lib/neverFill.js` (D777, D1147). Read that file's header for the five
+ * `frontend/src/lib/neverFill.js` (D777, D1147). Read that file's header for the six
  * kinds and how a rule matches; this one carries the same rules and the same
  * matcher, and `test/never_fill.test.ts` fails when the two disagree.
  *
@@ -15,19 +15,22 @@
  * the first two still cannot record Eadwyn as the author of a signature.
  */
 
-export type NeverFillCategory = 'signature_consent' | 'payment_amount' | 'identity_number' | 'legal_attestation' | 'score_rating';
+export type NeverFillCategory = 'signature_consent' | 'payment_amount' | 'identity_number' | 'legal_attestation' | 'score_rating' | 'money_term';
 export interface NeverFillRule {
   category: NeverFillCategory;
   label: string;
   tables: readonly string[];
   columns: readonly string[];
+  fields?: readonly string[];
+  exceptions?: readonly string[];
 }
 
 export const NEVER_FILL_RULES: readonly NeverFillRule[] = Object.freeze([
   {
     category: 'score_rating',
     label: 'Scores and ratings',
-    tables: ['readiness_scores', 'venture_scorecards'],
+    // D1256: a review, a weighting and the sharing switch are a person's acts too.
+    tables: ['readiness_scores', 'venture_scorecards', 'venture_score_reviews', 'investor_scope_weights', 'venture_score_sharing'],
     columns: ['score', 'scores', 'rating', 'ratings'],
   },
   {
@@ -98,6 +101,17 @@ export const NEVER_FILL_RULES: readonly NeverFillRule[] = Object.freeze([
       'certified', 'certify', 'sworn',
     ],
   },
+  {
+    category: 'money_term',
+    label: 'Financial plan inputs',
+    tables: ['financial_models', 'pct'],
+    exceptions: ['project_market_assumptions.runway'],
+    fields: ['uof_scenarios.amount_to_raise_cents', 'uof_scenarios.target_runway_months', 'uof_scenarios.cash_cents', 'uof_scenarios.start_month', 'uof_scenarios.raise_month', 'uof_scenario_lines.share_pct', 'uof_milestones.cost_cents', 'use_of_funds_hires.annual_cents', 'use_of_funds_hires.start_month', 'projects.use_of_funds', 'projects.use_of_funds_meta', 'projects.funding_needed'],
+    columns: ['cents', 'amount_to_raise', 'amount_to_raise_cents', 'funding_needed', 'share_pct',
+      'target_runway_months', 'runway_months', 'runway', 'cash_cents', 'cash_balance', 'burn',
+      'burn_cents', 'net_burn', 'hire_cost', 'annual_cents', 'annual_cost', 'cost_cents', 'forecast_driver',
+      'use_of_funds', 'use_of_funds_meta', 'milestone_costs'],
+  },
 ]);
 
 /** `signatureName`, `Signature-Name` and `signature_name` all fold to `signature_name`. */
@@ -133,7 +147,9 @@ export function neverFillReason(field: unknown): { category: NeverFillCategory; 
   const column = dot >= 0 ? folded.slice(dot + 1) : folded;
   const words = column.split('_').filter(Boolean);
   for (const rule of NEVER_FILL_RULES) {
-    if ((table && rule.tables.includes(table)) || rule.columns.some((t) => hasWords(words, t))) {
+    if (rule.exceptions?.includes(folded)) continue;
+    if ((table && rule.tables.includes(table)) || rule.fields?.includes(folded)
+      || rule.columns.some((t) => hasWords(words, t))) {
       return { category: rule.category, label: rule.label };
     }
   }

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Admin › Accounts</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Accounts</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">ACC1 to ACC14. One page with two tabs, Overview and All accounts, an account drawer, and the new Product tester sub-account. Drawn for the Admin unless a board says Super Admin. Desktop boards at 1440 wide, phone frames at 390.</p>
+</header>
+
+<section id="ACC1" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC1</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Accounts overview · Admin · desktop 1440, light</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: active in 30 days · unverified counts · tester and LP pending counts · per-profile sign-ups and facts · readiness · tester store</span></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c1" hint-size="1440px,2200px"></dc-import></div>
+</section>
+
+<section id="ACC2" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC2</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">All accounts · Admin · desktop 1440, light</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: last active · country · plan · sub-accounts · filters, sort and paging over every account</span></div>
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Row menu open on [Dev Testcase]</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c2" hint-size="1440px,1000px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Three rows checked · the bulk bar replaces the toolbar</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c2b" hint-size="1440px,1000px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ACC3" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC3</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Filters, sort and views · crops of ACC2</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: filters, sort and saved views</span></div>
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Filters panel open · the table behind it filtered to 61</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c3f" hint-size="1440px,1000px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Sort open</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c3s" hint-size="1440px,900px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Views open · with “Save this view…”</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c3v" hint-size="1440px,900px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Columns picker</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c3c" hint-size="1440px,900px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ACC4" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC4</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Account drawer · Profile tab · desktop 1440, over ACC2</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">The partner firm and the onboarding profile stay two records: the firm card, then the onboarding line under it.</span><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: onboarding profile status from Partner profiles · country · plan · persona · trust · needs</span></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c4" hint-size="1440px,1100px"></dc-import></div>
+</section>
+
+<section id="ACC5" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC5</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Account drawer · Sub-accounts tab · desktop 1440</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: tester record (applied, active, paused, declined, removed) · testing applications</span></div>
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c5" hint-size="1440px,1100px"></dc-import></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Variants · tester and LP cards</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c5v" hint-size="1440px,700px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ACC6" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC6</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Account drawer · Identity, Activity, Notes · three crops</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px dashed #7c3aed;font-size:12.5px;font-weight:600;color:#6d28d9">NEW: Needs information and Expired (with KYC &amp; KYB) · who saved the notes, and when</span></div>
+<div style="display:flex;gap:32px;align-items:flex-start">
+<div style="width:720px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c6i" hint-size="720px,760px"></dc-import></div>
+<div style="width:720px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c6a" hint-size="720px,760px"></dc-import></div>
+<div style="width:720px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c6n" hint-size="720px,760px"></dc-import></div>
+</div>
+</section>
+
+<section id="ACC7" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC7</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Action dialogs · 560 wide</h2></div>
+<div style="width:1248px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c7" hint-size="1248px,2800px"></dc-import></div>
+</section>
+
+<section id="ACC8" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC8</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Accounts overview · desktop 1440, dark</h2></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #374151;box-shadow:0 20px 50px rgba(24,24,27,.18)"><dc-import name="Accounts Page" v="c8" hint-size="1440px,2200px"></dc-import></div>
+</section>
+
+<section id="ACC9" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC9</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Empty · two frames</h2></div>
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">A new studio · measured zeros</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c9a" hint-size="1440px,1300px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Filters that match nobody · the chips stay</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c9b" hint-size="1440px,600px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ACC10" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC10</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Loading · two frames</h2></div>
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c10a" hint-size="1440px,1400px"></dc-import></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c10b" hint-size="1440px,900px"></dc-import></div>
+</div>
+</section>
+
+<section id="ACC11" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC11</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Error and partial · four frames</h2></div>
+<div style="display:flex;flex-direction:column;gap:32px">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Overview · the Explorers widget could not be read</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c11a" hint-size="1440px,2200px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">All accounts · trust scores could not be read</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c11b" hint-size="1440px,1000px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">All accounts · failed · never an empty table</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c11c" hint-size="1440px,500px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">A refused action, as a toast</span><div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c11d" hint-size="1440px,1000px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ACC12" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC12</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">All accounts · Super Admin · HQ › Team · desktop 1440</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">Administrator rows also offer “Start a support session…” and “Deactivate account…”.</span><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">The drawer footer has a “Credits” link.</span><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">An Explorer’s “Change profile…” opens dialog C.</span><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">An administrator’s menu says “Administrators are removed on their licence (Licences › Administrators).”</span></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c12" hint-size="1440px,1300px"></dc-import></div>
+</section>
+
+<section id="ACC13" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC13</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">No permission · two panels</h2></div>
+<div style="display:flex;gap:32px;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">An Admin opens another administrator’s account</span><div style="width:720px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c13a" hint-size="720px,480px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">A member who is not an admin opens /admin/accounts</span><div style="width:1100px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Accounts Page" v="c13b" hint-size="1100px,620px"></dc-import></div></div>
+</div>
+</section>
+
+<section id="ACC14" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">ACC14</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Accounts · phone 390 · five frames</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;color:#3f3a47">Every tap target at least 44 by 44 px. The rail becomes an “Ask Eadwyn” button. Frame 1 is drawn at its full scroll length.</span></div>
+<div style="display:flex;gap:40px;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">1 · Overview</span><div style="width:390px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Accounts Page" v="p1" hint-size="390px,1900px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">2 · All accounts as cards</span><div style="width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Accounts Page" v="p2" hint-size="390px,844px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">3 · Filters and sort sheet</span><div style="width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Accounts Page" v="p5" hint-size="390px,844px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">4 · Row menu sheet</span><div style="width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Accounts Page" v="p3" hint-size="390px,844px"></dc-import></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">5 · Account, full screen</span><div style="width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Accounts Page" v="p4" hint-size="390px,844px"></dc-import></div></div>
+</div>
+</section>
+
+</div>
+</x-dc>
+</body></html>

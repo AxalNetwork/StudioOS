@@ -109,7 +109,9 @@ const listing = (uid, status, o = {}) => ({
 test('the tabs: Activity on the four pages only where part 1 fills it, and no page has a Terms tab', () => {
   const labels = Object.fromEntries(Object.entries(PAGES).map(([k, p]) => [k, p.tabs.map((t) => t.label)]));
   for (const k of ['mentor-cohorts', 'refer-and-earn', 'perks', 'learning']) assert.equal(labels[k].at(-1), 'Activity', k);
-  for (const k of ['referral-partners', 'investor-cohorts', 'ai-native-venture']) assert.ok(!labels[k].includes('Activity'), `${k} is part 10's`);
+  // D963 (#2796): part 10 adds Activity to Referral partners and Investor cohort access; AI-native Venture is one page.
+  for (const k of ['referral-partners', 'investor-cohorts']) assert.equal(labels[k].at(-1), 'Activity', k);
+  assert.deepEqual(labels['ai-native-venture'], []);
   assert.ok(Object.values(labels).every((l) => !l.includes('Terms')), 'part 1’s store holds no program’s terms');
   for (const [k, p] of [['mentor-cohorts', '/admin/programs/mentor-cohorts/activity'], ['refer-and-earn', '/admin/programs/refer-and-earn/activity'],
     ['perks', '/admin/programs/perks/activity'], ['learning', '/admin/programs/learning/activity']]) {

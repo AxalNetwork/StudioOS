@@ -521,7 +521,7 @@ test('Approve and Reject keep step-up and the branch gate on the Worker', () => 
 });
 
 test('the wiring: People mounts the queue, the case is KycCase, the viewer reads through the client, and the docs', () => {
-  assert.match(read('frontend/src/pages/admin/ConsolePages.jsx'), /<KycTabBody view=\{kycViewOf\(pathname\)\} people=\{<KycConsole \/>\} \/>/);
+  assert.match(read('frontend/src/pages/admin/ConsolePages.jsx'), /<KycTabBody view=\{kycViewOf\(pathname\)\} people=\{<KycConsole \/>\} businesses=\{<KycBusinesses \/>\} \/>/);
   assert.match(read('frontend/src/pages/admin/kyc/KycTabs.jsx'), /import \{ KycPersonCase, KycPersonView \} from '\.\/KycCase';/);
   const client = read('frontend/src/lib/api/kycPeople.js');
   assert.match(client, /documentBlob,/);
