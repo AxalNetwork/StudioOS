@@ -15,6 +15,9 @@ The founder's Investor narrative tool at `/raise/investor-narrative` (D906,
 | `storyModel.js` | Pure: Story's derivations (sections, bound figures against the registry, typed numbers as claims, the dots, the order, the save plan and its dialog). |
 | `PositioningTab.jsx` | D911: the Positioning tab. NAR4's core positioning and "This version", NAR5's proposal lightbox (Accept or Discard, one at a time), and NAR18's moved notice. |
 | `ObjectionsPanel.jsx` | D913 (#2697): NAR10's Objections panel beside Story's writing surface, read on its own from `GET /narrative/objections`, whose "Answer it" asks Eadwyn to draft the open section (`draft:narrative-objection`, writes nothing); and `ObjectionsCard`, Home's "Objections heard" from `parts.narrative.objections`. |
+| `ClaimsTab.jsx` | D912 (#2696): NAR6's Claims tab (State, Source and Section filters, "Needs you first", the 100% bar by best source with Not backed dashed, its legend and Table) and NAR7's drawer, a full sheet on a phone (NAR19c): candidates and Eadwyn's proposed links on lavender (NAR15c when none), and for a Mismatch both figures, "Use the record's figure" and "Keep mine, with a note". |
+| `CheckTab.jsx` | D912: NAR8, the check against the deck and the metrics as "Check against" chooses, with Run the check and "Last checked"; it replaces D906's Check body and keeps "Nothing compared yet.". NAR9's Phrase the fix, per mismatch, wording with no number and the check's figures under it; "Accept into [section]" places it in Story (`?fix=`). |
+| `claimsModel.js` | D912: pure: the filters, the bar's whole-percent shares, the claim and check lines, the fix's scope and parts, and Story's address for an accepted fix. |
 | `PitchPositioningRedirect.jsx` | D911: `/raise/pitch/positioning`, now a redirect to the tab that keeps the query and hash and adds `?moved=positioning`. |
 
 D909 (#2693) adds `NarrativeHome` to `NarrativeTool.jsx`: Home's tiles, Needs
@@ -50,8 +53,8 @@ added, so every cycle-route rule (`cyclePaths.js`, `cycle_spacing_d694`) holds.
 - **A tile with no store is a dash with its reason, never 0** (D909). Claims
   backed waits for #2430. Objections answered counts the objections heard
   (D913), but which section answers each waits on the owner's call on #2697.
-- **A board waits for its store.** Claims' states (#2430) and the deck side of the check (#2434)
-  need stores the Worker does not have; objections are read since D913. Each is a slot task
+- **A board waits for its store.** Claims' states are D1264's store since D912, and the
+  check reads the deck's cards; objections are read since D913. Each is a slot task
   on #2454 (D906 §6). Build a board in the PR that builds its
   read, add its derivation to `narrativeModel.js`, and test it in
   `frontend/test/narrative_tool_d906.test.mjs` or its own file.
