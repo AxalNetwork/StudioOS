@@ -8,6 +8,7 @@ import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
 import { lovableRepositories } from '../integrations/providers/github/lovableMark';
+import { lovablePart } from '../services/lovableAppLinks';
 import { foundingTeamFromCode, mapLogin, unmapLogin } from '../integrations/providers/github/team';
 import { acceptCompanyProposal, companyFromCode, dismissCompanyProposal } from '../integrations/providers/github/company';
 import { validateConnectorSettings } from '../integrations/connectorRules';
@@ -264,7 +265,8 @@ async function prototype(env: Env, p: Project): Promise<ModuleRead> {
       { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
     sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
-    parts: { github: await prototypeGithub(env, p) } };
+    // D1083 (#2948): From Lovable, the project's one app link, under From GitHub.
+    parts: { github: await prototypeGithub(env, p), lovable: await lovablePart(env, p.id, 'build', [{ id: p.id, label: 'Prototype / MVP' }]) } };
 }
 
 /** GitHub's state for a fed must-have, in the module's words (D782, #2112). */
