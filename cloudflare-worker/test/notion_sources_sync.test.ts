@@ -1,7 +1,7 @@
 /**
  * D1086 (#2951, #2405 part 2) — a founder's picked Notion sources and the
  * shared sync, on the actual migrated schema (`_storage_schema.ts`, migration
- * 586 included), synthetic rows only. Notion is a stub of `NotionReads`
+ * 640 included), synthetic rows only. Notion is a stub of `NotionReads`
  * (`notionDeps.reads`): no test reaches a provider host. A test-only writer
  * stands in for part 4's roadmap writer, landing in the real `roadmap_okrs`,
  * so the ledger and the one-owner rule run against the real tables.
@@ -420,5 +420,5 @@ test('the source: every statement bound, the routes mounted ahead, the client co
   const client = readFileSync('frontend/src/lib/api/notion.js', 'utf8');
   for (const p of ['/search?', '/sources', '/schema', '/preview', '/notion/sync', '/accept', '/dismiss', '/notion/facts/']) assert.ok(client.includes(p), p);
   assert.ok(readFileSync('frontend/src/lib/api.js', 'utf8').includes("export * from './api/notion.js';"));
-  assert.match(readFileSync('cloudflare-worker/sql/migrations/586_notion_sources.sql', 'utf8'), /UNIQUE \(integration_id, project_id, module, notion_id\)[\s\S]*UNIQUE \(integration_id, project_id, kind, source_key\)/);
+  assert.match(readFileSync('cloudflare-worker/sql/migrations/640_notion_sources.sql', 'utf8'), /UNIQUE \(integration_id, project_id, module, notion_id\)[\s\S]*UNIQUE \(integration_id, project_id, kind, source_key\)/);
 });

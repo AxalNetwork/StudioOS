@@ -1,4 +1,4 @@
--- 586 — Notion part 2: the sources a founder picks, and the proposals they decide (D1086, #2951).
+-- 640 — Notion part 2: the sources a founder picks, and the proposals they decide (D1086, #2951).
 --
 -- Two new tables, no change to an existing one.
 --

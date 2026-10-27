@@ -9,7 +9,7 @@
  *     links it: a re-sync updates the linked row, never adds a second; a row
  *     the founder deleted keeps its ledger row with no `local_id` and is never
  *     written again ("deleted stays deleted", as `growFeeds.ts`).
- *   - A PROPOSAL waits in `notion_proposals` (migration 586) until the founder
+ *   - A PROPOSAL waits in `notion_proposals` (migration 640) until the founder
  *     accepts it through its kind's acceptor (`registerAcceptor`, parts 3–6).
  *     Its fingerprint is the SHA-256 of what it says now: the same fingerprint
  *     leaves the row as it is (a dismissed proposal stays dismissed); a new
