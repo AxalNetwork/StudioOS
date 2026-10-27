@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cyclesWrite } from '../../lib/api/cycles';
-import { Lightbox } from '../../ui';
 import { PmfMethodButton } from './PmfMethod';
 import {
   EMPTY_NOTE, MISSING_FOOT, POINTS_FOOT, TITLE,
   gapRows, historyView, inputGroups, kitView, pmfView, validateHref,
 } from './pmfModel';
+import Sheet from '../../ui/Sheet.jsx';
 
 /**
  * D1141 (#2433) and D1145 (#3031) — Fundraising readiness's Product-market fit
@@ -262,7 +262,7 @@ function InputLightbox({ row, onClose }) {
     ['As of', row.asOf || '—'],
   ];
   return (
-    <Lightbox label={row.label} eyebrow={`${TITLE} · ${row.moduleLabel}`} title={row.label} onClose={onClose} width={600} phone="sheet" testId="pmf-input-lightbox"
+    <Sheet label={row.label} eyebrow={`${TITLE} · ${row.moduleLabel}`} title={row.label} onClose={onClose} width={600} phone="sheet" testId="pmf-input-lightbox"
       footer={(
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className={GHOST} onClick={onClose}>Close</button>
@@ -292,7 +292,7 @@ function InputLightbox({ row, onClose }) {
           {row.key === 'product_pull' && row.state === 'not_expected' ? <p className={`m-0 mt-1 text-[12.5px] ${MUTED}`}>Coverage counts the inputs that apply, so it leaves this one out until a product is live.</p> : null}
         </div>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

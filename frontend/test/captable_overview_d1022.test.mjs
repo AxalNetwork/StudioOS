@@ -336,6 +336,8 @@ test('Needs you: the owner records a proposal from its drawer, and a refusal nam
   });
   try {
     await v.press(v.all('captable-need-review')[0]);
+    assert.equal(v.props(v.by('captable-proposal-record')).role, 'dialog', 'D1317: the proposal opens as the shared Sheet');
+    assert.equal(v.props(v.by('captable-proposal-record'))['data-width'], 640);
     assert.match(v.text(v.by('captable-proposal-record-confirm')), /Co-founders see it at once; investors as their access allows\./);
     assert.equal(v.requests.filter(([u]) => /\/accept$/.test(u)).length, 0, 'opening it writes nothing');
     await v.press(v.by('captable-proposal-accept'));
@@ -418,6 +420,10 @@ test('CT2: the holder drawer at /raise/cap-table/h-<n>, its reads each answering
   try {
     assert.ok(v.by('captable-holder-page') && v.by('captable-holder-drawer'));
     assert.match(v.text(v.by('captable-holder-drawer')), /Jo Rivera/);
+    const sheet = v.props(v.by('captable-holder-drawer'));
+    assert.equal(sheet.role, 'dialog', 'D1317: the holder opens as the shared Sheet over Overview');
+    assert.ok(sheet['aria-labelledby']);
+    assert.equal(sheet['data-width'], 640, 'its own 600, on the Sheet’s list');
     assert.match(v.text(v.by('captable-holder-positions')), /Options · 300,000 options/);
     assert.ok(v.by('captable-holder-no-document'), 'an issuance with no document says so');
     assert.match(v.text(v.by('captable-holder-vesting')), /Vested 75,000 of 300,000/);
@@ -426,6 +432,9 @@ test('CT2: the holder drawer at /raise/cap-table/h-<n>, its reads each answering
     // D1025 (#2862): each recorded row offers the owner Void (CT12b); Correct is an admin's.
     assert.ok(v.by('captable-holder-void'), 'the owner voids a recorded row');
     assert.ok(!v.by('captable-holder-correct'), 'only an admin corrects');
+    await v.press(v.by('captable-holder-drawer-close'));
+    assert.ok(!v.by('captable-holder-drawer'), 'closing goes back to /raise/cap-table');
+    assert.ok(v.by('captable-overview'), 'and Overview is still there');
   } finally { await v.close(); }
   const w = await mounted('/raise/cap-table/h-12?project_id=3', { plan: 500, build: 500 });
   try {

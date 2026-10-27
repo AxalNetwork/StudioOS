@@ -3,13 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { capTableScenariosApi } from '../../../lib/api/capTableScenarios';
-import { Lightbox, Unreadable, actionGhost, actionPrimary } from '../../../ui';
+import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import { Tag } from './CapTableTag';
 import { BASIS_CHECK, scenarioCard, tabSearch } from './capTableModel';
 import {
   BASIS_OPTIONS, EMPTY_FILTERS, NOTES_ONLY, SORT_OPTIONS, STATUS_OPTIONS, TYPE_OPTIONS,
   convertBody, convertView, filterInstruments, instrumentHref, instrumentView, over100, recordInstruments,
 } from './instrumentsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1023 (#2860, CT3, CT3b, CT4) — Instruments at `/raise/cap-table/instruments`:
@@ -260,7 +261,7 @@ function InstrumentDrawer({ projectId, uid, record, today, onClose }) {
   );
   const footer = <div className="flex justify-end"><button type="button" className={actionGhost} onClick={onClose} data-testid="captable-instrument-close">Close</button></div>;
   return (
-    <Lightbox label={v?.title || 'Instrument'} eyebrow="Instrument" title={v?.title || 'Instrument'} width={600} onClose={onClose} testId="captable-instrument" footer={footer} phone="sheet">
+    <Sheet label={v?.title || 'Instrument'} eyebrow="Instrument" title={v?.title || 'Instrument'} width={600} onClose={onClose} testId="captable-instrument" footer={footer} phone="sheet">
       {record.status === 'loading' ? <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="captable-instrument-loading" />
         : record.status !== 'ready' ? <div data-testid="captable-instrument-unreadable"><Unreadable what="This instrument" claim="This is not a claim that it does not exist." /></div>
           : !v ? <p className={`m-0 text-[13px] ${INK}`} data-testid="captable-instrument-missing">No SAFE or note on this venture’s record has that id.</p>
@@ -302,7 +303,7 @@ function InstrumentDrawer({ projectId, uid, record, today, onClose }) {
                 {section('At an exit before conversion', <p className={`m-0 text-[12.5px] ${INK}`} data-testid="captable-instrument-exit">{v.exit}</p>, 'captable-instrument-exit-block', <Tag kind="modelled" />)}
               </div>
             )}
-    </Lightbox>
+    </Sheet>
   );
 }
 
