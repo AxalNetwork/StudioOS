@@ -396,10 +396,10 @@ test('APIK6: Rotate confirms, then reveals the new secret once with the old key 
 test('APIK5: the drawer: still owned or lost, dates, month, recent requests; a rotate from it moves to the new key only after Done', async () => {
   const m = await mounted({}, { url: '/account/builder/keys/u-sync' });
   try {
-    assert.ok(m.has('apik-drawer'));
+    assert.ok(m.has('builder-drawer-key'));
     assert.match(m.textOf('apik-reach-7'), /Still yours ✓/);
     assert.match(m.textOf('apik-reach-9'), /You no longer own this company\. Calls for it are refused\./);
-    assert.match(m.textOf('apik-drawer'), /Last used— No call recorded/);
+    assert.match(m.textOf('builder-drawer-key'), /Last used— No call recorded/);
     assert.match(m.textOf('apik-recent'), /get_validate_context.*OK.*submit_interview.*refused/s);
     assert.deepEqual(m.calls.find((c) => c[0] === 'usage.events')[1], { key: 'u-sync' });
     await m.click('apik-drawer-rotate');

@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import Lightbox from '../../../ui/Lightbox';
+import Sheet from '../../../ui/Sheet.jsx';
 import { developerKeysApi } from '../../../lib/api/developerKeys.js';
 import { developerUsageApi } from '../../../lib/api/developerUsage.js';
 import { BTN, INPUT, useAccountRead } from '../AccountCenter';
@@ -102,14 +102,14 @@ function HowToUse({ limits }) {
 }
 
 /** APIK5: one key. A uid that is not the member's draws only "not on your account" (APIK14), whether or not it exists. */
-function KeyDrawer({ uid, read, usage, usageApi, support, onClose, onRotate, onRevoke, onEdit, now }) {
+function KeyDrawer({ uid, read, usage, usageApi, support, onClose, onRotate, onRevoke, onEdit, now, keysStatus }) {
   const key = (read?.keys ?? []).find((k) => k.uid === uid) ?? null;
   const recent = useAccountRead(() => usageApi.events({ key: uid }), { enabled: !!key });
   const title = key ? key.name : 'API key';
   const live = key ? keyState(key, now).live : false;
   const m = key ? monthOf(key, usage) : null;
   return (
-    <Lightbox label={title} title={title} onClose={onClose} width={560} phone="full" testId="apik-drawer"
+    <Sheet title={title} onClose={onClose} width={560} phone="full" testId="builder-drawer-key"
       footer={key && live && !support ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button type="button" className={BTN.link} onClick={() => onEdit(key)} data-testid="apik-drawer-edit">Edit name and limit</button>
@@ -120,7 +120,16 @@ function KeyDrawer({ uid, read, usage, usageApi, support, onClose, onRotate, onR
         </div>
       ) : null}>
       <button type="button" className={`${BTN.link} mb-3 w-fit`} onClick={onClose} data-testid="apik-drawer-back">‹ API keys</button>
-      {!key ? (
+      {keysStatus === 'loading' ? (
+        <div className="flex flex-col gap-2" data-testid="apik-drawer-loading">
+          <p className={`m-0 text-[13px] ${MUTED}`}>{WORDS.loading}</p>
+        </div>
+      ) : keysStatus === 'unreadable' ? (
+        <div className="flex flex-col gap-2" data-testid="apik-drawer-unreadable">
+          <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{WORDS.unreadable}</p>
+          <button type="button" className={`${BTN.link} w-fit`} onClick={onClose}>Back to API keys</button>
+        </div>
+      ) : !key ? (
         <div className="flex flex-col gap-2" data-testid="apik-foreign">
           <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{WORDS.foreign}</p>
           <button type="button" className={`${BTN.link} w-fit`} onClick={onClose}>Back to API keys</button>
@@ -165,7 +174,7 @@ function KeyDrawer({ uid, read, usage, usageApi, support, onClose, onRotate, onR
           {live && <p className={`m-0 text-[12px] ${MUTED}`}>{WORDS.editLine}</p>}
         </div>
       )}
-    </Lightbox>
+    </Sheet>
   );
 }
 
@@ -302,9 +311,9 @@ export default function ApiKeysPage({
       {body}
       {card !== 'off' && <HowToUse limits={limits} />}
 
-      {drawerUid && keys.status === 'ready' && (
+      {drawerUid && (
         <KeyDrawer uid={drawerUid} read={read} usage={usageRead} usageApi={usageApi} support={support} now={now} onClose={closeDrawer}
-          onRotate={(k) => setDialog({ kind: 'rotate', key: k })} onRevoke={(k) => setDialog({ kind: 'revoke', key: k })} onEdit={(k) => setDialog({ kind: 'edit', key: k })} />
+          onRotate={(k) => setDialog({ kind: 'rotate', key: k })} onRevoke={(k) => setDialog({ kind: 'revoke', key: k })} onEdit={(k) => setDialog({ kind: 'edit', key: k })} keysStatus={keys.status} />
       )}
       {dialog?.kind === 'create' && !support && (
         <CreateDialog read={read} initial={dialog.initial} api={api} now={now} onClose={() => setDialog(null)}
