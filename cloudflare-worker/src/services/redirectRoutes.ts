@@ -171,6 +171,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/contacts' },
   { path: '/raise/calls' },
   { path: '/raise/calls/:uid' }, // D1227 (#3226): one call, now /raise/capital-relationships/calls/:uid
+  { path: '/account/developer' }, // D1315 (#2418): Account › Developer, now /account/builder
+  { path: '/account/developer/*' }, // D1315 (#2418): its pages and drawers, now under /account/builder
   { path: '/refer' },
   { path: '/integrations', keep: true }, // every provider's OAuth sign-in returns here
   { path: '/account/integrations' },

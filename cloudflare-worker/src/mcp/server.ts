@@ -74,6 +74,10 @@ export type ToolSource = 'axal' | 'connector' | 'remote_mcp';
 
 export interface McpTool {
   name: string;
+  /** D1315: the name the usage ledger and the call log keep when a tool is renamed, so stored values do not change. */
+  storedAs?: string;
+  /** D1315: earlier names that still call this tool. They are never listed in tools/list. */
+  aliases?: readonly string[];
   requiredScope: ToolScope;
   source: ToolSource;
   /** A key in the connector registry (`integrations/registry.ts`), for a connector or remote tool. */
@@ -246,6 +250,8 @@ export async function listedTools(env: Env, props: GrantProps, scope: readonly s
  */
 export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = [], policy: MeteringPolicy = METERING_POLICY) {
   const executionId = newExecutionId();
+  // D1315: the ledger, the call log and the price keep the tool's stored name.
+  const recorded = tool.storedAs ?? tool.name;
   const started = Date.now();
   let user: Awaited<ReturnType<typeof grantUser>> | null = null;
   let companyId: number | null = null;
@@ -256,10 +262,10 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
   // execution_id keeps a second write for the same call out.
   const log = async (outcome: ToolOutcome, errorCategory: UsageErrorCategory | null = null) => {
     await recordUsage(env, {
-      executionId, userId: user?.id ?? Number(props.userId), surface: 'mcp', operation: tool.name, outcome: outcome === 'timeout' ? 'error' : outcome,
+      executionId, userId: user?.id ?? Number(props.userId), surface: 'mcp', operation: recorded, outcome: outcome === 'timeout' ? 'error' : outcome,
       errorCategory, durationMs: Date.now() - started, apiKeyUid, grantId, client: props.clientName ?? null, companyId,
     });
-    if (user) await logToolCall(env, user, { tool: tool.name, company: companyId, client: props.clientName, outcome, keyUid: apiKeyUid });
+    if (user) await logToolCall(env, user, { tool: recorded, company: companyId, client: props.clientName, outcome, keyUid: apiKeyUid });
     // D849: a failing key may be failing for many calls; the member hears once an hour.
     if (apiKeyUid && user && (outcome === 'error' || outcome === 'timeout')) {
       try { await noteKeyFailures(env, user.id, apiKeyUid); }
@@ -302,7 +308,7 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
       }
     }
     stage = 'run';
-    const operation = toolOperation(tool.name);
+    const operation = toolOperation(recorded);
     const priced = listed(operation, policy);
     if (!priced) console.warn('[mcp] tool has no metering price:', tool.name);
     const quote = priced ? quoteFor(operation, 1, policy) : 0;
@@ -356,13 +362,25 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
  * the tool as "not found". The SDK keeps its handlers in `_requestHandlers`;
  * `mcp_registry_d846.test.ts` fails if that ever moves.
  */
-function gateCalls(server: McpServer, listed: ReadonlySet<string>, refusal: string | null) {
+function gateCalls(server: McpServer, listed: ReadonlySet<string>, refusal: string | null, aliases: ReadonlyMap<string, string> = new Map()) {
   const handlers = (server.server as unknown as { _requestHandlers: Map<string, (req: any, extra: any) => Promise<unknown>> })._requestHandlers;
   const inner = handlers.get('tools/call');
   if (!inner) throw new Error('[mcp] the SDK has no tools/call handler to gate');
-  handlers.set('tools/call', (req, extra) => (listed.has(String(req?.params?.name))
-    ? inner(req, extra)
-    : Promise.resolve(text({ error: refusal ?? NOT_AVAILABLE }, true))));
+  handlers.set('tools/call', (req, extra) => {
+    const asked = String(req?.params?.name);
+    // D1315: an old name calls the listed tool it became, without being listed itself.
+    const name = listed.has(asked) ? asked : aliases.get(asked);
+    if (!name) return Promise.resolve(text({ error: refusal ?? NOT_AVAILABLE }, true));
+    return inner(name === asked ? req : { ...req, params: { ...req.params, name } }, extra);
+  });
+}
+
+/** D1315: each listed tool's earlier names, mapped to the name it is listed under. */
+export function toolAliases(tools: readonly McpTool[]): Map<string, string> {
+  const listed = new Set(tools.map((t) => t.name));
+  const out = new Map<string, string>();
+  for (const t of tools) for (const a of t.aliases ?? []) if (!listed.has(a)) out.set(a, t.name);
+  return out;
 }
 
 export async function createServer(env: Env, props: GrantProps, grantId: string | null, scope: readonly string[] = []): Promise<McpServer> {
@@ -379,7 +397,7 @@ export async function createServer(env: Env, props: GrantProps, grantId: string 
   }
   // With nothing listed the SDK never installs its tool handlers; install them so tools/list answers [].
   if (!tools.length) (server as unknown as { setToolRequestHandlers(): void }).setToolRequestHandlers();
-  gateCalls(server, new Set(tools.map((t) => t.name)), refusal);
+  gateCalls(server, new Set(tools.map((t) => t.name)), refusal, toolAliases(tools));
   return server;
 }
 

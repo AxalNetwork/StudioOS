@@ -106,8 +106,8 @@ test('deletion and cancellation require dialogs and read the server’s after-st
   }finally{await v.unmount();}
 });
 
-test('failed data reads are not opt-out or no-delete claims; Developer is not offered to a non-admin',async()=>{
-  const v=await mounted({fails:['/api/settings','/api/settings/privacy']});try{await v.click('Your data');await v.flush();assert.match(v.text(),/Unreadable.*deletion state/s);assert.match(v.text(),/matching consent could not be read/);assert.doesNotMatch(v.text(),/No open deletion|not opted into matching/);assert.equal(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/developer'),false);assert.ok(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/connectors'));}finally{await v.unmount();}
+test('failed data reads are not opt-out or no-delete claims; Builder (D1315) is offered to every profile',async()=>{
+  const v=await mounted({fails:['/api/settings','/api/settings/privacy']});try{await v.click('Your data');await v.flush();assert.match(v.text(),/Unreadable.*deletion state/s);assert.match(v.text(),/matching consent could not be read/);assert.doesNotMatch(v.text(),/No open deletion|not opted into matching/);assert.equal(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/developer'),false);assert.ok(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/builder'));assert.ok(v.nodes().some(n=>n.tagName==='A'&&v.props(n).href==='/account/connectors'));}finally{await v.unmount();}
 });
 
 

@@ -537,8 +537,9 @@ export const TOOLS = {
       },
     },
   },
+  // D1315: listed as structure_with_axalvc; this key and the stored name stay structure_with_studioos.
   structure_with_studioos: {
-    name: 'structure_with_studioos',
+    name: 'structure_with_axalvc',
     description: [
       'Ask StudioOS to structure a submitted interview with its own model, against the founder’s AI allowance,',
       'so the founder can compare its proposals with yours. Returns the run id.',

@@ -16,7 +16,8 @@ export const ASSISTANT_STEPS = [
 ];
 
 /** Where the sheet sends the founder to connect one. */
-export const ASSISTANTS_HREF = '/account/connectors#ai-assistants';
+// D1315: the assistants live in Account › Builder (#2418's coordination: this link points there).
+export const ASSISTANTS_HREF = '/account/builder';
 
 /** The consent line the sheet adds for an assistant interview (D665: the Worker checks consent). */
 export const ASSISTANT_CONSENT = 'The interviewee’s consent must cover your AI assistant processing the interview, not only the recording.';
