@@ -20,7 +20,8 @@ import {
  * rows named and marked Skipped in the preview. The dialog says the check is
  * over the preview's rows only. Axal VC never changes the sheet.
  *
- * D1093 (#2958): a feed whose Worker stores its mapping in another shape passes
+ * D1093 (#2958) and D1095 (#2960): a feed whose Worker stores its mapping in
+ * another shape passes
  * `encode(mapping, header)` (what the PUT sends) and `decode(saved, header)`
  * (the saved mapping as `{ column: field }`, for the first guess). Both default
  * to the dialog's own shape, `{ column: field }`.

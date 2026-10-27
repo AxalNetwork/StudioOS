@@ -50,7 +50,7 @@ function Cell({ col, row, words, onAdd }) {
   }
 }
 
-export function FlowTable({ rows, columns, sort, onSort, filters, onMin, picked, onPick, onAdd, page, onPage, words, onWords }) {
+export function FlowTable({ rows, columns, sort, onSort, filters, onMin, picked, onPick, onAdd, page, onPage, words, onWords, onPeek = null }) {
   const cols = COLUMNS.filter((c) => columns.includes(c.id));
   const pages = pagesFor(rows.length);
   const shown = pageOf(rows, page);
@@ -72,7 +72,7 @@ export function FlowTable({ rows, columns, sort, onSort, filters, onMin, picked,
             {shown.map((r) => (
               <tr key={r.id} className="border-t border-gray-100 align-top dark:border-gray-800" data-testid={`dealflow-row-${r.id}`}>
                 <td className={`${STICKY} left-0 px-1 py-2`}><input type="checkbox" aria-label={`Compare ${r.name}`} checked={picked.includes(r.id)} disabled={!picked.includes(r.id) && picked.length >= MAX_COMPARE} onChange={() => onPick(r.id)} data-testid={`dealflow-tick-${r.id}`} /></td>
-                <td className={`${STICKY} left-8 px-2 py-2`}><VentureCell row={r} /></td>
+                <td className={`${STICKY} left-8 px-2 py-2`}><VentureCell row={r} onPeek={onPeek} /></td>
                 {cols.map((c) => <td key={c.id} className={`whitespace-nowrap px-2 py-2 ${c.id === 'fit' ? 'border-l-2 border-sky-200 dark:border-sky-800' : ''}`}><Cell col={c} row={r} words={words} onAdd={onAdd} /></td>)}
               </tr>
             ))}
@@ -92,12 +92,12 @@ export function FlowTable({ rows, columns, sort, onSort, filters, onMin, picked,
 }
 
 /** DLS18a: the table as cards on a phone, with the card scopes. */
-export function PhoneCards({ rows, cards, picked, onPick }) {
+export function PhoneCards({ rows, cards, picked, onPick, onPeek = null }) {
   return (
     <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="dealflow-phone-cards">
       {rows.slice(0, PAGE_SIZE).map((r) => (
         <li key={r.id} className="flex flex-col gap-1 rounded-xl border border-axal-hairline bg-white p-3 text-[13px] dark:border-gray-800 dark:bg-gray-900" data-testid={`dealflow-phone-row-${r.id}`}>
-          <div className="flex items-start justify-between gap-2"><VentureCell row={r} /><input type="checkbox" aria-label={`Compare ${r.name}`} checked={picked.includes(r.id)} disabled={!picked.includes(r.id) && picked.length >= MAX_COMPARE} onChange={() => onPick(r.id)} /></div>
+          <div className="flex items-start justify-between gap-2"><VentureCell row={r} onPeek={onPeek} /><input type="checkbox" aria-label={`Compare ${r.name}`} checked={picked.includes(r.id)} disabled={!picked.includes(r.id) && picked.length >= MAX_COMPARE} onChange={() => onPick(r.id)} /></div>
           <span className={MUTED}>{r.inFlow ? stageWord(r.stage) : 'Not on your deals'} · {r.round}</span>
           <div className="flex flex-wrap gap-x-3">{cards.map((k) => <span key={k} className="flex gap-1"><span className={MUTED}>{SCOPE_SHORT[k]}</span><ScopeCell scores={r.scores} scope={k} /></span>)}</div>
           <div className="flex justify-between"><AskCell row={r} /><DaysCell row={r} /></div>

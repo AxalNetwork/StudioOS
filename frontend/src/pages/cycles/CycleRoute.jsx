@@ -40,6 +40,7 @@ import GrowFromMercury from './GrowFromMercury';
 import MercuryRaiseFeed from './MercuryRaiseFeed';
 import FromLovable from './FromLovable';
 import ValidateFromGoogle from './ValidateFromGoogle';
+import { DurableFromGoogle, RevenueFromGoogle } from './GrowFromGoogle';
 import FromNotion from './FromNotion';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
@@ -352,6 +353,8 @@ const CYCLE_DEFS = {
         <DurabilityChecklist items={data?.parts?.checklist}
           onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined} />
         {fromMercury('durable-company-building', data, ctx)}
+        {/* D1095 (#2960): Calendar events tagged #board or #filing, each an obligation proposal. */}
+        <DurableFromGoogle projectId={ctx.projectId} />
       </>),
       // The replies customer and partner asks brought in, beside the rows.
       distribution: (data, ctx) => (<>
@@ -368,7 +371,11 @@ const CYCLE_DEFS = {
         {fromMercury('partner-network', data, ctx)}
       </>),
       // D840 part 3 (#2348): the founder's own Mercury, anchored at #from-mercury.
-      'revenue-and-traction': (data, ctx) => fromMercury('revenue-and-traction', data, ctx),
+      // D1095 (#2960): then a metrics Sheet's figures, From Google.
+      'revenue-and-traction': (data, ctx) => (<>
+        {fromMercury('revenue-and-traction', data, ctx)}
+        <RevenueFromGoogle projectId={ctx.projectId} />
+      </>),
       'team-expansion': (data, ctx) => fromMercury('team-expansion', data, ctx),
     }),
   },

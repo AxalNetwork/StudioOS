@@ -2179,6 +2179,15 @@ decks.post('/:id/export', async (c) => {
 decks.put('/brand/watermark', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
+  // D898 group E (#2676): the studio names the venture the watermark was
+  // changed from, so the change is one row on that venture's ledger. The
+  // watermark itself stays the account's, on every venture's exports.
+  const pid = body?.project_id == null ? null : Number(body.project_id);
+  if (pid != null) {
+    if (!Number.isInteger(pid) || pid <= 0) return c.json({ error: 'invalid_project_id' }, 400);
+    try { await projectOwned(c, user, pid, { write: true }); } catch { return c.json({ error: 'forbidden' }, 403); }
+  }
+  const cleared = body?.watermark_url == null || body.watermark_url === '';
   try {
     await setStudioWatermark(c.env, user as any, body?.watermark_url ?? null);
   } catch (e: any) {
@@ -2189,6 +2198,10 @@ decks.put('/brand/watermark', async (c) => {
       return c.json({ error: 'watermark_url must be https URL ≤1000 chars' }, 400);
     }
     return c.json({ error: 'failed' }, 500);
+  }
+  if (pid != null) {
+    await auditDeckWrite(c, user, pid, cleared ? 'deck_watermark_cleared' : 'deck_watermark_set',
+      cleared ? 'Deck watermark cleared' : 'Deck watermark set');
   }
   const brand = await getDeckBrand(c.env, user as any);
   return c.json({ brand });

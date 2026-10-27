@@ -23,7 +23,9 @@ import { reportError } from '../../../lib/log';
 import { safeReadJSON, safeWriteJSON } from '../../../lib/storage';
 import { DEFAULT_SLA, SLA_BAND_CLASS, slaBand } from '../../../lib/dealFlow';
 import { Lightbox, Unreadable, Unrecorded, actionGhost, actionPrimary } from '../../../ui';
-import { NOT_YET, SCOPES, TITLE } from './dealFlowModel';
+import { SCOPES, TITLE } from './dealFlowModel';
+// D1241: the Scorecard column's wait is SCORING's word; Deal flow's own waits are retired.
+import { NOT_YET } from '../../../components/scoring/scorecard/scorecardModel.js';
 import {
   CRUMB, LENS_COLUMNS, PARTNER_NOTE, PASS_CLOSES, ROUND_WORD, STUDIO_LINE,
   columnSummary, intakeNotice, investorsLine, lensRows, nextStatus, notRaisingLine, rowActions, studioRow, studioViewHref, studioViewOf,

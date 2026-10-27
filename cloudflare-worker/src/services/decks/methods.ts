@@ -81,9 +81,10 @@ export type DeckMethodSpec = {
    * Who the deck is for — which is what every consumer of this field routes on.
    *
    * THE PICKER BADGE IS NOT THE ONLY READER, AND #207 IS WHAT THAT COST.
-   * `PitchDeckPage.jsx` prefers this value over the frontend registry's
-   * (`m.category || tpl.category`) for both the card label and the filter chips,
-   * and `frontend/src/lib/shareDeckAudience.js` maps a category to the flow a
+   * The old builder's picker (`PitchDeckPage.jsx`, retired by D898 group E)
+   * preferred this value over the frontend registry's (`m.category ||
+   * tpl.category`) for both the card label and the filter chips, and
+   * `frontend/src/lib/shareDeckAudience.js` maps a category to the flow a
    * share link offers after the NDA: `commercial` asks for feedback,
    * `fundraising` and `event` open the deal pack.
    *

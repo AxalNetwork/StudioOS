@@ -8,7 +8,8 @@
  *   GET    /destinations?project=                  the viewer's publish-capable connections and their places
  *   POST   /destinations/refresh/:integrationUid   { project } re-read the places the adapter lists
  *   PUT    /destinations/:uid?project=             { enabled, daily_cap? } by the connection's owner; logged
- *   POST   /drafts                                 { project_id, module, source_refs?, text? }
+ *   POST   /drafts                                 { project_id, module, source_refs?, text?, team_only_included? }
+ *                                                   no text: pre-filled from the module's records (D1333)
  *   GET    /drafts/:uid                            the venture's team
  *   PUT    /drafts/:uid                            { text?, per_destination?, alt_texts?, team_only_included?, named_consent? }
  *   DELETE /drafts/:uid                            archive
@@ -19,9 +20,9 @@
  *
  * WHO. Writes and sends: the venture's founder through their own connection,
  * never a support session (`canPublish`). Reads: the venture's team
- * (`isTeamViewer`). Use this draft (Eadwyn's proposal, part 4) and the Grow
- * draft builders (part 2) are not built here: a draft holds the founder's
- * own words.
+ * (`isTeamViewer`). Use this draft (Eadwyn's proposal, part 4) is not built
+ * here. D1333 (part 2): a draft with no text of the founder's own is pre-filled
+ * by its module's builder (`services/publishSources.ts`).
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -30,7 +31,8 @@ import { refuse } from '../util/refusal';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { getProviderImpl, type IntegrationRow } from '../integrations/registry';
 import { publishTarget, PUBLISH_DAILY_CAP } from '../integrations/publishTargets';
-import { PUBLISH_MODULES } from '../integrations/publishSources';
+import { PUBLISH_MODULES, type PublishModule } from '../integrations/publishSources';
+import { createDraft } from '../services/publishSources';
 import { isTeamViewer } from '../services/mercury/growFeeds';
 import {
   PublishRefusal, canPublish, checkSend, confirmSend, markNotSent, markRemoved, previewFor, refused, releaseStrandedSends,
@@ -171,14 +173,9 @@ publish.post('/drafts', handle(async (c, ctx) => {
   const projectId = idOf(b.project_id);
   await canPublish(c.env, { user: ctx.user, support: ctx.support, projectId });
   if (!(PUBLISH_MODULES as readonly string[]).includes(String(b.module))) throw refused('invalid');
-  const refs = Array.isArray(b.source_refs) ? b.source_refs.slice(0, 50) : [];
-  const text = typeof b.text === 'string' ? b.text.slice(0, 20_000) : '';
-  const project = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first() as { company_id: number | null } | null;
-  const uid = crypto.randomUUID();
-  await c.env.DB.prepare(
-    `INSERT INTO publish_drafts (uid, project_id, company_id, module, source_refs_json, author_user_id, body_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid, projectId, project?.company_id ?? null, b.module, JSON.stringify(refs), ctx.user.id, JSON.stringify({ text, per_destination: {} })).run();
-  return c.json({ draft: draftView(await draftOf(c.env, uid)) }, 201);
+  // D1333 (#3481): with no text of the founder's own, the module's records pre-fill the draft (`services/publishSources.ts`).
+  const made = await createDraft(c.env, projectId, b.module as PublishModule, ctx.user.id, b);
+  return c.json({ draft: draftView(await draftOf(c.env, made.uid)), prefill: made.prefill }, 201);
 }));
 
 publish.get('/drafts/:uid', handle(async (c, ctx) => {

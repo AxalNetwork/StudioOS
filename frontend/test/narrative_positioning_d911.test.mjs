@@ -235,7 +235,7 @@ test('the move: the route, the redirect inventory, the rail option, and every li
   const matrix = read('cloudflare-worker/src/services/ai/railMatrix.json');
   assert.ok(matrix.includes('"optionKey": "draft:narrative-positioning"'), 'the matrix was rebuilt');
   assert.ok(!matrix.includes('"optionKey": "draft:positioning"'));
-  for (const f of ['frontend/src/pages/cycles/CycleRoute.jsx', 'frontend/src/pages/SpinoutLabMarketPage.jsx', 'frontend/src/pages/cycles/founderToolNavigation.js', 'frontend/src/pages/PitchWorkspacePage.jsx']) {
+  for (const f of ['frontend/src/pages/cycles/CycleRoute.jsx', 'frontend/src/pages/SpinoutLabMarketPage.jsx', 'frontend/src/pages/cycles/founderToolNavigation.js', 'frontend/src/pages/raise/pitch/PitchStudio.jsx']) {
     assert.doesNotMatch(read(f), /(?:to|href|path)[=:] ?['"`]\/raise\/pitch\/positioning/, `${f} still links the old page`);
   }
   // Every write is the store's, one field at a time; there is no bulk decision.

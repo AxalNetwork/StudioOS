@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html>
-<head>
+<html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
@@ -10,7 +9,7 @@
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
-<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 body{margin:0}
 a{color:#7c3aed;text-decoration:none}
@@ -171,7 +170,7 @@ a:hover{color:#6d28d9;text-decoration:underline}
 </div>
 </div>
 
-<sc-if value="{{ drawerOn }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="position:absolute;inset:0;background:var(--scrim);z-index:4"></div><aside role="dialog" aria-modal="true" aria-label="Recognised as [Assistant A]" style="position:absolute;top:0;right:0;bottom:0;width:560px;z-index:5;box-sizing:border-box;background:var(--card);border-left:1px solid var(--line);border-radius:16px 0 0 16px;box-shadow:-16px 0 48px rgba(24,24,27,.16);display:flex;flex-direction:column">
+<sc-if value="{{ drawerOn }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="position:absolute;inset:0;background:var(--scrim);z-index:4"></div><aside role="dialog" aria-modal="true" aria-label="Recognised as [Assistant A]" style="position:absolute;top:0;right:0;bottom:0;width:560px;z-index:5;box-sizing:border-box;background:var(--card);border-left:1px solid var(--line);border-radius:16px 0 0 16px;box-shadow:-24px 0 56px rgba(9,9,11,.2);display:flex;flex-direction:column">
 <div style="height:56px;flex:none;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 12px;border-bottom:1px solid var(--line)"><a href="#" style="display:inline-flex;align-items:center;min-height:40px;padding:0 8px;font-size:13.5px;font-weight:600;color:var(--vtx)">‹ AI assistants</a><button type="button" aria-label="Close" style="width:40px;height:40px;border:none;background:transparent;color:var(--body);font-size:18px;cursor:pointer">×</button></div>
 <div style="flex:1;padding:18px 24px;display:flex;flex-direction:column;gap:18px">
 <div style="display:flex;flex-direction:column;gap:2px"><h2 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-0.02em">Recognised as [Assistant A]</h2><span style="font-size:13px;color:var(--mut)">“[Assistant A] Desktop”</span></div>
@@ -185,7 +184,7 @@ a:hover{color:#6d28d9;text-decoration:underline}
 <div style="flex:none;padding:12px 18px 18px;border-top:1px solid var(--line)"><button type="button" style="min-height:40px;padding:0 6px;border:none;background:transparent;color:var(--neg);font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:700;cursor:pointer">Revoke</button></div>
 </aside></sc-if>
 
-<sc-if value="{{ drawerNope }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="position:absolute;inset:0;background:var(--scrim);z-index:4"></div><aside role="dialog" aria-modal="true" aria-label="Connection" style="position:absolute;top:0;right:0;bottom:0;width:560px;z-index:5;box-sizing:border-box;background:var(--card);border-left:1px solid var(--line);border-radius:16px 0 0 16px;box-shadow:-16px 0 48px rgba(24,24,27,.16);display:flex;flex-direction:column"><div style="height:56px;flex:none;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 12px;border-bottom:1px solid var(--line)"><a href="#" style="display:inline-flex;align-items:center;min-height:40px;padding:0 8px;font-size:13.5px;font-weight:600;color:var(--vtx)">‹ AI assistants</a><button type="button" aria-label="Close" style="width:40px;height:40px;border:none;background:transparent;color:var(--body);font-size:18px;cursor:pointer">×</button></div><div style="padding:24px"><div style="border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:8px"><h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.02em">This connection is not on your account.</h2><a href="#" style="display:inline-flex;align-items:center;min-height:32px;font-size:13px;font-weight:600;color:var(--vtx)">Back to AI assistants</a></div></div></aside></sc-if>
+<sc-if value="{{ drawerNope }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="position:absolute;inset:0;background:var(--scrim);z-index:4"></div><aside role="dialog" aria-modal="true" aria-label="Connection" style="position:absolute;top:0;right:0;bottom:0;width:560px;z-index:5;box-sizing:border-box;background:var(--card);border-left:1px solid var(--line);border-radius:16px 0 0 16px;box-shadow:-24px 0 56px rgba(9,9,11,.2);display:flex;flex-direction:column"><div style="height:56px;flex:none;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 12px;border-bottom:1px solid var(--line)"><a href="#" style="display:inline-flex;align-items:center;min-height:40px;padding:0 8px;font-size:13.5px;font-weight:600;color:var(--vtx)">‹ AI assistants</a><button type="button" aria-label="Close" style="width:40px;height:40px;border:none;background:transparent;color:var(--body);font-size:18px;cursor:pointer">×</button></div><div style="padding:24px"><div style="border:1px solid var(--line);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:8px"><h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.02em">This connection is not on your account.</h2><a href="#" style="display:inline-flex;align-items:center;min-height:32px;font-size:13px;font-weight:600;color:var(--vtx)">Back to AI assistants</a></div></div></aside></sc-if>
 
 <sc-if value="{{ dlgOn }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="position:absolute;inset:0;background:var(--scrim);z-index:4"></div><div style="position:absolute;inset:0;z-index:5;display:grid;place-items:center"><div role="dialog" aria-modal="true" aria-label="Revoke [Assistant A]?" style="width:480px;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(24,24,27,.2);padding:22px 24px;display:flex;flex-direction:column;gap:10px"><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Revoke [Assistant A]?</h2><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">It loses access to [Northwind Labs] and [Bluefern Health] within about a minute.</p><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">Interviews and proposals it already sent stay in Axal VC for your review.</p><p style="margin:0;font-size:13.5px;line-height:1.55;color:var(--body)">To use it again, connect it again from the assistant.</p><div style="display:flex;justify-content:flex-end;gap:8px;padding-top:8px"><button type="button" style="min-height:40px;padding:0 16px;border-radius:9px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer">Keep</button><button type="button" style="min-height:40px;padding:0 16px;border-radius:9px;border:1px solid #b91c1c;background:#b91c1c;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;cursor:pointer">Revoke</button></div></div></div></sc-if>
 </div>
@@ -219,7 +218,7 @@ a:hover{color:#6d28d9;text-decoration:underline}
 </div>
 
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;v&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;d1&quot;,&quot;d2&quot;,&quot;d3&quot;,&quot;d4&quot;,&quot;d4b&quot;,&quot;d5&quot;,&quot;d5b&quot;,&quot;d6&quot;,&quot;d7&quot;,&quot;d8a&quot;,&quot;d8b&quot;,&quot;d9a&quot;,&quot;d9b&quot;,&quot;d9c&quot;,&quot;d10&quot;,&quot;d11a&quot;,&quot;d11b&quot;,&quot;d11c&quot;,&quot;d12a&quot;,&quot;d12b&quot;,&quot;d13a&quot;,&quot;d13b&quot;,&quot;d13c&quot;,&quot;d14a&quot;,&quot;d14b&quot;],&quot;default&quot;:&quot;d1&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;v&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;d1&quot;,&quot;d2&quot;,&quot;d3&quot;,&quot;d4&quot;,&quot;d4b&quot;,&quot;d5&quot;,&quot;d5b&quot;,&quot;d6&quot;,&quot;d7&quot;,&quot;d8a&quot;,&quot;d8b&quot;,&quot;d9a&quot;,&quot;d9b&quot;,&quot;d9c&quot;,&quot;d10&quot;,&quot;d11a&quot;,&quot;d11b&quot;,&quot;d11c&quot;,&quot;d12a&quot;,&quot;d12b&quot;,&quot;d13a&quot;,&quot;d13b&quot;,&quot;d13c&quot;,&quot;d14a&quot;,&quot;d14b&quot;],&quot;default&quot;:&quot;d1&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
 class Component extends DCLogic {
   state = { copied: false };
   componentWillUnmount() { clearTimeout(this._t); }
@@ -442,5 +441,4 @@ class Component extends DCLogic {
 }
 
 </script>
-</body>
-</html>
+</body></html>

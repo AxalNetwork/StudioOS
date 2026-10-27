@@ -1,14 +1,13 @@
 /**
  * D1236 (#2423) — Deal flow at /deals, from the owner's canvas "Deal flow"
  * (DLS1–DLS18): the view, the scope switch and the compare picks carried in
- * the address, the scoring scopes in SCORING's order, the round's status
- * words, and the words of every block no read carries yet. Pure, so
- * `frontend/test/deal_flow_d1236.test.mjs` holds each rule.
+ * the address, the scoring scopes in SCORING's order and the round's status
+ * words. Pure, so `frontend/test/deal_flow_d1236.test.mjs` holds each rule.
  *
- * WHAT IS READ. D1236 read `GET /api/deals` and the pending invitations.
- * D1240 (#3253) adds the firm's own flow, SCORING's batch, the fit and saved
- * views; their rules are `flowModel.js`'s. New for you's other ways in and
- * Compare's chart still say "Not read here yet" (part 5, #3254).
+ * WHAT IS READ. D1236 read `GET /api/deals`. D1240 (#3253) adds the firm's
+ * own flow, SCORING's batch, the fit and saved views (`flowModel.js`). D1241
+ * (#3254) reads every way into New for you (`movesModel.js`) and draws Compare
+ * from the batch (`compareModel.js`): no block waits on a read any more.
  */
 
 import { SCOPE_LABELS } from '../../../components/scoring/scorecard/scorecardModel.js';
@@ -117,21 +116,3 @@ export function dealRow(d = {}) {
  */
 export const opensDeal = (scope) => scope === 'mine';
 
-/** An invitation (DLS6 "Invited by the studio") from `GET /api/deals/invitations/mine`. */
-export function inviteRow(i = {}) {
-  return {
-    id: String(i.deal_id ?? ''),
-    name: i.project_name || 'Name not recorded',
-    status: i.status || null,
-    message: i.message || null,
-    at: i.created_at || null,
-  };
-}
-
-export const NOT_YET = 'Not read here yet';
-
-/** What the canvas draws that no read carries yet. Never a zero, never "none". D1240 retired the board's, the scores', fit's and views' waits. */
-export const WAITS = Object.freeze({
-  entered: 'Matches to your thesis, introductions, open syndicates and your watchlist do not reach this list yet.',
-  compare: 'The compare chart and its table wait for the scores by scope; the ventures you picked are listed.',
-});

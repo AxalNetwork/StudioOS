@@ -27,7 +27,7 @@
  * ── Autofill / field contract ────────────────────────────────────────────
  * `buildTemplateData()` (PitchDeckPrintPage.jsx) flattens the editor's
  * `slides[].fields[]` into one flat dict keyed by each field's `key`, and
- * `updateField()` (PitchDeckPage.jsx) writes edits back by that same key.
+ * the old builder's `updateField()` (retired by D898 group E) wrote edits back by that same key.
  * `hydrate()` below rebuilds the nested SpinoutDeckData shape from that flat
  * dict using a dotted-key contract:
  *   - scalar narrative fields  → key = dotted path,  value = string

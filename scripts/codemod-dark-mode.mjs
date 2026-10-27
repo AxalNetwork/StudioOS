@@ -38,7 +38,6 @@ export const ALLOWLIST = new Set([
   'frontend/src/pages/HomePage.jsx',
   // PDF/print surfaces — intentionally light, render off-screen for export.
   'frontend/src/pages/PitchDeckPrintPage.jsx',
-  'frontend/src/pages/PitchDeckPage.jsx',
   // Public marketing home template — it calls useForcedLightTheme() so it
   // renders a fixed light palette regardless of the app theme. Exempt like the
   // other public surfaces above.

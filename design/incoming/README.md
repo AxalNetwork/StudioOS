@@ -244,6 +244,19 @@ D1300–D1307, so this canvas stays in the queue until they land.
 their own addresses and one address per article, under the shared header, and
 the review notices open the article. The boards themselves wait for
 D1291–D1298, so this canvas stays in the queue until they land.
+## Revised 2026-10-27 — Content queue page, Builder page, and the Builder boards (D1332)
+
+The owner republished `XBryVcPJkeVM6D3SQKeR4b` and `N7rt85KNNnDWNPQnGvvR4J`, and
+sent `ExjNqxbFgaDkLJTZ6n6y6j`, each decoded by `scripts/read-canvas.mjs`:
+- `Content Queue Page.dc.html`: the review drawer docks beside the Eadwyn spine,
+  and the top articles read "Views, all time" and "Views per day since publish";
+- `Builder Page.dc.html`: the drawers' border and shadow match the shared Sheet;
+- `Builder · Boards.dc.html` is new here: the board grid (DEV1 to DEV14) for the
+  Builder page, which D1315 integrated without it. It imports the page by name.
+
+The logo uuids point at the files the earlier copies used. D1332 says what was
+already built (the docked Sheet, D1317) and builds the top articles.
+
 ## Landed 2026-10-26 — Pricing › Models › Add tokens (#2452)
 
 The owner's artifacts `Tq2eoropBxcFAJm2tHMVhH` (the board grid) and
