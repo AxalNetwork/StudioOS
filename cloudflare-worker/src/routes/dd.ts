@@ -31,6 +31,7 @@ import {
 import { encryptBytes, decryptBytes } from '../services/cryptoBox';
 import { DOWNLOAD_TTL_MS, REMINDER_GAP_MS, dueDateOf, markRequestAnsweredByFile, tokenHash } from '../services/ddRequests';
 import { createIcRecordForCase, icRecordForCase, caseSentToIc } from './ic';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
@@ -1767,6 +1768,8 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
     if (size > 10 * 1024 * 1024) return c.json({ error: 'NDA file too large (max 10MB)' }, 413);
 
     let storageKey = `inline:${genUid()}`;
+    // D1170 — a diligence upload counts to its uploader (D1169 §1).
+    const storage = c.env.FILES ? await assertStorageRoom(c.env, { userId: user.id }, size, user) : null;
     if (c.env.FILES) {
       storageKey = `dd-ndas/${caseId}/${sectionId}/${Date.now()}-${genUid().slice(0, 8)}-${filename}`;
       try { await c.env.FILES.put(storageKey, buf, { httpMetadata: { contentType: mime } }); }
@@ -1782,6 +1785,7 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
     await sql`UPDATE dd_sections SET reviewer_signed_nda_at = CURRENT_TIMESTAMP WHERE id = ${sectionId}`;
     await sql`UPDATE dd_reviewers SET nda_signed_at = CURRENT_TIMESTAMP WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
     await audit(c.env, caseId, user, 'nda_uploaded', { type: 'dd_section', id: sectionId }, { filename, size_bytes: size });
+    if (storage && !storageKey.startsWith('inline:')) await noteStorageLanded(c.env, storage);
     return c.json({ ok: true, filename, size_bytes: size });
   } finally { await sql.end(); }
 });
@@ -1828,6 +1832,8 @@ dd.post('/cases/:uid/items/:itemId/evidence', async (c) => {
     const filename = ((file as File).name || 'evidence').slice(0, 200);
     const mime = (file as File).type || 'application/octet-stream';
     const key = `dd-evidence/${caseId}/${item.section_id}/${uid}`;
+    // D1170 — a diligence upload counts to its uploader (D1169 §1).
+    const storage = await assertStorageRoom(c.env, { userId: user.id }, buf.byteLength, user);
     await c.env.FILES.put(key, buf, { httpMetadata: { contentType: mime } });
     const attachment = await c.env.DB.prepare(
       `INSERT INTO dd_attachments (case_id, section_id, file_key, filename, mime_type, size_bytes, uploaded_by_user_id)
@@ -1838,6 +1844,7 @@ dd.post('/cases/:uid/items/:itemId/evidence', async (c) => {
        VALUES (?, ?, ?, 'file', ?, ?, ?, ?)`,
     ).bind(uid, caseId, item.id, attachment!.id, user.id, at, at).run();
     await audit(c.env, caseId, user, 'item_evidence_added', { type: 'dd_checklist_item', id: item.id }, { kind: 'file', size_bytes: buf.byteLength });
+    await noteStorageLanded(c.env, storage);
     return c.json({ ok: true, evidence: { uid, item_id: item.id, kind: 'file', attachment_id: attachment!.id, filename, created_at: at } }, 201);
   }
   const body = await c.req.json().catch(() => ({}));

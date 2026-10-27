@@ -80,9 +80,65 @@ export const companiesPathFor = (tab) => TAB_PATHS[tab] || TAB_PATHS.companies;
  */
 export function companyUidFor(pathname = '') {
   const m = String(pathname).match(/^\/(?:account|settings)\/companies\/([A-Za-z0-9_-]{1,64})\/?$/);
-  return m && !TAB_PATHS[m[1].toLowerCase()] ? m[1] : null;
+  return m && !TAB_PATHS[m[1].toLowerCase()] && m[1].toLowerCase() !== SETTINGS_SEGMENT ? m[1] : null;
 }
 export const companyPathFor = (uid) => `/account/companies/${encodeURIComponent(uid)}`;
+
+/* ------------------------------------------------------------------ *
+ * D1140 (#3020, CMP19) — one place for companies
+ * ------------------------------------------------------------------ */
+
+/**
+ * The full company settings (what `/company-settings` drew) live under this
+ * section now. They read the company active on this device, so they are
+ * `/account/companies/<uid>/settings` for that company; `/account/companies/settings`
+ * opens the active company's, or, with none, a partner's Firm Settings, an
+ * advisor's Practice Settings and the way to create or join a company.
+ * `settings` is reserved: it is never read as a company's uid.
+ */
+export const SETTINGS_SEGMENT = 'settings';
+export const SETTINGS_PATH = '/account/companies/settings';
+export const companySettingsPathFor = (uid) => `/account/companies/${encodeURIComponent(uid)}/settings`;
+
+/** The company a settings address names: its uid, '' for the active one, or null when the address is not a settings address. */
+export function settingsUidFor(pathname = '') {
+  const p = String(pathname).replace(/\/+$/, '');
+  if (p === SETTINGS_PATH) return '';
+  const m = p.match(/^\/account\/companies\/([A-Za-z0-9_-]{1,64})\/settings$/);
+  return m && m[1].toLowerCase() !== SETTINGS_SEGMENT && !TAB_PATHS[m[1].toLowerCase()] ? m[1] : null;
+}
+
+export const MANAGE_LABEL = 'Manage companies and projects';
+export const SIDEBAR_LABEL = 'Companies and projects';
+export const MOVED_KEY = 'company-settings';
+/** The notices an old address lands with (CMP19b), by `?moved=`. */
+export const MOVED_NOTICES = Object.freeze({ [MOVED_KEY]: 'Company Settings has a new address. Update your bookmark.' });
+/** Profile and identity's one-line notice (CMP19b), shown until dismissed on this device. */
+export const PROFILE_MOVED_TEXT = 'Your companies is now Companies and projects, under Account.';
+export const PROFILE_MOVED_STORE = 'moved:your-companies';
+
+/**
+ * Where `/company-settings` forwards (owner question 2, A): the company page of
+ * the company active on this device, or the Companies tab when there is none.
+ * The query and the hash are kept, and `moved=company-settings` names the notice.
+ */
+export function forwardTarget(uid, search = '', hash = '') {
+  const q = new URLSearchParams(String(search).replace(/^\?/, ''));
+  q.set('moved', MOVED_KEY);
+  return `${uid ? companyPathFor(uid) : TAB_PATHS.companies}?${q.toString()}${hash || ''}`;
+}
+
+/**
+ * The company `/company-settings` meant: the one this device last made active,
+ * when it is still a membership, else the first membership, as the switcher
+ * restores it. Null when there is none.
+ */
+export function activeUidFrom(list, savedId) {
+  const arr = Array.isArray(list) ? list : [];
+  // The saved id comes back from localStorage as text.
+  const saved = savedId != null ? arr.find((c) => String(c.id) === String(savedId)) : null;
+  return (saved || arr[0])?.uid ?? null;
+}
 
 /** Whether a profile may create a company (D1135: an Explorer may not). */
 export const canCreate = (profile) => profile !== 'explorer';

@@ -226,9 +226,11 @@ export function activityRow(r, key) {
   const member = r.member?.name || 'A member';
   let text;
   if (r.kind === 'move') {
-    text = r.to?.key === key
-      ? `${who(r.actor)} moved ${member} into ${r.to?.name || 'this segment'}${r.from ? ` from ${r.from.name}` : ''}.`
-      : `${who(r.actor)} moved ${member} out to ${r.to?.name || 'another segment'}.`;
+    // D1006: the page-wide Activity (no key) says each move from and to, both named.
+    text = !key ? `${who(r.actor)} moved ${member} ${r.from ? `from ${r.from.name} ` : ''}to ${r.to?.name || 'another segment'}.`
+      : r.to?.key === key
+        ? `${who(r.actor)} moved ${member} into ${r.to?.name || 'this segment'}${r.from ? ` from ${r.from.name}` : ''}.`
+        : `${who(r.actor)} moved ${member} out to ${r.to?.name || 'another segment'}.`;
   } else if (r.kind === 'signup') {
     text = `${member} ${r.detail?.how_set === 'router' ? 'was suggested' : 'chose'} ${r.to?.name || 'this segment'} at sign-up${r.detail?.second ? ' as a second segment' : ''}.`;
   } else if (r.kind === 'segment_edit') {

@@ -11,6 +11,7 @@ import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { Unreadable, Unrecorded } from '../../../ui';
 import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
+import WeightingControl from '../../../components/scoring/scorecard/Weighting';
 import {
   MAX_COMPARE, NOT_YET, SCOPES, SCOPE_SWITCH, WAITS,
   compareHref, dealRow, inviteRow, opensDeal, viewHref,
@@ -48,6 +49,8 @@ export function DealFlowToolbar({ view, scope }) {
           <Link to={viewHref({ view: 'table', scope })} aria-current={view === 'table' ? 'page' : undefined} className={pill(view === 'table')} data-testid="dealflow-view-table">Table</Link>
         </nav>
       )}
+      {/* D1258 (#3281): SC7, the caller's weighting for the scorecard sort. */}
+      {scope !== 'new' && <WeightingControl />}
     </div>
   );
 }

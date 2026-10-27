@@ -32,7 +32,7 @@ import { isSuperAdmin } from '../../auth';
 import { notify } from '../notify';
 import { PMF_INPUT_KEYS } from '../scoring/pmf';
 import { SCOPE_ORDER, VENTURE_MODEL_V1, type AnyScopeKey } from './model';
-import type { StoredScope } from './store';
+import { confidenceWord, type StoredScope } from './store';
 
 export const REVIEW_CAP = 15;
 export const REASON_MIN = 10;
@@ -98,6 +98,14 @@ const STATEMENTS = {
   putSharing: `INSERT INTO venture_score_sharing (project_id, audience, user_id, enabled, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(project_id, audience, user_id) DO UPDATE SET enabled = excluded.enabled, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
   advisors: `SELECT COUNT(*) AS n FROM users WHERE role = 'advisor' AND is_active = 1 AND id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`,
+  // D1258: the venture's own advisors (accepted on its roster, an active advisor account), whom its founder may share with.
+  candidates: `SELECT u.id AS user_id, u.name AS advisor_name FROM project_members pm JOIN users u ON u.id = pm.user_id
+                WHERE pm.project_id = ? AND pm.role = 'advisor' AND pm.status = 'accepted' AND pm.removed_at IS NULL
+                  AND u.role = 'advisor' AND u.is_active = 1
+                ORDER BY u.id LIMIT 50`,
+  // D1258: every stored row, oldest first, for the trajectory (SC12). No inputs, never a signature.
+  trajectory: `SELECT scope, value, band, confidence, state, model_version, computed_at
+                 FROM venture_scorecards WHERE project_id = ? ORDER BY id LIMIT 2000`,
 } as const;
 export { STATEMENTS as ACCESS_STATEMENTS };
 
@@ -360,11 +368,43 @@ export async function readSharing(env: Env, projectId: number) {
     audience: string; user_id: number; enabled: number; updated_at: string; advisor_name: string | null;
   }>()).results || [];
   const sw = await investorsMaySee(env, projectId);
+  // D1258: the advisors the founder may choose from. A failed read says so; it never reads as none.
+  let candidates: { readable: boolean; items: Array<{ user_id: number; name: string | null }> };
+  try {
+    const found = (await env.DB.prepare(STATEMENTS.candidates).bind(projectId).all<{ user_id: number; advisor_name: string | null }>()).results || [];
+    candidates = { readable: true, items: found.map((r) => ({ user_id: Number(r.user_id), name: r.advisor_name ?? null })) };
+  } catch {
+    candidates = { readable: false, items: [] };
+  }
   return {
     investors: { on: sw.on, set: sw.set, default_rule: 'On once the venture is listed, until you turn it off.' },
     advisors: rows.filter((r) => r.audience === 'advisor' && Number(r.enabled) === 1)
       .map((r) => ({ user_id: Number(r.user_id), name: r.advisor_name ?? null, since: r.updated_at })),
+    candidates,
   };
+}
+
+/**
+ * D1258 — the trajectory (SC12): each scope's stored rows, oldest first, with
+ * the model version each was computed under. A row with no value is a gap,
+ * never a zero. Rows are only ever written on a change (D1255), so a point is
+ * a change, not a day.
+ */
+export async function readTrajectory(env: Env, projectId: number) {
+  const rows = (await env.DB.prepare(STATEMENTS.trajectory).bind(projectId).all<{
+    scope: string; value: number | null; band: string | null; confidence: number; state: string | null; model_version: string; computed_at: string;
+  }>()).results || [];
+  const scopes = SCOPE_ORDER.map((k) => ({
+    scope: k, label: SCOPE_LABELS[k],
+    points: rows.filter((r) => r.scope === k).map((r) => ({
+      at: r.computed_at, model: r.model_version,
+      state: r.state ?? (r.value == null ? 'not_enough' : 'scored'),
+      value: r.value == null ? null : Number(r.value), band: r.band ?? null, confidence_word: confidenceWord(r.confidence),
+    })),
+  }));
+  const models: Array<{ version: string; first_at: string }> = [];
+  for (const r of rows) if (!models.some((m) => m.version === r.model_version)) models.push({ version: r.model_version, first_at: r.computed_at });
+  return { scopes, models, rows: rows.length };
 }
 
 /** The founder turns investors' reading on or off, and names the advisors who may read. Every change is audited. */
@@ -372,6 +412,7 @@ export async function writeSharing(env: Env, user: User, projectId: number, body
   const at = new Date().toISOString();
   const stmts: D1PreparedStatement[] = [];
   const changes: string[] = [];
+  const added: number[] = [];
   if (body?.investors !== undefined) {
     if (typeof body.investors !== 'boolean') throw new ScoreError('bad_sharing', 'Investors is on or off.');
     stmts.push(env.DB.prepare(STATEMENTS.putSharing).bind(projectId, 'investors', 0, body.investors ? 1 : 0, user.id, at));
@@ -386,11 +427,22 @@ export async function writeSharing(env: Env, user: User, projectId: number, body
     if (Number(found?.n ?? 0) !== ids.length) throw new ScoreError('not_advisor', 'Only an active advisor account can be shared with.');
     const current = (await readSharing(env, projectId)).advisors.map((a) => a.user_id);
     for (const id of current) if (!ids.includes(id)) stmts.push(env.DB.prepare(STATEMENTS.putSharing).bind(projectId, 'advisor', id, 0, user.id, at));
-    for (const id of ids) if (!current.includes(id as number)) stmts.push(env.DB.prepare(STATEMENTS.putSharing).bind(projectId, 'advisor', id, 1, user.id, at));
+    for (const id of ids) if (!current.includes(id as number)) {
+      stmts.push(env.DB.prepare(STATEMENTS.putSharing).bind(projectId, 'advisor', id, 1, user.id, at));
+      added.push(id as number);
+    }
     changes.push(`advisors_${ids.length}`);
   }
   if (!changes.length) throw new ScoreError('nothing_to_change', 'Send investors, advisors or both.');
   if (stmts.length) await env.DB.batch(stmts);
+  // D1258: an advisor newly shared with is told, with the read-only page (SC21). A notice that fails never undoes the share.
+  for (const id of added) {
+    try {
+      await notify(env, { userId: id, type: 'venture_score_shared', title: 'A founder shared their scorecard with you',
+        body: 'You can read it, read only. Inputs stay hidden. The founder can stop sharing at any time.',
+        link: `/practice/scorecards/${projectId}`, payload: { project_id: projectId }, channels: ['in_app'] });
+    } catch { console.warn('[ventureScores] share notice failed'); }
+  }
   await logScorecard(env, { projectId, userId: user.id, action: 'venture_score_sharing_changed', details: { changes: changes.join(',') }, role: 'founder' });
   return readSharing(env, projectId);
 }

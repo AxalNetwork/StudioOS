@@ -88,6 +88,7 @@ test('the words, alone: a link out only to a release page on github.com', () => 
 
 test('Build draws the part on Product roadmap', () => {
   // Mutation checked: drop the 'product-roadmap' part → this fails.
-  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.match(route, /'product-roadmap': \(data\) => <RoadmapFromGithub github=\{data\?\.parts\?\.github\} \/>/);
+  // D1311: Build's parts live in buildParts.jsx, one line per connector.
+  const route = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
+  assert.match(route, /\['github', \(data\) => <RoadmapFromGithub github=\{data\?\.parts\?\.github\} \/>\]/);
 });
