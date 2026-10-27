@@ -287,7 +287,8 @@ test('D1169: the read touches only member stores; fund, legal, identity, 83(b) a
     'member_files', 'message_attachments', 'obligation_occurrences', 'projects', 'research_documents', 'user_company_links', 'users',
   ]);
   for (const never of ['legal_notice_files', 'legal_document_files', 'documents', 'kyc', 'fund', 'publications', 'articles']) assert.ok(!tables.has(never), never);
-  assert.equal((src.match(/source_kind <> 'signed'/g) ?? []).length, 4, 'every data room query leaves signed copies out');
+  // Four D1169 queries (each data room area's groups and largest) and D1170's two per-owner statements.
+  assert.equal((src.match(/source_kind <> 'signed'/g) ?? []).length, 6, 'every data room query leaves signed copies out');
 });
 
 test('D1169: each owner column the read filters on has an index, except the two recorded in D1169.md', () => {

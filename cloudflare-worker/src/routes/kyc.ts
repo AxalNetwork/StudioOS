@@ -654,7 +654,7 @@ async function approveCase(c: any, adminUser: any, userId: number, note: string 
   await sql`UPDATE users SET kyc_status = 'approved', kyc_reviewed_at = CURRENT_TIMESTAMP, kyc_reviewed_by = ${adminUser.id}, kyc_rejection_reason = NULL WHERE id = ${userId}`;
   const adminAction = isBypass ? 'kyc_bypass_granted' : 'kyc_approved_by_admin';
   const adminDetails = isBypass
-    ? `Admin ${adminUser.name} granted full access (KYC bypass) to ${target.name} (user_id=${target.id}) — no submission on file`
+    ? `Admin ${adminUser.name} granted full access (KYC bypass) to ${target.name} (user_id=${target.id}) — no submission on file${note ? '; reason recorded on the case' : ''}`
     : `Admin ${adminUser.name} approved KYC for ${target.name} (user_id=${target.id})`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES (${adminAction}, ${adminDetails}, ${await hashEmail(adminUser.email)}, ${adminUser.id})`;
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('kyc_approved', ${`Your KYC verification was approved by Axal compliance.`}, ${await hashEmail(target.email)}, ${target.id})`;
@@ -739,8 +739,28 @@ kyc.patch('/admin/:userId/approve', async (c) => {
   if (approvalNote && approvalNote.length > CASE_NOTE_MAX) return c.json({ error: `An approval note is at most ${CASE_NOTE_MAX} characters` }, 400);
   const withHq = await refuseIfWithHq(c, userId);
   if (withHq) return withHq;
+  // D1303 (#3400, #2377 item 11): full access WITHOUT an identity check (no
+  // submission on file) needs a reason, kept as the note on the approval's
+  // case event, beside who granted it and when. A reviewed submission's
+  // approval keeps its optional note.
+  const onFile = await c.env.DB.prepare('SELECT kyc_submitted_at FROM users WHERE id = ?').bind(userId).first<{ kyc_submitted_at: string | null }>();
+  if (onFile && !onFile.kyc_submitted_at) {
+    const reason = typeof approveBody?.reason === 'string' ? approveBody.reason.trim() : '';
+    if (reason.length < FULL_ACCESS_REASON_MIN || reason.length > FULL_ACCESS_REASON_MAX) {
+      return refuse(c, 400, {
+        code: 'reason_required',
+        message: `Say why full access is granted without an identity check, in ${FULL_ACCESS_REASON_MIN} to ${FULL_ACCESS_REASON_MAX} characters. It is recorded with the grant.`,
+        audience: 'admin',
+      });
+    }
+    return approveCase(c, adminUser, userId, reason);
+  }
   return approveCase(c, adminUser, userId, approvalNote || null);
 });
+
+/** D1303: a reason for full access without an identity check is 10 to 500 characters. */
+export const FULL_ACCESS_REASON_MIN = 10;
+export const FULL_ACCESS_REASON_MAX = 500;
 
 kyc.patch('/admin/:userId/reject', async (c) => {
   const adminUser = await requireAdmin(c);

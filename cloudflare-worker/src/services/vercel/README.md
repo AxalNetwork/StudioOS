@@ -8,3 +8,12 @@ No deployment, cancellation, rollback, environment variable or domain write exis
 Logs, runtime logs and Web Analytics wrappers are reserved, never called by the
 part 1 sync. Analytics remains off. Provider tests replace fetch with
 `test/_vercel_api_fake.mjs`; no test reaches Vercel.
+
+`health.ts` (D1097, #2962) holds production health: `healthFindings` turns
+evidence read from the API into the events it opens (a failed production
+deploy, a rollback, a misconfigured or unverified domain, a failed
+certificate, a Vercel-registered domain inside its expiry window) and the
+kinds it could check; `applyHealth` opens and closes `vercel_health_events`
+(migration 590) with their ledger rows; `dismissHealthEvent` keeps a
+dismissal. `hosting.ts` is Operating systems › Tools' Hosting read under the
+Tools rule.
