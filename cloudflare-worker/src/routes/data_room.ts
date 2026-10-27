@@ -63,6 +63,7 @@
  * INVESTOR SIDE (holder of a grant; admins use support-read instead)
  *   GET    /shared                            rooms shared with me
  *   GET    /shared/:projectUid                the room as I may see it
+ *   GET    /shared/:projectUid/evidence       the founder's shared evidence as I may see it (D1265)
  *   POST   /shared/:projectUid/files/:uid/download   one-time signed URL
  *
  * THE LOG (D374). `open_room`, `download`, and `blocked` — a download the NDA
@@ -108,6 +109,7 @@ import { logCycleWrite } from '../services/cycleActivity';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { WriterError } from '../services/validateWriters';
 import { DECLINE_REASON_MAX, readRequests } from '../services/dataRoomRequests';
+import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -348,6 +350,23 @@ r.get('/shared/:projectUid', async (c) => {
     delete room.hidden_from_grant;
     return c.json(room);
   } catch (e) { return mapError(c, e); }
+});
+
+// D1265 (#3288): the founder's shared Raise evidence, as this investor may see it. Who counts as an
+// investor in the raise, the NDA, each item's sharing, the file gate and quote consent are all
+// `investorEvidence`'s; an outsider and a missing venture answer alike. Each open logs `open_evidence`.
+r.get('/shared/:projectUid/evidence', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (user.role === 'admin') return refuse(c, 403, { code: 'support_read_required', message: 'Use an audited support read to open this room.' });
+    const project = await c.env.DB.prepare('SELECT id FROM projects WHERE uid = ? AND deleted_at IS NULL')
+      .bind(c.req.param('projectUid')).first<{ id: number }>();
+    if (!project) return c.json({ detail: 'Data room not found' }, 404);
+    return c.json(await investorEvidence(c.env, project.id, user.id));
+  } catch (e) {
+    if (e instanceof RaiseEvidenceError) return e.code === 'not_found' ? c.json({ detail: 'Data room not found' }, 404) : c.json({ code: e.code, detail: e.sentence }, e.status);
+    return mapError(c, e);
+  }
 });
 
 /**

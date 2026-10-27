@@ -34,7 +34,6 @@ const WORKSPACE = read('frontend/src/pages/PortfolioWorkspace.jsx');
 const APP = read('frontend/src/App.jsx');
 // D1242 (#3255): the Studio lens replaced DealsPage; its panels and dialogs live beside it.
 const DEALS = codeOnly(read('frontend/src/pages/investor/dealflow/StudioLens.jsx') + '\n' + read('frontend/src/pages/investor/dealflow/StudioParts.jsx'));
-const PIPELINE = codeOnly(read('frontend/src/pages/investor/deals/PipelineZone.jsx'));
 
 test('the Metrics page and its Investor update card are retired (#2336)', () => {
   assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/MetricsPage.jsx')), 'MetricsPage is back');
@@ -98,10 +97,4 @@ test('the Deal Flow page reads the stage funnel and records the source', () => {
     'the source-quality note stopped rendering the route’s own sentence');
 });
 
-test('the Pipeline tile counts recorded sources and names the pending taxonomy', () => {
-  assert.match(PIPELINE, /label="Source recorded"/, 'the fourth tile must count what the record carries');
-  assert.match(PIPELINE, /live\.filter\(\(d\) => String\(d\.source \|\| ''\)\.trim\(\)\)/,
-    'the tile stopped counting recorded sources');
-  assert.ok(!/label="From the Lab"/.test(PIPELINE),
-    'a tile named for the Lab counts a vocabulary nobody has decided');
-});
+// D1243 (#3256): the Pipeline zone's "Source recorded" tile retired with the zone; the source is still written by the draft and the terms editor above.
