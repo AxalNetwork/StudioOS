@@ -13,7 +13,7 @@ import {
   fmtDay, icState, may, maySection, platformRows, reportRows, reqState, requestActions, requestTiles, sectionRow, teamRows, unstaffed,
 } from './ddCaseModel.js';
 import { dueOf } from './ddReviewModel.js';
-import { Block, DecisionStrip, Severity, Table, Td, Tile, Unreadable, Who } from './DdCaseWork.jsx';
+import { Block, DecisionStrip, Severity, Table, Td, Tile, CaseUnreadable, Who } from './DdCaseWork.jsx';
 import { Note, btnCls, dangerCls, fieldCls, inputCls, muted, primaryCls } from './DdUi.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -91,7 +91,7 @@ export function DocumentsTab({ uid, data, onRetry }) {
     <div className="flex flex-col gap-4" data-testid="dd-case-documents">
       <Note>{LINK_LINE}</Note>
       <Block title="From the subject" testId="dd-docs-subject">
-        {lists.unreadable ? <Unreadable what="The files the subject sent could not be read." onRetry={onRetry} testId="dd-docs-unreadable" />
+        {lists.unreadable ? <CaseUnreadable what="The files the subject sent could not be read." onRetry={onRetry} testId="dd-docs-unreadable" />
           : !lists.fromSubject.length ? <p className={`m-0 text-[13px] ${muted}`}>The subject has sent no file yet.</p> : (
             <Table head={['File', 'Request', 'Section', 'Sent', 'Size', '']}>
               {lists.fromSubject.map((f) => (
@@ -104,7 +104,7 @@ export function DocumentsTab({ uid, data, onRetry }) {
           )}
       </Block>
       <Block title="Evidence on checklist items" testId="dd-docs-evidence">
-        {lists.evidence == null ? <Unreadable what="The evidence on items could not be read." onRetry={onRetry} />
+        {lists.evidence == null ? <CaseUnreadable what="The evidence on items could not be read." onRetry={onRetry} />
           : !lists.evidence.length ? <p className={`m-0 text-[13px] ${muted}`}>No evidence is attached to an item yet.</p> : (
             <Table head={['Evidence', 'Item', 'Section', 'Added by', 'Added', 'Size', '']}>
               {lists.evidence.map((e) => (
@@ -242,7 +242,7 @@ function Memo({ uid, data, open, version }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (may(data, 'memo_read')) load(); }, [uid, version]);
   if (!may(data, 'memo_read')) return <Who text={WHO.memo} />;
-  if (state.failed) return <Unreadable what="The memo could not be read." onRetry={load} testId="dd-memo-unreadable" />;
+  if (state.failed) return <CaseUnreadable what="The memo could not be read." onRetry={load} testId="dd-memo-unreadable" />;
   if (!state.read) return <p className={`m-0 text-[13px] ${muted}`}>Reading the memo…</p>;
   const save = () => {
     const long = MEMO_PARTS.find((p) => String(draft[p.key] || '').length > MEMO_MAX);
@@ -288,7 +288,7 @@ function Reports({ uid, data, open, version }) {
   return (
     <div className="flex flex-col gap-2" data-testid="dd-reports">
       <div><button type="button" className={btnCls} onClick={() => open('report')} data-testid="dd-report-open">Generate report</button></div>
-      {state.failed ? <Unreadable what="The reports could not be read." onRetry={load} />
+      {state.failed ? <CaseUnreadable what="The reports could not be read." onRetry={load} />
         : state.items == null ? <p className={`m-0 text-[13px] ${muted}`}>Reading the reports…</p>
           : !state.items.length ? <p className={`m-0 text-[13px] ${muted}`}>No report has been generated.</p> : (
             <Table head={['Generated', 'By', 'Format', 'Risk then', '']}>

@@ -48,7 +48,9 @@ function CaseDialog({ uid, data, me, dialog, close, done }) {
     case 'lead': return <ChangeLeadDialog row={row} me={me} onClose={close} onDone={done} />;
     case 'target': return <TargetDateDialog row={row} onClose={close} onDone={done} />;
     case 'notify': return <NotifyFounderDialog {...common} subject={cs.subject_label} />;
-    case 'report': return <ReportDialog {...common} />;
+    case 'report':
+      // Generate report: the Worker assembles it from the recorded sections and findings; no model writes it.
+      return <ReportDialog {...common} generate={async () => { const r = await dd.generateReport(uid); return r; }} />;
     case 'widen': return <WidenDialog {...common} depth={cs.template_depth} />;
     case 'compose': return <ComposeDialog {...common} data={data} />;
     case 'assign': return <AssignDialog {...common} data={data} sectionId={props.sectionId} />;

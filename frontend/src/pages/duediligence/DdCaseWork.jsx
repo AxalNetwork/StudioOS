@@ -19,7 +19,7 @@ export function Who({ text, testId }) {
   return <p className={`m-0 text-[12.5px] ${muted}`} data-testid={testId}>{text}</p>;
 }
 
-export function Unreadable({ what, onRetry, testId }) {
+export function CaseUnreadable({ what, onRetry, testId }) {
   return (
     <p className="m-0 text-[13px]" role="status" data-testid={testId}>
       <span className="font-semibold">Unreadable.</span> {what}{' '}
@@ -330,7 +330,7 @@ export function ActivityTab({ uid, data, read = dd.audit }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [uid]);
   if (!may(data, 'audit')) return <Who text="The deal team and the case’s reviewers read its activity." testId="dd-who-audit" />;
-  if (state.failed) return <Unreadable what="The case’s activity could not be read." onRetry={load} testId="dd-activity-unreadable" />;
+  if (state.failed) return <CaseUnreadable what="The case’s activity could not be read." onRetry={load} testId="dd-activity-unreadable" />;
   if (state.items == null) return <p className={`m-0 text-[13px] ${muted}`}>Reading the activity…</p>;
   const filters = activityFilters(state.items);
   const rows = activityRows(state.items, f);

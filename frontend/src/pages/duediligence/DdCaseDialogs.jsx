@@ -228,11 +228,11 @@ export function NotifyFounderDialog({ uid, subject, onClose, onDone }) {
   );
 }
 
-/** G. Generate a report. It asks for your authenticator code first if your session has not had one recently. */
-export function ReportDialog({ uid, onClose, onDone }) {
+/** G. Generate a report (`generate` is the page's call, so the Admin rail's list reads it there). It asks for your authenticator code first if your session has not had one recently. */
+export function ReportDialog({ generate, onClose, onDone }) {
   const { busy, error, send } = useCaseSend();
   const submit = () => send(async () => {
-    const r = await dd.generateReport(uid);
+    const r = await generate();
     if (r?.download_url) window.open(r.download_url, '_blank', 'noopener,noreferrer');
     onDone(`A report is generated${r?.format ? ` (${String(r.format).toUpperCase()})` : ''}.`);
   }, 'The report could not be generated.');
