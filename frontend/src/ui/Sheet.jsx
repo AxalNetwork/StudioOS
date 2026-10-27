@@ -1,6 +1,8 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { FOCUSABLE, inertOutside, lockScroll, pushDialog, tabbable, tabTarget, topmost } from './lightboxFocus.js';
 import { pushSheet } from './sheetStore.js';
+import Lightbox, { useLightboxPhone } from './Lightbox.jsx';
+import { usePhoneWidth } from './phone/usePhoneWidth.js';
 import './sheet.css';
 
 /**
@@ -47,13 +49,43 @@ import './sheet.css';
  *
  * Not portalled, like `Lightbox`: a portal cannot be server-rendered, and a
  * sheet that cannot be rendered cannot be tested.
+ *
+ * MOVING A `Lightbox` DRAWER HERE is a change of tag: the props are the same.
+ *   · `width` keeps the panel's own; a width off the owner's list (600, 620,
+ *     680, 860, 940, 960) takes the nearest on it, a tie going wider
+ *     (`sheetWidth`).
+ *   · `size="tall"`: the body does not scroll, its child (an `ActionSheet`)
+ *     owns the scroll.
+ *   · `pageBelow="lg"`, `bar`, `pageClass`: below 1024px the panel stays the
+ *     page it was — `Lightbox`'s page mode draws it, unchanged.
+ *   · `phone`: as `Lightbox`'s, and a page's `LightboxPhoneProvider` applies.
+ *   · `focusKey`: a swapped view moves focus to its first control.
  */
 export const SHEET_WIDTHS = Object.freeze([480, 520, 560, 640, 720, 760]);
 
-export default function Sheet({
-  label, title, eyebrow, sub, onClose, onEscape, footer, children, width = 560, testId = 'sheet',
-  initialFocus, returnFocusTo, phone = 'full', headerActions = null,
+/** The panel's own width on the owner's list: itself, else the nearest, a tie going wider. */
+export function sheetWidth(width = 560) {
+  const w = Number(width) || 560;
+  let best = SHEET_WIDTHS[0];
+  for (const c of SHEET_WIDTHS) if (Math.abs(c - w) <= Math.abs(best - w)) best = c;
+  return best;
+}
+
+export default function Sheet(props) {
+  const phoneWidth = usePhoneWidth();
+  // Below 1024px a panel that was a page stays one: Lightbox's page mode draws it.
+  if (props.pageBelow === 'lg' && phoneWidth) return <Lightbox {...props} />;
+  return <SheetFrame {...props} />;
+}
+
+function SheetFrame({
+  label, title, eyebrow, sub, onClose, onEscape, footer, children, width: ownWidth = 560, testId = 'sheet',
+  initialFocus, returnFocusTo, phone: phoneProp, headerActions = null, size = 'fit', focusKey,
 }) {
+  const width = sheetWidth(ownWidth);
+  const inherited = useLightboxPhone();
+  const phone = phoneProp || inherited || 'full';
+  const tall = size === 'tall';
   const id = useId();
   const titleId = `${id}-title`;
   const dialog = useRef(null);
@@ -87,6 +119,17 @@ export default function Sheet({
     };
   }, [id, initialFocus, returnFocusTo]);
 
+  // A view swapped under the same sheet moves focus to its first control (Lightbox's D686 §5.4).
+  const firstKey = useRef(focusKey);
+  useEffect(() => {
+    if (focusKey === firstKey.current) return;
+    firstKey.current = focusKey;
+    const el = dialog.current;
+    if (!el || typeof document === 'undefined' || typeof el.querySelector !== 'function') return;
+    if (typeof el.contains === 'function' && el.contains(document.activeElement)) return;
+    (el.querySelector(FOCUSABLE) || el).focus?.();
+  }, [focusKey]);
+
   const onTab = (e) => {
     if (e.key !== 'Tab') return;
     const el = dialog.current;
@@ -114,6 +157,7 @@ export default function Sheet({
         tabIndex={-1}
         data-testid={testId}
         data-width={width}
+        data-size={tall ? 'tall' : 'fit'}
         onKeyDown={onTab}
         style={{ width, maxWidth: 'calc(100vw - 108px)' }}
         className="axs-sheet absolute inset-y-0 right-0 flex flex-col overflow-hidden rounded-l-2xl border-l border-[#ececf1] bg-white text-axal-ink shadow-[-24px_0_56px_rgba(9,9,11,.2)] outline-none dark:border-[#374151] dark:bg-gray-950 dark:text-gray-100"
@@ -130,7 +174,7 @@ export default function Sheet({
               className="-mr-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-[20px] leading-none text-axal-muted hover:bg-gray-100 hover:text-axal-ink dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100">×</button>
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-testid={`${testId}-body`}>{children}</div>
+        <div className={tall ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto overscroll-contain'} data-testid={`${testId}-body`}>{children}</div>
         {footer && <footer className="shrink-0 border-t border-axal-hairline px-5 py-3.5 dark:border-gray-800" data-testid={`${testId}-footer`}>{footer}</footer>}
       </div>
     </div>

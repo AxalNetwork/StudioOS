@@ -14,7 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import Sheet, { SHEET_WIDTHS } from '../src/ui/Sheet.jsx';
+import Sheet, { SHEET_WIDTHS, sheetWidth } from '../src/ui/Sheet.jsx';
 import { closeSheets, openSheets, pushSheet } from '../src/ui/sheetStore.js';
 import { inertOutside, scrollLocks } from '../src/ui/lightboxFocus.js';
 import BuilderSection from '../src/pages/account/builder/BuilderSection.jsx';
@@ -43,6 +43,12 @@ test('the frame: a named modal dialog, its own width capped at 100vw − 108px, 
   const unnamed = renderToStaticMarkup(h(Sheet, { label: 'Filters', onClose() {} }));
   assert.match(unnamed, /role="dialog" aria-modal="true" aria-label="Filters"/, 'no title: named by `label`');
   assert.deepEqual([...SHEET_WIDTHS], [480, 520, 560, 640, 720, 760]);
+  // A width off the list takes the nearest on it, a tie going wider.
+  assert.deepEqual([480, 600, 620, 680, 860, 940, 960, 400, undefined].map(sheetWidth), [480, 640, 640, 720, 760, 760, 760, 480, 560]);
+  assert.match(renderToStaticMarkup(h(Sheet, { title: 'T', width: 600, onClose() {} })), /style="width:640px;/);
+  const tall = renderToStaticMarkup(h(Sheet, { title: 'T', size: 'tall', onClose() {} }));
+  assert.match(tall, /data-size="tall"/);
+  assert.match(tall, /class="min-h-0 flex-1 overflow-hidden" data-testid="sheet-body"/, 'tall: the child owns the scroll');
 });
 
 test('scroll: the header and the footer stay put, and only the body scrolls', () => {
@@ -222,4 +228,6 @@ test('the sheet is wired the way the contract says: Tab handler, the shared Esca
   assert.match(src, /pushDialog\(id\)/, 'one Escape stack with Lightbox, so a confirmation over a sheet closes first');
   assert.doesNotMatch(src, /createPortal/);
   assert.doesNotMatch(src, /fetch\(|api\.|navigate\(/, 'closing is the caller’s');
+  assert.match(src, /if \(props\.pageBelow === 'lg' && phoneWidth\) return <Lightbox \{\.\.\.props\} \/>;/, 'below 1024px a page stays the page it was');
+  assert.match(src, /const phone = phoneProp \|\| inherited \|\| 'full';/, 'a page’s LightboxPhoneProvider applies');
 });
