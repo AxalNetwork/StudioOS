@@ -28,5 +28,4 @@ a mapped Form's qualifying responses become `demand_signals` at `to_confirm`
 answer and never who sent it; signals the founder confirmed are offered as
 Experiments evidence in `google_workspace_proposals`. Every landed item has a
 `connector_fed_items` row, so a re-sync lands it once and a deleted one stays
-deleted. Parts 4–6 add their importers beside it.
 deleted. Raise (part 5, #2959) adds its importer beside these.
