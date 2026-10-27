@@ -298,9 +298,19 @@ test('ART3: /admin/articles/42 opens that article as readers see it, or its Mark
     assert.ok(v.calls.some((c) => c.method === 'GET' && c.path === '/api/admin/articles/42'));
     assert.ok(v.has('cq-drawer'));
     assert.match(v.of('cq-drawer-meta'), /In review/);
-    assert.ok(v.has('cq-article-rendered'));
+    assert.match(v.of('cq-article-rendered'), /Most seed teams hire an operator too late\./, 'the reader view is the Markdown, rendered');
     await v.click('cq-article-md');
     assert.match(v.of('cq-article-markdown'), /Most seed teams hire an operator too late\./);
+  } finally { await v.close(); }
+});
+
+test('ART3: an author\'s raw HTML is shown as text, never injected', async () => {
+  const v = await mount('/admin/articles/42', { article: () => json(ARTICLE({ body_markdown: 'Hello <img src=x onerror="alert(1)"> world' })) });
+  try {
+    const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+    const tags = walk(v.by('cq-article-rendered')).map((n) => String(n.tagName || n.nodeName || '').toUpperCase());
+    assert.ok(!tags.includes('IMG'), 'no element from the author\'s HTML');
+    assert.match(v.of('cq-article-rendered'), /Hello/);
   } finally { await v.close(); }
 });
 
@@ -437,9 +447,9 @@ test('ART17: a member is told the queue is for studio admins; an Admin on the Co
   assert.notDeepEqual(hqLinks('/admin/contentx'), hqLinks('/admin/content'));
 });
 
-test('no window.confirm, prompt or alert is left in the Content queue', () => {
+test('no window.confirm, prompt or alert, and no injected HTML, in the Content queue', () => {
   const dir = 'frontend/src/pages/admin/contentQueue';
   const files = ['frontend/src/pages/admin/ArticlesQueuePage.jsx', ...readdirSync(new URL(`../../${dir}`, import.meta.url)).filter((f) => /\.jsx?$/.test(f)).map((f) => `${dir}/${f}`)];
   assert.ok(files.length >= 6);
-  for (const f of files) assert.doesNotMatch(read(f), /window\.(confirm|prompt|alert)|\balert\(/, f);
+  for (const f of files) assert.doesNotMatch(read(f), /window\.(confirm|prompt|alert)|\balert\(|dangerouslySetInnerHTML/, f);
 });

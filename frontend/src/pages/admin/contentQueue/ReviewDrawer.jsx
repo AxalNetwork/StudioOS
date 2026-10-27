@@ -5,10 +5,11 @@
  * Details. The footer offers what `pipelineModel.actionsFor` allows; each
  * change opens `QueueDialog`. A failed block says so and leaves the rest.
  *
- * Reads: `GET /api/admin/articles/:id` (D1293 adds `rendered_html`, thread
+ * Reads: `GET /api/admin/articles/:id` (D1293 adds thread
  * fields and `saved_by_name`) and `GET /api/admin/articles/:id/revisions/:rev`.
  */
 import React, { useCallback, useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
 import { adminArticles as api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
@@ -39,7 +40,10 @@ function BlockFailed({ onRetry, testId }) {
   );
 }
 
-/** ART3: the article as readers see it (D1293's `rendered_html`), or its Markdown. */
+/**
+ * ART3: the article as readers see it, or its Markdown. The reader view is
+ * `react-markdown`, as the author's own preview is: no raw HTML reaches the page.
+ */
 function ArticleTab({ article }) {
   const [md, setMd] = useState(false);
   return (
@@ -51,11 +55,9 @@ function ArticleTab({ article }) {
       </div>
       {article.cover_r2_key && <img src={`/api/articles/cover/${article.id}`} alt="" className="max-h-48 rounded border border-slate-200 dark:border-slate-700" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
       {article.subtitle && <p className="m-0 text-[14px] text-slate-600 dark:text-slate-300">{article.subtitle}</p>}
-      {md || typeof article.rendered_html !== 'string'
+      {md
         ? <pre className="m-0 max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded border border-slate-200 bg-slate-50 p-3 font-mono text-[12px] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200" data-testid="cq-article-markdown">{article.body_markdown || ''}</pre>
-        // renderMarkdown (services/newsRender.ts) escapes every character of the
-        // author's text before it adds tags, as for the reader page's body_html.
-        : <div className="article-prose max-h-[60vh] overflow-y-auto text-[14px] text-slate-800 dark:text-slate-200" data-testid="cq-article-rendered" dangerouslySetInnerHTML={{ __html: article.rendered_html }} />}
+        : <div className="prose max-h-[60vh] max-w-none overflow-y-auto text-[14px] dark:prose-invert" data-testid="cq-article-rendered"><ReactMarkdown>{article.body_markdown || ''}</ReactMarkdown></div>}
     </div>
   );
 }
