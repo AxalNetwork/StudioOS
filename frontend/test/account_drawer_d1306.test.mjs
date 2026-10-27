@@ -165,9 +165,12 @@ async function mounted(el, { handle = handler() } = {}) {
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const byId = (id) => nodes().find((n) => props(n)['data-testid'] === id);
+  const click = async (id) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onClick({ preventDefault() {}, stopPropagation() {} }); }); await flush(); };
   return {
     requests, has: (id) => Boolean(byId(id)), textOf: (id) => text(byId(id)), props: (id) => props(byId(id)), node: byId,
-    click: async (id) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onClick({ preventDefault() {}, stopPropagation() {} }); }); await flush(); },
+    click,
+    // D1305: a row's changes sit in its ⋯ menu (`accounts-menu-<id>`), one item each.
+    menu: async (id, item) => { await click(`accounts-menu-${id}`); await click(`accounts-menu-${id}-${item}`); },
     type: async (id, value) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onChange({ target: { value } }); }); await flush(); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
@@ -178,7 +181,7 @@ const writes = (v) => v.requests.filter((q) => q.method !== 'GET' && !q.url.incl
 test('Grant full access: an in-page dialog that asks for a reason and sends it; nothing is sent before Confirm', async () => {
   const v = await mounted(h(UsersConsole, {}));
   try {
-    await v.click('row-full-access-5');
+    await v.menu(5, 'full');
     assert.match(v.textOf('account-dialog'), /Grant Ben Sample full access without an identity check\?/);
     assert.match(v.textOf('account-dialog-told'), /Ben Sample is told their access changed\./);
     assert.equal(v.props('account-dialog-confirm').disabled, true, 'Confirm works with no reason');
@@ -196,7 +199,7 @@ test('Grant full access: an in-page dialog that asks for a reason and sends it; 
 test('a refusal stays in the dialog, in one sentence, and nothing is claimed', async () => {
   const v = await mounted(h(UsersConsole, {}), { handle: handler({ '/approve': { method: 'PATCH', answer: () => response({ error: 'Only a super admin can do that.', code: 'super_admin_required' }, 403) } }) });
   try {
-    await v.click('row-full-access-5');
+    await v.menu(5, 'full');
     await v.type('account-dialog-reason', 'Checked by video call');
     await v.click('account-dialog-confirm');
     assert.ok(v.has('account-dialog'), 'the dialog closed on a refusal');
@@ -207,10 +210,10 @@ test('a refusal stays in the dialog, in one sentence, and nothing is claimed', a
 test('limited access: grant and revoke each open their dialog and send their call', async () => {
   const v = await mounted(h(UsersConsole, {}));
   try {
-    await v.click('row-limited-5');
+    await v.menu(5, 'limit');
     assert.match(v.textOf('account-dialog'), /Grant Ben Sample limited access\?/);
     await v.click('account-dialog-confirm');
-    await v.click('row-revoke-limited-6');
+    await v.menu(6, 'unlimit');
     assert.match(v.textOf('account-dialog'), /Revoke Eva Sample’s limited access\?/);
     await v.click('account-dialog-confirm');
     const w = writes(v);
@@ -223,11 +226,11 @@ test('limited access: grant and revoke each open their dialog and send their cal
 test('deactivate a member: the optional reason, and Cancel sends nothing', async () => {
   const v = await mounted(h(UsersConsole, {}));
   try {
-    await v.click('row-toggle-5');
+    await v.menu(5, 'toggle');
     assert.match(v.textOf('account-dialog'), /Deactivate Ben Sample\?.*Nothing is deleted\./s);
     await v.click('account-dialog-cancel');
     assert.equal(writes(v).length, 0);
-    await v.click('row-toggle-5');
+    await v.menu(5, 'toggle');
     await v.click('account-dialog-confirm');
     const w = writes(v);
     assert.equal(w.length, 1);
@@ -240,6 +243,7 @@ test('change a profile: ACC7 A’s dialog names both profiles and sends the role
   const v = await mounted(h(UsersConsole, {}));
   try {
     globalThis.innerHeight = 800;
+    await v.menu(5, 'profile');
     const trigger = v.node('role-trigger-5');
     trigger.parentNode.getBoundingClientRect = () => ({ top: 100, bottom: 120, left: 10, width: 80 });
     await v.click('role-trigger-5');
@@ -257,7 +261,7 @@ test('change a profile: ACC7 A’s dialog names both profiles and sends the role
 test('the support session dialog states the length and its ceiling, and keeps a refusal inside', async () => {
   const v = await mounted(h(UsersConsole, {}), { handle: handler({ '/impersonate/5': { method: 'POST', answer: () => response({ error: 'Support sessions are paused.' }, 409) } }) });
   try {
-    await v.click('row-support-5');
+    await v.menu(5, 'support');
     assert.equal(v.textOf('support-session-length'), '30 minutes. You can extend it, up to 120 minutes in all.');
   } finally { await v.close(); }
 });
