@@ -529,17 +529,17 @@ r.post('/applications/:applicant_id/interview/outcome', async (c) => {
   const applicant = await applicantForInterview(c.env, applicantId);
   if (!applicant) return refusal(c, 404, 'applicant_not_found', 'That applicant does not exist.');
   const iv = await c.env.DB.prepare(
-    `SELECT id, scheduled_at, outcome FROM spinout_application_interviews
+    `SELECT id, scheduled_at FROM spinout_application_interviews
       WHERE application_id = ? AND status = 'scheduled' ORDER BY id DESC LIMIT 1`,
-  ).bind(applicant.application_id).first<{ id: number; scheduled_at: string; outcome: string | null }>();
+  ).bind(applicant.application_id).first<{ id: number; scheduled_at: string }>();
   if (!iv) return refusal(c, 409, 'no_scheduled_interview', 'There is no interview to record.');
-  if (iv.outcome) return refusal(c, 409, 'outcome_recorded', 'This interview’s outcome is already recorded.');
   const at = sqliteUtcToMs(iv.scheduled_at);
   if (at === null || at > Date.now()) return refusal(c, 409, 'interview_not_yet', 'This interview’s time has not come yet.');
   const upd = await c.env.DB.prepare(
     `UPDATE spinout_application_interviews SET outcome = ?, outcome_at = datetime('now'), outcome_by = ?, updated_at = datetime('now')
       WHERE id = ? AND status = 'scheduled' AND outcome IS NULL`,
   ).bind(outcome, adminUser.id, iv.id).run();
+  // Compare-and-set: an outcome already recorded (or one recorded a moment ago) changes nothing.
   if ((upd.meta?.changes ?? 0) === 0) return refusal(c, 409, 'outcome_recorded', 'This interview’s outcome is already recorded.');
   await logActivity(c.env, adminUser.email, adminUser.id, 'cohort_interview_outcome',
     `Admin ${adminUser.name} recorded applicant #${applicantId}'s interview as ${outcome}`);
