@@ -8,6 +8,10 @@ import { request } from '../api.js';
 //   denyAssistantConsent     POST   /mcp/consent/:id/deny      → { redirectTo } carrying access_denied
 //   assistantGrants          GET    /connectors/assistants     the caller's grants (never a token)
 //   revokeAssistantGrant     DELETE /connectors/assistants/:id
+//   overview                 GET    /developer/assistants/overview  D1316: the server URL, scopes, tools, limits and
+//                                   whether the caller can connect a company (Builder › MCP and services)
+// D1316: each grant also carries scopes, verified_assistant and assistant_label, companies[].still_owned,
+// last_call_at (with last_call_source) and calls_30d (null when the call log could not be read).
 const enc = encodeURIComponent;
 
 export const assistantsApi = {
@@ -16,4 +20,5 @@ export const assistantsApi = {
   deny: (id) => request(`/mcp/consent/${enc(id)}/deny`, { method: 'POST' }),
   grants: () => request('/connectors/assistants'),
   revoke: (grantId) => request(`/connectors/assistants/${enc(grantId)}`, { method: 'DELETE' }),
+  overview: () => request('/developer/assistants/overview'),
 };

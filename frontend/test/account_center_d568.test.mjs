@@ -43,7 +43,6 @@ import { setReadState } from '../src/ui/CompanySwitcher.jsx';
 import { PushDevicesCard, SessionsCard } from '../src/pages/account/AccountDevices.jsx';
 import { PlanHeader, OrdersCard } from '../src/pages/account/AccountBilling.jsx';
 import { FollowingList } from '../src/pages/account/AccountFollowing.jsx';
-import DeveloperSection, { DeveloperPanel } from '../src/pages/account/AccountDeveloper.jsx';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -570,41 +569,6 @@ test('following: empty, unreadable and loading', () => {
   assert.match(html(h(FollowingList, { ...base, follows: loading() })), /data-testid="account-loading"/);
 });
 
-// --- Developer ---------------------------------------------------------------
-
-test('developer: hidden from every role the routes refuse', () => {
-  assert.equal(html(h(DeveloperSection, { role: 'founder' })), '');
-  assert.equal(html(h(DeveloperSection, { role: 'investor' })), '');
-  assert.match(html(h(DeveloperSection, { role: 'admin' })), /data-testid="account-developer"/, 'drawn for an admin, loading');
-});
-
-test('developer: flags, the account row, and Not recorded for what no store holds', () => {
-  const dev = ready({ feature_flags: { beta_board: true, new_rail: false }, raw_user: { id: 1, uid: 'abc', email: 'root@example.com', name: 'Root', role: 'admin', email_verified: 1, kyc_status: 'approved', created_at: '2026-01-05 12:00:00', last_active_at: null } });
-  const props = { dev, onToggleFlag: noop, flagBusy: false, flagOutcome: null, onResync: noop, resync: { busy: false, outcome: null, requestedAt: null } };
-  const t = text(h(DeveloperPanel, props));
-  const markup = html(h(DeveloperPanel, props));
-  assert.match(t, /API key Not recorded · there is no key store yet; the API tier \(T20\) has not shipped\./);
-  assert.match(t, /Webhook URL Not recorded/);
-  assert.match(t, /Rate limit Not recorded/);
-  assert.match(t, /2 stored/);
-  assert.match(markup, /data-testid="switch-flag-beta_board"/);
-  assert.match(markup, /role="switch" aria-checked="true"[^>]*data-testid="switch-flag-beta_board"/);
-  assert.match(t, /Email verified Yes/);
-  assert.match(t, /Created 5 Jan 2026/);
-  assert.match(t, /Last active Not recorded/);
-  assert.match(t, /last run not recorded/);
-  assert.match(t, /No part of the product reads these flags yet/);
-  const empty = text(h(DeveloperPanel, { ...props, dev: ready({ feature_flags: {}, raw_user: null }) }));
-  assert.match(empty, /No feature flags are stored on your account\./);
-  const bad = text(h(DeveloperPanel, { ...props, dev: unreadable('') }));
-  assert.match(bad, /Your developer settings could not be read\. This is not a claim that none is set\./);
-  // The page's own clock, read in the reader's zone: built from local parts so
-  // the run passes in any time zone.
-  const requested = text(h(DeveloperPanel, { ...props, resync: { busy: false, requestedAt: new Date(2026, 9, 6, 9, 41), outcome: { tone: 'ok', text: 'Re-sync request logged. The next scheduled cron will pick this up.' } } }));
-  assert.match(requested, /requested from this page at 09:41/);
-  assert.match(requested, /Re-sync request logged\. The next scheduled cron will pick this up\./);
-});
-
 // --- Wiring: the page, the route, and the Worker routes behind each method ---
 
 test('SettingsPage lists the canvas sections in its order, and mounts each section', () => {
@@ -684,10 +648,10 @@ test('App.jsx: Builder opens for every role, and /account/developer… forwards 
   for (const path of ['/account/developer', '/account/developer/*']) assert.ok(app.includes(`<Route path="${path}" element={<BuilderRedirect />} />`), path);
   assert.ok(app.indexOf('path="/account/developer"') < app.indexOf('path="/account/:section"'));
   assert.ok(app.indexOf('path="/account/builder/*"') < app.indexOf('path="/account/:section"'));
-  // The admin panel's own routes stay admin-only until D1316 retires them.
+  // D1316 retired the admin panel: its three routes and three clients went together.
   const settings = read('cloudflare-worker/src/routes/settings.ts');
-  const dev = settings.slice(settings.indexOf("settings.get('/developer'"), settings.indexOf("settings.put('/developer'"));
-  assert.match(dev, /if \(\(user\.role \|\| ''\)\.toLowerCase\(\) !== 'admin'\) return c\.json\(\{ error: 'Admin role required' \}, 403\);/);
+  assert.doesNotMatch(settings, /settings\.(get|put|post)\('\/developer/);
+  assert.doesNotMatch(read('frontend/src/lib/api.js'), /DeveloperSettings|resyncDeveloperIndices/);
 });
 
 test('each fixture field is one the route serves', () => {
@@ -757,9 +721,6 @@ test('every method the sections call reaches the route it was read against', asy
     await api.followsMine();
     await api.unfollow('user', 11);
     await api.follow('project', 5);
-    await api.getDeveloperSettings();
-    await api.updateDeveloperSettings({ feature_flags: { a: true } });
-    await api.resyncDeveloperIndices();
     await api.updateSettings({ name: 'Ana' });
   } finally { globalThis.fetch = orig; }
   assert.deepEqual(calls.map(([m, u]) => [m, u]), [
@@ -774,7 +735,6 @@ test('every method the sections call reaches the route it was read against', asy
     ['GET', '/billing/tier/status'], ['GET', '/billing/investor/status'], ['GET', '/billing/plan/status'],
     ['POST', '/billing/tier/portal'], ['POST', '/billing/investor/portal'],
     ['GET', '/orders/mine'], ['GET', '/follows/mine'], ['DELETE', '/follows'], ['POST', '/follows'],
-    ['GET', '/settings/developer'], ['PUT', '/settings/developer'], ['POST', '/settings/developer/resync-indices'],
     ['PATCH', '/settings'],
   ]);
   const body = (i) => JSON.parse(calls[i][2]);
