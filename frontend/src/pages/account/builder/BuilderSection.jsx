@@ -53,7 +53,7 @@ function MovedNotice({ storage }) {
   return (
     <div role="status" className="flex items-center gap-2.5 rounded-axal-md border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="builder-moved-notice">
       <span className="flex-1">{BUILDER_WORDS.movedNotice}</span>
-      <button type="button" onClick={dismiss} className="rounded-axal-sm px-2 py-1 text-[12px] font-semibold text-axal-violet hover:underline dark:text-violet-300">Dismiss</button>
+      <button type="button" onClick={dismiss} className="inline-flex min-h-[44px] items-center rounded-axal-sm px-2 text-[12px] font-semibold text-axal-violet hover:underline dark:text-violet-300">Dismiss</button>
     </div>
   );
 }
@@ -77,7 +77,7 @@ export function BuilderHandoff({ api = assistantsApi }) {
         <p className={`m-0 text-[12.5px] ${MUTED}`}>{BUILDER_WORDS.handoffLine}</p>
         {count != null && <p className="m-0 mt-1 font-mono text-[12px] tabular-nums text-axal-ink dark:text-gray-100" data-testid="builder-handoff-count">{count} connected</p>}
       </div>
-      <Link to={builderPathFor({ page: 'services' })} className="inline-flex min-h-[40px] items-center rounded-axal-md border border-axal-hairline bg-white px-3.5 text-[13px] font-semibold text-axal-ink hover:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{BUILDER_WORDS.openBuilder}</Link>
+      <Link to={builderPathFor({ page: 'services' })} className="inline-flex min-h-[44px] items-center rounded-axal-md border border-axal-hairline bg-white px-3.5 text-[13px] font-semibold text-axal-ink hover:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{BUILDER_WORDS.openBuilder}</Link>
     </section>
   );
 }
