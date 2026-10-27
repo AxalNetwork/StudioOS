@@ -1,6 +1,6 @@
 /**
  * D1152 (#3057) — the investor's Overview (DL1) on today's reads: the
- * scorecard strip's slot (DL24a), what is new since you last looked (part 2),
+ * scorecard's scope strip (DL24a, live since D1257), what is new since you last looked (part 2),
  * the terms at a glance and the round (the deal read), your next step (part
  * 2's one next action) and the deck's slot. A card whose read fails says so
  * and leaves the others standing.
@@ -11,7 +11,8 @@ import { Unreadable } from '../../ui';
 import { dealMoney } from '../../components/deals/dealMoney';
 import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3 } from './DealFrame';
-import { DECK_SLOT, SCORE_SLOT, termsAtGlance, whatsNewOf } from './dealFrameModel';
+import { DECK_SLOT, termsAtGlance, whatsNewOf } from './dealFrameModel';
+import { DealScoreStrip } from '../../components/scoring/scorecard/Scorecard';
 import { whatsNewOnce } from './dealVisit';
 
 const SLOT = 'flex flex-col gap-2 rounded-axal-lg border border-dashed border-axal-muted bg-axal-ground px-4 py-4 dark:border-gray-600 dark:bg-gray-800/60';
@@ -70,7 +71,8 @@ export default function DealOverview({ deal, track, investor }) {
     <div className="grid gap-3.5 lg:grid-cols-3" data-testid="deal-overview">
       <div className="flex min-w-0 flex-col gap-3.5 lg:col-span-2">
         {deal.description && <p className={`m-0 ${SUB}`}>{deal.description}</p>}
-        <Slot slot={SCORE_SLOT} testId="deal-score-slot" />
+        {/* D1257 (#3280): DL24a, the scope strip read through the batch for this deal. */}
+        <DealScoreStrip dealId={deal.id} />
         {investor && <WhatsNew dealId={deal.id} />}
         <section className={`${CARD} flex flex-col gap-1 px-4 py-4`} data-testid="deal-details">
           <h3 className={H3}>About this deal</h3>

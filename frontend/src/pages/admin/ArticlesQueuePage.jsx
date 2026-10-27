@@ -16,6 +16,9 @@ import { RailFrame, WorkerRail } from '../../ui';
 import useRecordCrumb from './useRecordCrumb';
 import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
 import { PAGE_LINE, QUEUE_BASE, QUEUE_TABS, WAITS, viewOf } from './contentQueueModel';
+import AuthorsTab from './contentQueue/AuthorsTab';
+import ContentCalendar from './contentQueue/Calendar';
+import PerformanceTab from './contentQueue/PerformanceTab';
 
 // Admin /admin/articles review queue — the single "Content Queue" (Task #3
 // merged the former News + Articles admin queues). /admin/news redirects here.
@@ -272,7 +275,7 @@ export default function ArticlesQueuePage() {
         data-testid="content-queue-header"
       />
 
-      {view.tab !== 'pipeline' ? <QueueWait tab={view.tab} /> : (<>
+      {view.tab === 'calendar' ? <ContentCalendar api={api} /> : view.tab === 'authors' ? <AuthorsTab /> : view.tab === 'performance' ? <PerformanceTab /> : view.tab !== 'pipeline' ? <QueueWait tab={view.tab} /> : (<>
       <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
         {STATUS_TABS.map((t) => (
           <button

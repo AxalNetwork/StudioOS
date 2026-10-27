@@ -39,7 +39,7 @@ it, where in their nav, and how do they get there.*
 | Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/history` · `/raise/cap-table/h-<n>` · `/new` · `/raise/cap-table/proposal/<id>` · `/raise/cap-table/instrument/<uid>` · `/raise/cap-table/scenarios/<uid>` · `/raise/cap-table/scenarios/compare?ids=` · `/share/captable/:token` · `/raise/capital/cap-table` · `/build/captable` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Cap Table | `/spinout-lab/captable` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Capital | `/spinout-lab/capital` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Capital relationships | `/raise/capital-relationships` · `/raise/capital/pipeline` · `/raise/capital-match` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Capital relationships | `/raise/capital-relationships` · `/raise/capital/pipeline` · `/raise/capital-match` · `/grow/capital-match` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
 | Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
@@ -96,7 +96,7 @@ it, where in their nav, and how do they get there.*
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Revenue | `/spinout-lab/revenue` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Round Manager | `/raise/capital/pipeline` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Round Manager | `/raise/capital-relationships/pipeline?moved=pipeline` | Headerless | Full page | Sidebar → Headerless → Raise | RETIRED | High |
 | Scoring Engine | `/spinout-lab/scoring` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 | Spin-Out Lab · Intro | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |

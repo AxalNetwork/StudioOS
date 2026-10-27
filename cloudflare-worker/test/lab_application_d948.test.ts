@@ -27,6 +27,7 @@ function fixture({ plans = true, settings = true, lifecycle = true } = {}) {
   if (lifecycle) {
     db.exec(readFileSync('cloudflare-worker/sql/migrations/315_spinout_application_lifecycle.sql', 'utf8'));
     db.exec(readFileSync('cloudflare-worker/sql/migrations/316_spinout_application_interviews.sql', 'utf8'));
+    db.exec(readFileSync('cloudflare-worker/sql/migrations/602_lab_interview_outcome_and_reached_weeks.sql', 'utf8'));
   }
   if (plans) db.exec(readFileSync('cloudflare-worker/sql/migrations/396_spinout_week1_plans.sql', 'utf8'));
   db.exec(`INSERT INTO cohort_cycles (id,year,month,start_at,end_at,status,app_status,applications_close_at,force_proceed) VALUES

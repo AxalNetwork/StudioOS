@@ -8,6 +8,9 @@
  *   RPT7b  Reminder settings       PUT  /api/reporting/reminders
  *   RPT5d  Send                    POST /api/reporting/reports/:uid/send
  *   RPT6   Correct this report     POST /api/reporting/reports/:uid/correct
+ *
+ * D1062 (#2932): at phone width Send's dialog is a bottom sheet (RPT20c), and
+ * every dialog's two buttons share the row, each at least 44px tall.
  */
 import React, { useRef, useState } from 'react';
 import { reportingApi } from '../../../lib/api/reporting.js';
@@ -21,10 +24,12 @@ import { correctionError, sendLines, sendRefusal, sendTitle } from './builderMod
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const SUB = 'm-0 text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+// D1062: below 640px the footer's buttons are 44px targets sharing the row.
+const TAP = ' max-sm:min-h-11 max-sm:flex-1';
 const INFO = 'm-0 rounded-lg border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-200';
 
 /** The shell every dialog here shares: one press at a time, the refusal said in the dialog. */
-export function Dialog({ title, testId, children, button, busyWord = 'Saving…', ready, run, onClose, onDone, refusalOf = (e) => e?.message || 'That did not work. Nothing changed. Try again.' }) {
+export function Dialog({ title, testId, children, button, busyWord = 'Saving…', ready, run, onClose, onDone, refusalOf = (e) => e?.message || 'That did not work. Nothing changed. Try again.', phone }) {
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
   const lock = useRef(false);
@@ -38,13 +43,13 @@ export function Dialog({ title, testId, children, button, busyWord = 'Saving…'
     } finally { lock.current = false; setBusy(false); }
   };
   return (
-    <Lightbox label={title} title={title} onClose={close} width={560} testId={testId}
+    <Lightbox label={title} title={title} onClose={close} width={560} testId={testId} phone={phone}
       footer={(
         <div className="flex flex-col gap-2">
           {refusal && <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" role="alert" data-testid={`${testId}-refused`}>{refusal}</p>}
           <div className="flex justify-end gap-2">
-            <button type="button" className={actionGhost} onClick={close} disabled={busy}>Back</button>
-            <button type="button" className={actionPrimary} onClick={go} disabled={!ready || busy} data-testid={`${testId}-go`}>{busy ? busyWord : button}</button>
+            <button type="button" className={actionGhost + TAP} onClick={close} disabled={busy}>Back</button>
+            <button type="button" className={actionPrimary + TAP} onClick={go} disabled={!ready || busy} data-testid={`${testId}-go`}>{busy ? busyWord : button}</button>
           </div>
         </div>
       )}>
@@ -86,7 +91,7 @@ export function ReminderDialog({ desk, onClose, onDone }) {
   const flip = (set, setter, v) => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); setter(n); };
   const ready = offsets.size > 0 && offsets.size <= 6 && channels.size > 0 && people.size > 0;
   const box = (checked, onChange, label, testId) => (
-    <label className="flex items-center gap-2" key={testId}>
+    <label className="flex min-h-11 items-center gap-2 sm:min-h-0" key={testId}>
       <input type="checkbox" checked={checked} onChange={onChange} data-testid={testId} />
       <span>{label}</span>
     </label>
@@ -122,7 +127,7 @@ export function SendDialog({ report, preview, recipients, onClose, onDone }) {
   return (
     <Dialog title={sendTitle(report, recipients)} testId="reporting-send" button="Send" busyWord="Sending…"
       ready={!!preview?.figures_sha256 && !preview?.stale}
-      run={() => reportingApi.sendReport(report.uid, preview.figures_sha256)} refusalOf={sendRefusal}
+      run={() => reportingApi.sendReport(report.uid, preview.figures_sha256)} refusalOf={sendRefusal} phone="sheet"
       onClose={onClose} onDone={onDone}>
       <ul className="m-0 flex list-disc flex-col gap-2 pl-5" data-testid="reporting-send-lines">
         {lines.map((l) => <li key={l}>{l}</li>)}
