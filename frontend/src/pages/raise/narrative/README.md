@@ -15,6 +15,8 @@ The founder's Investor narrative tool at `/raise/investor-narrative` (D906,
 | `storyModel.js` | Pure: Story's derivations (sections, bound figures against the registry, typed numbers as claims, the dots, the order, the save plan and its dialog). |
 | `PositioningTab.jsx` | D911: the Positioning tab. NAR4's core positioning and "This version", NAR5's proposal lightbox (Accept or Discard, one at a time), and NAR18's moved notice. |
 | `ObjectionsPanel.jsx` | D913 (#2697): NAR10's Objections panel beside Story's writing surface, read on its own from `GET /narrative/objections`, whose "Answer it" asks Eadwyn to draft the open section (`draft:narrative-objection`, writes nothing); and `ObjectionsCard`, Home's "Objections heard" from `parts.narrative.objections`. |
+| `ClaimsTab.jsx` | D912 (#2696): the Claims tab (NAR6), the claim lightbox (NAR7, NAR7b; a sheet on a phone, NAR19c), and the Check tab's body (NAR8) with Phrase the fix (NAR9), on `GET /narrative/:version/claims` and `POST /narrative/:version/check`. |
+| `claimsModel.js` | D912: pure. The claim rows needs-you first, the State, Source and Section filters, the bar by best source, the check's line and the lightbox's content. |
 | `PitchPositioningRedirect.jsx` | D911: `/raise/pitch/positioning`, now a redirect to the tab that keeps the query and hash and adds `?moved=positioning`. |
 
 D909 (#2693) adds `NarrativeHome` to `NarrativeTool.jsx`: Home's tiles, Needs
@@ -50,7 +52,8 @@ added, so every cycle-route rule (`cyclePaths.js`, `cycle_spacing_d694`) holds.
 - **A tile with no store is a dash with its reason, never 0** (D909). Claims
   backed waits for #2430. Objections answered counts the objections heard
   (D913), but which section answers each waits on the owner's call on #2697.
-- **A board waits for its store.** Claims' states (#2430) and the deck side of the check (#2434)
+- **Claims and the check read D1264's store** (D912): a claim's state is the claim check's, never the page's.
+- **A board waits for its store.** Claims' states (#2430, now D912) and the deck side of the check (#2434)
   need stores the Worker does not have; objections are read since D913. Each is a slot task
   on #2454 (D906 §6). Build a board in the PR that builds its
   read, add its derivation to `narrativeModel.js`, and test it in

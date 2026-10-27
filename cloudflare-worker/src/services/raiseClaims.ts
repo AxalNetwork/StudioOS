@@ -229,9 +229,12 @@ async function surface(name: ClaimSurface, run: () => Promise<{ version: string 
   catch { return { surface: name, version: null, state: 'unreadable', claims: [] }; }
 }
 
-/** The newest narrative version's figures, one claim per field and figure. */
-const narrative = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<string, string>) => surface('narrative', async () => {
-  const latest = await env.DB.prepare('SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0')
+/**
+ * A narrative version's figures, one claim per field and figure: the newest
+ * version, or (D912, #2696) the one the founder checks from its Check tab.
+ */
+const narrative = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<string, string>, at?: number) => surface('narrative', async () => {
+  const latest = at != null ? { v: at } : await env.DB.prepare('SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0')
     .bind(projectId).first<{ v: number | null }>();
   if (latest?.v == null) return { version: null, claims: [] };
   const version = `v${latest.v}`;
@@ -240,6 +243,11 @@ const narrative = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<
   const meta = await env.DB.prepare('SELECT why_now FROM narrative_version_meta WHERE project_id = ? AND version = ?').bind(projectId, latest.v).first<{ why_now: string | null }>();
   const claims = (words.results || []).flatMap((w) => statedClaims('narrative', version, w.field_key, w.value, items, kinds));
   if (meta?.why_now) claims.push(...statedClaims('narrative', version, 'why_now', meta.why_now, items, kinds));
+  // D912 (#2696): Solution, Business model and Team keep their words in `narrative_sections`; a figure there is a claim too.
+  const sections = await env.DB.prepare(
+    "SELECT section, body FROM narrative_sections WHERE project_id = ? AND version = ? AND body IS NOT NULL AND body <> '' ORDER BY section",
+  ).bind(projectId, latest.v).all<{ section: string; body: string }>();
+  for (const sec of sections.results || []) claims.push(...statedClaims('narrative', version, `section:${sec.section}`, sec.body, items, kinds));
   return { version, claims };
 });
 
@@ -390,7 +398,18 @@ export async function checkDeckVersion(env: Env, projectId: number, row: DeckRow
   return writeSurfaces(env, projectId, [await deck(env, projectId, items, kinds, row)], now);
 }
 
-/** Writes what changed for the surfaces given; the one writer both checks share. */
+/**
+ * D912 (#2696): one narrative version, checked and written from its Check tab
+ * ("Run the check"), as D900 checks one deck version. Other surfaces and
+ * other versions are untouched.
+ */
+export async function checkNarrativeVersion(env: Env, projectId: number, version: number, now = new Date().toISOString()): Promise<ClaimCheck> {
+  const items = await pinnedItems(env, projectId);
+  const kinds = await signalKinds(env, projectId, items);
+  return writeSurfaces(env, projectId, [await narrative(env, projectId, items, kinds, version)], now);
+}
+
+/** Writes what changed for the surfaces given; the one writer every check shares. */
 export async function writeSurfaces(env: Env, projectId: number, surfaces: Surface[], now = new Date().toISOString()): Promise<ClaimCheck> {
   const read = surfaces.filter((s) => s.state === 'recorded');
   const computed = read.flatMap((s) => s.claims).slice(0, MAX_WRITES);

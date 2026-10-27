@@ -123,6 +123,8 @@
  * else's module read has no `parts.mercury`, and the routes answer 403.
  */
 import { ClaimNoteError, noteText, setClaimNote } from '../services/raiseClaimNotes';
+import { narrativeClaims } from '../services/narrativeClaims';
+import { checkNarrativeVersion } from '../services/raiseClaims';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
@@ -885,6 +887,44 @@ cycleRaise.get('/narrative/:version', async (c) => {
   try {
     return c.json(await readNarrative(c.env, s.projectId, raw));
   } catch (e) { return unreadable(c, e); }
+});
+
+// D912 (#2696): one version's claims (NAR6, NAR7) and its check (NAR8). The
+// narrative's own gate first (an Admin gives a reason and only reads), then
+// the Evidence gate: claims are evidence, so only the founder reads a record's
+// figure and runs the check; an Admin reads states. A support session reads
+// no claims at all, as it reads no Evidence.
+const narrativeVersionNumber = async (c: any, projectId: number): Promise<number | Response> => {
+  const raw = c.req.param('version');
+  if (!/^[1-9][0-9]{0,8}$/.test(raw)) return c.json({ detail: 'Version not found' }, 404);
+  try { return await readableVersion(c.env, projectId, raw); } catch (e) { return writeFailed(c, e); }
+};
+
+cycleRaise.get('/narrative/:version/claims', async (c) => {
+  const s = await narrativeScope(c, 'read');
+  if (s instanceof Response) return s;
+  try {
+    const ctx = await evidenceScope(c, false);
+    if (ctx instanceof Response) return ctx;
+    const version = await narrativeVersionNumber(c, s.projectId);
+    if (version instanceof Response) return version;
+    return c.json(await narrativeClaims(c.env, s.projectId, version, ctx.founder));
+  } catch (error) { return evidenceFailure(c, error); }
+});
+
+cycleRaise.post('/narrative/:version/check', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  try {
+    const ctx = await evidenceScope(c, true);
+    if (ctx instanceof Response) return ctx;
+    const version = await narrativeVersionNumber(c, s.projectId);
+    if (version instanceof Response) return version;
+    const check = await checkNarrativeVersion(c.env, s.projectId, version);
+    if (check.outcome === 'unreadable') return c.json({ code: 'unreadable', detail: 'This version could not be read, so nothing was checked. Try again.' }, 503);
+    await logCycleWrite(c.env, { projectId: s.projectId, userId: Number(s.user.id), cycle: 'raise', module: 'investor-narrative', entityId: null, action: 'narrative_checked', summary: `Version ${version} checked against the records` });
+    return c.json(await narrativeClaims(c.env, s.projectId, version, true));
+  } catch (error) { return evidenceFailure(c, error); }
 });
 
 cycleRaise.put('/narrative/:version/sections/:section', async (c) => {

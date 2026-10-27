@@ -36,7 +36,7 @@ import { Hono } from 'hono';
 import { logAdminAction } from '../services/adminAudit';
 import researchCollections from './research_collections';
 import { CALL_REMINDER_INSTRUCTION, callReminderMaterial } from '../services/fundLpComms';
-import { NARRATIVE_FIX_INSTRUCTION, finishNarrativeFix, narrativeFixMaterial, narrativeMismatch } from '../services/narrativeFix';
+import { NARRATIVE_FIX_INSTRUCTION, claimMismatch, finishNarrativeFix, fixScope, narrativeFixMaterial, narrativeMismatch } from '../services/narrativeFix';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
@@ -3519,16 +3519,19 @@ const DRAFT_SURFACES: Record<string, {
   // `accept` hook: accepting keeps the wording and changes neither record.
   'raise/narrative-fix': {
     instruction: NARRATIVE_FIX_INSTRUCTION,
-    gather: async (c, userId, scope) => {
+    // D912 (#2696): the Check tab sends `<project>|<claim>`, the mismatch the founder clicked.
+    gather: async (c, userId, key) => {
+      const { project: scope, claim } = fixScope(key);
       const pid = await founderProject(c, userId, scope);
       if (pid == null) return [];
-      const m = await narrativeMismatch(c.env, pid);
+      const m = claim ? await claimMismatch(c.env, pid, claim) : await narrativeMismatch(c.env, pid);
       return m ? narrativeFixMaterial(m) : [];
     },
-    finish: async (c, userId, scope, text) => {
+    finish: async (c, userId, key, text) => {
+      const { project: scope, claim } = fixScope(key);
       const pid = await founderProject(c, userId, scope);
       if (pid == null) return null;
-      const m = await narrativeMismatch(c.env, pid);
+      const m = claim ? await claimMismatch(c.env, pid, claim) : await narrativeMismatch(c.env, pid);
       return m ? finishNarrativeFix(text, m) : null;
     },
   },

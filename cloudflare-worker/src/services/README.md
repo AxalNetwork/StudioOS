@@ -235,6 +235,7 @@ no new schema, runtime or billing path is introduced.
 | `eadwynTools.ts` | D854: Eadwyn uses the MCP registry's tools inside the member's own access. `eadwynToolInfo` lists them (scope and the page's company; D846's filter replaces `eadwynToolAvailable`), `runEadwynToolCalls` re-checks each call the model proposed, runs a read through `callTool` (metered by D844) and turns a write into an `ai_rail_proposals` row, and `toolResultsForModel` hands results back as escaped data. |
 | `deckCheck.ts` | D900 (#2679): the deck's check on top of D1264's: Stale from a version's stale bindings (display only), PD13's view (both figures and sources for the founder, states for anyone else), the per-version summaries, and `swapFigure`, which moves only the number the check's patterns read. |
 | `raiseClaimNotes.ts` | D900 (#2679): "Keep mine, with a note" on a Mismatch (migration 645). The state stays Mismatch; the note applies only to the figure it was written against. One cycle row under the claim's module, never the note or a figure. |
+| `narrativeClaims.ts` | D912 (#2696): one narrative version's claims as the Claims tab and the Check draw them, from `raise_claims`; a record's figure and a Not-backed claim's candidate records for the founder only. |
 | `raiseClaims.ts` | D1264 (#3287): the claim check. Every Raise claim (narrative and deck figures, Traction proof, Team and Product-market fit, use-of-funds sections, founder holdings, capital-model assumptions) gets Backed, Founder's figure, Mismatch or Not backed from the pinned evidence, best source first; it writes `raise_claims` and their `computed` links, never a person's link. |
 | `raiseEvidenceSources.ts` | D1263: local Raise evidence source registry, safe projections, source dates and snapshot hashes; founder decisions remain in raiseEvidence.ts. |
 | `capRelAccess.ts` | D1191 (#3125): capital editor access, local staff counts and mandatory founder-visible support audits; contract in the decision file. |
@@ -387,7 +388,9 @@ cohort route also uses). Only the group's size and percentiles leave it.
 `narrativeFix.ts` (#1524) hands one stored mismatch to the
 `raise/narrative-fix` draft band and holds the wording to it: a draft quoting a
 figure the check did not find is refused, and every kept one ends with the
-check's own sentence.
+check's own sentence. D912 (#2696): the wording carries no number at all, and
+the Check tab's scope key `<project>|<claim>` names the claim clicked
+(`claimMismatch`, from D1264's store).
 
 D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 - `interviewSessions.ts` holds the rules:

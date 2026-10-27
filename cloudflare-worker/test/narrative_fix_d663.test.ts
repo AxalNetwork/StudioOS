@@ -197,5 +197,9 @@ test('finishNarrativeFix appends the check\'s sentence, or refuses', () => {
   const kept = finishNarrativeFix('  Use one of the two.  ', ROW);
   assert.equal(kept, `Use one of the two.\n\nAs the check found them: MRR: $12,000 in ${STATED}, $9,500 in ${STORED}.`);
   assert.equal(finishNarrativeFix('Say $11,000.', ROW), null);
-  assert.match(NARRATIVE_FIX_INSTRUCTION, /Quote no other figure, date or number/);
+  // D912 (#2696, NAR9): the wording carries no number at all, even one that agrees with a figure.
+  // Mutation checked: refuse only unfound figures again → this draft is kept.
+  assert.equal(finishNarrativeFix('Either $12,000 or $9,500 is current.', ROW), null);
+  assert.match(NARRATIVE_FIX_INSTRUCTION, /Write no figure, date or number at all/);
+  assert.doesNotMatch(NARRATIVE_FIX_INSTRUCTION, /Name both figures/, 'the instruction never asks for a figure');
 });

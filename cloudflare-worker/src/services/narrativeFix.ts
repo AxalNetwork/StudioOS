@@ -17,18 +17,62 @@
  * - `finishNarrativeFix` ends every kept draft with the check's own sentence,
  *   so both figures and both sources are cited whatever the model wrote.
  *
+ * D912 (#2696, NAR9): THE WORDING CARRIES NO NUMBER. Eadwyn phrases; the
+ * figures under the wording come from the check alone (`finishNarrativeFix`
+ * appends them). A draft holding any number, even one that agrees with a
+ * figure, is no draft (map E5: `unfoundFigures` let agreeing numbers through).
+ * And it phrases the mismatch the founder clicked on the Check tab: the band's
+ * scope key carries that claim (`<project>|<claim uid>`, `claimMismatch`),
+ * read from D1264's store; with no claim, the newest version's first
+ * mismatch, as before.
+ *
  * NEITHER SIDE IS PICKED. The stored metric is not presumed right: a narrative
  * written last week can be newer than a snapshot from last quarter. The
  * instruction offers both corrections and says which record each one changes.
  */
 import type { Env } from '../types';
 import { agrees, FIGURE_LABEL, fmtFigure, mismatchSentence, type FigureKey, type Mismatch } from './raiseCycle';
+import { figureClaim, pinnedItems, signalKinds } from './raiseClaims';
+import { sectionOf } from './narrativeClaims';
+
+const SOURCE_WORD: Record<string, string> = { connector: 'Connector', signed: 'Signed', document: 'Document', recorded: 'Recorded', typed: 'Typed' };
+
+/** The band's scope key, split: the project's key and, when the Check tab sent one, the claim clicked. */
+export function fixScope(scope: string): { project: string; claim: string | null } {
+  const [project, claim] = String(scope ?? '').split('|');
+  return { project, claim: claim && /^[A-Za-z0-9_-]{1,64}$/.test(claim) ? claim : null };
+}
+
+/**
+ * D912: the narrative claim the founder clicked, as a mismatch the fix can
+ * phrase, or null when it is not one of this venture's narrative mismatches.
+ * The record's figure is recomputed by the claim check's own rule
+ * (`figureClaim`), in the figure's unit, from the founder's pinned evidence.
+ */
+export async function claimMismatch(env: Env, projectId: number, claimUid: string): Promise<Mismatch | null> {
+  const c = await env.DB.prepare(
+    `SELECT field_key, claim_kind, stated_value, surface_version FROM raise_claims
+      WHERE uid = ? AND project_id = ? AND surface = 'narrative' AND state = 'mismatch'`,
+  ).bind(claimUid, projectId).first<{ field_key: string; claim_kind: string; stated_value: string | null; surface_version: string }>();
+  if (!c || !Object.hasOwn(FIGURE_LABEL, c.claim_kind) || c.stated_value == null) return null;
+  const stated = Number(c.stated_value);
+  const items = await pinnedItems(env, projectId);
+  const { state, record } = figureClaim(c.claim_kind as FigureKey, stated, items, await signalKinds(env, projectId, items));
+  if (state !== 'mismatch' || !record || record.value == null) return null;
+  const section = sectionOf(c.field_key)?.label;
+  const source = [SOURCE_WORD[record.label] ?? record.label, record.provider, record.observed_on].filter(Boolean).join(' · ');
+  return {
+    figure: c.claim_kind as FigureKey,
+    stated_value: stated, stated_source: `the narrative, ${c.surface_version}${section ? `, ${section}` : ''}`,
+    metric_value: Number(record.value), metric_source: source,
+  };
+}
 
 export const NARRATIVE_FIX_INSTRUCTION = [
   'Phrase the fix for the one mismatch below, between what the founder\'s narrative states and what the stored metrics hold.',
-  'Name both figures and both sources exactly as given.',
+  'Name both sources as given, and the figure by its name only.',
   'Do not say or imply which figure is right: give one wording that brings the narrative to the stored figure, and say that if the narrative\'s figure is the current one, the stored metric is the record to correct instead.',
-  'Quote no other figure, date or number. Nothing else was checked.',
+  'Write no figure, date or number at all: the two figures are printed under your wording from the check. Nothing else was checked.',
 ].join(' ');
 
 /**
@@ -84,12 +128,17 @@ export function unfoundFigures(text: string, m: Mismatch): string[] {
   return out;
 }
 
+/** Every number the drafted wording states. D912: the wording carries none; the figures come from the check. */
+export function statedNumbers(text: string): string[] {
+  return [...String(text ?? '').matchAll(NUMBER)].map(([whole]) => whole.trim());
+}
+
 /**
  * What is stored for a drafted fix: the model's wording followed by the
- * check's own sentence, or null — no draft — when the wording quotes a figure
- * the check did not find.
+ * check's own sentence, or null — no draft — when the wording states any
+ * number (D912), whether or not it agrees with a figure the check found.
  */
 export function finishNarrativeFix(text: string, m: Mismatch): string | null {
-  if (unfoundFigures(text, m).length) return null;
+  if (statedNumbers(text).length) return null;
   return `${text.trim()}\n\nAs the check found them: ${mismatchSentence(m)}.`;
 }

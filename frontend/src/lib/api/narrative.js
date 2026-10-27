@@ -4,6 +4,9 @@ import { request } from '../api.js';
 // Every call names the venture (`?project=`); the venture's founder or an admin.
 //   read               GET  /cycles/raise/narrative/:version → sections and bindings
 //   saveSection        PUT  /cycles/raise/narrative/:version/sections/:section → changed fields
+// D912 (#2696) — one version's claims (NAR6, NAR7) and its check (NAR8), from D1264's store:
+//   claims             GET  /cycles/raise/narrative/:version/claims → { version, founder, checked_at, claims }
+//   runCheck           POST /cycles/raise/narrative/:version/check  → the same, after the check (the founder only)
 // D914 (#2698) — the Investor narrative's admin read: the reasons an admin
 // gives for opening a venture's narrative, and its notes thread. Worker:
 // routes/cycle_raise.ts (`services/narrative/adminRead.ts`).
@@ -35,6 +38,8 @@ const enc = encodeURIComponent;
 
 export const narrativeApi = {
   read: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}?project=${enc(projectId)}`),
+  claims: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}/claims?project=${enc(projectId)}`),
+  runCheck: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}/check?project=${enc(projectId)}`, { method: 'POST', body: '{}' }),
   saveSection: (projectId, version, section, body) => request(`/cycles/raise/narrative/${enc(version)}/sections/${enc(section)}?project=${enc(projectId)}`, {
     method: 'PUT', body: JSON.stringify(body),
   }),
