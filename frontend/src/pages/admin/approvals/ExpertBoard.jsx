@@ -3,13 +3,14 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { safeExternalUrl } from '../../../lib/url';
-import { AdminPageHeader, HeaderTab, Lightbox, Skeleton } from '../../../ui';
+import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
 import { BandPill } from './AdminApprovals';
 import { BOARDS, EXPERT_TABS, dayText, decisionCopy, doneLine, expertBoard, expertState, reasonReady, tabPath } from './approvalsModel';
 import {
   BTN, BTN_PRIMARY, CARD, DecisionDialog, FOOT, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
   TD, TH, Tile, WARN_PILL, nf, useLoad,
 } from './boardParts';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1046 (#2894) — Wellbeing experts (APR8), on part 5's review read (D1043):
@@ -97,7 +98,7 @@ function ExpertDrawer({ uid, onClose, onDecided }) {
     : null;
   return (
     <>
-      <Lightbox label={ready ? `${e.name}, wellbeing expert` : 'Wellbeing expert'} eyebrow={ready ? `Wellbeing expert · ${STATE_EYEBROW[state] || 'Expert'}` : 'Wellbeing expert'}
+      <Sheet label={ready ? `${e.name}, wellbeing expert` : 'Wellbeing expert'} eyebrow={ready ? `Wellbeing expert · ${STATE_EYEBROW[state] || 'Expert'}` : 'Wellbeing expert'}
         title={ready ? (e.name || 'Name not recorded') : 'Wellbeing expert'} sub={ready ? (e.headline || 'Esc to close') : null} onClose={onClose} testId="expert-drawer" width={600}
         footer={ready && ACTIONS[state] ? (
           <div className={`${FOOT} flex-wrap items-center`}>
@@ -156,7 +157,7 @@ function ExpertDrawer({ uid, onClose, onDecided }) {
             </>
           ) : null}
         </div>
-      </Lightbox>
+      </Sheet>
       {dialog && ready ? <ExpertDialog kind={dialog} expert={e} onClose={() => setDialog(null)} onDone={done} /> : null}
     </>
   );

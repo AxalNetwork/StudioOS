@@ -17,13 +17,14 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox, Unreadable } from '../../../ui';
+import { Unreadable } from '../../../ui';
 import { ventureScoresApi } from '../../../lib/api/ventureScores';
 import { reportError } from '../../../lib/log';
 import {
   COUNTED, FOUNDER_PAGE, GRADES, METHOD, MIX, NOT_ENOUGH, NOT_EXPECTED, NOT_SCORED, NOT_YET, PMF_GROUPS, SCOPES, STATE_WORDS, UNREADABLE, WAITS,
   barText, bandWord, batches, coverageText, gradeMix, panelOf, reviewText, stampText, stripBar, stripOf, unreadScopes,
 } from './scorecardModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 const CARD = 'flex min-w-0 flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const SUB = 'text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -344,7 +345,7 @@ export function ScopeDrawer({ s, model, computedAt, onClose }) {
     </div>
   );
   return (
-    <Lightbox label={`${s.label} scope`} eyebrow="Scorecard · scope" title={s.label} onClose={onClose} width={560} phone="sheet" footer={footer} testId={`scorecard-drawer-${s.key}`}>
+    <Sheet label={`${s.label} scope`} eyebrow="Scorecard · scope" title={s.label} onClose={onClose} width={560} phone="sheet" footer={footer} testId={`scorecard-drawer-${s.key}`}>
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">
           {word ? <span className="rounded-full border border-dashed border-gray-400 px-2 py-0.5 text-[11.5px] font-bold text-axal-muted dark:border-gray-500 dark:text-gray-400">{word}</span>
@@ -365,7 +366,7 @@ export function ScopeDrawer({ s, model, computedAt, onClose }) {
           <p className="m-0 mt-3 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-600 dark:text-gray-300">Individual skills and values are never shown. {COUNTED}.</p>
         )}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

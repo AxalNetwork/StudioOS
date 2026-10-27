@@ -42,6 +42,7 @@ test('the frame: a named modal dialog, its own width capped at 100vw − 108px, 
   assert.match(out, /Accounts › All accounts/);
   const unnamed = renderToStaticMarkup(h(Sheet, { label: 'Filters', onClose() {} }));
   assert.match(unnamed, /role="dialog" aria-modal="true" aria-label="Filters"/, 'no title: named by `label`');
+  assert.doesNotMatch(unnamed, /sheet-header|aria-label="Close"/, 'no title or eyebrow: the panel draws its own head, as with Lightbox');
   assert.deepEqual([...SHEET_WIDTHS], [480, 520, 560, 640, 720, 760]);
   // A width off the list takes the nearest on it, a tie going wider.
   assert.deepEqual([480, 600, 620, 680, 860, 940, 960, 400, undefined].map(sheetWidth), [480, 640, 640, 720, 760, 760, 760, 480, 560]);

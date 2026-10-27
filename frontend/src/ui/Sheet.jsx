@@ -162,6 +162,8 @@ function SheetFrame({
         style={{ width, maxWidth: 'calc(100vw - 108px)' }}
         className="axs-sheet absolute inset-y-0 right-0 flex flex-col overflow-hidden rounded-l-2xl border-l border-[#ececf1] bg-white text-axal-ink shadow-[-24px_0_56px_rgba(9,9,11,.2)] outline-none dark:border-[#374151] dark:bg-gray-950 dark:text-gray-100"
       >
+        {/* As in Lightbox: a panel with neither title nor eyebrow draws its own head (a phone's "‹ Back" bar). */}
+        {(title || eyebrow) && (
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-axal-hairline px-5 py-[18px] dark:border-gray-800" data-testid={`${testId}-header`}>
           <div className="min-w-0">
             {eyebrow && <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-violet dark:text-violet-300">{eyebrow}</div>}
@@ -174,6 +176,7 @@ function SheetFrame({
               className="-mr-1 inline-flex h-9 w-9 items-center justify-center rounded-lg text-[20px] leading-none text-axal-muted hover:bg-gray-100 hover:text-axal-ink dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100">×</button>
           </div>
         </header>
+        )}
         <div className={tall ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto overscroll-contain'} data-testid={`${testId}-body`}>{children}</div>
         {footer && <footer className="shrink-0 border-t border-axal-hairline px-5 py-3.5 dark:border-gray-800" data-testid={`${testId}-footer`}>{footer}</footer>}
       </div>
