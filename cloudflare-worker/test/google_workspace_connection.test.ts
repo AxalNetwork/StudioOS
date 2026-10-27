@@ -190,11 +190,15 @@ test('all file-operation replies exclude server tokens; unsupported mapping and 
  const scan=async(res:Response)=>{const raw=await res.text();assert.doesNotMatch(raw,/server-refresh-only|browser-must-never-see-server-access|access_token|refresh_token/);return JSON.parse(raw);};
  try{
   await scan(await call(env,base+'/picker-config?project=1'));
+  // D1092: a Customer research Doc maps to its interview; a Doc in any other module still takes no mapping.
+  await scan(await call(env,base+'/files','POST',{project:1,module:'solution_design',ids:['doc']}));
   await scan(await call(env,base+'/files','POST',{project:1,module:'customer_research',ids:['doc']}));
   await scan(await call(env,base+'/files','POST',{project:1,module:'demand_signals',ids:['form']}));
   const list=await scan(await call(env,base+'/files?project=1'));
-  const doc=list.items.find((r:any)=>r.kind==='doc'),form=list.items.find((r:any)=>r.kind==='form');
+  const doc=list.items.find((r:any)=>r.kind==='doc'&&r.module==='solution_design'),form=list.items.find((r:any)=>r.kind==='form');
   assert.equal((await scan(await call(env,base+`/files/${doc.uid}/mapping`,'PUT',{mapping:{}}))).error,'mapping_not_supported');
+  const notes=list.items.find((r:any)=>r.kind==='doc'&&r.module==='customer_research');
+  assert.equal((await scan(await call(env,base+`/files/${notes.uid}/mapping`,'PUT',{mapping:{interview_id:101}}))).saved,true);
   assert.equal((await scan(await call(env,base+`/files/${doc.uid}/preview`,'POST',{}))).error,'preview_not_supported');
   assert.equal((await scan(await call(env,base+`/files/${form.uid}/mapping`,'PUT',{mapping:[]}))).error,'invalid_mapping');
   assert.equal((await scan(await call(env,base+`/files/${form.uid}/mapping`,'PUT',{mapping:{question:'q1'}}))).saved,true);

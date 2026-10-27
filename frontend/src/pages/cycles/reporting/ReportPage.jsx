@@ -16,6 +16,11 @@
  *   Anyone else the Worker lets read a sent report (an admin, an advisor or a
  *   partner of the venture) reads it with "Read only" (RPT14, RPT15).
  *
+ * D1062 (#2932), at phone width (RPT20b): the builder is one step to the
+ * screen ("Step 2 of 4 · Narrative and documents", the step before one press
+ * back), with Save draft and Next pinned to the bottom; Send's dialog is a
+ * bottom sheet (RPT20c).
+ *
  * The page sends choices, never a figure's value: every value is the
  * Worker's, read from its store. The founders' typed figures are labelled
  * "Typed · entered by [company]".
@@ -27,7 +32,7 @@ import { shareUpdateApi } from '../../../lib/api/shareUpdate.js';
 import { reportError } from '../../../lib/log';
 import { Unreadable } from '../../../ui';
 import { CycleBar } from '../PhoneModulePage';
-import { CARD, H2, MUTED } from './DeskBlocks.jsx';
+import { BAR_GHOST, BAR_PRIMARY, CARD, H2, MUTED, PinnedBar } from './DeskBlocks.jsx';
 import {
   LINE_KINDS, NO_NETWORK, STEPS, acceptable, canInclude, choiceFor, documentError, draftNote, figureGroups, ownLine, proposals, readiness,
   readinessLine, reasonOf, recipientRows, recipientStatus, reportHref, revisionStrip, sentLine, sizeWords, sourceChip, sourceLine,
@@ -386,7 +391,7 @@ function FrozenBody({ report, reader }) {
 }
 
 /** The builder: four steps over a draft, saved on every choice. */
-function Builder({ initial, projectId, company, navigate, search }) {
+function Builder({ initial, projectId, company, navigate, search, phone = false }) {
   const [report, setReport] = useState(initial);
   const [unreadable, setUnreadable] = useState([]);
   const [step, setStep] = useState(0);
@@ -427,25 +432,42 @@ function Builder({ initial, projectId, company, navigate, search }) {
           </label>
         </section>
       )}
-      <ol className="m-0 flex list-none flex-wrap gap-1.5 p-0" aria-label="Steps" data-testid="reporting-steps">
-        {STEPS.map((st, i) => (
-          <li key={st.id}>
-            <button type="button" aria-current={i === step ? 'step' : undefined} onClick={() => setStep(i)}
-              className={`rounded-full border px-2.5 py-1 text-[12px] font-bold ${i === step ? LAV : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`}
-              data-testid={`reporting-step-${st.id}-tab`}>{i < step ? '✓ ' : ''}{i + 1} · {st.label}</button>
-          </li>
-        ))}
-        <li className={`${MUTED} self-center`} aria-live="polite" data-testid="reporting-saved">{busy ? 'Saving…' : savedAt ? `Draft saved ${savedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</li>
-      </ol>
+      {phone ? (
+        // RPT20b: one step to the screen, its place in the four said, and the step before one press away.
+        <div className="flex flex-col gap-0.5" data-testid="reporting-steps">
+          {step > 0 && <button type="button" className="inline-flex min-h-11 w-fit items-center bg-transparent p-0 text-[13px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200" onClick={() => setStep((n) => Math.max(0, n - 1))} data-testid="reporting-back">‹ {STEPS[step - 1].label}</button>}
+          <h2 className={H2} aria-live="polite" data-testid="reporting-step-count">Step {step + 1} of {STEPS.length} · {STEPS[step].label}</h2>
+          <p className={MUTED} aria-live="polite" data-testid="reporting-saved">{busy ? 'Saving…' : savedAt ? `Draft saved ${savedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</p>
+        </div>
+      ) : (
+        <ol className="m-0 flex list-none flex-wrap gap-1.5 p-0" aria-label="Steps" data-testid="reporting-steps">
+          {STEPS.map((st, i) => (
+            <li key={st.id}>
+              <button type="button" aria-current={i === step ? 'step' : undefined} onClick={() => setStep(i)}
+                className={`rounded-full border px-2.5 py-1 text-[12px] font-bold ${i === step ? LAV : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`}
+                data-testid={`reporting-step-${st.id}-tab`}>{i < step ? '✓ ' : ''}{i + 1} · {st.label}</button>
+            </li>
+          ))}
+          <li className={`${MUTED} self-center`} aria-live="polite" data-testid="reporting-saved">{busy ? 'Saving…' : savedAt ? `Draft saved ${savedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</li>
+        </ol>
+      )}
       {error && <p className={REFUSED} role="alert" data-testid="reporting-save-refused">{error}</p>}
       {step === 0 && <FiguresStep report={report} company={company} unreadable={unreadable} save={save} busy={busy} />}
       {step === 1 && <NarrativeStep report={report} projectId={projectId} save={save} busy={busy} />}
       {step === 2 && <RecipientsStep report={report} save={save} busy={busy} />}
       {step === 3 && <PreviewStep report={report} busy={busy} onRefresh={() => save({})} onSend={(p) => setSending(p)} />}
-      <div className="flex justify-between gap-2">
-        <button type="button" className={GHOST} disabled={step === 0} onClick={() => setStep((n) => Math.max(0, n - 1))} data-testid="reporting-back">Back</button>
-        {step < STEPS.length - 1 && <button type="button" className={BTN} onClick={() => setStep((n) => n + 1)} data-testid="reporting-next">Next</button>}
-      </div>
+      {phone ? (
+        // RPT20b: Save draft and Next pinned to the bottom. Preview's own Send is the last step's press.
+        <PinnedBar testId="reporting-builder-bar">
+          <button type="button" className={BAR_GHOST} onClick={() => save({})} disabled={busy} data-testid="reporting-save-draft">{busy ? 'Saving…' : 'Save draft'}</button>
+          {step < STEPS.length - 1 && <button type="button" className={BAR_PRIMARY} onClick={() => setStep((n) => n + 1)} data-testid="reporting-next">Next</button>}
+        </PinnedBar>
+      ) : (
+        <div className="flex justify-between gap-2">
+          <button type="button" className={GHOST} disabled={step === 0} onClick={() => setStep((n) => Math.max(0, n - 1))} data-testid="reporting-back">Back</button>
+          {step < STEPS.length - 1 && <button type="button" className={BTN} onClick={() => setStep((n) => n + 1)} data-testid="reporting-next">Next</button>}
+        </div>
+      )}
       {sending && (
         <SendDialog report={report} preview={sending} recipients={recipients} onClose={() => setSending(null)}
           onDone={() => { setSending(null); navigate(reportHref(report.uid, { search }), { replace: true, state: { sent: true } }); }} />
@@ -522,7 +544,7 @@ export default function ReportPage({ uid, edit = false, projectId, projectStatus
   else if (!uid || state.status === 'missing') body = <section className={CARD} data-testid="reporting-report-missing"><p className={MUTED}>No such report, or it is not shared with you. A draft is the founders’ own until it is sent.</p></section>;
   else if (state.status === 'loading') body = <section className={CARD} aria-busy="true" data-testid="reporting-report-loading"><p className={MUTED}>Reading…</p><div className="h-3 w-48 animate-pulse rounded bg-axal-ground dark:bg-gray-800" /></section>;
   else if (state.status === 'unreadable') body = <Unreadable what="The report" claim="This is not a claim that it was not sent." onRetry={() => setReload((n) => n + 1)} />;
-  else if (draft) body = <Builder key={r.uid} initial={r} projectId={projectId} company="your company" navigate={navigate} search={search} />;
+  else if (draft) body = <Builder key={r.uid} initial={r} projectId={projectId} company="your company" navigate={navigate} search={search} phone={phone} />;
   else body = <Sent report={r} navigate={navigate} search={search} justSent={justSent} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`reporting-${edit ? 'edit' : 'report'}-page`}>

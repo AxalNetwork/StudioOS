@@ -125,7 +125,9 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/products/:productId' },
   { path: '/market-intel' },
   { path: '/grow/updates' },
-  { path: '/grow/capital-match' },
+  { path: '/grow/capital-match' }, // D1194: → /raise/capital-relationships/match?moved=match
+  { path: '/raise/capital-match' }, // D1194: → /raise/capital-relationships/match?moved=match
+  { path: '/raise/capital/pipeline' }, // D1194: → /raise/capital-relationships/pipeline?moved=pipeline
   { path: '/grow/brand' }, // #2343: Grow's Brand page folded into /build/brand
   { path: '/build/discovery' }, // #2335: → Validate · Customer research
   { path: '/build/metrics' }, // #2336: → /build/kpi

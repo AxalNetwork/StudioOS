@@ -22,12 +22,14 @@ const html = (el) => renderToStaticMarkup(el);
 const channel = (key) => ({ channel: key === 'zoom' || key === 'google_meet' ? 'video' : 'text', submitted_via: key, submitted_via_name: CHANNEL_ORIGINS[key] });
 const ASSISTANT = { channel: 'text', submitted_via: 'client-abc123', submitted_via_name: 'Claude', submitted_via_host: 'claude.ai' };
 
-test('each of the four channels gets its own badge', () => {
-  assert.deepEqual(Object.keys(CHANNEL_ORIGINS), ['telegram', 'whatsapp', 'zoom', 'google_meet']);
+test('each channel, and a chosen Google Doc (D1092), gets its own badge', () => {
+  assert.deepEqual(Object.keys(CHANNEL_ORIGINS), ['telegram', 'whatsapp', 'zoom', 'google_meet', 'google_docs']);
   for (const [key, label] of Object.entries(CHANNEL_ORIGINS)) {
     assert.equal(channelOrigin(channel(key)), key);
     assert.equal(originBadge(channel(key)), `From ${label}`);
     const h = html(React.createElement(ChannelOriginBadge, { session: channel(key) }));
+    // D1092: a Doc's badge has no mark of its own (BrandIcon has none for it): its words only.
+    if (key === 'google_docs') { assert.match(h, /data-provider="google_docs"[^>]*>From Google Docs<\/span>$/); continue; }
     // D687: the channel's mark sits between the badge's opening tag and its words.
     assert.match(h, new RegExp(`data-testid="channel-origin-badge"[^>]*data-provider="${key}"[^>]*><svg[^>]*data-provider="${key}"[^>]*>.*?</svg>From ${label}<`));
   }

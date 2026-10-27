@@ -324,11 +324,15 @@ test('the Calendar read is one GET with fields limited to the day and attendees,
 });
 
 test('the feed registry names Raise’s three feeds, and the directory reads them', () => {
-  assert.deepEqual(GOOGLE_WORKSPACE_FEEDS.map((f) => [f.key, f.module, f.kind]), [
-    ['slides_deck_version', 'pitch_deck', 'proposal'], ['drive_data_room_copy', 'data_room', 'fact'], ['calendar_last_met', 'capital_relationships', 'proposal'],
+  // Parts 3 and 4 register theirs first; Raise's three follow, and the directory reads each of them.
+  const raise = GOOGLE_WORKSPACE_FEEDS.filter((f) => f.decision === 'D1094');
+  assert.deepEqual(raise.map((f) => [f.key, f.module, f.file_kind, f.lands]), [
+    ['slides_deck_version', 'pitch_deck', 'slides', 'proposal'], ['drive_data_room_copy', 'data_room', 'file', 'fact'], ['calendar_last_met', 'capital_relationships', 'calendar', 'proposal'],
   ]);
-  assert.deepEqual(CONNECTOR_METADATA.google_workspace.feeds, ['pitch_deck', 'data_room', 'capital_relationships']);
-  assert.deepEqual(CONNECTOR_METADATA.google_workspace.pulls.map((p: any) => p.module), ['pitch_deck', 'data_room', 'capital_relationships']);
+  for (const m of ['pitch_deck', 'data_room', 'capital_relationships']) {
+    assert.ok(CONNECTOR_METADATA.google_workspace.feeds.includes(m), m);
+    assert.ok(CONNECTOR_METADATA.google_workspace.pulls.some((p: any) => p.module === m), m);
+  }
   // The service calls no provider write: only the reader and the one GET Calendar read.
   const src = read('../src/services/google/raise.ts');
   assert.doesNotMatch(src, /method: '(POST|PUT|PATCH|DELETE)'/);
