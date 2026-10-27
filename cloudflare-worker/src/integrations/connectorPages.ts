@@ -532,6 +532,36 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app' },
     verified_on: null,
   },
+  // D1096 (#2961): each tool names its call site in `services/vercel/api.ts`; part 1's sync calls the installation, projects and domains reads.
+  vercel: {
+    tagline: 'Your Vercel projects, deployments and domains, for the venture you choose. Read-only.',
+    long_description: [
+      'Connect Vercel through its own install screen, pick a personal account or a team, and choose the projects that feed one venture. Read-only: Axal VC cannot deploy, cancel, roll back or change anything.',
+      'Each sync records the projects you chose: name, framework, Node version, production branch, linked repository, production domain, plan, and whether production is live, failing, building or not deployed. In Build › Operating systems, Vercel is listed in Tools with each sync.',
+      'Axal VC asks Vercel for Read on projects, deployments and domains, nothing else. If Vercel grants more, Axal VC uninstalls the integration and refuses the connection. Disconnecting uninstalls it on Vercel and deletes what Axal VC read.',
+    ],
+    tools: [
+      tool('read_installation', 'the installation', 'read', 'Reads which account and projects the installation covers, and the permissions it holds.', null,
+        ['`/v1/integrations/configuration/${key(auth.configuration_id)}`)']),
+      tool('read_projects', 'project names and settings', 'read', 'Lists the projects the installation reaches, so you can choose, and reads each chosen project.', 'operating_systems',
+        ["'/v10/projects'", '`/v9/projects/${key(id)}`)']),
+      tool('read_domains', 'domains', 'read', 'Reads each chosen project\'s domains, to record its production domain.', 'operating_systems',
+        ['`/v9/projects/${key(id)}/domains`']),
+      tool('read_deployments', 'deployments', 'read', 'Reads deployments, their state, promotions and rollbacks. Vercel parts 2 and 3 use it; part 1\'s sync does not.', null,
+        ["'/v7/deployments'", '`/v13/deployments/${key(id)}`']),
+      tool('uninstall', 'the installation', 'account', 'Uninstalls the integration on Vercel when you disconnect, and when Vercel grants more than read.', null,
+        ["`/v1/integrations/configuration/${key(auth.configuration_id)}`, {}, 'DELETE'", "method: 'GET' | 'DELETE' = 'GET'"]),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Vercel'),
+    made_by: AXAL,
+    service: { name: 'Vercel', href: 'https://vercel.com' },
+    sign_in: { kind: 'oauth', label: 'Install the Vercel integration and choose projects', key_help_href: null },
+    endpoints: { sign_in: null, api: 'https://api.vercel.com' },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://vercel.com/docs/integrations/create-integration/vercel-api-integrations' },
+    verified_on: null,
+  },
   zoom: {
     tagline: 'Interview calls on your own Zoom, and their cloud transcripts.',
     long_description: [
@@ -787,7 +817,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
 
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
-  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build',
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting',
 ] as const);
 
 /** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */
