@@ -283,6 +283,8 @@ const COMPOSED = new Map([
   // D1195 (#2382): Product testing's tabs draw the doors to one program (`/programs/:uid`).
   [CONSOLE_PAGES, [...ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f)), 'frontend/src/pages/admin/productTesting/ProductTestingTabs.jsx', 'frontend/src/pages/admin/kyc/KycTabs.jsx', 'frontend/src/pages/admin/kyc/KycBusinesses.jsx']],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
+  // D1295 (#3391): the Content queue draws Pipeline from contentQueue/, which holds the door to one article.
+  ['frontend/src/pages/admin/ArticlesQueuePage.jsx', ['frontend/src/pages/admin/contentQueue/Pipeline.jsx']],
   // D1213 (#2424): Contracts draws its desk from the file beside it, which holds the door to Closings.
   ['frontend/src/pages/hq/ContractsPage.jsx', ['frontend/src/pages/admin/contracts/ContractsDesk.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.

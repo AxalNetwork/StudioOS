@@ -469,6 +469,8 @@ const NewDeck = lazy(() => import('./pages/raise/pitch/NewDeck'));
 const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
 const FundAdminBoundary = lazy(() => import('./pages/admin/fundAdmin/Refusal'));
 const FUND_ADMIN_BOUNDARY_ROLES = new Set(['founder', 'partner', 'investor', 'advisor', 'exploring']);
+// D1295 (#3391, ART17b): a member who opens a Content queue address is told it is for studio admins, with the way to their own articles.
+const ContentQueueBoundary = lazy(() => import('./pages/admin/contentQueue/NoPermission'));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -1912,6 +1914,7 @@ const ROUTE_BOUNDARIES = [
   // D1160 (#3067, FND20b/c): Fund administration refuses a support session and every non-admin in its own words.
   // An admin previewing another role is sent home as before (`notPreview`).
   { under: /^\/admin\/fund-admin(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: FundAdminBoundary, notPreview: true },
+  { under: /^\/admin\/articles(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: ContentQueueBoundary, notPreview: true },
 ];
 
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
