@@ -134,10 +134,10 @@ export async function applyHealth(env: Env, ctx: { integrationId: number; projec
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).bind(ctx.integrationId, ctx.projectId, ctx.vercelProjectId ?? null, f.kind, f.subject, at, ctx.source));
     statements.push(env.DB.prepare(
-      `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
+      // The key carries this event's own opened_at, so it is always new.
+      `INSERT OR IGNORE INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
        SELECT ?, ?, 'operating_systems', 'health_event', ?, 'vercel_health_events', id FROM vercel_health_events
-        WHERE integration_id = ? AND project_id = ? AND kind = ? AND subject = ? AND opened_at = ?
-       ON CONFLICT (integration_id, external_id) DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP`,
+        WHERE integration_id = ? AND project_id = ? AND kind = ? AND subject = ? AND opened_at = ?`,
     ).bind(ctx.integrationId, ctx.projectId, fedKey(f.kind, f.subject, at), ctx.integrationId, ctx.projectId, f.kind, f.subject, at));
   }
   const checked = new Set(findings.checked);
