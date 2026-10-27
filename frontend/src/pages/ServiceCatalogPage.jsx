@@ -9,6 +9,7 @@ import {
   AlertCircle, X, Check, ExternalLink, Package,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import Sheet from '../ui/Sheet.jsx';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../workspaces/canvasKit';
@@ -184,9 +185,10 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
   }
 
   return (
-    <Modal title={offering.title} onClose={onClose} wide>
-      <div className="space-y-4 text-sm">
-        <div className="text-xs text-gray-500">{offering.partner_name} · {CAT_LABEL[offering.category] || offering.category}</div>
+    <Sheet label={offering.title || 'Offering'} title={offering.title}
+      sub={`${offering.partner_name} · ${CAT_LABEL[offering.category] || offering.category}`}
+      onClose={onClose} width={640} testId="service-offering-detail">
+      <div className="space-y-4 p-5 text-sm">
         <div className="flex items-center gap-3">
           <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">{priceLabel(offering)}</span>
         </div>
@@ -223,7 +225,7 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
           </div>
         )}
       </div>
-    </Modal>
+    </Sheet>
   );
 }
 
