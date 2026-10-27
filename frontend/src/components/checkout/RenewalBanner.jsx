@@ -49,7 +49,7 @@ export function renewalRefusal(err) {
   if (code === 'stripe_not_configured') return 'Payments aren’t set up here. You were not charged.';
   // requireFactor's 403: the session was not signed in with the authenticator app.
   if (code === 'factor_required' || /TOTP required/i.test(String(err?.message || ''))) return 'Sign in with your authenticator app to pay here. Nothing was charged.';
-  if (code === 'step_up_cancelled' || err?.message === 'step_up_cancelled') return 'Your authenticator code is needed first. Nothing was charged.';
+  if (code === 'step_up_required') return 'Your authenticator code is needed first. Nothing was charged.';
   return 'The payment couldn’t start just now. You were not charged. Try again in a moment.';
 }
 
@@ -102,7 +102,7 @@ function RenewalSheet({ view, action, onClose, onDone, bridge }) {
       <div role="dialog" aria-modal="true" aria-label={title} className="flex w-full max-w-[460px] flex-col gap-3 rounded-[16px] bg-white px-5 py-5 dark:bg-gray-900" data-testid={`renewal-sheet-${action}`}>
         <div className="flex items-center justify-between">
           <h2 className="m-0 text-[16px] font-extrabold text-axal-ink dark:text-gray-100">{title}</h2>
-          <button type="button" aria-label="Close" onClick={onClose} className="grid h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400"><X size={18} aria-hidden="true" /></button>
+          <button type="button" aria-label="Close" onClick={onClose} className="grid h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"><X size={18} aria-hidden="true" /></button>
         </div>
         <p className={`m-0 ${SUB}`}>{view.line}</p>
         {state.phase === 'preparing' && <p className={`m-0 ${SUB}`} data-testid="renewal-preparing">{action === 'confirm' ? 'Opening your bank’s check…' : 'Preparing the payment…'}</p>}
