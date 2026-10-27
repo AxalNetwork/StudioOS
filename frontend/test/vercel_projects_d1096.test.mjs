@@ -66,7 +66,8 @@ test('the model: what the read becomes, why a list is empty, what Save says, and
   for (const s of [emptyProjects('selected'), emptyProjects('all')]) assert.doesNotMatch(s, /\b0\b/, 'never a zero');
   assert.equal(saveSentence(1, 'Acme Health'), 'Axal VC will read 1 project for Acme Health and sync them now. Nothing changes on Vercel.');
   assert.equal(saveSentence(2, null), 'Axal VC will read 2 projects and sync them now. Nothing changes on Vercel.');
-  assert.match(vercelRefusal({ code: 'invalid_config', message: 'project_not_accessible' }), /no longer in the Vercel integration/);
+  assert.match(vercelRefusal({ code: 'invalid_config', message: 'project_not_accessible', data: { error: 'invalid_config', message: 'project_not_accessible' } }), /no longer in the Vercel integration/);
+  assert.match(vercelRefusal({ code: 'action_failed', message: 'That action did not complete.', data: { upstream: 'vercel_rate_limited' } }), /slow down/);
   assert.match(vercelRefusal({ code: 'company_not_enabled' }), /not enabled for your company/);
   assert.equal(vercelRefusal({ code: 'x', message: 'The Worker said this.' }), 'The Worker said this.');
   assert.equal(vercelRefusal(null), 'Vercel could not be read. Try again.');
@@ -102,7 +103,7 @@ test('Save opens a dialog that says what changes; confirming saves the venture a
 });
 
 test('a refused save keeps the dialog open with the reason; no venture or no pick cannot be saved', async () => {
-  const refuse = Object.assign(new Error('project_not_accessible'), { code: 'invalid_config' });
+  const refuse = Object.assign(new Error('project_not_accessible'), { code: 'invalid_config', data: { error: 'invalid_config', message: 'project_not_accessible' } });
   const v = await mounted({ api: fakeApi({ patch: async () => { throw refuse; } }) });
   try {
     await v.click('vercel-projects-save');
@@ -124,7 +125,7 @@ test('an empty list says why, a failed read says so with Try again, and no conne
     assert.match(empty.text(), /reaches no project/);
     assert.doesNotMatch(empty.text(), /\b0 projects?\b/);
   } finally { await empty.close(); }
-  const failed = await mounted({ api: fakeApi({ read: async () => { throw Object.assign(new Error('vercel_rate_limited'), { code: 'action_failed' }); } }) });
+  const failed = await mounted({ api: fakeApi({ read: async () => { throw Object.assign(new Error('That action did not complete on the connected account.'), { code: 'action_failed', data: { upstream: 'vercel_rate_limited' } }); } }) });
   try {
     assert.match(failed.text(), /Vercel asked Axal VC to slow down/);
     assert.ok(!failed.by('vercel-projects-list'));

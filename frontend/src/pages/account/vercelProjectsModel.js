@@ -19,11 +19,16 @@ const SENTENCES = {
   action_failed: 'Vercel could not be read. Try again.',
 };
 
-/** A refusal's sentence: the Worker's own words when it sent some, else ours for its code. */
+/**
+ * A refusal's sentence (D258: `request()` puts the code in `e.code`, the body in
+ * `e.data`). A config refusal's reason rides in its body's `message`
+ * (`invalid_config` + `project_not_accessible`), an action's in its `upstream` (the owner's clipped raw code).
+ */
 export function vercelRefusal(e) {
   const code = e?.code || '';
+  const detail = [e?.data?.message, e?.data?.upstream].find((d) => typeof d === 'string' && Object.hasOwn(SENTENCES, d));
+  if (detail) return SENTENCES[detail];
   const msg = typeof e?.message === 'string' ? e.message.trim() : '';
-  if (msg && Object.hasOwn(SENTENCES, msg)) return SENTENCES[msg];
   if (msg && msg !== code && !/^[a-z0-9_]+$/.test(msg)) return msg;
   if (code && Object.hasOwn(SENTENCES, code)) return SENTENCES[code];
   return 'Vercel could not be read. Try again.';
