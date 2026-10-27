@@ -28,7 +28,8 @@ addresses and the profile widgets are `accountsAddress.js`'s.
 change opens (D1306, #3403) — see its own README.
 `ArticlesQueuePage.jsx` is HQ › Content › Content queue (D1290, #2383): four
 tabs at their own addresses and one address per article, all named in
-`contentQueueModel.js`. Pipeline is the review queue. Calendar is built
+`contentQueueModel.js`. Pipeline is the review queue; an article's address opens
+its review as the shared Sheet over the full-width queue (D1317). Calendar is built
 (D1296, #3392) and Authors and Performance are D1297's, in `contentQueue/`
 — see its README.
 
