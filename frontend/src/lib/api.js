@@ -3670,6 +3670,9 @@ export const api = {
   // D209 — H14, the topology stated once. Super admin; a branch reads its own
   // half through branchDeployment() below.
   hqPlatformTopology: () => request('/admin/platform/topology'),
+  // D1170 — HQ › Platform › Storage: every member's stored bytes as totals by
+  // kind, plan and state; no name, email, id or file name. Super admin.
+  hqPlatformStorage: () => request('/admin/platform/storage'),
   hqSetPlatformSwitch: (key, action, reason) =>
     request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
       method: 'POST',

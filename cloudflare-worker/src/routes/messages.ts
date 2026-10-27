@@ -44,6 +44,7 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { effectiveFlags } from './public';
 import { refuse } from '../util/refusal';
 import { mintDownloadToken } from '../services/signedDownload';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -477,6 +478,8 @@ r.post('/:uid/attachments', async (c) => {
     const attUid = newUid();
     const key = `messages/${thread.uid}/${attUid}/${filename}`;
     const digest = await sha256Hex(bytes);
+    // D1170 — a message attachment counts to its uploader (D1169 §1).
+    const storage = await assertStorageRoom(c.env, { userId: user.id }, bytes.length, user);
     await c.env.FILES.put(key, bytes, {
       httpMetadata: { contentType: kind.type },
       customMetadata: { thread_uid: thread.uid, uploader_user_id: String(user.id), sha256: digest },
@@ -503,6 +506,7 @@ r.post('/:uid/attachments', async (c) => {
       await c.env.FILES.delete(key).catch(() => {});
       throw e;
     }
+    await noteStorageLanded(c.env, storage);
     return c.json({
       ok: true,
       message_uid: msgUid,
