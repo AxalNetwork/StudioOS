@@ -350,7 +350,7 @@ test('UF7 Runway: runway today from its source, the other runways with the forec
     assert.ok(v.text('uof-runway-other-forecast').includes('Never runway today'));
     assert.ok(!v.text('uof-runway-other-forecast').includes('16'), 'the forecast draws no runway figure');
     assert.equal(v.text('uof-after-value'), 'at least 18 months');
-    assert.equal(v.pr(v.by('uof-forecast-link')).href, '/raise/capital/model?project_id=3');
+    assert.equal(v.pr(v.by('uof-forecast-link')).href, '/raise/use-of-funds/runway/forecast?project_id=3', 'D1178: the forecast is under Runway');
   } finally { await v.close(); }
 });
 

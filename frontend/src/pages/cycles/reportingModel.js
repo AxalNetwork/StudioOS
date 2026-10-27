@@ -9,9 +9,8 @@
  *     the desk's History until part 3's desk read.
  *   - `GET /api/positions`, `GET /api/portfolio-updates?project_id=` and
  *     `GET /api/portfolio/chases`: the investor's company page.
- * No duty, period, due date or late state is stored yet (#2424's
- * `reporting_duties`, part 2), so none is drawn: each such block says what it
- * waits for, never "nothing due".
+ * D1060 (#2930): the desk's Due next, Needs you, calendar and Duties read
+ * part 2's `GET /api/reporting/desk`; their rules are `reporting/deskModel.js`'s.
  */
 
 export const TITLE = 'Reporting';
@@ -33,17 +32,7 @@ export function deskSearch(search = '') {
 
 export const deskHref = (tab, search = '') => `${(DESK_TABS.find((t) => t.id === tab) || DESK_TABS[0]).path}${deskSearch(search)}`;
 
-/**
- * The desk's blocks that no read carries yet, in the canvas's order, each with
- * the part that draws it. Drawn as "Not read here yet" with this reason.
- */
-export const DESK_WAITS = [
-  { key: 'due-next', title: 'Due next', waits: 'The next period and its readiness wait for the duties store (part 2) and the report assembler (part 3).' },
-  { key: 'needs-you', title: 'Needs you', waits: 'Late periods and investors’ asks wait for the periods and the ask route (part 2).' },
-  { key: 'calendar', title: 'Calendar', waits: 'The twelve months of duties wait for the duties store (part 2).' },
-];
-
-export const DUTIES_WAIT = 'Duties are created when a deal closes on Axal VC’s templates (#2424) and stored by part 2. Until then no duty is shown, which is not the same as owing none.';
+// The desk's reads (D1060) are `reporting/deskModel.js`'s.
 
 // ---------------------------------------------------------------- investor
 

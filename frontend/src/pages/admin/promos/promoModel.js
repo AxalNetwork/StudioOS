@@ -10,7 +10,9 @@
  * with each code's state, its name and note and its scope (part 3, D1273); one
  * code (`GET /:id`) for the drawer; its recorded redemptions with Stripe's own
  * count, and its history (part 4, D1274); and the usage read's last 30 days for
- * the tiles. Usage itself is part 6 (D1276) and still waits here.
+ * the tiles. D1276 (#3302, part 6): the Usage tab (PRM7) over the same read,
+ * for a range in the address — its tiles, redemptions by week and source, the
+ * discount per currency, top codes, products and codes near their end.
  *
  * NEVER A ZERO FOR A MISSING VALUE. A figure the read did not give is null, and
  * the page says "Not recorded" with its reason.
@@ -109,7 +111,7 @@ export const NOT_YET = 'Not read here yet';
 
 /** What the canvas draws that no read carries yet. Never a zero, never "none". */
 export const WAITS = Object.freeze({
-  usage: 'Redemptions by week and source, the discount given per currency, top codes and codes near their end are drawn on this tab in part 6.',
+  discountWeeks: 'The discount given per week is drawn when the usage read gives it by week. Today it gives each currency’s total for the period.',
 });
 
 /* ------------------------------------------------------------------ *
@@ -369,6 +371,248 @@ export function historyRow(e) {
     when: minuteWord(e.at) ?? 'Not recorded',
     detail: terms.join(' · '),
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * PRM7 — the Usage tab (D1276)
+ * ------------------------------------------------------------------ */
+
+const DAY_MS = 86_400_000;
+const ymd = (ms) => new Date(ms).toISOString().slice(0, 10);
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+/** The Worker's longest range (`MAX_DAYS`, services/promoUsage.ts). */
+export const MAX_RANGE_DAYS = 366;
+
+/** The range chips. The first is the Worker's default, twelve weeks. */
+export const RANGES = Object.freeze([
+  { key: '12w', label: 'Last 12 weeks', period: 'the last 12 weeks' },
+  { key: '30d', label: 'Last 30 days', period: 'the last 30 days' },
+  { key: 'quarter', label: 'This quarter', period: 'this quarter' },
+  { key: 'custom', label: 'Custom', period: 'this period' },
+]);
+
+/** Whole UTC days `from`…`to`, both included; null when it is not a range the Worker takes. */
+export function rangeDays(from, to) {
+  if (!YMD.test(String(from)) || !YMD.test(String(to))) return null;
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || ymd(a) !== from || ymd(b) !== to || a > b) return null;
+  const n = (b - a) / DAY_MS + 1;
+  return n > MAX_RANGE_DAYS ? null : n;
+}
+
+/** A custom range's problem in words, or null. */
+export function rangeProblem(from, to) {
+  if (!YMD.test(String(from)) || !YMD.test(String(to))) return 'Choose a first and a last day.';
+  if (from > to) return 'The first day comes after the last.';
+  if (rangeDays(from, to) == null) return `A range is at most ${MAX_RANGE_DAYS} days.`;
+  return null;
+}
+
+/**
+ * The Usage tab's range from its address: `?range=30d|quarter`, or
+ * `?from=&to=` for a custom one. Anything else is the last 12 weeks.
+ */
+export function usageRangeOf(search = '', now = Date.now()) {
+  const q = new URLSearchParams(String(search));
+  const to = ymd(now);
+  const from = q.get('from');
+  const until = q.get('to');
+  if (from && until && rangeDays(from, until) != null) return { key: 'custom', from, to: until };
+  if (q.get('range') === '30d') return { key: '30d', from: ymd(now - 29 * DAY_MS), to };
+  if (q.get('range') === 'quarter') {
+    const d = new Date(now);
+    return { key: 'quarter', from: ymd(Date.UTC(d.getUTCFullYear(), Math.floor(d.getUTCMonth() / 3) * 3, 1)), to };
+  }
+  return { key: '12w', from: ymd(now - 83 * DAY_MS), to };
+}
+
+/** The address of a range on the Usage tab. */
+export function usageHref({ key, from, to } = {}) {
+  if (key === 'custom' && rangeDays(from, to) != null) return `${USAGE}?from=${from}&to=${to}`;
+  if (key === '30d' || key === 'quarter') return `${USAGE}?range=${key}`;
+  return USAGE;
+}
+
+/** How the range reads in a sentence: `the last 12 weeks`, `1 Sep 2026 to 30 Sep 2026`. */
+export function periodWord(r) {
+  if (r?.key === 'custom') return `${dayWord(r.from) ?? r.from} to ${dayWord(r.to) ?? r.to}`;
+  return RANGES.find((x) => x.key === r?.key)?.period || 'this period';
+}
+
+/** The sources a redemption is recorded from, in the chart's order (`REDEMPTION_SOURCES` + not recorded). */
+export const SOURCES = Object.freeze([
+  { key: 'cart', label: 'Cart orders', tone: 'violet' },
+  { key: 'payment', label: 'One-time payments', tone: 'sky' },
+  { key: 'free_unlock', label: 'Free unlocks', tone: 'emerald' },
+  { key: 'subscription', label: 'Subscriptions', tone: 'amber' },
+  { key: 'not_recorded', label: 'Not recorded', tone: 'muted' },
+]);
+
+const count = (n, one, many) => `${Number(n).toLocaleString('en-US')} ${n === 1 ? one : many}`;
+const shortDay = (w) => (dayWord(w) ? dayWord(w).replace(/ \d{4}$/, '') : w);
+const ok = (b) => Boolean(b?.available);
+
+/**
+ * A block the read could not give, in words: null when the block is there.
+ * `unreadable` is drawn as a failed read with Try again by the page; the
+ * others are what the canvas says for an empty period.
+ */
+export const BLOCK_EMPTY = Object.freeze({
+  redemptions: { no_redemptions: 'Nothing was redeemed in this period.' },
+  discount: { no_redemptions: 'No discount was given in this period.', not_recorded: 'None of these redemptions carries its amount, so the discount is not recorded.' },
+  top_codes: { no_redemptions: 'No code was redeemed in this period.' },
+  products: { no_redemptions: 'Nothing to break down in this period.', not_recorded: 'None of these redemptions carries its product. Product is stored on each redemption from migration 631 on.' },
+  near_end: {},
+});
+export function blockState(name, b) {
+  if (ok(b)) {
+    if (name === 'redemptions' && b.total === 0) return { kind: 'empty', text: BLOCK_EMPTY.redemptions.no_redemptions };
+    return { kind: 'ok', text: null };
+  }
+  const text = BLOCK_EMPTY[name]?.[b?.reason];
+  return text ? { kind: 'empty', text } : { kind: 'unreadable', text: null };
+}
+
+/** The four tiles of the Usage tab. A figure the read did not give is null, with why. */
+export function usageTiles(u, range) {
+  const red = u?.redemptions;
+  const dis = u?.discount;
+  const period = periodWord(range);
+  const sentence = period.charAt(0).toUpperCase() + period.slice(1);
+  const redOk = ok(red) && Number.isSafeInteger(red.total);
+  const out = [{
+    key: 'redemptions', label: 'Redemptions', value: redOk ? red.total.toLocaleString('en-US') : null,
+    sub: redOk ? (red.total ? `${sentence} · every source` : 'Nothing was redeemed in this period.') : 'Could not be read.',
+  }];
+  let dValue = null;
+  let dSub = 'Could not be read.';
+  let aValue = null;
+  let aSub = 'Could not be read.';
+  if (ok(dis)) {
+    dValue = dis.currencies.map((x) => money(x.discount_cents, x.currency)).filter(Boolean).join(' and ') || null;
+    dSub = `${dis.not_recorded ? `${count(dis.not_recorded, 'redemption carries', 'redemptions carry')} no amount. ` : ''}Each currency on its own.`;
+    const [first, ...rest] = dis.currencies;
+    aValue = first ? money(first.average_cents, first.currency) : null;
+    aSub = first ? `${String(first.currency).toUpperCase()}, over the ${count(first.redemptions, 'redemption', 'redemptions')} with a recorded discount.${rest.map((x) => ` ${money(x.average_cents, x.currency) ?? 'Not recorded'} in ${String(x.currency).toUpperCase()}.`).join('')}` : 'Not recorded';
+  } else if (dis?.reason === 'no_redemptions') {
+    dValue = 'None given'; dSub = 'No discount was given in this period.';
+    aSub = 'No redemptions to average.';
+  } else if (dis?.reason === 'not_recorded') {
+    dSub = 'None of these redemptions carries its amount.';
+    aSub = 'No redemption with a recorded discount to average.';
+  }
+  out.push({ key: 'discount', label: 'Discount given', value: dValue, sub: dSub });
+  out.push({
+    key: 'members', label: 'Members who used a code', value: redOk ? red.members.toLocaleString('en-US') : null,
+    sub: redOk ? (red.total ? 'Each member counted once' : 'No redemptions in this period.') : 'Could not be read.',
+  });
+  out.push({ key: 'average', label: 'Average saving', value: aValue, sub: aSub });
+  return out;
+}
+
+/**
+ * Redemptions per week, stacked by source. Every week of the range comes from
+ * the read (a week with none is a measured 0); the week holding `now` is
+ * "This week, to date". The table spells each source and the total.
+ */
+export function weekChart(red, now = Date.now()) {
+  if (!ok(red) || !Array.isArray(red.weeks)) return null;
+  const thisWeek = (w) => Date.parse(`${w}T00:00:00Z`) <= now && now < Date.parse(`${w}T00:00:00Z`) + 7 * DAY_MS;
+  const n = (v) => (Number.isSafeInteger(Number(v)) ? Number(v) : 0);
+  const rows = red.weeks.map((w) => {
+    const parts = SOURCES.map((s) => ({ key: s.key, label: s.label, tone: s.tone, value: n(w[s.key]) }));
+    return { label: shortDay(w.week), week: w.week, toDate: thisWeek(w.week), value: parts.reduce((t, p) => t + p.value, 0), parts };
+  });
+  const recordedFrom = dayWord(red.detail_recorded_from);
+  const unrecorded = rows.reduce((t, r) => t + r.parts.at(-1).value, 0);
+  return {
+    type: 'stack',
+    height: 220,
+    rows: rows.map(({ toDate, ...r }) => r),
+    table: {
+      head: ['Week', ...SOURCES.map((s) => s.label), 'Total'],
+      rows: rows.map((r) => [r.toDate ? 'This week, to date' : `Week of ${dayWord(r.week) ?? r.week}`, ...r.parts.map((p) => p.value.toLocaleString('en-US')), r.value.toLocaleString('en-US')]),
+    },
+    summary: `${count(red.total, 'redemption', 'redemptions')} in ${count(rows.length, 'week', 'weeks')}.`,
+    recorded: recordedFrom
+      ? `Source is recorded on each redemption from ${recordedFrom}; ${unrecorded ? `${count(unrecorded, 'redemption', 'redemptions')} before that ${unrecorded === 1 ? 'is' : 'are'} Not recorded` : 'before that it is not recorded'}.`
+      : 'No redemption carries its source yet, so every one is Not recorded.',
+    alt: `Redemptions per week by source: ${rows.map((r) => `${r.toDate ? 'this week to date' : `week of ${r.label}`} ${r.value}`).join(', ')}.`,
+  };
+}
+
+/** The discount per currency, each on its own: never added across currencies. */
+export function currencyRows(dis) {
+  if (!ok(dis)) return [];
+  return dis.currencies.map((x) => ({
+    currency: String(x.currency).toUpperCase(),
+    total: money(x.discount_cents, x.currency) ?? 'Not recorded',
+    redemptions: Number.isSafeInteger(x.redemptions) ? x.redemptions.toLocaleString('en-US') : 'Not recorded',
+    average: money(x.average_cents, x.currency) ?? 'Not recorded',
+  }));
+}
+
+/** `44 of 100` or `21, no cap`: the period's count against the code's cap. */
+export const ofCap = (n, cap) => (cap != null ? `${n} of ${cap}` : `${n}, no cap`);
+
+/** Top codes as bars. A code the mirror no longer holds is named by its Stripe id. */
+export function topCodesChart(top) {
+  if (!ok(top) || !top.codes.length) return null;
+  const rows = top.codes.map((c) => ({ key: c.promo_id, label: c.code || c.promo_id, value: c.redeemed, text: ofCap(c.redeemed, c.max_redemptions) }));
+  const lead = top.codes[0];
+  return {
+    type: 'hbar', rows, axis: 'redemptions',
+    table: { head: ['Code', 'Redeemed in the period', 'Cap'], rows: top.codes.map((c) => [c.code || c.promo_id, c.redeemed.toLocaleString('en-US'), c.max_redemptions != null ? String(c.max_redemptions) : 'No cap']) },
+    summary: `${lead.code || lead.promo_id} was redeemed most: ${lead.max_redemptions != null ? `${lead.redeemed} of its ${lead.max_redemptions}` : `${lead.redeemed}, with no cap`}.`,
+    alt: `Top codes: ${rows.map((r) => `${r.label} ${r.text}`).join(', ')}.`,
+  };
+}
+
+/** Redemptions by plan and product, with the ones that name none as a dashed Not recorded row. */
+export function productsChart(pr) {
+  if (!ok(pr)) return null;
+  const rows = pr.rows.map((r) => ({
+    key: `${r.product_id}-${r.price_id}-${r.interval}`,
+    label: `${r.name || r.product_id}${r.interval ? ` · ${INTERVAL_WORD[r.interval] || r.interval}` : ''}`,
+    value: r.redemptions,
+  }));
+  const named = rows.reduce((t, r) => t + r.value, 0);
+  if (pr.not_recorded > 0) rows.push({ key: 'not_recorded', label: 'Not recorded', value: pr.not_recorded, dash: true, tone: 'muted' });
+  const lead = rows[0];
+  return {
+    type: 'hbar', rows, axis: 'redemptions',
+    table: { head: ['Plan or product', 'Redemptions'], rows: rows.map((r) => [r.label, r.value.toLocaleString('en-US')]) },
+    summary: `${lead.label} leads among the ${count(named, 'redemption', 'redemptions')} with a product recorded.`,
+    unrecorded: pr.not_recorded > 0 ? 'A cart of several products, and every redemption from before migration 631, names no product: those are Not recorded.' : null,
+    alt: `Redemptions by plan and product: ${rows.map((r) => `${r.label} ${r.value}`).join(', ')}.`,
+  };
+}
+
+/** Codes near their end: at their cap first, then soonest. Not limited to the range. */
+export function nearEndRows(near) {
+  if (!ok(near)) return null;
+  return near.codes.map((c) => ({
+    id: c.promo_id,
+    code: c.code || c.promo_id,
+    used: c.mirror_redeemed != null ? ofCap(c.mirror_redeemed, c.max_redemptions) : 'Not recorded',
+    why: c.at_cap ? 'At its cap' : (c.ends_in_days != null ? `ends in ${count(c.ends_in_days, 'day', 'days')}` : 'Not recorded'),
+    atCap: Boolean(c.at_cap),
+  }));
+}
+
+/** The near-end block's sentence. */
+export function nearEndSentence(near) {
+  const rows = nearEndRows(near);
+  if (!rows) return null;
+  const days = near.within_days ?? 14;
+  if (!rows.length) return `No active code ends within ${days} days or is at its cap.`;
+  const ending = near.codes.filter((c) => c.ends_in_days != null).length;
+  const capped = near.codes.filter((c) => c.at_cap).length;
+  const parts = [];
+  if (ending) parts.push(`${count(ending, 'code ends', 'codes end')} within ${days} days`);
+  if (capped) parts.push(`${count(capped, 'is', 'are')} at ${capped === 1 ? 'its' : 'their'} cap`);
+  return `${parts.join('; ')}.`.replace(/^./, (c) => c.toUpperCase());
 }
 
 /* ------------------------------------------------------------------ *

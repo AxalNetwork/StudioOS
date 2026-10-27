@@ -71,11 +71,12 @@ type DutyRow = {
   id: number; uid: string; project_id: number; holder_user_id: number | null; holder_name?: string | null; kind: Kind; cadence: Cadence;
   due_rule: DueRule; due_days: number; required_figures: string; required_documents: string; source_document: string; source_clause: string;
   source_kind: string; source_envelope_id: number | null; body_sha256: string | null; defaulted_json: string; starts_on: string; status: string;
-  closing_line_uid: string;
+  closing_line_uid: string; holding_route?: string | null;
 };
 type PeriodRow = {
   id: number; uid: string; duty_id: number; period_label: string; period_start: string; period_end: string; due_on: string;
   expected_on: string | null; expected_note: string | null; waived_at: string | null; met_update_id: number | null; met_at: string | null;
+  report_uid?: string | null;
 };
 
 /** The duty's words and terms. `withHolder` is the founder's view; an investor's never names a holder. */
@@ -85,7 +86,8 @@ function dutyDto(d: DutyRow, withHolder: boolean) {
     required_figures: parse(d.required_figures), required_documents: parse(d.required_documents),
     source: { document: d.source_document, clause: d.source_clause, kind: d.source_kind, body_sha256: d.body_sha256, signed: d.source_kind === 'signed_envelope' },
     defaulted: parse(d.defaulted_json), starts_on: d.starts_on, status: d.status,
-    ...(withHolder ? { holder: d.holder_user_id == null ? null : { name: d.holder_name ?? null }, closing_line_uid: d.closing_line_uid } : {}),
+    // D1061: the investor reads their own holding's route (direct, syndicate, Axal VC fund, third-party fund), never the line or a name.
+    ...(withHolder ? { holder: d.holder_user_id == null ? null : { name: d.holder_name ?? null }, closing_line_uid: d.closing_line_uid } : { holding: { route: d.holding_route ?? null } }),
   };
 }
 
@@ -99,6 +101,8 @@ function periodsWithState(duties: DutyRow[], periods: PeriodRow[], day: string) 
     return {
       uid: p.uid, duty_uid: d.uid, label: p.period_label, start: p.period_start, end: p.period_end, due_on: p.due_on,
       expected_on: p.expected_on, expected_note: p.expected_note, waived_at: p.waived_at, sent_at: p.met_at, ...s,
+      // D1061: the report that met it, so the reader can open it; null until it is sent.
+      report_uid: p.report_uid ?? null,
     };
   });
 }
@@ -115,7 +119,8 @@ function record(periods: Array<{ duty_uid: string; state: string }>) {
 async function periodsOf(env: Env, dutyIds: number[]): Promise<PeriodRow[]> {
   if (!dutyIds.length) return [];
   const rows = (await env.DB.prepare(
-    `SELECT id, uid, duty_id, period_label, period_start, period_end, due_on, expected_on, expected_note, waived_at, met_update_id, met_at
+    `SELECT id, uid, duty_id, period_label, period_start, period_end, due_on, expected_on, expected_note, waived_at, met_update_id, met_at,
+            (SELECT u.uid FROM portfolio_updates u WHERE u.id = reporting_periods.met_update_id) AS report_uid
        FROM reporting_periods WHERE duty_id IN (SELECT value FROM json_each(?)) ORDER BY period_start, duty_id`,
   ).bind(JSON.stringify(dutyIds)).all<PeriodRow>()).results || [];
   return rows;
@@ -217,7 +222,9 @@ async function ownDuties(env: Env, userId: number, projectId: number | null) {
   return ((await env.DB.prepare(
     `SELECT d.id, d.uid, d.project_id, d.holder_user_id, d.kind, d.cadence, d.due_rule, d.due_days, d.required_figures, d.required_documents,
             d.source_document, d.source_clause, d.source_kind, d.source_envelope_id, d.body_sha256, d.defaulted_json, d.starts_on, d.status,
-            d.closing_line_uid, p.uid AS project_uid, p.name AS project_name FROM reporting_duties d JOIN projects p ON p.id = d.project_id
+            d.closing_line_uid, p.uid AS project_uid, p.name AS project_name,
+            (SELECT l.route FROM closing_lines l WHERE l.uid = d.closing_line_uid) AS holding_route
+       FROM reporting_duties d JOIN projects p ON p.id = d.project_id
       WHERE d.holder_user_id = ? AND (? IS NULL OR d.project_id = ?) ORDER BY p.name, d.id`,
   ).bind(userId, projectId, projectId).all<DutyRow & { project_uid: string; project_name: string }>()).results || []);
 }
