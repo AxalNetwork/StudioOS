@@ -16,6 +16,7 @@ import { newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
 import { logDealRoomAction } from '../services/dealRoomAudit';
 import { INTAKE_LINE, LEAD_ADMIN_ONLY, NOT_YOUR_ROUND, canMoveRound, readStudioLens } from '../services/dealStudioLens';
+import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
 
 const deals = new Hono<{ Bindings: Env }>();
 
@@ -1168,6 +1169,27 @@ deals.get('/:id/documents', async (c) => {
   const docs = await sql`SELECT id, uid, title, doc_type, status, created_at FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`;
   await sql.end();
   return c.json(docs);
+});
+
+// D1265 (#3288): the deal page's Evidence block. An investor the deal admits (invited or committed)
+// reads the venture's shared evidence through `investorEvidence`, which applies the NDA and each
+// item's sharing; the founder reads the whole pack at /raise/evidence. Each open logs `open_evidence`.
+deals.get('/:id/evidence', async (c) => {
+  const id = parseInt(c.req.param('id'));
+  const ctx = await loadDealForRead(c, id);
+  if (ctx.error) return ctx.error;
+  const { sql, deal, user } = ctx;
+  await sql.end();
+  if (String((user as any).role) !== 'investor') {
+    return c.json({ code: 'investor_only', detail: 'This is the investor’s read of the evidence. The founder reads it in Raise › Evidence.' }, 403);
+  }
+  if (!deal.project_id) return c.json({ detail: 'Deal not found' }, 404);
+  try {
+    return c.json(await investorEvidence(c.env, Number(deal.project_id), (user as any).id));
+  } catch (e) {
+    if (e instanceof RaiseEvidenceError) return c.json({ code: e.code, detail: e.sentence }, e.status);
+    return c.json({ code: 'unreadable', detail: 'The evidence could not be read. Try again.' }, 503);
+  }
 });
 
 deals.get('/:id/data-room', async (c) => {

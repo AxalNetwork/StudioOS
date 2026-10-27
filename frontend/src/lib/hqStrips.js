@@ -33,6 +33,8 @@ export const HQ_STRIPS = {
     ['Topology', '/admin/platform/topology'],
     ['AI allowances', '/admin/platform/allowances'],
     ['AI usage', '/admin/platform/ai-usage'],
+    // D1172 (#3085, STG20): what members store, totals only.
+    ['Storage', '/admin/platform/storage'],
     // D938 (#2743): the four left the Admin Console for Platform's own addresses.
     ['Payments', '/admin/platform/payments'],
     ['Bank accounts', '/admin/platform/bank-accounts'],
