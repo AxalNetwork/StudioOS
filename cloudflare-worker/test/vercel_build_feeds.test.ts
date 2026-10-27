@@ -48,3 +48,12 @@ test('the slug is declared in both [vars] blocks, and is not a secret', () => {
   assert.equal((toml.match(/^VERCEL_INTEGRATION_SLUG = "[a-z0-9-]*"$/gm) || []).length, 2);
   assert.doesNotMatch(toml, /VERCEL_CLIENT_SECRET\s*=/, 'the client secret is a Worker secret, never a var');
 });
+
+test('Now fed by: Operating systems reads the connection (no ledger zero); a landed row counts once its part writes one', async () => {
+  const { fedCounts, FED_LEDGER_PROVIDERS } = await import('../src/integrations/fed.ts');
+  assert.ok(FED_LEDGER_PROVIDERS.has('vercel'));
+  const env = { DB: { prepare: () => ({ bind: () => ({ all: async () => ({ results: [] }) }) }) } } as any;
+  const out = await fedCounts(env, 1, 'vercel');
+  assert.deepEqual(out.map((m) => [m.module, m.count]), [['operating_systems', null]]);
+  assert.match(out[0].reason!, /^Read from the connection: Vercel/);
+});
