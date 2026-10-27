@@ -60,7 +60,7 @@ function useRead(load, key) {
   return { ...s, reload };
 }
 
-function Unreadable({ what, error, onRetry, testId }) {
+function ReadFailed({ what, error, onRetry, testId }) {
   const refused = error?.status === 403 || error?.status === 404;
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid={testId}>
@@ -97,13 +97,13 @@ export default function FounderScorecardPage({ tab = 'scorecard', api: scoresApi
   let body;
   if (venture.status === 'loading') body = <p className={`m-0 text-sm ${MUTED}`}>Reading your venture…</p>;
   else if (venture.status === 'none') body = <p className="m-0 text-sm" data-testid="founder-scorecard-no-venture">You have no venture yet. Your scorecard starts once you create one.</p>;
-  else if (venture.status === 'unreadable') body = <Unreadable what="Your ventures" onRetry={venture.retry} testId="founder-scorecard-ventures-unreadable" />;
+  else if (venture.status === 'unreadable') body = <ReadFailed what="Your ventures" onRetry={venture.retry} testId="founder-scorecard-ventures-unreadable" />;
   else if (tab === 'trajectory') {
     body = traj.status === 'loading' ? <p className={`m-0 text-sm ${MUTED}`}>Reading the trajectory…</p>
-      : traj.status === 'unreadable' ? <Unreadable what="The trajectory" error={traj.error} onRetry={traj.reload} testId="founder-scorecard-trajectory-unreadable" />
+      : traj.status === 'unreadable' ? <ReadFailed what="The trajectory" error={traj.error} onRetry={traj.reload} testId="founder-scorecard-trajectory-unreadable" />
         : <Trajectory read={traj.data} />;
   } else if (card.status === 'loading') body = <p className={`m-0 text-sm ${MUTED}`}>Reading your scorecard…</p>;
-  else if (card.status === 'unreadable') body = <Unreadable what="Your scorecard" error={card.error} onRetry={card.reload} testId="founder-scorecard-unreadable" />;
+  else if (card.status === 'unreadable') body = <ReadFailed what="Your scorecard" error={card.error} onRetry={card.reload} testId="founder-scorecard-unreadable" />;
   else {
     body = (
       <>
