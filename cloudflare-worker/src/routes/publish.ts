@@ -120,11 +120,11 @@ publish.get('/destinations', handle(async (c, ctx) => {
 publish.post('/destinations/refresh/:integrationUid', handle(async (c, ctx) => {
   const b = await body(c);
   const projectId = idOf(b.project);
-  const integration = await c.env.DB.prepare('SELECT * FROM integrations WHERE uid = ?').bind(String(c.req.param('integrationUid'))).first<IntegrationRow>();
+  const integration = await c.env.DB.prepare('SELECT * FROM integrations WHERE uid = ?').bind(String(c.req.param('integrationUid'))).first() as IntegrationRow | null;
   await canPublish(c.env, { user: ctx.user, support: ctx.support, projectId, integration: integration ?? null });
   const impl = getProviderImpl(integration!.provider_key);
   if (!publishTarget(integration!.provider_key) || !impl?.listDestinations) throw refused('not_publishable');
-  const project = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first<{ company_id: number }>();
+  const project = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first() as { company_id: number } | null;
   const listed = (await impl.listDestinations(c.env, integration!)).slice(0, 50);
   const ok = listed.filter((d) => typeof d?.external_account_id === 'string' && d.external_account_id && typeof d.display_name === 'string' && d.display_name);
   if (ok.length) {
@@ -143,7 +143,7 @@ publish.put('/destinations/:uid', handle(async (c, ctx) => {
   const dest = await destinationOf(c.env, c.req.param('uid'));
   const integration = await loadIntegration(c.env, dest.integration_id);
   await canPublish(c.env, { user: ctx.user, support: ctx.support, projectId, integration });
-  const project = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first<{ company_id: number }>();
+  const project = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first() as { company_id: number } | null;
   if (Number(project?.company_id) !== Number(dest.company_id)) throw refused('not_found');
   const b = await body(c);
   if (typeof b.enabled !== 'boolean') throw refused('invalid');
@@ -173,7 +173,7 @@ publish.post('/drafts', handle(async (c, ctx) => {
   if (!(PUBLISH_MODULES as readonly string[]).includes(String(b.module))) throw refused('invalid');
   const refs = Array.isArray(b.source_refs) ? b.source_refs.slice(0, 50) : [];
   const text = typeof b.text === 'string' ? b.text.slice(0, 20_000) : '';
-  const project = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first<{ company_id: number | null }>();
+  const project = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first() as { company_id: number | null } | null;
   const uid = crypto.randomUUID();
   await c.env.DB.prepare(
     `INSERT INTO publish_drafts (uid, project_id, company_id, module, source_refs_json, author_user_id, body_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
