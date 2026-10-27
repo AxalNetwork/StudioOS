@@ -38,6 +38,9 @@ import DurabilityChecklist from './DurabilityChecklist';
 import GrowFromMercury from './GrowFromMercury';
 import MercuryRaiseFeed from './MercuryRaiseFeed';
 import FromLovable from './FromLovable';
+import ValidateFromGoogle from './ValidateFromGoogle';
+import FromNotion from './FromNotion';
+import NotionInterviewImport from './NotionInterviewImport';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -124,23 +127,39 @@ const CYCLE_DEFS = {
     // read's `parts`, writes are these callbacks, and the venture is always
     // the page's, never a row's. Each dialog goes through `ctx.openDialog`.
     parts: toFnMap({
-      'customer-research': (data, ctx) => <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
-        onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
-        onExport={() => api.exportValidateInterviews(ctx.projectId)} />,
+      // D1092 (#2957): each of the three modules Google feeds draws its From Google part after its own section.
+      'customer-research': (data, ctx) => (
+        <>
+          <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+            onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
+            onExport={() => api.exportValidateInterviews(ctx.projectId)} />
+          <ValidateFromGoogle part={data?.parts?.from_google} module="customer_research" projectId={ctx.projectId} reload={ctx.reload} />
+          {/* D1087 (#2952): interview pages from Notion, imported only with the interviewee's consent. */}
+          <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />
+        </>
+      ),
+      // D1087 (#2952): research pages from Notion, as sources (title and link).
+      'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
+      'demand-signals': (data, ctx) => <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />,
       'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
         onExport={() => api.exportValidatePainMap(ctx.projectId)}
         // #1692's `attach` on the theme record, so the theme's activity logs it.
         onAssign={(themeId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', themeId, 'attach', body).then(ctx.reload)}
         newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />,
-      experiments: (data, ctx) => <HypothesesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
-        // Link to a pain's lists, as FVW handed them: the board's unretired claims and its themes.
-        onLoadLinkLists={() => api.getValidationBoard(ctx.projectId).then((board) => ({
-          hypotheses: (board?.hypotheses || []).filter((h) => !h.retired_at), painGroups: board?.pain_groups || [],
-        }))}
-        // #1692's `link` on the theme record, so both sides log it.
-        onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
-        // Only until #1656 registers New hypothesis as the table's Add (decision 20).
-        onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />,
+      experiments: (data, ctx) => (
+        <>
+          <HypothesesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+            // Link to a pain's lists, as FVW handed them: the board's unretired claims and its themes.
+            onLoadLinkLists={() => api.getValidationBoard(ctx.projectId).then((board) => ({
+              hypotheses: (board?.hypotheses || []).filter((h) => !h.retired_at), painGroups: board?.pain_groups || [],
+            }))}
+            // #1692's `link` on the theme record, so both sides log it.
+            onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
+            // Only until #1656 registers New hypothesis as the table's Add (decision 20).
+            onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />
+          <ValidateFromGoogle part={data?.parts?.from_google} module="experiments" projectId={ctx.projectId} reload={ctx.reload} />
+        </>
+      ),
       // D693 decision 13 (#1704): the verdict zone's Export summary, under the Decisions table.
       verdict: (_data, ctx) => <ExportSummary projectId={ctx.projectId} />,
     }),

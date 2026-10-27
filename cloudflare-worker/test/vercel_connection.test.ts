@@ -48,8 +48,10 @@ const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8
 const m435 = readFileSync('cloudflare-worker/sql/migrations/435_connector_companies.sql', 'utf8');
 const m589 = readFileSync('cloudflare-worker/sql/migrations/589_vercel_installations.sql', 'utf8');
 // D1097: the sync opens health events (590), each with its ledger row (445).
+// D1098: the same sync keeps deployments (591).
 const m445 = readFileSync('cloudflare-worker/sql/migrations/445_connector_fed_items.sql', 'utf8');
 const m590 = readFileSync('cloudflare-worker/sql/migrations/590_vercel_health_events.sql', 'utf8');
+const m591 = readFileSync('cloudflare-worker/sql/migrations/591_vercel_deployments.sql', 'utf8');
 const FOUNDER = 1, OTHER = 2;
 const PROJECTS = [
   { id: 'prj_web', name: 'acme-web', framework: 'nextjs', nodeVersion: '20.x', plan: 'hobby', link: { type: 'github', org: 'acme', repo: 'web', productionBranch: 'main' },
@@ -88,6 +90,7 @@ function fixture(env: Record<string, string> = CLIENT) {
   db.exec(m589);
   db.exec(m445);
   db.exec(m590);
+  db.exec(m591);
   const kv = memKV();
   const e = { DB: d1Over(db), RATE_LIMITS: kv, JWT_SECRET, ENVIRONMENT: 'development', OAUTH_CALLBACK_BASE_URL: 'https://app.example', ...env } as any;
   return { db, env: e };
@@ -222,9 +225,11 @@ test('D1096: the sync records each chosen project\'s facts, prunes what is no lo
   ]);
   assert.ok(f.calls.every((x) => x.method === 'GET' || x.path === '/v2/oauth/access_token'), 'the sync only reads');
   assert.ok(!f.calls.some((x) => /runtime-logs/.test(x.path) || /web-analytics/.test(x.path) || /\/events$/.test(x.path)), 'the sync reads no log, event stream or analytics');
-  // D1097 (part 2): the health evidence is one deployment list per project, each domain's configuration, and the account's domains.
+  // D1097: health reads one deployment list per project, each domain's configuration, and the account's domains.
   assert.deepEqual([...new Set(f.calls.filter((x) => /deployments/.test(x.path) || /\/config$/.test(x.path) || /^\/v5\/domains$/.test(x.path)).map((x) => x.path.replace(/\/v6\/domains\/[^/]+/, '/v6/domains/:name')))].sort(),
     ['/v5/domains', '/v6/domains/:name/config', '/v7/deployments']);
+  // Each chosen project is listed twice: once for health, once for D1098's newest deployments.
+  assert.deepEqual(f.calls.filter((x) => x.path === '/v7/deployments').map((x) => x.path), ['/v7/deployments', '/v7/deployments', '/v7/deployments', '/v7/deployments']);
   await call(env, 'PATCH', `/api/connectors/${uid}/config`, FOUNDER, { projects: ['prj_web'] });
   await call(env, 'POST', `/api/connectors/${uid}/sync`);
   assert.deepEqual(all(db, 'SELECT vercel_project_id FROM vercel_projects').map((r) => r.vercel_project_id), ['prj_web']);
@@ -357,12 +362,12 @@ test('D1097: the sync opens what the evidence shows, each with its ledger row, a
   assert.equal(s1.status, 200, JSON.stringify(s1.body));
   assert.deepEqual(events(db), ['domain_expiring:acme.example:sync:open', 'domain_misconfigured:app.acme.example:sync:open', 'domain_unverified:www.acme.example:sync:open'],
     'a preview that failed is no production failure, and production on its newest ready deploy is no rollback');
-  assert.deepEqual([s1.body.counts.deployments, s1.body.counts.health_events], [1, 3], 'one production deployment read; three events open');
+  assert.deepEqual([s1.body.counts.deployments, s1.body.counts.health_events], [2, 3], 'the production deploy and the preview are kept; three events open');
   const fed = all(db, "SELECT module, kind, external_id FROM connector_fed_items WHERE local_table = 'vercel_health_events' ORDER BY external_id");
   assert.equal(fed.length, 3);
   assert.ok(fed.every((r) => r.module === 'operating_systems' && r.kind === 'health_event' && /^health:/.test(r.external_id)));
   const log = one(db, "SELECT payload_json FROM integration_logs WHERE event_type = 'sync' AND status = 'ok' ORDER BY id DESC");
-  assert.deepEqual(JSON.parse(log.payload_json), { projects: 1, not_reachable: 0, deployments: 1, health_events: 3 }, 'the sync line’s counts');
+  assert.deepEqual(JSON.parse(log.payload_json), { projects: 1, not_reachable: 0, deployments: 2, health_events: 3 }, 'the sync line’s counts');
   // The same evidence again: nothing new opens, and the line still counts the three open.
   const again = await call(env, 'POST', `/api/connectors/${uid}/sync`);
   assert.equal(again.body.counts.health_events, 3, 'an event still open is counted, not only a new one');

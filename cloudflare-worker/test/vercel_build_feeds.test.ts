@@ -4,7 +4,8 @@
  * `vercelFeeds.ts` is the one list. The registry's `pulls` and `feeds` are
  * read from it, so a landing claims a module only once its part sets a store;
  * part 1 lands no module's rows and claims the connection on Operating
- * systems only. Every module named is one `MODULE_LABELS` knows.
+ * systems; D1098 (part 3) lands deployments on Prototype / MVP and Product
+ * roadmap. Every module named is one `MODULE_LABELS` knows.
  *
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/vercel_build_feeds.test.ts
@@ -19,13 +20,13 @@ import { VERCEL_LANDINGS, VERCEL_READ_BY, vercelFedModules, vercelPulls } from '
 import { VERCEL_READ_SCOPES } from '../src/services/vercel/api.ts';
 import { writesProjectData } from '../src/integrations/companyScope.ts';
 
-test('the page claims what the list says, and part 1 claims only the connection on Operating systems', () => {
+test('the page claims what the list says: deployments on Prototype / MVP and Product roadmap, the connection on Operating systems', () => {
   const m = CONNECTOR_METADATA.vercel;
   assert.deepEqual(m.pulls, vercelPulls());
   assert.deepEqual(m.feeds, vercelFedModules());
-  // D1097 (part 2): health events land on Operating systems; Runs on reads the projects on Solution design.
-  assert.deepEqual(m.feeds, ['operating_systems', 'solution_design']);
-  for (const claim of [{ what: 'Production health', module: 'operating_systems' }, { what: 'Framework, Node version and repository', module: 'solution_design' }]) {
+  // D1098 lands deployments; D1097 lands health on Operating systems and Runs on on Solution design. Part 4 has no store yet.
+  assert.deepEqual(m.feeds, ['prototype_mvp', 'product_roadmap', 'operating_systems', 'solution_design']);
+  for (const claim of [{ what: 'Production health', module: 'operating_systems' }, { what: 'Framework, Node version and repository', module: 'solution_design' }, { what: 'Deployments and what is live', module: 'prototype_mvp' }, { what: 'Production deploys', module: 'product_roadmap' }]) {
     assert.ok(m.pulls.some((x: any) => x.what === claim.what && x.module === claim.module), `It brings: ${claim.what}`);
   }
   assert.deepEqual(m.sends, [], 'Vercel sends nothing');
@@ -55,12 +56,13 @@ test('the slug is declared in both [vars] blocks, and is not a secret', () => {
   assert.doesNotMatch(toml, /VERCEL_CLIENT_SECRET\s*=/, 'the client secret is a Worker secret, never a var');
 });
 
-test('Now fed by: Operating systems reads the connection (no ledger zero); a landed row counts once its part writes one', async () => {
+test('Now fed by: Operating systems reads the connection (no ledger zero); deployments count from the ledger', async () => {
   const { fedCounts, FED_LEDGER_PROVIDERS } = await import('../src/integrations/fed.ts');
   assert.ok(FED_LEDGER_PROVIDERS.has('vercel'));
-  const env = { DB: { prepare: () => ({ bind: () => ({ all: async () => ({ results: [] }) }) }) } } as any;
+  const ledger = [{ module: 'prototype_mvp', n: 3, linked: 3 }, { module: 'product_roadmap', n: 5, linked: 4 }];
+  const env = { DB: { prepare: () => ({ bind: () => ({ all: async () => ({ results: ledger }) }) }) } } as any;
   const out = await fedCounts(env, 1, 'vercel');
-  assert.deepEqual(out.map((m) => [m.module, m.count]), [['operating_systems', null], ['solution_design', null]]);
-  assert.match(out[0].reason!, /^Read from the connection: Vercel/);
-  assert.match(out[1].reason!, /^Read from the connection: Runs on/);
+  assert.deepEqual(out.map((m) => [m.module, m.count, m.unlanded]), [['prototype_mvp', 3, 0], ['product_roadmap', 5, 1], ['operating_systems', null, null], ['solution_design', null, null]]);
+  assert.match(out[2].reason!, /^Read from the connection: Vercel/);
+  assert.match(out[3].reason!, /^Read from the connection: Runs on/);
 });

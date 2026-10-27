@@ -133,8 +133,6 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
   // D840 part 4 (#2349): a signed-in investor's sections, each read through the MCP server only.
   if (variant === 'investor') {
     tools.push(
-      // D884 (#2557): Pipeline shows the capacity Commit read, beside the cheques you intend; it calls no tool of its own.
-      tool('pipeline_capacity', 'your capacity beside your pipeline', 'read', 'Shows the capacity read for Deals › Commit beside the cheques you intend on the live deals in your pipeline. Only you see it.', 'deals_pipeline', [...mcp('getAccounts')]),
       tool('read_capacity', 'available balances of the accounts you pick', 'read', 'Reads the available balance of the accounts you pick, as your capacity beside your own commitments. Only you see it.', 'deals_commit', [...mcp('getAccounts')]),
       tool('list_payments_out', 'outgoing wires and ACH payments', 'read', 'Lists your outgoing payments, to propose the one that funded a commitment. Nothing is recorded until you accept it.', 'deals_closing', [...mcp('listTransactions')]),
       tool('list_payments_in', 'incoming payments', 'read', 'Lists the credits into your fund’s accounts, to propose the capital-call line each one pays. A receipt is recorded only when you accept it.', 'fund_calls', [...mcp('listTransactions')]),
@@ -164,7 +162,7 @@ const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s
 function mercuryPage(variant: MercuryVariant): ConnectorPage {
   return {
     tagline: variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
-      : variant === 'investor' ? 'Your capacity in Deals › Pipeline and Commit, and the wire that funded a commitment. Read-only; only you see a balance.'
+      : variant === 'investor' ? 'Your capacity in Deals › Commit, and the wire that funded a commitment. Read-only; only you see a balance.'
         : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
     long_description: [...(variant === 'founder'
         ? [
@@ -176,7 +174,7 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
           // D884 (#2557): what it reads, then Deals and Pipeline first, then Fund, then proof of funds.
           ? [
             'Your own Mercury account, read-only, on HQ or in a branch. Axal VC reads your accounts’ names, kinds and last four digits, their available balances, your transactions and your statements. A balance is shown to you alone, and it never sends, transfers or requests money.',
-            'Deals first. Deals › Pipeline shows your capacity beside the cheques you intend on your live deals. Deals › Commit reads that capacity from the accounts you pick, beside your commitments. Deals › Closing proposes the wire that funded a commitment, for you to accept.',
+            'Deals first. Deals › Commit reads your capacity from the accounts you pick, beside your commitments. Deals › Closing proposes the wire that funded a commitment, for you to accept.',
             'Then Fund › Calls, Accounting and Reporting, whose proposals write nothing until you accept them. Portfolio gets nothing from Mercury. On HQ, a proof of funds: Axal’s admins see only a dated statement of at least an amount you choose, never a balance.',
           ]
           : [
@@ -537,7 +535,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     tagline: 'Your Vercel projects, deployments and domains, for the venture you choose. Read-only.',
     long_description: [
       'Connect Vercel through its own install screen, pick a personal account or a team, and choose the projects that feed one venture. Read-only: Axal VC cannot deploy, cancel, roll back or change anything.',
-      'Each sync records the projects you chose: name, framework, Node version, production branch, linked repository, production domain, plan, and whether production is live, failing, building or not deployed. In Build › Operating systems, Vercel is the Hosting system, with each sync and its production health: a failed deploy, a rollback, a domain unverified, misconfigured or expiring. Solution design shows what the product runs on.',
+      'Each sync records the projects you chose: name, framework, Node version, production branch, linked repository, production domain, plan, and whether production is live, failing, building or not deployed. In Build › Operating systems, Vercel is the Hosting system, with each sync and its production health: a failed deploy, a rollback, a domain unverified, misconfigured or expiring. Solution design shows what the product runs on. The same sync keeps each project\'s newest 200 deployments: production deploys feed Product roadmap, and previews feed Prototype / MVP.',
       'Axal VC asks Vercel for Read on projects, deployments and domains, nothing else. If Vercel grants more, Axal VC uninstalls the integration and refuses the connection. Disconnecting uninstalls it on Vercel and deletes what Axal VC read.',
     ],
     tools: [
@@ -547,7 +545,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
         ["'/v10/projects'", '`/v9/projects/${key(id)}`)']),
       tool('read_domains', 'domains', 'read', 'Reads each chosen project\'s domains, to record its production domain, and each domain\'s configuration and the account\'s registered domains, for production health.', 'operating_systems',
         ['`/v9/projects/${key(id)}/domains`', '`/v6/domains/${key(name)}/config`', "'/v5/domains'"]),
-      tool('read_deployments', 'deployments', 'read', 'Reads deployments, their state, promotions and rollbacks. The sync reads one page of production deployments per project, for production health (D1097); Vercel part 3 reads more.', 'operating_systems',
+      tool('read_deployments', 'deployments', 'read', 'Reads each chosen project\'s newest 200 deployments: state, times, build length, commit, branch and pull request. Never who made one or its commit message. Production deploys feed Product roadmap; previews feed Prototype / MVP. The sync also reads one page of production deployments per project for production health (D1097).', 'prototype_mvp',
         ["'/v7/deployments'", '`/v13/deployments/${key(id)}`']),
       tool('uninstall', 'the installation', 'account', 'Uninstalls the integration on Vercel when you disconnect, and when Vercel grants more than read.', null,
         ["`/v1/integrations/configuration/${key(auth.configuration_id)}`, {}, 'DELETE'", "method: 'GET' | 'DELETE' = 'GET'"]),

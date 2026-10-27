@@ -10,8 +10,9 @@ export function fakeVercel({
   selected = [],
   domains = { default: [{ name: 'fixture.example', verified: true }] },
   rateLimited = () => false,
-  // D1097: the health evidence. Each defaults to a healthy answer; a function may return a status number to fail.
-  deployments = () => [{ uid: 'dpl_fixture', readyState: 'READY', target: 'production', createdAt: 1792886400000 }],
+  // D1098: each project's deployments, newest first, read 100 at a time with `until`.
+  // D1097 passes a function instead: it returns that project's list, or a status number to fail the read.
+  deployments = { default: [{ uid: 'dpl_fixture', readyState: 'READY', target: 'production', createdAt: 1792886400000 }] },
   domainConfig = () => ({ misconfigured: false }),
   accountDomains = () => [{ name: 'fixture.example' }],
 } = {}) {
@@ -35,7 +36,17 @@ export function fakeVercel({
       return p ? json(p) : json({ error: { code: 'not_found' } }, 404);
     }
     if (/^\/v9\/projects\/[^/]+\/domains$/.test(url.pathname)) return json({ domains: domains[url.pathname.split('/')[3]] ?? domains.default ?? [] });
-    if (url.pathname === '/v7/deployments') { const d = deployments(url.searchParams.get('projectId')); return typeof d === 'number' ? json({}, d) : json({ deployments: d }); }
+    if (url.pathname === '/v7/deployments') {
+      const projectId = url.searchParams.get('projectId');
+      if (typeof deployments === 'function') {
+        const d = deployments(projectId);
+        return typeof d === 'number' ? json({}, d) : json({ deployments: d });
+      }
+      const until = Number(url.searchParams.get('until') ?? Infinity);
+      const list = (deployments[projectId] ?? deployments.default ?? []).filter(d => d.createdAt < until);
+      const page = list.slice(0, 100);
+      return json({ deployments: page, pagination: { next: list.length > 100 ? page.at(-1).createdAt : null } });
+    }
     if (/^\/v13\/deployments\/[^/]+$/.test(url.pathname)) return json({ id: 'dpl_fixture', readyState: 'READY' });
     if (/\/aliases$/.test(url.pathname)) return json({ aliases: [{ alias: 'fixture.example' }] });
     if (/^\/v6\/domains\/[^/]+\/config$/.test(url.pathname)) { const c = domainConfig(decodeURIComponent(url.pathname.split('/')[3])); return typeof c === 'number' ? json({}, c) : json(c); }

@@ -6,6 +6,7 @@ import { hashEmail } from '../util/hashEmail';
 import { activeGrant, ndaActive } from '../routes/data_room';
 import { roundCallPipelineStatements } from '../routes/contacts';
 import { roundCallRequestStatement } from './dataRoomRequests';
+import { investorEvidence, RaiseEvidenceError } from './raiseEvidence';
 
 export class RoundCallError extends Error {
   status: 400 | 403 | 404 | 409 | 422 | 503;
@@ -356,13 +357,16 @@ export async function investorPage(env: Env, call: CallRow, investor: User) {
   const questions=await env.DB.prepare('SELECT uid,question,answer,asked_at,answered_at FROM round_call_questions WHERE call_id=? AND investor_user_id=? ORDER BY asked_at,id').bind(call.id,investor.id).all();
   // D1226: the company whose call this is, for CLS13's header. Its name only, never the founder's.
   const company=await env.DB.prepare('SELECT name FROM projects WHERE id=? AND deleted_at IS NULL').bind(call.project_id).first<{name:string|null}>();
+  // D1265 (#3288): the venture's shared evidence as this recipient may see it; each open logs open_evidence. A recipient the read
+  // does not admit (a call not yet sent) gets none; a failed read says so and never blanks the call.
+  const evidence=await investorEvidence(env,call.project_id,investor.id).catch(e=>(e instanceof RaiseEvidenceError && e.code==='not_found')?null:{state:'unreadable',reason:'The evidence could not be read. Try again.'});
   return { viewer:'investor',company:{name:company?.name ?? null},call:{uid:call.uid,name:call.name,amount_cents:call.amount_cents,instrument:call.instrument,
       terms:call.terms,minimum_cheque_cents:call.minimum_cheque_cents,target_close:call.target_close,
       valuation_cap_cents:call.valuation_cap_cents ?? null,discount_bps:call.discount_bps ?? null,pre_money_cents:call.pre_money_cents ?? null,
       deck_version:call.deck_version,state:call.state,sent_at:call.sent_at},
     deck,recipient:{commitment_cents:recipient.commitment_cents,data_room_requested_at:recipient.data_room_requested_at},questions:questions.results||[],read_only:!writableCall(call,today()) || !!deck && 'unreadable' in deck,
     data_room:{recorded:call.data_room_project_uid!=null,nda_signed:!!nda,has_grant:!!grant,
-      path:grant?'/research/diligence/'+encodeURIComponent(grant.uid):null} };
+      path:grant?'/research/diligence/'+encodeURIComponent(grant.uid):null},evidence };
 }
 export async function respond(env: Env, call: CallRow, investor: User, input: Record<string, unknown>, extraStatements: (claim: string) => D1PreparedStatement[] = () => []) {
   await verifiedReader(env,investor);

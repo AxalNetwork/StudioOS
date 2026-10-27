@@ -27,6 +27,8 @@
  * `vercel_health_events` through `applyHealth`, marked `sync` or `webhook`. A
  * read that fails checks nothing, so it closes nothing; a 429 stops the sync
  * before that project's health is applied.
+ * D1098 (part 3) adds each project's newest 200 deployments
+ * (`services/vercel/deployments.ts`).
  *
  * `clearVercelRows` deletes every `vercel_*` row of a connection; parts 2-4
  * add their tables to it. The rows also cascade with the connection.
@@ -39,6 +41,7 @@ import { oauthCallbackUrl } from '../../util/url';
 import { projectEnabled } from '../companyScope';
 import { decryptCredentials } from '../secrets';
 import { registerProvider, type ConnectInput, type ConnectResult, type IntegrationRow, type SyncResult } from '../registry';
+import { DEPLOYMENT_PAGES, deploymentRow, landDeployments, pruneDeployments, retainDeployments } from '../../services/vercel/deployments';
 import { VercelError, exchangeVercelCode, vercelClient, type Installation, type VercelAuth, type VercelProject, type Deployment, type Domain } from '../../services/vercel/api';
 import { applyHealth, healthFindings } from '../../services/vercel/health';
 
@@ -137,6 +140,8 @@ export async function clearVercelRows(env: Env, integrationId: number): Promise<
     // D1097 (#2962): the connection's health events, and their ledger rows.
     env.DB.prepare("DELETE FROM connector_fed_items WHERE integration_id = ? AND local_table = 'vercel_health_events'").bind(integrationId),
     env.DB.prepare('DELETE FROM vercel_health_events WHERE integration_id = ?').bind(integrationId),
+    // D1098 (part 3): deployments.
+    env.DB.prepare('DELETE FROM vercel_deployments WHERE integration_id = ?').bind(integrationId),
     env.DB.prepare('DELETE FROM vercel_projects WHERE integration_id = ?').bind(integrationId),
     env.DB.prepare('DELETE FROM vercel_installations WHERE integration_id = ?').bind(integrationId),
   ]);
@@ -292,10 +297,20 @@ export async function syncVercel(env: Env, row: IntegrationRow, source: 'sync' |
       ));
       kept.push(id);
       counts.projects = Number(counts.projects) + 1;
-      // D1097: what this project's production health is now.
+      // D1097: what this project's production health is now. A 429 here stops the sync before it is applied.
       const health = await projectHealth(env, client, { integrationId: row.id, projectId, source }, p, id, domains, account);
-      counts.deployments = Number(counts.deployments) + health.deployments;
       counts.health_events = Number(counts.health_events) + health.open;
+      // D1098 (part 3): the project's newest deployments, kept as `vercel_deployments` and ledger rows.
+      // `counts.deployments` is how many of those rows this sync wrote, not the health page's length.
+      let until: number | undefined;
+      for (let page = 0; page < DEPLOYMENT_PAGES; page += 1) {
+        const body = await client.deployments(id, until);
+        const found = (body.deployments ?? []).map((d) => deploymentRow(d, repositoryOf(p))).filter((r): r is NonNullable<typeof r> => r !== null);
+        counts.deployments = Number(counts.deployments) + await landDeployments(env, row.id, projectId, id, found);
+        const next = body.pagination?.next;
+        if (typeof next !== 'number') break;
+        until = next;
+      }
     } catch (e) {
       if (e instanceof VercelError && e.code === 'vercel_rate_limited') { partial = true; break; }
       if (e instanceof VercelError && e.status === 404) { counts.not_reachable = Number(counts.not_reachable) + 1; continue; }
@@ -310,7 +325,9 @@ export async function syncVercel(env: Env, row: IntegrationRow, source: 'sync' |
       env.DB.prepare(PRUNE_HEALTH).bind(row.id, projectId, JSON.stringify(kept)),
       env.DB.prepare(PRUNE_HEALTH_LEDGER).bind(row.id, row.id),
     ]);
+    await pruneDeployments(env, row.id, projectId, kept);
   }
+  await retainDeployments(env, row.id, projectId);
   if (partial) counts.partial = true;
   const n = Number(counts.projects);
   const what = `${n} ${n === 1 ? 'project' : 'projects'}`;

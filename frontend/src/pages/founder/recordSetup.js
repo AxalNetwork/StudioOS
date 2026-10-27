@@ -16,6 +16,7 @@
  * drawn, disabled, with that reason: it never takes a choice and drops it.
  */
 
+import { storageRefusal } from '../account/storagePageModel.js';
 import { MEETING_PROVIDERS, safeJoinUrl } from './channelThreads.js';
 import { consentTarget } from './chatConsent.js';
 
@@ -329,6 +330,10 @@ export function newStartKey(rand = () => Math.random().toString(36).slice(2, 10)
  * session's live view instead of a second recording.
  */
 export function startRefusal(e) {
+  // D1171 (STG4): a plan already full refuses the start (D1170); the room's
+  // shared sentence and its links, never the Worker's longer one.
+  const storage = storageRefusal(e);
+  if (storage) return { text: storage.text, liveHref: null, storage };
   const text = (typeof e?.message === 'string' && e.message.trim()) || 'The session could not be created.';
   const sid = e?.data?.session_id;
   if (e?.code === 'session_active' && Number.isSafeInteger(Number(sid)) && Number(sid) > 0) {

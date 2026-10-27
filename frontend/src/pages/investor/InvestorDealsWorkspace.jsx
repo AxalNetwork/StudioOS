@@ -171,11 +171,11 @@ export default function InvestorDealsWorkspace({ embedded = false, zone = null }
           </section>
         )}
 
-        {/* THE PIPELINE SECTION MOVED, IT DID NOT GO AWAY. Canvas ID1 draws
-            `/deals/pipeline` as a full composition — a four-up strip, a
-            six-column instrument with an SLA band per row, the note, and the
-            AI band — and `pages/investor/deals/PipelineZone.jsx` is that page.
-            `InvestorDealsRoutes` sends the slug there.
+        {/* THE PIPELINE SECTION MOVED, AND THEN RETIRED. Canvas ID1 drew
+            `/deals/pipeline` as a full composition, which was
+            `pages/investor/deals/PipelineZone.jsx` until D1243 (#3256)
+            retired it into Deal flow's table: `/deals/pipeline` forwards to
+            `/deals?view=table`.
 
             Keeping the card here as well would have mounted the SAME zone row
             twice, which is what `profile_zone_actions.test.mjs` caught: two

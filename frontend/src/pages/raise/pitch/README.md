@@ -9,7 +9,7 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 | `PitchStudio.jsx` | The studio's shell and the tabs whose reads exist: Decks (PD2) at `/raise/pitch`, Review at `/raise/pitch/review` (`PitchReview.jsx`), Share & analytics (PD19) at `/raise/pitch/analytics`. |
 | `pitchStudioModel.js` | Pure: the addresses, the words, and every derivation from the reads (views by week, seconds per slide, one version's readers and its funnel, the investor links and their pages). |
 | `PitchPresent.jsx` | Present mode at `/raise/pitch/present` (D901, PD16 and PD26 frame 2): the presenter view, the audience view and the phone viewer. Reads one version; writes nothing. |
-| `ExportDialog.jsx` | The export dialog (D901, PD17 and PD25): PDF, PowerPoint and HTML, with Google Slides drawn as unavailable. It says what the export records before it runs. |
+| `ExportDialog.jsx` | The export dialog (D901, PD17 and PD25): PDF, PowerPoint, HTML and (D904) Google Slides, created in the member's own Drive. It says what the export records before it runs; for Google it says to connect first, with the one link, and after, "Created in Google Slides · Open ›". |
 | `presentExportModel.js` | Pure: present mode's cards, keys, timer and dots, and the export dialog's formats, sentences and ledger line. |
 | `PitchReview.jsx` | D900 (#2679), PD14: the Review tab. The current version's review (`POST /api/decks/:id/review`) with its score only when one came back, four columns each pointing to a card, and the run's cost; "Reviews per version" (`GET /api/decks/:id/reviews`) with "Score not returned"; "Review this version" behind a dialog. The reviewer for an upload or pasted text (`DeckReviewerPage`, embedded) stays below it. |
 | `reviewModel.js` | D900: pure words and derivations of the Review tab: the cost in dollars or "Not recorded", the score or "Score not returned", the card pointer, the history rows, the estimate and the dialog's sentence. |
@@ -62,7 +62,7 @@ they build becomes a version until the founder saves the cards they kept.
 - **A board waits for its store.** The canvas draws boards whose Worker reads do
   not exist yet: the coverage meter and source chips, the generate flow, the
   editor, card AI tools, present mode and export, the share dialog, images and
-  Google Slides. Each is a slot task on #2434. Build a board in the PR that
+  Google Slides (D904 built it). Each is a slot task on #2434. Build a board in the PR that
   builds its read, and add its derivation to `pitchStudioModel.js` with a test
   in `frontend/test/pitch_studio_d894.test.mjs` or its own file.
 - **An admin reads, and changes nothing** (PD21). `isReadOnly` is true for an
