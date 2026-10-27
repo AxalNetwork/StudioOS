@@ -442,7 +442,9 @@ test('the wiring: no browser pop-up, every read is a mounted route, light classe
   assert.match(worker, /app\.route\('\/api\/reporting', reporting\)/);
   assert.match(read('cloudflare-worker/src/routes/esign.ts'), /esign\.get\('\/staged\/line\/:commitmentId'/);
   assert.match(read('cloudflare-worker/src/routes/mercury_investor.ts'), /app\.post\('\/proposals\/:uid\/accept'/);
-  assert.doesNotMatch(worker, /company_receiving_accounts/, 'the receiving-account route is still unmounted, so the room says so (D1218 §4)');
+  // D1217's follow-up (#3214) mounted the receiving-account route before the Closing router. The room
+  // reads it in a later part, and until then still says "Not read here yet" (D1218 §4).
+  assert.match(worker, /app\.route\('\/api\/closings\/company-receiving-accounts', companyReceivingAccounts\);\n(?:\/\/[^\n]*\n)?app\.route\('\/api\/closings', closings\)/);
   for (const src of files.slice(0, 3)) {
     for (const m of src.matchAll(/className="([^"]+)"/g)) {
       const c = m[1];
