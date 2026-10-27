@@ -691,7 +691,8 @@ test('every interview creator reads the one constant', () => {
   assert.match(read('middleware/requireTier.ts'), /FREE_TIER_LIMITS\.discoveryInterviews \? tierUpsell\('growth'\)/);
   assert.match(read('routes/founder_validate_sessions.ts'), /interviewCapRefusal\(c\.env, user\.id, projectId\)/);
   assert.match(read('services/interviewIntake.ts'), /interviewCapRefusal\(env, member\.id, project\.id\)/);
-  assert.match(read('services/assistantInterviews.ts'), /interviewCapRefusal\(env, grant\.userId, project\.id\)/);
+  // D1087: the cap sits in the storage step every outside interview takes (an assistant's, Notion's).
+  assert.match(read('services/assistantInterviews.ts'), /interviewCapRefusal\(env, a\.userId, a\.projectId\)/);
   assert.match(read('routes/progress.ts'), /FREE_TIER_LIMITS\.discoveryInterviews/);
   assert.match(read('routes/contacts.ts'), /FREE_TIER_LIMITS\.discoveryInterviews/);
 });

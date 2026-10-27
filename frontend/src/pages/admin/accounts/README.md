@@ -41,4 +41,6 @@ Admin › Accounts' Overview at `/admin/accounts`, from the owner's "Accounts" c
 | `AllAccounts.jsx` | The All accounts table (ACC2, ACC3, ACC12) that `../consoles/UsersConsole.jsx` mounts: chips, Views, search, Filters, Sort, Columns, the bulk bar and its two dialogs, each row's menu, paging, and the no-match, reading, trust-unreadable and failed states. The record and the row actions stay the console's |
 | `AccountsOverview.jsx` | The Overview over D1301's `GET /api/admin/accounts/overview` (`lib/api/adminAccounts.js`): the blocks, View as table, loading, the empty studio and failures |
 
+**On a phone (D1307, ACC14):** below 1024px (`usePhoneWidth()`), `AllAccounts.jsx` draws cards (`cardView`), Filters and sort and the row menu as sheets, and Show more (`moreOf`); the Overview stacks with every target 44px tall. The desktop is unchanged.
+
 **Adding to it:** a figure comes from a read the Worker serves, never from the page; All accounts filters, sorts and counts on the server, never over the rows on screen. A block that failed says so with Try again, and one that nothing records says "Not recorded" with why; neither is ever a zero, and one failed block never blanks the page. Each person opens their record at `/admin/accounts/all/<id>` (`accountRecordHref`). Every class has its dark twin.
