@@ -29,6 +29,8 @@ const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const M315 = read('cloudflare-worker/sql/migrations/315_spinout_application_lifecycle.sql');
 const M316 = read('cloudflare-worker/sql/migrations/316_spinout_application_interviews.sql');
+// D1123: 602 adds the interview's outcome; a database with 316 has it after deploy.
+const M602 = read('cloudflare-worker/sql/migrations/602_lab_interview_outcome_and_reached_weeks.sql');
 
 function ddl(name: string): string {
   const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
@@ -43,7 +45,7 @@ const TABLES = ['users', 'user_spinout_flags', 'spinout_applications', 'spinout_
 function freshDb({ migrate = true } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of TABLES) db.exec(ddl(t));
-  if (migrate) { db.exec(M315); db.exec(M316); }
+  if (migrate) { db.exec(M315); db.exec(M316); db.exec(M602); }
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   u.run(ADMIN_ID, 'admin', 'Admin One', 'admin@example.test');
   u.run(FOUNDER_ID, 'founder', 'Ada Founder', 'ada@example.test');

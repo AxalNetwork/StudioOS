@@ -2528,7 +2528,8 @@ export const api = {
   kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
   // D634 — one masked KYC field in clear; the Worker logs the showing first.
   kycAdminShowField: (userId, field) => request(`/kyc/admin/${userId}/sensitive/${encodeURIComponent(field)}`),
-  // D1303: full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  // D1303 (#3400): full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  // D1306 (#3403): the drawer's full-access dialog sends both, from the one reason it asks for.
   kycAdminApprove: (userId, body) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH', ...(body ? { body: JSON.stringify(body) } : {}) }),
   kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
@@ -2767,6 +2768,8 @@ export const api = {
   // D383 — the partner interview on an applicant (schedule replaces the live one).
   adminCohortScheduleInterview: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/interview`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortCancelInterview: (applicantId) => request(`/admin/cohort/applications/${applicantId}/interview/cancel`, { method: 'POST' }),
+  // D1123: held or missed, once the interview's time has passed.
+  adminCohortInterviewOutcome: (applicantId, outcome) => request(`/admin/cohort/applications/${applicantId}/interview/outcome`, { method: 'POST', body: JSON.stringify({ outcome }) }),
   adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),

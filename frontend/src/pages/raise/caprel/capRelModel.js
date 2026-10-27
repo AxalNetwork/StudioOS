@@ -215,6 +215,54 @@ export function mergeImport(answers, size = IMPORT_CHUNK) {
   return { created, total, skipped };
 }
 
+/**
+ * D1194 (#3128): where an old address lands. The query and the hash are kept;
+ * `?project=` becomes `?project_id=`, the tool's word, and `moved` names the
+ * notice the tool shows (`MOVED`).
+ */
+export function capRelMovedTo(tab, search = '', moved = null) {
+  const q = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  if (q.has('project')) {
+    if (!q.has('project_id')) q.set('project_id', q.get('project'));
+    q.delete('project');
+  }
+  if (moved) q.set('moved', moved);
+  const out = q.toString();
+  const path = TABS.find((t) => t.id === tab)?.path ?? '';
+  return { pathname: `${HOME_PATH}${path}`, search: out ? `?${out}` : '' };
+}
+
+/**
+ * D1194: the quote-aware CSV parser the Pipeline's Import reads with (quoted
+ * fields, `""` escapes, CRLF). It lived in the retired RaisePipelinePage.
+ */
+export function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false;
+      } else field += ch;
+    } else if (ch === '"') {
+      inQ = true;
+    } else if (ch === ',') {
+      row.push(field); field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.some((f) => f.trim() !== '')) rows.push(row);
+      row = [];
+    } else field += ch;
+  }
+  row.push(field);
+  if (row.some((f) => f.trim() !== '')) rows.push(row);
+  return rows;
+}
+
 /** The moved notices (CRL13), in the canvas's words, by `?moved=`. */
 export const MOVED = {
   pipeline: 'The investor pipeline is now Capital relationships › Pipeline.',

@@ -45,15 +45,9 @@ export const PAGE_LINE = 'Articles members propose, from submission to publish. 
 /**
  * What each tab waits on, until its slot task lands (D1290 §4). Each says
  * where today's version of the block is, never an empty board or a zero.
+ * D1296 (#3392) built Calendar, so its wait is gone (`contentQueue/Calendar.jsx`).
  */
 export const WAITS = Object.freeze({
-  calendar: {
-    title: 'The calendar is not built yet',
-    lines: [
-      'It shows every scheduled and published article by day, with Move… on each one. It needs the queue to answer by date range (D1291) and is built by D1296.',
-      'Until then, an approved article’s time to go out is set in its review panel on Pipeline, in your zone and in UTC.',
-    ],
-  },
   authors: {
     title: 'Authors is not built yet',
     lines: [
