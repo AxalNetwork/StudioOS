@@ -359,7 +359,7 @@ export async function investorPage(env: Env, call: CallRow, investor: User) {
   const company=await env.DB.prepare('SELECT name FROM projects WHERE id=? AND deleted_at IS NULL').bind(call.project_id).first<{name:string|null}>();
   // D1265 (#3288): the venture's shared evidence as this recipient may see it; each open logs open_evidence. A recipient the read
   // does not admit (a call not yet sent) gets none; a failed read says so and never blanks the call.
-  const evidence=await investorEvidence(env,call.project_id,investor.id).catch(e=>e instanceof RaiseEvidenceError&&e.code==='not_found'?null:{state:'unreadable',reason:'The evidence could not be read. Try again.'});
+  const evidence=await investorEvidence(env,call.project_id,investor.id).catch(e=>(e instanceof RaiseEvidenceError && e.code==='not_found')?null:{state:'unreadable',reason:'The evidence could not be read. Try again.'});
   return { viewer:'investor',company:{name:company?.name ?? null},call:{uid:call.uid,name:call.name,amount_cents:call.amount_cents,instrument:call.instrument,
       terms:call.terms,minimum_cheque_cents:call.minimum_cheque_cents,target_close:call.target_close,
       valuation_cap_cents:call.valuation_cap_cents ?? null,discount_bps:call.discount_bps ?? null,pre_money_cents:call.pre_money_cents ?? null,
