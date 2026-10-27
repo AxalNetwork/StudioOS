@@ -318,6 +318,11 @@ for a deal, its lines and their capital route, the evidence that money moved,
 the founder's cap-table decision and the close. An investor reads their own
 lines and the round's total. Nothing in it moves money.
 
+D1217 (#3214): `companyReceivingAccounts.js` reads the company's receiving
+account (always masked), saves it (the venture's founder), and reveals it once
+for an investor with a signed line, logged without the number
+(`/api/closings/company-receiving-accounts/:projectId`). No page calls it yet.
+
 D845 (#2471): `developerUsage.js` reads the caller's own usage reports over
 `api_usage_events` (D843): `report` (`GET /api/developer/usage`, grouped by day,
 key, provider, connector, tool or model, or by day and a second way) and `events`

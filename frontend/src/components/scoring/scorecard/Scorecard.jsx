@@ -21,7 +21,7 @@ import { Lightbox, Unreadable } from '../../../ui';
 import { ventureScoresApi } from '../../../lib/api/ventureScores';
 import { reportError } from '../../../lib/log';
 import {
-  COUNTED, FOUNDER_PAGE, GRADES, METHOD, MIX, NOT_ENOUGH, NOT_EXPECTED, NOT_SCORED, NOT_YET, PMF_GROUPS, SCOPES, STATE_WORDS, UNREADABLE, WAITS,
+  COUNTED, FOUNDER_PAGE, GRADES, METHOD, MIX, NOT_ENOUGH, NOT_EXPECTED, NOT_REVIEWED, NOT_SCORED, NOT_YET, PMF_GROUPS, SCOPES, STATE_WORDS, UNREADABLE, WAITS,
   barText, bandWord, batches, coverageText, gradeMix, panelOf, reviewText, stampText, stripBar, stripOf, unreadScopes,
 } from './scorecardModel';
 
@@ -361,6 +361,23 @@ export function ScopeDrawer({ s, model, computedAt, onClose }) {
             <ul className="m-0 list-none p-0">{list.map((i) => <InputRow key={i.key} i={i} />)}</ul>
           </div>
         ))}
+        {s.layers && (
+          <div data-testid="scorecard-risk-layers">
+            <h4 className={`${EYE} mb-0.5 mt-4`}>The ten venture-risk layers · analyst reviews</h4>
+            <ul className="m-0 list-none p-0">
+              {s.layers.map((l) => (
+                <li key={l.key} className="flex flex-col gap-0.5 border-b border-axal-hairline py-1.5 text-[13px] last:border-0 dark:border-gray-800" data-testid={`risk-layer-${l.key}`}>
+                  <span className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-axal-ink dark:text-gray-100">{l.label}</span>
+                    <span className={`font-mono text-[12px] ${l.reviewed ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>{l.text}{l.reviewed_on ? ` · ${l.reviewed_on}` : ''}</span>
+                  </span>
+                  {l.note && <span className={SUB}>{l.note}</span>}
+                </li>
+              ))}
+            </ul>
+            <p className={`m-0 mt-1 ${SUB}`}>Each layer is an analyst&rsquo;s review; one no analyst scored is {NOT_REVIEWED.toLowerCase()}, never 0. They feed &ldquo;Analyst layer reviews&rdquo; above as their mean.</p>
+          </div>
+        )}
         {inputs.some((i) => i.kind === 'counted') && (
           <p className="m-0 mt-3 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-600 dark:text-gray-300">Individual skills and values are never shown. {COUNTED}.</p>
         )}

@@ -14,7 +14,7 @@ import { acceptCompanyProposal, companyFromCode, dismissCompanyProposal } from '
 import { acceptVercelProposal, companyFromVercel, dismissVercelProposal } from '../services/vercel/company';
 import { validateConnectorSettings } from '../integrations/connectorRules';
 import { dismissHealthEvent } from '../services/vercel/health';
-import { hostingSystems } from '../services/vercel/hosting';
+import { UNREADABLE as VERCEL_UNREADABLE, hostingSystems, vercelRuntime } from '../services/vercel/hosting';
 import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
@@ -182,7 +182,7 @@ function reconnect(providerKey: string, failedAt: unknown, projectId: number, fa
   return { text: `Reconnect ${name}${since ? ` · failing since ${since}` : ''}`, href: connectHref(providerKey, projectId) };
 }
 
-async function solution(env: Env, p: Project): Promise<ModuleRead> {
+async function solution(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
             pg.title AS pain_theme, h.claim AS hypothesis
@@ -216,7 +216,16 @@ async function solution(env: Env, p: Project): Promise<ModuleRead> {
     cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
     list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
       sort: { key: 'impact', label: 'Impact' }, orders: { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } },
-    facts: { features: features.length, risks }, parts: { from_code: await fromCode(env, p.id) } };
+    facts: { features: features.length, risks }, parts: { from_code: await fromCode(env, p.id), vercel_runtime: await runsOnVercel(env, p, viewer) } };
+}
+
+/** D1097 (#2962): Solution design's "Runs on" from Vercel (VC4a). Its own read, Unreadable on its own. */
+async function runsOnVercel(env: Env, p: Project, viewer: Viewer) {
+  try { return await vercelRuntime(env, p, viewer, await projectMember(env, p, viewer)); }
+  catch (error) {
+    console.error('[cycle_build] vercel runtime read failed', (error as Error)?.message);
+    return { state: 'unreadable', items: [], reason: VERCEL_UNREADABLE };
+  }
 }
 
 /**
@@ -656,7 +665,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
   let hosting: any;
   try { hosting = await hostingSystems(env, p, viewer, viewerMember, connectHref('vercel', p.id)); }
-  catch { hosting = { state: 'unreadable', systems: [], reason: 'Unreadable: Vercel could not be read. The rest of this page is current.', syncs: { state: 'unreadable', rows: [], reason: null } }; }
+  catch { hosting = { state: 'unreadable', systems: [], reason: VERCEL_UNREADABLE, syncs: { state: 'unreadable', rows: [], reason: null } }; }
 
   const rituals = rows(await env.DB.prepare(
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?

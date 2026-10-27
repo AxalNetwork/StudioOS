@@ -122,7 +122,8 @@ test('the sheet\'s entry: three steps, the consent line, the link, and a starter
   const text = renderedText(h);
   assert.match(text, /Connect your assistant[^]*Run the interview there[^]*Review it here/);
   assert.match(text, /consent must cover your AI assistant processing the interview/);
-  assert.match(h, /href="\/account\/connectors#ai-assistants"/);
+  // D1315: the assistants live in Account › Builder.
+  assert.match(h, /href="\/account\/builder"/);
   assert.match(text, /StudioOS never sends it anywhere/);
   const p = starterPrompt('Northwind');
   assert.match(p, /^Use the StudioOS connector for Northwind\./);

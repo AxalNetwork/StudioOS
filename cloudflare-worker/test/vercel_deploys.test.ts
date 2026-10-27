@@ -66,6 +66,7 @@ async function world(opts: { withDeploys?: boolean } = {}) {
   for (const line of [...mig('441_build_cycle_stores.sql').matchAll(/^ALTER TABLE (mvp_features|roadmap_okrs) ADD COLUMN [^\n]+;$/gm)].map((m) => m[0])) db.exec(line);
   for (const line of [...mig('461_build_record_stores.sql').matchAll(/^ALTER TABLE (mvp_features|roadmap_okrs) ADD COLUMN [^\n]+;$/gm)].map((m) => m[0])) db.exec(line);
   db.exec(mig('445_connector_fed_items.sql'));
+  db.exec(mig('590_vercel_health_events.sql'));
   db.exec(mig('499_github_roadmap.sql'));
   addMvpStores(db);
   db.exec(mig('589_vercel_installations.sql'));
@@ -323,7 +324,7 @@ test('no Vercel sync touches a must-have, a roadmap item, a release or a release
   assert.equal(out.counts.deployments, 2);
   assert.deepEqual(snapshot(w), before, 'the four tables are byte-for-byte what they were');
   assert.ok(f.calls.every((x: any) => x.method === 'GET'), 'the sync only reads');
-  assert.deepEqual(w.all(`SELECT external_id, module, kind, local_table FROM connector_fed_items WHERE integration_id = 41 ORDER BY external_id`).map((r) => ({ ...r })), [
+  assert.deepEqual(w.all(`SELECT external_id, module, kind, local_table FROM connector_fed_items WHERE integration_id = 41 AND kind = 'deployment' ORDER BY external_id`).map((r) => ({ ...r })), [
     { external_id: 'deploy:dpl_p1', module: 'product_roadmap', kind: 'deployment', local_table: 'vercel_deployments' },
     { external_id: 'deploy:dpl_pr', module: 'prototype_mvp', kind: 'deployment', local_table: 'vercel_deployments' },
   ]);
@@ -363,6 +364,7 @@ test('the sync reads at most two pages per project, following Vercel\'s `until`'
   const real = Date.now();
   const list = Array.from({ length: 250 }, (_, i) => vd(`dpl_${i}`, real - (i + 1) * 60_000));
   const { out, f } = await synced(w, list);
-  assert.equal(f.calls.filter((x: any) => x.path === '/v7/deployments').length, 2);
+  // One page for production health (D1097), then two pages of the newest deployments (D1098).
+  assert.equal(f.calls.filter((x: any) => x.path === '/v7/deployments').length, 3);
   assert.equal(out.counts.deployments, 200, 'the newest 200');
 });

@@ -122,26 +122,17 @@ test('D1254: investor Screening contains only readable deals and audited verifie
       for (let i = 0; i < 201; i++) unrelated.run(1000 + i);
       const result = await request(deals, f.env, 3, '/screening');
       assert.equal(result.status, 200);
-      assert.deepEqual(result.body.scored.rows.map((r: any) => r.deal_id), [100]);
-      assert.equal(result.body.scored.rows[0].total_score, review === 'approved' ? 90 : null);
-      assert.equal('flags' in result.body.scored.rows[0], false);
-      assert.deepEqual(Object.keys(result.body).sort(), ['flags', 'red_flag_rules_available', 'red_flag_rules_reason', 'rubric', 'scored', 'source_quality', 'stage_history']);
-      assert.deepEqual(result.body.scored, {
-        available: true, total_deals: 1, scored_deals: review === 'approved' ? 1 : 0, unscored_deals: review === 'approved' ? 0 : 1,
-        rows: [{ deal_id: 100, company: 'Synthetic venture', sector: null, deal_status: 'active',
-          total_score: review === 'approved' ? 90 : null, tier: review === 'approved' ? 'TIER_1' : null,
-          scored_at: review === 'approved' ? '2026-10-01T00:00:00Z' : null,
-          dimensions: ['market', 'team', 'product', 'capital', 'fit', 'distribution'].map(key => ({ key, total: review === 'approved' ? (['market', 'team'].includes(key) ? 20 : 0) : null })) }],
-        sandbox_excluded: true, sandbox_note: 'Sandbox snapshots are practice runs and are excluded. A rehearsal is not a screening result.',
+      // D1260 (#3283): the desk keeps D1254's reader rule and carries no Lab score, whatever the snapshot's review.
+      assert.deepEqual(Object.keys(result.body).sort(), ['desk', 'scores', 'source_quality', 'stage_history']);
+      assert.deepEqual(result.body.desk, {
+        available: true, total_deals: 1,
+        rows: [{ deal_id: 100, company: 'Synthetic venture', sector: null, deal_status: 'active' }],
       });
-      assert.deepEqual(result.body.flags, { available: false, reason: 'Administrator access required.' });
-      assert.deepEqual(Object.keys(result.body.rubric).sort(), ['available', 'dimensions', 'editable', 'editable_reason']);
-      assert.equal(result.body.rubric.editable, false);
       const logs: any[] = f.db.prepare("SELECT user_id,project_id FROM activity_logs WHERE action='score_read'").all();
-      assert.equal(logs.length, review === 'approved' || review === 'tampered' ? 1 : 0);
+      assert.equal(logs.length, 0, 'Screening read a snapshot');
       const stranger = await request(deals, f.env, 4, '/screening');
-      assert.deepEqual(stranger.body.scored.rows, []);
-      assert.deepEqual([stranger.body.scored.total_deals, stranger.body.scored.scored_deals, stranger.body.scored.unscored_deals], [0, 0, 0]);
+      assert.deepEqual(stranger.body.desk.rows, []);
+      assert.equal(stranger.body.desk.total_deals, 0);
       assert.equal((await request(risk, f.env, 3, '/by-project/20')).status, 403);
       assert.equal((await request(risk, f.env, 3, '/matrix')).status, 403);
     } finally { f.db.close(); }
@@ -158,7 +149,7 @@ test('D1254: Screening mirrors canonical single/bulk deal permissions, including
       assert.equal(await userMayReadDeal(f.env, user, 200), true);
       const allowed = await userReadableDealIds(f.env, user, [100, 200]);
       const result = await request(deals, f.env, 3, '/screening');
-      assert.deepEqual(result.body.scored.rows.map((row: any) => row.deal_id).sort((a: number, b: number) => a - b), [...allowed].sort((a, b) => a - b));
+      assert.deepEqual(result.body.desk.rows.map((row: any) => row.deal_id).sort((a: number, b: number) => a - b), [...allowed].sort((a, b) => a - b));
       assert.deepEqual([...allowed].sort((a, b) => a - b), [100, 200]);
     } finally { f.db.close(); }
   }
