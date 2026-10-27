@@ -186,6 +186,8 @@ import './integrations/providers/vercel';
 import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
 import './integrations/providers/notion';
+// D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
+import './services/notion/build';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
