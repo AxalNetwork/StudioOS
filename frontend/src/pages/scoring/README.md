@@ -5,7 +5,8 @@ The venture scorecard's own pages, from the owner's canvas "Venture scorecard".
 | File | Address | Board |
 |---|---|---|
 | `ScoringMethodPage.jsx` | `/scoring/method` (any signed-in member) | SC11 How scoring works |
-| `FounderScorecardPage.jsx` | `/raise/scorecard` (founder, admin) | SC8 Investor scorecard |
+| `FounderScorecardPage.jsx` | `/raise/scorecard` and `/raise/scorecard/trajectory` (founder, admin) | SC8 Investor scorecard, SC12 Trajectory (D1258) |
+| `AdvisorScorecardPage.jsx` | `/practice/scorecards/:projectId` (advisor, when shared) | SC21 Advisor · read only (D1258) |
 | `HqScoringPage.jsx` | `/admin/platform/scoring` (HQ only) | SC13 Platform › Scoring |
 
 The panel and the strip are `../../components/scoring/scorecard/`. The deal page's Scorecard tab is `../DealRoomPage.jsx`.
