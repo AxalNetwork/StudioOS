@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Member side · Studio and Inbox</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Product testing · Member</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">PT-M1 to PT-M5. There is no /product-testing page and no menu entry. The flow lives in Studio, where the member already works, and in Inbox. Every detail and form opens in the shared right sheet, docked beside the Eadwyn spine. Desktop boards are 1440 wide, phone frames 390.</p>
+</header>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="5">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><sc-for list="{{ b.notes }}" as="n" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;line-height:1.45;color:#3f3a47">{{ n }}</span></sc-for></div>
+<div style="{{ b.rowSt }}">
+<sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span>
+<div style="{{ f.wst }}"><dc-import name="Product Testing Member Page" v="{{ f.v }}" hint-size="1440px,960px"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (v, cap) => ({ v, cap, wst: 'width:1440px;height:960px;border-radius:14px;overflow:hidden;border:1px solid ' + (v === 'm5dk' ? '#374151' : '#dedbe5') + ';box-shadow:0 20px 50px rgba(24,24,27,.10)' });
+    const P = (v, cap) => ({ v, cap, wst: 'width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)' });
+    const B = (id, t, notes, frames, row) => ({ id, t, notes, frames, rowSt: row ? 'display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap' : 'display:flex;flex-direction:column;gap:32px' });
+    return { boards: [
+      B('PT-M1', 'Become a Product tester · Studio card and sheet', ['The offer is a card in Studio, not a page.', 'The sheet holds what testers do, the consent text with its version, and one Apply button.', 'An Admin account sees no card.'], [D('m1a', 'Studio · not applied'), D('m1b', 'The sheet, beside the Eadwyn spine'), D('m1c', 'The card in every state, and the Admin case')]),
+      B('PT-M2', 'Open programmes · active testers only', ['A list in Studio: product, partner firm, what the test asks, dates, places left.', 'Opening one shows its questions and Apply in the sheet.', 'No other tester’s name and no email anywhere.'], [D('m2a', 'Studio · open programmes'), D('m2b', 'A programme open in the sheet')]),
+      B('PT-M3', 'My applications', ['One list: applied, picked, declined, withdrawn, finished.', 'Withdraw shows on open applications only, with a confirm step and the result.'], [D('m3a', 'Studio · my applications'), D('m3b', 'An open application in the sheet'), D('m3c', 'Confirm step'), D('m3d', 'Result')]),
+      B('PT-M4', 'Inbox messages', ['Applied, picked, declined, withdrawn by you or by HQ for you, programme closed, tester status changed.', 'Each message opens the matching sheet. Open applications show Withdraw.'], [D('m4a', 'Inbox · product testing messages'), D('m4b', 'A message opened in the sheet')]),
+      B('PT-M5', 'States · empty, loading, error, phone and dark', ['One failed read costs one block, with “Could not be read”.', 'On a phone the sheet becomes a full-screen page, and every target is at least 44px.'], [D('m5e', 'Empty'), D('m5l', 'Loading'), D('m5x', 'Error · open programmes could not be read'), D('m5dk', 'Dark · a programme open in the sheet'), P('m5p1', 'Phone · Studio'), P('m5p2', 'Phone · a programme, full screen')], true)
+    ] };
+  }
+}
+</script>
+</body></html>
