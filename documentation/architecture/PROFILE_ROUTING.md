@@ -150,7 +150,7 @@ it, where in their nav, and how do they get there.*
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | NEW | Low |
 | Data Room | `/raise/data-room` · `/raise/data-room/:id` · `/raise/data-room/file/:id` · `/raise/data-room/new` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Deals | CURRENT | High |
-| Deal Flow | `/pipeline` · `/deals` · `/deals/:dealId` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
+| Deal Flow | `/pipeline` · `/deals?view=table` · `/deals` · `/deals/:dealId` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
 | Deal flow list | `/deals` · `/deals?view=table` · `/deals?scope=all\|new` · `/deals/compare?ids=` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | UPGRADE | Low |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -166,7 +166,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Pages · Diligence room | `/research/diligence/:grantUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Headerless | Full page | Sidebar → Headerless → Fund | UPGRADE | High |
-| Pages · Investor Deals | `/deals` · `/pipeline` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
+| Pages · Investor Deals | `/deals` · `/pipeline` · `/deals?view=table` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
 | Pages · Investor Fund | `/funds` · `/funds/calls` · `/funds/accounting` · `/funds/ledger` · `/lp-reports` | Headerless | Full page (proposed) | Sidebar → Headerless → Fund | PARTIAL | Low |
 | Pages · Investor Network | `/network` | Headerless | Full page | Sidebar → Headerless → Network | PARTIAL | High |
 | Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Headerless | Full page (proposed) | Sidebar → Headerless → Portfolio | UPGRADE | Low |
