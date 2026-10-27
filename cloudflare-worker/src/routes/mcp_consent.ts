@@ -4,7 +4,8 @@
  *   GET    /api/mcp/consent/:id            the parked request: client, full redirect URI, scopes, grantable companies
  *   POST   /api/mcp/consent/:id/approve    { companies: [id…] } → { redirectTo }
  *   POST   /api/mcp/consent/:id/deny       → { redirectTo } carrying access_denied
- *   GET    /api/connectors/assistants      the caller's grants (never a token)
+ *   GET    /api/connectors/assistants      the caller's grants (never a token); D1316 adds scopes, the recognised
+ *                                       assistant, each company's still_owned, the last call and 30-day counts
  *   DELETE /api/connectors/assistants/:id  revoke one grant (KV reaches other edges within about a minute)
  *
  * All signed in (`requireAuth`), and all 404 with MCP_SERVER_ENABLED off.
@@ -26,6 +27,7 @@ import { logActorAct } from '../services/actorLog';
 import { CONSENT_TTL_SECONDS, SCOPES, requestedScopes, consentKey, mcpEnabled, oauthHelpers, type ParkedRequest } from '../mcp/oauth';
 import { assistantIdentity } from '../mcp/assistantIdentity';
 import { grantableCompanies, lastUsedKey, type GrantProps } from '../mcp/grants';
+import { ownsVenture } from './_founder_validate_helpers';
 
 type C = Context<{ Bindings: Env }>;
 const usedKey = (id: string) => `mcp_consent_used:${id}`;
@@ -135,9 +137,48 @@ mcpConsent.post('/:id/deny', async (c) => {
 
 export const assistantGrants = new Hono<{ Bindings: Env }>();
 
+/** D1316: the call log's window for a grant's counts. */
+export const GRANT_COUNT_DAYS = 30;
+
+/**
+ * D1316 (#3474): each grant's last call and its calls in the last 30 days, from
+ * the `mcp_tool_call` lines that name it (`details.grant`, written since D1316).
+ * One bound statement over the caller's own lines; `null` when it cannot be read.
+ */
+const GRANT_CALLS_SQL = `SELECT json_extract(details, '$.grant') AS grant_id, MAX(created_at) AS last_at,
+    SUM(created_at >= ?2) AS calls,
+    SUM(created_at >= ?2 AND json_extract(details, '$.outcome') = 'ok') AS ok,
+    SUM(created_at >= ?2 AND json_extract(details, '$.outcome') = 'refused') AS refused,
+    SUM(created_at >= ?2 AND json_extract(details, '$.outcome') = 'rate_limited') AS rate_limited,
+    SUM(created_at >= ?2 AND json_extract(details, '$.outcome') IN ('error', 'timeout')) AS failed
+  FROM activity_logs
+  WHERE user_id = ?1 AND action = 'mcp_tool_call' AND json_extract(details, '$.grant') IS NOT NULL
+  GROUP BY grant_id`;
+
+interface GrantCalls { last_at: string | null; calls: number; ok: number; refused: number; rate_limited: number; failed: number }
+
+async function grantCalls(env: Env, userId: number, now = Date.now()): Promise<Map<string, GrantCalls> | null> {
+  const since = new Date(now - GRANT_COUNT_DAYS * 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
+  try {
+    const r = await env.DB.prepare(GRANT_CALLS_SQL).bind(userId, since).all<Record<string, unknown>>();
+    return new Map((r.results || []).map((row) => [String(row.grant_id), {
+      last_at: row.last_at ? String(row.last_at) : null,
+      calls: Number(row.calls || 0), ok: Number(row.ok || 0), refused: Number(row.refused || 0),
+      rate_limited: Number(row.rate_limited || 0), failed: Number(row.failed || 0),
+    }]));
+  } catch (e) {
+    console.warn('[mcp] grant calls unreadable', (e as Error)?.message || 'unknown');
+    return null;
+  }
+}
+
+/** The store's `YYYY-MM-DD HH:MM:SS` (UTC) as ISO 8601. */
+const isoOf = (at: string) => `${at.replace(' ', 'T')}${/Z|[+-]\d\d:?\d\d$/.test(at) ? '' : 'Z'}`;
+
 assistantGrants.get('/', async (c) => {
   const user = await signedIn(c); if (user instanceof Response) return user;
   const helpers = oauthHelpers(c.env);
+  const calls = await grantCalls(c.env, Number(user.id));
   const out: unknown[] = [];
   let cursor: string | undefined;
   do {
@@ -145,16 +186,32 @@ assistantGrants.get('/', async (c) => {
     for (const g of page.items) {
       const m = (g.metadata || {}) as { clientName?: string | null; redirectHost?: string | null; companies?: number[] };
       const ids = Array.isArray(m.companies) ? m.companies.map(Number).filter(Number.isInteger) : [];
-      const names = ids.length
-        ? ((await c.env.DB.prepare('SELECT id, name FROM projects WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(ids)).all<{ id: number; name: string | null }>()).results || [])
+      const rows = ids.length
+        ? ((await c.env.DB.prepare('SELECT id, name, founder_id, deleted_at FROM projects WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(ids)).all<{ id: number; name: string | null; founder_id: number | null; deleted_at: string | null }>()).results || [])
         : [];
+      const mine = calls?.get(g.id) ?? null;
+      // D1316: the call log first; the KV key (31 days) only when the log names no call for this grant.
+      const kvLast = mine?.last_at ? null : (await c.env.OAUTH_KV!.get(lastUsedKey(g.id))) || null;
       out.push({
         id: g.id,
         client_name: m.clientName || null,
         redirect_host: m.redirectHost || (g.redirectUri ? hostOf(g.redirectUri) : null),
-        companies: ids.map((cid) => ({ id: cid, name: names.find((n) => n.id === cid)?.name || null })),
+        // D1316: recognised from the callback the grant was made for, never from the self-declared name.
+        ...assistantIdentity(g.redirectUri || ''),
+        scopes: Array.isArray(g.scope) ? g.scope : [],
+        companies: ids.map((cid) => {
+          const row = rows.find((n) => n.id === cid);
+          return { id: cid, name: row?.name || null, still_owned: !!row && !row.deleted_at && ownsVenture(row, user) };
+        }),
         connected_at: g.createdAt ? new Date(g.createdAt * 1000).toISOString() : null,
-        last_used_at: (await c.env.OAUTH_KV!.get(lastUsedKey(g.id))) || null,
+        last_used_at: mine?.last_at ? isoOf(mine.last_at) : kvLast,
+        last_call_at: mine?.last_at ? isoOf(mine.last_at) : kvLast,
+        last_call_source: mine?.last_at ? 'call_log' : kvLast ? 'last_use' : null,
+        // Null when the log could not be read: never zero calls in its place.
+        calls_30d: calls === null ? null : {
+          total: mine?.calls ?? 0, ok: mine?.ok ?? 0, refused: mine?.refused ?? 0,
+          rate_limited: mine?.rate_limited ?? 0, failed: mine?.failed ?? 0,
+        },
       });
     }
     cursor = page.cursor;

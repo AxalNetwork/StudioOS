@@ -12,9 +12,10 @@ import {
   APPLICATIONS_PATH, APPLICATION_REFUSALS, ASKS_MAX, BULK_MAX, CHIPS, EMPTY_FILTERS, INCORPORATED_FILTERS, INTERVIEW_FILTERS, LENGTHS, NOTE_MAX,
   ORIGIN_FILTERS, PAGE_SIZE, REASON_MAX, SORTS, STAGE_FILTERS, TTO_FILTERS,
   admitCopy, applicationOf, applicationRow, approveCopy, asksOf, bulkCopy, bulkResult, cancelCopy, cannotAct, capacityOf, closedLine,
-  cohortSwitch, cohortWord, countQuery, decidedLine, declineCopy, detailReply, etToUtc, founderSees, historyOf, interviewCopy, interviewOf,
+  cohortSwitch, cohortWord, countQuery, decidedLine, declineCopy, detailReply, etToUtc, founderSees, historyOf, interviewCopy, interviewOf, OUTCOMES, outcomeCopy,
   listQuery, listReply, moveCopy, movedLine, narrowed, needsConfirm, nextCohort, openCohorts, rangeOf, runCopy, statusOf, waitlistCopy, yourTime,
 } from './applicationsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D948 (#2753) — Applications (SL2), one application (SL3) at
@@ -238,6 +239,20 @@ function CancelDialog({ row, onClose, onChanged }) {
   );
 }
 
+/** D1123: held or missed, recorded once its time has passed. */
+function OutcomeDialog({ row, onClose, onChanged }) {
+  const [outcome, setOutcome] = useState('');
+  const w = useWrite(onChanged, APPLICATION_REFUSALS, refusalText);
+  const copy = outcomeCopy(row);
+  return (
+    <Dialog title={copy.title} sub={copy.sub} onClose={onClose} w={w} action={copy.action} disabled={!outcome} testId="lab-app-outcome"
+      onAction={() => w.run(() => api.adminCohortInterviewOutcome(row.applicantId, outcome))}
+      done={w.reply ? `The interview with ${row.company} is recorded as ${outcome}.` : null}>
+      <Radios name="lab-app-outcome" value={outcome} onChange={setOutcome} options={OUTCOMES} disabled={Boolean(w.reply)} testId="lab-app-outcome-choice" />
+    </Dialog>
+  );
+}
+
 function RunDialog({ cap, onClose, onChanged }) {
   const [reason, setReason] = useState('');
   const w = useWrite(onChanged, APPLICATION_REFUSALS, refusalText);
@@ -357,6 +372,7 @@ function ActionDialog({ dialog, overview, onClose, onChanged, now }) {
   if (kind === 'move') return <MoveDialog row={row} overview={overview} onClose={onClose} onChanged={onChanged} now={now} />;
   if (kind === 'interview') return <InterviewDialog row={row} again={row.hasInterview} onClose={onClose} onChanged={onChanged} />;
   if (kind === 'cancel') return <CancelDialog row={row} onClose={onClose} onChanged={onChanged} />;
+  if (kind === 'outcome') return <OutcomeDialog row={row} onClose={onClose} onChanged={onChanged} />;
   if (kind === 'run') return <RunDialog cap={dialog.cap} onClose={onClose} onChanged={onChanged} />;
   if (kind === 'admit') return <AdmitDialog overview={overview} onClose={onClose} onChanged={onChanged} now={now} />;
   return <BulkDialog status={dialog.status} rows={dialog.rows} cap={dialog.cap} onClose={onClose} onChanged={onChanged} />;
@@ -390,7 +406,7 @@ function Drawer({ id, tick, onClose, onAction, onRetry, now }) {
   const facts = it ? answerRows({ ...it, withdrawn_at: d.founder?.available ? d.founder.withdrawn_at : null }) : null;
   const history = d ? historyOf(d, now) : null;
   return (
-    <Lightbox label={row?.company || 'Application'} title={row?.company || 'Application'} sub={row ? [row.name, row.role].filter(Boolean).join(' · ') : null}
+    <Sheet label={row?.company || 'Application'} title={row?.company || 'Application'} sub={row ? [row.name, row.role].filter(Boolean).join(' · ') : null}
       onClose={onClose} testId="lab-app-drawer" pageBelow="lg"
       footer={(
         <div className="flex flex-wrap justify-end gap-2">
@@ -443,11 +459,20 @@ function Drawer({ id, tick, onClose, onAction, onRetry, now }) {
                   {row.interviewable ? <button type="button" className={BTN_SM} onClick={() => onAction('interview', row)} data-testid="lab-app-drawer-schedule">Schedule an interview</button> : null}
                 </span>
               ) : null}
+              {iv.state === 'recorded' ? (
+                <span className="flex flex-wrap items-center gap-2.5" data-testid="lab-app-interview-recorded">
+                  <Pill tone={iv.outcome === 'held' ? 'green' : 'muted'} glyph={iv.outcome === 'held' ? '✓' : '–'}>{iv.word}</Pill>
+                  <span className={MONO}>{iv.line}</span>
+                  <span className={SUB}>{iv.recorded}</span>
+                  {row.interviewable ? <button type="button" className={BTN_SM} onClick={() => onAction('interview', row)} data-testid="lab-app-drawer-schedule">Schedule another</button> : null}
+                </span>
+              ) : null}
               {iv.state === 'set' ? (
                 <>
                   <span className="flex flex-wrap items-center gap-2.5">
                     <span className={MONO} data-testid="lab-app-interview-line">{iv.line}</span>
                     {iv.yours ? <span className={SUB}>{iv.yours}</span> : null}
+                    {iv.due ? <button type="button" className={BTN_SM} onClick={() => onAction('outcome', row)} data-testid="lab-app-drawer-outcome">Record what happened</button> : null}
                     <button type="button" className={BTN_SM} onClick={() => onAction('interview', row)} data-testid="lab-app-drawer-reschedule">Move</button>
                     <button type="button" className={BTN_SM} onClick={() => onAction('cancel', row)} data-testid="lab-app-drawer-cancel">Cancel</button>
                   </span>
@@ -475,7 +500,7 @@ function Drawer({ id, tick, onClose, onAction, onRetry, now }) {
           </>
         ) : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

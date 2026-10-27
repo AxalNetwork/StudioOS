@@ -13,6 +13,7 @@ import {
   cannotDecide, cohortOptions, cohortWord, graceCopy, graceHours, historyRows, participantOf, participantRow,
   queryOf, reasonLeft, reasonOk, standingOf, stripText, thisWeekOf, toolsOf, unreadLines, weekCards, weekCopy, workspaceCopy,
 } from './participantsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D949 (#2754) — Participants (SL7) and one participant (SL8), from D946's
@@ -206,7 +207,7 @@ function Drawer({ uid, tick, onClose, onAction, onRetry, now }) {
   const tw = p ? thisWeekOf(p.this_week) : null;
   const notFound = isFailed(read) && Number(read.error?.status) === 404;
   return (
-    <Lightbox label={p?.name || 'Participant'} title={p?.name || 'Participant'} sub={row ? [row.company, row.sector].filter(Boolean).join(' · ') : null}
+    <Sheet label={p?.name || 'Participant'} title={p?.name || 'Participant'} sub={row ? [row.company, row.sector].filter(Boolean).join(' · ') : null}
       onClose={onClose} testId="lab-part-drawer" pageBelow="lg"
       footer={(
         <div className="flex flex-wrap justify-end gap-2">
@@ -289,7 +290,7 @@ function Drawer({ uid, tick, onClose, onAction, onRetry, now }) {
           </>
         ) : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

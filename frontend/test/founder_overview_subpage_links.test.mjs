@@ -154,7 +154,10 @@ test('no founder overview routes a reader through the shared workspace', () => {
   // `FounderWorkspaceTabs`, so a link carrying it does not go to the route it
   // spells. Checked against App.jsx rather than asserted, because the whole
   // reason this slipped through review is that the string looks right.
-  assert.match(APP, /get\('mode'\) === 'workspace'\s*\n?\s*\?\s*founderWorkspace\(/,
+  // D1180 (#3107): the last workspace it swapped in (Capital's) is retired, so `mode=workspace`
+  // now only forwards (Pitch to its moved notice, Capital to Use of funds › Forecast). A
+  // link carrying it still lands somewhere other than the route it spells.
+  assert.match(APP, /get\('mode'\) === 'workspace'\s*\n?\s*\?\s*<UseOfFundsMovedRedirect count="\/raise\/capital\?mode=workspace" \/>/,
     'the parameter this rule is about is gone from the router — re-read the rule before deleting it');
   for (const { bucket, file } of DESKS) {
     assert.ok(!read(file).includes('mode=workspace'),

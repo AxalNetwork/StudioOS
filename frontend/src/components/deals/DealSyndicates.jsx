@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { STATES, SYNDICATE_CLOSE_CONFIRM, SYNDICATE_FLOW, centsMoney, whenLine } from './dealRoomCopy';
 import { Loading, Empty, Unreadable, NotRecorded, StatusPill, BTN } from './DealRoomKit';
+import Sheet from '../../ui/Sheet.jsx';
 
 /**
  * D630 (#1388) — canvas `sy-close`: the syndicates on this deal's company,
@@ -112,13 +113,9 @@ export function SyndicateDrawer({ state, onRetry, canClose, onClose, onClosed, i
   };
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-md overflow-y-auto bg-white p-5 shadow-xl dark:bg-gray-900" role="dialog" aria-label="Syndicate" data-testid="dr-syndicate-drawer">
-        <div className="mb-4 flex items-start justify-between gap-2">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{s?.name || 'Syndicate'}</h2>
-          <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700" aria-label="Close drawer"><X size={18} /></button>
-        </div>
+    // D1317: the syndicate opens as the shared Sheet (480px, its own max-w-md).
+    <Sheet label="Syndicate" title={s?.name || 'Syndicate'} width={480} testId="dr-syndicate-drawer" onClose={onClose}>
+      <div className="p-5">
         {state.loading && !s ? <Loading what="this syndicate" />
           : state.error ? <Unreadable onRetry={onRetry}>This syndicate could not be read just now.</Unreadable>
             : (
@@ -185,7 +182,7 @@ export function SyndicateDrawer({ state, onRetry, canClose, onClose, onClosed, i
                 )}
               </>
             )}
-      </aside>
-    </>
+      </div>
+    </Sheet>
   );
 }

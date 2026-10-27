@@ -11,7 +11,8 @@ Builds the deck payload from the venture's real records and renders it.
 | `deckRoster.ts` | What the Demo Day deck does with the Advisors & Partners roster, in one place (D214): the first `DECK_ROSTER_PROFILES` active rows become the Team & Network slide's profiles, the first `DECK_ROSTER_NAMES` named rows its names list, and every other active row is only counted. The deck and HQ's Content page both call it, so the page cannot mark a row "on the deck" that the deck drops. Imports nothing, so the Content summary does not pull in the deck assembler. |
 | `render.ts` | The slide types the export writers share. Its CDN-Tailwind `renderDeckHTML` had no caller and was removed (D901). |
 | `offlineHtml.ts` | The HTML export (D901): one self-contained file of a version. The fonts are inline, every image is a `data:` URI, and the CSP is `default-src 'none'`. Its one script is keyboard navigation, admitted by its hash. |
-| `pptx.ts` | PowerPoint export. |
+| `pptx.ts` | PowerPoint export: one picture per card (the download), the text-only fallback, and `notesPackageParts`, the package both writers share. |
+| `pptxEditable.ts` | The editable PowerPoint for Google Slides (D904): every block at its place on the print card, text as text boxes, PNG/JPEG/GIF images and chart shots as pictures, and words for anything that cannot be pictured. |
 | `branding.ts` | Logo, colours, lock-up. |
 | `recommend.ts` | Slide-level suggestions. |
 | `methods.ts` | Shared helpers. |

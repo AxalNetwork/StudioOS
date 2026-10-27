@@ -46,9 +46,14 @@ const SECRET = ['d993', 'agreements', 'fixture', 'signing', 'secret'].join('-');
 
 const SUPER = 1, SUPER_PW = 2, SUPER_STALE = 3, ADMIN = 4, MEMBER = 5;
 const CHATTER = 10, PARTNER = 11, VERIFIED = 12, OLD = 13, NEW = 14, DECLINER = 15;
-const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString().slice(0, 19).replace('T', ' ');
+// One clock for the rows and the assertions. A fresh Date.now() at each call
+// crosses a second during the request, so the stored stamp and the expected
+// stamp differ by one second.
+const stamp = (at: number, hours: number) => new Date(at - hours * 3_600_000).toISOString().slice(0, 19).replace('T', ' ');
 
 function fixture() {
+  const at = Date.now();
+  const ago = (hours: number) => stamp(at, hours);
   const { DB, db } = makeD1(SCHEMA);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   for (const [id, role, email] of [[SUPER, 'admin', 'super@example.test'], [SUPER_PW, 'admin', 'superpw@example.test'],
@@ -124,7 +129,7 @@ function fixture() {
   }
   const rows = (sql: string, ...a: unknown[]) => (db.prepare(sql).all(...(a as any[])) as any[]).map((r) => ({ ...r }));
   const refOf = (email: string) => rows('SELECT ref FROM partner_profiles WHERE email = ?', email)[0].ref as string;
-  return { db, env, call, rows, refOf };
+  return { db, env, call, rows, refOf, ago };
 }
 
 const quiet = async <T>(fn: () => Promise<T>) => { const s = [console.error, console.warn]; console.error = () => {}; console.warn = () => {}; try { return await fn(); } finally { [console.error, console.warn] = s; } };
@@ -178,13 +183,13 @@ test('each row carries its agreement\'s envelope: out since, not delivered, sign
   assert.equal(r.status, 200);
   const env = new Map(r.body.rows.map((x: any) => [x.email, x.envelope]));
   assert.deepEqual(env.get('chat@example.test'), {
-    state: 'out', label: 'Out for signature', document_type: 'Founder Collaboration Agreement', sent_at: ago(72), signed_at: null,
+    state: 'out', label: 'Out for signature', document_type: 'Founder Collaboration Agreement', sent_at: f.ago(72), signed_at: null,
   });
   assert.deepEqual(env.get('eadwyn@example.test'), {
-    state: 'not_delivered', label: 'Not delivered', document_type: 'SPV Joinder Agreement', sent_at: ago(48), signed_at: null,
+    state: 'not_delivered', label: 'Not delivered', document_type: 'SPV Joinder Agreement', sent_at: f.ago(48), signed_at: null,
   });
   assert.deepEqual(env.get('done@example.test'), {
-    state: 'signed', label: 'Signed', document_type: 'Subscription Booklet & LPA', sent_at: ago(250), signed_at: ago(240),
+    state: 'signed', label: 'Signed', document_type: 'Subscription Booklet & LPA', sent_at: f.ago(250), signed_at: f.ago(240),
   });
   assert.equal((env.get('no@example.test') as any).state, 'declined');
   assert.equal(env.get('inv@example.test'), null, 'another document\'s envelope was taken for the agreement\'s');

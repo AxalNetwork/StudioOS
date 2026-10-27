@@ -4,8 +4,9 @@
  * `useProject` picks, read-only, so the page keeps `?project_id=`.
  *
  * Edit is one form, "Edit your venture", opened from the three editable
- * sections' Edit and saved through `PATCH /api/profile/venture`. It is a
- * `Lightbox` that becomes a page below 1024px (`pageBelow="lg"`, D695); while
+ * sections' Edit and saved through `PATCH /api/profile/venture`. It is the
+ * shared right-side `Sheet` (D1317, 560px), which stays a page below 1024px
+ * (`pageBelow="lg"`, D695); while
  * it is open on a phone the frame draws it alone, so its back bar is the only
  * bar. "Read from your modules" has no Edit: each row is its module's own
  * figure, edited where it is recorded.
@@ -13,7 +14,7 @@
 import React, { useState } from 'react';
 import { profileApi } from '../../lib/api/profile';
 import { PhoneRows, Unreadable, usePhoneWidth } from '../../ui';
-import Lightbox from '../../ui/Lightbox.jsx';
+import Sheet from '../../ui/Sheet.jsx';
 import { useProject } from '../cycles/CycleRoute';
 import ProfileFrame, { EditAction, ProfileCard, ProfileSection, ProfileText, useProfileRead } from './ProfileFrame';
 import { PROFILE_PAGES, VENTURE_FIELDS, ventureChanges, ventureDraft } from './profileModel';
@@ -87,7 +88,7 @@ export function VentureForm({ venture, onClose, onSaved, save }) {
   };
   const input = 'w-full rounded-[11px] border border-gray-300 bg-white px-3 py-2.5 text-[14px] text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
   return (
-    <Lightbox
+    <Sheet
       label="Edit your venture"
       eyebrow="Your venture"
       title="Edit your venture"
@@ -116,7 +117,7 @@ export function VentureForm({ venture, onClose, onSaved, save }) {
         )}
         <p className="text-[12px] text-gray-600 dark:text-gray-400">The venture’s name is not changed here.</p>
       </form>
-    </Lightbox>
+    </Sheet>
   );
 }
 

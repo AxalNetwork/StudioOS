@@ -111,6 +111,13 @@ test('nothing on screen still says these fields are not saved', () => {
   assert.doesNotMatch(PAGE, /Auto-saves<|>Auto-saves/, 'the page now claims to auto-save');
 });
 
+test('D1317: the assumptions drawer is the shared right-side Sheet at 480px, and nothing closes it while it saves', () => {
+  assert.match(PAGE, /^import Sheet from '\.\.\/ui\/Sheet\.jsx';$/m);
+  assert.match(PAGE, /<Sheet\s+label="Edit Market Assumptions"\s+title="Edit Market Assumptions"[\s\S]*?onClose=\{\(\) => \{ if \(!saving\) setEditOpen\(false\); \}\}\s+width=\{480\}\s+testId="modal-edit-sizing"\s+footer=\{sizingFooter\}/);
+  assert.match(PAGE, /const sizingFooter = \([\s\S]*?data-testid="sizing-error"[\s\S]*?data-testid="button-save-sizing"/, 'the error and Recalculate sit in the fixed footer');
+  assert.doesNotMatch(PAGE, /w-\[400px\]|fixed inset-0 z-\[75\]/, 'no own drawer left');
+});
+
 test('a failed assumptions save is visible, not swallowed', () => {
   // `saveError` is drawn INSIDE the drawer, so closing it on a failure files the
   // one message that says what was lost behind a panel nobody will reopen. The

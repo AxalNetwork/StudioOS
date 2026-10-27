@@ -9,8 +9,8 @@ write a bordered white box with a title, it already exists here.
 | `Pill.jsx` | Status and tag chips. |
 | `Stat.jsx` | A labelled figure. |
 | `SectionLabel.jsx` | The small uppercase section heading. |
-| `SidebarNav.jsx` | The app sidebar, lifted out of `App.jsx`. |
-| `CompanySwitcher.jsx` | **The only place active-company context changes.** |
+| `SidebarNav.jsx` | The app sidebar, lifted out of `App.jsx`. Its pinned footer is Companies and projects, at `/account/companies` (D1140; it was Company Settings). |
+| `CompanySwitcher.jsx` | **The only place active-company context changes.** Its menu ends with "Manage companies and projects ›", to `/account/companies` (D1140, CMP19a). |
 | `phone/` | D699 phone bars, rows, sheets and one width hook; see its README. |
 | `AssistRail.jsx` | The older per-feature AI rail, still on the Spin-Out Lab pages and a few founder tools (Advisory, Brand builder, Deck reviewer). New pages mount `WorkerRail`. |
 | `AssistLayout.jsx` | Page shell that hosts the rail. |
@@ -62,6 +62,8 @@ an unmodified PNG in `BrandIcon.jsx` (D687). Its source Apache-2.0 licence is
 included there; no logo host request is made.
 
 D1081: Lovable uses the existing initials tile, explicitly classified in `BRAND_MONOGRAM`; no vendor artwork or remote logo is added.
+
+`Sheet.jsx` (D1317) is the one detail sheet: every record's detail panel opens there, on the right, full height, docked beside the Eadwyn rail. While a sheet is open the rail draws its 44px spine (`sheetStore.js`), undimmed and clickable, and the spine's button closes the sheet before it opens the rail. With no rail the sheet meets the window's edge. It keeps the panel's own width (480 to 760px, capped at `calc(100vw - 108px)`), fixes its header and footer and scrolls its body, and keeps `Lightbox`'s modal contract (focus trap, Escape on the shared stack, focus returned, inert background except `[data-sheet-keep]`). `sheet.css` holds the dock, the 200ms slide and the phone forms. Confirmations, step-up dialogs and lightbox pickers stay `Lightbox`.
 
 D1165: `LightboxPhoneProvider` scopes the phone form to a page. Fund admin
 uses `phone="sheet"` for its nested drawers, including reused connection

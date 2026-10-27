@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { reportError } from '../../../lib/log';
 import { api } from '../../../lib/api';
-import { UserCheck, UserX, LogIn, ChevronDown, MessageSquare, X, Check, ShieldCheck, Search } from 'lucide-react';
+import { LogIn, ChevronDown, MessageSquare, Check } from 'lucide-react';
 import { useToast } from '../../../components/useToast';
 import { useEscapeClose } from '../../../components/useEscapeClose';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { Unrecorded, Unreadable } from '../../../ui';
+import { Lightbox, Unreadable } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 // D128 — the scope caption is fed from `/me.branch` through the same reader
 // the territory badge uses, so the two cannot disagree about which
 // deployment this is.
@@ -16,10 +16,18 @@ import { branchOfUser } from '../../../lib/shellRole';
 // the `branchOfUser` import D128's test pins stays exactly as it was.
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { drawsAccountControls } from '../../../lib/accountControls';
-import TrustScoreBadge from '../../../components/TrustScoreBadge';
-import { ROLE_BADGES, Field, ConsoleUnreadable, CONSOLE_LOADING } from './shared';
+import { ROLE_BADGES, Field } from './shared';
 import useRecordCrumb from '../useRecordCrumb';
 import LabAdmitDialog from '../lab/LabAdmitDialog';
+import AllAccounts from '../accounts/AllAccounts';
+import { changeProfileView } from '../accounts/allAccountsModel';
+// D1306 (#3403): the drawer's tabs and ACC7's dialogs, in place of every browser pop-up.
+import AccountDialog from '../accounts/AccountDialog';
+import AccountSubAccounts from '../accounts/AccountSubAccounts';
+import {
+  DRAWER_TABS, PROFILE_CHOICES, PROFILE_LABEL, SUPPORT_SESSION_CEILING_MINUTES, SUPPORT_SESSION_MINUTES,
+  accountDialog, day, drawerRefusal, identityWord, notesSavedLine, onboardingProfileLine, profileLabel,
+} from '../accounts/accountDrawerModel';
 
 /**
  * D648 (#1448) — the Users console: the account directory, its role picker,
@@ -28,27 +36,6 @@ import LabAdmitDialog from '../lab/LabAdmitDialog';
  * own consoles now. HQ · Accounts (`pages/hq/AccountsPage.jsx`) mounts this
  * console alone.
  */
-
-// Task #16 — per-row trust score column on the admin Users table.
-// Task #40 — accepts a pre-fetched `data` prop populated by the parent's
-// single batch call (POST /api/trust/score/batch); falls back to the
-// per-user GET /api/trust/score/:userId only if the parent didn't
-// provide one (e.g. a row whose batch entry failed). Renders an em-dash
-// placeholder while the batch is in flight to keep the row height stable.
-function UserTrustCell({ userId, data }) {
-  const [fallback, setFallback] = useState(null);
-  useEffect(() => {
-    if (data || !userId) return;
-    let cancelled = false;
-    api.trustScore(userId)
-      .then(d => { if (!cancelled) setFallback(d); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [userId, data]);
-  const eff = data || fallback;
-  if (!eff) return <span className="text-xs text-gray-400">—</span>;
-  return <TrustScoreBadge size="sm" score={eff.score} missing={eff.missing} label={false} />;
-}
 
 function RoleDropdown({ user, onRoleChange, canOverride = false }) {
   const [open, setOpen] = useState(false);
@@ -98,18 +85,11 @@ function RoleDropdown({ user, onRoleChange, canOverride = false }) {
     };
   }, [open, place]);
 
-  const OPTIONS = [
-    { value: 'founder', label: 'Founder' },
-    { value: 'partner', label: 'Partner' },
-    { value: 'investor', label: 'Investor' },
-    { value: 'advisor', label: 'Advisor' },
-    // Task #9 follow-up — lets an admin send any user (e.g. a partner) back
-    // into the exploring holding state for re-review. The reverse direction
-    // (exploring → founder/partner/investor) is intentionally NOT offered
-    // here — that transition requires a signed binding agreement and must
-    // go through the Exploring Users queue (/admin/exploring).
-    { value: 'exploring', label: 'Exploring' },
-  ];
+  // D1306 (#2377 G1): the canvas's order and names — `partner` is an Operating
+  // Partner, `exploring` an Explorer. Task #9 follow-up: any account may be sent
+  // back to Explorer for re-review; leaving it needs a signed binding agreement
+  // and goes through the Exploring board (/admin/exploring).
+  const OPTIONS = PROFILE_CHOICES.map((value) => ({ value, label: PROFILE_LABEL[value] }));
   const currentLabel = OPTIONS.find(o => o.value === user.role)?.label ?? user.role;
   const isExploring = user.role === 'exploring';
 
@@ -118,6 +98,7 @@ function RoleDropdown({ user, onRoleChange, canOverride = false }) {
       <button
         type="button"
         aria-label={`Change role for ${user.name || user.email}`}
+        data-testid={`role-trigger-${user.id}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         title="Click to change this user's role"
@@ -169,6 +150,7 @@ function RoleDropdown({ user, onRoleChange, canOverride = false }) {
             return (
               <li
                 key={opt.value}
+                data-testid={`role-option-${opt.value}`}
                 role="option"
                 aria-selected={user.role === opt.value}
                 aria-disabled={disabled}
@@ -265,7 +247,7 @@ function RoleDropdown({ user, onRoleChange, canOverride = false }) {
  * step-up prompt is request()'s), and tells the person: their own activity
  * says the role was assigned by override, and why. The dialog says both.
  */
-function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
+function RoleOverrideDialog({ target, nextRole, busy, error = '', onCancel, onConfirm }) {
   const [reason, setReason] = useState('');
   useEscapeClose(onCancel);
   const tooShort = reason.trim().length < 10;
@@ -314,6 +296,7 @@ function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
             ? 'At least ten characters — this is the line someone reads in the audit later.'
             : 'Stored on the role change and shown in Governance.'}
         </p>
+        {error && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700" data-testid="role-override-error">{error}</p>}
 
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel} disabled={busy}
@@ -330,7 +313,7 @@ function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
   );
 }
 
-function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
+function SupportSessionDialog({ target, busy, error = '', onCancel, onBegin }) {
   const [reason, setReason] = useState('');
   useEscapeClose(onCancel);
   const tooShort = reason.trim().length < 10;
@@ -350,11 +333,15 @@ function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
         <dl className="mt-4 space-y-2 rounded-lg border border-gray-200 p-3 text-[12px] dark:border-gray-700">
           <div className="flex justify-between gap-3">
             <dt className="text-gray-500 dark:text-gray-400">Scope</dt>
-            <dd className="font-medium text-gray-800 dark:text-gray-200">Read and write as user</dd>
+            <dd className="font-medium text-gray-800 dark:text-gray-200">Read and write, as this account</dd>
           </div>
+          {/* D1306 (#2377 item 11): the session's real limit, as auth.ts enforces it —
+              thirty minutes, extendable up to the ceiling from when it opened. */}
           <div className="flex justify-between gap-3">
-            <dt className="text-gray-500 dark:text-gray-400">Expiry</dt>
-            <dd className="font-medium text-gray-800 dark:text-gray-200">30 minutes · hard</dd>
+            <dt className="text-gray-500 dark:text-gray-400">Length</dt>
+            <dd className="text-right font-medium text-gray-800 dark:text-gray-200" data-testid="support-session-length">
+              {SUPPORT_SESSION_MINUTES} minutes. You can extend it, up to {SUPPORT_SESSION_CEILING_MINUTES} minutes in all.
+            </dd>
           </div>
         </dl>
 
@@ -374,6 +361,10 @@ function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
             ? 'At least ten characters — this is the line someone reads in the audit later.'
             : 'This is stored with the session and shown in Governance.'}
         </p>
+        <p className="mt-2 text-[11.5px] text-gray-500 dark:text-gray-400">
+          They are told a support session was opened on their account. It is recorded in Governance.
+        </p>
+        {error && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700" data-testid="support-session-error">{error}</p>}
 
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel} disabled={busy}
@@ -392,44 +383,40 @@ function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
 
 // KYC pill colors for the admin user table. `not_started` and an empty/null
 // value are treated the same — no submission yet.
-const KYC_BADGES = {
-  approved: 'bg-emerald-100 text-emerald-700',
-  pending: 'bg-amber-100 text-amber-700',
-  rejected: 'bg-red-100 text-red-700',
-  not_started: 'bg-gray-100 text-gray-600',
-};
-
-const KYC_LABELS = {
-  approved: 'Approved',
-  pending: 'Pending',
-  rejected: 'Rejected',
-  not_started: 'Not started',
-};
+/**
+ * D1305 (ACC7 A–C, until D1306 draws them in full): Change profile from a
+ * row's menu. It names the account and what the change does; an Explorer
+ * seen by a plain Admin is pointed to the Exploring board, since leaving
+ * Explorer needs a signed binding agreement.
+ */
+function ChangeProfileDialog({ user, canOverride, onClose, children }) {
+  const v = changeProfileView(user, canOverride);
+  return (
+    <Lightbox label={v.title} title={v.title} onClose={onClose} width={560} phone="sheet" testId="accounts-change-profile"
+      footer={<div className="flex justify-end"><button type="button" onClick={onClose} className="inline-flex min-h-[40px] items-center rounded-[9px] border border-axal-hairline px-3.5 text-[13px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">Cancel</button></div>}>
+      <p className="text-[13px] text-axal-ink dark:text-gray-100" data-testid="accounts-change-profile-line">{v.line}</p>
+      {v.kind === 'explorer' ? (
+        <p className="mt-3 text-[13px]"><Link to={v.to} className="font-semibold text-axal-violet underline dark:text-violet-300" data-testid="accounts-change-profile-exploring">Open the Exploring board</Link></p>
+      ) : (
+        <div className="mt-3 flex items-center gap-3 text-[13px] text-axal-muted dark:text-gray-400">New profile {children(user)}</div>
+      )}
+    </Lightbox>
+  );
+}
 
 /**
  * D1299 (#2377): with `onOpenChange`, the page owns which record is open, as
  * `/admin/accounts/all/<id>` (`openId`); without it, the console keeps it.
  */
 export default function UsersConsole({ onImpersonate, openId = null, onOpenChange = null }) {
+  // D1305 (#3402): the table is `../accounts/AllAccounts.jsx` over D1300's
+  // list read; this console keeps the record, the dialogs and the actions.
+  // `users` holds the page the table last read, so an address's record opens
+  // from its row; `reloadKey` re-reads the table after an action.
   const [users, setUsers] = useState([]);
+  const [reloadKey, setReloadKey] = useState(0);
   const [spinoutAdmit, setSpinoutAdmit] = useState(null);
-  // Task #40 — batched trust-score map keyed by user_id, populated by a
-  // single POST /api/trust/score/batch after each users-list refresh.
-  // Replaces the previous per-row GET /trust/score/:userId fan-out.
-  const [trustScores, setTrustScores] = useState({});
-  const [loading, setLoading] = useState(true);
-  // D648 — a failed read is said, never drawn as "No users found".
-  const [failed, setFailed] = useState(false);
-  const [filter, setFilter] = useState('all');
-  // D128 — the free-text account search, and the TOTALS the tiles read.
-  // `userQuery` is what the box holds; `userSearch` is what has actually been
-  // asked for, debounced. `totals` is null until the first envelope answers —
-  // never 0, because "not read yet" and "none" are different things and the
-  // tiles must not show a zero for the first.
-  const [userQuery, setUserQuery] = useState('');
-  const [userSearch, setUserSearch] = useState('');
-  const [totals, setTotals] = useState(null);
-  const [userPage, setUserPage] = useState({ showing: 0, limit: 0, searched: false });
+  const [changeProfile, setChangeProfile] = useState(null);
   const [openUser, setOpenUser] = useState(null);
   // D1299: the address's record, as its loaded row once the list has it, else by id alone.
   useEffect(() => {
@@ -440,85 +427,19 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
   }, [openId, users, onOpenChange]);
   const openRecord = (u) => (onOpenChange ? onOpenChange(u.id) : setOpenUser(u));
   const closeRecord = () => (onOpenChange ? onOpenChange(null) : setOpenUser(null));
-
-  useEffect(() => { loadAll(); }, []);
-  // THE BOX IS GATED AT TWO CHARACTERS, matching the route's own refusal
-  // (`query_too_short`). The server is the control — a one-character query is
-  // refused there whatever the browser does — and this is what keeps a 400 off
-  // the screen while somebody is still typing the first letter.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const next = userQuery.trim();
-      setUserSearch(next.length >= 2 ? next : '');
-    }, 250);
-    return () => clearTimeout(t);
-  }, [userQuery]);
-  useEffect(() => { loadUsers(userSearch); }, [userSearch]);
-
-  // The users half on its own, so typing does not re-fetch every trust score
-  // with each keystroke.
-  const loadUsers = async (q = '') => {
-    try {
-      const res = await api.adminListUsers({ envelope: 1, ...(q ? { q } : {}) });
-      const rows = res?.results || [];
-      setUsers(rows);
-      setTotals({ total: Number(res?.total) || 0, by_role: res?.by_role || {} });
-      setUserPage({
-        showing: Number(res?.showing) || rows.length,
-        limit: Number(res?.limit) || 0,
-        searched: Boolean(res?.searched),
-      });
-      setFailed(false);
-    } catch (e) {
-      reportError('UsersConsole:loadUsers', e);
-      setFailed(true);
-    }
-  };
-
-  const loadAll = async () => {
-    setLoading(true);
-    try {
-      const u = await api.adminListUsers({ envelope: 1 });
-      const rows = u?.results || [];
-      setUsers(rows);
-      setTotals({ total: Number(u?.total) || 0, by_role: u?.by_role || {} });
-      setUserPage({
-        showing: Number(u?.showing) || rows.length,
-        limit: Number(u?.limit) || 0,
-        searched: false,
-      });
-      setFailed(false);
-      // Task #40 — fan-in trust scores in one call. Best-effort: if it
-      // fails (network blip, 403 mid-role-change), each row's
-      // UserTrustCell falls back to the per-user GET.
-      const ids = rows.map(row => row.id).filter(Boolean);
-      if (ids.length > 0) {
-        try {
-          const res = await api.trustScoreBatch(ids);
-          const map = {};
-          for (const s of (res?.scores || [])) map[s.user_id] = s;
-          setTrustScores(map);
-        } catch (e) {
-          reportError('UsersConsole:trustScoreBatch', e);
-        }
-      } else {
-        setTrustScores({});
-      }
-    } catch (e) {
-      reportError('UsersConsole:loadAdminData', e);
-      setFailed(true);
-    } finally { setLoading(false); }
-  };
+  const loadAll = () => setReloadKey((k) => k + 1);
 
   // The dialog collects the reason the worker requires; nothing is minted
   // until Begin session. `handleImpersonate` is the one funnel both View As
   // buttons already went through, so intercepting here covers both.
   const [supportTarget, setSupportTarget] = useState(null);
   const [supportBusy, setSupportBusy] = useState(false);
-  const handleImpersonate = (user) => setSupportTarget(user);
+  const [supportError, setSupportError] = useState('');
+  const handleImpersonate = (user) => { setSupportError(''); setSupportTarget(user); };
   const beginSupportSession = async (reason) => {
     if (!supportTarget) return;
     setSupportBusy(true);
+    setSupportError('');
     try {
       const res = await api.adminImpersonate(supportTarget.id, reason);
       setSupportTarget(null);
@@ -526,53 +447,37 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
       // failed), passed on for the H25 bar; the shell never reads the typed
       // text back from this dialog.
       if (onImpersonate) onImpersonate(res.token, res.user, null, res.reason ?? null);
-    } catch (e) { alert(e.message || 'The support session could not be started'); }
-    finally { setSupportBusy(false); }
+    } catch (e) {
+      // D1306: the refusal stays in the dialog, in one sentence, never an alert.
+      setSupportError(e.message || 'The support session could not be started. Nothing changed.');
+    } finally { setSupportBusy(false); }
   };
-  // D247 — an administrator's account takes a typed reason, the way Demote
-  // asks for one on the licence's Administrators tab; anyone else's is one
-  // click, as before. The route also asks for a fresh step-up, which request()
-  // prompts for and retries.
-  const handleToggleActive = async (user) => {
-    let reason;
-    if (user.role === 'admin') {
-      reason = window.prompt(
-        `Why is this administrator account being ${user.is_active ? 'closed' : 're-opened'}? At least 10 characters, and it is recorded.`,
-      );
-      if (!reason) return;
-    }
-    try { await api.adminToggleActive(user.id, reason); loadAll(); } catch (e) { alert(e.message); }
-  };
-  const handleGrantFullAccess = async (user) => {
-    const ok = window.confirm(
-      `Grant ${user.name || user.email} full access without requiring KYC?\n\n` +
-      `This marks their KYC status as approved, lets them out of the verification gate, ` +
-      `and is logged in their activity history. Use this only when you've verified their ` +
-      `identity through another channel.`
-    );
-    if (!ok) return;
-    try { await api.kycAdminApprove(user.id); loadAll(); }
-    catch (e) { alert(e.message || 'Failed to grant access'); }
-  };
-  const handleGrantLimitedAccess = async (user) => {
-    const ok = window.confirm(
-      `Grant ${user.name || user.email} limited access?\n\n` +
-      `They will be able to log in and browse the platform without completing KYC, ` +
-      `BUT they will NOT be able to sign any legal agreements (subscription docs, SPA, ` +
-      `side letters, etc.) until they complete full KYC verification.`
-    );
-    if (!ok) return;
-    try { await api.adminSetAccessLevel(user.id, 'limited'); loadAll(); }
-    catch (e) { alert(e.message || 'Failed to grant limited access'); }
-  };
-  const handleRevokeLimitedAccess = async (user) => {
-    const ok = window.confirm(
-      `Revoke limited access from ${user.name || user.email}?\n\n` +
-      `They will be redirected back to the KYC verification flow on next page load.`
-    );
-    if (!ok) return;
-    try { await api.adminSetAccessLevel(user.id, null); loadAll(); }
-    catch (e) { alert(e.message || 'Failed to revoke limited access'); }
+
+  // D1306 (#3403, ACC7) — every other change on an account opens one in-page
+  // dialog: what it does, who is told, a reason where the Worker wants one.
+  // `{ kind, user, nextRole? }` while it is open; the dialog itself keeps a
+  // refusal and closes only on success.
+  const [accountChange, setAccountChange] = useState(null);
+  const ask = (kind, user, extra = {}) => setAccountChange({ kind, user, ...extra });
+  // D247 — an administrator's account takes a typed reason. Another
+  // administrator's is the Super Admin's (D132): `drawsAccountControls` draws
+  // no toggle a plain Admin could press on it (D221), and a 403 that still
+  // comes back stays in the dialog as one sentence.
+  const handleToggleActive = (user) => ask(user.is_active ? 'deactivate' : 'reactivate', user);
+  const handleGrantFullAccess = (user) => ask('full_access', user);
+  const handleGrantLimitedAccess = (user) => ask('limited_grant', user);
+  const handleRevokeLimitedAccess = (user) => ask('limited_revoke', user);
+  // What each dialog sends when it is confirmed. The Worker is the control:
+  // a refusal comes back into the dialog that asked.
+  const SENDS = {
+    role: (c) => api.adminUpdateRole(c.user.id, c.nextRole),
+    // D1303: with no submission on file the Worker requires `reason`; after a
+    // reviewed submission it keeps `note`. The one reason serves both.
+    full_access: (c, reason) => api.kycAdminApprove(c.user.id, { reason, note: reason }),
+    limited_grant: (c) => api.adminSetAccessLevel(c.user.id, 'limited'),
+    limited_revoke: (c) => api.adminSetAccessLevel(c.user.id, null),
+    deactivate: (c, reason) => api.adminToggleActive(c.user.id, reason || undefined),
+    reactivate: (c, reason) => api.adminToggleActive(c.user.id, reason || undefined),
   };
   // Task #7 — admit a founder to the next Spin-Out Lab cohort. Sends the
   // "You're in" email (production Worker; dev backend sets flags only).
@@ -583,52 +488,41 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
   // them regardless.
   const [roleOverride, setRoleOverride] = useState(null);
   const [roleOverrideBusy, setRoleOverrideBusy] = useState(false);
+  const [roleOverrideError, setRoleOverrideError] = useState('');
   const { user: viewer } = useAuth();
   const canOverrideRole = Number(viewer?.is_super_admin ?? 0) === 1;
 
-  const ROLE_LABELS = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Exploring' };
+  const ROLE_LABELS = PROFILE_LABEL;
 
   const handleRoleChange = async (user, newRole) => {
+    setChangeProfile(null);
     if (newRole === user.role) return;
     // Leaving `exploring` skips a signed binding agreement, so it is not a
-    // yes/no confirm — it needs a reason that goes into the audit. Everything
-    // else keeps the plain confirm it has always had.
+    // yes/no question — it needs a reason that goes into the audit. Every
+    // other change opens ACC7 A's dialog, which says what changes and who is told.
     if (String(user.role).toLowerCase() === 'exploring' && newRole !== 'exploring') {
+      setRoleOverrideError('');
       setRoleOverride({ user, nextRole: newRole });
       return;
     }
-    const ok = window.confirm(
-      `Change ${user.name || user.email}'s role from ${ROLE_LABELS[user.role] || user.role} ` +
-      `to ${ROLE_LABELS[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
-    );
-    if (!ok) return;
-    try { await api.adminUpdateRole(user.id, newRole); loadAll(); } catch (e) { alert(e.message); }
+    ask('role', user, { nextRole: newRole });
   };
 
   const confirmRoleOverride = async (reason) => {
     if (!roleOverride) return;
     setRoleOverrideBusy(true);
+    setRoleOverrideError('');
     try {
       await api.adminUpdateRole(roleOverride.user.id, roleOverride.nextRole, reason);
       setRoleOverride(null);
       loadAll();
     } catch (e) {
-      alert(e.message);
+      setRoleOverrideError(e.message || 'The profile could not be changed. Nothing changed.');
     } finally {
       setRoleOverrideBusy(false);
     }
   };
 
-  const filtered = filter === 'all' ? users : users.filter(u => u.role === filter);
-  // THE TILES COUNT THE TABLE, NOT THE PAGE (D128). They used to read
-  // `users.filter(...).length` over whatever `/admin/users` returned — which
-  // defaults to the newest 100 rows — so past a hundred accounts the "All
-  // Users" tile showed 100 as though it were the total and every role tile
-  // counted one page. `null` while the read is in flight, because a zero there
-  // would be the same lie one beat earlier.
-  //
-  // Task #9 follow-up — new signups land in `exploring` pending admin review,
-  // so it is often the largest bucket; it keeps its own filter.
   // S0 WALL RULE 2 — "search says what it searches". On a branch there is one
   // territory and the caption names it. Off a branch the table is HQ's own
   // database — the accounts HQ holds on axal.vc — and since D286 the caption
@@ -638,213 +532,35 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
   const accountScope = branchOfUser(viewer)
     ? `Searching ${viewer.branch.name || viewer.branch.code} accounts`
     : 'Searching HQ-held accounts';
-  const ROLE_TILES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'];
-  const counts = totals
-    ? { all: totals.total, ...Object.fromEntries(ROLE_TILES.map(r => [r, Number(totals.by_role?.[r]) || 0])) }
-    : null;
 
-  if (loading) return <div className="text-gray-600 text-center py-20">{CONSOLE_LOADING}</div>;
+  // D1305: a row's ⋯ menu item, run by the handler the old row buttons used;
+  // each opens D1306's in-page dialog (ACC7).
+  const runAction = (id, u) => {
+    if (id === 'profile') setChangeProfile(u);
+    else if (id === 'full') handleGrantFullAccess(u);
+    else if (id === 'limit') handleGrantLimitedAccess(u);
+    else if (id === 'unlimit') handleRevokeLimitedAccess(u);
+    else if (id === 'lab') handleSpinoutAdmit(u);
+    else if (id === 'support') handleImpersonate(u);
+    else if (id === 'toggle') handleToggleActive(u);
+  };
 
   return (
     <>
       {spinoutAdmit && <LabAdmitDialog user={spinoutAdmit} onClose={() => setSpinoutAdmit(null)} onChanged={loadAll} />}
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3" data-testid="admin-user-tiles">
-            {Object.entries(counts || { all: null, admin: null, founder: null, partner: null, investor: null, advisor: null, exploring: null }).map(([role, count]) => (
-              <button key={role} onClick={() => setFilter(role)}
-                className={`px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                  filter === role ? 'bg-violet-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:border-violet-300'
-                }`}>
-                <div className="text-lg font-bold">{count === null ? <Unrecorded /> : count}</div>
-                <div className="capitalize">{role === 'all' ? 'All Users' : role === 'exploring' ? 'Exploring' : `${role}s`}</div>
-              </button>
-            ))}
-          </div>
-
-          {/* SEARCH, AND A CAPTION THAT SAYS WHAT IS ON SCREEN (D128).
-              Until this, the only way to find an account was to scroll the
-              newest hundred — the panel filtered by role and nothing else, on
-              both tiers. S0's second wall rule is that a search says WHAT it
-              searches, which is why the branch caption names the territory and
-              HQ's does not: on HQ there is no territory to name. */}
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <label className="relative flex-1 min-w-[16rem]">
-              <span className="sr-only">Search accounts by name or email</span>
-              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="search"
-                value={userQuery}
-                onChange={(e) => setUserQuery(e.target.value)}
-                placeholder="Search by name or email"
-                data-testid="admin-user-search"
-                className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm dark:border-gray-800 dark:bg-gray-900"
-              />
-            </label>
-            {accountScope && (
-              <span className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="admin-user-scope">
-                {accountScope}
-              </span>
-            )}
-          </div>
-
-          <p className="mb-3 text-[12px] text-gray-500 dark:text-gray-400" data-testid="admin-user-showing">
-            {userPage.searched
-              ? `${userPage.showing} ${userPage.showing === 1 ? 'account matches' : 'accounts match'} “${userSearch}”${userPage.limit && userPage.showing >= userPage.limit ? ` — the first ${userPage.limit}; narrow the search to see the rest` : ''}`
-              : counts === null
-                ? 'Reading the directory…'
-                : userPage.limit && counts.all > userPage.limit
-                  ? `Showing the newest ${userPage.showing} of ${counts.all} accounts. The tiles above count every account; this table is one page. Search to reach the rest.`
-                  : `Showing all ${counts.all} ${counts.all === 1 ? 'account' : 'accounts'}.`}
-          </p>
-
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
-            {failed ? (
-              <ConsoleUnreadable what="The accounts" onRetry={() => loadAll()} />
-            ) : filtered.length === 0 ? (
-              <div className="p-8 text-center text-gray-500 text-sm">No users found</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50 dark:border-gray-800">
-                      <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Name</th>
-                      <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Email</th>
-                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Role</th>
-                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Status</th>
-                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">Verified</th>
-                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs">KYC</th>
-                      <th className="text-center px-4 py-2.5 text-gray-600 font-medium text-xs" title="Required legal obligations satisfied">Trust</th>
-                      <th className="text-left px-4 py-2.5 text-gray-600 font-medium text-xs">Joined</th>
-                      <th className="text-right px-4 py-2.5 text-gray-600 font-medium text-xs">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(u => (
-                      <tr key={u.id} onClick={() => openRecord(u)}
-                        className="border-b border-gray-100 hover:bg-violet-50/40 cursor-pointer">
-                        <td className="px-4 py-3 text-gray-900 font-medium dark:text-gray-100">{u.name}</td>
-                        <td className="px-4 py-3 text-gray-600">{u.email}</td>
-                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          {u.role === 'admin' ? (
-                            // Admin role is read-only in THIS picker, and the PATCH
-                            // /users/:id/role endpoint refuses to promote into or demote
-                            // out of `admin`. D221 — the tooltip used to say those changes
-                            // "can only be made via direct database SQL", which stopped
-                            // being true in D134: an administrator is opened through a
-                            // licence (POST /licences/:uid/admins) and demoted there by the
-                            // Super Admin (POST /users/:id/demote-admin), both on the
-                            // licence's Administrators tab.
-                            <span
-                              title="An administrator is opened and demoted on the licence they hold (Licences → Administrators), by the Super Admin — not from this picker"
-                              className={`inline-block text-xs font-semibold px-3 py-1 rounded-full ${ROLE_BADGES.admin || 'bg-violet-100 text-violet-700'}`}
-                            >
-                              Admin
-                            </span>
-                          ) : (
-                            // Admin promotion intentionally not offered — see span branch above.
-                            <RoleDropdown user={u} onRoleChange={handleRoleChange} canOverride={canOverrideRole} />
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {u.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {u.email_verified ? <UserCheck size={16} className="text-green-500 mx-auto" /> : <UserX size={16} className="text-gray-400 mx-auto" />}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {(() => {
-                            const k = u.kyc_status || 'not_started';
-                            // Limited-access takes visual precedence ONLY when the user is
-                            // not already approved — once they're approved, KYC trumps everything.
-                            const isLimited = u.access_level === 'limited' && k !== 'approved';
-                            if (isLimited) {
-                              return (
-                                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-sky-100 text-sky-700"
-                                  title="Browse-only access. Cannot sign legal agreements until KYC is complete.">
-                                  <ShieldCheck size={11} />
-                                  Limited
-                                </span>
-                              );
-                            }
-                            return (
-                              <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${KYC_BADGES[k] || KYC_BADGES.not_started}`}>
-                                <ShieldCheck size={11} />
-                                {KYC_LABELS[k] || k}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <UserTrustCell userId={u.id} data={trustScores[u.id]} />
-                        </td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
-                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-1 justify-end flex-wrap">
-                            {/* Admins always have access; only show "Grant Full Access" for
-                                non-admin users whose KYC isn't already approved. */}
-                            {u.role !== 'admin' && u.kyc_status !== 'approved' && (
-                              <button onClick={() => handleGrantFullAccess(u)}
-                                className="px-2.5 py-1.5 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium transition-colors flex items-center gap-1"
-                                title="Mark KYC approved without requiring submission">
-                                <ShieldCheck size={12} /> Grant Access
-                              </button>
-                            )}
-                            {/* Limited access: browse-only without KYC, no signing.
-                                Only meaningful for non-admins not yet approved. */}
-                            {u.role !== 'admin' && u.kyc_status !== 'approved' && u.access_level !== 'limited' && (
-                              <button onClick={() => handleGrantLimitedAccess(u)}
-                                className="px-2.5 py-1.5 text-xs bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-medium transition-colors flex items-center gap-1"
-                                title="Allow login & browsing without KYC. Signing remains blocked.">
-                                <ShieldCheck size={12} /> Grant Limited
-                              </button>
-                            )}
-                            {u.role !== 'admin' && u.access_level === 'limited' && u.kyc_status !== 'approved' && (
-                              <button onClick={() => handleRevokeLimitedAccess(u)}
-                                className="px-2.5 py-1.5 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg font-medium transition-colors flex items-center gap-1"
-                                title="Remove limited access. User will be redirected to KYC.">
-                                Revoke Limited
-                              </button>
-                            )}
-                            {/* Task #7 — Spin-Out Lab admission. Admins excluded. */}
-                            {u.role !== 'admin' && (
-                              <button onClick={() => handleSpinoutAdmit(u)}
-                                className="px-2.5 py-1.5 text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg font-medium transition-colors flex items-center gap-1"
-                                title="Admit to the next Spin-Out Lab cohort — sends the congratulations email">
-                                Admit to Lab
-                              </button>
-                            )}
-                            {/* D221 — neither is drawn where the server can only
-                                refuse: an admin's row, unless the viewer holds the
-                                elevation (D132 on the toggle, D133 on impersonation),
-                                and the viewer's own row. `lib/accountControls.js`
-                                holds the one rule both controls follow. */}
-                            {drawsAccountControls(u, viewer) && (
-                              <>
-                                <button onClick={() => handleImpersonate(u)}
-                                  className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
-                                  title="Login as this user">
-                                  <LogIn size={12} /> View As
-                                </button>
-                                <button onClick={() => handleToggleActive(u)}
-                                  className={`px-2.5 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                                    u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
-                                  }`}>
-                                  {u.is_active ? 'Disable' : 'Enable'}
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
+      <AllAccounts
+        scopeLine={accountScope}
+        controlsFor={(u) => drawsAccountControls(u, viewer)}
+        onOpen={openRecord}
+        onAction={runAction}
+        onRows={setUsers}
+        reloadKey={reloadKey}
+      />
+      {changeProfile && (
+        <ChangeProfileDialog user={changeProfile} canOverride={canOverrideRole} onClose={() => setChangeProfile(null)}>
+          {(u) => <RoleDropdown user={u} onRoleChange={handleRoleChange} canOverride={canOverrideRole} />}
+        </ChangeProfileDialog>
+      )}
       {/* Mounted beside the drawer, not inside it: the Users table opens a
           support session directly too, and the drawer closes itself before
           the dialog appears. */}
@@ -852,6 +568,7 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
         <SupportSessionDialog
           target={supportTarget}
           busy={supportBusy}
+          error={supportError}
           onCancel={() => setSupportTarget(null)}
           onBegin={beginSupportSession}
         />
@@ -861,8 +578,17 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
           target={roleOverride.user}
           nextRole={ROLE_LABELS[roleOverride.nextRole] || roleOverride.nextRole}
           busy={roleOverrideBusy}
+          error={roleOverrideError}
           onCancel={() => setRoleOverride(null)}
           onConfirm={confirmRoleOverride}
+        />
+      )}
+      {accountChange && (
+        <AccountDialog
+          spec={accountDialog(accountChange.kind, accountChange.user, accountChange)}
+          onCancel={() => setAccountChange(null)}
+          onConfirm={(reason) => SENDS[accountChange.kind](accountChange, reason)}
+          onDone={() => { setAccountChange(null); loadAll(); }}
         />
       )}
       {openUser && (
@@ -872,7 +598,8 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
           // D221 — the drawer follows the row's rule: where the server can
           // only refuse, it is handed no handler and draws no button.
           onImpersonate={drawsAccountControls(openUser, viewer) ? () => { handleImpersonate(openUser); closeRecord(); } : null}
-          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser); closeRecord(); } : null}
+          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser); } : null}
+          onLabAdmit={openUser.role && openUser.role !== 'admin' ? () => handleSpinoutAdmit(openUser) : null}
           // D633 (#1391, Q2) — the member's credits are the Super Admin's.
           showCredits={isSuperAdminUser(viewer)}
         />
@@ -881,15 +608,19 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
   );
 }
 
-export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive, showCredits = false }) {
-  useEscapeClose(onClose);
+export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive, onLabAdmit = null, showCredits = false }) {
+  // D1317: the Sheet answers Escape, on the dialog stack the resend dialog shares.
   // D775 (#2101): the open account is the rail's record while the drawer is shown.
   useRecordCrumb(userRow?.name || userRow?.email || null, 'account', userRow?.id);
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('profile');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
-  const [resending, setResending] = useState(false);
+  // D1306: resending the verification email opens its dialog, never a confirm().
+  const [resendAsk, setResendAsk] = useState(false);
+  // ACC13a: the read's refusal, as `drawerRefusal` words it.
+  const [refusal, setRefusal] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   // T19 — toast lifecycle now handled by useToast (cleans up on unmount).
   const { toast, showToast: setToastSafe } = useToast(3000);
   const [err, setErr] = useState('');
@@ -898,36 +629,34 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
     let alive = true;
     (async () => {
       try {
+        setRefusal(null);
         const res = await api.adminUserProfile(userRow.id);
         if (!alive) return;
         setData(res);
         setNotes(res.user.admin_notes || '');
       } catch (e) {
-        if (alive) setErr(e.message || 'Failed to load profile');
+        if (alive) { setErr(e.message || 'Failed to load profile'); setRefusal(drawerRefusal(e)); }
       }
     })();
     return () => { alive = false; };
-  }, [userRow.id]);
+  }, [userRow.id, reloadKey]);
 
   const flash = (kind, msg) => setToastSafe({ kind, msg });
 
   const saveNotes = async () => {
     setSaving(true);
     try {
-      await api.adminUpdateNotes(userRow.id, notes);
+      const r = await api.adminUpdateNotes(userRow.id, notes);
+      // D1303 answers who saved them and when; the line below the notes takes it.
+      if (r && r.notes_saved !== undefined) setData((d) => (d ? { ...d, notes_saved: r.notes_saved } : d));
       flash('ok', 'Notes saved');
     } catch (e) { flash('err', e.message || 'Failed to save'); }
     finally { setSaving(false); }
   };
 
   const resend = async () => {
-    if (!confirm(`Resend verification email to ${userRow.email}?`)) return;
-    setResending(true);
-    try {
-      const r = await api.adminResendVerification(userRow.id);
-      flash('ok', r.already_verified ? 'User is already verified' : 'Verification email sent');
-    } catch (e) { flash('err', e.message || 'Failed to send'); }
-    finally { setResending(false); }
+    const r = await api.adminResendVerification(userRow.id);
+    flash('ok', r.already_verified ? 'This account is already verified.' : 'Verification email sent.');
   };
 
   const u = data?.user || userRow;
@@ -1017,63 +746,113 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, userRow.id, selectedConvId]);
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between dark:border-gray-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{u.name}</h3>
-              <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
-              <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
-              {u.email_verified ? (
-                <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">Verified</span>
-              ) : (
-                <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">Unverified</span>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">{u.email} · joined {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X size={18} /></button>
-        </div>
+  // D1317: the drawer's actions stay at the sheet's foot while its tabs scroll.
+  const footer = (
+    <div className="flex w-full items-center justify-between">
+      <div className="flex gap-2">
+        {/* D221 — absent, never disabled: a handler of null means the
+            server would refuse this viewer on this account. */}
+        {onImpersonate && (
+          <button onClick={onImpersonate}
+            className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
+            <LogIn size={12} /> View As
+          </button>
+        )}
+        {showCredits && (
+          <Link to={`/admin/accounts/credits/${u.id}`} data-testid="user-drawer-credits"
+            className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900 rounded-lg font-medium">
+            Credits
+          </Link>
+        )}
+        {onLabAdmit && (
+          <button type="button" onClick={onLabAdmit} data-testid="drawer-lab-admit"
+            className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg font-medium">
+            Admit to Lab
+          </button>
+        )}
+        {onToggleActive && (
+          <button onClick={onToggleActive}
+            className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+            {u.is_active ? 'Disable account' : 'Enable account'}
+          </button>
+        )}
+      </div>
+      <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
+    </div>
+  );
 
+  return (
+    // D1317: the account opens as the shared Sheet over All accounts (760px, the
+    // panel's own max-w-4xl on the owner's list), docked beside the rail. Its tabs
+    // stay put and only the tab's content scrolls, so the body is tall.
+    <Sheet
+      label={u.name || u.email || 'Account'}
+      title={(
+        <span className="flex flex-wrap items-center gap-2">
+          {u.name}
+          <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>{profileLabel(u.role)}</span>
+          <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
+          {u.email_verified ? (
+            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">Verified</span>
+          ) : (
+            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">Unverified</span>
+          )}
+        </span>
+      )}
+      sub={`${u.email} · joined ${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}`}
+      width={760} size="tall" testId="account-drawer" onClose={onClose} footer={footer}
+    >
+      <div className="flex h-full min-h-0 flex-col">
         {toast && (
           <div className={`mx-6 mt-3 px-3 py-2 rounded-lg text-xs ${toast.kind === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{toast.msg}</div>
         )}
 
         <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 overflow-x-auto dark:border-gray-800">
-          {['profile', 'registration', 'onboarding', 'advisor', 'kyc', 'agreements', 'activity', 'notes'].map(t => {
+          {DRAWER_TABS.map(({ key: t, label }) => {
             // Task #11 — onboarding tab now reads from the user's first
-            // advisor conversation; the new 'advisor' tab reads from their
+            // advisor conversation; Conversations reads from their
             // most-recent. Fall back to the legacy `data.onboarding` shape
             // for safety so a stale worker response still renders something.
             const onboardingMsgs = data?.onboarding_conversation?.messages || data?.onboarding || [];
             const ongoingMsgs = data?.ongoing_conversation?.messages || [];
+            const count = t === 'registration' ? data?.timeline?.length
+              : t === 'agreements' ? data?.agreements?.length
+                : t === 'onboarding' ? onboardingMsgs.length
+                  : t === 'advisor' ? ongoingMsgs.length
+                    : t === 'activity' ? data?.activity?.length : 0;
             return (
-              <button key={t} onClick={() => setTab(t)}
-                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px capitalize whitespace-nowrap transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-                {t === 'kyc' ? 'KYC & Verification' :
-                 t === 'registration' ? `Registration${(data?.timeline?.length ?? 0) ? ` · ${data.timeline.length}` : ''}` :
-                 t === 'agreements' ? `Agreements${(data?.agreements?.length ?? 0) ? ` · ${data.agreements.length}` : ''}` :
-                 t === 'onboarding' ? `Onboarding${onboardingMsgs.length ? ` · ${onboardingMsgs.length}` : ''}` :
-                 t === 'advisor' ? `Ongoing Conversation${ongoingMsgs.length ? ` · ${ongoingMsgs.length}` : ''}` :
-                 t === 'activity' ? `Activity${(data?.activity?.length ?? 0) ? ` · ${data.activity.length}` : ''}` :
-                 t}
+              <button key={t} type="button" onClick={() => setTab(t)} aria-current={tab === t ? 'page' : undefined} data-testid={`drawer-tab-${t}`}
+                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+                {label}{count ? ` · ${count}` : ''}
               </button>
             );
           })}
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
-          {err && <div className="text-sm text-red-600 mb-4">{err}</div>}
+          {err && refusal && (
+            refusal.kind === 'hq_only' ? (
+              <section className="rounded-xl border border-gray-200 p-5 dark:border-gray-800" data-testid="drawer-hq-only">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-gray-500">{refusal.eyebrow}</p>
+                <h4 className="mt-1 text-[17px] font-extrabold text-gray-900 dark:text-gray-100">{refusal.title}</h4>
+                <p className="mt-1 text-[13.5px] leading-relaxed text-gray-600 dark:text-gray-400">{refusal.line}</p>
+                <button type="button" onClick={onClose} className="mt-3 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 dark:border-gray-600 dark:text-gray-200">Close</button>
+              </section>
+            ) : (
+              <div className="text-sm text-gray-600 dark:text-gray-400" data-testid="drawer-unreadable">
+                {refusal.title} {refusal.line}{' '}
+                <button type="button" onClick={() => { setErr(''); setReloadKey((k) => k + 1); }} className="font-semibold text-violet-700 underline dark:text-violet-300">Try again</button>
+              </div>
+            )
+          )}
           {!data && !err && <div className="text-sm text-gray-500">Loading…</div>}
 
           {data && tab === 'profile' && (
             <div className="grid grid-cols-2 gap-4 text-sm">
               <Field label="Name" value={u.name} />
               <Field label="Email" value={u.email} />
-              <Field label="Role" value={u.role} />
-              <Field label="UID" value={u.uid} mono />
+              <Field label="Profile" value={profileLabel(u.role)} />
+              <Field label="Account ID" value={u.uid} mono />
               <Field label="Founder ID" value={u.founder_public_id || (u.founder_id ? `#${u.founder_id}` : '—')} mono={!!u.founder_public_id} />
               <Field label="Partner ID" value={u.partner_public_id || (u.partner_id ? `#${u.partner_id}` : '—')} mono={!!u.partner_public_id} />
               <Field label="Joined" value={u.created_at ? new Date(u.created_at).toLocaleString() : '—'} />
@@ -1119,6 +898,20 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                   </div>
                 </div>
               )}
+              {/* D1306 (ACC4): the onboarding-profile line from #2380, under the firm card. */}
+              {(() => {
+                const op = onboardingProfileLine(data.onboarding_profile);
+                return (
+                  <div className="col-span-2 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] dark:border-gray-800" data-testid="drawer-onboarding-profile">
+                    {op.kind === 'profile' ? (
+                      <>
+                        <span>Onboarding profile: <b className="font-bold">{op.status}</b>{op.when ? ` ${op.when}` : ''}</span>
+                        <Link to={op.href} className="font-semibold text-violet-700 hover:underline dark:text-violet-300">Open in Partner profiles</Link>
+                      </>
+                    ) : <span className="text-gray-600 dark:text-gray-400">{op.text}</span>}
+                  </div>
+                );
+              })()}
               {integrations.length > 0 && (
                 <div className="col-span-2 mt-3">
                   <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Connected integrations</div>
@@ -1134,6 +927,8 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
               )}
             </div>
           )}
+
+          {data && tab === 'sub' && <AccountSubAccounts userId={userRow.id} />}
 
           {data && tab === 'registration' && (
             <div className="space-y-2">
@@ -1359,22 +1154,35 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
 
           {data && tab === 'kyc' && (
             <div className="space-y-3 text-sm">
-              <Field label="KYC status" value={kyc.status || 'unknown'} />
+              <Field label="Identity check" value={identityWord(kyc.status)} />
+              <Field label="Submitted" value={day(kyc.submitted_at) || 'Not recorded'} />
+              <Field label="Provider" value={kyc.provider || 'Not recorded'} />
               <Field label="Email verified" value={u.email_verified ? 'Yes' : 'No'} />
               <TotpEnrolmentField kyc={kyc} />
               <Field label="ID document uploaded" value={kyc.id_uploaded ? 'Yes' : 'No'} />
-              <div className="pt-2">
-                <button onClick={resend} disabled={resending || u.email_verified}
-                  className="px-3 py-2 text-xs bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:bg-gray-300">
-                  {resending ? 'Sending…' : u.email_verified ? 'Already verified' : 'Resend verification email'}
-                </button>
+              {userRow.access_level === 'limited' && kyc.status !== 'approved' && (
+                <p className="text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="drawer-limited-access">
+                  Limited access is on: they can browse, but cannot sign any agreement until the identity check is approved.
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                {/* D1306: shown only while the email is not verified; it opens its dialog. */}
+                {!u.email_verified && (
+                  <button type="button" onClick={() => setResendAsk(true)} data-testid="drawer-resend"
+                    className="px-3 py-2 text-xs bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">
+                    Resend verification email
+                  </button>
+                )}
+                <Link to={`/admin/kyc/people/${u.id}`} className="text-[12.5px] font-semibold text-violet-700 hover:underline dark:text-violet-300">Open in KYC & KYB</Link>
               </div>
+              <p className="text-[12px] text-gray-500 dark:text-gray-400">Identity is decided in KYC & KYB.</p>
             </div>
           )}
 
           {data && tab === 'activity' && (
             <div className="space-y-2">
               {activity.length === 0 && <div className="text-sm text-gray-500">No activity recorded.</div>}
+              {activity.length >= 100 && <p className="text-[12px] text-gray-500" data-testid="drawer-activity-cap">Showing the latest 100.</p>}
               {activity.map(a => (
                 <div key={a.id} className="text-xs border border-gray-200 rounded-lg p-2.5 dark:border-gray-800">
                   <div className="flex items-center justify-between">
@@ -1400,11 +1208,12 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
 
           {data && tab === 'notes' && (
             <div className="space-y-3">
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Admin notes (visible only to admins)</label>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={8}
+              <label htmlFor="drawer-notes" className="text-xs font-semibold text-gray-700 dark:text-gray-300">Notes only admins see</label>
+              <textarea id="drawer-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={8}
                 className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-gray-700"
                 placeholder="Internal notes about this user…" />
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="drawer-notes-saved">{notesSavedLine(data.notes_saved)}</span>
                 <button onClick={saveNotes} disabled={saving}
                   className="px-3 py-2 text-xs bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:bg-gray-300">
                   {saving ? 'Saving…' : 'Save notes'}
@@ -1413,34 +1222,14 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             </div>
           )}
         </div>
-
-        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between dark:border-gray-800">
-          <div className="flex gap-2">
-            {/* D221 — absent, never disabled: a handler of null means the
-                server would refuse this viewer on this account. */}
-            {onImpersonate && (
-              <button onClick={onImpersonate}
-                className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
-                <LogIn size={12} /> View As
-              </button>
-            )}
-            {showCredits && (
-              <Link to={`/admin/accounts/credits/${u.id}`} data-testid="user-drawer-credits"
-                className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900 rounded-lg font-medium">
-                Credits
-              </Link>
-            )}
-            {onToggleActive && (
-              <button onClick={onToggleActive}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
-                {u.is_active ? 'Disable account' : 'Enable account'}
-              </button>
-            )}
-          </div>
-          <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
-        </div>
       </div>
-    </div>
+      {resendAsk && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <AccountDialog spec={accountDialog('resend', u)} onCancel={() => setResendAsk(false)}
+            onConfirm={resend} onDone={() => setResendAsk(false)} />
+        </div>
+      )}
+    </Sheet>
   );
 }
 

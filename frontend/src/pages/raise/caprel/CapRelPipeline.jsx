@@ -5,12 +5,12 @@ import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { Lightbox, Unreadable } from '../../../ui';
 import { RecordFacts, RecordSection } from '../../cycles/RecordView';
 import { recordHref } from '../../cycles/recordModel';
-import { parseCsv } from '../../RaisePipelinePage';
 import {
   IMPORT_CHUNK, NO_STATUS, PASSED, SLUG, STAGES, STAGE_LABEL, STATUS_OPTIONS, amountText, asksStatus, boardColumns, chunks,
-  importRows, mergeImport, moveBody, moveSentence, moveTargets, stageLabel, statusCounts, statusLabel, tabSearch,
+  importRows, mergeImport, moveBody, moveSentence, moveTargets, parseCsv, stageLabel, statusCounts, statusLabel, tabSearch,
 } from './capRelModel';
 import CapRelProposals from './CapRelProposals';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1192 (#3126) — Capital relationships' Pipeline (CRL2 the board, CRL3 the
@@ -318,7 +318,7 @@ export function InvestorLightbox({ projectId, prospect, search = '', onClose, on
   const props = { projectId, prospect, onClose: () => setDialog(null), onDone: done };
   return (
     <>
-      <Lightbox label={nameOf(prospect)} testId="caprel-investor" onClose={onClose} width={860} eyebrow={stageLabel(prospect.stage)} title={nameOf(prospect)}
+      <Sheet label={nameOf(prospect)} testId="caprel-investor" onClose={onClose} width={760} eyebrow={stageLabel(prospect.stage)} title={nameOf(prospect)}
         sub={committed ? `Commitment: ${statusLabel(prospect.commit_status)}${amountText(prospect.amount) ? ` · ${amountText(prospect.amount)}` : ' · Amount not recorded'}` : (prospect.next_step ? `Next: ${prospect.next_step}${prospect.next_step_due ? ` · ${String(prospect.next_step_due).slice(0, 10)}` : ''}` : 'No next step set')}>
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap gap-2" data-testid="caprel-investor-actions">
@@ -340,7 +340,7 @@ export function InvestorLightbox({ projectId, prospect, search = '', onClose, on
             </div>
           ) : null}
         </div>
-      </Lightbox>
+      </Sheet>
       {dialog === 'step' ? <StepDialog {...props} /> : null}
       {dialog === 'next' ? <NextStepDialog {...props} /> : null}
       {dialog === 'feedback' ? <FeedbackDialog {...props} /> : null}

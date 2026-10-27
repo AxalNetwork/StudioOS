@@ -36,21 +36,21 @@ import PhoneCycleRoot from './PhoneCycleRoot';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
-import ToolsHistory from './ToolsHistory';
-import SolutionDesignFromCode from './SolutionDesignFromCode';
-import FoundingTeamFromCode from './FoundingTeamFromCode';
-import CompanyFromCode from './CompanyFromCode';
 import GrowFromMercury from './GrowFromMercury';
 import MercuryRaiseFeed from './MercuryRaiseFeed';
-import RoadmapFromGithub from './RoadmapFromGithub';
-import MvpFromGithub from './MvpFromGithub';
+import FromLovable from './FromLovable';
+import ValidateFromGoogle from './ValidateFromGoogle';
+import FromNotion from './FromNotion';
+import NotionInterviewImport from './NotionInterviewImport';
+import NotionSnapshotImport from './NotionSnapshotImport';
+import ContentCalendar from './ContentCalendar';
+import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
 import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
 import { PmfPart } from './PmfPart';
 import { PmfChip } from './PmfMethod';
 import UpdateAskReplies from './UpdateAskReplies';
-import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
 import { FromYourInterviews, InterviewsSection, PainThemesSection, HypothesesSection } from './ValidateSections';
 import { acceptSuggestions } from './validatePhone';
@@ -130,23 +130,39 @@ const CYCLE_DEFS = {
     // read's `parts`, writes are these callbacks, and the venture is always
     // the page's, never a row's. Each dialog goes through `ctx.openDialog`.
     parts: toFnMap({
-      'customer-research': (data, ctx) => <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
-        onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
-        onExport={() => api.exportValidateInterviews(ctx.projectId)} />,
+      // D1092 (#2957): each of the three modules Google feeds draws its From Google part after its own section.
+      'customer-research': (data, ctx) => (
+        <>
+          <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+            onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
+            onExport={() => api.exportValidateInterviews(ctx.projectId)} />
+          <ValidateFromGoogle part={data?.parts?.from_google} module="customer_research" projectId={ctx.projectId} reload={ctx.reload} />
+          {/* D1087 (#2952): interview pages from Notion, imported only with the interviewee's consent. */}
+          <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />
+        </>
+      ),
+      // D1087 (#2952): research pages from Notion, as sources (title and link).
+      'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
+      'demand-signals': (data, ctx) => <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />,
       'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
         onExport={() => api.exportValidatePainMap(ctx.projectId)}
         // #1692's `attach` on the theme record, so the theme's activity logs it.
         onAssign={(themeId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', themeId, 'attach', body).then(ctx.reload)}
         newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />,
-      experiments: (data, ctx) => <HypothesesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
-        // Link to a pain's lists, as FVW handed them: the board's unretired claims and its themes.
-        onLoadLinkLists={() => api.getValidationBoard(ctx.projectId).then((board) => ({
-          hypotheses: (board?.hypotheses || []).filter((h) => !h.retired_at), painGroups: board?.pain_groups || [],
-        }))}
-        // #1692's `link` on the theme record, so both sides log it.
-        onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
-        // Only until #1656 registers New hypothesis as the table's Add (decision 20).
-        onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />,
+      experiments: (data, ctx) => (
+        <>
+          <HypothesesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+            // Link to a pain's lists, as FVW handed them: the board's unretired claims and its themes.
+            onLoadLinkLists={() => api.getValidationBoard(ctx.projectId).then((board) => ({
+              hypotheses: (board?.hypotheses || []).filter((h) => !h.retired_at), painGroups: board?.pain_groups || [],
+            }))}
+            // #1692's `link` on the theme record, so both sides log it.
+            onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
+            // Only until #1656 registers New hypothesis as the table's Add (decision 20).
+            onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />
+          <ValidateFromGoogle part={data?.parts?.from_google} module="experiments" projectId={ctx.projectId} reload={ctx.reload} />
+        </>
+      ),
       // D693 decision 13 (#1704): the verdict zone's Export summary, under the Decisions table.
       verdict: (_data, ctx) => <ExportSummary projectId={ctx.projectId} />,
     }),
@@ -159,6 +175,12 @@ const CYCLE_DEFS = {
         <RecordView record={record} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
           onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
       )} />,
+      // D1083 (#2948, LV5–LV7): From Lovable under the claim's record, one slot per experiment.
+      experiments: (read, ctx) => <div className="space-y-3">
+        <RecordView record={read} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
+          onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
+        {read?.parts?.lovable && <FromLovable part={read.parts.lovable} cycle="validate" projectId={ctx.projectId} onRetry={ctx.reload} />}
+      </div>,
     }),
   },
   /**
@@ -201,11 +223,20 @@ const CYCLE_DEFS = {
           {mercuryPart('fundraising-readiness', data, ctx)}
         </>
       ),
+      // D1227 (#3226): the Calls history left Overview; Calls for Capital is the Calls tab (D1221).
       'capital-relationships': (data, ctx) => (
         <>
-          <CallsHistory calls={data?.parts?.calls} />
           <RaiseReceiptMatches role={ctx.role} onChanged={ctx.reload} />
           {mercuryPart('capital-relationships', data, ctx)}
+          {/* D1089 (#2954): an investor CRM in Notion, as investors to add or link; once linked, their stage follows. */}
+          <FromNotion section="raise" projectId={ctx.projectId} module="capital_relationships" />
+        </>
+      ),
+      // D1089 (#2954): Notion pages as dated snapshots, NDA by default; a change adds a version on Accept only.
+      'data-room': (data, ctx) => (
+        <>
+          {mercuryPart('data-room', data, ctx)}
+          <FromNotion section="raise" projectId={ctx.projectId} module="data_room" acceptDialog={NotionSnapshotImport} />
         </>
       ),
     }),
@@ -215,7 +246,8 @@ const CYCLE_DEFS = {
       // D1029: the Cap table module page is the tool, so it has no door to itself.
       // D1173 (#2455): the venture travels with the link (broken item 8).
       'use-of-funds': (q) => ({ label: 'Open the forecast', href: forecastHref(q) }),
-      'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
+      // D1194 (#3128): the old pipeline retired into the tool; its door opens the Pipeline tab with the venture.
+      'capital-relationships': (q) => ({ label: 'Open the investor pipeline', href: `/raise/capital-relationships/pipeline${q || ''}` }),
       // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
     }),
     add: toFnMap({}),
@@ -313,8 +345,13 @@ const CYCLE_DEFS = {
       // The replies customer and partner asks brought in, beside the rows.
       distribution: (data, ctx) => (<>
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
+        {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
+        <ContentCalendar part={data?.parts?.content_calendar} channels={data?.records?.rows} projectId={ctx.projectId} reload={ctx.reload} />
         {fromMercury('distribution', data, ctx)}
+        <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
       </>),
+      // D1090 (#2955): a feedback database in Notion, as product feedback.
+      'product-improvement': (_data, ctx) => <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />,
       'partner-network': (data, ctx) => (<>
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />
         {fromMercury('partner-network', data, ctx)}
@@ -346,19 +383,10 @@ const CYCLE_DEFS = {
     path: 'connect',
     Mount: BuildMount,
     action: (q, open) => ({ label: 'Connect a tool', href: `/build/connect${q}`, onOpen: open }),
-    // D686 §5.4: Operating systems' Tools history, anchored at #tools.
-    // D782 (#2114): Solution design's From GitHub (Built with, proposals, notes), anchored at #from-github.
-    parts: toFnMap({
-      'solution-design': (data, ctx) => <SolutionDesignFromCode part={data?.parts?.from_code} projectId={ctx.projectId} reload={ctx.reload} />,
-      // D782 (#2112): Prototype / MVP's pull request states and release checks, anchored at #from-github.
-      'prototype-mvp': (data) => <MvpFromGithub github={data?.parts?.github} />,
-      // D782 (#2111): Product roadmap's milestones and releases from GitHub, anchored at #from-github.
-      'product-roadmap': (data) => <RoadmapFromGithub github={data?.parts?.github} />,
-      'operating-systems': (data) => <ToolsHistory tools={data?.parts?.tools} />,
-      // D782 (#2115): who builds (the founder matches each login) and where the code sits, anchored at #from-github.
-      'founding-team': (data, ctx) => <FoundingTeamFromCode part={data?.parts?.github} projectId={ctx.projectId} reload={ctx.reload} />,
-      'company-creation': (data, ctx) => <CompanyFromCode part={data?.parts?.github} projectId={ctx.projectId} reload={ctx.reload} />,
-    }),
+    // D1311 (#2398, #2408): each module's connector parts, in the canvases'
+    // order, one line per connector (buildParts.jsx). GitHub's are D782's;
+    // Vercel's and Lovable's lines wait there for their tasks.
+    parts: toFnMap(buildPartsMap()),
     tools: toFnMap({
       'product-roadmap': (q) => ({ label: 'Open the roadmap: Now, Next and Later', href: `/build/roadmap${q}` }),
       'founding-team': (q) => ({ label: 'Open the cap table and vesting', href: `/raise/cap-table${q || ''}` }),
@@ -1006,9 +1034,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else if (reporting && cycle === 'grow') {
     // D1056 (#2427): Grow's Reporting desk, under the tab row with Reporting lit.
+    // D1060 (#2930): and one report, `reporting="report"|"edit"` with its uid as `:id`.
     body = (
       <ReportingDesk tab={reporting} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} />
+        search={location.search} cards={tabs} action={action} phone={phone} reportUid={recordId ?? null} role={user?.role ?? null} />
     );
   } else if (buildPlan && cycle === 'build') {
     // D1063 (#2426): Validate → Build's plan, under Build's header and tab row.

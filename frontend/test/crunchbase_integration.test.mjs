@@ -65,3 +65,14 @@ test('ProjectDetail lookup / apply / competitors are wired to api.crunchbase*', 
   assert.match(src, /api\.crunchbaseApply\(/);
   assert.match(src, /api\.crunchbaseCompetitors\(/);
 });
+
+test('D1317: the Crunchbase lookup and Edit startup open as the shared right-side Sheet, at their own widths', () => {
+  const src = readFileSync(resolve(root, 'frontend/src/pages/ProjectDetail.jsx'), 'utf8');
+  assert.match(src, /import Sheet from '\.\.\/ui\/Sheet\.jsx';/);
+  const cb = src.slice(src.indexOf('function CrunchbaseLookupSlideOver('), src.indexOf('function ', src.indexOf('function CrunchbaseLookupSlideOver(') + 10));
+  assert.match(cb, /<Sheet label="Look up on Crunchbase" width=\{560\} onClose=\{onClose\} testId="crunchbase-lookup" initialFocus=\{searchRef\}/, 'max-w-xl → 560, focus in the search box');
+  assert.match(cb, /className="sticky top-0[^"]*"/, 'the search box stays put over the scrolling results');
+  const edit = src.slice(src.indexOf('function EditProjectModal('));
+  assert.match(edit, /<Sheet label="Edit startup" title="Edit Startup" width=\{640\} onClose=\{handleClose\} testId="edit-project"\s+footer=/, 'max-w-2xl (672px) → 640, Save in the fixed footer');
+  assert.doesNotMatch(`${cb}${edit.slice(0, 8000)}`, /fixed inset-0|useEscapeClose/, 'overlay, frame and Escape are the Sheet’s');
+});

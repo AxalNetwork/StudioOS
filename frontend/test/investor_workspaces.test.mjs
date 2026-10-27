@@ -151,9 +151,11 @@ test('investor Deals implements the I3 hierarchy with live sources', () => {
   const SHELL = read('frontend/src/workspaces/shellConfig.js');
   const bucket = SHELL.slice(SHELL.indexOf("prefix: '/deals'"), SHELL.indexOf("prefix: '/portfolio'"));
   assert.match(bucket, /tagline: 'Find and close investments'/);
-  for (const label of ['Pipeline', 'Screening', 'Commit', 'Closing']) {
+  for (const label of ['Screening', 'Commit', 'Closing']) {
     assert.match(bucket, new RegExp(`label: '${label}'`), `the Deals bucket lost its ${label} zone`);
   }
+  // D1243 (#3256): Pipeline retired into Deal flow's table; `/deals/pipeline` forwards there.
+  assert.doesNotMatch(bucket, /label: 'Pipeline'/, 'the retired Pipeline zone is back in the Deals bucket');
   // And the workspace renders that config rather than a second copy of it.
   assert.match(deals, /<ZoneNav bucket=\{bucket\}/, 'the bucket root stopped rendering its zone row');
   // The heading here read "Deals AI" — one of four different headings across
@@ -217,14 +219,14 @@ test('investor Deals does not ship illustrative canvas data as live data', () =>
 
 test('investor Deals exposes only canonical deal-room IDs and partial source failures', () => {
   // WAS `navigate(`/deals/${id}`)` — the DealCard's own handler, which went to
-  // `pages/investor/deals/PipelineZone.jsx` with the rest of canvas ID1. What
-  // the assertion is FOR survives the move: a deal room is reached by the
-  // record's own id and never by a slug, a name or a sample. So both files are
-  // asked the same question — every `/deals/…` destination interpolates an
-  // expression — and each must have at least one, which is what stops this
-  // passing vacuously on a page that stopped linking to deal rooms at all.
-  const PIPELINE_ZONE = read('frontend/src/pages/investor/deals/PipelineZone.jsx');
-  for (const [what, src] of [['the workspace', deals], ['the pipeline zone', PIPELINE_ZONE]]) {
+  // `pages/investor/deals/PipelineZone.jsx` with the rest of canvas ID1, and
+  // retired with that zone (D1243). What the assertion is FOR survives: a deal
+  // room is reached by the record's own id and never by a slug, a name or a
+  // sample. So the workspace is asked the question — every `/deals/…`
+  // destination interpolates an expression — and must have at least one,
+  // which is what stops this passing vacuously on a page that stopped linking
+  // to deal rooms at all.
+  for (const [what, src] of [['the workspace', deals]]) {
     const links = [...src.matchAll(/`\/deals\/\$\{([^}]+)\}`/g)].map((m) => m[1].trim());
     assert.ok(links.length > 0, `${what} no longer links to a deal room at all`);
     for (const expr of links) {

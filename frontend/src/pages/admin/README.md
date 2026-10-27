@@ -24,10 +24,16 @@ glance that is already in hand is not passed through the legacy props.
 `ConsolePages.jsx`'s `AllAccountsPage` is All accounts at `/admin/accounts/all`,
 with one account's record at `/admin/accounts/all/:id` (D1299, #2377). The
 addresses and the profile widgets are `accountsAddress.js`'s.
+`accounts/` is the account drawer's tabs and the in-page dialog every account
+change opens (D1306, #3403) — see its own README.
 `ArticlesQueuePage.jsx` is HQ › Content › Content queue (D1290, #2383): four
 tabs at their own addresses and one address per article, all named in
-`contentQueueModel.js`. Pipeline is the review queue; Calendar, Authors and
-Performance say what they wait on until D1291–D1298 build them.
+`contentQueueModel.js`. Pipeline is the review queue; an article's address opens
+its review as the shared Sheet over the full-width queue (D1317). Calendar is built
+`contentQueueModel.js`. Pipeline is `contentQueue/` (D1295): the board and
+list, the review drawer and its in-page dialogs. Calendar is built
+(D1296, #3392) and Authors and Performance are D1297's, in `contentQueue/`
+— see its README.
 
 Roughly grouped by what they administer: accounts and roles, the Spin-Out Lab
 cohort (applications, timing, journey preview, and `SpinoutModerationPage.jsx`
@@ -121,6 +127,9 @@ README.
 own addresses and one person's case at `/admin/kyc/people/:id`, with People
 drawn by D648's queue in `consoles/` — see its own README.
 
+
+`accounts/` is D1304's Overview of Admin › Accounts at `/admin/accounts`, drawn
+by `HeldAccounts.jsx` over D1301's overview read (ACC1, ACC8–ACC11) — see its own README.
 
 `promos/` is D1270's Promo codes at `/admin/platform/promo-codes`, HQ only, under
 Platform: Codes and Usage at their own addresses and one code's drawer at

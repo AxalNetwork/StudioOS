@@ -57,15 +57,10 @@ import { makeZoneActions } from './zoneActionBuilder';
 
 export const INVESTOR_ZONE_ACTIONS = {
   // ── Deals ────────────────────────────────────────────────────────────────
-  'deals/pipeline': [
-    // D494 (#1023): BUILT UP TO THE OWNER'S LINE, which here is the whole op.
-    // The columns are the deal record's stored status — one workflow every
-    // route and the IC hand-off read — so a per-firm stage set is a decision
-    // about the workflow, not a missing form. The reason names that decision.
-    { label: 'Configure stages', unbuilt: 'the columns are the deal record’s stored status, shared by every route that moves a deal; whether a firm may define its own stage set is the owner’s decision, not yet made', hover: 'Stages follow one shared deal workflow. Custom stages per firm are not decided yet.' },
-    { label: 'Save view', unbuilt: 'filters reset between visits; no saved view is stored' },
-    { label: 'Export', kind: 'export' },
-  ],
+  // D1243 (#3256): `deals/pipeline` is gone with its zone. Its three ops are
+  // Deal flow's now, and built: the firm's own stages (D1238), Save view
+  // with a name, kept per person or shared with the firm (D1239, D1240), and
+  // the table's export. None of them is declared here any more.
   // TWO OF THESE REASONS WERE FALSE, and canvas ID2 is what found it. They
   // said no scoring run and no rubric were stored. `score_snapshots` is a
   // stored scoring run with SIX dimensions — market, team, product, capital,
@@ -79,13 +74,11 @@ export const INVESTOR_ZONE_ACTIONS = {
   // overstates the gap is as misleading as a control that does nothing — it
   // tells the next reader not to look.
   'deals/screening': [
-    // D494 (#1023): both built up to their decision. A run scores the rubric
-    // ANSWERS sent with it (`POST /api/scoring/score` reads them from the
-    // body), and an investor holds none to send for a founder's project, so a
-    // batch needs a decision on where its inputs come from. Who may edit the
-    // weights is the question asked on #1023.
-    { label: 'New batch run', unbuilt: 'scoring runs are stored, but a run is started against one project and scores the rubric answers sent with it — nothing batches them, and where a batch’s answers come from is the owner’s decision, not yet made', hover: 'Each scoring run uses one company’s own answers. Batch runs are not decided yet.' },
-    { label: 'Edit rubric', unbuilt: 'the six dimensions are real and their weights are fixed in code; no per-firm rubric is stored to edit, and who may edit the weights is the owner’s decision, asked on #1023', hover: 'The six weights are fixed for now. Who may edit them is not decided yet.' },
+    // D1260 (#3283): New batch run and Edit rubric were the Lab scorer's. The
+    // scorecard scores every venture from its records and recomputes on its
+    // own; each investor's weighting is Deal flow's "Your weighting".
+    { label: 'New batch run', unbuilt: 'the venture scorecard recomputes each venture from its own records, so there is no run to start; the Lab scorer this desk used to show is practice and its runs are not shown to investors', hover: 'Scorecards recompute on their own. There is nothing to run.' },
+    { label: 'Edit rubric', unbuilt: 'the eleven scopes and their weights are the published model, fixed in code; each investor’s own weighting is chosen in Deal flow’s Your weighting dialog', hover: 'The model is fixed. Your own weighting is on Deal flow.' },
     { label: 'Export', kind: 'export' },
   ],
   'deals/commit': [

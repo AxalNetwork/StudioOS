@@ -34,6 +34,10 @@
   --p-err: #b91c1c;
   --p-err-bg: #fef2f2;
   --p-err-line: #fecaca;
+  --p-sky: #0ea5e9;
+  --p-note-ink: #92400e;
+  --p-note-bg: #fffbeb;
+  --p-note-line: #fcd34d;
 
   container-type: inline-size;
   color: var(--p-ink);
@@ -59,6 +63,10 @@
   --p-err: #fca5a5;
   --p-err-bg: rgba(185, 28, 28, .12);
   --p-err-line: rgba(252, 165, 165, .35);
+  --p-sky: #38bdf8;
+  --p-note-ink: #fcd34d;
+  --p-note-bg: rgba(245, 158, 11, .12);
+  --p-note-line: rgba(252, 211, 77, .35);
 }
 .axp *, .axp *::before, .axp *::after { box-sizing: border-box; }
 .axp a { text-decoration: none; }
@@ -187,6 +195,11 @@
 }
 .axp-row { display: grid; gap: 14px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--p-line-2); font-size: 14px; line-height: 1.45; }
 .axp-row-l { color: var(--p-ink-2); }
+/* D1172 (#3085): the Storage group's New pill, "Best suited for" in words, and the LP band's storage line. */
+.axp-group-pill { margin-left: 8px; vertical-align: middle; letter-spacing: normal; text-transform: none; }
+.axp-cell-words { font-family: inherit; font-weight: 400; font-size: 13px; line-height: 1.45; color: var(--p-muted); text-align: center; }
+.axp-lp-storage { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+.axp-lp-storage-t { font-weight: 700; font-size: 14px; color: var(--p-ink); }
 .axp-cell { display: flex; justify-content: center; font: 500 13px var(--font-mono); color: var(--p-ink); }
 .axp-row-phone { display: flex; justify-content: space-between; min-height: 46px; padding: 10px 16px; }
 .axp-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin-bottom: 12px; }
@@ -220,14 +233,32 @@
 /* ── D1285 (#2452): the "Your AI tokens" band and the pack title ── */
 .axp-pack-t { font-weight: 700; font-size: 14px; }
 .axp-tokband { padding-bottom: 0; }
-.axp-tokband-row {
+/* D1286 (#3369): the band's card holds the balance, the plan block, Add tokens and the bar (CRP1). */
+.axp-tokband-card {
   background: var(--p-card); border: 1px solid var(--p-line); border-radius: 15px; padding: 22px 26px;
-  display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+  display: flex; flex-direction: column; gap: 16px;
 }
+.axp-tokband-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.axp-tokband-main { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; min-width: 0; }
 .axp-tokband-n { font-weight: 800; font-size: 34px; line-height: 1.1; letter-spacing: -.02em; margin: 6px 0 4px; }
 .axp-tokband-bad { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 14px; color: var(--p-err); }
-.axp-tokband-note { margin: 0 0 10px; padding: 10px 14px; border-radius: 10px; font-size: 13.5px; color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; }
+.axp-tokband-note { margin: 0 0 10px; padding: 10px 14px; border-radius: 10px; font-size: 13.5px; color: var(--p-note-ink); background: var(--p-note-bg); border: 1px solid var(--p-note-line); }
+.axp-tokband-plan { display: flex; flex-direction: column; gap: 3px; padding-left: 28px; border-left: 1px solid var(--p-line); min-width: 0; }
+.axp-tokband-name { font-weight: 800; color: var(--p-ink); }
+.axp-tokband-line { font-size: 13px; color: var(--p-body); }
+.axp-tokband-sub { font-size: 12.5px; color: var(--p-muted); }
+.axp .axp-tokband-link { color: var(--p-violet); font-weight: 600; }
+.axp-tokband-act { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .axp .axp-tokband-add { flex: none; width: auto; margin: 0; padding: 11px 18px; min-height: 44px; }
+.axp .axp-tokband-add:disabled { opacity: .55; cursor: not-allowed; }
+.axp-tokband-barwrap { display: flex; flex-direction: column; gap: 8px; }
+.axp-tokband-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--p-line-2); }
+.axp-tokband-seg { display: block; height: 100%; }
+.axp-tokband-seg.is-allowance, .axp-tokband-dot.is-allowance { background: var(--p-violet); }
+.axp-tokband-seg.is-tokens, .axp-tokband-dot.is-tokens { background: var(--p-sky); }
+.axp-tokband-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--p-body); }
+.axp-tokband-key { display: inline-flex; align-items: center; gap: 6px; }
+.axp-tokband-dot { display: block; width: 8px; height: 8px; border-radius: 999px; flex: none; }
 
 /* ── FAQ ── */
 .axp-faq { margin-top: 34px; }
@@ -269,4 +300,11 @@
   .axp-desk { display: none; }
   .axp-phone { display: block; }
   .axp-mcards { display: flex; }
+  /* D1286 (CRP15 frame 1): the band stacks, Add tokens runs full width, every target is at least 44px. */
+  .axp-tokband-card { padding: 18px; }
+  .axp-tokband-row, .axp-tokband-main { flex-direction: column; align-items: stretch; gap: 14px; }
+  .axp-tokband-plan { padding-left: 0; padding-top: 12px; border-left: 0; border-top: 1px solid var(--p-line); }
+  .axp-tokband-act { align-items: stretch; }
+  .axp .axp-tokband-add { width: 100%; justify-content: center; }
+  .axp .axp-tokband-link { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
 }

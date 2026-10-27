@@ -76,7 +76,7 @@ export const DATA_ROOM_ACCESS = '/raise/data-room/access';
 export const TOOL_HREF = {
   pitch: '/raise/pitch',
   capTable: '/raise/cap-table',
-  pipeline: '/raise/capital/pipeline',
+  pipeline: '/raise/capital-relationships/pipeline', // D1194: the old pipeline page is retired
   // D1178 (#3105): the financial model is Use of funds › Runway › Forecast.
   model: '/raise/use-of-funds/runway/forecast',
   metrics: '/build/kpi',
@@ -204,11 +204,15 @@ export async function teamReadiness(env: Env, projectId: number): Promise<Comput
   const reads: ReadRow[] = [];
   try {
     const team = await env.DB.prepare(`SELECT COUNT(DISTINCT h.id) AS founders,
-      COUNT(DISTINCT CASE WHEN v.start_date IS NOT NULL AND v.total_months > 0 THEN h.id END) AS vesting
+      COUNT(DISTINCT CASE WHEN v.start_date IS NOT NULL AND v.total_months > 0 THEN h.id END) AS vesting,
+      COUNT(DISTINCT CASE WHEN LOWER(COALESCE(h.source, 'manual')) NOT IN ('manual', 'typed') THEN h.id END) AS fed
       FROM cap_table_holders h LEFT JOIN cap_table_vesting v ON v.holder_id = h.id AND v.user_id = h.user_id
-      WHERE h.project_id = ? AND h.founder_role IS NOT NULL`).bind(projectId).first<{ founders: number; vesting: number }>();
-    reads.push({ a: 'Build · Founding team', b: `${Number(team?.founders ?? 0)} founders recorded · cap_table_holders`, ...met(Number(team?.founders ?? 0) > 0) });
-    reads.push({ a: 'Founders with vesting', b: `${Number(team?.vesting ?? 0)} recorded · cap_table_vesting`, ...met(Number(team?.vesting ?? 0) > 0) });
+      WHERE h.project_id = ? AND h.founder_role IS NOT NULL`).bind(projectId).first<{ founders: number; vesting: number; fed: number }>();
+    // D1264: the label of what was read. A holding a connector did not feed was typed by a founder.
+    const founders = Number(team?.founders ?? 0), fed = Number(team?.fed ?? 0);
+    const label = founders === 0 ? '' : fed === 0 ? ' · Typed' : fed === founders ? ' · Connector' : ' · Connector and Typed';
+    reads.push({ a: 'Build · Founding team', b: `${founders} founders recorded · cap_table_holders${label}`, ...met(founders > 0) });
+    reads.push({ a: 'Founders with vesting', b: `${Number(team?.vesting ?? 0)} recorded · cap_table_vesting${Number(team?.vesting ?? 0) > 0 ? label : ''}`, ...met(Number(team?.vesting ?? 0) > 0) });
   } catch {
     reads.push({ a: 'Build · Founding team and vesting', b: 'Unreadable · Try again', ...met(false) });
   }
@@ -227,6 +231,26 @@ export async function teamReadiness(env: Env, projectId: number): Promise<Comput
     reads.push({ a: 'Connector · GitHub contributors', b: 'Unreadable · Try again', ...met(false) });
   }
   return { key: 'team', score: null, evidence: null, missing: 'Team is assessed by a person; recorded counts are not a score.', reads };
+}
+
+/**
+ * D1264 (#3287): the Source labels a consistency check compared with, so a
+ * readiness cell says what it read. Stripe and Mercury are Connector, including
+ * a connector named inside a verified-revenue source; the round target and any
+ * metric typed into StudioOS are Typed.
+ */
+export function checkedLabels(metrics: Partial<Record<FigureKey, { source: string }>>, stated: Stated[]): string {
+  const labels = new Set<string>();
+  for (const s of stated) {
+    const m = metrics[s.figure];
+    if (!m) continue;
+    // Stripe and Mercury are anchored at the start. A connector or document
+    // named later (`Verified revenue · Connector · Stripe`) is a separate
+    // literal, so the leading anchor applies to every alternative.
+    const connector = /^(?:Stripe|Mercury)\b/.test(m.source) || m.source.includes('Connector · ');
+    labels.add(connector ? 'Connector' : m.source.includes('Document · ') ? 'Document' : 'Typed');
+  }
+  return ['Connector', 'Document', 'Typed'].filter((l) => labels.has(l)).join(' and ') || 'Typed';
 }
 
 /**
@@ -255,7 +279,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const hasDeck = deckCount > 0;
   out.push({
     key: 'deck', score: hasDeck ? 10 : 0, evidence: 'measured', missing: hasDeck ? null : 'Build the pitch deck.',
-    reads: [{ a: 'Pitch decks', b: hasDeck ? plural(deckCount, 'deck saved', 'decks saved') : 'none saved', ...met(hasDeck) }],
+    reads: [{ a: 'Pitch decks', b: hasDeck ? `${plural(deckCount, 'deck saved', 'decks saved')} · Typed` : 'none saved', ...met(hasDeck) }],
   });
 
   const hasAlloc = parseUseOfFundsValue(p?.use_of_funds).length > 0;
@@ -264,8 +288,8 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     key: 'use_of_funds', score: hasAlloc && hasTarget ? 10 : hasAlloc || hasTarget ? 5 : 0, evidence: 'measured',
     missing: hasAlloc && hasTarget ? null : 'Set a raise target and a 100% allocation.',
     reads: [
-      { a: 'Raise target', b: hasTarget ? usd(Number(p!.funding_needed)) : 'not set', ...met(hasTarget) },
-      { a: 'Allocation', b: hasAlloc ? 'split stored' : 'Not recorded', ...met(hasAlloc) },
+      { a: 'Raise target', b: hasTarget ? `${usd(Number(p!.funding_needed))} · Typed` : 'not set', ...met(hasTarget) },
+      { a: 'Allocation', b: hasAlloc ? 'split stored · Typed' : 'Not recorded', ...met(hasAlloc) },
     ],
   });
 
@@ -273,7 +297,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const hasCap = scenarios > 0;
   out.push({
     key: 'cap_table', score: hasCap ? 10 : 0, evidence: 'measured', missing: hasCap ? null : 'Set up the cap table.',
-    reads: [{ a: 'Cap table', b: hasCap ? 'a base scenario is saved' : 'no scenario saved', ...met(hasCap) }],
+    reads: [{ a: 'Cap table', b: hasCap ? 'a base scenario is saved · Typed' : 'no scenario saved', ...met(hasCap) }],
   });
 
   const fieldOf = (v: unknown) => (num(v) ?? 0) > 0;
@@ -304,8 +328,8 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     key: 'data_room', score: Math.round((known.size / DILIGENCE_CHECKLIST.length) * 10), evidence: 'measured',
     missing: open === 0 ? null : `${plural(open, 'checklist item has', 'checklist items have')} no file.`,
     reads: [
-      { a: 'Files investors can download', b: files ? `${files} in ${plural(Number(staged?.folders ?? 0), 'folder', 'folders')}` : 'none downloadable', ...met(files > 0) },
-      { a: 'Diligence checklist covered', b: `${known.size} of ${DILIGENCE_CHECKLIST.length} items`, ...met(open === 0, known.size > 0) },
+      { a: 'Files investors can download', b: files ? `${files} in ${plural(Number(staged?.folders ?? 0), 'folder', 'folders')} · Document` : 'none downloadable', ...met(files > 0) },
+      { a: 'Diligence checklist covered', b: `${known.size} of ${DILIGENCE_CHECKLIST.length} items${known.size ? ' · Document' : ''}`, ...met(open === 0, known.size > 0) },
     ],
   });
 
@@ -325,7 +349,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
       missing: compared === 0 ? 'Not enough recorded' : mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
       reads: [
         { a: 'Newest version', b: `v${v}`, ...met(true) },
-        { a: 'Consistency check', b: compared === 0 ? 'Not enough recorded · nothing compared yet' : `${compared} compared · ${plural(mismatches, 'mismatch', 'mismatches')}`, ...met(compared > 0 && mismatches === 0, compared > 0) },
+        { a: 'Consistency check', b: compared === 0 ? 'Not enough recorded · nothing compared yet' : `${compared} compared · ${plural(mismatches, 'mismatch', 'mismatches')} · ${checkedLabels(metrics, stated)}`, ...met(compared > 0 && mismatches === 0, compared > 0) },
       ],
     });
   }
@@ -477,9 +501,30 @@ export const INVESTOR_TYPE_LABEL: Record<string, string> = {
 /** The marker row every saved version carries, so a version with no override still exists. */
 export const VERSION_MARKER_KEY = '_version';
 
-export const FIGURES = ['mrr', 'paying_customers', 'raise', 'revenue'] as const;
+/**
+ * Every figure a Raise claim states, read by fixed patterns (D1264, #3287:
+ * #2430's list, MRR to the raise). The narrative check (`narrative_checks`,
+ * kept for readiness) still compares only `NARRATIVE_CHECK_FIGURES`, the ones
+ * its metric side reads; `raise_claims` checks every figure against the
+ * pinned evidence (`raiseClaims.ts`).
+ */
+export const FIGURES = [
+  'mrr', 'arr', 'paying_customers', 'revenue', 'revenue_growth', 'net_burn', 'runway', 'churn', 'cac',
+  'interviews', 'lois', 'waitlist', 'pilots', 'headcount', 'raise',
+] as const;
 export type FigureKey = (typeof FIGURES)[number];
-export const FIGURE_LABEL: Record<FigureKey, string> = { mrr: 'MRR', paying_customers: 'Paying customers', raise: 'The raise', revenue: 'Monthly revenue' };
+export const NARRATIVE_CHECK_FIGURES = ['mrr', 'paying_customers', 'raise', 'revenue'] as const satisfies readonly FigureKey[];
+export const FIGURE_LABEL: Record<FigureKey, string> = {
+  mrr: 'MRR', arr: 'ARR', paying_customers: 'Paying customers', revenue: 'Monthly revenue', revenue_growth: 'Revenue growth',
+  net_burn: 'Net burn', runway: 'Runway', churn: 'Churn', cac: 'CAC', interviews: 'Customer interviews', lois: 'Letters of intent',
+  waitlist: 'Waitlist sign-ups', pilots: 'Pilots', headcount: 'Headcount', raise: 'The raise',
+};
+/** What a figure counts: dollars, a percentage, months, or a whole number. */
+export const FIGURE_UNIT: Record<FigureKey, 'money' | 'percent' | 'months' | 'count'> = {
+  mrr: 'money', arr: 'money', paying_customers: 'count', revenue: 'money', revenue_growth: 'percent', net_burn: 'money',
+  runway: 'months', churn: 'percent', cac: 'money', interviews: 'count', lois: 'count', waitlist: 'count', pilots: 'count',
+  headcount: 'count', raise: 'money',
+};
 
 export type Stated = { figure: FigureKey; value: number; source: string };
 export type Mismatch = { figure: FigureKey; stated_value: number; stated_source: string; metric_value: number; metric_source: string };
@@ -510,6 +555,29 @@ export function parseStatedFigures(fieldKey: string, text: string): Stated[] {
   const revenue = new RegExp(`${MONEY}\\s*(?:in\\s+)?monthly revenue`, 'i').exec(t)
     || new RegExp(`monthly revenue\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i').exec(t);
   if (revenue) { const v = amount(revenue[1], revenue[2]); if (Number.isFinite(v)) out.push({ figure: 'revenue', value: v, source: src }); }
+  // D1264 (#3287): the rest of #2430's figures. Each needs its words beside
+  // the number, so a bare number is never read as any of them.
+  const PCT = String.raw`(\d{1,3}(?:\.\d+)?)\s*%`;
+  const COUNT = String.raw`(\d[\d,]*)`;
+  const more: Array<[FigureKey, RegExp[], boolean]> = [
+    ['arr', [new RegExp(`${MONEY}\\s*(?:in\\s+)?(?:ARR|annual recurring revenue)`, 'i'), new RegExp(`(?:ARR|annual recurring revenue)\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i')], true],
+    ['revenue_growth', [new RegExp(`${PCT}\\s*(?:month[- ]over[- ]month\\s+|MoM\\s+|monthly\\s+)?(?:revenue\\s+)?growth`, 'i'), new RegExp(`revenue growth\\s*(?:of|is|at|:|=)?\\s*${PCT}`, 'i')], false],
+    ['net_burn', [new RegExp(`(?:net\\s+)?burn(?:\\s+rate)?\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i'), new RegExp(`${MONEY}\\s*(?:a month\\s+|per month\\s+|monthly\\s+)?(?:net\\s+)?burn`, 'i')], true],
+    ['runway', [/(\d{1,3}(?:\.\d+)?)\s*months?\s+of\s+runway/i, /runway\s*(?:of|is|:|=)?\s*(\d{1,3}(?:\.\d+)?)\s*months?/i], false],
+    ['churn', [new RegExp(`${PCT}\\s*(?:monthly\\s+)?(?:customer\\s+|logo\\s+|revenue\\s+)?churn`, 'i'), new RegExp(`churn(?:\\s+rate)?\\s*(?:of|is|at|:|=)?\\s*${PCT}`, 'i')], false],
+    ['cac', [new RegExp(`(?:CAC|customer acquisition cost)\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i'), new RegExp(`${MONEY}\\s*(?:CAC|customer acquisition cost)`, 'i')], true],
+    ['interviews', [new RegExp(`${COUNT}\\s+(?:customer\\s+|discovery\\s+|user\\s+)?interviews`, 'i')], false],
+    ['lois', [new RegExp(`${COUNT}\\s+(?:signed\\s+)?(?:letters? of intent|LOIs?)\\b`, 'i')], false],
+    ['waitlist', [new RegExp(`${COUNT}\\s+(?:people\\s+)?(?:on\\s+(?:the|our)\\s+waitlist|waitlist sign-?ups)`, 'i'), new RegExp(`waitlist of\\s+${COUNT}`, 'i')], false],
+    ['pilots', [new RegExp(`${COUNT}\\s+(?:paid\\s+|active\\s+|signed\\s+)?pilots?\\b`, 'i')], false],
+    ['headcount', [new RegExp(`team of\\s+${COUNT}`, 'i'), new RegExp(`headcount\\s*(?:of|is|:|=)?\\s*${COUNT}`, 'i'), new RegExp(`${COUNT}\\s+(?:full-time\\s+)?(?:employees|team members)`, 'i')], false],
+  ];
+  for (const [figure, patterns, money] of more) {
+    const m = patterns.map((p) => p.exec(t)).find(Boolean);
+    if (!m) continue;
+    const v = money ? amount(m[1], m[2]) : amount(m[1]);
+    if (Number.isFinite(v)) out.push({ figure, value: v, source: src });
+  }
   return out;
 }
 
@@ -641,7 +709,13 @@ export function basedOnLabel(v: Pick<VersionRow, 'start_from' | 'based_on_versio
   return null;
 }
 
-export const fmtFigure = (f: FigureKey, v: number) => (f === 'paying_customers' ? Math.round(v).toLocaleString('en-US') : usd(v));
+export const fmtFigure = (f: FigureKey, v: number) => {
+  const unit = FIGURE_UNIT[f];
+  if (unit === 'count') return Math.round(v).toLocaleString('en-US');
+  if (unit === 'percent') return `${Number(v.toFixed(2))}%`;
+  if (unit === 'months') return `${Number(v.toFixed(1))} months`;
+  return usd(v);
+};
 /** One mismatch as a sentence that names both figures and both sources. */
 export function mismatchSentence(m: Mismatch): string {
   return `${FIGURE_LABEL[m.figure]}: ${fmtFigure(m.figure, m.stated_value)} in ${m.stated_source}, ${fmtFigure(m.figure, m.metric_value)} in ${m.metric_source}`;

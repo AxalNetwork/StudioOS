@@ -14,6 +14,8 @@ export const GOOGLE_WORKSPACE_READS = Object.freeze({
   'forms.responses.list': Object.freeze({ origin: 'https://forms.googleapis.com', path: '/v1/forms/' }),
 });
 export type WorkspaceRead = keyof typeof GOOGLE_WORKSPACE_READS;
+/** D1094: the largest file copied into the data room. */
+export const MAX_COPY_BYTES = 20 * 1024 * 1024;
 export class WorkspaceError extends Error {
   code: string; status: number;
   constructor(code: string, status = 503) { super(code); this.code = code; this.status = status; }
@@ -28,10 +30,14 @@ export async function workspaceConnection(env: Env, userId: number): Promise<'go
 }
 /** Bounded response, no redirects, error codes only; never include a provider's body in an exception. */
 export async function workspaceRead(env: Env, userId: number, call: WorkspaceRead, id: string,
-  options: { range?: string; mimeType?: string; pageToken?: string } = {}, fetcher: typeof fetch = fetch): Promise<any> {
+  options: { range?: string; mimeType?: string; pageToken?: string; pageSize?: number; maxBytes?: number } = {}, fetcher: typeof fetch = fetch): Promise<any> {
   if (!validFileId(id) || !Object.hasOwn(GOOGLE_WORKSPACE_READS, call)) throw new WorkspaceError('invalid_workspace_read', 400);
   const state = await workspaceConnection(env, userId);
   if (state !== 'ready') throw new WorkspaceError(state, 409);
+  // D1094: a file copied into the data room may be larger than the 2 MB a document read takes, never above 20 MB.
+  const binary = call === 'files.export' || call === 'alt=media';
+  const limit = binary && options.maxBytes != null ? options.maxBytes : 2 * 1024 * 1024;
+  if (!Number.isSafeInteger(limit) || limit <= 0 || limit > MAX_COPY_BYTES) throw new WorkspaceError('invalid_workspace_read', 400);
   const spec = GOOGLE_WORKSPACE_READS[call];
   const url = new URL(spec.path + encodeURIComponent(id), spec.origin);
   if (call === 'files.get') url.search = new URLSearchParams({ fields: 'id,name,mimeType,modifiedTime,trashed', supportsAllDrives: 'true' }).toString();
@@ -46,7 +52,11 @@ export async function workspaceRead(env: Env, userId: number, call: WorkspaceRea
     url.pathname += '/values/' + encodeURIComponent(range);
   }
   if (call === 'forms.responses.list') {
-    url.pathname += '/responses'; url.searchParams.set('pageSize', '5');
+    url.pathname += '/responses';
+    // Five for the mapping preview; a sync (D1092) reads up to 100 a page.
+    const size = options.pageSize ?? 5;
+    if (!Number.isInteger(size) || size < 1 || size > 100) throw new WorkspaceError('invalid_page_size', 400);
+    url.searchParams.set('pageSize', String(size));
     if (options.pageToken) {
       if (options.pageToken.length > 2048) throw new WorkspaceError('invalid_page_token', 400);
       url.searchParams.set('pageToken', options.pageToken);
@@ -65,7 +75,7 @@ export async function workspaceRead(env: Env, userId: number, call: WorkspaceRea
     const chunks: Uint8Array[] = []; let size = 0;
     if (reader) try {
       for (;;) { const { done, value } = await reader.read(); if (done) break;
-        size += value.byteLength; if (size > 2 * 1024 * 1024) throw new WorkspaceError('google_file_too_large', 413); chunks.push(value);
+        size += value.byteLength; if (size > limit) throw new WorkspaceError('google_file_too_large', 413); chunks.push(value);
       }
     } finally { await reader.cancel().catch(() => {}); }
     const bytes = new Uint8Array(size); let offset = 0;

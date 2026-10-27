@@ -38,7 +38,8 @@ function assertBandsNamed(rows) {
 
 // ------------------------------------------------------------------ Deals (I1–I5)
 
-const DEALS = [['/deals', 'Investor · Deals'], ['/deals/pipeline', 'Investor · Deals · Pipeline'], ['/deals/screening', 'Investor · Deals · Screening'],
+// D1243 (#3256): /deals/pipeline forwards to Deal flow's table, so it answers the Deals page's key.
+const DEALS = [['/deals', 'Investor · Deals'], ['/deals/pipeline', 'Investor · Deals'], ['/deals/screening', 'Investor · Deals · Screening'],
   ['/deals/commit', 'Investor · Deals · Commit'], ['/deals/closing', 'Investor · Deals · Closing']];
 
 test('Deals: each board\'s route answers its page key for an investor', () => {
@@ -46,18 +47,19 @@ test('Deals: each board\'s route answers its page key for an investor', () => {
   for (const o of rowsOf('Deals')) assert.ok(DEALS.some(([, k]) => k === o.page), `${o.page} is a Deals board`);
 });
 
-test('Deals: the five boards draw exactly one rail, the routes\' shell\'s', () => {
+test('Deals: the four boards draw exactly one rail, the routes\' shell\'s', () => {
   const routes = read('workspaces/investor/InvestorDealsRoutes.jsx');
   assert.equal((routes.match(/<WorkerRail\b/g) || []).length, 1);
   assert.match(routes, /<WorkspaceShell\b[\s\S]*?rail=\{\(\s*<WorkerRail\b/);
-  for (const f of ['PipelineZone', 'ScreeningZone', 'CommitZone', 'ClosingZone']) {
+  for (const f of ['ScreeningZone', 'CommitZone', 'ClosingZone']) {
     assert.doesNotMatch(read(`pages/investor/deals/${f}.jsx`), /<WorkerRail\b|<RailFrame\b/, `${f} draws a second rail`);
   }
 });
 
 test('Deals: every option of the section names itself on its band', () => {
   const rows = rowsOf('Deals');
-  assert.deepEqual(rows.map((o) => o.key), ['draft:stale-deal-notes', 'draft:screening-memo', 'draft:ic-memo', 'draft:closing-cover-note']);
+  // D1243 retired Pipeline's notes; D1260 retired Screening's memo.
+  assert.deepEqual(rows.map((o) => o.key), ['draft:ic-memo', 'draft:closing-cover-note']);
   assertBandsNamed(rows);
 });
 
@@ -226,13 +228,14 @@ test('a band names its railOption while a draft runs or is shown, and the regist
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const button = (text) => walk(container).find((n) => n.tagName?.toLowerCase() === 'button' && (n.textContent || '').includes(text));
-  const tree = (railOption) => h(MemoryRouter, { initialEntries: ['/deals/screening'] },
-    h(RailPageProvider, { role: 'investor' }, h(ZoneDraft, { surface: 'deals/screening', label: 'Draft · screening memo', run: 'Draft the memo', railOption }), h(Probe, { seen })));
-  const named = { key: 'draft:screening-memo', label: 'Draft · screening memo' };
+  // D1243 retired Pipeline's band and D1260 retired Screening's; Commit's band carries the same naming rule.
+  const tree = (railOption) => h(MemoryRouter, { initialEntries: ['/deals/commit'] },
+    h(RailPageProvider, { role: 'investor' }, h(ZoneDraft, { surface: 'deals/commit', label: 'Proposal · IC memo from the pipeline', run: 'Draft the memo', railOption }), h(Probe, { seen })));
+  const named = { key: 'draft:ic-memo', label: 'Proposal · IC memo from the pipeline' };
   try {
-    await act(async () => { root.render(tree('draft:screening-memo')); });
+    await act(async () => { root.render(tree('draft:ic-memo')); });
     await settle();
-    assert.equal(seen.at(-1).page, 'Investor · Deals · Screening');
+    assert.equal(seen.at(-1).page, 'Investor · Deals · Commit');
     assert.equal(seen.at(-1).option, null, 'a closed band names nothing');
     await act(async () => { props(button('Draft the memo')).onClick(); });
     await settle();
@@ -243,7 +246,7 @@ test('a band names its railOption while a draft runs or is shown, and the regist
     // Without railOption, the same band names the registry's key (D770).
     await act(async () => { root.render(tree(null)); });
     await settle();
-    assert.deepEqual(seen.at(-1).option, { key: 'draft:deals/screening', label: 'Draft · screening memo' });
+    assert.deepEqual(seen.at(-1).option, { key: 'draft:deals/commit', label: 'Proposal · IC memo from the pipeline' });
   } finally {
     await act(async () => root.unmount());
     restore();

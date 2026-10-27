@@ -185,6 +185,7 @@ function worker({ overview = OVERVIEW(), page = PAGE([ROW(), ROW({ id: 22, compa
     if (/\/move$/.test(p)) return writes.move ? writes.move() : json({ ok: true, founder_told: true });
     if (/\/interview$/.test(p)) return json({ ok: true, interview_id: 3 }, 201);
     if (/\/interview\/cancel$/.test(p)) return json({ ok: true });
+    if (/\/interview\/outcome$/.test(p)) return writes.outcome ? writes.outcome(JSON.parse(init.body)) : json({ ok: true, interview_id: 2, outcome: JSON.parse(init.body).outcome });
     if (/\/force-proceed$/.test(p)) return json({ ok: true });
     if (p === '/api/admin/cohort/applications/bulk-decide') return writes.bulk ? writes.bulk() : json({ ok: true, results: [] });
     if (p === '/api/admin/cohort/applications/admit') return json({ ok: true }, 201);
@@ -295,9 +296,15 @@ test('mounted SL3: /applications/:id opens the drawer — the idea, facts, plan,
     assert.match(m.of('lab-app-interview-ask'), /I teach on Wednesdays/);
     assert.match(m.of('lab-app-sees'), /Your application is at the partner interview/);
     assert.match(m.of('lab-app-history'), /Applied for Nov 2026.*Carried forward from Nov 2026/s);
+    // D1317: the application is the shared Sheet over the list, 560px.
+    assert.equal(m.props('lab-app-drawer').role, 'dialog');
+    assert.ok(m.props('lab-app-drawer')['aria-labelledby']);
+    assert.equal(m.props('lab-app-drawer')['data-width'], 560);
     await m.click('lab-app-drawer-cancel');
     await m.click('lab-app-cancel-go');
     assert.equal(writesTo(m.seen, /\/applications\/21\/interview\/cancel$/).length, 1);
+    await m.click('lab-app-drawer-close');
+    assert.equal(m.at.path, APPLICATIONS_PATH, 'closing returns to the list');
   } finally { await m.unmount(); }
   const gone = await mount(`${APPLICATIONS_PATH}/999`, { detail: () => json({ error: 'applicant_not_found' }, 404) });
   try { assert.ok(gone.has('lab-app-drawer-missing')); } finally { await gone.unmount(); }
@@ -310,6 +317,36 @@ test('mounted SL3: /applications/:id opens the drawer — the idea, facts, plan,
     assert.match(closed.of('lab-app-drawer-closed'), /Decisions are closed/);
     assert.ok(!closed.has('lab-app-drawer-approve'), 'a closed application has no decision buttons');
   } finally { await closed.unmount(); }
+});
+
+test('D1123: a past interview offers Record what happened — held or missed, in an in-page dialog; a recorded one shows its outcome and cannot be moved', async () => {
+  const past = DETAIL({ interview: { available: true, latest: { id: 2, scheduled_at: '2026-11-09 20:00:00', duration_min: 30, location: 'Fixture link', note: null, status: 'scheduled', outcome: null } } });
+  const m = await mount(`${APPLICATIONS_PATH}/21`, { detail: past });
+  try {
+    assert.ok(m.has('lab-app-drawer-outcome'), 'its time has passed');
+    await m.click('lab-app-drawer-outcome');
+    assert.match(m.of('lab-app-outcome'), /What happened at the interview with Northwind Labs\?.*Held — the interview happened.*Missed — it did not happen/s);
+    assert.equal(m.props('lab-app-outcome-go').disabled, true, 'nothing chosen, nothing to record');
+    await m.type('lab-app-outcome-choice-held', 'held');
+    await m.click('lab-app-outcome-go');
+    assert.deepEqual(writesTo(m.seen, /\/applications\/21\/interview\/outcome$/).map((s) => s.body), [{ outcome: 'held' }]);
+    assert.match(m.of('lab-app-outcome-result'), /recorded as held/);
+  } finally { await m.unmount(); }
+  const refused = await mount(`${APPLICATIONS_PATH}/21`, { detail: past, writes: { outcome: () => json({ error: 'outcome_recorded', code: 'outcome_recorded', message: 'x' }, 409) } });
+  try {
+    await refused.click('lab-app-drawer-outcome');
+    await refused.type('lab-app-outcome-choice-missed', 'missed');
+    await refused.click('lab-app-outcome-go');
+    assert.deepEqual(writesTo(refused.seen, /\/interview\/outcome$/).map((x) => x.body), [{ outcome: 'missed' }], 'the choice is what is sent');
+    assert.match(refused.of('lab-app-outcome-refusal'), /already recorded/);
+  } finally { await refused.unmount(); }
+  const ahead = await mount(`${APPLICATIONS_PATH}/21`);
+  try { assert.ok(!ahead.has('lab-app-drawer-outcome'), 'an interview still ahead has nothing to record'); } finally { await ahead.unmount(); }
+  const held = await mount(`${APPLICATIONS_PATH}/21`, { detail: DETAIL({ interview: { available: true, latest: { ...past.interview.latest, outcome: 'held', outcome_at: '2026-11-09 21:00:00' } } }) });
+  try {
+    assert.match(held.of('lab-app-interview-recorded'), /Held.*9 Nov 15:00 ET · 30 min · Fixture link.*Recorded 9 Nov 16:00 ET/s);
+    assert.ok(!held.has('lab-app-drawer-cancel') && !held.has('lab-app-drawer-reschedule') && !held.has('lab-app-drawer-outcome'), 'recorded: never moved, cancelled or recorded again');
+  } finally { await held.unmount(); }
 });
 
 test('dialog A, Approve: a reason is required; the places line; over the places the Worker refuses until the admin confirms', async () => {

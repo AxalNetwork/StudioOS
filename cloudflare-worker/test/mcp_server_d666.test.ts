@@ -235,7 +235,7 @@ test('tools: list_companies is the grant; get_validate_context never names an in
   const { token } = await connect(env, [P]);
   const list = await mcp(env, token, 'tools/list');
   assert.equal(list.status, 200, JSON.stringify(list.body));
-  assert.deepEqual(list.body.result.tools.map((t: any) => t.name).sort(), ['assign_chat_to_interview', 'extract_action_items', 'get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_meetings', 'propose_placements', 'structure_with_studioos', 'submit_interview', 'summarize_meeting']);
+  assert.deepEqual(list.body.result.tools.map((t: any) => t.name).sort(), ['assign_chat_to_interview', 'extract_action_items', 'get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_meetings', 'propose_placements', 'structure_with_axalvc', 'submit_interview', 'summarize_meeting']);
   for (const t of list.body.result.tools) assert.ok(t.description.length > 20 && t.inputSchema?.type === 'object', t.name);
   assert.deepEqual(toolJson(await callTool(env, token, 'list_companies')).companies, [{ id: P, name: 'Acme' }]);
   const ctxRes = await callTool(env, token, 'get_validate_context', { company: P });
@@ -271,7 +271,9 @@ test('activity_logs: one row per call with tool, company, client and outcome, an
   await callTool(env, token, 'get_interview_guide', { company: P, hypothesis: 'SECRET-ARG-TEXT reconciliation' });
   const rows = db.prepare(`SELECT user_id, project_id, details FROM activity_logs WHERE action = 'mcp_tool_call'`).all() as any[];
   assert.equal(rows.length, 1);
-  assert.deepEqual(JSON.parse(rows[0].details), { tool: 'get_interview_guide', company_id: P, client: 'Claude', outcome: 'ok' });
+  // D1316 (#3474): the line also names the connection's grant id (never a token).
+  const grantId = (await asUser(env, FOUNDER, 'GET', '/api/connectors/assistants')).body.grants[0].id;
+  assert.deepEqual(JSON.parse(rows[0].details), { tool: 'get_interview_guide', company_id: P, client: 'Claude', outcome: 'ok', grant: grantId });
   assert.deepEqual([rows[0].user_id, rows[0].project_id], [FOUNDER, P]);
   assert.ok(!JSON.stringify(db.prepare('SELECT * FROM activity_logs').all()).includes('SECRET-ARG-TEXT'));
 });

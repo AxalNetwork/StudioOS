@@ -55,7 +55,9 @@ export function recordOf(cycle: LovableCycle, projectId: number, raw: unknown): 
   return { kind: KINDS[cycle].kind, id };
 }
 
-type Drafted = { prompt: string; dropped: number; hypothesisId: number | null };
+/** The dialog's "What this tests" (the owner's re-export, D1311 §3): the record's own words, never more. */
+export type Tests = { code: string | null; claim: string | null; title: string | null; target: string | null };
+type Drafted = { prompt: string; dropped: number; hypothesisId: number | null; tests: Tests };
 
 async function drafted(env: Env, cycle: LovableCycle, projectId: number, ref: RecordRef): Promise<Drafted> {
   const venture = await env.DB.prepare('SELECT name, description FROM projects WHERE id = ? AND deleted_at IS NULL')
@@ -68,14 +70,14 @@ async function drafted(env: Env, cycle: LovableCycle, projectId: number, ref: Re
       .first<{ title: string; method: string | null; target: string | null; hypothesis_id: number; code: string | null; claim: string }>();
     if (!e) throw new LovableError('not_found', 404, 'This experiment is not on this venture.');
     const { prompt, dropped } = landingTestPrompt({ venture: venture.name, description: venture.description, code: e.code, claim: e.claim, title: e.title, method: e.method, target: e.target });
-    return { prompt, dropped, hypothesisId: Number(e.hypothesis_id) };
+    return { prompt, dropped, hypothesisId: Number(e.hypothesis_id), tests: { code: e.code ?? null, claim: e.claim ?? null, title: e.title ?? null, target: e.target ?? null } };
   }
   const p = await env.DB.prepare('SELECT mvp_target_date FROM projects WHERE id = ?').bind(projectId).first<{ mvp_target_date: string | null }>();
   const features = (await env.DB.prepare(`SELECT title, description FROM mvp_features
     WHERE project_id = ? AND is_must_have = 1 AND (scope IS NULL OR scope != 'out') ORDER BY sort_order, id`).bind(projectId)
     .all<{ title: string; description: string | null }>()).results || [];
   const { prompt, dropped } = prototypePrompt({ venture: venture.name, description: venture.description, mustHaves: features, targetDate: p?.mvp_target_date ?? null });
-  return { prompt, dropped, hypothesisId: null };
+  return { prompt, dropped, hypothesisId: null, tests: { code: null, claim: venture.name, title: `Prototype / MVP · ${features.length} must-have${features.length === 1 ? '' : 's'}`, target: null } };
 }
 
 /** When this record was last opened in Lovable, or null. */
@@ -96,7 +98,7 @@ export async function draftPrompt(env: Env, cycle: LovableCycle, projectId: numb
   return {
     record: ref, prompt: d.prompt, prompt_chars: d.prompt.length, max: LOVABLE_PROMPT_MAX, left_out: LEFT_OUT,
     ...(d.dropped ? { cut: `${d.dropped} ${d.dropped === 1 ? 'line was' : 'lines were'} left out to stay within ${LOVABLE_PROMPT_MAX.toLocaleString('en-US')} characters.` } : {}),
-    check: view(findings), last_opened_at: await lastOpened(env, cycle, projectId, ref),
+    check: view(findings), last_opened_at: await lastOpened(env, cycle, projectId, ref), tests: d.tests,
   };
 }
 

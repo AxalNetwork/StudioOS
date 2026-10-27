@@ -1,212 +1,181 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { ShieldAlert, RefreshCw, Info } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ShieldAlert } from 'lucide-react';
+import { ventureScoresApi } from '../lib/api/ventureScores.js';
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
+import Lightbox from '../ui/Lightbox';
 import RiskRadar from './RiskRadar';
-import RiskLayerCard from './RiskLayerCard';
-import { RISK_BAND_CHIP, RISK_BAND_LABEL, RISK_BAND_HEX, layerHasRiskData } from '../lib/riskBands';
+import { NOT_ENOUGH, NOT_REVIEWED, bandWord, scopeOf } from './scoring/scorecard/scorecardModel';
 
-// Task #10 — per-company Venture Risk panel (internal deal team only).
-//
-// Renders the 10-axis radar, an overall de-risking score, and a card per layer
-// with the analyst override controls. Reads gate to admin/partner/investor;
-// `canWrite` (admin/partner) unlocks the recompute + override controls.
+/**
+ * Venture risk on the project page — the scorecard's Risk scope and its ten
+ * layers (D1260, #3283; owner question 8 A of #2428).
+ *
+ * It reads `GET /api/venture-scores/:projectId` and nothing else that scores.
+ * The old panel read `/api/venture-risk`, whose automatic layer scores came
+ * from the Lab scorer's sliders and the projects row, scored a layer with no
+ * data as 0, and averaged it into an "overall derisking" figure. None of that
+ * is drawn now:
+ *
+ *   · The headline is the Risk scope as the scorecard computed it, with its
+ *     band in risk words and its confidence, or why it has no value.
+ *   · The ten layers are Risk's sub-rows: an analyst's review, or "Not
+ *     reviewed", never 0. The radar plots only reviewed layers.
+ *   · An Admin or Operating Partner reviews a layer in a dialog that says what
+ *     it changes. The review is written where it always was
+ *     (`PUT /api/venture-risk/:id/layers/:key`), and the scorecard is read
+ *     again, so the Risk scope moves with it.
+ *   · An investor reads a scorecard through a deal they are on; here they get
+ *     the Worker's sentence and the deal list, never a figure.
+ */
 
-function RiskGauge({ score, band, size = 96, muted = false }) {
-  const stroke = 8;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const dash = (Math.max(0, Math.min(100, score)) / 100) * c;
-  const accent = muted ? '#cbd5e1' : (RISK_BAND_HEX[band] || RISK_BAND_HEX.medium);
+const RISK_BAND = Object.freeze({ Strong: 'low', Fair: 'medium', Weak: 'high' });
+const CARD = 'rounded-xl border border-slate-200 bg-white p-5 mb-6 dark:border-slate-700 dark:bg-gray-900';
+const SUB = 'text-xs text-slate-600 dark:text-slate-400';
+const BTN = 'inline-flex min-h-[36px] items-center rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800';
+const STATUSES = [['open', 'Open'], ['in_review', 'In review'], ['mitigated', 'Mitigated'], ['accepted', 'Accepted'], ['flagged', 'Flagged']];
+
+/** What the review dialog sends: a score of 0–100 or none, a status, a note. Never a band: the Worker derives it. */
+export function layerReviewBody(form) {
+  const raw = String(form.score ?? '').trim();
+  const score = raw === '' ? null : Number(raw);
+  if (score != null && (!Number.isFinite(score) || score < 0 || score > 100)) return { error: 'A score is a number from 0 to 100, or leave it empty.' };
+  if (score == null && !String(form.note || '').trim()) return { error: 'Give a score, a note, or both.' };
+  return { body: { analyst_score: score, status: form.status || 'open', analyst_note: String(form.note || '').trim() || null } };
+}
+
+function ReviewLayer({ projectId, layer, onClose, onSaved }) {
+  const [form, setForm] = useState({ score: layer.score ?? '', status: 'open', note: layer.note ?? '' });
+  const [problem, setProblem] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async (clear = false) => {
+    setProblem('');
+    const out = clear ? { body: null } : layerReviewBody(form);
+    if (out.error) { setProblem(out.error); return; }
+    setBusy(true);
+    try {
+      if (clear) await api.ventureRiskClearLayer(projectId, layer.key);
+      else await api.ventureRiskSetLayer(projectId, layer.key, out.body);
+      onSaved();
+    } catch (e) {
+      reportError('VentureRiskPanel:review', e);
+      setProblem('The review could not be saved. Nothing changed. Try again.');
+    } finally { setBusy(false); }
+  };
   return (
-    <span className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          className="stroke-slate-200 dark:stroke-slate-700"
-          fill="none"
-          strokeWidth={stroke}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={accent}
-          strokeWidth={stroke}
-          strokeDasharray={muted ? `0 ${c}` : `${dash} ${c}`}
-          strokeLinecap="round"
-        />
-      </svg>
-      <span className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-bold text-slate-900 dark:text-slate-100">{muted ? '—' : score}</span>
-        <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500">/ 100</span>
-      </span>
-    </span>
+    <Lightbox label={`Review ${layer.label}`} title={`Review · ${layer.label}`} onClose={onClose} width={480} testId={`risk-layer-review-${layer.key}`}
+      footer={(
+        <div className="flex flex-col gap-2">
+          {problem ? <p className="m-0 text-[12px] text-rose-700 dark:text-rose-300" data-testid="risk-layer-review-problem">{problem}</p> : null}
+          <div className="flex flex-wrap justify-end gap-2">
+            {layer.reviewed && <button type="button" className={BTN} disabled={busy} onClick={() => save(true)} data-testid="risk-layer-review-clear">Remove the review</button>}
+            <button type="button" className={BTN} onClick={onClose}>Cancel</button>
+            <button type="button" className="inline-flex min-h-[36px] items-center rounded-lg bg-violet-700 px-3 text-xs font-semibold text-white disabled:opacity-50" disabled={busy} onClick={() => save(false)} data-testid="risk-layer-review-save">Save the review</button>
+          </div>
+        </div>
+      )}>
+      <p className={`m-0 ${SUB}`}>
+        Your score is this layer&rsquo;s figure on the scorecard: 0 to 100, higher is lower risk. It changes
+        Risk&rsquo;s &ldquo;Analyst layer reviews&rdquo; input, the mean of the layers reviewed, on the next read.
+        Investors with an NDA see the figure and its band; your note is for studio staff only.
+      </p>
+      <label className="mt-3 flex flex-col gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">Score (0–100, or empty for a note only)
+        <input type="number" min="0" max="100" value={form.score} onChange={(e) => setForm({ ...form, score: e.target.value })} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-gray-800" data-testid="risk-layer-review-score" />
+      </label>
+      <label className="mt-2 flex flex-col gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">Status
+        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-gray-800">
+          {STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </label>
+      <label className="mt-2 flex flex-col gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">Note (staff only)
+        <textarea rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-gray-800" />
+      </label>
+    </Lightbox>
   );
 }
 
 export default function VentureRiskPanel({ projectId, canWrite = false }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
-  const [unavailable, setUnavailable] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [read, setRead] = useState({ status: 'loading' });
+  const [reviewing, setReviewing] = useState(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setErr('');
-    setUnavailable(false);
+    setRead({ status: 'loading' });
     try {
-      const res = await api.ventureRiskByProject(projectId);
-      setData(res);
+      const out = await ventureScoresApi.venture(projectId);
+      const raw = (out?.scopes || []).find((s) => s?.scope === 'risk');
+      setRead({ status: 'ready', risk: scopeOf(raw, 'risk') });
     } catch (e) {
-      // The venture-risk surface is worker-only (D1); the dev FastAPI backend
-      // 404s on the whole prefix. Surface that as an "unavailable in this
-      // environment" notice rather than a hard error.
-      if (e?.status === 404) {
-        setUnavailable(true);
-        setData(null);
-      } else {
-        reportError('VentureRiskPanel:load', e);
-        setErr(e?.message || 'Failed to load venture risk.');
-      }
-    } finally {
-      setLoading(false);
+      if (e?.status === 403 || e?.status === 404) setRead({ status: 'refused', message: e?.data?.message || e?.message || 'You cannot read this scorecard.' });
+      else { reportError('VentureRiskPanel:load', e); setRead({ status: 'error' }); }
     }
   }, [projectId]);
-
   useEffect(() => { load(); }, [load]);
 
-  const recompute = async () => {
-    if (busy) return;
-    setBusy(true);
-    setErr('');
-    try {
-      const res = await api.ventureRiskRecompute(projectId);
-      setData(res);
-    } catch (e) {
-      reportError('VentureRiskPanel:recompute', e);
-      setErr(e?.message || 'Recompute failed.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveLayer = async (layerKey, body) => {
-    setBusy(true);
-    try {
-      const res = await api.ventureRiskSetLayer(projectId, layerKey, body);
-      setData(res);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const clearLayer = async (layerKey) => {
-    setBusy(true);
-    try {
-      const res = await api.ventureRiskClearLayer(projectId, layerKey);
-      setData(res);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const hasAnyData = data ? data.layers.some(layerHasRiskData) : false;
+  const risk = read.status === 'ready' ? read.risk : null;
+  const layers = risk?.layers || [];
+  const reviewed = layers.filter((l) => l.reviewed);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-slate-700">
-      <div className="flex items-start justify-between gap-3 mb-1">
-        <div className="flex items-center gap-2">
-          <ShieldAlert size={16} className="text-violet-600" />
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Venture Risk</h3>
-          <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5">
-            Internal
-          </span>
-        </div>
-        {canWrite && data && !unavailable && (
-          <button
-            type="button"
-            onClick={recompute}
-            disabled={busy}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 dark:text-slate-200"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />
-            Recompute
-          </button>
-        )}
+    <div className={CARD} data-testid="venture-risk-panel">
+      <div className="mb-1 flex items-center gap-2">
+        <ShieldAlert size={16} className="text-violet-600" />
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Venture risk</h3>
+        <span className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:text-slate-400">Scorecard · Risk</span>
       </div>
-      <p className="text-xs text-slate-600 dark:text-slate-400 mb-4">
-        The 10-layer rating system. Each layer scores de-risk confidence (0–100, higher = lower risk),
-        computed live from platform data and refined by analyst overrides.
+      <p className={`mb-4 ${SUB}`}>
+        The venture scorecard&rsquo;s Risk scope and its ten layers. A higher value means lower risk.{' '}
+        <Link to="/scoring/method" className="underline">How scoring works</Link>
       </p>
 
-      {unavailable && (
-        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded flex items-start gap-2 text-amber-800 dark:text-amber-200 text-sm">
-          <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
-          <div>
-            <div className="font-semibold">Venture risk is unavailable in this environment.</div>
-            <div>This surface runs on the production worker (D1). It will populate once deployed.</div>
-          </div>
-        </div>
+      {read.status === 'loading' && <p className={SUB} aria-live="polite">Reading the scorecard…</p>}
+      {read.status === 'refused' && <p className={SUB} data-testid="venture-risk-refused">{read.message} <Link to="/deals" className="underline">Your deals</Link></p>}
+      {read.status === 'error' && (
+        <p className={SUB} data-testid="venture-risk-unreadable">
+          The scorecard could not be read. That is not a score of zero.{' '}
+          <button type="button" className="underline" onClick={load}>Try again</button>
+        </p>
       )}
 
-      {err && (
-        <div className="p-3 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded text-rose-700 dark:text-rose-300 text-sm mb-3">
-          {err}
-        </div>
-      )}
-
-      {loading && !data && !unavailable && (
-        <div className="py-8 text-center text-slate-400 text-sm">Loading venture risk…</div>
-      )}
-
-      {data && !unavailable && (
+      {risk && (
         <>
-          <div className="grid lg:grid-cols-[auto_1fr] gap-6 items-center mb-6">
-            <div className="flex items-center gap-4 justify-center lg:justify-start">
-              <RiskGauge score={data.overall_score} band={data.overall_band} muted={data.overall_score == null} />
-              <div>
-                <div className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Overall derisking</div>
-                {data.overall_score != null ? (
-                  <span className={`inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-medium border ${RISK_BAND_CHIP[data.overall_band] || RISK_BAND_CHIP.medium}`}>
-                    {RISK_BAND_LABEL[data.overall_band] || 'Unknown'}
-                  </span>
-                ) : (
-                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-[16rem]">
-                    Not enough platform data yet to score this company. Add an analyst override or capture signals to begin.
-                  </div>
-                )}
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{data.covered_layers ?? 0} of {data.total_layers ?? 10} layers scored</div>
-                {hasAnyData && data.computed_at && (
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                    Computed {new Date(data.computed_at).toLocaleString()}
-                  </div>
-                )}
-              </div>
+          <div className="mb-5 grid items-center gap-6 lg:grid-cols-[auto_1fr]">
+            <div data-testid="venture-risk-scope">
+              <div className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Risk</div>
+              {risk.state === 'scored' ? (
+                <>
+                  <div className="font-mono text-3xl font-bold text-slate-900 dark:text-slate-100">{Math.round(risk.value)}</div>
+                  <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">{bandWord(risk.band, 'risk')} · {risk.confidence ?? 'confidence not recorded'} confidence</div>
+                </>
+              ) : (
+                <div className="mt-1 max-w-[16rem] text-xs text-slate-500 dark:text-slate-400" data-testid="venture-risk-no-value">{risk.reason || (risk.state === 'not_enough' ? NOT_ENOUGH : 'Not scored yet')}. Missing is never 0.</div>
+              )}
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{reviewed.length} of {layers.length || 10} layers reviewed</div>
             </div>
             <div className="flex justify-center">
-              <RiskRadar layers={data.layers} band={data.overall_band} size={300} muted={!hasAnyData} />
+              <RiskRadar layers={layers.map((l) => ({ key: l.key, label: l.label, score: l.score }))} band={RISK_BAND[risk.band] || 'medium'} size={300} muted={reviewed.length === 0} />
             </div>
           </div>
-
-          <div className="grid sm:grid-cols-2 gap-3">
-            {data.layers.map((layer) => (
-              <RiskLayerCard
-                key={layer.key}
-                layer={layer}
-                canWrite={canWrite}
-                onSave={saveLayer}
-                onClear={clearLayer}
-                busy={busy}
-              />
-            ))}
-          </div>
+          {layers.length === 0 ? (
+            <p className={SUB}>The ten layers are not in this read.</p>
+          ) : (
+            <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2" data-testid="venture-risk-layers">
+              {layers.map((l) => (
+                <li key={l.key} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700" data-testid={`venture-risk-layer-${l.key}`}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{l.label}</span>
+                    <span className={`font-mono text-xs ${l.reviewed ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>{l.reviewed ? l.text : NOT_REVIEWED}</span>
+                  </div>
+                  {l.reviewed_on && <div className="text-[11px] text-slate-500 dark:text-slate-400">Reviewed {l.reviewed_on}</div>}
+                  {l.note && <p className="m-0 mt-1 text-xs text-slate-600 dark:text-slate-300">{l.note}</p>}
+                  {canWrite && <button type="button" className={`${BTN} mt-2`} onClick={() => setReviewing(l)} data-testid={`venture-risk-review-${l.key}`}>{l.reviewed ? 'Change the review' : 'Review this layer'}</button>}
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
+      {reviewing && <ReviewLayer projectId={projectId} layer={reviewing} onClose={() => setReviewing(null)} onSaved={() => { setReviewing(null); load(); }} />}
     </div>
   );
 }

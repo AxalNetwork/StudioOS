@@ -22,7 +22,7 @@ studio's side is the Programs tab of its licence page,
 - `DefaultsView.jsx` — GR6 at `/defaults`: the terms new grants start from,
   "Can be granted" and Edit defaults.
 - `GrantDialogs.jsx` — the dialogs: the reason dialog (pause, resume, end,
-  send schedule, the switches), the grant lightbox (GR4 and its review),
+  send schedule, the switches), the grant sheet (GR4 and its review; the shared Sheet, D1317),
   the answer dialog (GR5d) and Edit defaults.
 - `grantsModel.js` — the pure model every view and the test share.
 - `ProgramGrantsHistory.jsx` — D1126 (#3006): HQ's History tab at

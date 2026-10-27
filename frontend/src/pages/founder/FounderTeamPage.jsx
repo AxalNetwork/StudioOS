@@ -52,6 +52,7 @@ import PageExplainer from '../../components/PageExplainer';
 import IncomingLeadsStrip from '../../components/IncomingLeadsStrip';
 import { buildDecisionModel, DECISION_OUTCOMES } from '../../lib/cofounderMatchViewModel';
 import { Card, Pill, Unrecorded, Unreadable } from '../../ui';
+import Sheet from '../../ui/Sheet.jsx';
 import AdvisorsPage from '../AdvisorsPage';
 import CofounderMatchingPanel from './CofounderMatchingPanel';
 import MyJobsPage from '../jobs/MyJobsPage';
@@ -328,7 +329,7 @@ export default function FounderTeamPage() {
         <Card>
           <p className="text-sm text-gray-700 dark:text-gray-300">
             Team is scoped to a company, and this account has no company membership yet.
-            Create one or accept an invitation in <Link to="/company-settings" className="text-violet-700 underline dark:text-violet-300">Company Settings</Link>.
+            Create one or accept an invitation in <Link to="/account/companies" className="text-violet-700 underline dark:text-violet-300">Companies and projects</Link>.
           </p>
         </Card>
       </div>
@@ -962,18 +963,9 @@ function PersonDrawer({ person: p, data, company, onClose, onChanged, flash }) {
   );
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose} data-testid="person-drawer">
-      <div className="h-full w-full max-w-lg overflow-y-auto bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-100 text-sm font-bold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">{initialsOf(p.name)}</span>
-            <div>
-              <div className="font-semibold text-gray-900 dark:text-gray-100">{p.name}</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">{p.role_title || 'Role not recorded'} · {TYPE_LABEL[p.person_type]}</div>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"><X size={18} /></button>
-        </div>
+    // D1317: one person's record opens as the shared right-side Sheet (max-w-lg → 520).
+    <Sheet title={p.name} sub={`${p.role_title || 'Role not recorded'} · ${TYPE_LABEL[p.person_type]}`} onClose={onClose} width={520} testId="person-drawer">
+      <div className="px-5 pb-5 text-gray-900 dark:text-gray-100">
 
         {editing ? (
           <PersonForm initial={p} company={company} pool={data.pool} people={data.people} onCancel={() => setEditing(false)}
@@ -1040,7 +1032,7 @@ function PersonDrawer({ person: p, data, company, onClose, onChanged, flash }) {
           </>
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -1173,18 +1165,12 @@ function InviteDrawer({ company, onClose, onCreated, flash }) {
     onCreated();
   };
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose} data-testid="invite-drawer">
-      <div className="h-full w-full max-w-lg overflow-y-auto bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="font-semibold text-gray-900 dark:text-gray-100">Invite teammate</h2>
-            <p className="text-xs text-gray-600 dark:text-gray-400">Records them on {company.company_name}’s roster, and optionally invites their email to the workspace.</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"><X size={18} /></button>
-        </div>
+    // D1317: already a side panel, so it is the shared right-side Sheet too (max-w-lg → 520).
+    <Sheet title="Invite teammate" sub={`Records them on ${company.company_name}’s roster, and optionally invites their email to the workspace.`} onClose={onClose} width={520} testId="invite-drawer">
+      <div className="px-5 pb-5">
         <PersonForm initial={null} company={company} create sendInvite={sendInvite} setSendInvite={setSendInvite} onCancel={onClose} onSaved={onSaved} flash={flash} />
       </div>
-    </div>
+    </Sheet>
   );
 }
 

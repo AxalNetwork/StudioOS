@@ -1,6 +1,7 @@
 import type { Env } from '../types';
 import { connectorFeeds } from './registry';
 import { GITHUB_READ_BY } from './githubFeeds';
+import { VERCEL_READ_BY, VERCEL_READ_REASON } from './vercelFeeds';
 
 /**
  * D655 — "Now fed by": how many items each connector delivered into each
@@ -11,7 +12,8 @@ import { GITHUB_READ_BY } from './githubFeeds';
  * before D655) gets each module it feeds with `count: null` and a reason,
  * never 0: zero would say "nothing arrived", which nobody measured.
  */
-export const FED_LEDGER_PROVIDERS = new Set(['github', 'mercury', 'google_workspace', 'notion']);
+// D1096: Vercel's parts land `connector_fed_items` rows (deploy, health, runtime, hosting_step) as each is built.
+export const FED_LEDGER_PROVIDERS = new Set(['github', 'mercury', 'google_workspace', 'notion', 'vercel']);
 
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
 export { MODULE_LABELS } from './moduleLabels';
@@ -53,6 +55,10 @@ export async function fedCounts(env: Env, integrationId: number, providerKey: st
     if (providerKey === 'github' && (GITHUB_READ_BY as readonly string[]).includes(m)) {
       return { module: m, label: label(m), href: moduleHref(m), count: null, linked: null, unlanded: null,
         reason: 'Read from the connection: GitHub is the Code system here, with its repositories and each sync.' };
+    }
+    if (providerKey === 'vercel' && (VERCEL_READ_BY as readonly string[]).includes(m)) {
+      return { module: m, label: label(m), href: moduleHref(m), count: null, linked: null, unlanded: null,
+        reason: VERCEL_READ_REASON[m as keyof typeof VERCEL_READ_REASON] };
     }
     const r = by.get(m);
     const count = Number(r?.n || 0), linked = Number(r?.linked || 0);

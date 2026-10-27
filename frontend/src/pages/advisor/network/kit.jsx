@@ -16,8 +16,9 @@
 //
 // Table / chip / slide-over primitives that mirror the app's existing patterns
 // so a section reads like the rest of the product without a new dependency.
-import React, { useEffect } from 'react';
-import { X, Search } from 'lucide-react';
+import React from 'react';
+import { Search } from 'lucide-react';
+import Sheet from '../../../ui/Sheet.jsx';
 
 export function Avatar({ name, size = 40 }) {
   const initials = (name || '?')
@@ -97,35 +98,16 @@ export function FilterChips({ options, value, onChange }) {
 }
 
 // Right-hand slide-over detail panel. Renders nothing when `open` is false.
-export function SlideOver({ open, onClose, title, subtitle, children }) {
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
+// D1317: it is the shared right-side `Sheet` (docked beside the Eadwyn rail,
+// focus trapped, Escape and the scrim close it, only the body scrolls), at the
+// panel's own 520px (max-w-lg), so every page that uses it gets the Sheet.
+export function SlideOver({ open, onClose, title, subtitle, children, footer = null, width = 520, testId = 'slide-over' }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[90] flex justify-end" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-lg h-full overflow-y-auto bg-white dark:bg-gray-950 shadow-xl border-l border-gray-200 dark:border-gray-800">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white truncate">{title}</h2>
-            {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{subtitle}</p>}
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800"
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <div className="p-5 space-y-5">{children}</div>
-      </div>
-    </div>
+    <Sheet label={title || subtitle || 'Details'} title={title || undefined} sub={subtitle || undefined}
+      onClose={onClose} width={width} footer={footer} testId={testId}>
+      <div className="p-5 space-y-5">{children}</div>
+    </Sheet>
   );
 }
 

@@ -90,7 +90,8 @@ test('ACCOUNT_PHONE_PAGES is the canvas, byte for byte: title, sub and section t
     const p = ACCOUNT_PHONE_PAGES[key];
     assert.equal(p.title, c.title, `${key} title`);
     assert.equal(p.sub, c.sub, `${key} sub`);
-    assert.deepEqual(p.sections, c.sections, `${key} sections`);
+    // D1315: the canvas's "Developer" section is Builder.
+    assert.deepEqual(p.sections, c.sections.map((t) => (key === 'account' && t === 'Developer' ? 'Builder' : t)), `${key} sections`);
   }
   // Decision 3: the member routes, not the public pages AM:24 names.
   assert.equal(ACCOUNT_PHONE_PAGES.events.route, '/my/events');
@@ -119,18 +120,24 @@ test('1. A1m: a founder\'s index draws the Settings rows in order, the plan by D
     // D1050: the row names the plan; its price is the Billing pane's, read from the plans read.
     ['/account/billing', 'Billing and orders Validate + Build ›'],
     ['/account/following', 'Following 3 people and companies ›'],
+    // D1315 (#2418): Builder, for every role, one row per page.
+    ['/account/builder', 'MCP and services ›'],
+    ['/account/builder/keys', 'API keys ›'],
+    ['/account/builder/usage', 'API usage ›'],
+    ['/account/builder/activity', 'Activity ›'],
     ['/account/onboarding', 'Onboarding ›'],
     ['/account/appearance', 'Appearance ›'],
     ['/account/activity', 'Activity Log ›'],
   ]);
   const titles = [...markup.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]);
-  assert.deepEqual(titles, ['Settings', 'More'], 'no Developer section for a founder');
+  assert.deepEqual(titles, ['Settings', 'Builder', 'More'], 'Builder for every role (D1315)');
   assert.doesNotMatch(markup, /Usage|Connectors/, 'A2m and A3m are not repeated on the index');
 
   const admin = html(h(AccountPhoneIndex, { role: 'admin', follows: ready(FOLLOWS), billing: ready({ plan_group: null, status: 'free', has_customer: false }) }));
-  assert.deepEqual([...admin.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]), ['Settings', 'Developer', 'More']);
-  assert.ok(rowsOf(admin).some(([to, t]) => to === '/account/developer' && t === 'API and search indexes Feature flags, account fields and the search indexes ›'));
-  assert.doesNotMatch(admin, /developer mode/, 'no developer-mode switch exists, so the row does not name one');
+  assert.deepEqual([...admin.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]), ['Settings', 'Builder', 'More']);
+  // D1315: the admin panel's row (flags, the account record, the re-sync) left with the panel.
+  assert.ok(!rowsOf(admin).some(([to]) => to.startsWith('/account/developer')));
+  assert.doesNotMatch(admin, /developer mode|search indexes/);
 });
 
 // --- 2. No number from a failed read -------------------------------------------
@@ -237,12 +244,14 @@ test('4. SettingsPage reads its section from the address on every change, and wr
   assert.doesNotMatch(page, /initialSection|useState\(initial/);
   // D753 — the canonicalising call keeps a connector's key.
   // D1138 — and a Companies and projects tab.
-  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid \}\);/);
+  // D1315 — and Builder's page or drawer.
+  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid, builderView \}\);/);
   assert.match(page, /\}, \[active, phone, location\.pathname\]\);/, 'the URL effect re-runs when the path moves');
   assert.doesNotMatch(src, /const PATH_TO_SECTION/, 'the map moved to accountPhone.js');
   // On a phone a section is pushed, so Back returns to the index; desktop replaces, as before.
   // D807 — a click may name a Usage page.
-  assert.match(page, /navigate\(\{ pathname: accountPathFor\(\{ section: id, phone, usagePage: page \}\) \}, \{ replace: !phone \}\)/);
+  // D1315 — or a Builder page.
+  assert.match(page, /navigate\(\{ pathname: id === 'builder' \? builderPathFor\(\{ page: page \?\? 'services' \}\) : accountPathFor\(\{ section: id, phone, usagePage: page \}\) \}, \{ replace: !phone \}\)/);
   assert.match(page, /<ProfileCompletionBanner onJump=\{\(\) => setActive\('account'\)\} \/>/);
   // The phone view is drawn inside the rail frame, and the desktop keeps its heading.
   assert.ok(page.indexOf('<RailFrame') < page.indexOf('<AccountPhoneFrame'));
@@ -309,7 +318,8 @@ test('5. A1m: the bar and the sections are the canvas\'s, with More the one name
     index: h(AccountPhoneIndex, { role: 'admin', follows: ready(FOLLOWS), billing: ready(GROWTH) }) }));
   assert.match(barOf(index), new RegExp(`^ ‹ Back ${c.title} ${c.sub.replace('.', '\\.')}`));
   // Decision 10: More is A1m's one added section, after the canvas's two.
-  assert.deepEqual(sectionTitles(index), [...c.sections, 'More']);
+  // D1315: the canvas's "Developer" is Builder.
+  assert.deepEqual(sectionTitles(index), [...c.sections.map((t) => (t === 'Developer' ? 'Builder' : t)), 'More']);
 });
 
 test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then keeps the desktop cards', () => {
@@ -417,20 +427,15 @@ test('5. at desktop width neither section draws the bar, and each keeps its own 
 
 // --- 7. Not recorded, never 0 ----------------------------------------------------
 
-test('7. a storage read with files and no total reads Not recorded with its reason, never 0', () => {
-  const g = storageGroup({ storage: ready({ ...STORAGE, total_bytes: null, unknown_size_files: 3 }) });
+// D1171 (#3084, STG15): A2m's Storage figures moved to Usage › Storage, which
+// draws them on a phone as on a desk, with "Not recorded, never 0" pinned by
+// storage_page_d1171. The group keeps the canvas's section title and opens it.
+test('7. A2m\'s Storage keeps its section and opens Usage › Storage, drawing no figure of its own', () => {
+  const g = storageGroup();
+  assert.equal(g.label, ACCOUNT_PHONE_PAGES.usage.sections[2]);
   const markup = html(h(PhoneRows, { groups: [g] }));
-  const all = markup.slice(markup.indexOf('All your files'), markup.indexOf('Files with no size recorded'));
-  assert.match(all, /title="Some files were stored before sizes were recorded\."[^>]*>Not recorded</);
-  assert.doesNotMatch(text(all), /\b0\b|0 B/);
-  assert.match(text(markup), /Files with no size recorded 3 files/);
-  assert.match(text(markup), /All your files Data room, Diligence files, Research library, Message attachments, Interview recordings, Earlier data room versions, Record a Session audio, Deck reviews, Validate evidence, Build proofs, Grow minutes, Your photo and logos, Imports/);
-  assert.match(text(markup), /Identity documents, signed legal copies and fund documents do not count\. No plan sets a storage limit\./);
-  // With a total, the value is the total and the file count; with no unsized files there is no such row.
-  const whole = text(html(h(PhoneRows, { groups: [storageGroup({ storage: ready(STORAGE) })] })));
-  assert.match(whole, /All your files [^›]*1\.2 GB · 148/);
-  assert.doesNotMatch(whole, /Files with no size recorded/);
-  assert.match(text(html(h(PhoneRows, { groups: [storageGroup({ storage: UNREADABLE })] }))), /Storage could not be read\. This is not a claim that you stored nothing\./);
+  assert.match(markup, /href="\/account\/usage\/storage"/);
+  assert.doesNotMatch(text(markup), /\b\d+(\.\d+)? ?(B|KB|MB|GB)\b/, 'no figure');
 });
 
 test('8. Usage\'s Models rows: the canvas note, no invented rows, and Not counted for an uncounted model', () => {

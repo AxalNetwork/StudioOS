@@ -126,10 +126,11 @@ const FOUNDER = [
   alias('/raise/status', key(F, 'Raise', 'Fundraising readiness'), 'The legacy Status zone: where the raise stands.'),
   alias('/raise/pitch', key(F, 'Raise', 'Pitch deck'), 'The Pitch deck studio, its tabs and the deck builder (D894).'),
   alias('/raise/capital', key(F, 'Raise', 'Capital relationships'), 'The legacy Capital zone: investors and rounds.'),
-  alias('/raise/capital-match', key(F, 'Raise', 'Capital relationships'), 'Investor match finds capital relationships.'),
+  // D1194: /raise/capital-match forwards to Capital relationships › Match, which the module key covers.
   // D1189 (#3123): a Call for Capital is Raise's call to investors (D686), not a phone call.
-  alias('/raise/calls', key(F, 'Raise', 'Capital relationships'), 'The history of Calls for Capital, on Capital relationships’ Calls tab.'),
-  alias('/raise/call', key(F, 'Raise'), 'Call for Capital opens over Raise’s overview; its history is /raise/calls.'),
+  // D1227 (#3226): /raise/calls and /raise/calls/:uid forward to Capital relationships › Calls.
+  alias('/raise/calls', key(F, 'Raise', 'Capital relationships'), 'The history of Calls for Capital: Capital relationships’ Calls tab, where each sent call has its own page.'),
+  alias('/raise/call', key(F, 'Raise'), 'Call for Capital opens over Raise’s overview; sent Calls for Capital are on Capital relationships’ Calls tab.'),
   alias('/raise/legal', key(F, 'Build', 'Company creation'), 'The legal zone holds the company’s formation documents.'),
   alias('/raise/legal-engine', key(F, 'Build', 'Company creation'), 'The legal engine: incorporation, founders, compliance and equity.'),
   ...CYCLE('Grow', '/grow', [
@@ -163,11 +164,10 @@ const I = 'Investor';
 const INVESTOR = [
   own('/studio', key(I, 'Home')),
   own('/deals', key(I, 'Deals')),
-  own('/deals/pipeline', key(I, 'Deals', 'Pipeline')),
   own('/deals/screening', key(I, 'Deals', 'Screening')),
   own('/deals/commit', key(I, 'Deals', 'Commit')),
   own('/deals/closing', key(I, 'Deals', 'Closing')),
-  alias('/pipeline', key(I, 'Deals', 'Pipeline'), 'The investor’s legacy pipeline board, which Deals · Pipeline superseded (shellConfig).'),
+  alias('/pipeline', key(I, 'Deals'), 'D1243 (#3256): an investor’s /pipeline forwards to Deal flow’s table at /deals, which owns this key.'),
   own('/portfolio', key(I, 'Portfolio')),
   alias('/portfolio/health', key(I, 'Portfolio'), 'The overview’s legacy alias (shellConfig).'),
   own('/portfolio/positions', key(I, 'Portfolio', 'Positions')),
@@ -412,6 +412,7 @@ export const RAIL_PAGES = {
  */
 export const RAIL_BOARD_ALIASES = [
   { board: key(I, 'Fund', 'Overview'), to: key(I, 'Fund'), why: 'I13 maps to I12: the fund page is its overview (D720 §11).' },
+  { board: key(I, 'Deals', 'Pipeline'), to: key(I, 'Deals'), why: 'D1243 (#3256): the Pipeline zone retired into Deal flow’s table at /deals; /deals/pipeline and an investor’s /pipeline forward there.' },
   { board: key(SA, 'Revenue', 'Overview'), to: key(SA, 'Revenue'), why: 'H13 maps to H12: the Revenue page is its overview (D720 §11).' },
   { board: key(AD, 'Approvals', 'Exploring members'), to: key(AD, 'Accounts', 'Exploring members'), why: 'One console, /admin/exploring; Accounts is listed first.' },
   { board: key(AD, 'Programs', 'Advisor cohorts'), to: key(AD, 'Approvals', 'Advisor cohort access'), why: 'One console, Programs › Mentor cohort access › People (D953); Approvals is listed first.' },
@@ -471,6 +472,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/perks', railCount: 0, pageTestIds: ['perks-desk'], roles: ['founder', 'investor', 'advisor', 'admin', 'exploring'], why: 'Owner request: the standalone Perks page has no AI rail on desktop or phone. Partner Perk deals remains in its own workspace.' },
   { route: '/learning', railCount: 0, pageTestIds: ['learning-home'], roles: ['founder', 'investor', 'advisor', 'partner', 'admin'], why: 'Owner request: Learning home has no AI rail on desktop or phone. Learning subpages retain their rails.' },
   { route: '/studio', roles: ['admin'], why: 'Admin · Studio has no rail (D598).' },
+  { route: '/grow/reporting', prefix: true, roles: ['advisor', 'partner'], why: 'D1060 (#2930), RPT14: an Advisor or an Operating Partner of the venture reads the Reporting desk, Duties and a sent report read only; the rail canvas draws no Reporting page in their profiles, so the founder’s Grow page key is not theirs.' },
   { route: '/raise/pitch', railCount: 0, pageTestIds: ['pitch-studio-boundary'], roles: ['advisor', 'partner'], why: 'D905 (#2684), PD22: an Advisor or an Operating Partner opening the Pitch deck studio reads its boundary inside their own shell, with no rail and nothing from a deck.' },
   { route: '/studio', railCount: 0, pageTestIds: ['advisor-studio-home'], roles: ['advisor'], why: 'Owner request: Advisor Studio has no AI side rail; its interview and practice modules remain.' },
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },

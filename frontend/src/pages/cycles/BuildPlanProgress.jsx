@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Unreadable, actionGhost } from '../../ui';
+import Sheet from '../../ui/Sheet.jsx';
 import { buildPlanApi } from '../../lib/api/buildPlan';
 import {
   BACK_IN_FOOT, BUCKETS, BUILT_UNREAD, CHART_FOOT, MODULE_FILTERS, NOT_RECORDED_FOOT, PER_PAGE, PROGRESS_FILTERS, SORTS, STAGES, STAGE_FILTERS, STAGE_WORD,
@@ -287,7 +288,7 @@ export function ItemTrail({ projectId, row, handoffs, links, onClose, search = '
   }, [projectId, where?.table, where?.id, tick]); // eslint-disable-line react-hooks/exhaustive-deps
   const nodes = state.status === 'ready' ? trailNodes(row, state.trail, handoffs, links) : [];
   return (
-    <Lightbox label={row.title} title={row.title} sub={`Plan item${row.marker ? ` · ${row.marker}` : ''}`} onClose={onClose} width={600} testId="plan-trail">
+    <Sheet label={row.title} title={row.title} sub={`Plan item${row.marker ? ` · ${row.marker}` : ''}`} onClose={onClose} width={600} testId="plan-trail">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-1.5">
           {[row.kindWord, row.moduleWord].map((p) => <span key={p} className="rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">{p}</span>)}
@@ -313,7 +314,7 @@ export function ItemTrail({ projectId, row, handoffs, links, onClose, search = '
         <Link to={`/raise${ventureSearch(search)}`} className={`${actionGhost} w-fit`}>See how Raise uses it</Link>
         <p className={MUTED}>{TRAIL_FOOT}</p>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

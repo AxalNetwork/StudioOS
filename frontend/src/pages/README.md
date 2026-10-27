@@ -4,14 +4,13 @@ Every route declared in `App.jsx` resolves to a file here. Most are lazy-loaded,
 so the filename is usually the fastest way from a URL to its code: `/pricing` →
 `PricingPage.jsx`.
 
-D1174 (#3101): `FinancialsPage.jsx` has no Capital score. Its forecast is
-Modelled and follows the URL venture (`project_id` or `project`), including
-Back/Forward, without selecting the first of multiple ventures. Capital's tabs
-carry either alias; D1029 retired the Cap Table tab. Legacy Capital links keep
+D1180 (#3107): the old FinancialsPage is retired; the financial model is Use of
+funds › Runway › Forecast (`raise/useoffunds/`), on the same `/api/financials`
+store. #3128 (D1194) had already forwarded Raise Pipeline, so the Capital workspace
+page is deleted: both old tabs only forward. D1029 retired the Cap Table tab. Legacy Capital links keep
 the venture through `raise/captable/CapTableMovedRedirect.jsx`, which normalizes
 `project` to `project_id`. The live cap table also reads both aliases through
-`raise/captable/capTableModel.js` (D1029). An unsaved model
-has no sensitivity table; export/recompute require a person-saved model.
+`raise/captable/capTableModel.js` (D1029).
 
 ## Finding a page
 
@@ -25,7 +24,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 
 | Folder | What lives there |
 | --- | --- |
-| `trust/` | D1078: the member Trust Center’s requirement counts, explanations, lightbox and data controls at `/trust/me`. |
+| `trust/` | D1078: the member Trust Center’s requirement counts, explanations, detail sheet (D1317) and data controls at `/trust/me`. |
 | `site/` | The public site's pages from the owner's website canvas (D673–D680): each renders in `SitePage` (`frontend/src/components/site/SitePage.jsx`) and draws only live data or the owner's copy. |
 | `admin/` | Admin console screens and their tabs. |
 | `advisor/` | The advisor's own practice surfaces. |

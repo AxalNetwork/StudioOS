@@ -36,6 +36,7 @@ import {
 } from '../validateWriters';
 import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
 import { acceptedPerModule, findingKindsOf, findingsFor } from '../interviewSuggestions';
+import { lovablePart, type LovablePart } from '../lovableAppLinks';
 import type { FindingKind } from '../interviewFindings';
 
 type Any = Record<string, any>;
@@ -1288,6 +1289,17 @@ function loadHypothesis(ctx: RecordContext, id: string): Promise<HypothesisData>
   });
 }
 
+/** D1083: the claim's experiments, each a slot for the app Lovable gave the founder. */
+async function lovableExperiments(ctx: RecordContext, id: string): Promise<LovablePart> {
+  try {
+    const rows = (await ctx.env.DB.prepare('SELECT id, title FROM hypothesis_experiments WHERE hypothesis_id = ? AND project_id = ? ORDER BY id')
+      .bind(Number(id), ctx.projectId).all<{ id: number; title: string }>()).results || [];
+    return await lovablePart(ctx.env, ctx.projectId, 'validate', rows.map((r) => ({ id: Number(r.id), label: String(r.title) })));
+  } catch {
+    return { state: 'unreadable' };
+  }
+}
+
 const experiments: ModuleSpec = {
   read: 'read', write: 'write', store: 'hypotheses',
   activityType: 'validate.experiments',
@@ -1308,6 +1320,8 @@ const experiments: ModuleSpec = {
         fact('Strength', claim?.strength ? STRENGTH[claim.strength] : null, 'No strength recorded'),
       ],
       createdBy: h.created_by ?? null, createdAt: h.created_at ?? null,
+      // D1083 (#2948): From Lovable, one slot per experiment of this claim.
+      parts: { lovable: await lovableExperiments(ctx, id) },
     };
   },
   sections: [

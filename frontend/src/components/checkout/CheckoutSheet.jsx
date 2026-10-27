@@ -4,7 +4,7 @@ import { Check, Lock, X } from 'lucide-react';
 import { checkoutApi } from '../../lib/api/billingCheckout';
 import {
   FREE_FIRST, NOT_YET, POLL_MS, RENEWS, SECURE_LINE, SELLER_LINE, SLOW_MS, TITLE,
-  cardWords, declineFamily, familyOf, includedLines, intervalsOf, newNonce, planKeyOf, promoState, quoteView,
+  cardWords, declineFamily, familyOf, includedLines, intervalsOf, newNonce, notSoldView, planKeyOf, promoState, quoteView,
   refusalView, savedCardsApply, sheetMode, signinHref, statusView, whatYouGet,
 } from './checkoutModel';
 
@@ -32,6 +32,15 @@ import {
  *     now", Scheduled, or Failed.
  *   - A decline is one of five families of words (`declineFamily`); a raw code
  *     is never shown, and every failure says whether money moved.
+ *
+ * D1054 (#2905, part 6): the sheet opens from anywhere in the app through
+ * `openCheckout` (`checkoutEntry.js`) and the one `CheckoutHost`:
+ *   - `from` is the page it opened over; Accepted offers "Back to [label]" (PAYX7b);
+ *   - `unlocks` names the feature a paywall or Usage asked for (PAYX12);
+ *   - a plan the catalogue does not sell says why, with Contact sales for a
+ *     plan priced by sales (PAYX13);
+ *   - `testMode` is a Super Admin's: Stripe is in test mode, so the header
+ *     says no real money moves and links HQ's Payments and Promo codes (PAYX16).
  *
  * `bridge` is the Stripe side, so a test can stand in for it: the card form,
  * and confirming a saved card or an existing intent.
@@ -66,7 +75,7 @@ export const STRIPE_BRIDGE = {
  * The card form failed to load (Stripe.js blocked, or offline): the sheet says
  * so, and that nothing was charged, instead of a blank column.
  */
-class CardFormBoundary extends React.Component {
+export class CardFormBoundary extends React.Component {
   constructor(props) { super(props); this.state = { failed: false }; }
   static getDerivedStateFromError() { return { failed: true }; }
   componentDidCatch() { this.props.onFailed?.(); }
@@ -78,8 +87,8 @@ class CardFormBoundary extends React.Component {
   }
 }
 
-/** Esc closes, focus moves in and stays inside, and returns to the opener on close. */
-function useDialog(onClose) {
+/** Esc closes, focus moves in and stays inside, and returns to the opener on close. Pack mode (D1287) shares it. */
+export function useDialog(onClose) {
   const box = useRef(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -134,17 +143,19 @@ function Totals({ view, read, fallback }) {
   );
 }
 
-function Summary({ plan, spec, interval, setInterval, intervals, view, read, locked }) {
+function Summary({ plan, spec, interval, setInterval, intervals, view, read, locked, unlocks }) {
   const fam = familyOf(plan);
   const price = intervals[interval] || intervals.monthly || intervals.yearly;
+  const tag = spec?.tag || plan?.catalogue?.tagline;
   return (
     <div className="flex flex-col gap-3.5" data-testid="checkout-summary">
       <span className={EYE}>Your plan</span>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL[fam.tone]}`}>{fam.label}</span>
       </div>
-      <h3 className="m-0 text-[20px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{plan.plan_name || spec?.name || 'Plan'}</h3>
-      {spec?.tag ? <p className={`m-0 ${SUB}`}>{spec.tag}</p> : null}
+      <h3 className="m-0 text-[20px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{plan.plan_name || spec?.name || plan?.catalogue?.label || 'Plan'}</h3>
+      {tag ? <p className={`m-0 ${SUB}`}>{tag}</p> : null}
+      {unlocks ? <p className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="checkout-unlocks">Unlocks: {unlocks}</p> : null}
       {intervals.monthly && intervals.yearly ? (
         <div className="flex gap-[3px] self-start rounded-[9px] bg-axal-ground p-[3px] dark:bg-gray-800" role="group" aria-label="Billing">
           {[['monthly', 'Monthly'], ['yearly', 'Yearly']].map(([k, t]) => (
@@ -155,10 +166,12 @@ function Summary({ plan, spec, interval, setInterval, intervals, view, read, loc
           ))}
         </div>
       ) : null}
-      <div>
-        <div className={`${MONO} text-[22px] font-extrabold text-axal-ink dark:text-gray-100`} data-testid="checkout-price">{price.line}</div>
-        <p className={`m-0 mt-1 ${SUB}`}>{RENEWS}</p>
-      </div>
+      {price ? (
+        <div>
+          <div className={`${MONO} text-[22px] font-extrabold text-axal-ink dark:text-gray-100`} data-testid="checkout-price">{price.line}</div>
+          <p className={`m-0 mt-1 ${SUB}`}>{RENEWS}</p>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-1.5">
         <span className={EYE}>Included</span>
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="checkout-included">
@@ -170,18 +183,20 @@ function Summary({ plan, spec, interval, setInterval, intervals, view, read, loc
           ))}
         </ul>
       </div>
-      <Totals view={view} read={read} fallback={price.subtotal} />
+      {price ? <Totals view={view} read={read} fallback={price.subtotal} /> : null}
     </div>
   );
 }
 
 /** The payment column for a mode that does not pay here (D1048 §3, D1053 PAYX19a). */
 function NotHere({ mode, plan, interval, onClose, onRetryPlan }) {
+  const ns = mode === 'notsold' ? notSoldView(plan) : null;
   const body = {
+    notsold: ns && [ns.title, ns.line, ns.contact ? <Link key="c" to="/contact" className={LINK} onClick={onClose} data-testid="checkout-contact-sales">Contact sales</Link> : null],
     signin: ['Sign in to continue.', `After you sign in, Checkout opens on ${plan?.plan_name || 'this plan'}.`, <Link key="s" to={signinHref(plan, interval)} className={LINK} data-testid="checkout-signin">Sign in</Link>],
     reading: ['Reading your current plan…', 'Payment waits until your current plan is read.', null],
     unreadable: ['Your current plan could not be read.', 'Your current plan is Unreadable. Try again before starting a payment.', null],
-    staff: ['Staff account · no plan needed', 'Admin and Super Admin accounts hold no plan.', null],
+    staff: ['Staff account · no plan needed', 'Admin, licence administrator and Super Admin accounts hold no plan.', null],
     explorer: ['Choose your profile first.', 'Plans belong to a profile: Founder, Investor, Advisor or Operating Partner. You can still buy AI tokens without a plan.', <Link key="p" to="/onboarding" className={LINK} onClick={onClose}>Choose a profile</Link>],
     other: ['This plan is for another profile.', 'Plans are sold to the profile they belong to.', null],
     unsellable: ['This plan’s price couldn’t be read just now.', 'That doesn’t mean it’s free. No payment can start until a price is on sale.', null],
@@ -239,7 +254,7 @@ function Promo({ promo, state, onApply, onRemove, locked }) {
 }
 
 /** PAYX7, PAYX8: after Pay, the status route's answer. */
-function After({ status, slow, unreadable, free, onClose, onRetry }) {
+function After({ status, slow, unreadable, free, from, onClose, onRetry }) {
   const view = statusView(status, { slow });
   const changes = status?.changes?.before ? status.changes : null;
   return (
@@ -265,14 +280,15 @@ function After({ status, slow, unreadable, free, onClose, onRetry }) {
       )}
       <div className="flex flex-wrap gap-3">
         {view.key === 'failed' && <button type="button" className={LINK} onClick={onRetry} data-testid="checkout-after-retry">Try again</button>}
-        <Link to="/account/billing" className={LINK} onClick={onClose}>Open Billing</Link>
         <button type="button" className={LINK} onClick={onClose}>Close</button>
+        <Link to="/account/billing" className={LINK} onClick={onClose}>Open Billing</Link>
+        {from && view.key !== 'failed' && <Link to={from.href} className={LINK} onClick={onClose} data-testid="checkout-back-to">Back to {from.label}</Link>}
       </div>
     </div>
   );
 }
 
-export default function CheckoutSheet({ plan, spec, user, role, held, planRead, onRetryPlan, interval: start = 'monthly', onClose, bridge = STRIPE_BRIDGE, pollMs = POLL_MS }) {
+export default function CheckoutSheet({ plan, spec, user, role, held, planRead, onRetryPlan, interval: start = 'monthly', onClose, from = null, unlocks = null, testMode = false, bridge = STRIPE_BRIDGE, pollMs = POLL_MS }) {
   const intervals = intervalsOf(plan);
   const [interval, setInterval] = useState(intervals[start] ? start : intervals.monthly ? 'monthly' : 'yearly');
   const mode = planRead && planRead.status !== 'ready' ? (planRead.status === 'loading' ? 'reading' : 'unreadable') : sheetMode({ user, role, plan, held });
@@ -389,14 +405,24 @@ export default function CheckoutSheet({ plan, spec, user, role, held, planRead, 
         className="relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px]"
         data-testid="checkout-sheet">
         <div className="flex items-center justify-between border-b border-axal-hairline px-5 py-3 dark:border-gray-700">
-          <h2 id="checkout-title" className="m-0 text-[16px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{TITLE}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="checkout-title" className="m-0 text-[16px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{TITLE}</h2>
+            {testMode && (
+              <span className="flex flex-wrap items-center gap-2" data-testid="checkout-test-mode">
+                <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL.amber}`}>Test mode</span>
+                <span className={SUB}>No real money moves.</span>
+                <Link to="/admin/platform/payments" className={LINK} onClick={close}>Payments ›</Link>
+                <Link to="/admin/platform/promo-codes" className={LINK} onClick={close}>Promo codes ›</Link>
+              </span>
+            )}
+          </div>
           <button type="button" aria-label="Close" onClick={close} className="grid h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"><X size={18} aria-hidden="true" /></button>
         </div>
         {phase === 'status' ? (
-          <After status={status} slow={slow} unreadable={unreadable} free={!!started?.free} onClose={close} onRetry={again} />
+          <After status={status} slow={slow} unreadable={unreadable} free={!!started?.free} from={from} onClose={close} onRetry={again} />
         ) : (
           <div className="grid gap-6 px-5 py-5 sm:grid-cols-[360px_1fr]">
-            {mode === 'unsellable' ? <p className={SUB}>{NOT_YET}</p> : <Summary plan={plan} spec={spec} interval={interval} setInterval={setInterval} intervals={intervals} view={view} read={read} locked={locked} />}
+            {mode === 'unsellable' ? <p className={SUB}>{NOT_YET}</p> : <Summary plan={plan} spec={spec} interval={interval} setInterval={setInterval} intervals={intervals} view={view} read={read} locked={locked} unlocks={unlocks} />}
             <div className="flex flex-col gap-3.5" data-testid="checkout-payment">
               <span className={EYE}>Payment</span>
               {!pays ? (

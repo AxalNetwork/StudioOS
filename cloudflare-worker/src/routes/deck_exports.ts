@@ -36,8 +36,13 @@ import { refuse } from '../util/refusal';
 import { logCycleWriteStatement } from '../services/cycleActivity';
 import { getDeckBrand } from '../services/decks/branding';
 import { boundedDownload } from '../services/channels/providerHttp';
-import { imageDataUri, imageUrlsOf, sniffImage, writeOfflineDeck } from '../services/decks/offlineHtml';
-import { projectOwned, sanitizeImageUrl } from './decks';
+import { imageDataUri, imageUrlsOf, sniffImage, writeOfflineDeck, type ImageKind } from '../services/decks/offlineHtml';
+import { exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken } from './decks';
+import { context as workspaceContext, member } from './google_workspace';
+import { WorkspaceError } from '../services/google/workspace';
+import { createPresentation, driveName } from '../services/google/driveCreate';
+import { writeEditableDeck, type ChartShot } from '../services/decks/pptxEditable';
+import { stripTrailingSlashes } from '../util/url';
 
 const deckExports = new Hono<{ Bindings: Env }>();
 
@@ -95,9 +100,9 @@ async function ventureBrand(env: Env, projectId: number) {
   return getDeckBrand(env, owner || ({ id: 0, role: 'founder', subscription_tier: 'free' } as any));
 }
 
-/** Each URL → a `data:` URI, or null when it could not be fetched, was too large, or is not a raster image. */
-export async function inlineImages(urls: string[]): Promise<Map<string, string | null>> {
-  const out = new Map<string, string | null>();
+/** Each URL → its bytes and kind, or null when it could not be fetched, was too large, or is not a raster image. */
+export async function fetchImages(urls: string[]): Promise<Map<string, { kind: ImageKind; bytes: Uint8Array } | null>> {
+  const out = new Map<string, { kind: ImageKind; bytes: Uint8Array } | null>();
   const wanted = urls.slice(0, IMAGES_MAX);
   for (const u of urls.slice(IMAGES_MAX)) out.set(u, null);
   const got = await Promise.all(wanted.map(async (u) => {
@@ -113,8 +118,15 @@ export async function inlineImages(urls: string[]): Promise<Map<string, string |
     const g = got[i];
     if (!g || total + g.bytes.length > IMAGES_MAX_BYTES) { out.set(u, null); return; }
     total += g.bytes.length;
-    out.set(u, imageDataUri(g.kind, g.bytes));
+    out.set(u, g);
   });
+  return out;
+}
+
+/** Each URL → a `data:` URI, or null when it could not be fetched, was too large, or is not a raster image. */
+export async function inlineImages(urls: string[]): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  for (const [u, g] of await fetchImages(urls)) out.set(u, g ? imageDataUri(g.kind, g.bytes) : null);
   return out;
 }
 
@@ -163,6 +175,87 @@ deckExports.post('/:id/export/html', async (c) => {
       'Cache-Control': 'no-store',
       'X-Content-SHA256': hash,
     },
+  });
+});
+
+/**
+ * D904 (#2683) — PD17's Google Slides: the version as an editable PowerPoint
+ * (`pptxEditable.ts`), created as a new presentation in the member's own
+ * Drive (`driveCreate.ts`, the one Workspace write), then recorded.
+ *
+ * WHO. A signed-in member, never a support session (D1091); the D895 deck
+ * check, as the other formats; and D1091's Workspace scope for the deck's
+ * venture: the member's connection is active and its company is enabled.
+ * Every refusal is a code; the dialog says it in words.
+ *
+ * ORDER. The file is created first, because its Drive id is what the
+ * ledger keeps (`deck_exports.external_ref`, migration 537), with the
+ * uploaded file's SHA-256 and one `raise.pitch-deck` audit row in one batch.
+ * When that batch fails the presentation already exists in the member's
+ * Drive, so the answer says so and links it (`export_not_recorded_created`)
+ * rather than claiming nothing happened.
+ */
+deckExports.post('/:id/export/google-slides', async (c) => {
+  let user: any;
+  try { user = await member(c); } catch (e) {
+    if (e instanceof WorkspaceError) return c.json({ error: e.code }, e.status as any);
+    throw e;
+  }
+  const row = await deckRow(c.env, Number(c.req.param('id')));
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  try { await workspaceContext(c, user, row.project_id); } catch (e) {
+    const w = e instanceof WorkspaceError ? e : new WorkspaceError('workspace_unreadable');
+    return c.json({ error: w.code }, w.status as any);
+  }
+  const body = await c.req.json().catch(() => ({} as any));
+  const opts = { notes: body?.notes === true, sources: body?.sources === true };
+  const { slides, renderable } = exportDeckOf(row, opts);
+  const brand = await ventureBrand(c.env, Number(row.project_id));
+  const images = await fetchImages(imageUrlsOf(slides));
+
+  // A chart is pictured from the print page, block by block, when the headless browser is bound.
+  const browser = (c.env as any).BROWSER;
+  let chartShot: ChartShot | null = null;
+  if (browser?.fetch) {
+    const token = await signDeckPrintToken(c.env, row.id, 300, opts);
+    const base = stripTrailingSlashes((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc');
+    chartShot = async (i, r) => {
+      const res = await browser.fetch('https://browser/screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: `${base}/deck/print-export/${token}?print_mode=single&slide=${i}`,
+          viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
+          gotoOptions: { waitUntil: 'networkidle0', timeout: 45000 },
+          screenshotOptions: { type: 'png', omitBackground: false, clip: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.w), height: Math.round(r.h) } },
+        }),
+      });
+      if (!res.ok) return null;
+      const png = new Uint8Array(await res.arrayBuffer());
+      return sniffImage(png) === 'png' ? png : null;
+    };
+  }
+  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot });
+  const hash = await sha256Hex(deck.bytes);
+
+  let created;
+  try {
+    created = await createPresentation(c.env, Number(user.id), { name: driveName(row.title || 'Pitch deck', row.version ?? null), bytes: deck.bytes });
+  } catch (e) {
+    const w = e instanceof WorkspaceError ? e : new WorkspaceError('google_not_created');
+    return c.json({ error: w.code }, w.status as any);
+  }
+  try {
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'google_slides', contentHash: hash, externalRef: created.file_id, userId: Number(user.id), audit: true }));
+  } catch (e) {
+    console.warn('[decks/export/google-slides] created but not recorded', (e as Error)?.name);
+    return c.json({ error: 'export_not_recorded_created', url: created.url, converted: created.converted }, 503);
+  }
+  return c.json({
+    created: true, file_id: created.file_id, url: created.url, converted: created.converted,
+    charts: deck.charts, images: deck.images, content_hash: hash,
   });
 });
 

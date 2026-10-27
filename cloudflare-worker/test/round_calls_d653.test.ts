@@ -314,7 +314,7 @@ Object.assign(checks,{
       [1,extended.terms_hash,true,1]);
     await m.service.recordCounsel(f.env,extended,f.counsel,'Counsel renewed approval',extended.terms_hash,extended.revision);
     const notice=f.db.prepare("SELECT user_id,link,body FROM notifications_inbox WHERE type='round_call_counsel_approved'").get()!;
-    assert.deepEqual([notice.user_id,notice.link,notice.body.includes('resumed')],[1,'/raise/calls/call',true]);
+    assert.deepEqual([notice.user_id,notice.link,notice.body.includes('resumed')],[1,'/raise/capital-relationships/calls/call',true]);
   },
   async keyTerms(m:any) {
     const f=await fixture('draft'),project=await m.service.projectFacts(f.env,1);

@@ -13,15 +13,16 @@ import { codeOnly } from './_codeOnly.mjs';
 
 const RUN = { usage_log_id: 41, rail_page: 'Founder · Spin-Out Lab · Market', rail_option: 'fill:market', charged_microusd: 1200, est_cost_usd: 0.0009 };
 
+// D1324 (#3485): `fill:market` is no inventory's key, so the line names its page, never the key.
 test('the line names the run and what the member was charged, to a fraction of a cent', () => {
   // Mutations checked: micro-USD not divided (a $1,200 charge); two places only (a $0.00 charge).
-  assert.equal(fillRunLine(RUN), 'Run: fill:market · charged $0.0012');
-  assert.equal(fillRunLine({ ...RUN, charged_microusd: 25_000 }), 'Run: fill:market · charged $0.03');
+  assert.equal(fillRunLine(RUN), 'Run: Founder · Spin-Out Lab · Market · charged $0.0012');
+  assert.equal(fillRunLine({ ...RUN, charged_microusd: 25_000 }), 'Run: Founder · Spin-Out Lab · Market · charged $0.03');
 });
 
 test('an unsettled charge says the estimate; neither says so; no option names the page', () => {
-  assert.equal(fillRunLine({ ...RUN, charged_microusd: null }), 'Run: fill:market · estimated $0.0009');
-  assert.equal(fillRunLine({ ...RUN, charged_microusd: null, est_cost_usd: null }), 'Run: fill:market · cost not recorded');
+  assert.equal(fillRunLine({ ...RUN, charged_microusd: null }), 'Run: Founder · Spin-Out Lab · Market · estimated $0.0009');
+  assert.equal(fillRunLine({ ...RUN, charged_microusd: null, est_cost_usd: null }), 'Run: Founder · Spin-Out Lab · Market · cost not recorded');
   assert.equal(fillRunLine({ ...RUN, rail_option: null }), 'Run: Founder · Spin-Out Lab · Market · charged $0.0012');
 });
 

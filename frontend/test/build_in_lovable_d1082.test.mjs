@@ -17,7 +17,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { BuildInLovable, BuildInLovableDialog } from '../src/pages/cycles/lovable/BuildInLovable.jsx';
-import { LEFT_OUT, OPENS_LINE, countText, openedDay, prototypeLovable, showsEntry } from '../src/pages/cycles/lovable/lovableModel.js';
+import { BRING_BACK, DRAFTED_LINE, LEFT_OUT, OPENS_LINE, PRIVACY_OK, PRIVACY_OK_SUB, countText, dialogHead, openedDay, prototypeLovable, showsEntry, testsRows } from '../src/pages/cycles/lovable/lovableModel.js';
 import { RecordSection } from '../src/pages/cycles/RecordView.jsx';
 import { lovableApi } from '../src/lib/api/lovable.js';
 
@@ -41,7 +41,8 @@ function fakeApi(answers = {}) {
   const one = { draft: step('draft'), check: step('check'), launch: step('launch'), launches: step('launches') };
   return { calls, api: { validate: one, build: one } };
 }
-const DRAFT = { record: RECORD, prompt: PROMPT, prompt_chars: PROMPT.length, max: 4000, left_out: LEFT_OUT, check: OK, last_opened_at: null };
+const TESTS = { code: 'H2', claim: 'Small clinics will join a waitlist for same-day invoice reconciliation.', title: 'Landing page test', target: '40 sign-ups' };
+const DRAFT = { record: RECORD, prompt: PROMPT, prompt_chars: PROMPT.length, max: 4000, left_out: LEFT_OUT, check: OK, last_opened_at: null, tests: TESTS };
 
 async function mount(node) {
   const restore = installDocument();
@@ -66,16 +67,17 @@ const fakeTab = () => { const tab = { closed: false, opener: 'page', location: {
 // ---------------------------------------------------------------- the model
 
 test('the words and small rules: the opens line, the count, the opened day, which entry draws', () => {
-  assert.equal(OPENS_LINE, 'Lovable opens in a new tab with this prompt. Nothing is sent until you press send there. Building uses your own Lovable credits.');
+  // The owner's re-export (Lovable Page.dc.html, D1311 §3).
+  assert.equal(OPENS_LINE, 'Lovable opens in a new tab with this prompt. You build there, with your own Lovable account.');
   assert.equal(LEFT_OUT, 'Interview names, quotes and contacts are never included.');
   assert.deepEqual([countText(0), countText(1234), countText(4000)], ['0 / 4,000', '1,234 / 4,000', '4,000 / 4,000']);
   assert.deepEqual([openedDay('2026-10-22 09:12:00'), openedDay(null), openedDay('soon')], ['2026-10-22', null, null]);
   assert.equal(showsEntry({ record: RECORD, can_launch: false, opened_at: null }), false, 'a reader with nothing opened sees nothing');
   assert.equal(showsEntry({ record: RECORD, can_launch: false, opened_at: '2026-10-22 09:12:00' }), true);
   const part = { state: 'ok', project_id: 1, record: { kind: 'prototype', id: '1' }, can_launch: true, opened_at: null };
-  assert.deepEqual(prototypeLovable('build', 'prototype-mvp', { parts: { lovable: part } }), { cycle: 'build', project_id: 1, record: part.record, can_launch: true, opened_at: null });
-  assert.equal(prototypeLovable('build', 'product-roadmap', { parts: { lovable: part } }), null);
-  assert.equal(prototypeLovable('validate', 'prototype-mvp', { parts: { lovable: part } }), null);
+  assert.deepEqual(prototypeLovable('build', 'prototype-mvp', { parts: { lovable: { state: 'ok', slots: [], launch: part } } }), { cycle: 'build', project_id: 1, record: part.record, can_launch: true, opened_at: null });
+  assert.equal(prototypeLovable('build', 'product-roadmap', { parts: { lovable: { state: 'ok', slots: [], launch: part } } }), null);
+  assert.equal(prototypeLovable('validate', 'prototype-mvp', { parts: { lovable: { state: 'ok', slots: [], launch: part } } }), null);
   assert.equal(prototypeLovable('build', 'prototype-mvp', { parts: {} }), null);
 });
 
@@ -89,8 +91,7 @@ test('LV2: the drafted prompt, editable, with its count, the Left out line and t
     assert.equal(v.text('lovable-opens-line'), OPENS_LINE);
     assert.equal(v.props('lovable-prompt').value, PROMPT);
     assert.equal(v.text('lovable-count'), countText(PROMPT.length));
-    assert.equal(v.text('lovable-left-out'), LEFT_OUT);
-    assert.equal(v.text('lovable-check'), 'No personal data found');
+    assert.equal(v.text('lovable-check'), `✓ ${PRIVACY_OK}${PRIVACY_OK_SUB}`);
     assert.equal(v.props('lovable-open').disabled, false, 'the draft passed its own check');
     await v.type('lovable-prompt', `${PROMPT} Write to ana@clinic.example`);
     assert.equal(v.props('lovable-open').disabled, true, 'an edit not yet checked cannot be opened');
@@ -101,7 +102,7 @@ test('LV2: the drafted prompt, editable, with its count, the Left out line and t
     assert.equal(v.props('lovable-open').disabled, true, 'a failed check keeps Open disabled');
     await v.type('lovable-prompt', `${PROMPT} Keep it calm.`);
     await v.settle(120);
-    assert.equal(v.text('lovable-check'), 'No personal data found');
+    assert.equal(v.text('lovable-check'), `✓ ${PRIVACY_OK}${PRIVACY_OK_SUB}`);
     assert.equal(v.props('lovable-open').disabled, false);
   } finally { await v.close(); }
 });
@@ -237,4 +238,69 @@ test('the wiring: LV7 beside Add must-have, the phone sheet, the client’s rout
     ]);
     assert.equal(seen[2][2], JSON.stringify(b));
   } finally { globalThis.fetch = prev; restore(); }
+});
+
+// ---------------------------------------------------------------- the owner's re-export (Lovable Page.dc.html, D1311 §3)
+
+test('the re-export\'s words: "Build in Lovable · H2", the title per cycle, What this tests from the Worker\'s fields only', () => {
+  assert.deepEqual(dialogHead('validate', TESTS), { eyebrow: 'Build in Lovable · H2', title: 'Build the landing page test in Lovable' });
+  // Mutation checked: always add the code → "Build in Lovable · " with nothing after it.
+  assert.deepEqual(dialogHead('build', { code: null }), { eyebrow: 'Build in Lovable', title: 'Build the prototype in Lovable' });
+  assert.deepEqual(testsRows(TESTS).map((r) => r.text), ['H2 · Small clinics will join a waitlist for same-day invoice reconciliation.', 'Landing page test', 'Target 40 sign-ups']);
+  // Mutation checked: prefix Target twice → "Target Target 40".
+  assert.equal(testsRows({ ...TESTS, target: 'Target 40 sign-ups' })[2].text, 'Target 40 sign-ups');
+  // Mutation checked: draw a missing target → "Target null".
+  assert.deepEqual(testsRows({ ...TESTS, target: null, code: null }).map((r) => r.key), ['claim', 'title']);
+  assert.deepEqual(testsRows(null), []);
+  assert.match(DRAFTED_LINE.validate, /^Drafted from this experiment\. Edit it before you open Lovable\.$/);
+  assert.doesNotMatch(Object.values(DRAFTED_LINE).join(' '), /Eadwyn/, 'a fixed template is not written by Eadwyn (D1082 §3)');
+  // Part 4's form address and sign-up count wait for #3432.
+  assert.doesNotMatch(JSON.stringify(BRING_BACK), /sign-up count|axal\.vc\/f\//);
+});
+
+test('the re-export mounted: eyebrow, title, What this tests, the drafted line, Copy behind the check, and Close once opened', async () => {
+  const copied = [];
+  const { api } = fakeApi({ draft: DRAFT, check: (arg) => ({ check: /@/.test(arg.prompt) ? EMAIL : OK }), launch: { url: 'https://lovable.dev/#prompt=x', handoff: { opened_at: '2026-10-27 10:00:00' } } });
+  const v = await mount(h(BuildInLovableDialog, { cycle: 'validate', projectId: 1, record: RECORD, api, openTab: fakeTab, onClose() {}, clipboard: { write: async (t) => { copied.push(t); } } }));
+  try {
+    assert.equal(v.text('lovable-eyebrow'), 'Build in Lovable · H2');
+    assert.equal(v.text('lovable-tests'), 'What this testsH2 · Small clinics will join a waitlist for same-day invoice reconciliation.Landing page testTarget 40 sign-ups');
+    assert.equal(v.text('lovable-drafted'), DRAFTED_LINE.validate);
+    assert.ok(!v.has('lovable-cancel'), 'the re-export has no Cancel: × closes');
+    await v.click('lovable-copy');
+    assert.deepEqual(copied, [PROMPT]);
+    assert.equal(v.text('lovable-copy'), 'Copied');
+    await v.type('lovable-prompt', `${PROMPT} ana@clinic.example`);
+    await v.settle(120);
+    // Mutation checked: let Copy skip the check → the email reaches the clipboard.
+    assert.equal(v.props('lovable-copy').disabled, true, 'a prompt that fails the check is not copied either');
+    await v.type('lovable-prompt', PROMPT);
+    await v.settle(120);
+    await v.click('lovable-open');
+    assert.equal(v.text('lovable-cancel'), 'Close');
+    assert.ok(!v.has('lovable-copy'));
+  } finally { await v.close(); }
+});
+
+test('Bring it back: an optional link, saved through D1083\'s route on this record, with the Worker\'s refusal in words', async () => {
+  const links = [];
+  let refuse = false;
+  const linkApi = { link: async (...a) => { links.push(a); if (refuse) { const e = new Error('Use an https address on a public host.'); throw e; } return { ok: true }; } };
+  const { api } = fakeApi({ draft: DRAFT, check: () => ({ check: OK }) });
+  const v = await mount(h(BuildInLovableDialog, { cycle: 'validate', projectId: 7, record: { kind: 'experiment', id: '42' }, api, linkApi, onClose() {} }));
+  try {
+    assert.match(v.text('lovable-bring-back'), /Bring it back.*Paste the Lovable project link \(optional\).*Axal VC does not see what you build until you link it\./s);
+    // Mutation checked: allow Link with an empty field → an empty PUT.
+    assert.equal(v.props('lovable-link-save').disabled, true);
+    await v.type('lovable-link-url', ' https://clinic-waitlist.lovable.app ');
+    await v.click('lovable-link-save');
+    // Mutation checked: send the record id as text or the untrimmed address → D1083's route refuses it.
+    assert.deepEqual(links, [['validate', 7, 42, 'https://clinic-waitlist.lovable.app']]);
+    assert.equal(v.text('lovable-link-saved'), 'Linked. It shows as From Lovable.');
+    refuse = true;
+    await v.type('lovable-link-url', 'http://x');
+    await v.click('lovable-link-save');
+    assert.equal(v.text('lovable-link-error'), 'Use an https address on a public host.');
+    assert.ok(!v.has('lovable-link-saved'));
+  } finally { await v.close(); }
 });

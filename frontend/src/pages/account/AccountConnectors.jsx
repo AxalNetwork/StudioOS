@@ -6,7 +6,7 @@ import { BrandIcon, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, VerifiedB
 import { BTN, INPUT } from './AccountCenter';
 import { Banner, Group, useConnectors } from './ConnectorSheet';
 import Lightbox from '../../ui/Lightbox';
-import { AssistantsSection } from './AssistantsGroup';
+import { BuilderHandoff } from './builder/BuilderSection';
 import { ChannelsSection } from './ChannelsGroup';
 import {
   MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, connectorPagePath,
@@ -515,8 +515,9 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
           both tabs. Zoom and Google connect on their own pages (D753). */}
       <ChannelsSection catalogue={data.catalogue} onOpenConnector={(key) => { if (data.catalogue.some((x) => x.key === key)) navigate(connectorPagePath(key)); }} />
 
-      {/* D668 (#1498): AI assistants that use StudioOS (D665), on both tabs. */}
-      <AssistantsSection />
+      {/* D668 (#1498): AI assistants that use StudioOS (D665), on both tabs. D1315: they live in
+          Builder now; here one card counts them and opens it (DEV14, MCPX13). */}
+      <BuilderHandoff />
 
       {requesting !== null && <RequestSheet tool={requesting} onClose={() => setRequesting(null)} />}
     </>

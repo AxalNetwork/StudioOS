@@ -223,6 +223,10 @@ test('GR8: View all terms opens the read-only terms, each with its schedule; Req
     await act(async () => { v.props('licence-program-terms-refer-and-earn').onClick(); });
     await v.settle();
     const d = v.of('program-terms-dialog');
+    // D1317: one program's terms are the shared right-side Sheet, at 640px (its own 600 snapped).
+    assert.equal(v.props('program-terms-dialog').role, 'dialog');
+    assert.ok(v.props('program-terms-dialog')['aria-labelledby']);
+    assert.equal(v.props('program-terms-dialog')['data-width'], 640);
     assert.match(d, /Refer & Earn · your terms/);
     assert.match(v.of('program-term-credits'), /400 credits a quarter.*Program schedule · sent/);
     assert.match(v.of('program-term-money'), /Program fee to HQ €2,000 a year · HQ share 10%/);
@@ -245,6 +249,10 @@ test('GR9: the sheet lists only programs HQ offers, says what the term stands at
     await act(async () => { v.props('licence-program-ask-referral-partners').onClick(); });
     await v.settle();
     const sheetText = v.of('program-request-sheet');
+    // D1317: the shared right-side Sheet at 480px, named by its title.
+    assert.equal(v.props('program-request-sheet').role, 'dialog');
+    assert.ok(v.props('program-request-sheet')['aria-labelledby']);
+    assert.equal(v.props('program-request-sheet')['data-width'], 480);
     assert.doesNotMatch(sheetText, /Product testing|AI-native Venture|Perks/, 'only programs HQ offers');
     assert.equal(v.props('program-request-program').value, 'referral-partners');
     assert.match(v.of('program-request-answer'), /HQ answers within 3 days/);

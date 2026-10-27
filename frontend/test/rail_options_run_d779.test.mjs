@@ -2,8 +2,9 @@
  * D779 (#2104), part 1 — the investor's options fill, draft and place through
  * the run path, and nothing is written without the member's Accept or Save.
  *
- * The part is every row of `lib/railOptions/investor.js` (D772, #2098): 15
- * options, at most 30 per part. Each handler has its own rule (D720 §9):
+ * The part is every row of `lib/railOptions/investor.js` (D772, #2098): 13
+ * options since D1243 retired Pipeline's notes and D1260 retired Screening's
+ * memo, at most 30 per part. Each handler has its own rule (D720 §9):
  *
  *   draft   The band drafts on the member's press, from a stubbed run, and the
  *           draft is all that is written. Accept is the only further write, and
@@ -42,9 +43,9 @@ function handler(method, path) {
 const writes = (body) => [...body.matchAll(/(?:INSERT INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/g)].map((m) => m[1]);
 
 // The part's rows, by key, so a row added to the inventory is a decision for a later part.
+// D1243 (#3256) retired 'Investor · Deals · Pipeline|draft:stale-deal-notes' with the Pipeline zone.
+// D1260 (#3283) retired 'Investor · Deals · Screening|draft:screening-memo' with the Lab scorer it cited.
 const PART_1 = [
-  'Investor · Deals · Pipeline|draft:stale-deal-notes',
-  'Investor · Deals · Screening|draft:screening-memo',
   'Investor · Deals · Commit|draft:ic-memo',
   'Investor · Deals · Closing|draft:closing-cover-note',
   'Investor · Portfolio · Positions|draft:multiple-narrative',
@@ -75,7 +76,7 @@ const DRAFTS = INVESTOR_RAIL_OPTIONS.filter((o) => o.handler === 'draft').map((o
 }));
 
 test('each draft option is a zone draft band whose Accept writes no other record', () => {
-  assert.equal(DRAFTS.length, 11);
+  assert.equal(DRAFTS.length, 9); // D1243 retired Pipeline's notes and D1260 retired Screening's memo
   const accept = handler('patch', '/drafts/:uid');
   // Accept stamps the draft. A surface may name an `accept` hook that writes a
   // record first; none of the investor's does.

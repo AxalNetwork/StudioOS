@@ -17,6 +17,11 @@
  * the row and logs it as `grow.<module>` with its record id (D690).
  *   POST  /feedback                PATCH /feedback/:uid
  *   POST  /channels                PATCH /channels/:uid      PUT /channels/:uid/spend/:month
+ *   POST  /channels/content        PATCH /channels/content/:uid   DELETE /channels/content/:uid
+ *     D1090 (#2955): Distribution's content calendar, typed by hand. A piece
+ *     from Notion is edited in Notion (409 here) and may be deleted (it stays
+ *     deleted). Distribution's read carries it as `parts.content_calendar`;
+ *     an unreadable calendar says so there and never blanks the channels.
  *   POST  /kpis                    (Enter a KPI, decision 4)
  *   POST  /roles                   PATCH /roles/:id          PATCH /applications/:id/stage
  *   POST  /partners                PATCH /partners/:uid      PUT /partners/:uid/revenue/:month
@@ -47,7 +52,7 @@ import { ensureProjectMetricsSchema } from './progress';
 import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
 import {
   CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
-  REPEATS_OF, Refused, addChannel, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
+  REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
   logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation,
   updatePartner, updateRole,
 } from '../services/growWriters';
@@ -59,6 +64,12 @@ import { isSupportSession } from '../integrations/providers/mercury';
 import {
   GROW_FEED_SLUGS, GrowSyncRefused, acceptPartnerProposal, syncGrowFromMercury, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, isVentureFounder, type GrowFeedSlug,
 } from '../services/mercury/growFeeds';
+import { workspaceContext, workspaceMember } from './google_workspace';
+import { WorkspaceError } from '../services/google/workspace';
+import {
+  CALENDAR_TAGS, GoogleGrowRefused, calendarProposals, decideProposal, deleteSheetFact, pendingProposal, proposeFromCalendar,
+  readCalendar, readFromGoogle, syncMetricsSheets,
+} from '../services/google/growFeeds';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -185,7 +196,7 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
         return { id: ch.uid, ...ch, kind: more.kind ?? null, cac_bar_cents: more.cac_bar_cents ?? null, bar_currency: more.bar_currency ?? null,
           spend_source: ch.spend_cents == null ? null : 'manual' };
       }),
-      parts: { from_update_asks: await updateAskReplies(env, projectId, 'customer') },
+      parts: { from_update_asks: await updateAskReplies(env, projectId, 'customer'), content_calendar: await calendarPart(env, projectId) },
       filters: [{ key: 'state', label: 'State', options: fixed(CHANNEL_STATES) }],
       sorts: [{ key: 'cac_cents', label: 'CAC' }, { key: '-cac_cents', label: 'Highest CAC' }, { key: 'name', label: 'Name' }] };
   }
@@ -248,6 +259,14 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
     parts: { checklist: await checklist(env, projectId), ...(await updatesHistory(x, viewer)) },
     filters: [{ key: 'kind', label: 'Kind', options: fixed(OBLIGATION_KINDS) }, { key: 'due_window', label: 'Due', options: fixed(DUE_WINDOWS) }],
     sorts: [{ key: 'due_at', label: 'Due' }, { key: '-due_at', label: 'Due latest' }] };
+}
+
+/** D1090: the content calendar beside the channels; a failed read says so on its own and never blanks them. */
+async function calendarPart(env: Env, projectId: number): Promise<Row> {
+  try { return { state: 'ready', items: await contentCalendar(env, projectId) }; } catch (e) {
+    console.error('[cycle_grow] content calendar unreadable:', (e as Error).name);
+    return { state: 'unreadable', reason: 'Unreadable: the content calendar could not be read' };
+  }
 }
 
 /** Customer and partner asks have no linked record; expose their replies beside the module's rows. */
@@ -409,6 +428,9 @@ r.post('/feedback', write((c, u, pid, b) => addFeedback(c.env, pid, u, b), true)
 r.patch('/feedback/:uid', write((c, u, pid, b) => updateFeedback(c.env, pid, u, param(c, 'uid'), b)));
 r.post('/channels', write((c, u, pid, b) => addChannel(c.env, pid, u, b), true));
 r.patch('/channels/:uid', write((c, u, pid, b) => updateChannel(c.env, pid, u, param(c, 'uid'), b)));
+r.post('/channels/content', write((c, u, pid, b) => addContentItem(c.env, pid, u, b), true));
+r.patch('/channels/content/:uid', write((c, u, pid, b) => updateContentItem(c.env, pid, u, param(c, 'uid'), b)));
+r.delete('/channels/content/:uid', write((c, u, pid) => removeContentItem(c.env, pid, u, param(c, 'uid'))));
 r.put('/channels/:uid/spend/:month', write((c, u, pid, b) => setChannelSpend(c.env, pid, u, param(c, 'uid'), param(c, 'month'), b)));
 r.post('/kpis', write(async (c, u, pid, b) => {
   await ensureProjectMetricsSchema(c.env);
@@ -491,6 +513,103 @@ r.delete('/mercury/facts/:id', async (c) => {
     const slug = Number.isSafeInteger(id) && id > 0 ? await deleteGrowFact(c.env, pid, id) : null;
     if (!slug) throw new Refused(404, 'That figure is not on this venture');
     await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: 'grow_mercury_fact_deleted', summary: 'Mercury figure deleted' });
+    return c.json({ ok: true, id });
+  } catch (e) { return fail(c, e); }
+});
+
+// ── D1095 (#2960): From Google — a metrics Sheet into Revenue and traction, tagged Calendar events into Durable company-building.
+
+const GOOGLE_SLUGS: Record<string, 'revenue_and_traction' | 'durable_company_building'> = {
+  'revenue-and-traction': 'revenue_and_traction', 'durable-company-building': 'durable_company_building',
+};
+const GOOGLE_DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'That proposal is not on this venture'],
+  decided: [409, 'That proposal was already decided'],
+};
+/** The member's own Workspace connection, checked as D1091's routes check it: support, admin, venture write, company. */
+async function googleMember(c: C, project: unknown) {
+  const user = await workspaceMember(c);
+  const { project: p, integration } = await workspaceContext(c, user, project);
+  return { user: user as User, pid: Number(p.id), integrationId: Number(integration.id) };
+}
+function googleFail(c: C, e: unknown) {
+  if (e instanceof WorkspaceError || e instanceof GoogleGrowRefused) return c.json({ error: e.code }, e.status as 400);
+  return fail(c, e);
+}
+
+// POST /google/sync — `part` is `sheets`, `calendar` or both; each part answers on its own.
+r.post('/google/sync', async (c) => {
+  try {
+    const b = await body(c);
+    const { user, pid, integrationId } = await googleMember(c, b.project);
+    const part = b.part === 'sheets' || b.part === 'calendar' ? b.part : null;
+    const today = new Date().toISOString().slice(0, 10);
+    const out: Record<string, unknown> = {};
+    if (part !== 'calendar') {
+      try { out.sheets = await syncMetricsSheets(c.env, integrationId, pid, user.id, today); }
+      catch (e) { out.sheets = { error: e instanceof WorkspaceError || e instanceof GoogleGrowRefused ? e.code : 'google_unreadable' }; }
+    }
+    if (part !== 'sheets') {
+      try {
+        const read = await readCalendar(c.env, user.id, today);
+        out.calendar = await proposeFromCalendar(c.env, integrationId, pid, calendarProposals(read.events), read.partial);
+      } catch (e) { out.calendar = { error: e instanceof WorkspaceError ? e.code : 'calendar_unreadable' }; }
+    }
+    await logGrowWrite(c.env, pid, user.id, { module: part === 'calendar' ? 'durable-company-building' : 'revenue-and-traction', entityId: pid,
+      action: 'grow_google_synced', summary: 'Grow synced from Google' });
+    return c.json({ ok: true, ...out });
+  } catch (e) { return googleFail(c, e); }
+});
+
+// GET /google/:slug?project= — what that module's From Google section draws.
+r.get('/google/:slug', async (c) => {
+  try {
+    const module = GOOGLE_SLUGS[param(c, 'slug')];
+    if (!module) throw new Refused(404, 'Google feeds this Grow module nothing');
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    const mine = await c.env.DB.prepare("SELECT id FROM integrations WHERE user_id = ? AND provider_key = 'google_workspace' AND status = 'active'")
+      .bind(user.id).first<{ id: number }>().catch(() => null);
+    return c.json({ module: param(c, 'slug'), ...(await readFromGoogle(c.env, pid, user.id, mine?.id ?? null, module)) });
+  } catch (e) { return googleFail(c, e); }
+});
+
+// POST /google/proposals/:id/accept — writes the obligation, then links it; refused as a typed one would be.
+r.post('/google/proposals/:id/accept', async (c) => {
+  try {
+    const b = await body(c);
+    const { user, pid, integrationId } = await googleMember(c, b.project);
+    const found = await pendingProposal(c.env, integrationId, pid, proposalId(c));
+    if (found.state !== 'ok') throw new Refused(...GOOGLE_DECIDED[found.state]);
+    const p = found.proposal;
+    const kind = p.kind === 'board_meeting' ? CALENDAR_TAGS.board.obligation : CALENDAR_TAGS.filing.obligation;
+    const { id } = await addObligation(c.env, pid, user, { title: p.title, due_at: p.date, kind }, 'google_calendar');
+    await decideProposal(c.env, integrationId, pid, p.id, user.id, { obligationId: id, eventId: p.event_id });
+    await logGrowWrite(c.env, pid, user.id, { module: 'durable-company-building', entityId: p.id, action: 'grow_google_proposal_accepted', summary: 'Calendar obligation accepted' });
+    return c.json({ ok: true, id: p.id, state: 'accepted', obligation_id: id });
+  } catch (e) { return googleFail(c, e); }
+});
+r.post('/google/proposals/:id/dismiss', async (c) => {
+  try {
+    const b = await body(c);
+    const { user, pid, integrationId } = await googleMember(c, b.project);
+    const found = await pendingProposal(c.env, integrationId, pid, proposalId(c));
+    if (found.state !== 'ok') throw new Refused(...GOOGLE_DECIDED[found.state]);
+    await decideProposal(c.env, integrationId, pid, found.proposal.id, user.id, null);
+    await logGrowWrite(c.env, pid, user.id, { module: 'durable-company-building', entityId: found.proposal.id, action: 'grow_google_proposal_dismissed', summary: 'Calendar obligation dismissed' });
+    return c.json({ ok: true, id: found.proposal.id, state: 'dismissed' });
+  } catch (e) { return googleFail(c, e); }
+});
+
+// DELETE /google/facts/:id?project= — a team member deletes a Sheet row; the next sync leaves it deleted.
+r.delete('/google/facts/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), true);
+    if (!(await isTeamViewer(c.env, user, pid))) throw new Refused(403, 'Only the venture\'s team can change its Google Sheets figures');
+    const id = Number(param(c, 'id'));
+    if (!Number.isSafeInteger(id) || id <= 0 || !(await deleteSheetFact(c.env, pid, id))) throw new Refused(404, 'That figure is not on this venture');
+    await logGrowWrite(c.env, pid, user.id, { module: 'revenue-and-traction', entityId: id, action: 'grow_google_fact_deleted', summary: 'Google Sheets figure deleted' });
     return c.json({ ok: true, id });
   } catch (e) { return fail(c, e); }
 });

@@ -60,9 +60,10 @@ test('Q4: a delete is confirmed before it is sent, and the confirmation says the
   assert.equal((code.match(/onClick=\{confirmDelete\}/g) || []).length, 1);
   assert.match(code, /onClick=\{confirmDelete\} disabled=\{busy\}[^>]*data-testid="hq-comment-confirm-delete"/);
   assert.match(code, /onClick=\{\(\) => setConfirming\(true\)\}[^>]*data-testid="hq-comment-delete"/);
-  const page = codeOnly(read('pages/admin/ArticlesQueuePage.jsx'));
-  assert.match(page, /const deleteComment = async \(cid\) => \{\s*await api\.deleteComment\(cid\);/);
-  assert.match(page, /onDelete=\{deleteComment\}/);
+  // D1295: the Content queue's drawer asks in its own in-page dialog (ART6 I) before the one call.
+  const drawer = codeOnly(read('pages/admin/contentQueue/ReviewDrawer.jsx'));
+  assert.equal((drawer.match(/api\.deleteComment\(/g) || []).length, 1);
+  assert.match(drawer, /if \(kind === 'delete_comment'\) await api\.deleteComment\(dialog\.comment\.id\);/);
 });
 
 test('Q4 states: loading, empty, and an unreadable list that is never "No comments"', () => {
@@ -72,10 +73,10 @@ test('Q4 states: loading, empty, and an unreadable list that is never "No commen
   assert.match(unread, /^Unreadable\. Comments could not be read just now\. Try again$/);
   assert.equal((html(h(ReviewComments, { state: { loading: false, error: false, comments: [C, { ...C, id: 6 }] }, onResolve: noop, onDelete: noop }))
     .match(/data-testid="hq-comment"/g) || []).length, 2);
-  // The page's own failed read is Unreadable with Try again, not "Select an article".
-  const page = codeOnly(read('pages/admin/ArticlesQueuePage.jsx'));
-  assert.match(page, /!detail && selectedId && detailFailed \?/);
-  assert.match(page, /Unreadable\. The article and its review comments could not be read just now\./);
+  // The drawer's own failed read is Unreadable with Try again, not "Select an article" (D1295 keeps it).
+  const drawer = codeOnly(read('pages/admin/contentQueue/ReviewDrawer.jsx'));
+  assert.match(drawer, /\{read\.status === 'failed' && \(/);
+  assert.match(drawer, /Unreadable\. The article and its review comments could not be read just now\./);
 });
 
 // ── Q5 · a billing dispute ─────────────────────────────────────────────────

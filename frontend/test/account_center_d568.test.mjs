@@ -43,7 +43,6 @@ import { setReadState } from '../src/ui/CompanySwitcher.jsx';
 import { PushDevicesCard, SessionsCard } from '../src/pages/account/AccountDevices.jsx';
 import { PlanHeader, OrdersCard } from '../src/pages/account/AccountBilling.jsx';
 import { FollowingList } from '../src/pages/account/AccountFollowing.jsx';
-import DeveloperSection, { DeveloperPanel } from '../src/pages/account/AccountDeveloper.jsx';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -348,7 +347,8 @@ test('Company profile follows the selected company even when the signing entity 
   setReadState({ loading: false, failed: false });
   const first = html(companyCard(COMPANY_A));
   assert.match(text(companyCard(COMPANY_A)), /Company Example Labs Role Founder Stage Seed Website https:\/\/example.com/);
-  assert.match(first, /href="\/company-settings"/);
+  // D1140 (#3020): the card opens this company's settings at their new address.
+  assert.match(first, /href="\/account\/companies\/company-a\/settings"/);
   assert.doesNotMatch(first, /No company|Add company profile/);
   assert.match(text(companyCard(COMPANY_B)), /Company Other Labs Role Viewer/);
   assert.doesNotMatch(html(companyCard(COMPANY_B)), /Example Labs|https:\/\/example.com/);
@@ -362,7 +362,7 @@ test('Company profile distinguishes an empty membership list, loading and a fail
   setReadState({ loading: false, failed: false });
   const empty = html(companyCard(null));
   assert.match(empty, /No company selected/);
-  assert.match(empty, /href="\/company-settings"/);
+  assert.match(empty, /href="\/account\/companies"/); // D1140: Companies and projects
   setReadState({ loading: true, failed: false });
   assert.match(html(companyCard(null)), /account-loading/);
   assert.doesNotMatch(html(companyCard(null)), /No company selected/);
@@ -500,11 +500,15 @@ test('sessions: the count the route serves, the two settings no route stores, an
 test('the plan line: tier, seats, renewal; Not recorded for a paid plan with no renewal date', () => {
   const founder = text(h(PlanHeader, { role: 'founder', billing: ready({ tier: 'growth', status: 'active', renews_at: '2026-11-01T12:00:00Z', trial_ends_at: null, has_customer: true, spinout_lab: null }) }));
   assert.match(founder, /Founder workspace Validate \+ Build renews 1 Nov 2026/);
-  assert.match(founder, /Plans & Pricing Manage billing ↗/);
+  // D1054 (#2905, PAYX11): Change plan opens the checkout sheet; Billing no longer sends the member to Pricing and back.
+  assert.match(founder, /Change plan Manage billing ↗/);
+  assert.match(html(h(PlanHeader, { role: 'founder', billing: ready({ tier: 'growth', status: 'active', has_customer: true }) })), /data-testid="button-change-plan"/);
   const inst = text(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'institutional', raw_tier: 'institutional', status: 'active', renews_at: null, trial_ends_at: null, has_customer: true, quotas: { seats: 4, seat_count: 2 } }) }));
   assert.match(inst, /Investor Institutional 2 of 4 seats · renewal not recorded/);
   assert.match(html(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'institutional', status: 'active', renews_at: null, has_customer: true, quotas: {} }) })), /title="this plan has no renewal date recorded"/);
-  assert.match(html(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'free', status: 'free', has_customer: false, quotas: {} }) })), /href="\/pricing\?for=investor"/);
+  assert.match(html(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'free', status: 'free', has_customer: false, quotas: {} }) })), /data-testid="button-change-plan"/);
+  // With no other plan sold here (Investor Pro: Institutional is sales'), Compare plans is Pricing.
+  assert.match(html(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'professional', status: 'active', has_customer: true, quotas: {} }) })), /href="\/pricing\?for=investor"[^>]*>Compare plans/);
   const lapsed = text(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'free', raw_tier: 'professional', status: 'canceled', renews_at: null, has_customer: true, quotas: { seats: 1, seat_count: 1 } }) }));
   assert.match(lapsed, /Investor Free Cancelled subscribed as Professional, Free applies · 1 of 1 seat · free plan, nothing renews/);
   const trial = text(h(PlanHeader, { role: 'partner', billing: ready({ plan_group: 'partner', plan: 'partner_pro', status: 'trialing', renews_at: '2026-10-20T12:00:00Z', trial_ends_at: '2026-10-20T12:00:00Z', has_customer: true }) }));
@@ -569,41 +573,6 @@ test('following: empty, unreadable and loading', () => {
   assert.match(html(h(FollowingList, { ...base, follows: loading() })), /data-testid="account-loading"/);
 });
 
-// --- Developer ---------------------------------------------------------------
-
-test('developer: hidden from every role the routes refuse', () => {
-  assert.equal(html(h(DeveloperSection, { role: 'founder' })), '');
-  assert.equal(html(h(DeveloperSection, { role: 'investor' })), '');
-  assert.match(html(h(DeveloperSection, { role: 'admin' })), /data-testid="account-developer"/, 'drawn for an admin, loading');
-});
-
-test('developer: flags, the account row, and Not recorded for what no store holds', () => {
-  const dev = ready({ feature_flags: { beta_board: true, new_rail: false }, raw_user: { id: 1, uid: 'abc', email: 'root@example.com', name: 'Root', role: 'admin', email_verified: 1, kyc_status: 'approved', created_at: '2026-01-05 12:00:00', last_active_at: null } });
-  const props = { dev, onToggleFlag: noop, flagBusy: false, flagOutcome: null, onResync: noop, resync: { busy: false, outcome: null, requestedAt: null } };
-  const t = text(h(DeveloperPanel, props));
-  const markup = html(h(DeveloperPanel, props));
-  assert.match(t, /API key Not recorded · there is no key store yet; the API tier \(T20\) has not shipped\./);
-  assert.match(t, /Webhook URL Not recorded/);
-  assert.match(t, /Rate limit Not recorded/);
-  assert.match(t, /2 stored/);
-  assert.match(markup, /data-testid="switch-flag-beta_board"/);
-  assert.match(markup, /role="switch" aria-checked="true"[^>]*data-testid="switch-flag-beta_board"/);
-  assert.match(t, /Email verified Yes/);
-  assert.match(t, /Created 5 Jan 2026/);
-  assert.match(t, /Last active Not recorded/);
-  assert.match(t, /last run not recorded/);
-  assert.match(t, /No part of the product reads these flags yet/);
-  const empty = text(h(DeveloperPanel, { ...props, dev: ready({ feature_flags: {}, raw_user: null }) }));
-  assert.match(empty, /No feature flags are stored on your account\./);
-  const bad = text(h(DeveloperPanel, { ...props, dev: unreadable('') }));
-  assert.match(bad, /Your developer settings could not be read\. This is not a claim that none is set\./);
-  // The page's own clock, read in the reader's zone: built from local parts so
-  // the run passes in any time zone.
-  const requested = text(h(DeveloperPanel, { ...props, resync: { busy: false, requestedAt: new Date(2026, 9, 6, 9, 41), outcome: { tone: 'ok', text: 'Re-sync request logged. The next scheduled cron will pick this up.' } } }));
-  assert.match(requested, /requested from this page at 09:41/);
-  assert.match(requested, /Re-sync request logged\. The next scheduled cron will pick this up\./);
-});
-
 // --- Wiring: the page, the route, and the Worker routes behind each method ---
 
 test('SettingsPage lists the canvas sections in its order, and mounts each section', () => {
@@ -613,17 +582,18 @@ test('SettingsPage lists the canvas sections in its order, and mounts each secti
   // D642 (#1435) — the Usage canvas's acNav puts Usage after Billing and orders.
   // D651 (#1463) — the Connectors canvas puts Connectors after Usage.
   // D1134 (#2422) — Companies and projects, second, below Profile and identity.
-  assert.deepEqual(labels.slice(0, 9), ['Profile and identity', 'Companies and projects', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Connectors', 'Following', 'Developer']);
-  assert.match(block, /\{ id: 'developer', label: 'Developer', roles: \['admin'\] \}/);
+  assert.deepEqual(labels.slice(0, 9), ['Profile and identity', 'Companies and projects', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Connectors', 'Following', 'Builder']);
+  // D1315 (#2418): Developer is Builder, for every profile.
+  assert.match(block, /\{ id: 'builder', label: 'Builder' \}/);
   for (const id of ['onboarding', 'appearance', 'activity']) {
     assert.match(block, new RegExp(`\\{ id: '${id}', label: '[^']+', group: 'more' \\}`), `${id} is kept, under More`);
   }
   // D700 — the deep-link map moved, unchanged, to account/accountPhone.js.
   const paths = read('frontend/src/pages/account/accountPhone.js');
-  for (const [path, id] of [['following', 'following'], ['developer', 'developer'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity'], ['usage', 'usage'], ['connectors', 'connectors'], ['integrations', 'connectors']]) {
+  for (const [path, id] of [['following', 'following'], ['builder', 'builder'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity'], ['usage', 'usage'], ['connectors', 'connectors'], ['integrations', 'connectors']]) {
     assert.match(paths, new RegExp(`\\n  ${path.replace(/[-']/g, (c) => (c === '-' ? '\\-' : "'"))}: '${id}',`), `${path} resolves to ${id}`);
   }
-  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<ConnectorsTab connectorKey={connectorKey} />', '<DeveloperSection role={data.role} />']) {
+  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<ConnectorsTab connectorKey={connectorKey} />', '<BuilderSection view={builderView ?? undefined} />']) {
     assert.ok(page.includes(mount), `${mount} is mounted`);
   }
   assert.match(page, /<ProfileTabs key=\{profileRev\}/, 'the editors below the profile cards remount after a card saves');
@@ -675,13 +645,17 @@ test('the sign-in pane uses the signed-in enrolment routes, never the login-flow
   assert.doesNotMatch(page, /api\.revokeAllSessions\(/);
 });
 
-test('App.jsx gates /account/developer the way its route does', () => {
+test('App.jsx: Builder opens for every role, and /account/developer… forwards to it before :section (D1315)', () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/account\/developer" element=\{guard\(\['admin'\], <SettingsPage \/>\)\} \/>/);
+  const six = "guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)";
+  for (const path of ['/account/builder', '/account/builder/*']) assert.ok(app.includes(`<Route path="${path}" element={${six}} />`), path);
+  for (const path of ['/account/developer', '/account/developer/*']) assert.ok(app.includes(`<Route path="${path}" element={<BuilderRedirect />} />`), path);
   assert.ok(app.indexOf('path="/account/developer"') < app.indexOf('path="/account/:section"'));
+  assert.ok(app.indexOf('path="/account/builder/*"') < app.indexOf('path="/account/:section"'));
+  // D1316 retired the admin panel: its three routes and three clients went together.
   const settings = read('cloudflare-worker/src/routes/settings.ts');
-  const dev = settings.slice(settings.indexOf("settings.get('/developer'"), settings.indexOf("settings.put('/developer'"));
-  assert.match(dev, /if \(\(user\.role \|\| ''\)\.toLowerCase\(\) !== 'admin'\) return c\.json\(\{ error: 'Admin role required' \}, 403\);/);
+  assert.doesNotMatch(settings, /settings\.(get|put|post)\('\/developer/);
+  assert.doesNotMatch(read('frontend/src/lib/api.js'), /DeveloperSettings|resyncDeveloperIndices/);
 });
 
 test('each fixture field is one the route serves', () => {
@@ -751,9 +725,6 @@ test('every method the sections call reaches the route it was read against', asy
     await api.followsMine();
     await api.unfollow('user', 11);
     await api.follow('project', 5);
-    await api.getDeveloperSettings();
-    await api.updateDeveloperSettings({ feature_flags: { a: true } });
-    await api.resyncDeveloperIndices();
     await api.updateSettings({ name: 'Ana' });
   } finally { globalThis.fetch = orig; }
   assert.deepEqual(calls.map(([m, u]) => [m, u]), [
@@ -768,7 +739,6 @@ test('every method the sections call reaches the route it was read against', asy
     ['GET', '/billing/tier/status'], ['GET', '/billing/investor/status'], ['GET', '/billing/plan/status'],
     ['POST', '/billing/tier/portal'], ['POST', '/billing/investor/portal'],
     ['GET', '/orders/mine'], ['GET', '/follows/mine'], ['DELETE', '/follows'], ['POST', '/follows'],
-    ['GET', '/settings/developer'], ['PUT', '/settings/developer'], ['POST', '/settings/developer/resync-indices'],
     ['PATCH', '/settings'],
   ]);
   const body = (i) => JSON.parse(calls[i][2]);

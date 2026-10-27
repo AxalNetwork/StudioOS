@@ -147,6 +147,8 @@ test('Validate: draft, launch and LV4 — one handoff row with the hash and leng
   assert.deepEqual([d.body.max, d.body.left_out, d.body.check, d.body.last_opened_at],
     [4000, LEFT_OUT, { ok: true, line: 'No personal data found', findings: [] }, null]);
   assert.equal(d.body.prompt_chars, d.body.prompt.length);
+  // The re-export's "What this tests": the record's own words.
+  assert.deepEqual(d.body.tests, { code: 'H1', claim: 'Clinics book a demo from a landing page', title: 'Demo landing page', target: '20 demo requests in two weeks' });
   const prompt = `${d.body.prompt}\n\nKeep it calm.`;
   const l = await call(env, FOUNDER, 'POST', '/api/cycles/validate/lovable/launch', { project_id: 1, record: EXP, prompt });
   assert.equal(l.status, 200, JSON.stringify(l.body));
@@ -174,6 +176,8 @@ test('Build › Prototype / MVP: the must-haves only, the handoff on the venture
   assert.match(d.body.prompt, /- Online booking: Patients pick a slot\n- Reminders/);
   assert.equal(d.body.check.ok, true, 'a drafted prompt passes its own check: the ship date is in words, never digits a phone matcher reads');
   assert.doesNotMatch(d.body.prompt, /Nice to have/, 'only the must-haves');
+  assert.match(d.body.tests.title, /^Prototype \/ MVP · \d+ must-haves?$/);
+  assert.equal(d.body.tests.code, null);
   const l = await call(env, FOUNDER, 'POST', '/api/cycles/build/lovable/launch', { project_id: 1, record: PROTO, prompt: d.body.prompt });
   assert.equal(l.status, 200, JSON.stringify(l.body));
   const row = db.prepare('SELECT * FROM build_handoffs').get() as any;
@@ -181,9 +185,13 @@ test('Build › Prototype / MVP: the must-haves only, the handoff on the venture
   assert.equal(count(db, `SELECT COUNT(*) n FROM activity_logs WHERE action = 'lovable_opened' AND entity_type = 'build.prototype-mvp'`), 1);
   const m = await call(env, FOUNDER, 'GET', '/api/cycles/build/modules/prototype-mvp?project=1');
   assert.equal(m.status, 200, JSON.stringify(m.body));
-  assert.deepEqual(m.body.parts.lovable, { state: 'ok', project_id: 1, record: PROTO, can_launch: true, opened_at: row.opened_at });
+  // D1083's app link and this part's launch share the one `lovable` key.
+  assert.deepEqual(m.body.parts.lovable.launch, { state: 'ok', project_id: 1, record: PROTO, can_launch: true, opened_at: row.opened_at });
+  assert.equal(m.body.parts.lovable.state, 'ok', 'D1083\'s From Lovable part is kept');
+  assert.ok(Array.isArray(m.body.parts.lovable.slots), 'D1083\'s slots are kept');
+  assert.ok('vercel' in m.body.parts, 'D1098\'s From Vercel is kept');
   const p = await call(env, PARTNER, 'GET', '/api/cycles/build/modules/prototype-mvp?project=1');
-  if (p.status === 200) assert.equal(p.body.parts.lovable.can_launch, false, 'a reader is not offered the launch');
+  if (p.status === 200) assert.equal(p.body.parts.lovable.launch.can_launch, false, 'a reader is not offered the launch');
   const wrong = await call(env, FOUNDER, 'POST', '/api/cycles/build/lovable/draft', { project_id: 1, record: { kind: 'prototype', id: '2' } });
   assert.deepEqual([wrong.status, wrong.body.code], [400, 'invalid_record'], 'another venture’s Prototype / MVP is not this one');
   assert.equal(fetches, 0);

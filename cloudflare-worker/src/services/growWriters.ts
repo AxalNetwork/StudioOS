@@ -20,6 +20,7 @@ import { closePosting, createPosting, submitForReview } from './jobBoardCommon';
 import { APPLICATION_STAGES, MARKET_PARTS, type GrowSlug } from './growCycle';
 import { calendarDay } from './growKpis';
 import { mintDownloadToken } from './signedDownload';
+import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
 
 export class Refused extends Error {
   status: number; sentence: string; field: string | null;
@@ -252,6 +253,75 @@ export async function setChannelSpend(env: Env, pid: number, user: User, uid: st
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: uid, action: 'grow_channel_spend', summary: `Spend entered for ${month}` })),
   ]);
   return { uid, month, spend_cents: spend, source: 'manual' as const };
+}
+
+// D1090 (#2955): the content calendar. A planned piece, never a record of what was sent.
+export const CONTENT_STATUS = ['idea', 'planned', 'scheduled', 'published', 'dropped'] as const;
+
+/** A channel of this venture by its uid, or none; another venture's is a 404. */
+async function channelId(env: Env, pid: number, uid: unknown): Promise<number | null> {
+  if (uid == null || uid === '') return null;
+  return (await owned<{ id: number }>(env, 'SELECT id FROM growth_channels WHERE uid = ? AND project_id = ?', String(uid), pid)).id;
+}
+
+/** A link to the piece: http or https only. */
+function link(v: unknown, field: string): string | null {
+  const u = str(v, 2000);
+  if (!u) return null;
+  try { const p = new URL(u); if (p.protocol === 'https:' || p.protocol === 'http:') return p.toString(); } catch { /* refused below */ }
+  throw new Refused(400, `${field} is a web link`, field);
+}
+
+export async function addContentItem(env: Env, pid: number, user: User, b: Body): Promise<{ uid: string }> {
+  const title = str(b.title, 200);
+  if (!title) throw new Refused(400, 'A planned piece has a title', 'title');
+  const channel = await channelId(env, pid, b.channel_uid);
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO content_calendar_items (uid, project_id, channel_id, title, planned_on, status, url, source, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`)
+      .bind(id, pid, channel, title, day(b.planned_on, 'planned_on'), oneOf(b.status, CONTENT_STATUS, 'status') ?? 'idea', link(b.url, 'url'), user.id, user.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: id, action: 'grow_content_added', summary: 'Planned piece added' })),
+  ]);
+  return { uid: id };
+}
+
+/** A typed piece's edit. A piece from Notion changes in Notion: the next sync would undo an edit here. */
+export async function updateContentItem(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string }> {
+  const row = await owned<Row & { id: number; source: string }>(env,
+    'SELECT id, channel_id, title, planned_on, status, url, source FROM content_calendar_items WHERE uid = ? AND project_id = ?', uid, pid);
+  if (row.source !== 'manual') throw new Refused(409, 'This piece comes from Notion. Change it there, and the next sync brings it here.');
+  let title = row.title;
+  if (has(b, 'title')) { title = str(b.title, 200); if (!title) throw new Refused(400, 'A planned piece has a title', 'title'); }
+  await env.DB.batch([
+    env.DB.prepare('UPDATE content_calendar_items SET channel_id = ?, title = ?, planned_on = ?, status = ?, url = ?, updated_by = ?, updated_at = ? WHERE id = ?')
+      .bind(has(b, 'channel_uid') ? await channelId(env, pid, b.channel_uid) : row.channel_id, title,
+        has(b, 'planned_on') ? day(b.planned_on, 'planned_on') : row.planned_on,
+        has(b, 'status') ? oneOf(b.status, CONTENT_STATUS, 'status', true) : row.status,
+        has(b, 'url') ? link(b.url, 'url') : row.url, user.id, nowIso(), row.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: uid, action: 'grow_content_updated', summary: 'Planned piece updated' })),
+  ]);
+  return { uid };
+}
+
+/** Removes a piece, typed or from Notion; one from Notion stays deleted (its ledger row keeps no local id). */
+export async function removeContentItem(env: Env, pid: number, user: User, uid: string): Promise<{ uid: string; deleted: true }> {
+  const row = await owned<{ id: number }>(env, 'SELECT id FROM content_calendar_items WHERE uid = ? AND project_id = ?', uid, pid);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM content_calendar_items WHERE id = ?').bind(row.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: uid, action: 'grow_content_deleted', summary: 'Planned piece deleted' })),
+  ]);
+  return { uid, deleted: true };
+}
+
+/** The calendar as Distribution reads it, soonest first; an unplanned piece last. */
+export async function contentCalendar(env: Env, pid: number): Promise<Row[]> {
+  const q = await env.DB.prepare(
+    `SELECT i.uid, i.title, i.planned_on, i.status, i.url, i.source, g.uid AS channel_uid, g.name AS channel_name
+       FROM content_calendar_items i LEFT JOIN growth_channels g ON g.id = i.channel_id
+      WHERE i.project_id = ? ORDER BY i.planned_on IS NULL, i.planned_on, i.id`,
+  ).bind(pid).all<Row>();
+  return q.results || [];
 }
 
 // ── Team expansion ──────────────────────────────────────────────────────────
@@ -536,7 +606,8 @@ function remindDays(v: unknown): string | null {
   return unique.length ? JSON.stringify(unique) : null;
 }
 
-export async function addObligation(env: Env, pid: number, user: User, b: Body): Promise<{ id: number }> {
+/** `source` is `manual` for a typed obligation; D1095's Calendar proposal writes `google_calendar`. */
+export async function addObligation(env: Env, pid: number, user: User, b: Body, source: 'manual' | 'google_calendar' = 'manual'): Promise<{ id: number }> {
   const title = str(b.title, 200);
   if (!title) throw new Refused(400, 'An obligation has a title', 'title');
   const due = obligationDue(b.due_at);
@@ -552,9 +623,9 @@ export async function addObligation(env: Env, pid: number, user: User, b: Body):
     const ins = await env.DB.prepare(
       `INSERT INTO compliance_events (project_id, entity_id, jurisdiction, event_type, title, due_date,
         completion_status, recurrence, source, kind, owner_name, owner_user_id, created_by_user_id, created_by,
-        completed_at, completed_by_user_id, remind_days_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        completed_at, completed_by_user_id, remind_days_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(pid, entity?.id ?? null, entity?.jurisdiction || 'Unspecified', OBLIGATION_EVENTS[kind], title, due,
-      completion, REPEATS[repeats], kind, str(b.owner_name, 120), null, user.id, user.id,
+      completion, REPEATS[repeats], source, kind, str(b.owner_name, 120), null, user.id, user.id,
       completion === 'completed' ? nowIso() : null, completion === 'completed' ? user.id : null, remind).run();
     id = ins.meta.last_row_id;
   } catch (error) { obligationClash(error, kind, due); }
@@ -759,12 +830,15 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
   if (!heldOn) throw new Refused(400, 'When was it held?', 'held_on');
   const file = b.minutes && typeof b.minutes === 'object' && 'arrayBuffer' in (b.minutes as object) ? b.minutes as File : null;
   let key: string | null = null;
+  let storage: StorageTicket | null = null;
   if (file) {
     if (!env.FILES) throw new Refused(503, 'File storage is not configured', 'minutes');
     const ext = MINUTES_TYPES[String(file.type || '').toLowerCase()];
     if (!ext) throw new Refused(415, 'Minutes are a PDF or a DOCX file', 'minutes');
     if (file.size > MINUTES_MAX_BYTES) throw new Refused(413, 'Minutes are 20 MB at most', 'minutes');
     key = `${minutesPrefix(pid)}${newUid()}.${ext}`;
+    // D1170 — Grow minutes count to the venture's owner (D1169 §1).
+    storage = await assertStorageRoom(env, { projectId: pid }, file.size, user);
     await env.FILES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
   }
   const months = REPEAT_MONTHS[e.recurrence];
@@ -785,6 +859,7 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
     if (key) { try { await env.FILES?.delete(key); } catch { /* the stored file is orphaned, never served */ } }
     obligationClash(error, obligationKind(e), next);
   }
+  if (storage) await noteStorageLanded(env, storage);
   return { id: e.id, occurrence, due_at: next, status: months ? 'pending' : 'completed' };
 }
 

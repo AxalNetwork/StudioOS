@@ -5,7 +5,9 @@ import { ownsVenture } from '../routes/_founder_validate_helpers';
 import { logCycleWriteStatement, type CycleModules } from './cycleActivity';
 import { collectEvidenceSources, candidateKey, EVIDENCE_AREAS, EVIDENCE_RULES, type EvidenceCandidate, type EvidenceArea, type CollectedEvidence } from './raiseEvidenceSources';
 export { EVIDENCE_RULES, EVIDENCE_AREAS, collectEvidenceSources, evidenceDate, evidenceStale, evidenceHash, candidateKey } from './raiseEvidenceSources';
-import { grantFolderScope, tierAdmits } from './dataRoomAccess';
+import { grantFolderScope, investorCommitted, tierAdmits, type FolderScope } from './dataRoomAccess';
+import { hasActivePairwiseNda } from './trust';
+import { checkClaims, claimRecord, type ClaimCheck } from './raiseClaims';
 
 /** Count a file only if a currently granted, active account can download it. D1103 — inside that grant's folders. */
 export async function readableRoomFiles(env: Env, projectId: number): Promise<any[]> {
@@ -347,6 +349,11 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
   const limit=query.limit??50,offset=query.offset??0;if(!Number.isSafeInteger(limit)||limit<1||limit>100||!Number.isSafeInteger(offset)||offset<0||offset>1000000)throw new RaiseEvidenceError('invalid',400);
   let sources:CollectedEvidence|null=null,refresh:any={refreshed:false,outcome:'founder_only'};
   if(ctx.founder){try{refresh=await buildCandidates(ctx,{force:query.refresh});}catch{refresh={refreshed:false,outcome:'unreadable',reason:'Candidates could not be prepared. Try again.'};}}
+  // D1264 (#3287): each claim's state from the pinned evidence, checked on the founder's read; an admin reads the last check.
+  let check:ClaimCheck|null=null,claimCheck:any=null;
+  if(ctx.founder){try{check=await checkClaims(ctx.env,ctx.projectId);claimCheck={outcome:check.outcome,surfaces:check.surfaces};}
+    catch{claimCheck={outcome:'unreadable',surfaces:null,reason:'Claims could not be checked. Try again.'};}}
+  const records=new Map(check?.claims.map(c=>[JSON.stringify([c.surface,c.surface_version,c.field_key]),claimRecord(c)])??[]);
   const rawItems=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT * FROM raise_evidence_items WHERE project_id=? AND (?=1 OR private_reason IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?`)
     .bind(ctx.projectId,ctx.founder?1:0,limit+1,offset).all<RaiseEvidenceItem>());
   const rawProposals=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT id,uid,source_ref,source_kind,source_label,payload_json,status,usage_log_id,model FROM ai_rail_proposals
@@ -388,12 +395,183 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
       .bind(ctx.projectId,limit+1,offset).all<{id:number;uid:string;surface:string;surface_version:string;field_key:string;claim_kind:string;stated_value:string|null;state:string;checked_at:string|null}>();
     const links=await ctx.env.DB.prepare(`SELECT c.uid AS claim_uid,i.uid AS item_uid,i.version AS item_version,l.how FROM raise_claim_evidence l JOIN raise_claims c ON c.id=l.claim_id AND c.project_id=l.project_id
       JOIN raise_evidence_items i ON i.id=l.item_id AND i.project_id=l.project_id WHERE l.project_id=? AND (?=1 OR i.private_reason IS NULL) AND c.uid IN (SELECT value FROM json_each(?))`).bind(ctx.projectId,ctx.founder?1:0,JSON.stringify(rows.results.slice(0,limit).map(r=>r.uid))).all<{claim_uid:string;item_uid:string;item_version:number;how:string}>();
-    return {state:'recorded',rows:rows.results.slice(0,limit).map(row=>ctx.founder?{...row,links:links.results.filter(l=>l.claim_uid===row.uid)}:
+    return {state:'recorded',rows:rows.results.slice(0,limit).map(row=>ctx.founder?{...row,record:records.get(JSON.stringify([row.surface,row.surface_version,row.field_key]))??null,links:links.results.filter(l=>l.claim_uid===row.uid)}:
       {uid:row.uid,surface:row.surface,claim_kind:row.claim_kind,state:row.state,checked_at:row.checked_at}),has_more:rows.results.length>limit};
   }catch{return unreadableBlock;}})();
   const coverage=await(async()=>{try{const result=await ctx.env.DB.prepare(`SELECT area,source_label,state,visibility,COUNT(*) AS count FROM raise_evidence_items
     WHERE project_id=? AND (?=1 OR private_reason IS NULL) GROUP BY area,source_label,state,visibility`).bind(ctx.projectId,ctx.founder?1:0)
       .all<{area:string;source_label:string;state:string;visibility:string;count:number}>();return {state:'recorded',groups:result.results};}
     catch{return {state:'unreadable',groups:null,reason:'Coverage could not be read. Try again.'};}})();
-  return {items,proposals,claims,coverage,sources:ctx.founder?parseSourceBlocks(sourceCoverage?.blocks_json):null,source_coverage_at:ctx.founder?sourceCoverage?.last_attempt_at??null:null,live_sources:ctx.founder?sources?.blocks??null:null,refresh,permissions:{can_decide:ctx.founder,can_share:ctx.founder},limit,offset};
+  // D1266 (#3289): who opened the shared evidence in the last 30 days (`open_evidence`), for the founders and the venture's admins.
+  const opens=await(async()=>{try{const rows=await ctx.env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(u.display_name),''),u.name) AS investor,l.user_id,l.created_at AS at FROM data_room_access_log l
+      JOIN users u ON u.id=l.user_id WHERE l.project_id=? AND l.action='open_evidence' AND datetime(l.created_at)>datetime('now','-30 days') ORDER BY l.created_at DESC,l.id DESC LIMIT 200`)
+      .bind(ctx.projectId).all<{investor:string;user_id:number;at:string}>();
+    const all=rows.results||[];
+    return {state:'recorded',days:30,count:all.length,investors:new Set(all.map(r=>r.user_id)).size,capped:all.length>=200,rows:all.slice(0,20).map(r=>({investor:r.investor,at:r.at}))};}
+    catch{return {state:'unreadable',days:30,count:null,investors:null,rows:null,reason:'Investor opens could not be read. Try again.'};}})();
+  return {items,opens,proposals,claims,coverage,sources:ctx.founder?parseSourceBlocks(sourceCoverage?.blocks_json):null,source_coverage_at:ctx.founder?sourceCoverage?.last_attempt_at??null:null,live_sources:ctx.founder?sources?.blocks??null:null,refresh,claim_check:claimCheck,permissions:{can_decide:ctx.founder,can_share:ctx.founder},limit,offset};
+}
+
+// D1265 (#3288): what an investor may see of the pack, and the one read SCORING uses.
+export type EvidenceAudienceVia='data_room'|'round_call'|'invited';
+export type EvidenceAudience={investorUserId:number;via:EvidenceAudienceVia[];grantId:number|null;folders:FolderScope;committed:boolean};
+/** An investor in the raise (#2430 owner question 3): a data-room grant, a round-call recipient or an invited investor.
+ *  An advisor grant has no evidence scope to read (no such column; this part has no migration), so it admits no one. */
+export async function evidenceAudience(env:Env,projectId:number,investorUserId:number):Promise<EvidenceAudience|null>{
+  const row=await env.DB.prepare(`SELECT
+      (SELECT g.id FROM data_room_grants g WHERE g.project_id=p.id AND g.investor_user_id=u.id AND g.status='active'
+        AND (g.expires_at IS NULL OR datetime(g.expires_at)>datetime('now')) ORDER BY g.id LIMIT 1) AS grant_id,
+      EXISTS(SELECT 1 FROM round_call_recipients r JOIN round_calls c ON c.id=r.call_id
+        WHERE c.project_id=p.id AND r.investor_user_id=u.id AND c.state IN ('sent','closed')) AS recipient,
+      EXISTS(SELECT 1 FROM deals d WHERE d.project_id=p.id AND (EXISTS(SELECT 1 FROM deal_invitations i WHERE i.deal_id=d.id AND i.investor_user_id=u.id)
+        OR EXISTS(SELECT 1 FROM commitments k WHERE k.deal_id=d.id AND k.investor_user_id=u.id))) AS invited
+    FROM projects p JOIN users u ON u.id=? AND u.is_active=1 AND u.role<>'admin'
+    WHERE p.id=? AND p.deleted_at IS NULL AND (p.founder_id IS NULL OR u.founder_id IS NULL OR u.founder_id<>p.founder_id)`)
+    .bind(investorUserId,projectId).first<{grant_id:number|null;recipient:number;invited:number}>();
+  if(!row)return null;
+  const via:EvidenceAudienceVia[]=[];
+  if(row.grant_id!=null)via.push('data_room');if(Number(row.recipient)===1)via.push('round_call');if(Number(row.invited)===1)via.push('invited');
+  if(!via.length)return null;
+  const grantId=row.grant_id==null?null:Number(row.grant_id);
+  // No grant opens no folder: an empty scope, so tierAdmits refuses every file.
+  return {investorUserId,via,grantId,folders:grantId==null?new Set<number>():await grantFolderScope(env,grantId),committed:await investorCommitted(env,projectId,investorUserId)};
+}
+/** The NDA the room uses: one active pairwise NDA between this venture's founder account and the investor. */
+export async function evidenceNda(env:Env,projectId:number,investorUserId:number):Promise<boolean>{
+  const founders=await env.DB.prepare('SELECT u.id FROM users u JOIN projects p ON p.founder_id=u.founder_id WHERE p.id=? ORDER BY u.id').bind(projectId).all<{id:number}>();
+  for(const f of founders.results||[])if(await hasActivePairwiseNda(env,Number(f.id),investorUserId))return true;
+  return false;
+}
+/** Bank-derived figures (owner question 1) may carry a value after the NDA; never a bank line, a balance or one investor's money. */
+const BANK_FIGURES=new Set(['bank-runway','bank-revenue','mapped-bank-spend','kpi-snapshot']);
+const ONE_INVESTOR=new Set(['round-call-response','typed-commitment','confirmed-receipt','accepted-safe']);
+/** The data-room file an item stands on, when it stands on one. */
+const FILE_KINDS=new Set(['bank-statement','revenue-proof']);
+function valueWithheld(row:Pick<RaiseEvidenceItem,'kind'|'private_reason'>):string|null{
+  if(ONE_INVESTOR.has(row.kind))return 'One investor’s money is not shared with another investor.';
+  if(row.private_reason==='bank'&&!BANK_FIGURES.has(row.kind))return 'A bank line is never shared; the item says it is recorded.';
+  return null;
+}
+const SHARED_MAX=500;
+type CurrentShared={row:RaiseEvidenceItem;stale:boolean|null};
+/** Pinned items shared beyond Private whose source still matches the fingerprint the founder accepted, computed now. */
+async function currentShared(env:Env,projectId:number):Promise<{rows:CurrentShared[];partial:boolean}>{
+  const shared=await env.DB.prepare(`SELECT * FROM raise_evidence_items WHERE project_id=? AND state='pinned' AND visibility IN ('summary','after_nda') ORDER BY id LIMIT ?`)
+    .bind(projectId,SHARED_MAX).all<RaiseEvidenceItem>();
+  const byOwner=new Map<number,RaiseEvidenceItem[]>();
+  for(const row of shared.results||[]){if(row.accepted_by==null)continue;const k=Number(row.accepted_by);byOwner.set(k,[...(byOwner.get(k)??[]),row]);}
+  const rows:CurrentShared[]=[];let partial=false;const now=new Date().toISOString();
+  // The bank owner is the founder who accepted the item, never the reader.
+  for(const [owner,group] of byOwner){
+    let sources:CollectedEvidence;
+    try{sources=await collectEvidenceSources(env,projectId,owner,now,[...new Set(group.map(r=>r.kind))],group.map(r=>({kind:r.kind,source_ref:r.source_ref})));}
+    catch{partial=true;continue;}
+    const current=new Map(sources.candidates.map(c=>[candidateKey(c),c]));
+    for(const row of group){
+      const rule=EVIDENCE_RULES.find(r=>r.kind===row.kind);
+      if(!rule||sources.blocks.some(b=>b.dataset===rule.dataset&&b.state==='unreadable')){partial=true;continue;}
+      const found=current.get(candidateKey(row));
+      if(found&&found.snapshot_hash===row.snapshot_hash)rows.push({row,stale:found.stale});
+    }
+  }
+  return {rows,partial};
+}
+/** A quote needs its interview's consent now, not only when it was accepted. */
+async function quoteConsented(env:Env,projectId:number,row:RaiseEvidenceItem):Promise<boolean>{
+  if(row.kind!=='consented-quote'&&row.private_reason!=='quote')return true;
+  if(row.source_table!=='discovery_interviews')return false;
+  const id=Number(row.source_ref.split(':')[0]);if(!Number.isSafeInteger(id)||id<1)return false;
+  return !!await env.DB.prepare('SELECT 1 AS yes FROM discovery_interviews WHERE id=? AND project_id=? AND quote_consent=1').bind(id,projectId).first();
+}
+/** A file the room would refuse this reader is refused here too: its tier, expiry, the grant's folders, then its NDA gate. */
+async function fileAdmits(env:Env,projectId:number,row:RaiseEvidenceItem,aud:EvidenceAudience,nda:boolean):Promise<boolean>{
+  if(!FILE_KINDS.has(row.kind))return true;
+  const id=Number(row.source_ref.split(':')[0]);if(!Number.isSafeInteger(id)||id<1)return false;
+  const file=row.kind==='revenue-proof'
+    ?await env.DB.prepare(`SELECT d.visibility,d.access_tier,d.access_expires_at,d.folder_id FROM revenue_entries r JOIN data_room_files d ON d.id=r.proof_document_id AND d.project_id=r.project_id WHERE r.id=? AND r.project_id=?`).bind(id,projectId).first<any>()
+    :await env.DB.prepare('SELECT visibility,access_tier,access_expires_at,folder_id FROM data_room_files WHERE id=? AND project_id=?').bind(id,projectId).first<any>();
+  return !!file&&tierAdmits(file,aud.committed,Date.now(),aud.folders)&&(file.visibility==='open'||(file.visibility==='nda'&&nda));
+}
+async function logOpenEvidence(env:Env,projectId:number,userId:number){
+  try{await env.DB.prepare(`INSERT INTO data_room_access_log(project_id,file_id,user_id,action,created_at) VALUES(?,NULL,?,'open_evidence',?)`).bind(projectId,userId,new Date().toISOString()).run();}
+  catch{console.error('[raise_evidence] open_evidence log insert failed');}
+}
+function sharedClaims(env:Env,projectId:number,itemUids:string[]){
+  return env.DB.prepare(`SELECT DISTINCT c.uid,c.surface,c.claim_kind,c.state,c.checked_at,i.uid AS item_uid FROM raise_claim_evidence l
+    JOIN raise_claims c ON c.id=l.claim_id AND c.project_id=l.project_id JOIN raise_evidence_items i ON i.id=l.item_id AND i.project_id=l.project_id
+    WHERE l.project_id=? AND i.uid IN (SELECT value FROM json_each(?)) ORDER BY c.id`).bind(projectId,JSON.stringify(itemUids))
+    .all<{uid:string;surface:string;claim_kind:string;state:string;checked_at:string|null;item_uid:string}>();
+}
+const BEFORE_NDA='Figures, files and quotes open once the NDA is signed.';
+/** The investor's read (owner questions 1–4): before the NDA, coverage only; after it, each item the founder shared, After NDA
+ *  with its value and Summary without. Never a private item, a balance, a bank line, another investor's name or money, an
+ *  unconsented quote or a file the room refuses. Each open writes `open_evidence`. */
+export async function investorEvidence(env:Env,projectId:number,investorUserId:number){
+  const aud=await evidenceAudience(env,projectId,investorUserId);
+  if(!aud)throw new RaiseEvidenceError('not_found',404);
+  const nda=await evidenceNda(env,projectId,investorUserId);
+  const view=await sharedView(env,projectId,aud,nda);
+  await logOpenEvidence(env,projectId,investorUserId);
+  return view;
+}
+/** The projection an investor reads, and the founder's preview of it: the same rules, with no log. */
+async function sharedView(env:Env,projectId:number,aud:EvidenceAudience,nda:boolean){
+  let admitted:CurrentShared[]|null=null,partial=false;
+  try{
+    const current=await currentShared(env,projectId);partial=current.partial;admitted=[];
+    for(const c of current.rows)if(await quoteConsented(env,projectId,c.row)&&await fileAdmits(env,projectId,c.row,aud,nda))admitted.push(c);
+  }catch{admitted=null;}
+  const unreadable={state:'unreadable',reason:'The shared evidence could not be read. Try again.'} as const;
+  const coverage=admitted==null?unreadable:{state:'recorded',groups:[...admitted.reduce((m,{row})=>{
+    const k=JSON.stringify([row.area,row.kind,row.source_label]);const g=m.get(k)??{area:row.area,kind:row.kind,source_label:row.source_label,count:0,newest:null as string|null};
+    g.count+=1;if(row.observed_on&&(!g.newest||row.observed_on>g.newest))g.newest=row.observed_on;m.set(k,g);return m;
+  },new Map<string,{area:string;kind:string;source_label:string;count:number;newest:string|null}>()).values()]};
+  if(!nda)return {nda_signed:false,before_nda:BEFORE_NDA,coverage,items:null,claims:null,partial};
+  const items=admitted==null?unreadable:{state:'recorded',rows:admitted.map(({row,stale})=>{
+    const base={uid:row.uid,area:row.area,kind:row.kind,source_label:row.source_label,provider:row.provider,strength:row.strength,observed_on:row.observed_on,summary:row.summary,stale,sharing:row.visibility};
+    if(row.visibility!=='after_nda')return {...base,value_num:null,value_unit:null,currency:null,value_reason:'Shared as a summary only.'};
+    const withheld=valueWithheld(row);
+    return withheld?{...base,value_num:null,value_unit:null,currency:null,value_reason:withheld}:{...base,value_num:row.value_num,value_unit:row.value_unit,currency:row.currency,value_reason:row.value_num==null?'No figure is recorded for this item.':null};
+  })};
+  let claims:any=unreadable;
+  if(admitted){try{const res=await sharedClaims(env,projectId,admitted.map(a=>a.row.uid));const by=new Map<string,any>();
+    for(const r of res.results||[]){const c=by.get(r.uid)??{uid:r.uid,surface:r.surface,claim_kind:r.claim_kind,state:r.state,checked_at:r.checked_at,items:[] as string[]};c.items.push(r.item_uid);by.set(r.uid,c);}
+    claims={state:'recorded',rows:[...by.values()]};}catch{claims=unreadable;}}
+  return {nda_signed:true,before_nda:null,coverage,items,claims,partial};
+}
+
+/** D1266 (#3289): the investor the founder previews as — invited, holding an unscoped grant, not committed. */
+const PREVIEW_AUDIENCE:EvidenceAudience={investorUserId:0,via:['data_room'],grantId:null,folders:null,committed:false};
+export const PREVIEW_AS='An invited investor with a data-room grant to every folder, not yet committed. A grant scoped to some folders, or a committed-only file, opens less or more.';
+/** See as an investor (VR11) and the Share dialog's "Who can see this now" (VR5): the investor's own projection, never logged
+ *  as an open, and the number of investors who hold a grant and an NDA now. Counts only: no investor is named here. */
+export async function previewEvidence(ctx:RaiseEvidenceContext,nda:boolean){
+  founderOnly(ctx);
+  const view=await sharedView(ctx.env,ctx.projectId,PREVIEW_AUDIENCE,nda);
+  const audience=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT COUNT(DISTINCT g.investor_user_id) AS grants,
+      COUNT(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM pairwise_ndas n JOIN users owner ON owner.id=n.party_a_user_id JOIN projects p ON p.founder_id=owner.founder_id
+        WHERE p.id=g.project_id AND n.party_b_user_id=g.investor_user_id AND n.status='active' AND (n.valid_until IS NULL OR datetime(n.valid_until)>datetime('now')))
+        THEN g.investor_user_id END) AS ndas
+    FROM data_room_grants g JOIN users u ON u.id=g.investor_user_id AND u.is_active=1
+    WHERE g.project_id=? AND g.status='active' AND (g.expires_at IS NULL OR datetime(g.expires_at)>datetime('now'))`).bind(ctx.projectId).first<{grants:number;ndas:number}>());
+  return {...view,preview:true,preview_as:PREVIEW_AS,
+    audience:audience?{state:'recorded',data_room:Number(audience.grants)||0,nda_signed:Number(audience.ndas)||0}:{state:'unreadable',data_room:null,nda_signed:null,reason:'Who can see this could not be read. Try again.'}};
+}
+
+async function sha256Hex(text:string){
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+/** The one read SCORING uses (owner question 6): only items shared beyond Private, current at read, with a hash of exactly what was read. */
+export async function evidencePack(env:Env,projectId:number,opts:{audience:'scoring'}){
+  if(opts?.audience!=='scoring')throw new RaiseEvidenceError('invalid',400);
+  const current=await currentShared(env,projectId);
+  const items=current.rows.map(({row,stale})=>{const withheld=valueWithheld(row);const rule=EVIDENCE_RULES.find(r=>r.kind===row.kind);
+    return {uid:row.uid,area:row.area,kind:row.kind,source_label:row.source_label,provider:row.provider,strength:row.strength,observed_on:row.observed_on,stale,
+      sharing:row.visibility,backs:[...(rule?.backs??[])],value_num:withheld?null:row.value_num,value_unit:withheld?null:row.value_unit,currency:withheld?null:row.currency};})
+    .sort((a,b)=>a.uid<b.uid?-1:a.uid>b.uid?1:0);
+  const res=await sharedClaims(env,projectId,items.map(i=>i.uid));
+  const claims=[...new Map((res.results||[]).map(r=>[r.uid,{uid:r.uid,surface:r.surface,claim_kind:r.claim_kind,state:r.state}])).values()].sort((a,b)=>a.uid<b.uid?-1:a.uid>b.uid?1:0);
+  const pack_hash=await sha256Hex(JSON.stringify({project_id:projectId,items,claims}));
+  return {audience:'scoring' as const,items,claims,partial:current.partial,pack_hash};
 }
