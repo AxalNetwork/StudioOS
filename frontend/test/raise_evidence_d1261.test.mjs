@@ -14,7 +14,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { EvidenceBody, EvidenceSummary } from '../src/pages/cycles/evidence/RaiseEvidence.jsx';
 import {
-  AREAS, BASE, CLAIM_STATE, NOT_YET, SHARING, SOURCES, WAITS, claimHref, claimWord, gradeOf, itemHref, strengthWord, viewOf,
+  AREAS, BASE, CLAIM_STATE, SHARING, SOURCES, WAITS, claimHref, claimWord, gradeOf, itemHref, strengthWord, viewOf,
 } from '../src/pages/cycles/evidence/evidenceModel.js';
 import { cycleTabs } from '../src/pages/cycles/cycleModel.js';
 import { MODULES } from '../src/pages/cycles/modules.js';
