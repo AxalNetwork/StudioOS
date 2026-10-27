@@ -26,7 +26,7 @@ export type HealthKind = typeof HEALTH_KINDS[number];
 /**
  * A Vercel-registered domain's expiry window, in days, as #2408 and #2962
  * word it: "expiring within 30 days, or 14 with auto-renew off". The owner
- * confirms the reading (D1097 §5); both figures live here only.
+ * confirms the reading (D1097 §7); both figures live here only.
  */
 export const EXPIRY_WINDOW_DAYS = Object.freeze({ renewOn: 30, renewOff: 14 });
 const DAY = 86_400_000;
