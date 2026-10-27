@@ -1,4 +1,4 @@
-/** D1217 (#3214): prepared /api/closings/company-receiving-accounts routes. */
+/** D1217 (#3214): /api/closings/company-receiving-accounts, mounted in index.ts before the Closing router. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';

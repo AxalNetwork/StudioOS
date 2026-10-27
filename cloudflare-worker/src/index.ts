@@ -136,6 +136,7 @@ import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import closings, { adminClosings } from './routes/closings';
+import companyReceivingAccounts from './routes/company_receiving_accounts';
 import reporting from './routes/reporting';
 import reportingReports from './routes/reporting_reports';
 import fundReporting from './routes/fund_reporting';
@@ -186,6 +187,8 @@ import './integrations/providers/vercel';
 import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
 import './integrations/providers/notion';
+// D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
+import './services/notion/build';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
@@ -416,6 +419,8 @@ import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 // D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
 import notionRoutes, { notionCycleRoutes } from './routes/notion';
+// D1325 (#3486): the Fill with Eadwyn sheet's read.
+import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
@@ -997,6 +1002,7 @@ app.route('/api/assistant', assistantRoutes);
 // dev-only Anthropic path, and this endpoint reports on the production
 // Workers AI router, which is a different thing that happens to sit nearby.
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
+app.route('/api/fills', fillsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
 // D845 (#2471): the member's own usage reports over api_usage_events.
@@ -1280,6 +1286,8 @@ app.route('/api/fund-ledger', fundLedger);
 app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
+// D1217 (#3214): the company's receiving account, its own module, mounted before the Closing router (S01, 2026-10-26).
+app.route('/api/closings/company-receiving-accounts', companyReceivingAccounts);
 // D1215 (#3212): closings as a record; the admin desk is mounted before the /api/admin catch-all.
 app.route('/api/closings', closings);
 // D1058 (#2928): reporting duties and periods, the founder's desk and the investor's view.

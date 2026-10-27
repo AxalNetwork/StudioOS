@@ -134,7 +134,7 @@ function event(env: Env, closingId: number, lineId: number | null, actor: number
 }
 
 /** The line's status from its evidence: withdrawn stays; receiving evidence is received; sending alone is sent. */
-function recompute(env: Env, lineId: number) {
+export function recompute(env: Env, lineId: number) {
   return env.DB.prepare(
     `UPDATE closing_lines SET status = CASE
         WHEN status = 'withdrawn' THEN 'withdrawn'

@@ -151,7 +151,8 @@ test('Workspace source has a single GET-only transport and no provider write end
  assert.doesNotMatch(source,/method:\s*['"](?:POST|PATCH|PUT|DELETE)['"]/);
  assert.equal((source.match(/fetcher\(url\.toString\(\)/g)||[]).length,1);
  assert.match(source,/AbortSignal\.timeout\(10000\)/);
- assert.match(source,/size > 2 \* 1024 \* 1024/);
+ // D1094: a document read stays at 2 MB; only a data-room copy (export or media) may ask for more, never above 20 MB.
+ assert.match(source,/: 2 \* 1024 \* 1024;/);assert.match(source,/MAX_COPY_BYTES = 20 \* 1024 \* 1024/);assert.match(source,/limit > MAX_COPY_BYTES/);assert.match(source,/size > limit/);
 });
 
 test('every Workspace route refuses support and admin access; venture scope is required even for Picker configuration',async()=>{
