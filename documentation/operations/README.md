@@ -20,6 +20,7 @@ files say how to act on it.
 | `ZOOM_AND_MEET_TRANSCRIPTS.md` | Create and share the Zoom app, switch on Google Meet transcript import, run the live check, read each refusal and roll back (D757). |
 | `AI_TOKEN_PACKS.md` | Run AI token packs (D755): create, adopt and archive packs, handle refunds and disputes, an overdue credit, adjustments and reconcile, and run the live purchase-and-refund check. |
 | `AIRAIL.md` | Run the Eadwyn AI rail (D720): how a page gets its models, add a model Cloudflare publishes, how members are billed, and where a member's consumption is shown. A draft until D781 closes. |
+| `CLOSING.md` | Run a closing end to end (D1220): open it, prepare and send the paper, countersign for Axal, choose each route, share instructions, record evidence, the founder's cap-table decision, and Mark Closed; what no page does yet. |
 | `MERCURY_MEMBER_CHECKS.md` | Run D752's read-only live checks: four Mercury field names for S02 or S03, and the owner's walk-through with a test investor and founder (#1008 item 34). |
 | `MCP_API_RUNBOOK.md` | Switch member API keys for `/mcp` on, check them read-only, roll back, revoke a member's keys and read usage in aggregate (D850). |
 | `REDIRECT_RETIREMENT.md` | Retire the SPA's internal redirects on 2027-01-19 (#2301): what is counted and kept, the D1 query for the last 30 days, and what to remove. |

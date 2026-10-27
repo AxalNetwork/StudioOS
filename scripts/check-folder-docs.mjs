@@ -111,6 +111,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/duediligence',         'Due diligence (D1244): the list and case tabs as addresses, and the list tabs D1250 draws — Cases, Templates and their dialogs'],
   ['frontend/src/pages/admin/programs',       'Admin › Programs (D953): the catalogue, each program page with its tabs, the redirects and the model they read'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
+  ['frontend/src/pages/account/companies',    'Companies and projects: the pane, its lightboxes and dialogs, and the moved settings (D1134, D1140)'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],

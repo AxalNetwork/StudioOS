@@ -167,9 +167,10 @@ test('the four calls go to the Worker\'s routes, and both modules mount their pa
     ['/cycles/build/company-creation/proposals/9/accept?project=101', 'POST', null],
     ['/cycles/build/company-creation/proposals/10/dismiss?project=101', 'POST', null],
   ]);
-  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.match(route, /'founding-team': \(data, ctx\) => <FoundingTeamFromCode part=\{data\?\.parts\?\.github\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
-  assert.match(route, /'company-creation': \(data, ctx\) => <CompanyFromCode part=\{data\?\.parts\?\.github\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
+  // D1311: Build's parts live in buildParts.jsx, one line per connector.
+  const route = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
+  assert.match(route, /\['github', \(data, ctx\) => <FoundingTeamFromCode part=\{data\?\.parts\?\.github\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
+  assert.match(route, /\['github', \(data, ctx\) => <CompanyFromCode part=\{data\?\.parts\?\.github\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
   const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/cycle_build.ts', import.meta.url), 'utf8');
   assert.ok(worker.includes("app.post('/founding-team/github-logins'"));
   assert.ok(worker.includes("app.delete('/founding-team/github-logins/:login'"));
