@@ -19,3 +19,12 @@ kinds it could check; `applyHealth` opens and closes `vercel_health_events`
 (migration 590) with their ledger rows; `dismissHealthEvent` keeps a
 dismissal. `hosting.ts` is Operating systems › Tools' Hosting read under the
 Tools rule.
+
+`deployments.ts` (D1098, #2963) keeps each chosen project's deployments in
+`vercel_deployments` (migration 591): `deploymentRow` reads what is kept (never
+a creator or a commit message), `landDeployments` writes rows and their
+`deploy:<id>` ledger rows and skips a removed one, `retainDeployments` keeps
+180 days or the newest 500, `pruneDeployments` drops an unchosen project's.
+`buildReads.ts` is Prototype / MVP's and Product roadmap's `parts.vercel`: the
+Live strip, Preview chips by repository and pull request number, the Deploys
+strip, and "In production since" and "Live on" on SHA equality only.

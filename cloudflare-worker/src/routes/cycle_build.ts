@@ -324,7 +324,7 @@ async function prototypeGithub(env: Env, p: Project) {
   }
 }
 
-async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
+async function roadmap(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const items = rows(await env.DB.prepare(
     `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id,
             u.name AS owner
@@ -359,7 +359,7 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
     list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
       sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
     facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 },
-    parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', () => roadmapVercel(env, p.id, RELEASES_SHOWN)) } };
+    parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } };
 }
 
 /** How many releases the strip shows, newest first; `releases_total` gives the rest's count. */

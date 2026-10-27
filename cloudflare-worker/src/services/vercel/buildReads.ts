@@ -48,7 +48,8 @@ export function median(values: number[]): number | null {
   return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
 }
 
-const PROJECTS = `SELECT vp.integration_id, vp.vercel_project_id, vp.name, vp.production_domain, vp.live_state, vp.live_since
+const PROJECTS = `SELECT vp.integration_id, vp.vercel_project_id, vp.name, vp.production_domain, vp.live_state, vp.live_since,
+       i.status, i.last_synced_at, i.last_error_at
   FROM vercel_projects vp JOIN integrations i ON i.id = vp.integration_id AND i.provider_key = 'vercel'
  WHERE vp.project_id = ? ORDER BY vp.name, vp.id`;
 // The newest production deployment per Vercel project: what the Live strip's commit and build are.
@@ -58,7 +59,7 @@ const LATEST_PRODUCTION = `SELECT d.vercel_project_id, d.state, d.commit_sha, d.
    AND d.id = (SELECT d2.id FROM vercel_deployments d2 WHERE d2.project_id = d.project_id AND d2.vercel_project_id = d.vercel_project_id
                  AND d2.target = 'production' ORDER BY d2.created_at DESC, d2.id DESC LIMIT 1)`;
 // GitHub's fed must-haves: the ledger names the repository and number; `merge_commit_sha` is G1's.
-const FED_MUST_HAVES = `SELECT f.id, f.title, f.merge_commit_sha, l.external_id
+const FED_MUST_HAVES = `SELECT f.id, f.title, f.pr_state, f.merge_commit_sha, l.external_id
   FROM connector_fed_items l JOIN mvp_features f ON f.id = l.local_id AND f.project_id = ?
  WHERE l.local_table = 'mvp_features' AND l.kind = 'pull_request' AND l.external_id LIKE 'pull:%'
  ORDER BY f.sort_order, f.id`;
@@ -76,6 +77,19 @@ export function pullKey(externalId: string): { repository: string; number: numbe
 }
 
 const LIVE_WORDS: Record<string, string> = { live: 'Live', failing: 'Failing', building: 'Building', not_deployed: 'Not deployed' };
+
+/**
+ * When the figures were read, and whether Vercel's sign-in needs renewing (VC5's
+ * Reconnect state). A project's name is the member's to read only.
+ */
+function connectionOf(projects: any[], member: boolean) {
+  const synced = projects.map((p) => p.last_synced_at).filter(Boolean).sort();
+  const failing = projects.find((p) => p.status === 'error');
+  return {
+    as_of: synced[0] ?? null,
+    reconnect: failing ? { since: failing.last_error_at ?? null, project: member ? failing.name : null } : null,
+  };
+}
 
 /** Prototype / MVP's `parts.vercel`: the Live strip and, per GitHub-fed must-have, its Preview and production marks. */
 export async function mvpVercel(env: Env, projectId: number, member: boolean) {
@@ -110,7 +124,7 @@ export async function mvpVercel(env: Env, projectId: number, member: boolean) {
     const pr = newest.get(`${key.repository}#${key.number}`);
     const sha = typeof f.merge_commit_sha === 'string' ? f.merge_commit_sha : null;
     return [{
-      feature_id: f.id,
+      feature_id: f.id, title: f.title, pr_state: f.pr_state ?? null,
       preview: pr ? { state: pr.state, at: pr.created_at, url: member ? pr.preview_url ?? null : null } : null,
       preview_reason: pr ? null : 'Not recorded: no preview deploy for this pull request yet.',
       in_production_since: sha ? shipped.get(sha) ?? null : null,
@@ -118,7 +132,7 @@ export async function mvpVercel(env: Env, projectId: number, member: boolean) {
         : shipped.has(sha) ? null : 'No production deploy carries this pull request\'s merge commit yet.',
     }];
   });
-  return { state: 'ok', live, must_haves: mustHaves, projects: projects.length, reason: null };
+  return { state: 'ok', live, must_haves: mustHaves, projects: projects.length, connection: connectionOf(projects, member), reason: null };
 }
 
 const WINDOW = `SELECT state, created_at, build_seconds, is_rollback, promoted_at FROM vercel_deployments
@@ -128,7 +142,7 @@ const RELEASES = `SELECT id, tag, commit_sha FROM roadmap_releases WHERE project
  ORDER BY published_at IS NULL, published_at DESC, id DESC LIMIT ?`;
 
 /** Product roadmap's `parts.vercel`: 12 weekly production-deploy counts, the failed share, the median build, rollbacks and promotions, and each release's "Live on". */
-export async function roadmapVercel(env: Env, projectId: number, releasesShown: number, now = Date.now()) {
+export async function roadmapVercel(env: Env, projectId: number, releasesShown: number, member: boolean, now = Date.now()) {
   const projects = rows(await env.DB.prepare(PROJECTS).bind(projectId).all<any>());
   if (!projects.length) {
     return { state: 'empty', weeks: [], releases: [], reason: 'Vercel has not brought anything to this venture yet. Choose projects on Vercel\'s connector page.' };
@@ -161,12 +175,14 @@ export async function roadmapVercel(env: Env, projectId: number, releasesShown: 
     failed_share: finished.length ? Math.round((failed / finished.length) * 100) : null,
     failed_reason: finished.length ? null : 'No production deploy finished in these 12 weeks.',
     median_build_seconds: median(builds),
+    median_reason: builds.length ? null : 'Not recorded: no build finished in the last 12 weeks.',
     events,
     releases: releases.map((r) => {
       const sha = typeof r.commit_sha === 'string' ? r.commit_sha : null;
       const on = sha ? shipped.get(sha) ?? null : null;
-      return { release_id: r.id, live_on: on, state: !sha ? 'needs_github' : on ? 'live' : 'no_match' };
+      return { release_id: r.id, tag: r.tag, live_on: on, state: !sha ? 'needs_github' : on ? 'live' : 'no_match' };
     }),
+    connection: connectionOf(projects, member),
     reason: null,
   };
 }

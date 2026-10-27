@@ -193,6 +193,12 @@ test('the Live strip: live, failing and not deployed; names, domains and links o
   assert.equal(status, 200, JSON.stringify(body));
   assert.equal(body.parts.vercel.live[0].name, 'acme-web');
   assert.equal(body.parts.github.state, 'ok', 'GitHub\'s part stands beside it');
+  assert.deepEqual([mine.must_haves[0].title, mine.must_haves[0].pr_state], ['Feature 1', 'built'], 'the must-have and GitHub\'s state beside its preview');
+  assert.deepEqual(mine.connection, { as_of: null, reconnect: null });
+  // VC5's Reconnect: Vercel's sign-in lapsed; the project is named for members only.
+  w.db.exec(`UPDATE integrations SET status = 'error', last_error_at = '2026-10-20T08:00:00Z', last_synced_at = '2026-10-19T08:00:00Z' WHERE id = 41`);
+  assert.deepEqual((await mvpVercel(w.env, 101, true) as any).connection, { as_of: '2026-10-19T08:00:00Z', reconnect: { since: '2026-10-20T08:00:00Z', project: 'acme-web' } });
+  assert.equal((await mvpVercel(w.env, 101, false) as any).connection.reconnect.project, null);
   w.db.exec(`UPDATE vercel_projects SET live_state = 'not_deployed', live_since = NULL`);
   assert.deepEqual((await mvpVercel(w.env, 101, true) as any).live[0].label, 'Not deployed');
 });
@@ -231,7 +237,7 @@ test('the Deploys strip: 12 weeks, null before the first deploy, the failed shar
   deploy(w.db, { target: 'production', created_at: at(0, 12), state: 'BUILDING' });
   deploy(w.db, { target: 'production', created_at: at(0, 13), build_seconds: 40, promoted_at: at(0, 14) });
   deploy(w.db, { target: 'preview', created_at: at(0, 15), build_seconds: 999 });
-  const out = await roadmapVercel(w.env, 101, 12, NOW) as any;
+  const out = await roadmapVercel(w.env, 101, 12, true, NOW) as any;
   assert.equal(out.weeks.length, DEPLOY_WEEKS);
   assert.deepEqual(out.weeks.map((x: any) => x.count), [null, null, null, null, null, null, null, null, 2, 0, 1, 3 + 0],
     'before the first deploy: not measured; after it, a quiet week is a measured 0; a preview is not a production deploy');
@@ -242,9 +248,11 @@ test('the Deploys strip: 12 weeks, null before the first deploy, the failed shar
   assert.equal(median([]), null);
   const quiet = await world();
   project(quiet.db);
-  const none = await roadmapVercel(quiet.env, 101, 12, NOW) as any;
+  const none = await roadmapVercel(quiet.env, 101, 12, true, NOW) as any;
   assert.deepEqual([none.weeks.every((x: any) => x.count === null), none.failed_share, none.median_build_seconds], [true, null, null], 'nothing read: nothing drawn as zero');
   assert.match(none.failed_reason, /^No production deploy finished/);
+  assert.equal(none.median_reason, 'Not recorded: no build finished in the last 12 weeks.');
+  assert.equal(out.median_reason, null);
 });
 
 test('a release is "Live on" only when a READY production deploy carries its tag\'s SHA exactly', async () => {
@@ -257,9 +265,9 @@ test('a release is "Live on" only when a READY production deploy carries its tag
   deploy(w.db, { target: 'production', created_at: '2026-10-02T10:00:00.000Z', ready_at: '2026-10-02T10:03:00.000Z', commit_sha: SHA_A });
   deploy(w.db, { target: 'production', created_at: '2026-10-11T10:00:00.000Z', state: 'ERROR', commit_sha: SHA_B });
   deploy(w.db, { target: 'preview', created_at: '2026-10-11T11:00:00.000Z', ready_at: '2026-10-11T11:01:00.000Z', commit_sha: SHA_B });
-  const out = await roadmapVercel(w.env, 101, 12, NOW) as any;
-  assert.deepEqual(out.releases.map((r: any) => [r.release_id, r.state, r.live_on]), [
-    [3, 'needs_github', null], [2, 'no_match', null], [1, 'live', '2026-10-02T10:03:00.000Z'],
+  const out = await roadmapVercel(w.env, 101, 12, true, NOW) as any;
+  assert.deepEqual(out.releases.map((r: any) => [r.release_id, r.tag, r.state, r.live_on]), [
+    [3, 'v1.2', 'needs_github', null], [2, 'v1.1', 'no_match', null], [1, 'v1.0', 'live', '2026-10-02T10:03:00.000Z'],
   ], 'newest first, as GitHub\'s strip lists them');
   const { body } = await moduleRead(w.env, 'product-roadmap');
   assert.equal(body.parts.vercel.releases[2].live_on, '2026-10-02T10:03:00.000Z');
