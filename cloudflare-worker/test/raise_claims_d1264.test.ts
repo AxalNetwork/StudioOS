@@ -238,5 +238,17 @@ test('readiness cells say what each check read', async () => {
     assert.match(rows.traction, /Typed · Founder's figure/);
     assert.equal(checkedLabels({ mrr: { source: 'Stripe (measured) · project_metrics.mrr on 2026-09-01' }, raise: { source: 'Pipeline · raise_rounds.target_amount' } } as any,
       [{ figure: 'mrr', value: 1, source: '' }, { figure: 'raise', value: 1, source: '' }]), 'Connector and Typed');
+    assert.equal(checkedLabels({ revenue: { source: 'Verified revenue · Connector · Stripe · 2026-09' } } as any,
+      [{ figure: 'revenue', value: 1, source: '' }]), 'Connector');
+    assert.equal(checkedLabels({ revenue: { source: 'Verified revenue · Document · revenue proof · 2026-09' } } as any,
+      [{ figure: 'revenue', value: 1, source: '' }]), 'Document');
+    assert.equal(checkedLabels({ runway: { source: 'Connector · Mercury · measured cash and net burn' } } as any,
+      [{ figure: 'runway', value: 1, source: '' }]), 'Connector');
+    assert.equal(checkedLabels({ revenue: { source: 'Mercury revenue credits · Operating · measured 2026-09-01' } } as any,
+      [{ figure: 'revenue', value: 1, source: '' }]), 'Connector');
+    assert.equal(checkedLabels({ mrr: { source: 'Metrics (stated: stripe) · project_metrics.mrr on 2026-09-01' } } as any,
+      [{ figure: 'mrr', value: 1, source: '' }]), 'Typed');
+    assert.equal(checkedLabels({ mrr: { source: 'Notes mention a connector later' } } as any,
+      [{ figure: 'mrr', value: 1, source: '' }]), 'Typed');
   } finally { w.db.close(); }
 });

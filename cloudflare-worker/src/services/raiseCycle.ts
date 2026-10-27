@@ -235,15 +235,20 @@ export async function teamReadiness(env: Env, projectId: number): Promise<Comput
 
 /**
  * D1264 (#3287): the Source labels a consistency check compared with, so a
- * readiness cell says what it read. Stripe and Mercury are Connector; the
- * round target and any metric typed into StudioOS are Typed.
+ * readiness cell says what it read. Stripe and Mercury are Connector, including
+ * a connector named inside a verified-revenue source; the round target and any
+ * metric typed into StudioOS are Typed.
  */
 export function checkedLabels(metrics: Partial<Record<FigureKey, { source: string }>>, stated: Stated[]): string {
   const labels = new Set<string>();
   for (const s of stated) {
     const m = metrics[s.figure];
     if (!m) continue;
-    labels.add(/^(?:Stripe|Mercury)\b|Connector · /.test(m.source) ? 'Connector' : /Document · /.test(m.source) ? 'Document' : 'Typed');
+    // Stripe and Mercury are anchored at the start. A connector or document
+    // named later (`Verified revenue · Connector · Stripe`) is a separate
+    // literal, so the leading anchor applies to every alternative.
+    const connector = /^(?:Stripe|Mercury)\b/.test(m.source) || m.source.includes('Connector · ');
+    labels.add(connector ? 'Connector' : m.source.includes('Document · ') ? 'Document' : 'Typed');
   }
   return ['Connector', 'Document', 'Typed'].filter((l) => labels.has(l)).join(' and ') || 'Typed';
 }
