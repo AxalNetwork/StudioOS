@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Account › Builder · /account/builder</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Account · Builder</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">DEV1 to DEV14. Where things reach in to Axal VC: the assistants a member has connected, what each may do, what each did, and the keys and webhooks Axal VC holds for them. Personal API keys and outgoing webhooks do not exist in v1, and the page says so. Desktop boards at 1440 wide, phone frames at 390.</p>
+</header>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.notesOn }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;flex-wrap:wrap;max-width:1440px"><sc-for list="{{ b.notes }}" as="n" hint-placeholder-count="1"><span style="display:inline-flex;align-items:center;min-height:28px;padding:4px 12px;border-radius:999px;background:#fff;border:1px solid #dedbe5;font-size:12.5px;line-height:1.45;color:#3f3a47">{{ n }}</span></sc-for></div></sc-if>
+<div style="{{ b.rowSt }}">
+<sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.capOn }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Developer Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (v, cap, h) => ({ v, cap: cap || '', capOn: !!cap, hs: '1440px,' + h + 'px', wst: 'width:1440px;min-height:' + h + 'px;border-radius:14px;overflow:hidden;border:1px solid ' + (v === 'd6' ? '#374151' : '#dedbe5') + ';box-shadow:0 20px 50px rgba(24,24,27,.10)' });
+    const M = (v, cap) => ({ v, cap, capOn: true, hs: '390px,844px', wst: 'width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)' });
+    const COL = 'display:flex;flex-direction:column;gap:32px';
+    const ROW = 'display:flex;gap:40px;align-items:flex-start';
+    const B = (id, t, frames, notes, row) => ({ id, t, frames, notes: notes || [], notesOn: !!(notes && notes.length), rowSt: row ? ROW : COL });
+    const boards = [
+      B('DEV1', 'AI assistants · Founder · desktop 1440, light', [D('d1', '', 1960)], ['A Spin-Out Lab member sees the same, for their Lab project only.', 'The “⋯” menu on each row holds Open, See its activity and Revoke. A row click opens DEV3.']),
+      B('DEV2', 'AI assistants · Investor · desktop 1440', [D('d2', '', 1300)], ['Advisor, Operating Partner and Admin see the same. An Explorer sees the same unless they hold a Spin-Out Lab project.', 'Drawn with a connection from earlier: it stays listed, with Revoke.']),
+      B('DEV3', 'Connected-assistant drawer · desktop 1440, over DEV1', [D('d3', '', 1960)], ['A measured zero shows as 0. A tile with no record would show a dash.']),
+      B('DEV4', 'Revoke dialog · desktop 1440', [D('d4', 'The dialog', 900), D('d4b', 'After: the row leaves Connected', 820)]),
+      B('DEV5', 'Activity · Founder · desktop 1440, light', [D('d5', 'Default range, 30 days', 1620), D('d5b', 'Range set to 7 days: the dotted line is the previous 7 days', 820)], ['This is your own log. Admins see only their own here too.', 'Days before the first connection have no bar: a dashed hairline marks them “Not connected yet”.', 'Download CSV saves the filtered log to the member’s own device. It is never published or committed anywhere.']),
+      B('DEV6', 'Activity · desktop 1440, dark', [D('d6', '', 1620)]),
+      B('DEV7', 'Keys and webhooks · Founder · desktop 1440', [D('d7', '', 1560)], ['Previews only: no token, secret, full key or signing secret is ever drawn.', 'Custom connectors: if the Connectors foundation issue opens it, this card links there instead.']),
+      B('DEV8', 'Admin and Super Admin · desktop 1440', [D('d8a', 'Admin · AI assistants, as DEV2', 1140), D('d8b', 'Super Admin · HQ shell · Keys and webhooks', 1620)], ['Removed from the old admin panel: “Feature flags”, “Account record” and “Re-sync search indexes”. Nothing read the flags, and the re-sync did nothing.']),
+      B('DEV9', 'Empty · desktop 1440', [D('d9a', 'AI assistants · none connected · Set one up stays', 1760), D('d9b', 'Activity · nothing recorded', 720), D('d9c', 'Keys and webhooks · no connections', 1200)]),
+      B('DEV10', 'Loading · desktop 1440', [D('d10', '', 1060)], ['The server address card is drawn at once: its address is fixed.']),
+      B('DEV11', 'Error and switched off · desktop 1440', [D('d11a', 'One block failed: the other cards render', 1800), D('d11b', 'Server switched off: no setup cards', 820), D('d11c', 'Activity · the chart failed, the log still shows', 1400)]),
+      B('DEV12', 'No permission · desktop 1440', [D('d12a', 'A connection that is not yours', 860), D('d12b', 'Explorer · Keys and webhooks', 720)]),
+      B('DEV13', 'Phone · 390 wide', [M('d13a', '1 · AI assistants · just after Copy'), M('d13b', '2 · A connection, full screen'), M('d13c', '3 · Activity, one week at a time')], ['Frame 1 shows the Copy button just after a copy: “Copied” for two seconds, announced to screen readers.', 'Dialogs become bottom sheets. Every touch target at least 44 × 44px.'], true),
+      B('DEV14', 'Connectors hand-off · desktop 1440', [D('d14a', 'Connectors · the AI assistants group is now one compact card', 860), D('d14b', 'Builder · shown once per member, with Dismiss', 860)])
+    ];
+    return { boards };
+  }
+}
+</script>
+</body></html>

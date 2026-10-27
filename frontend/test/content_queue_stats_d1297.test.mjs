@@ -59,7 +59,10 @@ const BEFORE = {
   from: '2026-08-03', to: '2026-10-26', views_recorded_since: null,
   views_reason: 'Not recorded: views are counted per day from the first read after migration 637.',
   weeks: [week('2026-10-12', { published: 2, submitted: 3, approved: 2, changes_requested: 1 }), week('2026-10-19', { published: 1, submitted: 2, rejected: 1 })],
-  views_by_sector: null, top_articles: null,
+  views_by_sector: null,
+  // D1332: the top articles rank by views all time, so they show before the daily count starts.
+  top_articles: [{ id: 7, title: 'Pricing before product', author_name: 'Synthetic Author 11', published_at: '2026-10-13 08:00:00', read_minutes: 6, views_all_time: 1240, views_per_day: 88.6 }],
+  top_articles_of: 148,
   decisions: { median_hours_to_decision: 30, timed: 3, note: 'Change requests are counted per week, not timed.' },
   follower_reach: { publishes_recorded: 0, followers: 0, notified: 0, note: 'No publish before migration 637 has a reach.' },
   not_recorded: NR,
@@ -69,7 +72,6 @@ const AFTER = {
   ...BEFORE, views_recorded_since: '2026-10-14', views_reason: null,
   weeks: [week('2026-10-12', { published: 2, views: 40, views_partial: true }), week('2026-10-19', { views: 0 })],
   views_by_sector: [{ sector: 'B2B software', views: 30 }, { sector: null, views: 10 }],
-  top_articles: [{ id: 7, title: 'Pricing before product', author_name: 'Synthetic Author 11', published_at: '2026-10-13 08:00:00', read_minutes: 6, views: 30 }],
   follower_reach: { publishes_recorded: 2, followers: 20, notified: 18, note: null },
 };
 
@@ -134,7 +136,9 @@ test('Performance before the daily count: views Not recorded with the reason, ne
   assert.equal(v.viewsKnown, false);
   assert.equal(v.summaries.views, null);
   assert.equal(v.sectors, null);
-  assert.equal(v.top, null);
+  // D1332: the top articles rank by views all time, so they do not wait on the daily count.
+  assert.equal(v.top[0].views, '1,240');
+  assert.equal(v.topOf, '1–1 of 148');
   assert.equal(v.tiles.find((t) => t.key === 'published').value, '3');
   assert.equal(v.tiles.find((t) => t.key === 'decision').value, '1 day');
   assert.match(v.summaries.decided, /5 submitted\. Reviews ended in 2 approvals, 1 change requests and 1 rejections\./);
@@ -149,7 +153,8 @@ test('Performance after it: the partial week, a real 0, sectors and the top arti
   assert.equal(v.tiles.find((t) => t.key === 'views').sub, 'Counted from 14 Oct 2026', 'the start week is partial');
   assert.deepEqual(v.weeks.map((w) => [w.views, w.partial]), [[40, true], [0, false]]);
   assert.deepEqual(v.sectors, [{ sector: 'B2B software', views: 30 }, { sector: 'No sector', views: 10 }]);
-  assert.deepEqual(v.top[0], { rank: 1, id: 7, title: 'Pricing before product', author: 'Synthetic Author 11', published: '13 Oct 2026', views: '30', read: '6 min' });
+  assert.deepEqual(v.top[0], { rank: 1, id: 7, title: 'Pricing before product', author: 'Synthetic Author 11', published: '13 Oct 2026', views: '1,240', perDay: '88.6', read: '6 min' });
+  assert.equal(performanceView({ status: 'ready', data: { ...AFTER, top_articles: [{ ...AFTER.top_articles[0], views_per_day: null }] } }).top[0].perDay, NOT_RECORDED, 'no publish date: no rate, never 0');
   assert.equal(v.tiles.find((t) => t.key === 'reach').value, '18');
 });
 
@@ -223,7 +228,8 @@ test('Performance before the daily store: views, sectors and top articles say No
     assert.deepEqual(asked, [{}], 'the default period sends no range');
     assert.ok(w.text('perf-tiles-views').includes(NOT_RECORDED));
     assert.doesNotMatch(w.text('perf-tiles-views'), /\b0\b/);
-    for (const id of ['views', 'sectors', 'top']) assert.ok(w.text(`perf-nr-${id}`).includes('migration 637'), id);
+    for (const id of ['views', 'sectors']) assert.ok(w.text(`perf-nr-${id}`).includes('migration 637'), id);
+    assert.ok(!w.by('perf-nr-top'), 'D1332: the top articles do not wait on the daily count');
     assert.ok(w.text('perf-not-recorded').includes('left out rather than shown as zero'));
     assert.ok(w.by('perf-nr-item-unique_readers'));
 
@@ -247,6 +253,15 @@ test('Performance after it, and a failed read with Try again', async () => {
     assert.ok(w.text('perf-table-views').includes('(counted from mid-week)'));
     assert.ok(w.text('perf-top-table').includes('Pricing before product'));
   } finally { await w.done(); }
+  // D1332: the canvas's two columns, ranked by views all time, with the count of all published.
+  const b = await mount(React.createElement(PerformanceTab, { load: async () => BEFORE }), '/admin/articles/performance');
+  try {
+    const top = b.text('perf-top-table');
+    assert.ok(top.includes('Views, all time ↓') && top.includes('Views per day since publish'), top);
+    assert.ok(top.includes('1,240') && top.includes('88.6'), 'all-time views and the rate, before the daily count starts');
+    assert.equal(b.text('perf-top-of'), '1–1 of 148');
+    assert.ok(b.text('perf-top-cards').includes('1,240 views all time · 88.6 a day'));
+  } finally { await b.done(); }
   let n = 0;
   const f = await mount(React.createElement(PerformanceTab, { load: async () => { n += 1; if (n === 1) throw new Error('x'); return BEFORE; } }), '/admin/articles/performance');
   try {
