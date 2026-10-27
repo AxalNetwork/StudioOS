@@ -74,23 +74,12 @@ async function mount(glance) {
 
 const ACCOUNTS = { available: true, label: 'Accounts', total: 15, by_role: [{ role: 'founder', count: 12 }, { role: 'partner', count: 3 }], new_7d: 2, new_30d: 5, deactivated: 1, exploring: 4, trash_projects: 0 };
 
-test('Overview: the header and tabs, the totals and a widget per profile, from the glance', async () => {
+test('Overview: the header and tabs and the four doors, from the glance (D1304 draws the rest from D1301, accounts_overview_d1304)', async () => {
   const w = await mount(async () => ({ tier: 'hq', accounts: ACCOUNTS }));
   try {
     assert.ok(byId(w.container, 'accounts-header'));
     for (const t of ACCOUNTS_TABS) assert.ok(byId(w.container, `accounts-tab-${t.key}`), t.key);
-    assert.match(text(byId(w.container, 'accounts-total-total-count')), /15/);
-    assert.match(text(byId(w.container, 'accounts-total-new30d-count')), /5/);
-    assert.match(text(byId(w.container, 'accounts-widget-founder-count')), /12/);
-    // Mutation checked: map Operating Partners to 'operating_partner' → reads 0, not 3.
-    assert.match(text(byId(w.container, 'accounts-widget-partner-count')), /3/);
-    assert.match(text(byId(w.container, 'accounts-widget-advisor-count')), /\b0\b/, 'a measured zero');
-    // The sub-accounts say why, never a number.
-    for (const k of ['lp', 'tester']) {
-      const t = text(byId(w.container, `accounts-widget-${k}-count`));
-      assert.doesNotMatch(t, /\d/, `${k}: ${t}`);
-    }
-    assert.match(text(byId(w.container, 'accounts-widget-tester-count')), /Not recorded/);
+    assert.match(text(byId(w.container, 'held-accounts-users-count')), /15/);
     // The other doors stay.
     assert.ok(byId(w.container, 'held-accounts-cards'));
   } finally { await w.done(); }
@@ -99,7 +88,7 @@ test('Overview: the header and tabs, the totals and a widget per profile, from t
 test('a glance that cannot be read draws no zero anywhere', async () => {
   const w = await mount(async () => { throw new Error('503'); });
   try {
-    for (const id of ['accounts-total-total-count', 'accounts-widget-founder-count', 'accounts-widget-advisor-count']) {
+    for (const id of ['held-accounts-users-count', 'held-accounts-exploring-count', 'held-accounts-trash-count']) {
       // `Figure` says Unreadable for a failed glance before it reads any value.
       assert.doesNotMatch(text(byId(w.container, id)), /\b0\b/, id);
     }
