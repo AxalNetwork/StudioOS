@@ -290,7 +290,7 @@ function MembersTab({ segKey, superAdmin, onMoved }) {
       {members.data?.unreadable?.length ? <span className={SUB} data-testid="seg-page-members-partial">Some columns could not be read and say so: {members.data.unreadable.join(', ')}.</span> : null}
       <span className={SUB}>⋯ holds Move to another segment… and Open account. Confidence shows only for a suggestion at sign-up.</span>
       {moving ? (
-        <MoveDialog members={moving} superAdmin={superAdmin} onClose={() => setMoving(null)}
+        <MoveDialog members={moving} superAdmin={superAdmin} back="Members" onClose={() => setMoving(null)}
           onMoved={(reply, target) => { setMoving(null); setPicked(new Map()); members.retry(); onMoved(movedLine(reply, target.name)); }} />
       ) : null}
     </section>

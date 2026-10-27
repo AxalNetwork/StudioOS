@@ -6,6 +6,8 @@ import { canHoldValidateSource } from './_founder_validate_helpers';
 import { projectEnabled } from '../integrations/companyScope';
 import { ensureIntegrationsSchema } from '../integrations/registry';
 import { googleCalClientId } from '../services/calendar';
+import { GOOGLE_WORKSPACE_LEDGER_MODULE } from '../integrations/googleWorkspaceFeeds';
+import { GoogleGrowRefused, METRICS_FILE_MODULE, metricsMapping } from '../services/google/growFeeds';
 import { DRIVE_FILE_SCOPE, WorkspaceError, ensureWorkspaceIntegration, validFileId, workspaceConnection, workspaceRead } from '../services/google/workspace';
 
 const workspace = new Hono<{ Bindings: Env }>();
@@ -137,6 +139,10 @@ workspace.put('/files/:uid/mapping', safe(async (c, user) => {
   if (!['sheet','form'].includes(row.kind) && !(row.kind === 'doc' && row.module === 'customer_research')) throw new WorkspaceError('mapping_not_supported', 400);
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body.mapping !== 'object' || body.mapping === null || Array.isArray(body.mapping) || JSON.stringify(body.mapping).length > 10000) throw new WorkspaceError('invalid_mapping', 400);
+  // D1095: a metrics Sheet maps only the columns no connected source writes; refused here and again at sync.
+  if (row.module === METRICS_FILE_MODULE) {
+    try { metricsMapping(body.mapping); } catch (e) { if (e instanceof GoogleGrowRefused) throw new WorkspaceError(e.code, e.status); throw e; }
+  }
   // This stores a draft mapping only. Each feed validates its allowed fields before syncing.
   await c.env.DB.prepare('UPDATE google_workspace_files SET mapping_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').bind(JSON.stringify(body.mapping), row.id, user.id).run();
   return c.json({ saved: true });
@@ -145,7 +151,7 @@ workspace.delete('/files/:uid', safe(async (c, user) => {
   const row = await picked(c, user);
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE google_workspace_files SET status = 'stopped', mapping_json = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?").bind(row.id, user.id),
-    c.env.DB.prepare('UPDATE connector_fed_items SET local_id = NULL WHERE integration_id = ? AND project_id = ? AND module = ? AND (external_id = ? OR substr(external_id,1,length(?) + 1) = ? || ?)').bind(row.integration_id,row.project_id,row.module,row.drive_file_id,row.drive_file_id,row.drive_file_id,':'),
+    c.env.DB.prepare('UPDATE connector_fed_items SET local_id = NULL WHERE integration_id = ? AND project_id = ? AND module IN (?, ?) AND (external_id = ? OR substr(external_id,1,length(?) + 1) = ? || ?)').bind(row.integration_id,row.project_id,row.module,GOOGLE_WORKSPACE_LEDGER_MODULE[row.module] ?? row.module,row.drive_file_id,row.drive_file_id,row.drive_file_id,':'),
     // D1093: a Doc no longer used proposes nothing; an accepted note stays.
     c.env.DB.prepare("DELETE FROM google_workspace_proposals WHERE integration_id = ? AND project_id = ? AND module = ? AND source_key = ? AND status = 'pending'").bind(row.integration_id,row.project_id,row.module,row.drive_file_id),
   ]);
@@ -164,4 +170,6 @@ workspace.post('/files/:uid/preview', safe(async (c, user) => {
   }
   throw new WorkspaceError('preview_not_supported', 400);
 }));
+/** D1095: a section's Google routes check the member, the venture and the company exactly as these do. */
+export { member as workspaceMember, context as workspaceContext };
 export default workspace;
