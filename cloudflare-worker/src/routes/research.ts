@@ -77,6 +77,7 @@ import { refuse } from '../util/refusal';
 import { activeGrant, ndaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const research = new Hono<{ Bindings: Env }>();
 research.route('/collections', researchCollections);
@@ -320,6 +321,8 @@ research.post('/documents', async (c) => {
   // DERIVED SERVER-SIDE, NEVER TAKEN FROM THE REQUEST. A caller-supplied key
   // is a path-traversal write into another account's prefix.
   const r2Key = `research/${user.id}/${uid}.${EXT_BY_MIME[mime] || 'bin'}`;
+  // D1170 — a research document counts to its owner (D1169 §1).
+  const storage = await assertStorageRoom(c.env, { userId: user.id }, file.size, user);
 
   try {
     await c.env.FILES.put(r2Key, await file.arrayBuffer(), {
@@ -345,6 +348,7 @@ research.post('/documents', async (c) => {
     try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch { /* the hourly sweep will catch it */ }
   }
 
+  await noteStorageLanded(c.env, storage);
   const row = await ownDoc(c.env, user.id, uid);
   return c.json(row ? dto(row) : { uid, title, index_state: 'pending' });
 });

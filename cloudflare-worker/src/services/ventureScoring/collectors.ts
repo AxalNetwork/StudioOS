@@ -21,7 +21,8 @@ import { DILIGENCE_CHECKLIST } from '../raiseCycle';
 import { mercuryRunway } from '../raiseEvidence';
 import { latestPivotOrStopDay } from '../verdict';
 import { parseUseOfFundsValue } from '../../util/useOfFunds';
-import { GRADES, type GradeLabel, type ScopeKey } from './model';
+import { GRADES, VENTURE_MODEL_V1, type GradeLabel, type ScopeKey, type VentureModel } from './model';
+import { INDEX_SOURCES, recordedSources, type IndexSourceKey } from './countryIndex';
 import { unsourced, type InputFacts } from './engine';
 
 export const STATEMENTS = Object.freeze({
@@ -109,6 +110,15 @@ export const STATEMENTS = Object.freeze({
   },
   markets: `SELECT demand_score, demand_source, partners_score, partners_source, cost_score, cost_source,
       regulation_score, regulation_source, updated_at FROM markets WHERE project_id = ? AND state IN ('served', 'entering', 'considering')`,
+  // D1259: model v1.1's country indices. Only an edition imported under the licence recorded now is read.
+  indices: {
+    countries: `SELECT DISTINCT geography_ref AS country FROM markets
+      WHERE project_id = ? AND state IN ('served', 'entering', 'considering') AND geography_ref IS NOT NULL`,
+    edition: `SELECT edition, published_on FROM country_index_editions WHERE source = ? AND licence = ?
+      ORDER BY published_on DESC, id DESC LIMIT 1`,
+    values: `SELECT country, indicator, value FROM country_index_values
+      WHERE source = ? AND edition = ? AND licence = ? AND country IN (SELECT value FROM json_each(?))`,
+  },
   political: {
     dd: `SELECT s.verdict, COALESCE(s.completed_at, s.updated_at) AS at FROM dd_sections s JOIN dd_cases c ON c.id = s.case_id
       WHERE c.subject_type = 'project' AND c.subject_id = ? AND c.status = 'completed'
@@ -459,7 +469,56 @@ type MarketRow = { demand_score: number | null; demand_source: string | null; pa
   cost_score: number | null; cost_source: string | null; regulation_score: number | null; regulation_source: string | null; updated_at: string | null };
 const sourced = (score: number | null, src: string | null) => score != null && Number.isFinite(Number(score)) && !!src && String(src).trim().length > 0;
 
-async function geographic(env: Env, projectId: number): Promise<InputFacts[]> {
+/** Whether `model` reads this input from a store; v1 holds the indices with `source: null`. */
+const readsStore = (model: VentureModel, scope: ScopeKey, key: string) => model.scopes[scope].inputs.some((i) => i.key === key && i.source !== null);
+
+type Edition = { source: IndexSourceKey; edition: string; published_on: string; values: Array<{ country: string; indicator: string; value: number }> };
+
+/** The newest edition of a source with a recorded licence, holding only these countries; null when none is imported. */
+async function editionOf(env: Env, source: IndexSourceKey, countries: string[]): Promise<Edition | null> {
+  const licence = INDEX_SOURCES[source].licence;
+  if (licence === null) return null;
+  const e = await first<{ edition: string; published_on: string }>(env, STATEMENTS.indices.edition, source, licence);
+  if (!e) return null;
+  const values = await all<{ country: string; indicator: string; value: number }>(env, STATEMENTS.indices.values, source, e.edition, licence, JSON.stringify(countries));
+  return { source, edition: e.edition, published_on: e.published_on, values };
+}
+
+async function marketCountries(env: Env, projectId: number): Promise<string[]> {
+  return (await all<{ country: string }>(env, STATEMENTS.indices.countries, projectId)).map((r) => String(r.country)).filter((c) => /^[A-Z]{2}$/.test(c));
+}
+
+/** A WGI input: per market country, the mean of these percentile ranks; then the mean across countries. */
+async function wgiInput(env: Env, key: string, countries: string[], indicators: readonly string[]): Promise<InputFacts> {
+  if (!countries.length) return missing(key, 'markets', 'No market has a country attached in Research › Geographies');
+  const wgi = await editionOf(env, 'wgi', countries);
+  if (!wgi) return missing(key, 'country_index_values', 'No World Bank governance edition is imported');
+  const perCountry = countries.map((c) => {
+    const xs = wgi.values.filter((v) => v.country === c && indicators.includes(v.indicator)).map((v) => Number(v.value));
+    return xs.length ? mean(xs) : null;
+  }).filter((x): x is number => x != null);
+  if (!perCountry.length) return missing(key, 'country_index_values', `The WGI ${wgi.edition} edition has no figure for these markets’ countries`);
+  return recorded(key, mean(perCountry), null, GRADES.sourced, day(wgi.published_on), 'country_index_values', perCountry.length,
+    `${plural(perCountry.length, 'market country', 'market countries')} · World Bank WGI ${wgi.edition}`);
+}
+
+/** The share of market countries on no high-risk list, over the lists whose licence is recorded. */
+async function listsInput(env: Env, countries: string[]): Promise<InputFacts> {
+  const key = 'high_risk_lists';
+  if (!countries.length) return missing(key, 'markets', 'No market has a country attached in Research › Geographies');
+  const lists = recordedSources().filter((s) => INDEX_SOURCES[s].kind === 'list');
+  const editions = (await Promise.all(lists.map((s) => editionOf(env, s, countries)))).filter((e): e is Edition => e !== null);
+  const uncounted = (Object.keys(INDEX_SOURCES) as IndexSourceKey[]).filter((s) => INDEX_SOURCES[s].kind === 'list' && INDEX_SOURCES[s].licence === null)
+    .map((s) => INDEX_SOURCES[s].publisher);
+  const note = uncounted.length ? ` · ${uncounted.join(' and ')} not counted: no licence recorded` : '';
+  if (!editions.length) return missing(key, 'country_index_values', `No high-risk list with a recorded licence is imported${note}`);
+  const listed = new Set(editions.flatMap((e) => e.values.filter((v) => Number(v.value) > 0).map((v) => v.country)));
+  const clear = countries.filter((c) => !listed.has(c)).length;
+  return recorded(key, (100 * clear) / countries.length, null, GRADES.sourced, newest(...editions.map((e) => e.published_on)), 'country_index_values', countries.length,
+    `${clear} of ${plural(countries.length, 'market country', 'market countries')} on no list · ${editions.map((e) => `${INDEX_SOURCES[e.source].publisher} ${e.edition}`).join(', ')}${note}`);
+}
+
+async function geographic(env: Env, projectId: number, model: VentureModel = VENTURE_MODEL_V1): Promise<InputFacts[]> {
   const rows = await all<MarketRow>(env, STATEMENTS.markets, projectId);
   const perMarket = rows.map((r) => {
     const parts = ([['demand_score', 'demand_source'], ['partners_score', 'partners_source'], ['cost_score', 'cost_source']] as const)
@@ -470,18 +529,20 @@ async function geographic(env: Env, projectId: number): Promise<InputFacts[]> {
     perMarket.length
       ? recorded('market_readiness', mean(perMarket), null, GRADES.sourced, newest(...rows.map((r) => r.updated_at)), 'markets', perMarket.length, plural(perMarket.length, 'market with sourced readiness', 'markets with sourced readiness'))
       : missing('market_readiness', 'markets', 'No market has a sourced demand, partners or cost score'),
-    unsourced('country_environment', 'Facts only: no country index is chosen (owner question 4)'),
+    readsStore(model, 'geographic', 'country_environment')
+      ? await wgiInput(env, 'country_environment', await marketCountries(env, projectId), ['GE.PER.RNK', 'RL.PER.RNK'])
+      : unsourced('country_environment', 'Facts only: no country index is chosen (owner question 4)'),
   ];
 }
 
-async function political(env: Env, projectId: number): Promise<InputFacts[]> {
+async function political(env: Env, projectId: number, model: VentureModel = VENTURE_MODEL_V1): Promise<InputFacts[]> {
   const [rows, dd] = await Promise.all([
     all<MarketRow>(env, STATEMENTS.markets, projectId),
     first<{ verdict: string; at: string | null }>(env, STATEMENTS.political.dd, projectId),
   ]);
   const reg = rows.filter((r) => sourced(r.regulation_score, r.regulation_source));
   const VERDICT: Record<string, number> = { pass: 100, warn: 50, fail: 0 };
-  return [
+  const out: InputFacts[] = [
     reg.length
       ? recorded('regulation_readiness', mean(reg.map((r) => num(r.regulation_score) * 10)), null, GRADES.sourced, newest(...reg.map((r) => r.updated_at)), 'markets', reg.length,
         plural(reg.length, 'market with sourced regulation readiness', 'markets with sourced regulation readiness'))
@@ -489,9 +550,16 @@ async function political(env: Env, projectId: number): Promise<InputFacts[]> {
     dd && dd.verdict in VERDICT
       ? recorded('dd_compliance', VERDICT[dd.verdict], null, GRADES.reviewed, day(dd.at), 'dd_sections', 1, `Compliance section: ${dd.verdict}`)
       : missing('dd_compliance', 'dd_sections', 'No completed compliance section in a completed DD case'),
-    unsourced('high_risk_lists', 'The FATF and EU lists are not imported (owner question 4)'),
-    unsourced('stability', 'No governance index is imported (owner question 4)'),
   ];
+  const indexed = readsStore(model, 'political', 'high_risk_lists') || readsStore(model, 'political', 'stability');
+  const countries = indexed ? await marketCountries(env, projectId) : [];
+  out.push(readsStore(model, 'political', 'high_risk_lists')
+    ? await listsInput(env, countries)
+    : unsourced('high_risk_lists', 'The FATF and EU lists are not imported (owner question 4)'));
+  out.push(readsStore(model, 'political', 'stability')
+    ? await wgiInput(env, 'stability', countries, ['PV.PER.RNK', 'RQ.PER.RNK'])
+    : unsourced('stability', 'No governance index is imported (owner question 4)'));
+  return out;
 }
 
 // ── Governance ───────────────────────────────────────────────────────────────
@@ -572,7 +640,7 @@ async function legalIp(env: Env, projectId: number, venture: Venture): Promise<I
 }
 
 /** The collector for one scope. A throw means the scope's stores could not be read. */
-export async function collectScope(env: Env, scope: ScopeKey, projectId: number, venture: Venture, today: string): Promise<InputFacts[]> {
+export async function collectScope(env: Env, scope: ScopeKey, projectId: number, venture: Venture, today: string, model: VentureModel = VENTURE_MODEL_V1): Promise<InputFacts[]> {
   switch (scope) {
     case 'team': return team(env, projectId);
     case 'market': return market(env, projectId);
@@ -580,8 +648,8 @@ export async function collectScope(env: Env, scope: ScopeKey, projectId: number,
     case 'traction': return traction(env, projectId);
     case 'financial': return financial(env, projectId);
     case 'risk': return risk(env, projectId);
-    case 'geographic': return geographic(env, projectId);
-    case 'political': return political(env, projectId);
+    case 'geographic': return geographic(env, projectId, model);
+    case 'political': return political(env, projectId, model);
     case 'governance': return governance(env, projectId, today);
     case 'legal_ip': return legalIp(env, projectId, venture);
   }

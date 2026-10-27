@@ -124,6 +124,9 @@ own addresses and one person's case at `/admin/kyc/people/:id`, with People
 drawn by D648's queue in `consoles/` — see its own README.
 
 
+`accounts/` is D1304's Overview of Admin › Accounts at `/admin/accounts`, drawn
+by `HeldAccounts.jsx` over D1301's overview read (ACC1, ACC8–ACC11) — see its own README.
+
 `promos/` is D1270's Promo codes at `/admin/platform/promo-codes`, HQ only, under
 Platform: Codes and Usage at their own addresses and one code's drawer at
 `/admin/platform/promo-codes/:id`, over D213's list in `consoles/` — see its own README.

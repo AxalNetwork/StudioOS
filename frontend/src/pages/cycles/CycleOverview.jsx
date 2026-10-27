@@ -28,7 +28,7 @@ import { MODULES } from './modules';
 const SECTION = 'text-[10px] font-extrabold uppercase tracking-[.09em]';
 const CARD = 'flex min-w-0 flex-col gap-2.5 rounded-xl border border-axal-hairline bg-white px-4 py-3.5 dark:border-gray-800 dark:bg-gray-900';
 
-export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null }) {
+export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
   const tabs = cycleTabs(meta.key, cards, active, search, { back: record ? `‹ Back to ${moduleName}` : null });
@@ -45,9 +45,13 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           {/* D1146 (#3032): a header chip, such as Validate's Product-market fit (RD12). */}
           {chip}
         </div>
-        {!record && action?.onClick
-          ? <button type="button" className={btn} onClick={action.onClick} data-testid="cycle-action">{label}</button>
-          : !record && href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
+        {/* D1060 (#2930): `more` sits beside the action, as the Reporting desk's More menu. */}
+        <div className="flex items-center gap-2">
+          {!record && action?.onClick
+            ? <button type="button" className={btn} onClick={action.onClick} disabled={!!action.disabled} data-testid="cycle-action">{label}</button>
+            : !record && href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
+          {more}
+        </div>
       </div>
       <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`}</p>
       <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 lg:flex" data-testid="cycle-tabs">
