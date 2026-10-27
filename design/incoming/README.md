@@ -244,6 +244,17 @@ D1300–D1307, so this canvas stays in the queue until they land.
 their own addresses and one address per article, under the shared header, and
 the review notices open the article. The boards themselves wait for
 D1291–D1298, so this canvas stays in the queue until they land.
+## Landed 2026-10-27 — Product testing, the member flow (D1335, #3517)
+
+The owner's two artifacts came from S21's prompt on #3517. Each was decoded by
+`scripts/read-canvas.mjs`, verbatim, with no asset uuid left:
+- `Product testing member · Boards.dc.html` is the board grid (PT-M1 to PT-M5).
+  It imports the page by name.
+- `Product Testing Member Page.dc.html` is the page.
+
+**Grade: NEW.** There is no member screen yet. D1335 maps the boards to the stores
+on `main`. D1336 (Worker) and D1337 (frontend) build them.
+
 ## Revised 2026-10-27 — Content queue page, Builder page, and the Builder boards (D1332)
 
 The owner republished `XBryVcPJkeVM6D3SQKeR4b` and `N7rt85KNNnDWNPQnGvvR4J`, and
