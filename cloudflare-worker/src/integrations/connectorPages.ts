@@ -550,7 +550,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       tool('read_deployments', 'deployments', 'read', 'Reads deployments, their state, promotions and rollbacks. Vercel parts 2 and 3 use it; part 1\'s sync does not.', null,
         ["'/v7/deployments'", '`/v13/deployments/${key(id)}`']),
       tool('uninstall', 'the installation', 'account', 'Uninstalls the integration on Vercel when you disconnect, and when Vercel grants more than read.', null,
-        ["`/v1/integrations/configuration/${key(auth.configuration_id)}`, {}, 'DELETE'"]),
+        ["`/v1/integrations/configuration/${key(auth.configuration_id)}`, {}, 'DELETE'", "method: 'GET' | 'DELETE' = 'GET'"]),
     ],
     prompts: [],
     prompts_reason: notRead('Vercel'),
