@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  FileText, RefreshCw, Loader2, MessageSquare, CheckCircle2,
+  RefreshCw, Loader2, MessageSquare, CheckCircle2,
   XCircle, Edit3, Globe, RotateCcw, Eye, Clock,
 } from 'lucide-react';
 import { adminArticles as api } from '../../lib/api';
@@ -13,9 +14,13 @@ import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { RailFrame, WorkerRail } from '../../ui';
 import useRecordCrumb from './useRecordCrumb';
+import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
+import { PAGE_LINE, QUEUE_BASE, QUEUE_TABS, WAITS, viewOf } from './contentQueueModel';
 
 // Admin /admin/articles review queue — the single "Content Queue" (Task #3
 // merged the former News + Articles admin queues). /admin/news redirects here.
+// D1290 (#2383): four tabs at their own addresses (`contentQueueModel.js`);
+// Pipeline is today's queue, and `/admin/articles/<id>` opens an article.
 
 const STATUS_TABS = [
   { id: '', label: 'All open' },
@@ -120,6 +125,17 @@ function PromptModal({ title, placeholder, onConfirm, onCancel, confirmLabel = '
   );
 }
 
+/** D1290: a tab whose build is a slot task says what it waits on and where today's version is (D1290 §4). */
+function QueueWait({ tab }) {
+  const w = WAITS[tab];
+  return (
+    <section className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white p-6 dark:border-slate-700 dark:bg-slate-900" data-testid={`content-queue-wait-${tab}`}>
+      <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{w.title}</h2>
+      {w.lines.map((l) => <p key={l} className="mt-2 text-sm text-slate-600 dark:text-slate-400">{l}</p>)}
+    </section>
+  );
+}
+
 export default function ArticlesQueuePage() {
   const { toast: current, showToast, dismissToast } = useToast();
   const toast = {
@@ -130,7 +146,12 @@ export default function ArticlesQueuePage() {
   const [tab, setTab] = useState('submitted');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedId, setSelectedId] = useState(null);
+  // D1290: the open article is the address's, so a notice or a shared link opens it.
+  const navigate = useNavigate();
+  const view = viewOf(useLocation().pathname);
+  const selectedId = view.id;
+  // A literal, so the admin reachability walk sees the door to `/admin/articles/:view`.
+  const setSelectedId = (id) => (id ? navigate(`/admin/articles/${id}`) : navigate(QUEUE_BASE));
   const [detail, setDetail] = useState(null);
   // D634 — a failed article read is Unreadable, not "Select an article".
   const [detailFailed, setDetailFailed] = useState(false);
@@ -241,15 +262,17 @@ export default function ArticlesQueuePage() {
     <RailFrame rail={rail} data-testid="content-queue-page">
     <div className="max-w-7xl mx-auto p-6">
       <ToastMessage toast={current} onDismiss={dismissToast} />
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <FileText className="w-6 h-6 text-violet-600" /> Content review queue
-        </h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-          Review author-proposed articles. Approve → Publish bursts the 60-day edge cache.
-        </p>
-      </header>
+      <AdminPageHeader
+        crumb={superAdmin ? { label: 'Content', to: '/admin/content', current: 'Content queue' } : null}
+        title="Content queue"
+        line={PAGE_LINE}
+        tabs={QUEUE_TABS.map((t) => (
+          <HeaderTab key={t.key} to={t.to} end={t.key !== 'pipeline'} data-testid={`content-queue-tab-${t.key}`}>{t.label}</HeaderTab>
+        ))}
+        data-testid="content-queue-header"
+      />
 
+      {view.tab !== 'pipeline' ? <QueueWait tab={view.tab} /> : (<>
       <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
         {STATUS_TABS.map((t) => (
           <button
@@ -409,6 +432,7 @@ export default function ArticlesQueuePage() {
           )}
         </div>
       </div>
+      </>)}
 
       {prompt && <PromptModal {...prompt} onCancel={() => setPrompt(null)} />}
     </div>
