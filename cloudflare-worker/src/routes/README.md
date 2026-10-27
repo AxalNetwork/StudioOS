@@ -134,7 +134,8 @@ widened guard on this very sentence, which is the rule working.)
 /api/funds         → funds.ts
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS; D1158: GET /lps, the LP roster)
-/api/closings      → closings.ts        (D1215: a closing as a record — open, lines, route, evidence, the cap-table proposal, complete; the admin desk `adminClosings` is mounted at /api/admin/closings)
+/api/closings      → closings.ts        (D1215: a closing as a record — open, lines, route, evidence, the cap-table proposal, complete; the admin desk `adminClosings` is mounted at /api/admin/closings. The operator's order of work is documentation/operations/CLOSING.md, D1220)
+                     company_receiving_accounts.ts (D1217: the company's receiving instructions — masked read, founder save, the investor's logged reveal — prepared for /api/closings/company-receiving-accounts and NOT mounted: #3214 is open for the mount)
 /api/reporting     → reporting.ts       (D1058: reporting duties and periods — the founder's desk, the expected date and reminders; the investor's own duties, ask and waive)
 /api/reporting     → reporting_reports.ts (D1059: a report from the Grow modules — draft, choices, preview, send with frozen figures, correct as a revision, the open, and private statements)
 /api/fund-reporting → fund_reporting.ts
@@ -145,7 +146,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/pipeline      → pipeline.ts
 /api/search        → search.ts
 /api/kyc           → kyc_governance.ts, kyc.ts  (D1232: renewals, renewal periods, the audit read and its export, mounted first so `/admin/:userId` does not read them as ids)
-/api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*)
+/api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*; D1216: `/staged*`, a closing line's paper signed in order — company, investor, then Axal's countersign)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts
 /api/profiling     → profiling.ts
