@@ -394,19 +394,20 @@ test('a rail run resolves the caller\'s model, then the pick, then the default a
   const text = { vision: false };
   // research: Kimi K2.6 (paid only) is the canvas default; a free plan starts on GPT-OSS 120B.
   assert.equal(RESEARCH.models[0].id, '@cf/moonshotai/kimi-k2.6');
-  assert.deepEqual(compatibleModels(RESEARCH, text, OFF), ['@cf/moonshotai/kimi-k2.6', '@cf/openai/gpt-oss-120b'], 'the index and the reranker never answer a chat run');
+  assert.deepEqual(compatibleModels(RESEARCH, text, OFF), ['@cf/moonshotai/kimi-k2.6', '@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-flash-0731', '@cf/zai-org/glm-5.2'], 'the index and the reranker never answer a chat run (D1338 adds DeepSeek V4 Flash and GLM-5.2)');
   assert.deepEqual(resolveRailChain(RESEARCH, text, OFF, {}), { ok: true, primary: '@cf/openai/gpt-oss-120b', chain: [], source: 'default' });
-  assert.deepEqual(resolveRailChain(RESEARCH, text, PAID_ON, {}), { ok: true, primary: '@cf/moonshotai/kimi-k2.6', chain: ['@cf/openai/gpt-oss-120b'], source: 'default' });
+  assert.deepEqual(resolveRailChain(RESEARCH, text, PAID_ON, {}), { ok: true, primary: '@cf/moonshotai/kimi-k2.6', chain: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-flash-0731', '@cf/zai-org/glm-5.2'], source: 'default' });
   // The member's pick: the option's wins over the page's, and a pick the row no longer offers is ignored.
-  const [a, b, c] = CHAT.models.map((m) => m.id);
-  assert.deepEqual(resolveRailChain(CHAT, text, OFF, { page: b }), { ok: true, primary: b, chain: [a, c], source: 'pick' });
-  assert.deepEqual(resolveRailChain(CHAT, text, OFF, { option: c, page: b }), { ok: true, primary: c, chain: [a, b], source: 'pick' });
+  // D1338: the row's fourth model (Qwen3 30B A3B) is free, so it joins every chain; the fifth (GLM-5.3 Flash) is paid only.
+  const [a, b, c, d] = CHAT.models.map((m) => m.id);
+  assert.deepEqual(resolveRailChain(CHAT, text, OFF, { page: b }), { ok: true, primary: b, chain: [a, c, d], source: 'pick' });
+  assert.deepEqual(resolveRailChain(CHAT, text, OFF, { option: c, page: b }), { ok: true, primary: c, chain: [a, b, d], source: 'pick' });
   assert.equal((resolveRailChain(CHAT, text, OFF, { page: '@cf/retired/model' }) as any).primary, a);
   // The caller's model: any model that can do the work, even off the row; anything else is refused.
-  assert.deepEqual(resolveRailChain(CHAT, text, OFF, { caller: '@cf/qwen/qwq-32b', page: b }), { ok: true, primary: '@cf/qwen/qwq-32b', chain: [a, b, c], source: 'caller' });
+  assert.deepEqual(resolveRailChain(CHAT, text, OFF, { caller: '@cf/qwen/qwq-32b', page: b }), { ok: true, primary: '@cf/qwen/qwq-32b', chain: [a, b, c, d], source: 'caller' });
   assert.deepEqual(resolveRailChain(CHAT, text, OFF, { caller: '@cf/baai/bge-m3' }), { ok: false, refusal: 'model_not_offered', model: '@cf/baai/bge-m3' });
   // A vision run takes only the row's models that read images.
-  assert.deepEqual(compatibleModels(VISION, { vision: true }, OFF), ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct']);
+  assert.deepEqual(compatibleModels(VISION, { vision: true }, OFF), ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/meta/llama-3.2-11b-vision-instruct']);
   assert.equal((resolveRailChain(CHAT, { vision: true }, OFF, { caller: '@cf/zai-org/glm-4.7-flash' }) as any).refusal, 'model_not_offered');
   // A row with no model for the run leaves the task's route in charge.
   const searchRow = ROWS.find((r) => r.kind === 'search')!;

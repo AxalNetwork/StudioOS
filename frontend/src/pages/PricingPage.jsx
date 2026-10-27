@@ -220,10 +220,16 @@ function Skeleton() {
   );
 }
 
-function usedFor(pages) {
-  if (!pages?.length) return 'Not used on a page yet';
-  const named = pages.slice(0, 2).map((p) => p.split(' · ').join(' › '));
-  return pages.length > 2 ? `${named.join(' · ')} and ${pages.length - 2} more` : named.join(' · ');
+/**
+ * "Used for": the rail pages that offer the model, then (D1338) the jobs the
+ * router gives it off the rail, two named and the rest counted. "Not used on
+ * a page yet" only when neither lists anything.
+ */
+export function usedFor(pages, uses = []) {
+  const all = [...(pages || []).map((p) => p.split(' · ').join(' › ')), ...(uses || [])];
+  if (!all.length) return 'Not used on a page yet';
+  const named = all.slice(0, 2);
+  return all.length > 2 ? `${named.join(' · ')} and ${all.length - 2} more` : named.join(' · ');
 }
 
 function Models({ read, onRetry }) {
@@ -247,7 +253,7 @@ function Models({ read, onRetry }) {
             return (
               <div key={m.id} className="axp-mrow" style={cols} data-testid={`pricing-model-${m.id}`}>
                 <span className="axp-mname"><b>{m.name}</b>{m.is_new && <span className="axp-pill axp-pill-new">New</span>}{m.paid_only && <span className="axp-pill">Paid plans</span>}</span>
-                <span className="axp-mused">{usedFor(m.pages)}</span>
+                <span className="axp-mused">{usedFor(m.pages, m.uses)}</span>
                 {units.map((u) => <span key={u.unit} className="axp-num axp-mono">{prices.find((p) => p.unit === u.unit)?.value ?? '—'}</span>)}
               </div>
             );
@@ -257,7 +263,7 @@ function Models({ read, onRetry }) {
           {g.rows.map((m) => (
             <div key={m.id} className="axp-mcard">
               <span className="axp-mname"><b>{m.name}</b>{m.is_new && <span className="axp-pill axp-pill-new">New</span>}{m.paid_only && <span className="axp-pill">Paid plans</span>}</span>
-              <span className="axp-mused">{usedFor(m.pages)}</span>
+              <span className="axp-mused">{usedFor(m.pages, m.uses)}</span>
               {modelPrices(m).map((p) => <span key={p.unit} className="axp-mprice"><span className="axp-mono">{p.value}</span> {p.label}</span>)}
             </div>
           ))}

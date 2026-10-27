@@ -16,6 +16,8 @@
 import { CATALOGUE, isOffered, type CatalogueModel, type CatalogueSwitches, type PriceUnit } from './catalogue';
 import { AI_MARKUP, billedUnitPrice, unitPrice } from './pricing';
 import { railOptionRows, railRows } from './railMatrix';
+import { ROUTE } from '../aiRouter';
+import { TASK_LABELS } from '../aiCatalog';
 
 /** What each unit's price is per, as the page prints it. */
 export const UNIT_WORDS: Readonly<Record<PriceUnit, string>> = Object.freeze({
@@ -98,9 +100,19 @@ export interface PublicModel {
   unit_words: Record<string, string>;
   /** Canvas page names whose rail rows name this model, in the matrix's order. */
   pages: string[];
+  /**
+   * D1338: the jobs the router gives this model off the rail (`ROUTE`'s
+   * non-rail tasks: its model, fallbacks and alternates), each in
+   * `TASK_LABELS`' words, in `ROUTE`'s order. A background job no member runs
+   * (`system_job`) is not listed.
+   */
+  uses: string[];
   is_new: boolean;
   paid_only: boolean;
 }
+
+/** Router tasks no member runs, left out of `uses`. */
+const NOT_LISTED_TASKS: ReadonlySet<string> = new Set(['system_job']);
 
 /** The Models tab's rows, in the catalogue's order. */
 export function publicModels(env: CatalogueSwitches): PublicModel[] {
@@ -110,6 +122,16 @@ export function publicModels(env: CatalogueSwitches): PublicModel[] {
       const list = pages.get(m.id) ?? [];
       if (!list.includes(row.pageKey)) list.push(row.pageKey);
       pages.set(m.id, list);
+    }
+  }
+  const uses = new Map<string, string[]>();
+  for (const [task, r] of Object.entries(ROUTE) as [keyof typeof TASK_LABELS, { model: string; fallbackChain?: string[]; alternates?: string[] }][]) {
+    if (task.startsWith('rail_') || NOT_LISTED_TASKS.has(task)) continue;
+    const label = TASK_LABELS[task];
+    for (const id of new Set([r.model, ...(r.fallbackChain ?? []), ...(r.alternates ?? [])])) {
+      const list = uses.get(id) ?? [];
+      if (!list.includes(label)) list.push(label);
+      uses.set(id, list);
     }
   }
   return CATALOGUE.filter((m) => isOffered(m, env)).map((m) => {
@@ -123,7 +145,7 @@ export function publicModels(env: CatalogueSwitches): PublicModel[] {
     }
     return {
       id: m.id, name: m.name, kind: m.kind, group: modelGroup(m), billed, unit_words: words,
-      pages: pages.get(m.id) ?? [], is_new: NEW_MODEL_IDS.has(m.id), paid_only: m.paid_only,
+      pages: pages.get(m.id) ?? [], uses: uses.get(m.id) ?? [], is_new: NEW_MODEL_IDS.has(m.id), paid_only: m.paid_only,
     };
   });
 }

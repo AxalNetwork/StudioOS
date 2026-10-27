@@ -16,7 +16,7 @@ import { AI_MARKUP, billedUnitPrice, unitPrice } from '../src/services/ai/pricin
 import { railOptionRows, railRows } from '../src/services/ai/railMatrix.ts';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
-const FIELDS = ['billed', 'group', 'id', 'is_new', 'kind', 'name', 'paid_only', 'pages', 'unit_words'];
+const FIELDS = ['billed', 'group', 'id', 'is_new', 'kind', 'name', 'paid_only', 'pages', 'unit_words', 'uses'];
 
 async function get(env: Record<string, unknown> = {}) {
   // No DB: the read must not touch D1.

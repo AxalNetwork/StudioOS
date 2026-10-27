@@ -20,6 +20,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -42,6 +52,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -64,6 +84,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -91,6 +121,11 @@
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
      "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
+    },
+    {
+     "id": "@cf/openai/whisper",
+     "role": "Short clips",
+     "line": "The earlier Whisper, for short clips"
     }
    ]
   },
@@ -113,6 +148,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -140,6 +185,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -162,6 +217,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -184,6 +249,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -206,6 +291,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -228,6 +333,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -250,6 +365,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -289,6 +414,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -311,6 +446,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -328,6 +473,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -350,6 +505,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -372,6 +537,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -394,6 +579,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -416,6 +621,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -438,6 +653,11 @@
      "id": "@cf/moondream/moondream3.1-9B-A2B",
      "role": "Extract",
      "line": "Pulls figures out of images"
+    },
+    {
+     "id": "@cf/meta/llama-3.2-11b-vision-instruct",
+     "role": "Lighter",
+     "line": "Reads images at a lower cost"
     }
    ]
   },
@@ -460,6 +680,11 @@
      "id": "@cf/moondream/moondream3.1-9B-A2B",
      "role": "Extract",
      "line": "Pulls figures out of images"
+    },
+    {
+     "id": "@cf/meta/llama-3.2-11b-vision-instruct",
+     "role": "Lighter",
+     "line": "Reads images at a lower cost"
     }
    ]
   },
@@ -482,6 +707,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -504,6 +739,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -548,6 +793,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -570,6 +825,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -592,6 +857,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -614,6 +889,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -636,6 +921,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -680,6 +975,16 @@
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
      "role": "European",
      "line": "Reads European-language sources"
+    },
+    {
+     "id": "@cf/aisingapore/gemma-sea-lion-v4-27b-it",
+     "role": "Southeast Asia",
+     "line": "Writes for Southeast Asian markets and languages"
+    },
+    {
+     "id": "@cf/ai4bharat/indictrans2-en-indic-1B",
+     "role": "Indian languages",
+     "line": "Translates English into Indian languages"
     }
    ]
   },
@@ -697,6 +1002,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -812,6 +1127,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -839,6 +1164,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -866,6 +1201,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -888,6 +1233,16 @@
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
      "role": "European",
      "line": "Reads European-language sources"
+    },
+    {
+     "id": "@cf/aisingapore/gemma-sea-lion-v4-27b-it",
+     "role": "Southeast Asia",
+     "line": "Writes for Southeast Asian markets and languages"
+    },
+    {
+     "id": "@cf/ai4bharat/indictrans2-en-indic-1B",
+     "role": "Indian languages",
+     "line": "Translates English into Indian languages"
     }
    ]
   },
@@ -915,6 +1270,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -942,6 +1307,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -981,6 +1356,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -1003,6 +1388,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -1047,6 +1452,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -1069,6 +1494,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -1086,6 +1531,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -1108,6 +1563,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -1130,6 +1595,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -1152,6 +1627,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -1174,6 +1659,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -1223,6 +1718,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -1245,6 +1750,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -1267,6 +1782,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -1311,6 +1836,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -1333,6 +1868,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -1355,6 +1900,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -1470,6 +2025,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -1497,6 +2062,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -1519,6 +2094,11 @@
      "id": "@cf/moondream/moondream3.1-9B-A2B",
      "role": "Extract",
      "line": "Pulls figures out of images"
+    },
+    {
+     "id": "@cf/meta/llama-3.2-11b-vision-instruct",
+     "role": "Lighter",
+     "line": "Reads images at a lower cost"
     }
    ]
   },
@@ -1541,6 +2121,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -1568,6 +2158,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -1607,6 +2207,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -1629,6 +2239,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -1673,6 +2293,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -1695,6 +2325,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -1722,6 +2362,11 @@
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
      "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
+    },
+    {
+     "id": "@cf/openai/whisper",
+     "role": "Short clips",
+     "line": "The earlier Whisper, for short clips"
     }
    ]
   },
@@ -1744,6 +2389,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -1766,6 +2421,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -1810,6 +2475,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -1832,6 +2507,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -1854,6 +2539,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -1876,6 +2571,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -1898,6 +2603,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -1920,6 +2635,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -1942,6 +2667,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -1964,6 +2699,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -1986,6 +2731,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -2123,6 +2878,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -2150,6 +2915,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -2177,6 +2952,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -2204,6 +2989,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -2231,6 +3026,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -2270,6 +3075,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -2336,6 +3151,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -2353,6 +3178,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -2375,6 +3210,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -2397,6 +3242,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -2419,6 +3274,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -2441,6 +3306,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -2463,6 +3338,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -2485,6 +3370,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -2507,6 +3402,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -2529,6 +3434,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -2551,6 +3466,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -2573,6 +3498,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -2595,6 +3530,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -2639,6 +3584,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -2776,6 +3731,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -2803,6 +3768,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -2830,6 +3805,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -2857,6 +3842,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -2962,6 +3957,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -2984,6 +3989,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -3006,6 +4031,11 @@
      "id": "@cf/moondream/moondream3.1-9B-A2B",
      "role": "Extract",
      "line": "Pulls figures out of images"
+    },
+    {
+     "id": "@cf/meta/llama-3.2-11b-vision-instruct",
+     "role": "Lighter",
+     "line": "Reads images at a lower cost"
     }
    ]
   },
@@ -3028,6 +4058,11 @@
      "id": "@cf/moondream/moondream3.1-9B-A2B",
      "role": "Extract",
      "line": "Pulls figures out of images"
+    },
+    {
+     "id": "@cf/meta/llama-3.2-11b-vision-instruct",
+     "role": "Lighter",
+     "line": "Reads images at a lower cost"
     }
    ]
   },
@@ -3050,6 +4085,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -3116,6 +4171,11 @@
      "id": "@cf/moondream/moondream3.1-9B-A2B",
      "role": "Extract",
      "line": "Pulls figures out of images"
+    },
+    {
+     "id": "@cf/meta/llama-3.2-11b-vision-instruct",
+     "role": "Lighter",
+     "line": "Reads images at a lower cost"
     }
    ]
   },
@@ -3138,6 +4198,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -3160,6 +4240,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -3204,6 +4304,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -3226,6 +4336,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -3248,6 +4368,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -3270,6 +4400,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -3292,6 +4432,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -3314,6 +4464,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -3336,6 +4496,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -3358,6 +4528,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -3380,6 +4560,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -3402,6 +4592,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -3424,6 +4624,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -3446,6 +4656,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -3468,6 +4688,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -3556,6 +4786,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -3573,6 +4813,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3590,6 +4840,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3607,6 +4867,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3624,6 +4894,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3641,6 +4921,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3658,6 +4948,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3680,6 +4980,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -3702,6 +5012,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -3719,6 +5039,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3746,6 +5076,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -3763,6 +5103,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3780,6 +5130,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3797,6 +5157,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3814,6 +5184,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3831,6 +5211,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3848,6 +5238,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3865,6 +5265,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3931,6 +5341,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -3953,6 +5373,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -3970,6 +5400,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -3992,6 +5432,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -4014,6 +5464,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -4036,6 +5496,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -4058,6 +5528,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -4080,6 +5560,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -4102,6 +5592,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -4124,6 +5624,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -4146,6 +5656,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -4212,6 +5732,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -4285,6 +5815,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -4307,6 +5847,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -4329,6 +5879,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -4351,6 +5911,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -4390,6 +5960,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -4412,6 +5992,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -4429,6 +6019,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -4451,6 +6051,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -4473,6 +6083,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   }
@@ -4500,6 +6120,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -4525,6 +6155,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -4555,6 +6195,11 @@
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
      "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
+    },
+    {
+     "id": "@cf/openai/whisper",
+     "role": "Short clips",
+     "line": "The earlier Whisper, for short clips"
     }
    ]
   },
@@ -4580,6 +6225,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -4610,6 +6265,11 @@
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
      "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
+    },
+    {
+     "id": "@cf/openai/whisper",
+     "role": "Short clips",
+     "line": "The earlier Whisper, for short clips"
     }
    ]
   },
@@ -4640,6 +6300,11 @@
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
      "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
+    },
+    {
+     "id": "@cf/openai/whisper",
+     "role": "Short clips",
+     "line": "The earlier Whisper, for short clips"
     }
    ]
   },
@@ -4670,6 +6335,11 @@
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
      "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
+    },
+    {
+     "id": "@cf/openai/whisper",
+     "role": "Short clips",
+     "line": "The earlier Whisper, for short clips"
     }
    ]
   },
@@ -4695,6 +6365,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -4720,6 +6400,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -4750,6 +6440,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -4775,6 +6475,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -4800,6 +6520,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -4825,6 +6555,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -4850,6 +6590,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -4875,6 +6625,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -4900,6 +6660,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -4925,6 +6695,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -4950,6 +6740,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -4975,6 +6775,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5000,6 +6810,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -5025,6 +6855,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5050,6 +6890,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -5070,6 +6930,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -5095,6 +6965,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5120,6 +7000,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5145,6 +7035,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5170,6 +7070,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5195,6 +7105,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5220,6 +7140,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5245,6 +7175,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5270,6 +7210,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5295,6 +7245,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5320,6 +7280,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5345,6 +7315,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5370,6 +7350,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5395,6 +7385,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5420,6 +7420,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5445,6 +7455,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5470,6 +7490,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5495,6 +7525,11 @@
      "id": "@cf/moondream/moondream3.1-9B-A2B",
      "role": "Extract",
      "line": "Pulls figures out of images"
+    },
+    {
+     "id": "@cf/meta/llama-3.2-11b-vision-instruct",
+     "role": "Lighter",
+     "line": "Reads images at a lower cost"
     }
    ]
   },
@@ -5520,6 +7555,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -5545,6 +7600,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -5570,6 +7645,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -5595,6 +7690,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -5620,6 +7725,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -5645,6 +7760,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5670,6 +7795,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -5695,6 +7830,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5720,6 +7865,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5745,6 +7900,11 @@
      "id": "@cf/moondream/moondream3.1-9B-A2B",
      "role": "Extract",
      "line": "Pulls figures out of images"
+    },
+    {
+     "id": "@cf/meta/llama-3.2-11b-vision-instruct",
+     "role": "Lighter",
+     "line": "Reads images at a lower cost"
     }
    ]
   },
@@ -5770,6 +7930,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5795,6 +7965,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5845,6 +8025,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5870,6 +8060,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -5950,6 +8150,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -5980,6 +8190,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6010,6 +8230,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6100,6 +8330,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6130,6 +8370,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6160,6 +8410,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6190,6 +8450,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6220,6 +8490,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6250,6 +8530,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6275,6 +8565,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -6300,6 +8610,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -6325,6 +8645,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -6350,6 +8680,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -6375,6 +8715,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -6400,6 +8750,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -6430,6 +8790,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6460,6 +8830,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6485,6 +8865,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -6510,6 +8900,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -6575,6 +8985,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -6600,6 +9020,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -6625,6 +9055,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -6655,6 +9095,11 @@
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
      "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
+    },
+    {
+     "id": "@cf/openai/whisper",
+     "role": "Short clips",
+     "line": "The earlier Whisper, for short clips"
     }
    ]
   },
@@ -6680,6 +9125,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -6705,6 +9160,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -6735,6 +9200,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6760,6 +9235,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -6785,6 +9270,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -6815,6 +9310,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6845,6 +9350,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6875,6 +9390,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -6940,6 +9465,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -6965,6 +9500,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -6990,6 +9535,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick answers at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Quick answers from a newer model"
     }
    ]
   },
@@ -7020,6 +9575,11 @@
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
      "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
+    },
+    {
+     "id": "@cf/openai/whisper",
+     "role": "Short clips",
+     "line": "The earlier Whisper, for short clips"
     }
    ]
   },
@@ -7045,6 +9605,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -7070,6 +9640,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -7095,6 +9675,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -7115,6 +9705,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Second view",
      "line": "Checks the first reading"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second reading of the same terms"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest model for long terms"
     }
    ]
   },
@@ -7140,6 +9740,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -7165,6 +9775,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -7190,6 +9810,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -7215,6 +9845,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -7240,6 +9880,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick plans at a lower cost"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Longer",
+     "line": "Plans that hold many steps at once"
     }
    ]
   },
@@ -7265,6 +9915,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -7290,6 +9950,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -7315,6 +9985,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -7340,6 +10020,26 @@
      "id": "@cf/qwen/qwq-32b",
      "role": "Challenge",
      "line": "Argues the other side"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to test the same claim"
+    },
+    {
+     "id": "@cf/qwen/qwen3.8-27b",
+     "role": "Long reading",
+     "line": "Reasons over long documents"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+     "role": "Step by step",
+     "line": "Shows each step of its reasoning"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3",
+     "role": "Newest",
+     "line": "The newest reasoning model"
     }
    ]
   },
@@ -7365,6 +10065,16 @@
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
      "role": "Faster",
      "line": "Reads figures out of documents"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Quick sums at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Second view",
+     "line": "A second model to check the figures"
     }
    ]
   },
@@ -7390,6 +10100,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   },
@@ -7490,6 +10210,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -7520,6 +10250,16 @@
      "id": "@cf/baai/bge-reranker-base",
      "role": "Rank",
      "line": "Puts the most relevant on top"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+     "role": "Faster",
+     "line": "Quicker research over many sources"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.2",
+     "role": "Long reading",
+     "line": "Reads very long sources in one pass"
     }
    ]
   },
@@ -7545,6 +10285,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -7570,6 +10320,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -7635,6 +10395,16 @@
      "id": "@cf/openai/gpt-oss-120b",
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Groups notes at a lower cost"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Thorough",
+     "line": "Weighs every note before it groups them"
     }
    ]
   },
@@ -7660,6 +10430,16 @@
      "id": "@cf/zai-org/glm-4.7-flash",
      "role": "Faster",
      "line": "Short drafts and replies"
+    },
+    {
+     "id": "@cf/zai-org/glm-5.3-flash",
+     "role": "Newer",
+     "line": "Clean drafts from a newer model"
+    },
+    {
+     "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+     "role": "Lighter",
+     "line": "Short drafts at a lower cost"
     }
    ]
   }

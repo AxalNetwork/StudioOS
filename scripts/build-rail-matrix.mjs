@@ -8,7 +8,8 @@
  * Reads `design/incoming/airail-every-page-data/canvas.json` (the canvas's own
  * tables: profiles, each page's kind of work, each kind's suggested models) and
  * `scripts/lib/railMatrixOverrides.json` (the name → id table, each kind's
- * shape, and the page rows the canvas has no board for), and writes
+ * shape, each kind's further models after the canvas's own (`alternates`,
+ * D1338), and the page rows the canvas has no board for), and writes
  * `cloudflare-worker/src/services/ai/railMatrix.json`.
  *
  * One row per page: `{ pageKey, kind, routeTask, models: [{ id, role, line }] }`.
@@ -110,7 +111,12 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
     if (!shape) { problems.push(`kind ${kind} has no shape`); continue; }
     const onIndex = overrides.searchIndexKinds.includes(kind);
     const out = [];
-    for (const s of suggested) {
+    // D1338: the overrides' further models for this kind follow the canvas's own, never ahead of its Default.
+    const extra = Array.isArray(overrides.alternates?.[kind]) ? overrides.alternates[kind] : [];
+    for (const a of extra) {
+      if (VOICE_BANNED.test(`${a.role} ${a.line}`)) problems.push(`alternates.${kind}: "${a.role}" breaks the voice rule`);
+    }
+    for (const s of [...suggested, ...extra]) {
       const m = modelOf(s.t);
       if (!m) continue;
       const id = onIndex && m.caps.includes('embedding') ? overrides.searchIndexModel : m.id;

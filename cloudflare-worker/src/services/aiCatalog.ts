@@ -122,6 +122,16 @@ export const MODEL_NAMES: Record<string, string> = {
   '@cf/meta/llama-4-scout-17b-16e-instruct': 'Llama 4 Scout',
   '@cf/mistralai/mistral-small-3.1-24b-instruct': 'Mistral Small 3.1 24B',
   '@cf/ibm-granite/granite-4.0-h-micro': 'Granite 4.0 Micro',
+  // D1338: the catalogue's models the rail now offers beside the canvas's picks.
+  '@cf/qwen/qwen3-30b-a3b-fp8': 'Qwen3 30B A3B',
+  '@cf/zai-org/glm-5.3-flash': 'GLM-5.3 Flash',
+  '@cf/zai-org/glm-5.3': 'GLM-5.3',
+  '@cf/zai-org/glm-5.2': 'GLM-5.2',
+  '@cf/nvidia/nemotron-3-120b-a12b': 'Nemotron 3 120B',
+  '@cf/qwen/qwen3.8-27b': 'Qwen3.8 27B',
+  '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b': 'DeepSeek R1 Distill 32B',
+  '@cf/meta/llama-3.2-11b-vision-instruct': 'Llama 3.2 11B Vision',
+  '@cf/aisingapore/gemma-sea-lion-v4-27b-it': 'SEA-LION v4 27B',
 };
 
 /**

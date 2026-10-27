@@ -511,6 +511,16 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   '@cf/meta/llama-4-scout-17b-16e-instruct',
   '@cf/mistralai/mistral-small-3.1-24b-instruct',
   '@cf/ibm-granite/granite-4.0-h-micro',
+  // D1338 (2026-10-27): each kind's further models (railMatrixOverrides.json `alternates`).
+  '@cf/qwen/qwen3-30b-a3b-fp8',
+  '@cf/zai-org/glm-5.3-flash',
+  '@cf/zai-org/glm-5.3',
+  '@cf/zai-org/glm-5.2',
+  '@cf/nvidia/nemotron-3-120b-a12b',
+  '@cf/qwen/qwen3.8-27b',
+  '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
+  '@cf/meta/llama-3.2-11b-vision-instruct',
+  '@cf/aisingapore/gemma-sea-lion-v4-27b-it',
 ]);
 
 /**
@@ -884,19 +894,19 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // (`rail_matrix_d764.test.ts` holds these entries to it). rail_search has
   // only Kimi K2.6 to answer with, which needs a paid plan: the canvas pairs
   // the index with no other answer model.
-  rail_chat:     { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: [MID_LLAMA, '@cf/openai/gpt-oss-120b'], alternates: ['@cf/zai-org/glm-4.7-flash', MID_LLAMA, '@cf/openai/gpt-oss-120b'] },
-  rail_synth:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b'], alternates: [MID_LLAMA, '@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b'] },
-  rail_speech:   { provider: 'workers-ai', model: '@cf/openai/whisper-large-v3-turbo', isAudio: true, alternates: ['@cf/openai/whisper-large-v3-turbo'] },
-  rail_research: { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/moonshotai/kimi-k2.6'] },
-  rail_reason:   { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/qwen/qwq-32b'], alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/qwen/qwq-32b'] },
-  rail_vision:   { provider: 'workers-ai', model: '@cf/google/gemma-4-26b-a4b-it', fallbackChain: ['@cf/meta/llama-4-scout-17b-16e-instruct'], alternates: ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct'] },
+  rail_chat:     { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: [MID_LLAMA, '@cf/openai/gpt-oss-120b'], alternates: ['@cf/zai-org/glm-4.7-flash', MID_LLAMA, '@cf/openai/gpt-oss-120b', '@cf/qwen/qwen3-30b-a3b-fp8', '@cf/zai-org/glm-5.3-flash'] },
+  rail_synth:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b'], alternates: [MID_LLAMA, '@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b', '@cf/qwen/qwen3-30b-a3b-fp8', '@cf/nvidia/nemotron-3-120b-a12b'] },
+  rail_speech:   { provider: 'workers-ai', model: '@cf/openai/whisper-large-v3-turbo', isAudio: true, alternates: ['@cf/openai/whisper-large-v3-turbo', '@cf/openai/whisper'] },
+  rail_research: { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/moonshotai/kimi-k2.6', '@cf/deepseek-ai/deepseek-v4-flash-0731', '@cf/zai-org/glm-5.2'] },
+  rail_reason:   { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/qwen/qwq-32b'], alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/qwen/qwq-32b', '@cf/nvidia/nemotron-3-120b-a12b', '@cf/qwen/qwen3.8-27b', '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', '@cf/zai-org/glm-5.3'] },
+  rail_vision:   { provider: 'workers-ai', model: '@cf/google/gemma-4-26b-a4b-it', fallbackChain: ['@cf/meta/llama-4-scout-17b-16e-instruct'], alternates: ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/meta/llama-3.2-11b-vision-instruct'] },
   rail_code:     { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', alternates: ['@cf/qwen/qwen2.5-coder-32b-instruct', '@cf/moonshotai/kimi-k2.7-code'] },
-  rail_numbers:  { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/ibm-granite/granite-4.0-h-micro'], alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/ibm-granite/granite-4.0-h-micro'] },
-  rail_write:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: ['@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/zai-org/glm-4.7-flash'], alternates: [MID_LLAMA, '@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/zai-org/glm-4.7-flash'] },
+  rail_numbers:  { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/ibm-granite/granite-4.0-h-micro'], alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/ibm-granite/granite-4.0-h-micro', '@cf/qwen/qwen3-30b-a3b-fp8', '@cf/nvidia/nemotron-3-120b-a12b'] },
+  rail_write:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: ['@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/zai-org/glm-4.7-flash'], alternates: [MID_LLAMA, '@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/zai-org/glm-4.7-flash', '@cf/zai-org/glm-5.3-flash', '@cf/qwen/qwen3-30b-a3b-fp8'] },
   rail_match:    { provider: 'workers-ai', model: MID_LLAMA, alternates: [MID_LLAMA] },
-  rail_plan:     { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: ['@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b'], alternates: ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b'] },
-  rail_legal:    { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813'] },
-  rail_multi:    { provider: 'workers-ai', model: '@cf/mistralai/mistral-small-3.1-24b-instruct', alternates: ['@cf/mistralai/mistral-small-3.1-24b-instruct'] },
+  rail_plan:     { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: ['@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b'], alternates: ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b', '@cf/qwen/qwen3-30b-a3b-fp8', '@cf/zai-org/glm-5.3'] },
+  rail_legal:    { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/nvidia/nemotron-3-120b-a12b', '@cf/zai-org/glm-5.3'] },
+  rail_multi:    { provider: 'workers-ai', model: '@cf/mistralai/mistral-small-3.1-24b-instruct', alternates: ['@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/aisingapore/gemma-sea-lion-v4-27b-it'] },
   rail_search:   { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', alternates: ['@cf/moonshotai/kimi-k2.6'] },
 };
 

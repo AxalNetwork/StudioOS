@@ -57,6 +57,16 @@ export const MODEL_COPY = {
   // D857 (#2502): translate_segment's models.
   '@cf/meta/m2m100-1.2b': { name: 'M2M100' },
   '@cf/ai4bharat/indictrans2-en-indic-1B': { name: 'IndicTrans2' },
+  // D1338: each kind's further models (railMatrixOverrides.json `alternates`).
+  '@cf/qwen/qwen3-30b-a3b-fp8': { name: 'Qwen3 30B A3B' },
+  '@cf/zai-org/glm-5.3-flash': { name: 'GLM-5.3 Flash' },
+  '@cf/zai-org/glm-5.3': { name: 'GLM-5.3' },
+  '@cf/zai-org/glm-5.2': { name: 'GLM-5.2' },
+  '@cf/nvidia/nemotron-3-120b-a12b': { name: 'Nemotron 3 120B' },
+  '@cf/qwen/qwen3.8-27b': { name: 'Qwen3.8 27B' },
+  '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b': { name: 'DeepSeek R1 Distill 32B' },
+  '@cf/meta/llama-3.2-11b-vision-instruct': { name: 'Llama 3.2 11B Vision' },
+  '@cf/aisingapore/gemma-sea-lion-v4-27b-it': { name: 'SEA-LION v4 27B' },
 };
 
 /** The guard: listed under Safety, never picked. */
@@ -73,18 +83,18 @@ export const GUARD_MODEL = '@cf/meta/llama-guard-3-8b';
 const R = (name, id = null) => [name, id];
 export const ALL_MODELS = [
   ['Conversation and writing', [
-    R('GLM-4.7 Flash', '@cf/zai-org/glm-4.7-flash'), R('GLM-5.3 Flash'), R('Llama 3.3 70B Fast', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'),
-    R('Mistral Small 3.1 24B', '@cf/mistralai/mistral-small-3.1-24b-instruct'), R('GPT-OSS 20B', '@cf/openai/gpt-oss-20b'), R('Qwen3 30B A3B'), R('Llama 3.1 8B', '@cf/meta/llama-3.1-8b-instruct-fp8'),
+    R('GLM-4.7 Flash', '@cf/zai-org/glm-4.7-flash'), R('GLM-5.3 Flash', '@cf/zai-org/glm-5.3-flash'), R('Llama 3.3 70B Fast', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'),
+    R('Mistral Small 3.1 24B', '@cf/mistralai/mistral-small-3.1-24b-instruct'), R('GPT-OSS 20B', '@cf/openai/gpt-oss-20b'), R('Qwen3 30B A3B', '@cf/qwen/qwen3-30b-a3b-fp8'), R('Llama 3.1 8B', '@cf/meta/llama-3.1-8b-instruct-fp8'),
     R('Granite 4.0 Micro', '@cf/ibm-granite/granite-4.0-h-micro'), R('Llama 3.2 3B', '@cf/meta/llama-3.2-3b-instruct'), R('Llama 3.1 8B Fast', '@cf/meta/llama-3.1-8b-instruct-fp8-fast'),
   ]],
   ['Reasoning', [
-    R('GPT-OSS 120B', '@cf/openai/gpt-oss-120b'), R('DeepSeek V4 Pro', '@cf/deepseek-ai/deepseek-v4-pro-0813'), R('DeepSeek V4 Flash', '@cf/deepseek-ai/deepseek-v4-flash-0731'), R('GLM-5.3'),
-    R('Nemotron 3 120B'), R('Qwen3.8 27B'), R('QwQ 32B', '@cf/qwen/qwq-32b'), R('Kimi K2.6', '@cf/moonshotai/kimi-k2.6'),
+    R('GPT-OSS 120B', '@cf/openai/gpt-oss-120b'), R('DeepSeek V4 Pro', '@cf/deepseek-ai/deepseek-v4-pro-0813'), R('DeepSeek V4 Flash', '@cf/deepseek-ai/deepseek-v4-flash-0731'), R('GLM-5.3', '@cf/zai-org/glm-5.3'),
+    R('Nemotron 3 120B', '@cf/nvidia/nemotron-3-120b-a12b'), R('Qwen3.8 27B', '@cf/qwen/qwen3.8-27b'), R('QwQ 32B', '@cf/qwen/qwq-32b'), R('Kimi K2.6', '@cf/moonshotai/kimi-k2.6'),
   ]],
   ['Code', [R('Kimi K2.7 Code', '@cf/moonshotai/kimi-k2.7-code'), R('Qwen2.5 Coder 32B', '@cf/qwen/qwen2.5-coder-32b-instruct')]],
-  ['Reading images and files', [R('Llama 4 Scout', '@cf/meta/llama-4-scout-17b-16e-instruct'), R('Gemma 4 26B', '@cf/google/gemma-4-26b-a4b-it'), R('Llama 3.2 11B Vision'), R('Moondream 3.1')]],
+  ['Reading images and files', [R('Llama 4 Scout', '@cf/meta/llama-4-scout-17b-16e-instruct'), R('Gemma 4 26B', '@cf/google/gemma-4-26b-a4b-it'), R('Llama 3.2 11B Vision', '@cf/meta/llama-3.2-11b-vision-instruct'), R('Moondream 3.1')]],
   ['Search and ranking', [R('BGE-M3'), R('Qwen3 Embedding 0.6B'), R('BGE Base EN v1.5', '@cf/baai/bge-base-en-v1.5'), R('BGE Reranker Base')]],
-  ['Languages', [R('M2M100', '@cf/meta/m2m100-1.2b'), R('IndicTrans2', '@cf/ai4bharat/indictrans2-en-indic-1B'), R('SEA-LION v4 27B')]],
+  ['Languages', [R('M2M100', '@cf/meta/m2m100-1.2b'), R('IndicTrans2', '@cf/ai4bharat/indictrans2-en-indic-1B'), R('SEA-LION v4 27B', '@cf/aisingapore/gemma-sea-lion-v4-27b-it')]],
   ['Speech to text', [
     R('Whisper Large v3 Turbo', '@cf/openai/whisper-large-v3-turbo'), R('Whisper', '@cf/openai/whisper'),
     R('Deepgram Nova-3', '@cf/deepgram/nova-3'), R('Deepgram Flux'), R('Smart Turn v2'),

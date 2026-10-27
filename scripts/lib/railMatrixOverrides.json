@@ -16,6 +16,7 @@
     "FLUX.2 Klein 4B": { "id": "@cf/black-forest-labs/flux-2-klein-4b", "caps": ["image"] },
     "FLUX.2 Klein 9B": { "id": "@cf/black-forest-labs/flux-2-klein-9b", "caps": ["image"] },
     "GLM-4.7 Flash": { "id": "@cf/zai-org/glm-4.7-flash", "caps": ["text"] },
+    "GLM-5.2": { "id": "@cf/zai-org/glm-5.2", "caps": ["text"] },
     "GLM-5.3": { "id": "@cf/zai-org/glm-5.3", "caps": ["text"] },
     "GLM-5.3 Flash": { "id": "@cf/zai-org/glm-5.3-flash", "caps": ["text"] },
     "GPT-OSS 120B": { "id": "@cf/openai/gpt-oss-120b", "caps": ["text"] },
@@ -64,6 +65,53 @@
     "legal": { "defaultNeeds": "text", "allow": ["text"] },
     "multi": { "defaultNeeds": "embedding", "allow": ["embedding", "translation", "text"] },
     "search": { "defaultNeeds": "embedding", "allow": ["embedding", "text"] }
+  },
+  "alternates": {
+    "_about": "D1338 (#2711, 2026-10-27): each kind's further models, appended after the canvas's own suggestions so a member may pick them on every page of that kind. They pass the same checks as the canvas's models (caps the kind allows, a price, a name), and the canvas's Default never changes.",
+    "chat": [
+      { "t": "Qwen3 30B A3B", "role": "Lighter", "line": "Quick answers at a lower cost" },
+      { "t": "GLM-5.3 Flash", "role": "Newer", "line": "Quick answers from a newer model" }
+    ],
+    "synth": [
+      { "t": "Qwen3 30B A3B", "role": "Lighter", "line": "Groups notes at a lower cost" },
+      { "t": "Nemotron 3 120B", "role": "Thorough", "line": "Weighs every note before it groups them" }
+    ],
+    "write": [
+      { "t": "GLM-5.3 Flash", "role": "Newer", "line": "Clean drafts from a newer model" },
+      { "t": "Qwen3 30B A3B", "role": "Lighter", "line": "Short drafts at a lower cost" }
+    ],
+    "plan": [
+      { "t": "Qwen3 30B A3B", "role": "Lighter", "line": "Quick plans at a lower cost" },
+      { "t": "GLM-5.3", "role": "Longer", "line": "Plans that hold many steps at once" }
+    ],
+    "reason": [
+      { "t": "Nemotron 3 120B", "role": "Second view", "line": "A second model to test the same claim" },
+      { "t": "Qwen3.8 27B", "role": "Long reading", "line": "Reasons over long documents" },
+      { "t": "DeepSeek R1 Distill 32B", "role": "Step by step", "line": "Shows each step of its reasoning" },
+      { "t": "GLM-5.3", "role": "Newest", "line": "The newest reasoning model" }
+    ],
+    "research": [
+      { "t": "DeepSeek V4 Flash", "role": "Faster", "line": "Quicker research over many sources" },
+      { "t": "GLM-5.2", "role": "Long reading", "line": "Reads very long sources in one pass" }
+    ],
+    "numbers": [
+      { "t": "Qwen3 30B A3B", "role": "Lighter", "line": "Quick sums at a lower cost" },
+      { "t": "Nemotron 3 120B", "role": "Second view", "line": "A second model to check the figures" }
+    ],
+    "legal": [
+      { "t": "Nemotron 3 120B", "role": "Second view", "line": "A second reading of the same terms" },
+      { "t": "GLM-5.3", "role": "Newest", "line": "The newest model for long terms" }
+    ],
+    "vision": [
+      { "t": "Llama 3.2 11B Vision", "role": "Lighter", "line": "Reads images at a lower cost" }
+    ],
+    "multi": [
+      { "t": "SEA-LION v4 27B", "role": "Southeast Asia", "line": "Writes for Southeast Asian markets and languages" },
+      { "t": "IndicTrans2", "role": "Indian languages", "line": "Translates English into Indian languages" }
+    ],
+    "speech": [
+      { "t": "Whisper", "role": "Short clips", "line": "The earlier Whisper, for short clips" }
+    ]
   },
   "searchIndexKinds": ["research", "search"],
   "searchIndexModel": "@cf/baai/bge-base-en-v1.5",
