@@ -7,6 +7,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 
 | File | What it holds |
 | --- | --- |
+| `lovable/` | D1082 (#2947): Build in Lovable's dialog, button and model, mounted on an experiment row and beside Add must-have. See its README. |
 | `cyclePaths.js` | D694's pure predicate for cycle roots, modules, actions, new pages and records; App gives each one the cycle's own inset |
 | `recordModel.js` | D696 PR 1's pure record rules: safe record links, Worker id checks, row/tone mapping, section anchors, declared-action dispatch and the client export registry. PR 2 maps the merged Worker forms and confirmations, filters unsaveable forms, and builds JSON or multipart action bodies. |
 | `RecordView.jsx` | D696's record body: pills/actions, four facts, main/side sections and real activity. Exports `RecordActions`, `RecordFacts`, `RecordSection` and `RecordActivity`; the caller supplies cycle/module names and callbacks, and owns reads and every dialog. |

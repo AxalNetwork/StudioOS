@@ -58,7 +58,8 @@ export function Cell({ cell, first = false, linkState = undefined, plain = false
  * end of each row the caller can act on (Edit). A row it returns null for
  * draws an empty cell, so the columns stay aligned.
  *
- * Each `add` entry is `{ text, href, state?, onOpen?, onClick? }`. A link
+ * Each `add` entry is `{ text, href, state?, onOpen?, onClick? }`, or `{ key, node }`
+ * for an entry that is its own control (D1082: Build in Lovable). A link
  * passes its `state` on, so an Add's `/new` address carries `state.under`
  * and closing it can go back to the page that opened it (D695).
  */
@@ -82,6 +83,8 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{title}</h2>
           <div className="flex flex-wrap gap-2">{addButtons.map((addBtn) => {
+            // D1082 (LV7): an entry may be its own control (Build in Lovable beside Add must-have).
+            if (addBtn?.node) return <span key={addBtn.key || 'node'} className="inline-flex">{addBtn.node}</span>;
             const addHref = safeHref(addBtn?.href);
             const className = 'whitespace-nowrap rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep';
             return addBtn?.text && (addBtn.onClick

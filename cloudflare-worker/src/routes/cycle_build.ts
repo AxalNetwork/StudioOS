@@ -1,5 +1,6 @@
 /** D662 — Build overview and six module reads, from the founder's project. */
 import { Hono } from 'hono';
+import { lovableHandler } from '../services/lovable/launch';
 import { readCapTable } from '../services/capTableToday';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
@@ -227,7 +228,7 @@ async function fromCode(env: Env, projectId: number) {
   }
 }
 
-async function prototype(env: Env, p: Project): Promise<ModuleRead> {
+async function prototype(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.is_must_have, f.delivery_status, f.done_at, f.updated_at,
             f.hypothesis_id, f.due_date, u.name AS owner, h.claim AS test_hypothesis
@@ -264,7 +265,22 @@ async function prototype(env: Env, p: Project): Promise<ModuleRead> {
       { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
     sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
-    parts: { github: await prototypeGithub(env, p) } };
+    parts: { github: await prototypeGithub(env, p), lovable: await prototypeLovable(env, p, viewer) } };
+}
+
+/**
+ * D1082 (#2947, LV7 and LV4): Build in Lovable beside Add must-have, for a
+ * writer, and when Prototype / MVP was last opened in Lovable. A failed read
+ * says so and keeps the module.
+ */
+async function prototypeLovable(env: Env, p: Project, viewer: Viewer) {
+  try {
+    const row = await env.DB.prepare(`SELECT MAX(opened_at) AS at FROM build_handoffs WHERE project_id = ? AND provider = 'lovable' AND record_table = 'projects' AND record_id = ?`)
+      .bind(p.id, String(p.id)).first<{ at: string | null }>();
+    return { state: 'ok', project_id: p.id, record: { kind: 'prototype', id: String(p.id) }, can_launch: canWrite(p, viewer), opened_at: row?.at ?? null };
+  } catch {
+    return { state: 'unreadable', reason: 'When this was last opened in Lovable could not be read.', project_id: p.id, record: { kind: 'prototype', id: String(p.id) }, can_launch: canWrite(p, viewer), opened_at: null };
+  }
 }
 
 /** GitHub's state for a fed must-have, in the module's words (D782, #2112). */
@@ -1619,6 +1635,13 @@ async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
 // D690 (#1695 decision 13): the writes a record action runs. Declared as plain
 // functions so each route and its helpers read as one handler.
 export { patchFeature, postRisk, postRoadmap, patchRoadmap, patchFounder, postFormationStep, patchFormationStep, putSystem };
+
+// D1082 (#2947): Build in Lovable — the draft, the check, the launch and LV4's
+// "Opened in Lovable on" read (services/lovable/launch.ts). The Worker never calls Lovable.
+app.post('/lovable/draft', lovableHandler('build', 'draft'));
+app.post('/lovable/check', lovableHandler('build', 'check'));
+app.post('/lovable/launch', lovableHandler('build', 'launch'));
+app.get('/lovable/launches', lovableHandler('build', 'launches'));
 
 export default app;
 // Build's module slugs, so services/cycleActivity.ts refuses a module that does not exist (D690).

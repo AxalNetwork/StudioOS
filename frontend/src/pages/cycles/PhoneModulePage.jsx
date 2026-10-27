@@ -140,6 +140,8 @@ export default function PhoneModulePage({
           <p className="m-0 flex min-h-[40px] items-center text-[10px] font-extrabold uppercase tracking-[.12em] text-violet-700 dark:text-violet-300">One next thing</p>
           <h2 id="phone-module-next-title" className="m-0 mt-2 text-[29px] font-black leading-[1.15] tracking-[-.032em] text-gray-900 [text-wrap:balance] dark:text-gray-100">{headline}</h2>
           {addOne && <Cta add={addOne} />}
+          {/* D1082 (LV8a): an entry that is its own control (Build in Lovable) follows the first Add. */}
+          {(Array.isArray(add) ? add : []).filter((a) => a?.node).map((a) => <div key={a.key || 'node'} className="mt-3 flex justify-center">{a.node}</div>)}
         </section>
       )}
       <section className={`${headline ? 'mt-[22px]' : ''} min-w-0`.trim()} data-testid="phone-module-chart" data-state={view.state}>

@@ -28,6 +28,7 @@
  * neither.
  */
 import { Hono } from 'hono';
+import { lovableHandler } from '../services/lovable/launch';
 import { hasRecords } from '../services/records';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -462,5 +463,12 @@ cycleValidate.patch('/hypotheses/:id', async (c) => {
     }));
   } catch (e) { return writeFailed(c, e); }
 });
+
+// D1082 (#2947): Build in Lovable — the draft, the check, the launch and LV4's
+// "Opened in Lovable on" read (services/lovable/launch.ts). The Worker never calls Lovable.
+cycleValidate.post('/lovable/draft', lovableHandler('validate', 'draft'));
+cycleValidate.post('/lovable/check', lovableHandler('validate', 'check'));
+cycleValidate.post('/lovable/launch', lovableHandler('validate', 'launch'));
+cycleValidate.get('/lovable/launches', lovableHandler('validate', 'launches'));
 
 export default cycleValidate;

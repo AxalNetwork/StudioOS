@@ -22,6 +22,7 @@ import { isPlainClick } from './cycleModel.js';
 import { declaredActions, dispatchOf, pillView, rowAction, rowView, sectionId, toneOf } from './recordModel.js';
 
 import { NR } from './CycleModulePage.jsx';
+import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 const PILL = {
   v1: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
   v2: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
@@ -129,7 +130,13 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
     });
     if (!rows.length) phoneRows.push({ key: 'empty', title: section.empty ? section.empty : 'Nothing recorded here yet.', chevron: false });
     if (action) phoneRows.push({ key: 'action', title: action.tone === 'danger' ? danger(action.label) : action.label, ...runOf(action, handlers) });
-    return <PhoneGroup id={sectionId(cycleName, moduleName, section.title)} testid="record-section" label={section.title} rows={phoneRows} />;
+    // D1082 (LV8a): an experiment's Build in Lovable below its group on the phone; the dialog is a full-height sheet there.
+    const lovable = rows.map((raw) => rowView(raw)).filter((row) => row.lovable && (row.lovable.can_launch || row.lovable.opened_at));
+    return <>
+      <PhoneGroup id={sectionId(cycleName, moduleName, section.title)} testid="record-section" label={section.title} rows={phoneRows} />
+      {lovable.map((row, index) => <div key={`lovable-${index}`} className="flex flex-col gap-1 text-[12.5px]" data-testid="record-lovable-row">
+        <span className="text-axal-ink dark:text-gray-200">{text(row.a)}</span><BuildInLovable lovable={row.lovable} /></div>)}
+    </>;
   }
   return <section id={sectionId(cycleName, moduleName, section.title)} className={CARD}>
     <header className="flex items-center justify-between gap-3 border-b border-axal-hairline px-4 py-3 dark:border-gray-700">
@@ -150,7 +157,8 @@ export function RecordSection({ section, side = false, cycleName, moduleName, de
           {side && row.c !== '' && <span className="ml-2"><Status value={row.c} tone={row.tone} /></span>}
           {side && ownAction && <span className="ml-2"><RecordAction action={ownAction} quiet {...handlers} /></span>}
         </div>
-        {!side && <div className="flex items-center gap-2"><Status value={row.c} tone={row.tone} />{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}</div>}
+        {!side && <div className="flex flex-wrap items-center justify-end gap-2"><Status value={row.c} tone={row.tone} />{ownAction && <RecordAction action={ownAction} quiet {...handlers} />}
+          {row.lovable && <BuildInLovable lovable={row.lovable} />}</div>}
       </div>;
     })}
   </section>;

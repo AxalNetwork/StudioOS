@@ -27,6 +27,8 @@ import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView, { RecordPhoneProvider } from './RecordView';
+import { BuildInLovable } from './lovable/BuildInLovable';
+import { prototypeLovable } from './lovable/lovableModel';
 import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
@@ -695,6 +697,14 @@ function RecordCrumb({ title, type = null, id = null }) {
 /** D1178: a Use of funds page under a tab, and the tab it sits under. */
 const UOF_SUB_TAB = { forecast: 'runway', compare: 'scenarios' };
 
+/** D1082 (#2947, LV7): Build in Lovable beside Add must-have on Prototype / MVP (`parts.lovable`). */
+function withLovable(cycle, slug, module, add) {
+  const lovable = prototypeLovable(cycle, slug, module);
+  if (!lovable) return add;
+  const list = Array.isArray(add) ? add : add ? [add] : [];
+  return [...list, { key: 'lovable', node: <BuildInLovable lovable={lovable} /> }];
+}
+
 export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null }) {
   const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
   const location = useLocation();
@@ -1109,9 +1119,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         query={query}
         onQuery={setQuery}
         action={action}
-        add={narrativeAdmin ? undefined : forms.length && projectId
+        add={withLovable(cycle, slug, module, narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
-          : fnOf(def.add, slug)?.(q, openAction)}
+          : fnOf(def.add, slug)?.(q, openAction))}
         rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
