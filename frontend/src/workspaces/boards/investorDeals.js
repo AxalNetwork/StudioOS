@@ -59,18 +59,17 @@ export default function investorDealsBoard(role, api) {
         title: 'Screening desk',
         span: 'half',
         source: 'screening',
+        // D1260 (#3283): the desk sends the deals only. Their scores are each
+        // venture's scorecard, drawn on the zone as the eleven-scope strip.
         cols: '1.5fr .8fr .8fr',
-        columns: ['Company', 'Tier', 'Score'],
-        empty: 'Nothing has been scored against the rubric yet.',
-        summary: (d) => summary(
-          count(d?.scored?.available ? d.scored.rows.filter((r) => r.total_score !== null).length : null, 'scored deal'),
-          count(d?.flags?.available ? d.flags.rows.length : null, 'flag'),
-        ),
-        rows: (d) => top(d?.scored?.available ? d.scored.rows.filter((r) => r.total_score !== null) : [])
-          .map((r) => [r.company || `Deal #${r.deal_id}`, title(r.tier), r.total_score === null ? null : String(r.total_score)]),
+        columns: ['Company', 'Sector', 'Deal status'],
+        empty: 'No deal is open to you to screen yet.',
+        summary: (d) => summary(count(d?.desk?.available ? d.desk.rows.length : null, 'deal')),
+        rows: (d) => top(d?.desk?.available ? d.desk.rows : [])
+          .map((r) => [r.company || `Deal #${r.deal_id}`, title(r.sector), title(r.deal_status)]),
         footnote: () =>
-          'The rubric itself is a shape rather than a list — how a score is composed, with no '
-          + 'per-deal row to show here. The zone holds it, beside every pass this fund has recorded.',
+          'Each deal’s scores are its venture scorecard: eleven scopes, never one total. The zone draws '
+          + 'them beside every pass this fund has recorded.',
       },
       {
         slug: 'commit',

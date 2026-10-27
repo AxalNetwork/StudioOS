@@ -154,9 +154,12 @@ place.
 
 ## 5. Share the payment instructions (founder, then the investor)
 
-**Today this step happens outside StudioOS.** The company's receiving
-instructions (D1217, migration 613) are built but **not mounted**. #3214 holds
-their mount, pending S01's answer. Until it lands:
+**Today this step happens outside StudioOS's pages.** The company's receiving
+instructions (D1217, migration 613) are mounted at
+`/api/closings/company-receiving-accounts` (#3214): the founder saves the
+account, every read is masked, and an investor with a signed line (D1215's line
+on an open closing, its own envelope completed and signed by them) reveals it,
+logged without the number. No page calls these routes yet, so:
 - The founder's room reads "Your company's receiving account: Not read here yet".
 - The investor's **See payment instructions** drawer opens with CP9's warning,
   then says the instructions are not read here, naming #3214. It shows no
@@ -291,7 +294,7 @@ These are recorded on the Worker but have no control on any page.
 | Record evidence on a line | `POST /api/closings/:uid/lines/:lineUid/evidence` | The same |
 | Withdraw evidence | `POST /api/closings/:uid/evidence/:evidenceUid/withdraw` | The same |
 | Commit or release fund money (`fund_investment.commit`, `.release`) | none | Not recordable. The page says "No route records this yet". |
-| Show the receiving account, and reveal it (CP1, CP9) | not mounted (#3214) | Step 5 |
+| Show the receiving account, and reveal it (CP1, CP9) | `GET`, `PUT` and `POST /reveal` on `/api/closings/company-receiving-accounts/:projectId` (#3214) | Step 5; no page calls them yet |
 
 A call made by hand is still the Admin's act: it is checked and logged the same
 way. Never paste the session token anywhere.
@@ -314,7 +317,7 @@ way. Never paste the session token anywhere.
   - `cloudflare-worker/src/routes/closings.ts` and `cloudflare-worker/src/services/closings.ts`;
   - `cloudflare-worker/src/services/stagedSigning.ts`;
   - `cloudflare-worker/src/services/reportingDuties.ts`;
-  - `cloudflare-worker/src/routes/company_receiving_accounts.ts`, not mounted.
+  - `cloudflare-worker/src/routes/company_receiving_accounts.ts`, mounted at `/api/closings/company-receiving-accounts` (#3214).
 - **Pages:** `frontend/src/pages/closing/`.
 - **Decisions:**
   - D1213: the pages;

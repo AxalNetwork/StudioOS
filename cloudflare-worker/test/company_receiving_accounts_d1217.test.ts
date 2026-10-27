@@ -47,6 +47,9 @@ function fixture(){
  VALUES(51,50,3,'investor@example.test','synthetic-signing-token','2027-01-01','signed','2026-10-01');
  INSERT INTO safe_issuances(uid,project_id,investor_name,amount_cents,valuation_cap_cents,currency,envelope_id,created_by)
  VALUES('safe-one',10,'Fixture investor',25000,1000000,'usd',50,1);
+ INSERT INTO closings(id,uid,deal_id,project_id,currency,status,created_by) VALUES(500,'closing-one',1000,10,'USD','open',5);
+ INSERT INTO closing_lines(id,uid,closing_id,commitment_id,investor_user_id,amount_cents,currency,envelope_id,status,created_by)
+ VALUES(501,'closing-line-one',500,30,3,25000,'USD',50,'open',5);
  INSERT INTO integrations(id,uid,user_id,provider_key,status,auth_type) VALUES(80,'fixture-mercury',3,'mercury','active','oauth_mcp');
  INSERT INTO mercury_investor_proposals(id,uid,user_id,integration_id,kind,external_id,mercury_id,target_kind,target_id,amount_cents,posted_on)
  VALUES(81,'proposal-one',3,80,'closing','closing:fixture-wire','fixture-wire','deal_commitment',30,25000,'2026-10-15');`);
@@ -107,11 +110,24 @@ test('unsigned, unrelated, withdrawn and incomplete investment paper cannot reve
   await save(f);
   for(const user of [null,1,2,4,5,7])assert.notEqual((await f.call(user,'POST','/10/reveal',{commitment_uid:'line-one'})).status,200);
   assert.equal((await f.call(3,'POST','/10/reveal',{commitment_uid:'line-other'})).status,403);
-  for(const sql of ["UPDATE esign_envelopes SET document_type='nda' WHERE id=50", "UPDATE esign_envelopes SET status='sent' WHERE id=50", "UPDATE esign_recipients SET status='pending' WHERE id=51", "UPDATE safe_issuances SET amount_cents=10000 WHERE uid='safe-one'","UPDATE safe_issuances SET project_id=20 WHERE uid='safe-one'","UPDATE esign_envelopes SET deal_id=2000 WHERE id=50","UPDATE esign_recipients SET user_id=4 WHERE id=51"]){
-   f.db.exec("UPDATE esign_envelopes SET document_type='safe',status='completed',deal_id=1000 WHERE id=50; UPDATE esign_recipients SET status='signed',user_id=3 WHERE id=51; UPDATE safe_issuances SET amount_cents=25000,project_id=10 WHERE uid='safe-one'");f.db.exec(sql);
-   assert.equal((await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'})).status,403);
+  // #3214 on D1215: the signed line is the commitment's line on its deal's open closing, the line's
+  // own envelope completed and signed by this investor. A SAFE for the same amount no longer counts.
+  const RESET="UPDATE esign_envelopes SET status='completed' WHERE id=50; UPDATE esign_recipients SET status='signed',user_id=3,signed_at='2026-10-01' WHERE id=51; UPDATE closing_lines SET envelope_id=50,status='open',commitment_id=30 WHERE id=501; UPDATE closings SET status='open' WHERE id=500";
+  for(const sql of ["UPDATE esign_envelopes SET status='sent' WHERE id=50", "UPDATE esign_recipients SET status='pending' WHERE id=51", "UPDATE esign_recipients SET user_id=4 WHERE id=51",
+    "UPDATE closing_lines SET envelope_id=NULL WHERE id=501", "UPDATE closing_lines SET status='withdrawn' WHERE id=501", "UPDATE closing_lines SET status='received' WHERE id=501",
+    "UPDATE closings SET status='closed' WHERE id=500", "UPDATE closing_lines SET commitment_id=31 WHERE id=501", "DELETE FROM closing_lines WHERE id=501"]){
+   f.db.exec(RESET);if(!f.one('SELECT 1 AS x FROM closing_lines WHERE id=501'))f.db.exec("INSERT INTO closing_lines(id,uid,closing_id,commitment_id,investor_user_id,amount_cents,currency,envelope_id,status,created_by) VALUES(501,'closing-line-one',500,30,3,25000,'USD',50,'open',5)");
+   f.db.exec(sql);
+   assert.equal((await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'})).status,403,sql);
   }
-  f.db.exec("UPDATE safe_issuances SET amount_cents=25000,project_id=10 WHERE uid='safe-one'; UPDATE esign_envelopes SET deal_id=1000 WHERE id=50; UPDATE esign_recipients SET user_id=3 WHERE id=51");
+  f.db.exec("INSERT INTO closing_lines(id,uid,closing_id,commitment_id,investor_user_id,amount_cents,currency,envelope_id,status,created_by) VALUES(501,'closing-line-one',500,30,3,25000,'USD',50,'open',5)");
+  f.db.exec(RESET);
+  // The interim SAFE bridge alone, with no line, is refused.
+  f.db.exec("UPDATE closing_lines SET envelope_id=NULL WHERE id=501");
+  assert.equal((await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'})).status,403,'the SAFE bridge still reveals');
+  f.db.exec(RESET);
+  // A line already sent still owes money, so it may reveal.
+  f.db.exec("UPDATE closing_lines SET status='sent' WHERE id=501");
   const r=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.account.account_number,NUMBER);assert.equal(r.body.expires_in_seconds,30);
   const log=f.rows('SELECT * FROM company_receiving_account_reveals');assert.equal(log.length,1);assert.equal(log[0].actor_user_id,3);assert.equal(log[0].commitment_id,30);assert.ok(!JSON.stringify(log).includes(NUMBER));
   assert.equal(log[0].account_uid,r.body.account.uid);assert.equal(log[0].company_uid,'company-one');
@@ -199,6 +215,30 @@ test('accepting the sender proposal records Sent atomically and never changes Re
   assert.equal((await acceptProposal(f.env,user,f.one('SELECT * FROM mercury_investor_proposals WHERE id=81'))).ok,false);
   assert.deepEqual(await ownCommitments(f.env,user),[...(await ownCommitments(f.env,user)).filter((x:any)=>x.id!==30)]);
  }finally{f.close();}
+});
+
+test('#3214: Accept writes Sent on D1215\'s line as sending-side evidence, never Received; a closed or withdrawn line keeps only the commitment record',async()=>{
+ const f=fixture();try{
+  const user=f.one('SELECT * FROM users WHERE id=3');
+  assert.equal((await acceptProposal(f.env,user,f.one('SELECT * FROM mercury_investor_proposals WHERE id=81'))).ok,true);
+  assert.equal(f.one('SELECT status FROM closing_lines WHERE id=501').status,'sent','the line does not read Sent');
+  const ev=f.rows('SELECT * FROM closing_evidence WHERE line_id=501');
+  assert.equal(ev.length,1);assert.deepEqual([ev[0].kind,ev[0].side,ev[0].source_ref,ev[0].recorded_by,ev[0].accepted_by],['investor_mercury','sending','mercury:fixture-wire',3,3]);
+  assert.equal(f.one("SELECT COUNT(*) AS n FROM closing_evidence WHERE side='receiving'").n,0,'a sender report became receiving evidence');
+  const events=f.rows('SELECT event,source_ref,actor_user_id FROM closing_events WHERE line_id=501');
+  assert.deepEqual(events.map((e:any)=>({...e})),[{event:'evidence_added',source_ref:`closing_evidence:${ev[0].uid}`,actor_user_id:3}]);
+  assert.ok(!JSON.stringify(events).includes('25000'));
+  assert.equal(f.one("SELECT status FROM commitments WHERE id=30").status,'pending','Sent confirmed the commitment');
+ }finally{f.close();}
+ for(const sql of ["UPDATE closings SET status='closed' WHERE id=500","UPDATE closing_lines SET status='withdrawn' WHERE id=501","DELETE FROM closing_lines WHERE id=501"]){
+  const g=fixture();try{
+   g.db.exec(sql);
+   assert.equal((await acceptProposal(g.env,g.one('SELECT * FROM users WHERE id=3'),g.one('SELECT * FROM mercury_investor_proposals WHERE id=81'))).ok,true,sql);
+   assert.ok(g.one('SELECT sent_at FROM commitments WHERE id=30').sent_at,sql);
+   assert.equal(g.one('SELECT COUNT(*) AS n FROM closing_evidence').n,0,`${sql}: evidence on a line that is not open`);
+   assert.equal(g.one('SELECT COUNT(*) AS n FROM closing_events').n,0,sql);
+  }finally{g.close();}
+ }
 });
 
 test('stale amounts, currency, foreign owners and already received lines cannot become Sent',async()=>{
@@ -315,4 +355,48 @@ test('audit identities and outcomes survive account-version or company deletion 
    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM company_receiving_accounts').get() as any).n,0);
   }finally{db.close();}
  }
+});
+
+test('#3214: a replacement also tells an investor whose unpaid line on an open closing came from a Raise prospect', async()=>{
+ const f=fixture();try{
+  await save(f);
+  f.db.exec("INSERT INTO closing_lines(id,uid,closing_id,prospect_id,investor_user_id,amount_cents,currency,status,created_by) VALUES(502,'prospect-line',500,77,4,10000,'USD','open',5)");
+  await save(f,1,OTHER_NUMBER);
+  assert.deepEqual(f.rows("SELECT user_id FROM notifications_inbox WHERE type='company_receiving_account_changed' ORDER BY user_id").map((x:any)=>x.user_id),[3,4,9]);
+  assert.equal(f.one("SELECT link FROM notifications_inbox WHERE type='company_receiving_account_changed' AND user_id=4").link,'/deals/1000/closing');
+ }finally{f.close();}
+ const g=fixture();try{
+  await save(g);
+  g.db.exec("INSERT INTO closing_lines(id,uid,closing_id,prospect_id,investor_user_id,amount_cents,currency,status,created_by) VALUES(502,'prospect-line',500,77,4,10000,'USD','received',5)");
+  await save(g,1,OTHER_NUMBER);
+  assert.ok(!g.rows("SELECT user_id FROM notifications_inbox WHERE type='company_receiving_account_changed'").some((x:any)=>x.user_id===4),'a received line was told to pay');
+ }finally{g.close();}
+});
+
+test('#3214: the route is mounted before the Closing router, and the client names the same paths', ()=>{
+ const index=readFileSync('cloudflare-worker/src/index.ts','utf8');
+ const mount=index.indexOf("app.route('/api/closings/company-receiving-accounts', companyReceivingAccounts);");
+ const closings=index.indexOf("app.route('/api/closings', closings);");
+ assert.ok(mount>0&&closings>mount,'the account routes are not mounted, or mounted after /api/closings swallows them');
+ const client=readFileSync('frontend/src/lib/api/companyReceivingAccounts.js','utf8');
+ assert.match(client,/`\/closings\/company-receiving-accounts\/\$\{encodeURIComponent\(projectId\)\}`/);
+ assert.match(client,/\$\{at\(projectId\)\}\/reveal/);
+ assert.match(readFileSync('frontend/src/lib/api.js','utf8'),/^export \* from '\.\/api\/companyReceivingAccounts\.js';$/m);
+});
+
+test('#3214: the reveal checks the account against the signed line\'s own currency, and a refused Accept writes no line evidence', async()=>{
+ const f=fixture();try{
+  await save(f);
+  f.db.exec("UPDATE closing_lines SET currency='EUR' WHERE id=501");
+  const r=await f.call(3,'POST','/10/reveal',{commitment_uid:'line-one'});
+  assert.equal(r.status,409);assert.equal(r.body.error,'company_account_currency_mismatch');assert.ok(!JSON.stringify(r.body).includes(NUMBER));
+ }finally{f.close();}
+ const g=fixture();try{
+  // Sent was already recorded on the commitment, so this Accept writes nothing at all.
+  g.db.exec("UPDATE commitments SET sent_at='2026-10-14 10:00:00' WHERE id=30");
+  const out=await acceptProposal(g.env,g.one('SELECT * FROM users WHERE id=3'),g.one('SELECT * FROM mercury_investor_proposals WHERE id=81'));
+  assert.equal(out.ok,false);
+  assert.equal(g.one('SELECT COUNT(*) AS n FROM closing_evidence').n,0,'evidence was written for an Accept that failed');
+  assert.equal(g.one('SELECT status FROM closing_lines WHERE id=501').status,'open');
+ }finally{g.close();}
 });

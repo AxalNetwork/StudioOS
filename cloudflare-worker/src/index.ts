@@ -17,6 +17,7 @@
  * the legacy in-worker routes mounted here as the source of truth.
  */
 
+import { LEGACY_BUILDER_PATHS, builderRedirectTarget } from './services/builderRedirect';
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
 import { developerKeys } from './routes/developer_keys';
@@ -135,6 +136,7 @@ import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import closings, { adminClosings } from './routes/closings';
+import companyReceivingAccounts from './routes/company_receiving_accounts';
 import reporting from './routes/reporting';
 import reportingReports from './routes/reporting_reports';
 import fundReporting from './routes/fund_reporting';
@@ -185,6 +187,8 @@ import './integrations/providers/vercel';
 import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
 import './integrations/providers/notion';
+// D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
+import './services/notion/build';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
@@ -598,6 +602,14 @@ app.use('*', async (c, next) => {
   url.host = 'axal.vc';
   return c.redirect(url.toString(), 301);
 });
+
+// D1315 (#2418): /account/developer… moved to /account/builder…, permanently, the sub-path and query kept.
+for (const path of LEGACY_BUILDER_PATHS) {
+  app.on(['GET', 'HEAD'], path, (c) => {
+    const url = new URL(c.req.url);
+    return c.redirect(builderRedirectTarget(url.pathname, url.search) ?? '/account/builder', 308);
+  });
+}
 
 /**
  * D751 T9 (#1921): each OAuth connector the catalogue offers (oauth2, an
@@ -1274,6 +1286,8 @@ app.route('/api/fund-ledger', fundLedger);
 app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
+// D1217 (#3214): the company's receiving account, its own module, mounted before the Closing router (S01, 2026-10-26).
+app.route('/api/closings/company-receiving-accounts', companyReceivingAccounts);
 // D1215 (#3212): closings as a record; the admin desk is mounted before the /api/admin catch-all.
 app.route('/api/closings', closings);
 // D1058 (#2928): reporting duties and periods, the founder's desk and the investor's view.
