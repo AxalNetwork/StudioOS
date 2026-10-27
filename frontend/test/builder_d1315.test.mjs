@@ -132,9 +132,11 @@ test('the pane: the eyebrow trail, one h2 "Builder", the page line, and honest w
   assert.match(t, /^Builder › MCP and services Builder Where assistants and your API keys connect to StudioOS/);
   assert.equal((services.match(/<h2/g) || []).length, 1);
   assert.match(services, /<nav aria-label="Builder"/);
-  assert.match(t, /StudioOS MCP server https:\/\/axal\.vc\/mcp/);
+  // #2479 builds MCP and services' cards; only the tools wait for D846's read.
+  assert.match(t, /axal\.vc\/mcp https:\/\/axal\.vc\/mcp/);
   assert.match(t, new RegExp(BUILDER_WORDS.movedNotice.replace('.', '\\.')));
-  for (const id of ['tools', 'limits', 'services']) assert.match(services, new RegExp(`data-testid="builder-wait-${id}"`), id);
+  assert.match(services, /data-testid="builder-wait-tools"/);
+  for (const id of ['mcp-endpoint', 'mcp-callers', 'mcp-services', 'mcp-limits']) assert.match(services, new RegExp(`data-testid="${id}"`), id);
   assert.match(t, new RegExp(NOT_YET));
   const keys = text(html(h(BuilderSection, { view: builderViewFor('/account/builder/keys'), storage }), '/account/builder/keys'));
   assert.match(keys, /^Builder › API keys Builder Keys your own scripts use to call StudioOS\./);
@@ -142,6 +144,7 @@ test('the pane: the eyebrow trail, one h2 "Builder", the page line, and honest w
   const drawer = html(h(BuilderSection, { view: builderViewFor('/account/builder/assistants/g1'), storage }), '/account/builder/assistants/g1');
   assert.match(text(drawer), /^Builder › AI assistants Builder/);
   assert.match(drawer, /data-testid="builder-drawer-assistant"/);
+  assert.match(drawer, /data-testid="mcp-assistant-drawer"/, '#2479 draws MCPX5');
   assert.match(drawer, /href="\/account\/builder"[^>]*>‹ MCP and services</);
   assert.doesNotMatch(drawer, /builder-moved-notice/, 'the notice is the page’s, not a drawer’s');
   // Never sample data: no bracketed canvas placeholder reaches the page.
