@@ -171,6 +171,11 @@ test('the Super Admin: four entities in order, endings, the Fund note, the previ
     assert.ok(t.includes(FUND_NOTE));
     assert.match(t, /Token …f1x2/);
     assert.ok(t.includes(ENTITY_SHEET_AUDIT_FOOT), 'the sheet says "sheet" (S1 on #1991)');
+    const frame = m.pr(m.by('sheet-dialog'));
+    assert.equal(frame.role, 'dialog', 'D1317: the entity sheet opens in the shared Sheet');
+    assert.ok(frame['aria-labelledby']);
+    assert.equal(frame['data-width'], 520);
+    assert.ok(m.by('mercury-audit-foot') && m.text(m.by('sheet-dialog-footer')).includes(ENTITY_SHEET_AUDIT_FOOT), 'its audit line in the fixed footer');
     assert.ok(!t.includes('Opening this page is recorded'), 'never a page\'s sentence inside a sheet');
     for (const id of ['mercury-sync-holdings', 'mercury-replace-holdings', 'mercury-disconnect-holdings', 'mercury-connect-fund']) assert.ok(m.by(id), id);
     assert.equal(m.by('mercury-sync-fund'), undefined, 'no sync for an entity that is not connected');

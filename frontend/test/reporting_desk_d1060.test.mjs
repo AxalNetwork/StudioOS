@@ -401,6 +401,10 @@ test('mounted Duties (RPT2, RPT8): rows from the desk, search and grouping, and 
     await t.click(t.all('reporting-duty-row')[1]);
     const drawer = t.byId('reporting-duty-drawer');
     assert.ok(drawer);
+    assert.equal(t.props(drawer).role, 'dialog', 'D1317: the drawer is the shared Sheet');
+    assert.ok(t.props(drawer)['aria-labelledby']);
+    assert.equal(t.props(drawer)['data-width'], 640);
+    assert.ok(t.byId('reporting-duty-drawer-scrim'), 'the Sheet’s scrim, not a centred backdrop');
     assert.match(t.text(drawer), /Quarterly KPI report to Bluefern Angels/);
     assert.equal(t.text(t.byId('reporting-duty-source')), 'From the closing’s template');
     assert.equal(t.text(t.byId('reporting-duty-clause')), 'Term Sheet (deal pack) Information rights');
