@@ -36,7 +36,7 @@ async function venture(c: any, user: any, project: unknown) {
   if (!row?.company_id) throw new WorkspaceError('company_not_enabled', 409);
   return row as { id: number; company_id: number };
 }
-/** The venture and the member's enabled Workspace connection for it. D1092's Validate routes reuse it. */
+/** The venture and the member's enabled Workspace connection. D1092's Validate routes and D1093's Build routes share this scope check. */
 export async function context(c: any, user: any, project: unknown) {
   const p = await venture(c, user, project);
   const row = await c.env.DB.prepare("SELECT id,uid FROM integrations WHERE user_id = ? AND provider_key = 'google_workspace' AND status = 'active'").bind(user.id).first();
@@ -61,7 +61,7 @@ export async function prepareWorkspaceConnect(c: any) {
   if (await workspaceConnection(c.env, user.id) !== 'ready') await c.env.DB.prepare("UPDATE integrations SET status = 'pending' WHERE id = ?").bind(row.id).run();
   return user;
 }
-function safe(handler: (c: any, user: any) => Promise<any>) {
+export function safe(handler: (c: any, user: any) => Promise<any>) {
   return async (c: any) => {
     try { return await handler(c, await member(c)); }
     catch (error) {
@@ -124,6 +124,8 @@ workspace.delete('/files/:uid', safe(async (c, user) => {
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE google_workspace_files SET status = 'stopped', mapping_json = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?").bind(row.id, user.id),
     c.env.DB.prepare('UPDATE connector_fed_items SET local_id = NULL WHERE integration_id = ? AND project_id = ? AND module = ? AND (external_id = ? OR substr(external_id,1,length(?) + 1) = ? || ?)').bind(row.integration_id,row.project_id,row.module,row.drive_file_id,row.drive_file_id,row.drive_file_id,':'),
+    // D1093: a Doc no longer used proposes nothing; an accepted note stays.
+    c.env.DB.prepare("DELETE FROM google_workspace_proposals WHERE integration_id = ? AND project_id = ? AND module = ? AND source_key = ? AND status = 'pending'").bind(row.integration_id,row.project_id,row.module,row.drive_file_id),
   ]);
   return c.json({ stopped: true, facts_kept: true });
 }));

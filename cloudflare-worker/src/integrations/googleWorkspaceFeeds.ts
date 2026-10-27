@@ -6,7 +6,8 @@
  * calls it makes. The registry's `pulls` and `feeds` read this list, and
  * `google_workspace_feeds.test.ts` holds them to it.
  *
- * D1092 (#2957, part 3): Validate's three. Parts 4–6 add theirs here.
+ * D1092 (#2957, part 3): Validate's three. D1093 (#2958, part 4): Build's two.
+ * Parts 5 and 6 add theirs here.
  *
  * No side effects and no imports: the registry and the pages may read it.
  */
@@ -27,4 +28,8 @@ export const GOOGLE_WORKSPACE_FEEDS: readonly GoogleWorkspaceFeed[] = Object.fre
   { key: 'validate_interview_notes', what: 'Interview notes from a Doc you map to an interview', module: 'customer_research', file_kind: 'doc', lands: 'fact', reads: ['files.get', 'documents.get'], decision: 'D1092' },
   { key: 'validate_demand_signals', what: 'Form responses that give an answer you chose, as signals to confirm', module: 'demand_signals', file_kind: 'form', lands: 'proposal', reads: ['forms.get', 'forms.responses.list'], decision: 'D1092' },
   { key: 'validate_signal_evidence', what: 'Signals you confirmed, offered as evidence on a hypothesis you pick', module: 'experiments', file_kind: 'form', lands: 'proposal', reads: [], decision: 'D1092' },
+  // D1093 (#2958): a spec Doc's title and headings, proposed as a design note; nothing lands until the founder accepts.
+  { key: 'spec_doc', what: 'Spec Docs, proposed as design notes', module: 'solution_design', file_kind: 'doc', lands: 'proposal', reads: ['documents.get'], decision: 'D1093' },
+  // D1093 (#2958): a roadmap Sheet, once mapped, as roadmap items. Each objective is a fact under the one-owner rule.
+  { key: 'roadmap_sheet', what: 'A mapped roadmap Sheet, as roadmap items', module: 'product_roadmap', file_kind: 'sheet', lands: 'fact', reads: ['spreadsheets.values.get'], decision: 'D1093' },
 ].map((f) => Object.freeze({ ...f, reads: Object.freeze(f.reads) })) as GoogleWorkspaceFeed[]);
