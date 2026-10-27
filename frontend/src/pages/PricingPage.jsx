@@ -31,10 +31,11 @@ import CheckoutSheet from '../components/checkout/CheckoutSheet';
 import PackSheet from '../components/checkout/PackSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
 import {
-  PRICING_TABS, compareCell, heldCard, initialTab, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
+  PRICING_TABS, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
+  storageGroup,
 } from '../lib/pricingModel';
 import {
-  AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS, TOKENS_BAND,
+  AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS, STORAGE_COMPARE, TOKENS_BAND,
 } from '../lib/sitePricing';
 import './pricing.css';
 
@@ -126,19 +127,28 @@ function PlanCard({ card, onCheckout }) {
   );
 }
 
-function Compare({ tab, cards }) {
+/** A group's heading; D1172's Storage group carries the canvas's New pill. */
+function GroupHead({ t, meta }) {
+  return <div className="axp-group">{t}{meta?.fresh && <span className="axp-pill axp-pill-new axp-group-pill">New</span>}</div>;
+}
+
+/** D1172: "Best suited for" is a sentence, set in words rather than figures. */
+const cellClass = (meta, label) => (meta?.fresh && label === STORAGE_COMPARE.best ? 'axp-cell axp-cell-words' : 'axp-cell');
+
+function Compare({ tab, cards, storage = null }) {
   const D = useContext(Face);
-  const groups = COMPARE[tab] || [];
+  // D1172 (#3085, STG18–STG19): the Storage group comes last, from the public read.
+  const groups = [...(COMPARE[tab] || []), ...(storage ? [storage] : [])];
   // The phone shows one plan: the member's own, else the second (the canvas's default).
   const [pick, setPick] = useState(() => {
     const own = cards.findIndex((c) => c.current);
     return own >= 0 ? own : Math.min(1, cards.length - 1);
   });
   const at = Math.min(pick, cards.length - 1);
-  const cell = (v, key) => {
+  const cell = (v, key, cn = 'axp-cell') => {
     const c = compareCell(v);
     return (
-      <span key={key} className="axp-cell">
+      <span key={key} className={cn}>
         {c.tick && <span className="axp-tick" aria-label="Included">{TICK}</span>}
         {c.dash && <span className="axp-dash" aria-label="Not included">—</span>}
         {c.text}
@@ -151,13 +161,13 @@ function Compare({ tab, cards }) {
       <h2 id="axp-compare-h" className="axp-h2">Compare plans</h2>
       <div className="axp-desk axp-table">
         <div className="axp-thead" style={cols}><span />{cards.map((c) => <span key={c.id} className={`axp-th${D}`}>{c.name}</span>)}</div>
-        {groups.map(([t, rows]) => (
+        {groups.map(([t, rows, meta]) => (
           <React.Fragment key={t}>
-            <div className="axp-group">{t}</div>
+            <GroupHead t={t} meta={meta} />
             {rows.map((r) => (
-              <div key={r[0]} className="axp-row" style={cols}>
+              <div key={r[0]} className="axp-row" style={cols} data-testid={meta?.fresh ? `pricing-storage-${r[0] === STORAGE_COMPARE.best ? 'best' : 'row'}` : undefined}>
                 <span className="axp-row-l">{r[0]}</span>
-                {r.slice(1).map((v, i) => cell(v, i))}
+                {r.slice(1).map((v, i) => cell(v, i, cellClass(meta, r[0])))}
               </div>
             ))}
           </React.Fragment>
@@ -170,11 +180,11 @@ function Compare({ tab, cards }) {
           ))}
         </div>
         <div className="axp-table">
-          {groups.map(([t, rows]) => (
+          {groups.map(([t, rows, meta]) => (
             <React.Fragment key={t}>
-              <div className="axp-group">{t}</div>
+              <GroupHead t={t} meta={meta} />
               {rows.map((r) => (
-                <div key={r[0]} className="axp-row axp-row-phone"><span className="axp-row-l">{r[0]}</span>{cell(r[1 + at], 'v')}</div>
+                <div key={r[0]} className="axp-row axp-row-phone"><span className="axp-row-l">{r[0]}</span>{cell(r[1 + at], 'v', cellClass(meta, r[0]))}</div>
               ))}
             </React.Fragment>
           ))}
@@ -506,6 +516,18 @@ export function PricingBody({ user = null }) {
                 <div className="axp-lp-head"><span className={`axp-lp-name${D}`}>{LP_ACCESS.name}</span><span className={`axp-lp-name${D}`}>$0</span><span className="axp-price-u">/ month</span></div>
                 <div className="axp-p">{LP_ACCESS.text}</div>
                 <div className="axp-small">{LP_ACCESS.note}</div>
+                {(() => {
+                  // D1172 (#3085, STG18b): the LP band's storage line, from lp_access's row in the public read.
+                  const line = lpStorageLine(plans.body, STORAGE_COMPARE);
+                  return (
+                    <div className="axp-lp-storage" data-testid="pricing-lp-storage">
+                      {line ? (<>
+                        <span className="axp-lp-storage-t">{line.text}<span className="axp-pill axp-pill-new axp-group-pill">New</span></span>
+                        <span className="axp-small">{line.note}</span>
+                      </>) : <span className="axp-small">{STORAGE_COMPARE.lpMissing}</span>}
+                    </div>
+                  );
+                })()}
                 <Link to={LP_ACCESS.link.to} className="axp-btn axp-btn-inline">{LP_ACCESS.link.label}</Link>
               </div>
               <ul className="axp-lp-feats">
@@ -528,7 +550,7 @@ export function PricingBody({ user = null }) {
         </section>
       )}
 
-      {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} />}
+      {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} storage={storageGroup(plans.body, specs, tab, STORAGE_COMPARE)} />}
 
       {!roleTab && user && <TokensBand read={me} onRetry={retryMe} storage={storage} autoReload={autoReload} packs={plans} user={user} onAdd={(uid) => setPackSheet({ pack: uid })} />}
       {!roleTab && <Packs read={plans} onRetry={retryPlans} signedIn={!!user} onBuy={(uid) => setPackSheet({ pack: uid })} />}

@@ -1,7 +1,10 @@
 # `pages/investor/deals` — the Deals bucket, one file per artboard
 
-**All four artboards are built.** ID1–ID4 each have their file below; the
-bucket root (`pages/investor/InvestorDealsWorkspace.jsx`) now draws only the
+**Three artboards are built, and ID1 is retired.** ID2–ID4 each have their
+file below. ID1 Pipeline (`PipelineZone.jsx`) was retired by D1243 (#3256):
+Deal flow's table at `/deals?view=table` does its job, and `/deals/pipeline`
+forwards there with its query kept (`../dealflow/DealsPipelineRedirect.jsx`).
+The bucket root (`pages/investor/InvestorDealsWorkspace.jsx`) draws only the
 deal-invitation queue, which no artboard covers.
 
 `design/canvases/integrated/Pages · Investor Deals.dc.html` draws four
@@ -12,7 +15,6 @@ band underneath.
 
 | File | Artboard | Route | Architecture |
 | --- | --- | --- | --- |
-| `PipelineZone.jsx` | ID1 · Deals · Pipeline | `/deals/pipeline` | WORK BOARD |
 | `ScreeningZone.jsx` | ID2 · Deals · Screening | `/deals/screening` | ANALYTICS |
 | `CommitZone.jsx` | ID3 · Deals · Commit | `/deals/commit` | LEDGER |
 | `ClosingZone.jsx` | ID4 · Deals · Closing | `/deals/closing` | COLLECTION |

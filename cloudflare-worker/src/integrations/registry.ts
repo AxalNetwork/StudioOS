@@ -629,7 +629,7 @@ export const PERSONAL_MERCURY: Readonly<Record<PersonalMercuryRole, Readonly<Per
     permissions: FOUNDER_PARTNER_PERMISSIONS, feeds: [],
   }),
   investor: Object.freeze({
-    description: "Your own Mercury account, read-only: your capacity in Deals › Pipeline and Deals › Commit, the wire that funded a commitment in Deals › Closing, and proposals for your Fund sections. On HQ, also a dated proof of funds for Axal's admins, who never see your balance.",
+    description: "Your own Mercury account, read-only: your capacity in Deals › Commit, the wire that funded a commitment in Deals › Closing, and proposals for your Fund sections. On HQ, also a dated proof of funds for Axal's admins, who never see your balance.",
     capabilities: ['Capacity', 'Closing proposals', 'Fund calls, accounting and reporting proposals', 'Proof of funds'],
     permissions: ['Read your Mercury account names, last four digits, available balances, transactions and statements for your own sections; only you see a balance, and it never sends, transfers or requests money.'],
     // D840 part 4 (#2349), D884 (#2557): the investor's sections, read from `mercuryFeeds.ts` itself.
@@ -825,7 +825,7 @@ export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewe
   const metadata = cartaInvestor ? { ...CONNECTOR_METADATA.carta, feeds: ['deals_pipeline', 'investor_portfolio'],
     pulls: [{ what: 'Your firms, funds, portfolio investments, securities and cap tables', module: 'investor_portfolio' }],
     permissions: ['Read your Carta firms.', 'Read funds in those firms.', 'Read their portfolio investments.', 'Read their investment securities.', 'Read their portfolio companies’ capitalization tables.'],
-    used_by: [{ label: 'Deals · Pipeline', href: '/deals/pipeline' }, { label: 'Portfolio', href: '/portfolio' }] } : CONNECTOR_METADATA[p.key];
+    used_by: [{ label: 'Deal flow', href: '/deals' }, { label: 'Portfolio', href: '/portfolio' }] } : CONNECTOR_METADATA[p.key];
   const feeds = variant ? [...variant.feeds] : metadata?.feeds ?? [];
   return {
     key: p.key,
