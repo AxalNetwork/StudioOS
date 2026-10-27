@@ -22,11 +22,5 @@ test('2462: raise edits omit allocations, with and without an existing split', (
  const custom = [{label:'Other recorded section',pct:10}];
  assert.deepEqual(JSON.parse(allocationPatch(true,[20,20,20,20,10],custom).use_of_funds).at(-1),custom[0]);
 });
-test('2462: clearing a financial driver keeps it empty; explicit zero remains zero', () => {
- const financials = read('../src/pages/FinancialsPage.jsx');
- const source = financials.match(/export function driverValue\(raw\) \{[\s\S]*?\n\}/)[0].replace('export ','');
- const ctx = vm.createContext({});
- vm.runInContext(`${source}; globalThis.parse = driverValue`,ctx);
- assert.equal(ctx.parse(''),''); assert.equal(ctx.parse('0'),0);
- assert.match(financials,/if \(!projectId \|\| !assumptions \|\| missingDriver\) return/);
-});
+// D1180 (#3107): FinancialsPage.jsx is retired, and its driver test with it. Forecast holds the
+// same rule: an empty driver is refused, never read as 0 (`driverError`, use_of_funds_d1178.test.mjs).

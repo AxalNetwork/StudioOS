@@ -21,7 +21,7 @@ import {
 export const CARD = 'rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900';
 export const H3 = 'm-0 text-[14px] font-extrabold text-gray-900 dark:text-gray-100';
 export const MUTED = 'text-[12px] leading-snug text-gray-500 dark:text-gray-400';
-export const BTN = 'inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-violet-700 px-3.5 text-[12.5px] font-semibold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[36px]';
+export const BTN = 'inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-violet-700 px-3.5 text-[12.5px] font-semibold text-white hover:bg-violet-800 dark:hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[36px]';
 export const BTN_SEC = 'inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 text-[12.5px] font-semibold text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 sm:min-h-[36px]';
 export const BTN_GHOST = 'inline-flex min-h-[44px] items-center justify-center rounded-lg px-2.5 text-[12.5px] font-semibold text-violet-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-violet-300 sm:min-h-[36px]';
 const LINK = 'font-semibold text-violet-700 underline underline-offset-2 dark:text-violet-300';
@@ -132,7 +132,7 @@ export function ConfirmDialog({ title, sub, confirm, tone = 'pri', onConfirm, on
       footer={(
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className={BTN_SEC} onClick={onClose}>Cancel</button>
-          <button type="button" className={tone === 'neg' ? `${BTN} bg-red-700 hover:bg-red-800` : BTN} onClick={go} disabled={busy} data-testid={`${testId}-confirm`}>{busy ? 'Working…' : confirm}</button>
+          <button type="button" className={tone === 'neg' ? `${BTN} bg-red-700 hover:bg-red-800 dark:hover:bg-red-600` : BTN} onClick={go} disabled={busy} data-testid={`${testId}-confirm`}>{busy ? 'Working…' : confirm}</button>
         </div>
       )}>
       {err ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid={`${testId}-error`}>{err}</p> : null}
@@ -177,7 +177,7 @@ export function AssignDialog({ row, interviews, onAssign, onClose, inboxHref }) 
  * WA2: the chats inbox
  * ------------------------------------------------------------------ */
 
-export function ChannelInbox({ items, channel, onChannel, onAssign, onAsk, onIgnore, sessionHref, now }) {
+export function ChannelInbox({ items, channel, onChannel, onAssign, onAsk, onIgnore, sessionHref, now, emptyLine = 'No chats here yet. Customers who write to your business number appear here.' }) {
   const rows = inboxRows(items, channel, now);
   return (
     <section className="flex flex-col gap-3" data-testid="channel-inbox">
@@ -189,7 +189,7 @@ export function ChannelInbox({ items, channel, onChannel, onAssign, onAsk, onIgn
           </button>
         ))}
       </div>
-      {!rows.length ? <p className={`${CARD} ${MUTED}`} data-testid="inbox-none">No chats here yet. Customers who write to your business number appear here.</p> : (
+      {!rows.length ? <p className={`${CARD} ${MUTED}`} data-testid="inbox-none">{emptyLine}</p> : (
         <ul className={`${CARD} m-0 list-none divide-y divide-gray-100 p-0 dark:divide-gray-800`}>
           {rows.map((r) => (
             <li key={r.uid} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center" data-testid={`inbox-row-${r.uid}`}>
@@ -219,11 +219,11 @@ export function ChannelInbox({ items, channel, onChannel, onAssign, onAsk, onIgn
  * WA3, WA7: the transcript
  * ------------------------------------------------------------------ */
 
-export function ChannelTranscript({ read, meta }) {
+export function ChannelTranscript({ read, meta, provider = 'whatsapp' }) {
   const [view, setView] = useState('both');
   const segments = read?.segments || [];
   const turns = transcriptTurns(segments, view);
-  const banner = consentBanner(read?.channel_consent);
+  const banner = consentBanner(read?.channel_consent, provider);
   const notice = pendingNotice(pendingTranslations(segments));
   return (
     <section className="flex flex-col gap-3" data-testid="channel-transcript">
@@ -251,6 +251,10 @@ export function ChannelTranscript({ read, meta }) {
           {turns.map((t) => (
             <li key={t.id} className={`flex max-w-[78%] flex-col gap-1 ${t.you ? 'items-end self-end' : 'self-start'}`} data-testid={`turn-${t.id}`}>
               <span className={MUTED}>{t.who}{t.at ? ` · ${t.at}` : ''}{t.voice ? ' · voice note' : ''}</span>
+              {t.deleted ? (
+                // D869 (TG3): the contact deleted this message in Telegram; only its place in the chat is kept.
+                <div className="rounded-xl border border-dashed border-gray-300 px-3 py-2 text-[12.5px] italic text-gray-500 dark:border-gray-600 dark:text-gray-400" data-testid={`turn-deleted-${t.id}`}>Deleted in Telegram. Nothing of it is kept.</div>
+              ) : (
               <div className={`flex flex-col gap-1.5 rounded-xl px-3 py-2.5 ${t.you ? 'border border-violet-200 bg-violet-50 dark:border-violet-400/40 dark:bg-violet-950/30' : 'border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'}`}>
                 {t.showOriginal ? <p className="m-0 text-[13px] text-gray-900 dark:text-gray-100" data-testid={`turn-original-${t.id}`}>{t.original}</p> : null}
                 {t.showTranslation ? (
@@ -259,7 +263,9 @@ export function ChannelTranscript({ read, meta }) {
                   </p>
                 ) : null}
                 {t.pending ? <span className="text-[11.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid={`turn-pending-${t.id}`}>Translation pending</span> : null}
+                {t.edited ? <span className="text-[11.5px] font-semibold text-gray-500 dark:text-gray-400" data-testid={`turn-edited-${t.id}`}>Edited in Telegram</span> : null}
               </div>
+              )}
             </li>
           ))}
         </ol>
@@ -360,7 +366,7 @@ function Confidence({ conf }) {
   );
 }
 
-export function ChannelProposals({ groups, editHref, onAccept, onDiscard, onAcceptAll, line }) {
+export function ChannelProposals({ groups, editHref, onAccept, onDiscard, onAcceptAll, line, buildLabel = 'For Build' }) {
   const [ask, setAsk] = useState(null);
   const all = acceptAllIds(groups);
   const total = groups.reduce((n, g) => n + g.items.length, 0);
@@ -379,7 +385,7 @@ export function ChannelProposals({ groups, editHref, onAccept, onDiscard, onAcce
           <ul className="m-0 mt-2 flex list-none flex-col divide-y divide-gray-100 p-0 dark:divide-gray-800">
             {g.items.map((it) => (
               <li key={it.id} className="flex flex-col gap-1.5 py-2.5" data-testid={`proposal-${it.id}`}>
-                <span className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-gray-900 dark:text-gray-100">{it.t}{it.build ? <Pill tone="lav" testId={`proposal-build-${it.id}`}>For Build</Pill> : null}</span>
+                <span className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-gray-900 dark:text-gray-100">{it.t}{it.build ? <Pill tone="lav" testId={`proposal-build-${it.id}`}>{buildLabel}</Pill> : null}</span>
                 {it.q ? <blockquote className="m-0 border-l-2 border-violet-300 pl-2 text-[12.5px] text-gray-700 dark:border-violet-500 dark:text-gray-300">“{it.q}”</blockquote> : <span className={MUTED}>Quote not recorded.</span>}
                 <span className="flex flex-wrap items-center gap-3"><Confidence conf={it.conf} /></span>
                 <div className="flex flex-wrap gap-1.5">
