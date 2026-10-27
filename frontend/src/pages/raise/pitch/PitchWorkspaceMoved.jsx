@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useMovedNotice } from '../../../ui';
+import { useMovedNotice } from '../../../ui/AdminPageHeader';
 import { MOVED_NOTICES, builderTarget, movedTarget } from './pitchStudioModel';
 
 /**
