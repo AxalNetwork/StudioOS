@@ -78,7 +78,8 @@ export function CompanySheet({ onClose, opener }) {
         <button type="button" onClick={() => { setAdding(false); setError(''); }}>Cancel</button>
       </form>}
     <div className="mt-2 border-t border-gray-200 dark:border-gray-800">
-      <SheetRow title="Company Settings" description="Members, access, the public profile" to="/company-settings" onClose={onClose} />
+      <SheetRow title="Company Settings" description="Members, access, the public profile" to="/account/companies/settings" onClose={onClose} />
+      <SheetRow title="Companies and projects" description="Every company you belong to, and its ventures" to="/account/companies" onClose={onClose} />
       <p className="py-3 text-[11.5px] text-gray-600 dark:text-gray-400">{SHARED_NOTICE}</p>
     </div>
   </PhoneSheet>;

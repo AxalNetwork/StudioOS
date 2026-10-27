@@ -87,9 +87,14 @@ test('the four cards folded into the account pane are all still rendered', () =>
     settings.indexOf("safeActive === 'account' && ("),
     settings.indexOf("safeActive === 'security-privacy'"),
   );
-  for (const card of ['<ProfileTabs', '<EmailSection', '<YourCompaniesSection', '<RolesAccessCard', '<DocumentsAgreementsSection']) {
+  // D1140 (#3020): "Your companies" moved to Companies and projects; the
+  // account pane keeps a moved notice in its place, and the card renders on
+  // the Companies tab, so it is still drawn, one pane over.
+  for (const card of ['<ProfileTabs', '<EmailSection', '<ProfileMovedNotice', '<RolesAccessCard', '<DocumentsAgreementsSection']) {
     assert.ok(pane.includes(card), `${card} left the account pane`);
   }
+  assert.ok(!pane.includes('<YourCompaniesSection'), 'Your companies is back on Profile and identity');
+  assert.match(settings, /entityRecords=\{<YourCompaniesSection /, 'Your companies is no longer drawn on Companies and projects');
 });
 
 test('Profile, Legal entity and Identity & tax are the three profile sub-tabs', () => {

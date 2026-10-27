@@ -217,6 +217,8 @@ function getCsrfHeader(method) {
 // done(true) so the original request is retried once. Concurrent 403s share one
 // in-flight prompt. If no modal is mounted (e.g. nothing listening), we fail
 // fast via the synchronous `ack` flag so the request never hangs.
+// D1287: `request(path, { noStepUp: true })` skips the prompt and throws the 403,
+// for a read that is only shown (the checkout sheet's auto-reload line).
 let _stepUpInFlight = null;
 function requestStepUp(ttlMinutes) {
   if (_stepUpInFlight) return _stepUpInFlight;
@@ -834,6 +836,7 @@ export async function request(path, options = {}) {
         res.status === 403 &&
         err && err.code === 'step_up_required' &&
         !options.__steppedUp &&
+        !options.noStepUp &&
         !path.startsWith('/auth/step-up')
       ) {
         try {
@@ -3667,6 +3670,9 @@ export const api = {
   // D209 — H14, the topology stated once. Super admin; a branch reads its own
   // half through branchDeployment() below.
   hqPlatformTopology: () => request('/admin/platform/topology'),
+  // D1170 — HQ › Platform › Storage: every member's stored bytes as totals by
+  // kind, plan and state; no name, email, id or file name. Super admin.
+  hqPlatformStorage: () => request('/admin/platform/storage'),
   hqSetPlatformSwitch: (key, action, reason) =>
     request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
       method: 'POST',
