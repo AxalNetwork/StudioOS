@@ -19,6 +19,7 @@ import {
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import GithubRepositoriesSection from './GithubRepositoriesSection';
+import VercelProjectsSection from './VercelProjectsSection';
 import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -284,6 +285,8 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false 
       </div>
       {/* The provider's own section goes here: GitHub's repositories (F4, #1957), Mercury (F5, below), the channel cards (C1). */}
       {p.key === 'github' && <GithubRepositoriesSection p={p} focus={repositories} onChanged={onChanged} />}
+      {/* D1096 (#2961): Vercel's Choose projects. */}
+      {p.key === 'vercel' && <VercelProjectsSection p={p} onChanged={onChanged} />}
       <div className="-mx-5">
         {mercury ? (
           <div data-testid="connector-page-mercury">
