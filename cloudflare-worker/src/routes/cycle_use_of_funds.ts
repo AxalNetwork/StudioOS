@@ -8,6 +8,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { base,fields,hires,idOf,makeBase,milestone,obj,PlanError,saveHire,saveMilestone,saveScenario,saveSplit,scenario,deleteScenario,view,type Scope } from '../services/useOfFunds/store';
 import { planRead,runwayToday } from '../services/useOfFunds/read';
+import useOfFundsEadwyn from './use_of_funds_eadwyn';
 
 const r=new Hono<{Bindings:Env;Variables:{uof:Scope;mercury:boolean}}>();
 r.use('*',async(c,next)=>{
@@ -34,6 +35,7 @@ const body=async(c:any)=>{
   if (!obj(b)) throw new PlanError(400,'invalid_plan','Send a plan object. Nothing was saved.');
   return b;
 };
+r.route('/eadwyn', useOfFundsEadwyn);
 r.get('/plan',async c=>c.json(await planRead(c.env,c.get('uof'),c.get('mercury'))));
 r.get('/scenarios',async c=>{
   const s=c.get('uof'); await base(c.env,s);
@@ -73,4 +75,19 @@ r.get('/hires',async c=>c.json({items:(await hires(c.env,c.get('uof'))).map(h=>(
 r.patch('/hires/:id',async c=>c.json(await saveHire(c.env,c.get('uof'),idOf(c.req.param('id')),await body(c))));
 r.delete('/hires/:id',async c=>c.json(await saveHire(c.env,c.get('uof'),idOf(c.req.param('id')),{},true)));
 r.put('/',async c=>c.json(await saveSplit(c.env,c.get('uof'),await body(c))));
+/** D1177 (#3104): the plan's history (UF15), newest first, 20 a page. Mercury rows are the founder's alone. */
+r.get('/history',async c=>{
+  const s=c.get('uof'); const mercury=c.get('mercury');
+  const page=Math.max(1,Math.min(1000,Number.parseInt(String(c.req.query('page')??'1'),10)||1));
+  const [count,rows]=await Promise.all([
+    c.env.DB.prepare(`SELECT COUNT(*) AS n FROM activity_logs a
+      WHERE a.project_id=? AND a.entity_type='raise.use-of-funds' AND (?=1 OR a.action NOT LIKE 'mercury%')`).bind(s.projectId,mercury?1:0).first<{n:number}>(),
+    c.env.DB.prepare(`SELECT a.id,a.action,a.details,a.created_at,u.name AS who,u.role AS who_role FROM activity_logs a LEFT JOIN users u ON u.id=a.user_id
+      WHERE a.project_id=? AND a.entity_type='raise.use-of-funds' AND (?=1 OR a.action NOT LIKE 'mercury%')
+      ORDER BY a.created_at DESC,a.id DESC LIMIT 20 OFFSET ?`).bind(s.projectId,mercury?1:0,(page-1)*20).all<any>(),
+  ]);
+  return c.json({page,page_size:20,total:Number(count?.n??0),items:(rows.results??[]).map(x=>({
+    id:x.id,action:x.action,summary:x.details??null,at:x.created_at,who:x.who??null,admin:x.who_role==='admin',
+  }))});
+});
 export default r;

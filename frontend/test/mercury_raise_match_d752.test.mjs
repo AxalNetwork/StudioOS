@@ -25,7 +25,9 @@ import { api } from '../src/lib/api.js';
 import { MercuryMatchView, RAISE_MATCH_NOTE, RAISE_TARGETS, UNMATCHABLE_TEXT, WITHDRAW_REASON_MIN, unmatchableText } from '../src/components/MercuryMatch.jsx';
 import RaiseReceiptMatches, { RAISE_PANEL_LEAD, RaiseReceiptsView, raiseTargetsOf } from '../src/components/RaiseReceiptMatches.jsx';
 import { MercuryCreditImportView } from '../src/components/spinout/MercuryCreditImport.jsx';
-import { CommitmentsTab, COMMITMENT_MATCH_STATUSES, isDealFounder } from '../src/pages/DealRoomPage.jsx';
+// D1155: the founder's commitments table is the staff one; `viewerOf` names the deal's founder.
+import DealCommitmentsStaff from '../src/pages/deal/DealCommitmentsStaff.jsx';
+import { viewerOf } from '../src/pages/deal/dealAudienceModel.js';
 import { FITS_RAISE_TARGET, FITS_RAISE_TARGET_NOTE, mercuryCreditReason } from '../src/lib/revenueLedger.js';
 import { USE_WORDS } from '../src/pages/account/mercuryModel.js';
 
@@ -48,6 +50,7 @@ const view = (target, read, extra = {}) => ssr(h(MercuryMatchView, { target, sta
 
 test('the deal\'s founder only: an investor, an admin, a partner or another founder is never offered the match', () => {
   const deal = { id: 3, project_founder_id: 41 };
+  const isDealFounder = (role, user, d) => viewerOf(role, user, d) === 'founder';
   assert.equal(isDealFounder('founder', { founder_id: 41 }, deal), true);
   assert.equal(isDealFounder('founder', { founder_id: '41' }, { project_founder_id: 41 }), true);
   assert.equal(isDealFounder('founder', { founder_id: 42 }, deal), false, 'another founder');
@@ -55,7 +58,6 @@ test('the deal\'s founder only: an investor, an admin, a partner or another foun
   assert.equal(isDealFounder('founder', { founder_id: null }, { project_founder_id: null }), false, 'two missing ids are not a match');
   assert.equal(isDealFounder('founder', {}, deal), false);
   assert.equal(isDealFounder('founder', { founder_id: 41 }, {}), false);
-  assert.deepEqual([...COMMITMENT_MATCH_STATUSES], ['pending', 'confirmed']);
 });
 
 test('Capital relationships: the panel is drawn for a founder only, with the Mercury logo, and reads nothing until pressed', () => {
@@ -71,7 +73,8 @@ async function commitments(rows, founderMatch) {
   const was = api.dealCommitments;
   api.dealCommitments = async () => rows;
   try {
-    const v = await mountContracts(h(CommitmentsTab, { dealId: 3, founderMatch }), '/deals/3');
+    // D1155: an Operating Partner reads only; the founder is offered the match.
+    const v = await mountContracts(h(DealCommitmentsStaff, { dealId: 3, viewer: founderMatch ? 'founder' : 'partner' }), '/deals/3');
     try { await v.flush(); await v.flush(); return { text: v.text(), buttons: v.nodes().filter((n) => n.tagName === 'BUTTON').map((n) => v.props(n)['data-testid']) }; }
     finally { await v.unmount(); }
   } finally { api.dealCommitments = was; }
@@ -82,12 +85,12 @@ const ROWS = [
   { id: 13, investor_name: 'Investor C', amount: 50000, status: 'rejected' },
 ];
 
-test('the deal room: an investor\'s view of a commitment shows the status only', async () => {
+test('the deal room: a reader who is not the founder sees each commitment\'s status only', async () => {
   const seen = await commitments(ROWS, false);
-  assert.match(seen.text, /pending/);
-  assert.match(seen.text, /confirmed/);
-  assert.doesNotMatch(seen.text, /Mercury|Received|••/);
-  assert.deepEqual(seen.buttons, []);
+  assert.match(seen.text, /Committed/);
+  assert.match(seen.text, /Received/);
+  assert.doesNotMatch(seen.text, /Match to my Mercury|••/);
+  assert.deepEqual(seen.buttons.filter((b) => /mercury/.test(b || '')), []);
 });
 
 test('the deal room: the founder gets the door on a pending commitment, and on a confirmed one to withdraw, never on another', async () => {
@@ -97,12 +100,13 @@ test('the deal room: the founder gets the door on a pending commitment, and on a
   assert.match(seen.text, /Change the Mercury match/);
 });
 
-test('the deal room passes the founder test, and keeps the commitments read unchanged', () => {
+test('the deal room passes the founder test, and the match is the founder\'s action on a pending or received line', () => {
   const src = codeOnly(readFileSync('frontend/src/pages/DealRoomPage.jsx', 'utf8'));
-  // The tab also carries D752 #1890's admin proof props; only the founder test is pinned here.
-  assert.match(src, /<CommitmentsTab [^>]*dealId=\{deal\.id\}[^>]* founderMatch=\{isDealFounder\(role, user, deal\)\} \/>/);
-  assert.match(src, /\{founderMatch && COMMITMENT_MATCH_STATUSES\.includes\(c\.status\) && \(/);
-  assert.match(src, /api\.dealCommitments\(dealId\)\.then\(setItems\)/);
+  assert.match(src, /<DealCommitmentsStaff [^>]*dealId=\{deal\.id\}[^>]* viewer=\{viewerOf\(role, user, deal\)\}/);
+  const table = codeOnly(readFileSync('frontend/src/pages/deal/DealCommitmentsStaff.jsx', 'utf8'));
+  assert.match(table, /\{act === 'match' && <MercuryMatch target="commitment" targetId=\{c\.id\}/);
+  const model = codeOnly(readFileSync('frontend/src/pages/deal/dealAudienceModel.js', 'utf8'));
+  assert.match(model, /if \(viewer === 'founder' && \(row\.status === 'pending' \|\| row\.status === 'confirmed'\)\) return 'match';/);
 });
 
 // ─────────────────────────────────────────────────────────── the match screen for raise targets

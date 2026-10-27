@@ -24,9 +24,10 @@ import { ProductTestingPanel } from './consoles/ProductTestingConsole';
 import { ProductTestingTabBody, useTestingReads } from './productTesting/ProductTestingTabs';
 import { PAGE_LINE as TESTING_LINE, tabCounts as testingTabCounts, viewOf as testingViewOf } from './productTesting/productTestingModel';
 import { PromoCodesPanel } from './consoles/PromoCodesConsole';
-import { PromoDrawer, PromoNotes, PromoUsage } from './promos/PromoParts';
+import { PromoUsage } from './promos/PromoParts';
 import { PAGE_LINE as PROMO_LINE, viewOf as promoViewOf } from './promos/promoModel';
 import { KycTabBody } from './kyc/KycTabs';
+import KycBusinesses from './kyc/KycBusinesses';
 import { PAGE_LINE as KYC_LINE, viewOf as kycViewOf } from './kyc/kycModel';
 import { BillingPanel } from './consoles/BillingConsole';
 
@@ -133,7 +134,7 @@ export function KycPage() {
   );
   return (
     <ConsolePage crumb={{ ...APPROVALS, current: 'KYC & KYB' }} title="KYC & KYB" line={KYC_LINE} tabs={tabs} testId="admin-kyc">
-      <KycTabBody view={kycViewOf(pathname)} people={<KycConsole />} />
+      <KycTabBody view={kycViewOf(pathname)} people={<KycConsole />} businesses={<KycBusinesses />} />
     </ConsolePage>
   );
 }
@@ -254,13 +255,8 @@ export function PromoCodesPage() {
   );
   return (
     <ConsolePage hqOnly crumb={{ ...PLATFORM, current: 'Promo codes' }} title="Promo codes" line={PROMO_LINE} tabs={tabs} testId="admin-platform-promo-codes">
-      {view.tab === 'usage' ? <PromoUsage /> : (
-        <div className="flex flex-col gap-4">
-          <PromoDrawer id={view.id} />
-          <PromoNotes />
-          <PromoCodesPanel />
-        </div>
-      )}
+      {/* D1275: the list draws the drawer at `/:id` itself, so a change made there refreshes both. */}
+      {view.tab === 'usage' ? <PromoUsage /> : <PromoCodesPanel view={view} />}
     </ConsolePage>
   );
 }

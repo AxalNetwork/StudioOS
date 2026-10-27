@@ -64,7 +64,11 @@ export const LEARNING_PEOPLE_PATH = '/admin/programs/learning/people';
 export const LEARNING_ACTIVITY_PATH = '/admin/programs/learning/activity';
 export const PARTNERS_PATH = '/admin/programs/referral-partners';
 export const PARTNERS_HOW_PATH = '/admin/programs/referral-partners/how-it-runs';
+// D963 (#2796): Referral partners' Queue and Activity, and Investor cohort access's Activity.
+export const PARTNERS_QUEUE_PATH = '/admin/programs/referral-partners/queue';
+export const PARTNERS_ACTIVITY_PATH = '/admin/programs/referral-partners/activity';
 export const INVESTOR_PATH = '/admin/programs/investor-cohorts';
+export const INVESTOR_ACTIVITY_PATH = '/admin/programs/investor-cohorts/activity';
 export const AI_NATIVE_PATH = '/admin/programs/ai-native-venture';
 
 /** The three old addresses. Each redirects where its function now lives (D894's rule). */
@@ -147,8 +151,16 @@ export const GROUPS = ['Ventures', 'Access', 'Network and referrals', 'Rewards',
 /** "Not open to members yet" is `LEARNING_COMING_SOON`'s. */
 export const LEARNING_WHO = LEARNING_COMING_SOON ? 'Not open to members yet' : 'Every member';
 
-const PLAYBOOK_UNWRITTEN = 'The playbook is not written yet.';
-const PARTNER_TERMS_UNBUILT = 'Set with partner terms, which are not built yet.';
+/**
+ * D963 (#2796): Referral partners' words are part 5's (`FACTS`,
+ * cloudflare-worker/src/services/referralPartnerTerms.ts, OD3 A), and
+ * AI-native Venture's are OD-AIN's answer (A). Migration 593 writes the same
+ * words into part 1's registry where it still holds 560's seed.
+ */
+export const PARTNERS_WHO = 'Members HQ adds as referral partners, in one of three segments: Event organisers, Venture scouts and Deal makers.';
+export const PARTNERS_JOIN = 'By invitation. HQ adds the partner; their own referral code earns.';
+export const PARTNERS_TERMS = 'Standard commission rules, or custom terms the Super Admin approves and the partner signs.';
+export const AI_NATIVE_PURPOSE = 'Founders build an AI-native company with Eadwyn and the studio’s tools.';
 
 /**
  * One entry per card, in the canvas's order. `grant` is the held mode's badge
@@ -164,8 +176,8 @@ export const PROGRAMS = Object.freeze([
   },
   {
     key: 'ai-native-venture', group: 'Ventures', name: 'AI-native Venture',
-    purpose: null, purposeReason: PLAYBOOK_UNWRITTEN,
-    status: 'Proposed', grant: 'Not offered yet', hqGrant: 'HQ only', who: null, whoReason: PLAYBOOK_UNWRITTEN,
+    purpose: AI_NATIVE_PURPOSE,
+    status: 'Proposed', grant: 'Not offered yet', hqGrant: 'HQ only', who: 'Founders', join: 'By application',
   },
   {
     key: 'mentor-cohorts', group: 'Access', name: 'Mentor cohort access',
@@ -179,8 +191,8 @@ export const PROGRAMS = Object.freeze([
   },
   {
     key: 'referral-partners', group: 'Network and referrals', name: 'Referral partners',
-    purpose: 'People who bring events, startups, deals and LPs.',
-    status: 'Partly built', grant: 'HQ-held', hqGrant: 'HQ-held', who: null, whoReason: PARTNER_TERMS_UNBUILT,
+    purpose: 'People who bring events, startups, deals and LPs, under the standard rules or their own signed terms.',
+    status: 'Partly built', grant: 'HQ-held', hqGrant: 'HQ-held', who: PARTNERS_WHO, join: PARTNERS_JOIN,
   },
   {
     key: 'refer-and-earn', group: 'Network and referrals', name: 'Refer & Earn',
@@ -318,23 +330,28 @@ export const PAGES = Object.freeze({
   },
   'referral-partners': {
     title: 'Referral partners', workspace: 'Programs',
-    line: 'People who bring the studio events, startups, deals and LPs.',
-    facts: null,
+    line: 'People who bring the studio events, startups, deals and LPs, under the standard rules or their own signed terms.',
+    facts: [`Who: ${PARTNERS_WHO}`, `Join: ${PARTNERS_JOIN}`, `Terms: ${PARTNERS_TERMS}`],
     tabs: [
       { key: 'overview', label: 'Overview', path: PARTNERS_PATH },
       { key: 'how', label: 'How it runs', path: PARTNERS_HOW_PATH },
+      { key: 'queue', label: 'Queue', path: PARTNERS_QUEUE_PATH },
+      { key: 'activity', label: 'Activity', path: PARTNERS_ACTIVITY_PATH },
     ],
   },
   'investor-cohorts': {
     title: 'Investor cohort access', workspace: 'Programs',
     line: 'Verified investors follow one Lab cohort and meet its founders at Demo Day.',
     facts: ['Who: Verified investors', 'Join: Assigned by an admin', 'Cycle: one Lab cohort'],
-    tabs: [],
+    tabs: [
+      { key: 'overview', label: 'Overview', path: INVESTOR_PATH },
+      { key: 'activity', label: 'Activity', path: INVESTOR_ACTIVITY_PATH },
+    ],
   },
   'ai-native-venture': {
     title: 'AI-native Venture', workspace: 'Programs',
-    line: null, lineReason: PLAYBOOK_UNWRITTEN,
-    facts: null, whoReason: PLAYBOOK_UNWRITTEN,
+    line: AI_NATIVE_PURPOSE,
+    facts: ['Who: Founders', 'Join: By application'],
     tabs: [],
   },
 });
@@ -441,25 +458,34 @@ export const HOW_IT_RUNS = Object.freeze({
   'referral-partners': [
     { title: 'Purpose', lines: ['People who bring the studio events, startups, deals and LPs.'] },
     { title: 'Partner deals', lines: ['Partner deals, their codes and the sign-ups with them are on Partner invitations.'] },
-    { title: 'Terms', lines: ['Per-partner terms are not built yet.'] },
+    {
+      title: 'Terms',
+      lines: [
+        'A partner earns under the standard commission rules, or under custom terms: an admin drafts them, the Super Admin approves them, and they take effect only once the partner signs.',
+        'Signed terms pay instead of the standard rule, within their caps, and pay no L2 or L3 bonus.',
+        'Today only a referred member’s identity check pays. The other standard rules have no event that fires them yet.',
+      ],
+    },
   ],
+  // D963: migration 593's words, rewritten from O-VER, O-NDA, O-SEE and O-INT (D959).
   'investor-cohorts': [
     {
       title: 'How it runs',
       lines: [
-        'An admin gives a verified investor access to one cohort.',
-        'The investor signs the cohort NDA first.',
-        'They see each venture’s summary and weekly progress. Never founders’ email addresses.',
-        'Founders are told and can hide themselves from one investor.',
-        'An introduction request goes to the founder, who accepts or declines.',
+        'An admin gives a verified investor access to one cohort, until an end date. Verified means an investor account that is active, with approved KYC, checked on every read.',
+        'The investor signs the cohort NDA, one per grant, before they read anything.',
+        'They see each venture’s summary and weekly progress. Never a founder’s email address. Pitch deck and Demo Day are not open yet.',
+        'Founders are told when an investor can read them, and can hide themselves from one investor.',
+        'An investor can ask a founder for an introduction. The founder accepts or declines once, and writes first.',
       ],
     },
   ],
 });
 
-export const INVESTOR_BANNER = 'New program. This is the design; nothing runs yet.';
-export const INVESTOR_UNDECIDED = 'Who counts as verified, the cohort NDA, what an investor sees and how a founder answers an introduction are not decided yet.';
-export const AI_NATIVE_WAITS = 'The playbook card and the tiles wait for the playbook.';
+/** D963: the banner stands until part 1's registry says the program runs (`live`). */
+export const INVESTOR_BANNER = 'Not running yet. Investors have no page to read a cohort on yet, and HQ has not marked this program running.';
+export const AI_NATIVE_FOOT = 'When HQ publishes it, you can request it.';
+export const NOT_RUNNING_YET = 'Not running yet';
 
 /* ------------------------------------------------------------------ *
  * Reads, and Guard L

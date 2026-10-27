@@ -1,44 +1,19 @@
-/** D1102 — actual upload payloads through the client; both upload doors start NDA-on. */
+/**
+ * D1102 — actual upload payloads through the client; every upload door starts NDA-on.
+ * D1109 (#2989): the old files tool (`DataRoomPage.jsx`) is retired, so the doors are
+ * the tool's Upload sheet (its real request body is mounted in data_room_files_d1106)
+ * and the module's form; the admin summary moved to `dataroom/DataRoomSummary.jsx`.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { act } from 'react';
 import { h, mountForm, mutationCheck } from './_form_d695.mjs';
 
-const path = 'pages/raise/DataRoomPage.jsx';
-// Isolated exports expose the existing component without changing the production module.
-const source = readFileSync('frontend/src/' + path, 'utf8') + '\nexport { UploadQueue, FounderRoom };';
-
-test('files tool starts NDA-on, sends NDA, and sends Open only after the person turns it off', async () => {
-  await mutationCheck(source, path, async ({ UploadQueue }) => {
-    const previousFetch = globalThis.fetch, previousReader = globalThis.FileReader;
-    const bodies = [];
-    globalThis.fetch = async (url, init = {}) => {
-      assert.equal(new URL(url, 'https://fixture.example.test').pathname, '/api/data-room/synthetic-room/files');
-      bodies.push(JSON.parse(init.body));
-      return new Response(JSON.stringify({ uid: 'synthetic-upload' }), { headers: { 'Content-Type': 'application/json' } });
-    };
-    globalThis.FileReader = class { readAsDataURL() { this.result = 'data:text/plain;base64,eA=='; this.onload(); } };
-    let view;
-    try {
-      view = await mountForm(h(UploadQueue, { projectUid: 'synthetic-room', folders: [], onDone() {} }));
-      const checkbox = () => view.nodes().find(n => n.tagName === 'INPUT' && view.props(n).type === 'checkbox');
-      assert.equal(view.props(checkbox()).checked, true);
-      const upload = async () => {
-        const picker = view.nodes().find(n => n.tagName === 'INPUT' && view.props(n).type === 'file');
-        await act(async () => view.props(picker).onChange({ target: { files: [{ name: 'synthetic.txt', type: 'text/plain', size: 1 }], value: 'synthetic' } }));
-        await view.flush();
-      };
-      await upload(); assert.equal(bodies[0].visibility, 'nda');
-      await act(async () => view.props(checkbox()).onChange({ target: { checked: false } }));
-      await upload(); assert.equal(bodies[1].visibility, 'open');
-      assert.equal(view.props(checkbox()).checked, false);
-    } finally { if (view) await view.unmount(); globalThis.fetch = previousFetch; globalThis.FileReader = previousReader; }
-  }, [
-    ['const [nda, setNda] = useState(true);', 'const [nda, setNda] = useState(false);'],
-    ["visibility: nda ? 'nda' : 'open'", "visibility: 'open'"],
-    ["visibility: nda ? 'nda' : 'open'", "visibility: 'nda'"],
-  ]);
+test('the tool\'s Upload starts NDA-on and sends Open only when the owner turns it off', () => {
+  const upload = readFileSync('frontend/src/pages/raise/dataroom/DataRoomUpload.jsx', 'utf8');
+  assert.ok(upload.includes('const [nda, setNda] = useState(true);'), 'Upload starts with the NDA off');
+  assert.ok(upload.includes("visibility: nda ? 'nda' : 'open'"), 'Upload sends a fixed gate');
+  assert.match(upload, /New files need an NDA unless you switch it off\./);
 });
 
 test('the module upload uses the same NDA default in its real request body', async () => {
@@ -50,37 +25,30 @@ test('the module upload uses the same NDA default in its real request body', asy
 });
 
 test('the admin summary renders counts without owner controls, and an unreadable block is never zero', async () => {
-  await mutationCheck(source, path, async ({ FounderRoom }) => {
+  const path = 'pages/raise/dataroom/DataRoomSummary.jsx';
+  const source = readFileSync('frontend/src/' + path, 'utf8');
+  await mutationCheck(source, path, async ({ AdminRoomSummary }) => {
     for (const failed of [false, true]) {
-      const previous = globalThis.fetch; const seen = []; let down=failed;
-      globalThis.fetch = async (url, init={}) => {
-        seen.push(init.method || 'GET');
-        return new Response(JSON.stringify({ mode:'summary',read_only:true,project:{uid:'synthetic-room'},
-          files:down ? {available:false,reason:'Synthetic failed read'} : {available:true,total:2},
-          folders:{available:true,total:1},coverage:{available:true,covered_items:1,total_items:7},grants:{available:true,total:3} }),
-          {headers:{'Content-Type':'application/json'}});
-      };
+      let retried = 0;
+      const room = { mode: 'summary', read_only: true, project: { uid: 'synthetic-room' },
+        files: failed ? { available: false, reason: 'Synthetic failed read' } : { available: true, total: 2 },
+        folders: { available: true, total: 1 }, coverage: { available: true, covered_items: 1, total_items: 7 }, grants: { available: true, total: 3 } };
       let view;
       try {
-        view=await mountForm(h(FounderRoom,{projects:[{uid:'synthetic-room'}]})); await view.flush();
-        assert.ok(view.by('data-room-admin-summary')); assert.match(view.text(),/Read-only summary/);
-        assert.match(view.text(),failed ? /FilesUnreadable/ : /Files2/);
-        assert.match(view.text(),/Checklist coverage1 of 7/); assert.match(view.text(),/Grants3/);
-        assert.doesNotMatch(view.text(),/Upload files|Nothing in the room yet|Revoke|Require a signed NDA/);
-        if (failed) {
-          down=false; await view.click('Try again'); await view.flush();
-          assert.match(view.text(),/Files2/); assert.doesNotMatch(view.text(),/Unreadable/); assert.equal(seen.length,2);
-        }
-        assert.ok(seen.every(m=>m==='GET'));
-      } finally {if(view) await view.unmount();globalThis.fetch=previous;}
+        view = await mountForm(h(AdminRoomSummary, { room, reload: () => { retried += 1; } })); await view.flush();
+        assert.ok(view.by('data-room-admin-summary')); assert.match(view.text(), /Read-only summary/);
+        assert.match(view.text(), failed ? /FilesUnreadable/ : /Files2/);
+        assert.match(view.text(), /Checklist coverage1 of 7/); assert.match(view.text(), /Grants3/);
+        assert.doesNotMatch(view.text(), /Upload files|Nothing in the room yet|Revoke|Require a signed NDA/);
+        if (failed) { await view.click('Try again'); assert.equal(retried, 1); }
+        else assert.doesNotMatch(view.text(), /Try again/);
+      } finally { if (view) await view.unmount(); }
     }
   }, [
-    ["if (room?.mode === 'summary') return <AdminRoomSummary room={room} reload={load} />;", "if (room?.mode === 'summary') return <p>Upload files</p>;"],
     ['onClick={reload} className="mt-2 text-sm underline', 'onClick={() => {}} className="mt-2 text-sm underline'],
     ["typeof block[key] === 'number' ? block[key] : 'Unreadable'", "typeof block[key] === 'number' ? block[key] : 0"],
   ]);
 });
-
 
 test('D1101 Files, Access and Activity tabs render an admin aggregate before any detail derivation',async()=>{
   const path='pages/raise/dataroom/DataRoomTool.jsx';

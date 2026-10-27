@@ -183,6 +183,7 @@ import './integrations/providers/notion';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
+import ventureScores from './routes/venture_scores';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
 import dashboard from './routes/dashboard';
@@ -332,6 +333,7 @@ import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
 import { testing, partnerTesting, adminTesting } from './routes/testing';
 import adminProductTesters from './routes/admin_product_testers';
+import adminSubAccounts from './routes/admin_sub_accounts';
 import adminReferralPartners from './routes/admin_referral_partners';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
@@ -1371,6 +1373,8 @@ app.route('/api/legal/esign', esign);
 app.route('/api/network', network);
 // Task #9 — Refer & Earn payouts via Stripe Connect Express (import at top).
 app.route('/api/refer-earn', referEarn);
+// D1256 (#3279): the venture scorecard's reads, reviews, corrections, weighting and sharing.
+app.route('/api/venture-scores', ventureScores);
 app.route('/api/networkfx', networkfx);
 app.route('/api/profiling', profiling);
 // D357 — Profiling v2 "me" routes: the caller's own snapshot history and
@@ -1582,6 +1586,8 @@ app.route('/api/partner/testing', partnerTesting);
 app.route('/api/admin/testing', adminTesting);
 // D1042 (#2890): the product tester pool — HQ approves, declines, pauses, resumes and removes.
 app.route('/api/admin/product-testers', adminProductTesters);
+// D1302 (#3399): an account's sub-accounts (Product tester, LP), read where each lives, for Admin › Accounts.
+app.route('/api/admin/sub-accounts', adminSubAccounts);
 // D958 (#2791): referral partners and their custom terms, HQ only.
 app.route('/api/admin/referral-partners', adminReferralPartners);
 // #45 — what the firm records about work in flight: milestones, blockers,
@@ -2061,6 +2067,29 @@ export default {
         }
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
+        }
+        // D1256 (#3279) — the venture scorecard. Every 15 minutes, ventures
+        // whose people's connectors synced since their last row; at 04:20 the
+        // nightly recompute; at 04:30 on a quarter's first day the fairness
+        // check for HQ. Every tier: each deployment scores its own ventures.
+        if (now.getUTCMinutes() % 15 === 7 || (now.getUTCHours() === 4 && (now.getUTCMinutes() === 20 || now.getUTCMinutes() === 30))) {
+          try {
+            const jobs = await import('./services/ventureScoring/jobs');
+            if (now.getUTCMinutes() % 15 === 7) {
+              const r = await jobs.syncRecompute(env, now);
+              if (r.ventures) console.info(`[cron] venture scores after sync ventures=${r.ventures} failed=${r.failed}`);
+            }
+            if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+              const r = await jobs.nightlyRecompute(env, now);
+              console.info(`[cron] venture scores nightly ventures=${r.ventures} failed=${r.failed}`);
+            }
+            if (now.getUTCHours() === 4 && now.getUTCMinutes() === 30 && jobs.isQuarterStart(now)) {
+              const r = await jobs.runFairness(env, now);
+              console.info(`[cron] venture score fairness written=${r.written} gaps=${r.gaps}`);
+            }
+          } catch {
+            console.error('[cron] venture scores unreadable');
+          }
         }
         // D561 — Learning videos no item uses any more, and the videos of
         // items archived for over 30 days, are removed from R2 once a day.

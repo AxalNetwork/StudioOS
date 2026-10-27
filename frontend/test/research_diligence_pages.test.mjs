@@ -10,7 +10,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { activityLine, fileSize, roomFileState } from '../src/pages/research/diligenceRead.js';
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
@@ -21,7 +21,9 @@ const file = read('../src/pages/research/DiligenceFile.jsx');
 const zone = read('../src/pages/research/DiligenceZone.jsx');
 const app = read('../src/App.jsx');
 const api = read('../src/lib/api.js');
-const dataRoom = read('../src/pages/raise/DataRoomPage.jsx');
+// D1109 (#2989): the founder's room is the Data room tool now; DataRoomPage.jsx is retired.
+const dataRoom = readdirSync(new URL('../src/pages/raise/dataroom/', import.meta.url)).filter((f) => f.endsWith('.jsx'))
+  .map((f) => read(`../src/pages/raise/dataroom/${f}`)).join('\n');
 
 /** Both ends: the canvas draws `drawn`, and the page renders `rendered` (default: the same words). */
 function bothEnds(canvas, page, drawn, rendered = drawn) {

@@ -26,6 +26,7 @@ export * from './api/adminPayments.js';
 export * from './api/adminPrograms.js';
 export * from './api/adminPromos.js';
 export * from './api/adminStorage.js';
+export * from './api/adminSubAccounts.js';
 export * from './api/aiBudget.js';
 export * from './api/approvalBoards.js';
 export * from './api/assistants.js';
@@ -64,6 +65,7 @@ export * from './api/ddLifecycle.js';
 export * from './api/dealContext.js';
 export * from './api/dealFlow.js';
 export * from './api/dealInsights.js';
+export * from './api/dealStaff.js';
 export * from './api/dealViews.js';
 export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
@@ -86,6 +88,7 @@ export * from './api/googleWorkspace.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
+export * from './api/investorCohorts.js';
 export * from './api/kyb.js';
 export * from './api/kycGovernance.js';
 export * from './api/kycHq.js';
@@ -125,6 +128,7 @@ export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
 export * from './api/railProposals.js';
 export * from './api/raiseEvidence.js';
+export * from './api/referralPartners.js';
 export * from './api/reporting.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
@@ -140,6 +144,7 @@ export * from './api/tokenPacks.js';
 export * from './api/trustContent.js';
 export * from './api/usage.js';
 export * from './api/useOfFunds.js';
+export * from './api/ventureScores.js';
 export * from './api/verdict.js';
 // api-modules:end
 
@@ -893,6 +898,9 @@ async function _analyticsRead(path) {
     return await request(path);
   }
 }
+
+/** D1300 — the filters, sort and scope `adminListUsers` passes through to `GET /api/admin/users`. */
+const ADMIN_USER_FILTERS = ['profile', 'sub', 'status', 'email', 'identity', 'limited', 'plan', 'country', 'persona', 'program', 'trust', 'joined', 'joined_from', 'joined_to', 'active', 'sort', 'scope'];
 
 export const api = {
   // Task #19 — Best-Fit consultations + admin report.
@@ -2029,12 +2037,24 @@ export const api = {
   // `SuperAdminHolders.jsx` reads. The envelope exists because the Users
   // panel's role tiles were counting the returned PAGE and rendering it as the
   // total — past 100 accounts, "All Users" read 100.
+  //
+  // D1300 — All accounts' filters, sort and paging. Each filter takes a value
+  // or a list (a list is "any of"): profile, sub, status, email, identity,
+  // limited, plan, country, persona, program, trust; and joined (7d, 30d) or
+  // joined_from / joined_to, active (7d, 30d, over_30d, never), sort and
+  // scope. The envelope then carries `matched` and `matched_by_role`, the
+  // totals over the filtered set, beside D128's whole-table `total`.
   adminListUsers: (opts = {}) => {
     const qs = new URLSearchParams();
     if (opts.q) qs.set('q', String(opts.q));
     if (opts.envelope) qs.set('envelope', '1');
     if (opts.limit) qs.set('limit', String(opts.limit));
     if (opts.offset) qs.set('offset', String(opts.offset));
+    for (const k of ADMIN_USER_FILTERS) {
+      const v = opts[k];
+      const list = Array.isArray(v) ? v.filter((x) => x != null && x !== '') : (v == null || v === '' ? [] : [v]);
+      if (list.length) qs.set(k, list.map(String).join(','));
+    }
     const s = qs.toString();
     return request(`/admin/users${s ? `?${s}` : ''}`);
   },
@@ -5702,6 +5722,9 @@ export const articles = {
     request(`/articles/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
   submit: (id) => request(`/articles/${id}/submit`, { method: 'POST', body: '{}' }),
   retract: (id) => request(`/articles/${id}/retract`, { method: 'POST', body: '{}' }),
+  // D1293 — the author answers an admin's review comment on their own article.
+  replyToComment: (id, cid, body) =>
+    request(`/articles/${id}/comments/${cid}/replies`, { method: 'POST', body: JSON.stringify({ body }) }),
   uploadCover: (id, dataUri) =>
     request(`/articles/${id}/cover`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
   uploadImage: (id, dataUri) =>
@@ -5709,9 +5732,19 @@ export const articles = {
 };
 
 export const adminArticles = {
-  queue: ({ status, limit = 50, offset = 0 } = {}) => {
+  // D1291: `status` is one raw status, as before; `stage` adds ready and
+  // scheduled (and `open`, `calendar`, `all`). Search `q`, filters `author`,
+  // `profile`, `sector`, `reviewer`, `submitted_from`, `submitted_to`,
+  // `open_comments` (1 or 0), `sort` (waiting, newest, goes_out, rounds,
+  // title) and the calendar's `from`/`to`. Empty values are left out.
+  // → { items, total, limit, offset, counts, publications? }
+  queue: ({ status, limit = 50, offset = 0, ...filters } = {}) => {
     const qs = new URLSearchParams();
     if (status) qs.set('status', status);
+    for (const k of ['stage', 'q', 'author', 'profile', 'sector', 'reviewer', 'submitted_from', 'submitted_to', 'open_comments', 'sort', 'from', 'to']) {
+      const v = filters[k];
+      if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+    }
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     return request(`/admin/articles/queue?${qs.toString()}`);
@@ -5727,9 +5760,16 @@ export const adminArticles = {
   // D484 — set (an ISO UTC string) or clear (null) the time an approved article goes out.
   schedule: (id, publishAt) =>
     request(`/admin/articles/${id}/schedule`, { method: 'POST', body: JSON.stringify({ publish_at: publishAt }) }),
-  unpublish: (id) => request(`/admin/articles/${id}/unpublish`, { method: 'POST', body: '{}' }),
-  addComment: (id, body, anchor) =>
-    request(`/admin/articles/${id}/comments`, { method: 'POST', body: JSON.stringify({ body, anchor }) }),
+  // D1293 — the reason (at least eight characters) is the author's to read.
+  unpublish: (id, reason) =>
+    request(`/admin/articles/${id}/unpublish`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // D1293 — Super Admin only, at most three at a time.
+  feature: (id, featured) =>
+    request(`/admin/articles/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
+  revision: (id, rev) => request(`/admin/articles/${id}/revisions/${rev}`),
+  // D1293 — `parentId` answers a thread instead of starting one.
+  addComment: (id, body, anchor, parentId) =>
+    request(`/admin/articles/${id}/comments`, { method: 'POST', body: JSON.stringify(parentId ? { body, parent_id: parentId } : { body, anchor }) }),
   resolveComment: (cid, resolved) =>
     request(`/admin/articles/comments/${cid}`, { method: 'PUT', body: JSON.stringify({ resolved }) }),
   deleteComment: (cid) => request(`/admin/articles/comments/${cid}`, { method: 'DELETE' }),
