@@ -15,3 +15,11 @@ Company creation. Per chosen project it writes the account and plan as facts
 formation step once (`vercel_company_proposals`). Accept and Dismiss are the
 founder's; Accept adds the step and changes nothing on Vercel. Part 1's sync
 calls `syncVercelCompany`, and its disconnect `deleteVercelCompanyOf`.
+`health.ts` (D1097, #2962) holds production health: `healthFindings` turns
+evidence read from the API into the events it opens (a failed production
+deploy, a rollback, a misconfigured or unverified domain, a failed
+certificate, a Vercel-registered domain inside its expiry window) and the
+kinds it could check; `applyHealth` opens and closes `vercel_health_events`
+(migration 590) with their ledger rows; `dismissHealthEvent` keeps a
+dismissal. `hosting.ts` is Operating systems › Tools' Hosting read under the
+Tools rule.

@@ -31,6 +31,7 @@
  * names its module and a code, never an amount, a name or a date.
  */
 import type { Env, User } from '../../types';
+import { assertStorageRoom, noteStorageLanded, type StorageTicket } from '../storageRoom';
 import type { ModuleSlug } from '../raiseCycle';
 import { FUND_SECTIONS } from '../../util/useOfFunds';
 import { normalizeEntityName, namesAxalEntity } from '../../integrations/providers/mercury';
@@ -686,6 +687,14 @@ async function acceptStatement(env: Env, a: { integrationId: number; projectId: 
   const key = `data-room/${project.uid}/${uid}`;
   const month = MONTH.test(String(p.payload.month)) ? String(p.payload.month) : 'statement';
   const four = /^\d{4}$/.test(String(p.payload.last_four)) ? ` ··${p.payload.last_four}` : '';
+  // D1170 — a statement filed in the data room counts to the venture's owner (D1169 §1).
+  let storage: StorageTicket;
+  try {
+    storage = await assertStorageRoom(env, { projectId: project.id }, pdf.bytes.byteLength, a.user);
+  } catch (e) {
+    if (e instanceof Response) throw new AcceptError(413, 'storage_full', String(((await e.json().catch(() => null)) as any)?.message || 'Storage is full.'));
+    throw e;
+  }
   await env.FILES.put(key, pdf.bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { project_uid: project.uid, uploaded_by: String(a.user.id) } });
   let fileId: number | null = null;
   try {
@@ -703,6 +712,7 @@ async function acceptStatement(env: Env, a: { integrationId: number; projectId: 
     await env.FILES.delete(key).catch(() => {});
     throw e;
   }
+  await noteStorageLanded(env, storage);
   await log(env, a.user, a.projectId, 'data-room', fileId ?? p.id, 'file_uploaded', 'File added from Mercury; access nobody');
   return { ok: true, landed: { table: 'data_room_files', id: fileId ?? 0 } };
 }
