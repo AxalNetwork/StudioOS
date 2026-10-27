@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react';
 import { NO_PLAN_LINE } from '../../lib/planAllowance';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { usageApi } from '../../lib/api/usage';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { EmptyState, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN, Chips, INPUT, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import {
   NOT_COUNTED, allowanceView, chargedPages, dayAxis, dayBars, filterPages, modelRows, pageOf, pageRows,
-  rateRows, receiptView, storageView, STORAGE_AREAS, taskRows, topUpState, topUpRows, purchaseLine,
+  rateRows, receiptView, storageView, taskRows, topUpState, topUpRows, purchaseLine,
 } from './usageModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
 import { ADD_TOKENS_PATH, TOPUP_UNAVAILABLE_RUNS, pastAllowanceLine } from '../../lib/aiTokens';
@@ -459,7 +458,7 @@ export function StorageCard({ storage, role, title = 'Storage' }) {
       aside={v && !v.empty ? (v.total != null
         ? <span className={`${MONO} text-base text-axal-ink dark:text-gray-100`} data-testid="usage-storage-total">{v.total} <span className="font-sans text-[13px] text-axal-muted dark:text-gray-400">in {v.files} {v.files === 1 ? 'file' : 'files'}</span></span>
         : <span data-testid="usage-storage-total"><Unrecorded reason={v.anyUnreadable ? 'A place below could not be read.' : 'Some files were stored before sizes were recorded.'}>Total not recorded</Unrecorded></span>) : null}
-      footer={v && !v.empty ? 'Identity documents, signed legal copies and fund documents do not count. No plan sets a storage limit.' : null}
+      footer={v && !v.empty ? 'Identity documents, signed legal copies and fund documents do not count. Your plan’s storage is on Usage › Storage.' : null}
     >
       <div id="storage" className="scroll-mt-24" />
       {storage.status === 'loading' ? <LoadingRows lines={5} />
@@ -603,39 +602,32 @@ export function modelsGroup({ spend, rates }) {
   return group;
 }
 
-/** A2m's Storage rows: every counted file, and those with no size recorded. */
-export function storageGroup({ storage }) {
-  const group = { label: ACCOUNT_PHONE_PAGES.usage.sections[2], rows: [], testid: 'usage-phone-storage' };
-  const v = storage.status === 'ready' ? storageView(storage.data) : null;
-  if (!v) return { ...group, note: phonePending(storage.status, 'Storage', 'This is not a claim that you stored nothing.', storage.reload) };
-  const reason = v.anyUnreadable ? 'A place where files are kept could not be read.' : 'Some files were stored before sizes were recorded.';
-  const total = v.total != null && v.files != null;
-  group.rows.push({
-    title: ACCOUNT_PHONE_COPY.allFiles,
-    description: STORAGE_AREAS.map(([, label]) => label).join(', '),
-    ...(total ? { value: `${v.total} · ${v.files}` } : { notRecorded: true, notRecordedReason: reason }),
-    testid: 'usage-phone-all-files',
-  });
-  if (v.noSize > 0) {
-    group.rows.push({ title: ACCOUNT_PHONE_COPY.noSizeFiles, value: `${v.noSize} ${v.noSize === 1 ? 'file' : 'files'}`, testid: 'usage-phone-nosize' });
-  }
-  group.note = 'Identity documents, signed legal copies and fund documents do not count. No plan sets a storage limit.';
-  return group;
+/**
+ * A2m's Storage group. D1171 (STG15) moves the figures to Usage › Storage,
+ * which draws them on a phone as on a desk; the group keeps the canvas's
+ * section title and opens that page, so no figure is drawn twice.
+ */
+export function storageGroup() {
+  return {
+    label: ACCOUNT_PHONE_PAGES.usage.sections[2],
+    rows: [{ title: ACCOUNT_PHONE_COPY.storageMoved, description: ACCOUNT_PHONE_COPY.storageMovedSub, to: '/account/usage/storage', testid: 'usage-phone-storage-open' }],
+    testid: 'usage-phone-storage',
+  };
 }
 
 /**
  * A2m — Usage on a phone, given the section's reads. The board's three
- * sections come first (A2m's Storage stays until D1166's part 5 moves it, STG15); the cards it does not draw follow as they stack today
+ * sections come first (A2m's Storage opens Usage › Storage since D1171, STG15); the cards it does not draw follow as they stack today
  * (D700 decision 9). No read takes a company.
  */
-export function UsagePhoneView({ budget, product, topUps, spend, rates, storage, now = new Date(), details = false }) {
+export function UsagePhoneView({ budget, product, topUps, spend, rates, now = new Date(), details = false }) {
   const page = ACCOUNT_PHONE_PAGES.usage;
   return (
     <div className="flex flex-col gap-3" data-testid="usage-section" data-phone="true">
       <div className="-mx-[22px]">
         {!details && <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />}
         <div className="pt-[18px]">
-          <PhoneRows groups={[allowanceGroup({ budget, product, now }), modelsGroup({ spend, rates }), storageGroup({ storage })]} />
+          <PhoneRows groups={[allowanceGroup({ budget, product, now }), modelsGroup({ spend, rates }), storageGroup()]} />
         </div>
       </div>
       {topUps && <TopUpsCard {...topUps} />}
@@ -655,8 +647,6 @@ export default function UsageSection({ details = false }) {
   const rates = useAccountRead(() => aiBudgetApi.rates());
   const topUps = useTopUps();
   const phone = usePhoneWidth();
-  // A2m still draws Storage on a phone; the desktop cards leave it to /account/usage/storage (D1166).
-  const storage = useAccountRead(() => usageApi.storage(), { enabled: phone });
   // The canvas's anchors (#days, #where, #models, #last-run). Each
   // card draws its anchor in every state, so the scroll lands while it loads.
   const { hash } = useLocation();
@@ -664,7 +654,7 @@ export default function UsageSection({ details = false }) {
     const id = hash ? decodeURIComponent(hash.slice(1)) : '';
     if (id) document.getElementById(id)?.scrollIntoView?.({ block: 'start' });
   }, [hash]);
-  if (phone) return <UsagePhoneView budget={budget} product={product} topUps={topUps} spend={spend} rates={rates} storage={storage} details={details} />;
+  if (phone) return <UsagePhoneView budget={budget} product={product} topUps={topUps} spend={spend} rates={rates} details={details} />;
   return (
     <div className="flex flex-col gap-3" data-testid="usage-section">
       {!details && <div>

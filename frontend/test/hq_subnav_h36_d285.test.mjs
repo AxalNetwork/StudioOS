@@ -57,6 +57,8 @@ PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Integration keys'), 2);
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Bank accounts') + 1, 0, ['Product testing', '/admin?tab=product-testing']);
 // D1253 (#2428) — HQ › Scoring joins the Platform row after Product testing.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Product testing') + 1, 0, ['Scoring', '/admin/platform/scoring']);
+// D1172 (#3085, STG20) — HQ › Storage joins the Platform row after AI usage.
+PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'AI usage') + 1, 0, ['Storage', '/admin/platform/storage']);
 const CONTENT = [
   ['Overview', '/admin/content'], ['Content queue', '/admin/articles'], ['Publications', '/admin/publications'],
   // D997 (#2378): Personas is now Persona segments, at its own address.

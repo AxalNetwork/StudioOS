@@ -268,7 +268,7 @@ export const DOORS = {
     statusTitle: 'What is live today, and what is not yet.',
     statusNote: 'Portfolio reporting for LPs is live. The dedicated LP data room and capital-account portal is coming soon.',
     live: [
-      { t: 'Curated pipeline', route: '/deals/pipeline' },
+      { t: 'Curated pipeline', route: '/deals' },
       // Dropped: "Stripe and Plaid verification" (no Plaid integration).
       { t: 'Deal rooms', route: '/deals/:dealId' },
       { t: 'Relationships and notes', route: '/network/relationships' },

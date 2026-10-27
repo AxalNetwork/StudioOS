@@ -30,6 +30,8 @@ change opens (D1306, #3403) — see its own README.
 tabs at their own addresses and one address per article, all named in
 `contentQueueModel.js`. Pipeline is the review queue; an article's address opens
 its review as the shared Sheet over the full-width queue (D1317). Calendar is built
+`contentQueueModel.js`. Pipeline is `contentQueue/` (D1295): the board and
+list, the review drawer and its in-page dialogs. Calendar is built
 (D1296, #3392) and Authors and Performance are D1297's, in `contentQueue/`
 — see its README.
 

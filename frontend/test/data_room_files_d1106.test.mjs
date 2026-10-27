@@ -113,7 +113,8 @@ test('the tree, the table and Home: counts with subfolders, the top level, searc
   assert.match(needs[1].text, /^1 investor needs an NDA to open 1 file$/);
   assert.deepEqual(accessRows(ROOM, NOW).map((a) => [a.who, a.folders, a.nda]), [['Bluefern Capital', 'Every folder', 'NDA signed'], ['Juniper Angels', 'Legal', 'NDA needed']]);
   assert.deepEqual(recentFiles(ROOM).map((f) => f.name), ['Contract.pdf', 'Deck.pdf', 'Statement.pdf', 'Model.xlsx']);
-  assert.match(storageLine(ROOM), /3\.5 KB over the 3 of 4 files whose size is recorded\. Earlier versions are not totalled here, and no plan limit is recorded, so storage left is not shown\./);
+  // D1171 (#3084): a plan's storage is now read, on Usage › Storage; the line points there.
+  assert.match(storageLine(ROOM), /3\.5 KB over the 3 of 4 files whose size is recorded\. Earlier versions are not totalled here\. What your plan holds, and what is left, is on Usage › Storage\./);
   assert.equal(queueEntry({ name: 'v.mp4', size: 21 * 1024 * 1024 }, 0).state, 'refused');
   assert.equal(queueEntry({ name: 'a.pdf', size: 10 }, 0).state, 'waiting');
   assert.equal(uploadRefusal({ status: 413 }), 'Refused: larger than 20 MB');
@@ -289,7 +290,7 @@ test('Upload at /new: the queue in states, a large file refused before sending, 
   const v = await mounted('/raise/data-room/new?project_id=3');
   try {
     assert.ok(v.has('dataroom-upload-sheet'));
-    assert.match(v.of('dataroom-upload-storage'), /storage left is not shown/);
+    assert.match(v.of('dataroom-upload-storage'), /what is left, is on Usage › Storage/); // D1171
     const small = new File(['hello'], 'Pipeline.xlsx', { type: 'text/plain' });
     const big = { name: 'Demo.mp4', size: 21 * 1024 * 1024, type: 'video/mp4', arrayBuffer: async () => new ArrayBuffer(0) };
     await v.change('dataroom-upload-pick', { files: [small, big] });

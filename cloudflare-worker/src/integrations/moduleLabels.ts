@@ -26,7 +26,7 @@ export const MODULE_LABELS: Record<string, string> = {
   investor_narrative: 'Investor narrative',
   pitch_deck: 'Pitch deck',
   // D840 part 4 (#2349): the investor's sections a signed-in Mercury feeds.
-  deals_pipeline: 'Deals · Pipeline',
+  deals_pipeline: 'Deal flow', // D1243: the Pipeline zone retired into Deal flow
   investor_portfolio: 'Portfolio',
   deals_commit: 'Deals · Commit',
   deals_closing: 'Deals · Closing',
@@ -69,7 +69,7 @@ export const MODULE_HREFS: Record<string, string> = {
   cap_table: '/raise/cap-table',
   investor_narrative: '/raise/investor-narrative',
   pitch_deck: '/raise/pitch-deck',
-  deals_pipeline: '/deals/pipeline',
+  deals_pipeline: '/deals',
   investor_portfolio: '/portfolio',
   deals_commit: '/deals/commit',
   deals_closing: '/deals/closing',

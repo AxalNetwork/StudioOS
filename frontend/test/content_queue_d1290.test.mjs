@@ -89,16 +89,16 @@ test('an article address opens that article\'s review', async () => {
     // Mutation checked: keep selection in state → nothing is read for the address.
     assert.deepEqual(w.calls.get, [42]);
     // D1317: the article opens as the shared Sheet over the full-width queue, 760px.
-    const sheet = byId(w.container, 'article-review');
+    const sheet = byId(w.container, 'cq-drawer');
     assert.equal(props(sheet).role, 'dialog');
     assert.ok(props(sheet)['aria-labelledby']);
     assert.equal(props(sheet)['data-width'], 760);
     assert.match(text(sheet), /Pricing before product/);
     assert.match(text(sheet), /Body\./);
     assert.ok(text(w.container).split('Pricing before product').length > 2, 'the queue stays drawn under the sheet');
-    await w.click(byId(w.container, 'article-review-close'));
+    await w.click(byId(w.container, 'cq-drawer-close'));
     assert.equal(w.at.path, '/admin/articles', 'closing returns to the queue');
-    assert.equal(byId(w.container, 'article-review'), undefined);
+    assert.equal(byId(w.container, 'cq-drawer'), undefined);
   } finally { await w.done(); }
 });
 

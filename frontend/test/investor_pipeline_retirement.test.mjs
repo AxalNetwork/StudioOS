@@ -15,6 +15,8 @@
  *    `PipelineWorkspace`, and founder access there is deliberate. Only the
  *    investor arm was superseded, so an unconditional redirect would take the
  *    founder's board and the partner's bucket root with it.
+ *    D1243 (#3256) forwards that investor arm, and only it, to Deal flow's
+ *    table, counted by the forward (`ROLE_REDIRECTS`).
  *
  * 2. `legacyRedirects()` must never be mounted wholesale. It is exported from
  *    shellConfig and called by NOTHING, and every row named a path App.jsx
@@ -67,15 +69,18 @@ test('the three legacy pages are gone, and nothing imports them', () => {
   }
 });
 
-test('TRAP 1 — /pipeline keeps its role fork and never redirects', () => {
+test('TRAP 1 — /pipeline keeps its role fork; only an investor forwards (D1243)', () => {
   const at = APP.indexOf('path="/pipeline"');
   assert.ok(at > 0, 'the /pipeline root is gone — the founder board and partner bucket root with it');
-  const element = APP.slice(at, at + 220);
-  assert.doesNotMatch(element, /<Navigate/, 'the /pipeline ROOT was turned into a redirect');
-  // The fork itself, which is the reason it may not redirect.
+  const element = APP.slice(at, APP.indexOf('\n', at));
+  assert.doesNotMatch(element, /<Navigate/, 'the /pipeline ROOT was turned into a redirect for every role');
+  // The fork itself, which is the reason it may not redirect wholesale.
   assert.match(element, /effectiveRole === 'partner' \? <PartnerBucketRoutes \/>/,
     'the partner arm of /pipeline is gone');
-  assert.match(element, /<PipelineWorkspace \/>/, 'the investor/founder arm of /pipeline is gone');
+  // D1243 (#3256): the investor's arm is a counted forward to Deal flow's table.
+  assert.match(element, /effectiveRole === 'investor' \? <DealsPipelineRedirect countAs="\/pipeline" \/>/,
+    'the investor arm of /pipeline no longer forwards to Deal flow');
+  assert.match(element, /: investorWorkspace\('deals', <PipelineWorkspace \/>\)/, 'the founder and admin arm of /pipeline is gone');
   assert.match(element, /'founder'/, 'founder lost /pipeline, and that access is deliberate');
 });
 

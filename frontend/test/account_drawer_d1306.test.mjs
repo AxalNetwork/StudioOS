@@ -165,9 +165,12 @@ async function mounted(el, { handle = handler() } = {}) {
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const byId = (id) => nodes().find((n) => props(n)['data-testid'] === id);
+  const click = async (id) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onClick({ preventDefault() {}, stopPropagation() {} }); }); await flush(); };
   return {
     requests, has: (id) => Boolean(byId(id)), textOf: (id) => text(byId(id)), props: (id) => props(byId(id)), node: byId,
-    click: async (id) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onClick({ preventDefault() {}, stopPropagation() {} }); }); await flush(); },
+    click,
+    // D1305: a row's changes sit in its ⋯ menu (`accounts-menu-<id>`), one item each.
+    menu: async (id, item) => { await click(`accounts-menu-${id}`); await click(`accounts-menu-${id}-${item}`); },
     type: async (id, value) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onChange({ target: { value } }); }); await flush(); },
     // D1305: each row's actions are its ⋯ menu in All accounts (`accounts-menu-<id>`), not row buttons.
     menu: async (row, item) => {

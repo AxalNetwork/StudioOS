@@ -40,6 +40,22 @@ export const STORAGE_PLANS = Object.freeze({
 } satisfies Record<string, StoragePlan>);
 export type StoragePlanKey = keyof typeof STORAGE_PLANS;
 
+/**
+ * D1172 (#3085) — the owner's table on #2449 rows, by price (D1166 §5,
+ * question 1): which plans share an allowance, as HQ › Platform › Storage
+ * (STG20) groups them. Staff (`admin`) hold no plan and are not counted. Each
+ * tier's plans share one allowance, read from STORAGE_PLANS above, never here.
+ */
+export const STORAGE_TIERS = Object.freeze([
+  { key: 'free', label: 'Free', plans: ['founder:free', 'investor:free', 'advisor:free', 'partner:free', 'other'] },
+  { key: 'usd_20', label: '$20 a month', plans: ['founder:growth', 'advisor:pro', 'partner:pro'] },
+  { key: 'usd_50', label: '$50 a month', plans: ['investor:plus'] },
+  { key: 'usd_100', label: '$100 a month', plans: ['founder:studio'] },
+  { key: 'usd_150', label: '$150 a month', plans: ['investor:professional'] },
+  { key: 'lp_access', label: 'LP Access', plans: ['lp_access'] },
+  { key: 'negotiated', label: 'Negotiated', plans: ['investor:institutional'] },
+] as const satisfies ReadonlyArray<{ key: string; label: string; plans: ReadonlyArray<StoragePlanKey> }>);
+
 export function storagePlan(key: string | null | undefined): StoragePlan | null {
   return key && Object.hasOwn(STORAGE_PLANS, key) ? STORAGE_PLANS[key as StoragePlanKey] : null;
 }

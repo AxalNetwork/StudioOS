@@ -1,3 +1,4 @@
+import StorageRefusal from '../account/StorageRefusal.jsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../ui/Lightbox.jsx';
@@ -603,7 +604,8 @@ export default function RecordLightbox({
       </div>
       <div className="px-5 pb-3">
         {!ready && !(m.audio && !consent) && (state.reason || blockedReason) && <p id="record-start-reason" className="m-0 text-[11.5px] text-axal-faint" data-testid="record-start-reason">{state.reason || blockedReason}</p>}
-        {refusal && (
+        {refusal?.storage && <div className="mt-1"><StorageRefusal refusal={refusal.storage} recording testId="record-storage-full" /></div>}
+        {refusal && !refusal.storage && (
           <p role="alert" className="m-0 mt-1 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-error">
             {refusal.text}
             {refusal.sessionHref && <Link to={refusal.sessionHref} className="ml-1 underline">Open the session to check its status</Link>}{refusal.liveHref && <>{' '}<Link to={refusal.liveHref} replace className="underline" data-testid="record-error-live">Return to that recording</Link></>}

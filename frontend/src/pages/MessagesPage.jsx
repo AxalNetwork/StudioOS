@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import StorageRefusal from './account/StorageRefusal.jsx';
+import { storageRefusal } from './account/storagePageModel.js';
 import { Link } from 'react-router-dom';
 import {
   Mail, MailOpen, Search, PenLine, Send, Paperclip, ArrowLeft, ArrowUpRight, Archive, X, Loader2,
@@ -138,6 +140,9 @@ function Composer({ onSend, onAttach, disabled, hint, note, attachReason }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // D1171 (STG4): the plan's storage was full for this file. The file stays
+  // chosen; the message can go without it.
+  const [storage, setStorage] = useState(null);
   const ref = useRef(null);
   const picker = useRef(null);
   // The canvas's growing textarea: one line, up to about six.
@@ -150,7 +155,7 @@ function Composer({ onSend, onAttach, disabled, hint, note, attachReason }) {
   function choose(e) {
     const f = e.target.files?.[0] || null;
     e.target.value = '';
-    setErr('');
+    setErr(''); setStorage(null);
     if (f && f.size > ATTACHMENT_MAX_BYTES) { setErr('Files up to 10 MB can be attached.'); return; }
     setFile(f);
   }
@@ -158,12 +163,23 @@ function Composer({ onSend, onAttach, disabled, hint, note, attachReason }) {
     e?.preventDefault();
     const body = text.trim();
     if ((!body && !file) || busy) return;
-    setBusy(true); setErr('');
+    setBusy(true); setErr(''); setStorage(null);
     try {
       if (file) await onAttach(file, body);
       else await onSend(body);
       setText(''); setFile(null);
-    } catch (ex) { setErr(ex?.message || 'That message did not send.'); }
+    } catch (ex) {
+      const full = file ? storageRefusal(ex) : null;
+      if (full) setStorage(full); else setErr(ex?.message || 'That message did not send.');
+    }
+    finally { setBusy(false); }
+  }
+  async function sendWithoutFile() {
+    const body = text.trim();
+    if (!body || busy) return;
+    setBusy(true); setErr('');
+    try { await onSend(body); setText(''); setFile(null); setStorage(null); }
+    catch (ex) { setErr(ex?.message || 'That message did not send.'); }
     finally { setBusy(false); }
   }
   const canAttach = !attachReason && !disabled;
@@ -174,7 +190,13 @@ function Composer({ onSend, onAttach, disabled, hint, note, attachReason }) {
           <Paperclip size={12} className="flex-none text-gray-500" />
           <span className="truncate">{file.name}</span>
           <span className="flex-none text-gray-500">{fileSize(file.size)}</span>
-          <button type="button" onClick={() => setFile(null)} aria-label="Remove the file" className="flex-none text-gray-400 hover:text-gray-700"><X size={12} /></button>
+          <button type="button" onClick={() => { setFile(null); setStorage(null); }} aria-label="Remove the file" className="flex-none text-gray-400 hover:text-gray-700"><X size={12} /></button>
+        </div>
+      )}
+      {storage && (
+        <div className="mb-2 flex flex-col gap-1.5" data-testid="messages-storage-full">
+          <StorageRefusal refusal={storage} />
+          <button type="button" onClick={sendWithoutFile} disabled={busy || !text.trim()} className="w-fit rounded-lg border border-gray-300 px-2.5 py-1 text-[12px] font-semibold text-gray-800 disabled:opacity-50 dark:border-gray-700 dark:text-gray-100" data-testid="messages-send-without-file">Send without the file</button>
         </div>
       )}
       <div className="flex items-end gap-2">
