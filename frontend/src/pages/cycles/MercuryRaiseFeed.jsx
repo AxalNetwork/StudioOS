@@ -1,3 +1,4 @@
+import { ConnectorMark } from '../../ui/FillMark.jsx';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { insertInStoryHref } from '../raise/narrative/narrativeModel';
@@ -36,7 +37,7 @@ export default function MercuryRaiseFeed({ slug, part, projectId, reload }) {
   return (
     <section id="from-mercury" className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-part-mercury" aria-labelledby="from-mercury-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
-        <h2 id="from-mercury-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From Mercury</h2>
+        <h2 id="from-mercury-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From Mercury<ConnectorMark provider="mercury" /></h2>
         {view.state !== 'connect' && !view.connection && <button type="button" disabled={busy != null} onClick={() => run('sync', () => w.mercurySync(projectId), 'Mercury could not be read.')} data-testid="mercury-sync"
           className="rounded-md border border-axal-hairline px-3 py-1 text-[12px] font-bold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:text-gray-200">{busy === 'sync' ? 'Reading…' : 'Sync from Mercury'}</button>}
       </div>

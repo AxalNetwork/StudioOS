@@ -1,3 +1,4 @@
+import { ConnectorMark } from '../../ui/FillMark.jsx';
 import { useState } from 'react';
 import { cyclesWrite } from '../../lib/api/cycles';
 import { mercuryView, monthLabel } from './growFromMercury';
@@ -38,7 +39,7 @@ export default function GrowFromMercury({ slug, part, projectId, reload }) {
   return (
     <section id="from-mercury" className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid={`cycle-part-mercury-${slug}`} aria-labelledby="from-mercury-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
-        <h2 id="from-mercury-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From Mercury</h2>
+        <h2 id="from-mercury-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From Mercury<ConnectorMark provider="mercury" /></h2>
         <span className="flex items-baseline gap-2">
           <span className={FAINT}>{view.source || 'Read-only, from the founder’s own Mercury'}</span>
           {view.canSync && projectId && (

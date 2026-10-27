@@ -6,14 +6,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { FigureTile } from '../src/pages/cycles/CycleOverview.jsx';
 import PhoneCycleRoot from '../src/pages/cycles/PhoneCycleRoot.jsx';
-import { FilledMark } from '../src/pages/SpinoutLabMarketPage.jsx';
+import { FillMark, marketFillMark } from '../src/ui/FillMark.jsx';
 import { accessNow, noAccessReason } from '../src/pages/raise/dataRoomRead.js';
 import { grantOn } from '../src/pages/raise/dataroom/filesModel.js';
 import { mountContracts } from './_contracts_dom.mjs';
 const now=Date.parse('2026-10-24T12:00:00Z');
 test('a fill keeps citations and cost but never displays its model, even in its tooltip',async()=>{
- const m=await mountContracts(React.createElement(FilledMark,{fill:{model:'SYNTHETIC_MODEL_SECRET_LABEL',edited:true,proposed_value:'Prior',citation:{kind:'library',title:'Synthetic source',quote:'Recorded quote'},run:null}}));
- try {const mark=m.nodes().find(n=>m.props(n)?.['data-testid']==='filled-mark');assert.ok(mark);const title=m.props(mark).title;assert.match(title,/Synthetic source/);assert.match(title,/Recorded quote/);assert.match(title,/Run: not recorded/);assert.doesNotMatch(title,/SYNTHETIC_MODEL_SECRET_LABEL|Model:/);assert.match(m.text(),/Eadwyn · edited/);}
+ const m=await mountContracts(React.createElement(FillMark,{mark:marketFillMark({model:'SYNTHETIC_MODEL_SECRET_LABEL',edited:true,proposed_value:'Prior',citation:{kind:'library',title:'Synthetic source',quote:'Recorded quote'},run:null})}));
+ try {const mark=m.nodes().find(n=>m.props(n)?.['data-testid']==='fill-mark');assert.ok(mark);const title=m.props(mark).title;assert.match(title,/Synthetic source/);assert.match(title,/Recorded quote/);assert.match(title,/Run: not recorded/);assert.doesNotMatch(title,/SYNTHETIC_MODEL_SECRET_LABEL|Model:/);assert.match(m.text(),/Eadwyn · edited/);}
  finally {await m.unmount();}
 });
 test('access requires an unexpired readable grant as well as file tier, expiry and NDA',()=>{
