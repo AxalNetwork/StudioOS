@@ -106,7 +106,7 @@ test('the parse keeps what its field\'s class allows and says why it drops the r
 
 test('the run streams meta, guard and done; one proposal per kept field with its run; the record is never written', async () => {
   const seen: any[] = [];
-  const run: Run = async (env, input) => { seen.push(input); return { ...(await answer({ fields: [{ field: 'hypothesis_id', value: 61 }, { field: 'pain_group_id', value: 51 }, { field: 'title', value: 'Overwrite me' }] })(env, input)), usageLogId: 9 }; };
+  const run: Run = async (_env, input) => { seen.push(input); return { ...(await answer({ fields: [{ field: 'hypothesis_id', value: 61 }, { field: 'pain_group_id', value: 51 }, { field: 'title', value: 'Overwrite me' }] })()), usageLogId: 9 }; };
   const f = fixture(run);
   f.db.exec("INSERT INTO ai_usage_logs(id,user_id,task,model,charged_microusd) VALUES (9,11,'rail_write','m',900)");
   const before = f.features();
@@ -181,9 +181,9 @@ test('every guard and budget refusal ends the run in its own words, proposing no
 
 test('a changed form drops the result: a record written during the run is never proposed over', async () => {
   let f: any;
-  f = fixture(async (env, input) => {
+  f = fixture(async () => {
     f.db.exec('UPDATE mvp_features SET hypothesis_id = 61 WHERE id = 81');
-    return answer({ fields: [{ field: 'hypothesis_id', value: 61 }] })(env, input);
+    return answer({ fields: [{ field: 'hypothesis_id', value: 61 }] })();
   });
   const r = await f.runForm(11, { record: { type: 'mvp_features', id: 81 } });
   assert.deepEqual(r.done.dropped, [{ field: '', why: 'record_changed' }]);
