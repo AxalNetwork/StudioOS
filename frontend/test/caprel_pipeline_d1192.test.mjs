@@ -260,7 +260,8 @@ test('the investor lightbox reads the record; its next step, step and feedback g
     await v.click('caprel-next-go');
     const ns = v.writes().at(-1);
     assert.match(ns.url, /\/cycles\/raise\/prospects\/41\/next-step\?project=3$/);
-    assert.deepEqual([ns.method, ns.body], ['PUT', { next_step: 'Partner meeting', next_step_due: '2026-11-02' }]);
+    // D1193: the investor's warm path is sent as it is, so saving a next step never clears it (none here).
+    assert.deepEqual([ns.method, ns.body], ['PUT', { next_step: 'Partner meeting', next_step_due: '2026-11-02', warm_path: null }]);
     await v.click('caprel-investor-feedback');
     await v.change('caprel-feedback-said', 'Too early for us');
     await v.click('caprel-feedback-go');

@@ -56,6 +56,8 @@ export const AI_SURFACE = {
   buildPlan: '/build/plan',
   /** Raise · Cap table — Eadwyn's read of a signed document (`POST /api/captable/record/:projectId/document-read`), D1021. */
   raiseCapTable: '/raise/cap-table',
+  /** Raise · Capital relationships — Eadwyn's proposals from a note and its message drafts (`POST /api/cycles/raise/capital-relationships/proposals`, `/drafts`), D1193. */
+  raiseCapitalRelationships: '/raise/capital-relationships',
   /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
   studio: '/studio',
   /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */
