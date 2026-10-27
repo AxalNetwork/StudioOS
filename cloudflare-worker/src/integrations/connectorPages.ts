@@ -210,7 +210,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       'A Lovable project synced to GitHub can already use the existing GitHub connector. That is a GitHub connection, not a Lovable sign-in.',
     ],
     works_without_signing_in: [
-      { name: 'Build in Lovable', what: 'Part 2: review a prompt, then open Lovable in your browser. Not built yet.', built: false },
+      { name: 'Build in Lovable', what: 'Part 2: on a Planned experiment or Prototype / MVP, review a prompt, then open Lovable in your browser (D1082).', built: true },
       { name: 'App links and live checks', what: 'Part 3: record your app’s address and check its public page when you ask. Not built yet.', built: false },
     ],
     never_does: ['No Lovable sign-in or stored Lovable key.', 'No prompt sent by the Worker.', 'Nothing built or published for you.'],

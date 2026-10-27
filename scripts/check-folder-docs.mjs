@@ -115,6 +115,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/programs',       'Admin › Programs (D953): the catalogue, each program page with its tabs, the redirects and the model they read'],
   ['frontend/src/pages/admin/contentQueue',   'Content queue (D1290): Pipeline (D1295), Calendar (D1296), Authors and Performance (D1297)'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
+  ['frontend/src/pages/account/builder',      'Account › Builder (D1315): MCP and services (D1331), API keys (D1317), API usage and Activity (D1320)'],
   ['frontend/src/pages/account/companies',    'Companies and projects: the pane, its lightboxes and dialogs, and the moved settings (D1134, D1140)'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],

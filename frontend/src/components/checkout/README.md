@@ -6,7 +6,7 @@ that opens in place, over the page the member is on, to buy a plan.
 | File | What it is |
 |---|---|
 | `checkoutModel.js` | Pure functions: who may pay here (`sheetMode`), each interval's price with the `price_id` from the plans read, the Worker's yearly saving, and the "Included" lines. No React. |
-| `CheckoutSheet.jsx` | The sheet: a modal dialog with the plan summary on the left and the payment on the right, on D1051's quote, start and status routes (D1053). |
+| `CheckoutSheet.jsx` | The sheet: a modal dialog with the plan summary on the left and the payment on the right, on D1051's quote, start and status routes (D1053). Below `sm` (D1055, PAYX20) it is full screen with "‹ Back", the summary as one row with Details, and Pay held at the bottom; every target is 44px. |
 | `PlanCardForm.jsx` | The card form (D1053): a Payment Element on a deferred intent, Apple Pay first, lazy-loaded with the sheet. It hands the sheet `submit()` and `confirm(clientSecret)`. `mode="payment"` takes a pack's one-time payment (D1287). |
 | `packModel.js` | D1287: pack mode's pure rules — the pack rows and offers, the balance line, the totals, the one-line intent body, the pack rules' sentences, the landing after Pay, the count-up frames and auto-reload's words. |
 | `PackSheet.jsx` | D1287: the sheet in pack mode, "Add tokens" (CRP2–CRP5, CRP7, CRP8, CRP15, CRP17), with its History tab. Opened by Models' Add tokens and each pack's Buy on `/pricing`. |

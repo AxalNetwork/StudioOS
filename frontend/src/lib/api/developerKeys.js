@@ -6,6 +6,7 @@ import { request } from '../api.js';
 // secret comes back once, from create or rotate, and never from `list`.
 //   list    GET  /developer/keys               keys (never a secret), scopes and companies available
 //   create  POST /developer/keys               { name, scopes, companies, expires_in_days?, monthly_limit_microusd? } → { key, secret }
+//   update  PATCH /developer/keys/:uid         { name?, monthly_limit_microusd? } → { key } (a live key's name or cap)
 //   revoke  POST /developer/keys/:uid/revoke   → { key }
 //   rotate  POST /developer/keys/:uid/rotate   → { key, secret, replaced }
 //   limits  GET  /developer/limits             D849: the per-member, per-connection and per-key limits in force
@@ -14,6 +15,7 @@ const enc = encodeURIComponent;
 export const developerKeysApi = {
   list: () => request('/developer/keys'),
   create: (body) => request('/developer/keys', { method: 'POST', body: JSON.stringify(body) }),
+  update: (uid, body) => request(`/developer/keys/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   revoke: (uid) => request(`/developer/keys/${enc(uid)}/revoke`, { method: 'POST' }),
   rotate: (uid) => request(`/developer/keys/${enc(uid)}/rotate`, { method: 'POST' }),
   limits: () => request('/developer/limits'),

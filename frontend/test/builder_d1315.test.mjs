@@ -132,18 +132,25 @@ test('the pane: the eyebrow trail, one h2 "Builder", the page line, and honest w
   assert.match(t, /^Builder › MCP and services Builder Where assistants and your API keys connect to StudioOS/);
   assert.equal((services.match(/<h2/g) || []).length, 1);
   assert.match(services, /<nav aria-label="Builder"/);
-  assert.match(t, /StudioOS MCP server https:\/\/axal\.vc\/mcp/);
+  // D1331 (#2479) builds MCP and services' cards; only the tools wait for D846's read.
+  assert.match(t, /axal\.vc\/mcp https:\/\/axal\.vc\/mcp/);
   assert.match(t, new RegExp(BUILDER_WORDS.movedNotice.replace('.', '\\.')));
-  for (const id of ['tools', 'limits', 'services']) assert.match(services, new RegExp(`data-testid="builder-wait-${id}"`), id);
+  assert.match(services, /data-testid="builder-wait-tools"/);
+  for (const id of ['mcp-endpoint', 'mcp-callers', 'mcp-services', 'mcp-limits']) assert.match(services, new RegExp(`data-testid="${id}"`), id);
   assert.match(t, new RegExp(NOT_YET));
-  const keys = text(html(h(BuilderSection, { view: builderViewFor('/account/builder/keys'), storage }), '/account/builder/keys'));
+  const keysHtml = html(h(BuilderSection, { view: builderViewFor('/account/builder/keys'), storage }), '/account/builder/keys');
+  const keys = text(keysHtml);
   assert.match(keys, /^Builder › API keys Builder Keys your own scripts use to call StudioOS\./);
-  assert.match(keys, /#2480/);
+  // #2480: API keys is live, so its page draws instead of a wait.
+  assert.match(keysHtml, /data-testid="apik-page"/);
+  assert.doesNotMatch(keysHtml, /builder-wait-keys/);
   const drawer = html(h(BuilderSection, { view: builderViewFor('/account/builder/assistants/g1'), storage }), '/account/builder/assistants/g1');
   assert.match(text(drawer), /^Builder › AI assistants Builder/);
   assert.match(drawer, /data-testid="builder-drawer-assistant"/);
+  assert.match(drawer, /data-testid="mcp-assistant-drawer"/, 'D1331 draws MCPX5');
   assert.match(drawer, /role="dialog" aria-modal="true" aria-labelledby="[^"]+"[^>]*data-testid="builder-drawer-assistant"[^>]*data-width="560"/, 'D1317: the drawer is the shared Sheet, 560px');
-  assert.match(drawer, /data-testid="builder-wait-services"/, 'the page stays drawn under the sheet');
+  // D1331: the page under the sheet is MCP and services' own cards now.
+  assert.match(drawer, /data-testid="mcp-services-page"/, 'the page stays drawn under the sheet');
   assert.doesNotMatch(drawer, /builder-moved-notice/, 'the notice is the page’s, not a drawer’s');
   // Never sample data: no bracketed canvas placeholder reaches the page.
   for (const m of [services, keys, drawer]) assert.doesNotMatch(m, /\[(Assistant|Vendor|Northwind|Deploy bot|CRM)/);

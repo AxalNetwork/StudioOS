@@ -390,7 +390,8 @@ test('a network recipient never receives the metrics unless the founder included
   assert.equal(net.body.metrics, undefined);
   assert.equal(net.body.highlights, undefined);
   assert.equal(net.body.asks.length, 3);
-  assert.doesNotMatch(JSON.stringify(net.body), /38400|Stripe · MRR/);
+  // The figure is a JSON number. A random ask uid can contain the digits 38400, so the boundary keeps that from reading as the metric.
+  assert.doesNotMatch(JSON.stringify(net.body), /\b38400\b|Stripe · MRR/);
   const inv = await call(db, INVESTOR, 'GET', `/${uid}/page`);
   assert.equal(inv.body.metrics.find((m: any) => m.key === 'mrr').value, 38400);
   assert.equal(inv.body.highlights.length, 1);

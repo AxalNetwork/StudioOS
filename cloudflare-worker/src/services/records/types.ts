@@ -16,6 +16,11 @@ export type Row = {
   tone?: string;
   href?: string;
   action?: string | { key: string; body: Record<string, unknown> };
+  /**
+   * D1082 (#2947, LV1 and LV4): an experiment row's Build in Lovable. `can_launch`
+   * is a writer's on a Planned experiment; `opened_at` is when it was last opened, or null.
+   */
+  lovable?: { cycle: 'validate' | 'build'; project_id: number; record: { kind: string; id: string }; can_launch: boolean; opened_at: string | null };
 };
 
 export type RecordSection = {
