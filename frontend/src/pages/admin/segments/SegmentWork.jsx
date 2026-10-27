@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { personaSegmentsApi } from '../../../lib/api/personaSegments';
 import { reportError } from '../../../lib/log';
 import { Lightbox, actionGhost } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import MoveDialog from './MoveDialog';
 import { PROFILES } from './segModel';
 import { ACTIVE, movedLine, rangeText } from './segmentPageModel';
@@ -59,8 +60,10 @@ function Failed({ what, onRetry, id }) {
   );
 }
 
-function Dialog({ title, sub, onClose, children, footer, testId }) {
-  return <Lightbox label={title} title={title} sub={sub} onClose={onClose} width={620} phone="sheet" testId={testId} footer={footer}>{children}</Lightbox>;
+/** `sheet`: a segment's own editor is a detail panel, the shared Sheet (D1317, 620 → 640px); the asks and confirmations stay centred. */
+function Dialog({ title, sub, onClose, children, footer, testId, sheet = false }) {
+  const Frame = sheet ? Sheet : Lightbox;
+  return <Frame label={title} title={title} sub={sub} onClose={onClose} width={620} phone="sheet" testId={testId} footer={footer}>{children}</Frame>;
 }
 
 /* ------------------------------------------------------------------ *
@@ -224,7 +227,7 @@ export function EditSegmentDialog({ segment, seed = null, onClose, onSaved }) {
     );
   }
   return (
-    <Dialog title={`Edit ${segment.name}`} sub="HQ writes the segment profiles. Questions and sidebar links are set in code." onClose={onClose} testId="seg-edit"
+    <Dialog title={`Edit ${segment.name}`} sub="HQ writes the segment profiles. Questions and sidebar links are set in code." onClose={onClose} testId="seg-edit" sheet
       footer={(
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className={SUB}>Changes apply to every studio.</span>

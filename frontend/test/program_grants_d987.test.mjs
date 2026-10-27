@@ -336,6 +336,10 @@ test('mounted grant (GR4 → GR10a): terms marked Default or Changed, the live s
   try {
     await m.click('grants-grant-AXL-004-perks');
     assert.match(m.of('grant-lightbox'), /Grant Perks to Northfield Ventures/);
+    // D1317: one grant's terms open as the shared Sheet, 600 → 640px.
+    assert.equal(m.prop('grant-lightbox', 'role'), 'dialog');
+    assert.ok(m.prop('grant-lightbox', 'aria-labelledby'));
+    assert.equal(m.prop('grant-lightbox', 'data-width'), 640);
     assert.equal(m.of('grant-chip-credits_per_quarter'), 'Default');
     await m.change('grant-input-credits_per_quarter', '450');
     assert.equal(m.of('grant-chip-credits_per_quarter'), 'Changed');

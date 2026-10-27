@@ -12,7 +12,8 @@ import { localInputValue, publishAtFromLocal, utcLabel } from './articlePublishA
 import ReviewComments from '../../components/hqReview/ReviewComments';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
-import { RailFrame, WorkerRail } from '../../ui';
+import { Lightbox, RailFrame, WorkerRail } from '../../ui';
+import Sheet from '../../ui/Sheet.jsx';
 import useRecordCrumb from './useRecordCrumb';
 import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
 import { PAGE_LINE, QUEUE_BASE, QUEUE_TABS, WAITS, viewOf } from './contentQueueModel';
@@ -102,29 +103,32 @@ function statusBadge(s) {
 
 function PromptModal({ title, placeholder, onConfirm, onCancel, confirmLabel = 'Confirm', confirmClass = 'bg-violet-600' }) {
   const [text, setText] = useState('');
+  // D1317: opened from the article's Sheet, so it is the centred Lightbox on the same Escape stack (it closes first).
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onCancel}>
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-lg max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-semibold mb-3">{title}</h3>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={placeholder}
-          rows={5}
-          autoFocus
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-950 text-sm"
-        />
-        <div className="text-xs text-slate-500 mt-1">Minimum 8 characters. Sent to the author.</div>
-        <div className="flex justify-end gap-2 mt-4">
+    <Lightbox label={title} title={title} width={520} onClose={onCancel} testId="article-prompt"
+      footer={(
+        <div className="flex justify-end gap-2">
           <button onClick={onCancel} className="px-3 py-1.5 text-sm border border-slate-300 dark:border-slate-700 rounded">Cancel</button>
           <button
             disabled={text.trim().length < 8}
             onClick={() => onConfirm(text.trim())}
             className={`px-3 py-1.5 text-sm text-white rounded disabled:opacity-50 ${confirmClass}`}
+            data-testid="article-prompt-confirm"
           >{confirmLabel}</button>
         </div>
+      )}>
+      <div className="px-5 py-4">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={placeholder}
+          rows={5}
+          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-950 text-sm"
+          data-testid="article-prompt-text"
+        />
+        <div className="text-xs text-slate-500 mt-1">Minimum 8 characters. Sent to the author.</div>
       </div>
-    </div>
+    </Lightbox>
   );
 }
 
@@ -289,51 +293,52 @@ export default function ArticlesQueuePage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded">
-          {items.length === 0 ? (
-            <div className="p-6 text-center text-sm text-slate-500">Nothing here.</div>
-          ) : (
-            <ul>
-              {items.map((it) => (
-                <li key={it.id}>
-                  <button
-                    onClick={() => setSelectedId(it.id)}
-                    className={`w-full text-left px-3 py-2 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 ${selectedId === it.id ? 'bg-violet-50 dark:bg-violet-900/20' : ''}`}
-                  >
-                    <div className="flex justify-between gap-2">
-                      <div className="font-medium text-sm truncate">{it.title}</div>
-                      {statusBadge(it.status)}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      {it.author_name || it.author_email} · {it.word_count}w · {new Date(it.submitted_at || it.updated_at).toLocaleString()}
-                    </div>
-                    {it.reviewer_name && <div className="text-xs text-amber-700 dark:text-amber-300">Reviewer: {it.reviewer_name}</div>}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded">
+        {items.length === 0 ? (
+          <div className="p-6 text-center text-sm text-slate-500">Nothing here.</div>
+        ) : (
+          <ul>
+            {items.map((it) => (
+              <li key={it.id}>
+                <button
+                  onClick={() => setSelectedId(it.id)}
+                  className={`w-full text-left px-3 py-2 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 ${selectedId === it.id ? 'bg-violet-50 dark:bg-violet-900/20' : ''}`}
+                >
+                  <div className="flex justify-between gap-2">
+                    <div className="font-medium text-sm truncate">{it.title}</div>
+                    {statusBadge(it.status)}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">
+                    {it.author_name || it.author_email} · {it.word_count}w · {new Date(it.submitted_at || it.updated_at).toLocaleString()}
+                  </div>
+                  {it.reviewer_name && <div className="text-xs text-amber-700 dark:text-amber-300">Reviewer: {it.reviewer_name}</div>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
-        <div className="lg:col-span-2">
+      {/* D1317: the open article (`/admin/articles/<id>`) is the shared Sheet over
+          the full-width queue, 760px; closing returns to `/admin/articles`. */}
+      {selectedId && (
+        <Sheet eyebrow="Content queue" title={detail?.article?.title || 'Article'} sub={detail?.article?.subtitle || null}
+          width={760} testId="article-review" onClose={() => setSelectedId(null)}>
           {!detail && selectedId && detailFailed ? (
-            <div className="bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900 rounded p-6 text-center text-sm text-red-700 dark:text-red-300" role="alert" data-testid="hq-article-unreadable">
+            <div className="m-5 bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900 rounded p-6 text-center text-sm text-red-700 dark:text-red-300" role="alert" data-testid="hq-article-unreadable">
               Unreadable. The article and its review comments could not be read just now.{' '}
               <button type="button" onClick={() => loadDetail(selectedId)} className="font-semibold underline">Try again</button>
             </div>
           ) : !detail ? (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded p-6 text-center text-slate-500">
-              {selectedId ? 'Loading the article…' : 'Select an article to review.'}
+            <div className="p-6 text-center text-slate-500">
+              Loading the article…
             </div>
           ) : (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded">
+            <div>
               <div className="p-4 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-xl font-bold">{detail.article.title}</h2>
-                    {detail.article.subtitle && <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{detail.article.subtitle}</p>}
-                    <div className="text-xs text-slate-500 mt-2 flex items-center gap-2 flex-wrap">
+                    <div className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
                       {statusBadge(detail.article.status)}
                       <span>by {detail.article.author_name || detail.article.author_email}</span>
                       <span>· {detail.article.word_count} words · ~{detail.article.read_minutes} min</span>
@@ -433,11 +438,10 @@ export default function ArticlesQueuePage() {
               </div>
             </div>
           )}
-        </div>
-      </div>
+          {prompt && <PromptModal {...prompt} onCancel={() => setPrompt(null)} />}
+        </Sheet>
+      )}
       </>)}
-
-      {prompt && <PromptModal {...prompt} onCancel={() => setPrompt(null)} />}
     </div>
     </RailFrame>
   );

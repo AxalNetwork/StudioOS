@@ -15,6 +15,7 @@ import {
   cohortSwitch, cohortWord, countQuery, decidedLine, declineCopy, detailReply, etToUtc, founderSees, historyOf, interviewCopy, interviewOf, OUTCOMES, outcomeCopy,
   listQuery, listReply, moveCopy, movedLine, narrowed, needsConfirm, nextCohort, openCohorts, rangeOf, runCopy, statusOf, waitlistCopy, yourTime,
 } from './applicationsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D948 (#2753) — Applications (SL2), one application (SL3) at
@@ -405,7 +406,7 @@ function Drawer({ id, tick, onClose, onAction, onRetry, now }) {
   const facts = it ? answerRows({ ...it, withdrawn_at: d.founder?.available ? d.founder.withdrawn_at : null }) : null;
   const history = d ? historyOf(d, now) : null;
   return (
-    <Lightbox label={row?.company || 'Application'} title={row?.company || 'Application'} sub={row ? [row.name, row.role].filter(Boolean).join(' · ') : null}
+    <Sheet label={row?.company || 'Application'} title={row?.company || 'Application'} sub={row ? [row.name, row.role].filter(Boolean).join(' · ') : null}
       onClose={onClose} testId="lab-app-drawer" pageBelow="lg"
       footer={(
         <div className="flex flex-wrap justify-end gap-2">
@@ -499,7 +500,7 @@ function Drawer({ id, tick, onClose, onAction, onRetry, now }) {
           </>
         ) : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 
