@@ -15,7 +15,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { FundAdminConsoleView } from '../src/pages/admin/fundAdmin/FundAdminConsole.jsx';
 import {
-  BANKING_PARTS, LEGACY_TABS, NOT_YET, TABS, WAITS, keepFund, legacyHref, tabOfView, viewFrom, viewHref,
+  BANKING_PARTS, LEGACY_TABS, TABS, WAITS, keepFund, legacyHref, tabOfView, viewFrom, viewHref,
 } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
 
 const h = React.createElement;
@@ -113,8 +113,9 @@ test('a D714 ?tab= link forwards to its new address, keeping only a well-formed 
 });
 
 test('every view with no read says why, and none says zero or none', () => {
-  for (const v of ['funds', 'books']) assert.ok(WAITS[v], v);
+  for (const v of ['books']) assert.ok(WAITS[v], v);
   assert.equal(WAITS.lps, undefined, 'D1162: LPs reads its roster');
+  assert.equal(WAITS.funds, undefined, 'D1161: Funds reads the funds');
   for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w), w);
 });
 
@@ -133,16 +134,17 @@ test('the tabs are links to their addresses; the open one is current, and Bankin
   } finally { await v.close(); }
 });
 
-test('Funds draws its wait card and makes no read of its own', async () => {
-  for (const [url, view] of [['/admin/fund-admin/funds', 'funds']]) {
-    const v = await mount(url);
-    try {
-      assert.ok(v.by(`fund-admin-panel-${view}`), view);
-      assert.ok(v.text(`fund-admin-wait-${view}`).includes(NOT_YET), view);
-      assert.ok(v.text(`fund-admin-wait-${view}`).includes(WAITS[view].slice(0, 40)), view);
-      assert.deepEqual([...new Set(v.calls)].sort(), ['access', 'overview'], `${view} reads nothing but the console's own two`);
-    } finally { await v.close(); }
-  }
+test('Funds keeps its panel and address, and draws the funds where the wait card was (D1161)', async () => {
+  const s = stubs();
+  s.apis.funds = { list: async () => { s.calls.push('funds'); return { ok: true, items: [{ id: 7, name: 'Example Fund I', status: 'active', carried_interest: 0.2, management_fee: 0.02 }] }; } };
+  const v = await mount('/admin/fund-admin/funds', s);
+  try {
+    assert.ok(v.by('fund-admin-panel-funds'));
+    assert.ok(!v.by('fund-admin-wait-funds'), 'the wait card is gone');
+    assert.ok(v.by('funds-row-7'));
+    assert.deepEqual(v.current(), ['fund-admin-tab-funds']);
+    assert.deepEqual([...new Set(v.calls)].sort(), ['access', 'funds', 'overview']);
+  } finally { await v.close(); }
 });
 
 test('Banking draws its three parts with the open one current; Reconciliation is a part, not a tab', async () => {

@@ -128,12 +128,20 @@ export async function setCompanyAccount(env: Env, userId: number, projectId: num
     env.DB.prepare(`INSERT INTO activity_logs(uid, project_id, user_id, action, details)
       SELECT ?, ?, ?, 'company_receiving_account_set', ? WHERE EXISTS (SELECT 1 FROM company_receiving_accounts WHERE uid = ? AND is_active = 1)`)
       .bind(crypto.randomUUID(), projectId, userId, JSON.stringify({ revision: next }), uid),
-    env.DB.prepare(`SELECT DISTINCT k.investor_user_id AS user_id, MIN(d.id) AS deal_id
-      FROM commitments k JOIN deals d ON d.id = k.deal_id JOIN projects p ON p.id = d.project_id
-      JOIN users u ON u.id = k.investor_user_id AND u.role = 'investor' AND u.is_active = 1 AND u.deletion_requested_at IS NULL
-      WHERE p.company_id = ? AND p.deleted_at IS NULL AND k.status = 'pending' AND ? = 1
-        AND EXISTS (SELECT 1 FROM company_receiving_accounts WHERE uid = ? AND is_active = 1)
-      GROUP BY k.investor_user_id`).bind(scope.company_id, before ? 1 : 0, uid),
+    // Every investor with an unpaid line: a pending commitment, or (D1215) an open or sent
+    // closing line of their own, which may come from a Raise prospect with no commitment.
+    env.DB.prepare(`SELECT owed.user_id, MIN(owed.deal_id) AS deal_id FROM (
+        SELECT k.investor_user_id AS user_id, d.id AS deal_id FROM commitments k JOIN deals d ON d.id = k.deal_id
+          JOIN projects p ON p.id = d.project_id
+          WHERE p.company_id = ? AND p.deleted_at IS NULL AND k.status = 'pending'
+        UNION
+        SELECT l.investor_user_id, c.deal_id FROM closing_lines l JOIN closings c ON c.id = l.closing_id AND c.status = 'open'
+          JOIN projects p ON p.id = c.project_id
+          WHERE p.company_id = ? AND p.deleted_at IS NULL AND l.status IN ('open', 'sent') AND l.investor_user_id IS NOT NULL
+      ) owed
+      JOIN users u ON u.id = owed.user_id AND u.role = 'investor' AND u.is_active = 1 AND u.deletion_requested_at IS NULL
+      WHERE ? = 1 AND EXISTS (SELECT 1 FROM company_receiving_accounts WHERE uid = ? AND is_active = 1)
+      GROUP BY owed.user_id`).bind(scope.company_id, scope.company_id, before ? 1 : 0, uid),
   ]);
   if (Number(saved[1]?.meta?.changes) !== 1) fail(409, 'company_account_changed', 'The account or its owner changed. Read the current details before saving.');
   const row = { uid, revision: next, created_at: at, account_last4: details.account_number.slice(-4) };
@@ -150,9 +158,15 @@ export async function setCompanyAccount(env: Env, userId: number, projectId: num
   return { recorded: true, changed: true, account: masked(row, details) };
 }
 
-/** Conservative legacy bridge, prepared pending S01's signature-contract answer.
+/**
+ * The signed line (#3214, on D1215's closing lines): the investor's own
+ * commitment has a line on its deal's OPEN closing, the line is not yet
+ * received or withdrawn, and the line's own envelope is completed with this
+ * investor's signature on it. This replaces the interim SAFE bridge S01
+ * approved until part 2 (#3212) gave a line its envelope; an unrelated signed
+ * document, a SAFE alone or a commitment with no line never qualifies.
  * The conditional audit INSERT is the authorization point, so a revoked
- * signature, membership or current account cannot produce an unaudited reveal.
+ * signature, line, membership or current account cannot produce an unaudited reveal.
  */
 async function recordSignedReveal(env: Env, userId: number, projectId: number, commitmentUid: string, accountUid: string) {
   const revealUid = crypto.randomUUID();
@@ -165,11 +179,11 @@ async function recordSignedReveal(env: Env, userId: number, projectId: number, c
        JOIN projects p ON p.company_id = a.company_id AND p.deleted_at IS NULL
        JOIN deals d ON d.project_id = p.id JOIN commitments k ON k.deal_id = d.id
        JOIN users u ON u.id = k.investor_user_id AND u.role = 'investor' AND u.is_active = 1 AND u.deletion_requested_at IS NULL
+       JOIN closings c ON c.deal_id = d.id AND c.project_id = p.id AND c.status = 'open'
+       JOIN closing_lines l ON l.closing_id = c.id AND l.commitment_id = k.id AND l.status IN ('open', 'sent')
+       JOIN esign_envelopes e ON e.id = l.envelope_id AND e.status = 'completed'
        WHERE a.uid = ? AND a.is_active = 1 AND p.id = ? AND k.uid = ? AND u.id = ? AND k.status <> 'withdrawn'
-         AND EXISTS (SELECT 1 FROM safe_issuances s JOIN esign_envelopes e ON e.id = s.envelope_id AND e.status = 'completed'
-           JOIN esign_recipients r ON r.envelope_id = e.id AND r.user_id = u.id AND r.status = 'signed' AND r.signed_at IS NOT NULL
-           WHERE s.project_id = p.id AND s.amount_cents = CAST(ROUND(k.amount * 100) AS INTEGER)
-             AND UPPER(s.currency) = d.currency AND e.document_type = 'safe' AND e.deal_id = d.id)
+         AND EXISTS (SELECT 1 FROM esign_recipients r WHERE r.envelope_id = e.id AND r.user_id = u.id AND r.status = 'signed' AND r.signed_at IS NOT NULL)
        RETURNING commitment_id`,
     ).bind(revealUid, accountUid, projectId, commitmentUid, userId).all<{ commitment_id: number }>();
   } catch { return fail(503, 'company_reveal_unrecorded', 'The reveal could not be recorded, so the instructions are not shown.'); }
@@ -198,7 +212,9 @@ export async function revealCompanyAccount(env: Env, userId: number, projectId: 
   const { commitmentId, revealUid } = await recordSignedReveal(env, userId, projectId, commitmentUid, row.uid);
   let line: { currency: string } | null;
   try {
-    line = await env.DB.prepare('SELECT d.currency FROM commitments k JOIN deals d ON d.id = k.deal_id WHERE k.id = ?')
+    // The line's own currency (D1215 records it per line), not the deal's.
+    line = await env.DB.prepare(`SELECT l.currency FROM closing_lines l JOIN closings c ON c.id = l.closing_id AND c.status = 'open'
+      WHERE l.commitment_id = ? AND l.status IN ('open', 'sent') ORDER BY l.id DESC LIMIT 1`)
       .bind(commitmentId).first<{ currency: string }>();
   } catch {
     await finishReveal(env, revealUid, 'unreadable');

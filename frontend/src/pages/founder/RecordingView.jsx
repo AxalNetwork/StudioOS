@@ -328,8 +328,9 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
         </div>
       )}
 
-      <div className="relative mx-auto flex w-full max-w-[420px] flex-1 items-center justify-center px-6">
-        <div className="relative aspect-square w-full" data-testid="recording-ring"
+      {/* D1330: the visualiser is a square, min(100%, 440px), centred on the stage. */}
+      <div className="relative mx-auto flex w-full max-w-[488px] flex-1 items-center justify-center px-6">
+        <div className="relative aspect-square w-full max-w-[440px]" data-testid="recording-ring"
           {...(l.stopping ? { role: 'progressbar', 'aria-label': `Processing: ${STAGES[stageAt] || 'starting'}`, 'aria-valuemin': 0, 'aria-valuemax': 100, ...(pct == null ? {} : { 'aria-valuenow': pct }) } : {})}>
           <RingViz analyser={st?.cap?.analyser || null} mode={ringMode(l)} theme={theme} motion={reduced ? 'reduced' : undefined}
             progress={progress} flash={reduced ? null : st?.toast?.at ?? null} />

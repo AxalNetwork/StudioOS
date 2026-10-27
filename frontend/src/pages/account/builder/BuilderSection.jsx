@@ -5,12 +5,17 @@
  * says "Not read here yet" and names the task that builds it. Never sample data.
  */
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import Sheet from '../../../ui/Sheet.jsx';
 import { assistantsApi } from '../../../lib/api/assistants.js';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { useViewMode } from '../../../contexts/ViewModeContext';
+// D1331 (#2479): MCP and services' cards and its two drawers.
 import McpServicesPage from './McpServicesPage';
 import { BUILDER_LINES, BUILDER_PAGES, BUILDER_WORDS, builderPathFor, builderTrailFor } from './builderModel';
+// D1320 (#2481): API usage, and Activity's request history with its drawer.
+import ApiUsagePage from './ApiUsagePage';
+import ActivityPage from './ActivityPage';
 
 const CARD = 'rounded-axal-lg border border-axal-hairline bg-white p-5 dark:border-gray-700 dark:bg-gray-900';
 const H3 = 'm-0 text-[15px] font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100';
@@ -23,15 +28,12 @@ export const MOVED_KEY = 'axal.builder.assistantsMoved.dismissed';
 export const WAITS = Object.freeze({
   tools: 'Every tool on axal.vc/mcp, its source, the permission it needs, whether you can call it now, and whether it spends AI tokens. It is drawn from the tool read (D846), which is being built.',
   keys: 'Your API keys: create, reveal once, rotate and revoke. #2480 draws them from GET /api/developer/keys.',
-  usage: 'Requests and AI tokens by day, where the tokens went, and your limits and alerts. #2481 draws them from GET /api/developer/usage.',
-  activity: 'Every call your keys and assistants made, with its outcome. #2481 draws it from GET /api/developer/usage/events.',
   key: 'One key: its scopes, companies, limit and last use. #2480 draws it (APIK5).',
-  request: 'One request: its tool, company, outcome and cost. #2481 draws it (APIU4).',
 });
 
-export function Wait({ id, title }) {
+export function Wait({ id, title, bare = false }) {
   return (
-    <section className={`${CARD} flex flex-col gap-2`} data-testid={`builder-wait-${id}`}>
+    <section className={bare ? 'flex flex-col gap-2 p-5' : `${CARD} flex flex-col gap-2`} data-testid={`builder-wait-${id}`}>
       {title && <h3 className={H3}>{title}</h3>}
       <span className="w-fit rounded-axal-pill border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
       <p className={`m-0 text-[12.5px] ${MUTED}`}>{WAITS[id]}</p>
@@ -40,7 +42,6 @@ export function Wait({ id, title }) {
 }
 
 const DRAWER_TITLES = { assistant: 'AI assistant', service: 'Service', key: 'API key', request: 'Request' };
-const BACK = { assistant: 'MCP and services', service: 'MCP and services', key: 'API keys', request: 'Activity' };
 
 /** The once-per-member notice that AI assistants left Connectors (DEV14, MCPX13). */
 function MovedNotice({ storage }) {
@@ -81,9 +82,9 @@ export function BuilderHandoff({ api = assistantsApi }) {
 }
 
 /**
- * #2479: MCP and services draws its own cards and its two drawers from the
- * reads that have landed (`McpServicesPage.jsx`). Card 3, the tools, waits
- * for D846's tool read.
+ * D1331 (#2479): MCP and services draws its own cards, and its two drawers as
+ * the shared Sheet over them, from the reads that have landed
+ * (`McpServicesPage.jsx`). Card 3, the tools, waits for D846's tool read.
  */
 function ServicesPage({ view, role, user, api }) {
   return <McpServicesPage view={view} role={role} user={user} api={api} tools={<Wait id="tools" title="Tools on axal.vc/mcp" />} />;
@@ -95,11 +96,12 @@ function ServicesPage({ view, role, user, api }) {
  */
 export default function BuilderSection({ view = { page: 'services', drawer: null }, storage = typeof window !== 'undefined' ? window.localStorage : null, api, role: roleProp, user: userProp }) {
   const { page, drawer } = view;
+  const navigate = useNavigate();
   const auth = useAuth();
   const user = userProp ?? auth?.user ?? null;
   const shellRole = useViewMode()?.shellRole;
   const role = roleProp ?? shellRole ?? user?.role ?? null;
-  // #2479: the services and assistant drawers are MCP and services' own (MCPX3, MCPX5).
+  // D1331: a service and an assistant are MCP and services' own drawers (MCPX3, MCPX5).
   const ownDrawer = drawer && (drawer.kind === 'service' || drawer.kind === 'assistant');
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="account-builder" data-page={page}>
@@ -116,20 +118,20 @@ export default function BuilderSection({ view = { page: 'services', drawer: null
         ))}
       </nav>
       {page === 'services' && !drawer && <MovedNotice storage={storage} />}
-      {ownDrawer ? (
-        <div data-testid={`builder-drawer-${drawer.kind}`}><ServicesPage view={view} role={role} user={user} api={api} /></div>
-      ) : drawer ? (
-        <section className={`${CARD} flex flex-col gap-2`} data-testid={`builder-drawer-${drawer.kind}`}>
-          <Link to={builderPathFor({ page })} className="w-fit text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300">‹ {BACK[drawer.kind]}</Link>
-          <Wait id={drawer.kind} title={DRAWER_TITLES[drawer.kind]} />
-        </section>
-      ) : (
-        <>
-          {page === 'services' && <ServicesPage view={view} role={role} user={user} api={api} />}
-          {page === 'keys' && <Wait id="keys" title="API keys" />}
-          {page === 'usage' && <Wait id="usage" title="Requests and AI tokens by day" />}
-          {page === 'activity' && <Wait id="activity" title="Calls by day" />}
-        </>
+      {page === 'services' && <ServicesPage view={view} role={role} user={user} api={api} />}
+      {page === 'keys' && <Wait id="keys" title="API keys" />}
+      {page === 'usage' && <ApiUsagePage />}
+      {/* One mount for the log and its drawer, so opening and closing a request keeps the log as read. */}
+      {page === 'activity' && <ActivityPage drawerId={drawer?.kind === 'request' ? drawer.id : null} />}
+      {/* D1317: a drawer's address opens it as the shared Sheet over its page
+          (560px, the canvases' width); closing returns to the page's address.
+          Builder has no Eadwyn rail, so the sheet meets the window's edge.
+          A request is Activity's own drawer (D1320), already over that log. */}
+      {drawer && drawer.kind !== 'request' && !ownDrawer && (
+        <Sheet eyebrow={builderTrailFor(view)} title={DRAWER_TITLES[drawer.kind]} width={560}
+          testId={`builder-drawer-${drawer.kind}`} onClose={() => navigate(builderPathFor({ page }))}>
+          <Wait id={drawer.kind} bare />
+        </Sheet>
       )}
     </div>
   );

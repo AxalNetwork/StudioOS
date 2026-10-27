@@ -51,6 +51,7 @@ export * from './api/community.js';
 export * from './api/communityTasks.js';
 export * from './api/companyActions.js';
 export * from './api/companyEin.js';
+export * from './api/companyReceivingAccounts.js';
 export * from './api/companySheet.js';
 export * from './api/connectors.js';
 export * from './api/contracts.js';
@@ -75,6 +76,7 @@ export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
+export * from './api/fills.js';
 export * from './api/fundAdmin.js';
 export * from './api/fundBooklets.js';
 export * from './api/fundFees.js';
@@ -129,6 +131,7 @@ export * from './api/programs.js';
 export * from './api/promoUsage.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
+export * from './api/publish.js';
 export * from './api/railPrefs.js';
 export * from './api/railProposals.js';
 export * from './api/raiseEvidence.js';
@@ -2978,6 +2981,20 @@ export const api = {
       },
       body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
     }),
+  // D904 (#2683) — the version as a new presentation in the member's own
+  // Google Drive; the answer is `{created, url, converted, …}` or `{error}`.
+  // Raw Response, like deckExport: the caller reads the answer or the refusal.
+  deckExportGoogleSlides: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/google-slides`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
   // D901 — every export of the deck's venture, newest first (50).
   deckExportList: (id) => request(`/decks/${id}/exports`),
   // Task #2 — public, HMAC-token-gated deck payload consumed by the
@@ -3427,9 +3444,6 @@ export const api = {
   updateNotificationSettings: (data) => request('/settings/notifications', { method: 'PUT', body: JSON.stringify(data) }),
   getSecuritySettings: () => request('/settings/security'),
   getIntegrationSettings: () => request('/settings/integrations'),
-  getDeveloperSettings: () => request('/settings/developer'),
-  updateDeveloperSettings: (data) => request('/settings/developer', { method: 'PUT', body: JSON.stringify(data) }),
-  resyncDeveloperIndices: () => request('/settings/developer/resync-indices', { method: 'POST', body: JSON.stringify({}) }),
   listFounderInvites: () => request('/settings/founder/invites'),
   createFounderInvite: (data) =>
     request('/settings/founder/invites', { method: 'POST', body: JSON.stringify(data) }),
@@ -4225,9 +4239,9 @@ export const api = {
   // Worker-only (D1); the dev FastAPI backend 404s on the whole prefix.
   // Reads gate to admin/partner/investor; analyst writes (override/recompute)
   // gate to admin/partner.
-  ventureRiskByProject: (projectId) => request(`/venture-risk/by-project/${projectId}`),
-  ventureRiskRecompute: (projectId) =>
-    request(`/venture-risk/${projectId}/recompute`, { method: 'POST' }),
+  // D1260 (#3283): the venture-risk READ (its automatic layer scores) has no
+  // caller: VentureRiskPanel reads the scorecard. Analyst reviews are still
+  // written here, and feed the scorecard's Risk scope.
   ventureRiskSetLayer: (projectId, layerKey, body) =>
     request(`/venture-risk/${projectId}/layers/${layerKey}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
   ventureRiskClearLayer: (projectId, layerKey) =>

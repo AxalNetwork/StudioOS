@@ -42,6 +42,7 @@ import { api } from '../../lib/api';
 import { predictTarget, pageLabel } from '../../lib/advisor/router';
 import { PhoneBuckets } from './eadwynPhone';
 import { fullDayText, storedDate } from '../../pages/founder/studioPhoneModel.js';
+import { openCheckout, planKeyOfTier } from '../checkout/checkoutEntry';
 
 // FLIP animation: items leaving one bucket and arriving in another get
 // a < 500ms inverse-translate transition so the move reads as motion
@@ -262,12 +263,23 @@ function ItemCard({
       {/* Locked → Upgrade CTA */}
       {locked && (
         <div className="mt-1.5">
-          <Link
-            to={upgradeLink || '/billing/upgrade'}
-            className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-800 dark:text-amber-300 hover:underline"
-          >
-            Upgrade to unlock <ArrowRight size={10} />
-          </Link>
+          {upgradeLink ? (
+            <Link
+              to={upgradeLink}
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-800 dark:text-amber-300 hover:underline"
+            >
+              Upgrade to unlock <ArrowRight size={10} />
+            </Link>
+          ) : (
+            // D1054 (#2905): no upgrade address sent, so the plan opens in the checkout sheet over this page.
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); openCheckout({ plan_key: planKeyOfTier(lockTier) || 'founder:studio', unlocks: item?.prompt || null }); }}
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-800 dark:text-amber-300 hover:underline"
+            >
+              Upgrade to unlock <ArrowRight size={10} />
+            </button>
+          )}
         </div>
       )}
 
@@ -600,7 +612,7 @@ export default function AdvisorProgressWidget({
                 locked
                 lockTier={c.tier_required || 'studio'}
                 upgradeLink={c.upgrade_link}
-                onClick={() => navigate(c.upgrade_link || '/billing/upgrade')}
+                onClick={() => (c.upgrade_link ? navigate(c.upgrade_link) : openCheckout({ plan_key: planKeyOfTier(c.tier_required) || 'founder:studio', unlocks: c.prompt || null }))}
               />
             ))}
           </>

@@ -10,6 +10,7 @@ import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../workspaces/canvasKit';
 import { Pill } from '../ui';
+import Sheet from '../ui/Sheet.jsx';
 import { useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions';
 
@@ -883,9 +884,19 @@ function MatchDetail({ prop, onClose }) {
   const b = prop.breakdown || {};
   const t = prop.target || {};
   const reasons = Array.isArray(b.reasons) ? b.reasons : [];
+  const footer = (
+    <div className="flex items-center justify-between gap-2">
+      {t.profile_path ? (
+        <Link to={t.profile_path} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+          <ExternalLink size={12} /> View profile
+        </Link>
+      ) : <span />}
+      <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-700 dark:text-gray-300">Close</button>
+    </div>
+  );
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="max-h-[80vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+    <Sheet label={t.name || 'Member'} eyebrow="Why this match" title={t.name || 'Member'} onClose={onClose} width={480} testId="intro-match-detail" footer={footer}>
+      <div className="p-5">
         <div className="flex items-start gap-3">
           {t.headshot_url ? (
             <img src={t.headshot_url} alt="" className="h-11 w-11 flex-shrink-0 rounded-full object-cover" />
@@ -895,8 +906,7 @@ function MatchDetail({ prop, onClose }) {
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-extrabold tracking-tight">{t.name || 'Member'}</h3>
-            <div className="mt-1 flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               <Chip tone="blue">{entityLabel(t)}</Chip>
               {t.country && <Chip><Scale size={10} className="mr-0.5" /> {t.country}</Chip>}
             </div>
@@ -937,17 +947,8 @@ function MatchDetail({ prop, onClose }) {
             <Handshake size={11} /> {b.relationship_context}
           </p>
         )}
-
-        <div className="mt-4 flex items-center justify-between gap-2">
-          {t.profile_path ? (
-            <Link to={t.profile_path} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
-              <ExternalLink size={12} /> View profile
-            </Link>
-          ) : <span />}
-          <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-700 dark:text-gray-300">Close</button>
-        </div>
       </div>
-    </div>
+    </Sheet>
   );
 }
 

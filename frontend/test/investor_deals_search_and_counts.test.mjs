@@ -76,7 +76,7 @@ test('a count is only ever claimed where the page supplies one', () => {
   // a label may carry `{n}` only where the page actually passes that key —
   // otherwise the chip silently loses its figure and nobody notices.
   const supplied = {
-    'deals/screening': ['scored', 'flags'],
+    'deals/screening': ['scorecards'], // D1260; Pipeline's counts left with its zone (D1243)
     'deals/closing': ['close', 'documents', 'blocking', 'wires'],
   };
   for (const [zone, keys] of Object.entries(supplied)) {
@@ -97,7 +97,7 @@ test('a count is only ever claimed where the page supplies one', () => {
 
 test('each page passes the counts its labels promise', () => {
   const pages = {
-    ScreeningZone: ['scored:', 'flags:'],
+    ScreeningZone: ['scorecards:'], // D1260; PipelineZone retired with its zone (D1243)
     ClosingZone: ['close:', 'documents:', 'blocking:', 'wires:'],
   };
   for (const [file, keys] of Object.entries(pages)) {

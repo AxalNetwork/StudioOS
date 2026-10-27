@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import Sheet from '../../../ui/Sheet.jsx';
 import { CopyUrl } from '../AssistantsGroup';
 import { assistantsApi } from '../../../lib/api/assistants.js';
 import { developerKeysApi } from '../../../lib/api/developerKeys.js';
@@ -274,18 +274,19 @@ function LimitsCard({ limits, onRetry }) {
   );
 }
 
-/** A right-hand drawer (a full screen on the phone): focus moves in, Esc closes. */
+/**
+ * D1331, D1317: a drawer is the shared right Sheet over MCP and services, 560px
+ * (a full screen on the phone), with focus moved in and Escape to close.
+ * Closing returns to the page's address.
+ */
 function Drawer({ title, back = '/account/builder', children, testid }) {
-  const box = useRef(null);
-  useEffect(() => { box.current?.focus?.(); }, []);
+  const navigate = useNavigate();
+  const kind = testid === 'mcp-service-drawer' ? 'service' : 'assistant';
   return (
-    <section ref={box} tabIndex={-1} className={`${CARD} flex flex-col gap-3 outline-none`} aria-label={title} data-testid={testid}>
-      <div className="flex items-center justify-between gap-2">
-        <Link to={back} className={`inline-flex min-h-[44px] items-center ${LINK}`}>‹ MCP and services</Link>
-        <Link to={back} aria-label="Close" className="grid h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"><X size={18} aria-hidden="true" /></Link>
-      </div>
-      {children}
-    </section>
+    <Sheet eyebrow={`Builder › ${kind === 'service' ? 'MCP and services' : 'AI assistants'}`} title={title} width={560}
+      testId={`builder-drawer-${kind}`} onClose={() => navigate(back)}>
+      <div className="flex flex-col gap-3 p-5" data-testid={testid}>{children}</div>
+    </Sheet>
   );
 }
 
@@ -389,11 +390,13 @@ export default function McpServicesPage({ view, role, user, api = MCP_API, tools
     setGrants((g) => ({ ...g, data: { ...g.data, grants: (g.data?.grants || []).filter((x) => String(x?.id) !== String(id)) } }));
   };
 
-  if (view?.drawer?.kind === 'service') return <ServiceDrawer keyName={view.drawer.id} rows={rows} connections={connections} onRetry={retryConnections} />;
-  if (view?.drawer?.kind === 'assistant') return <AssistantDrawer id={view.drawer.id} grants={grants} onRetry={retryGrants} onRevoke={revoke} />;
+  // D1317: the page stays drawn; a drawer's address opens it over the page.
+  const drawer = view?.drawer?.kind === 'service' ? <ServiceDrawer keyName={view.drawer.id} rows={rows} connections={connections} onRetry={retryConnections} />
+    : view?.drawer?.kind === 'assistant' ? <AssistantDrawer id={view.drawer.id} grants={grants} onRetry={retryGrants} onRevoke={revoke} /> : null;
 
   return (
     <div className="flex flex-col gap-[14px]" data-testid="mcp-services-page" data-audience={audience.kind}>
+      {drawer}
       {audience.lab && <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="mcp-lab-note">{LAB_NOTE}</p>}
       <EndpointCard server={server} keys={keys} copy={copy} />
       {server === 'off' ? null : (

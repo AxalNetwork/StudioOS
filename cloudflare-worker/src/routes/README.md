@@ -136,7 +136,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS; D1158: GET /lps, the LP roster)
 /api/closings      → closings.ts        (D1215: a closing as a record — open, lines, route, evidence, the cap-table proposal, complete; the admin desk `adminClosings` is mounted at /api/admin/closings)
-                                         (D1220: the operator's order through these routes, from Open to Mark Closed, is `documentation/operations/CLOSING.md`. Adding a line and recording or withdrawing evidence have no page control yet; the runbook's §10 says how they are sent. `company_receiving_accounts.ts` (D1217, receiving instructions at /api/closings/company-receiving-accounts) is prepared and NOT mounted until #3214)
+                                         (D1220: the operator's order through these routes, from Open to Mark Closed, is `documentation/operations/CLOSING.md`. Adding a line and recording or withdrawing evidence have no page control yet; the runbook's §10 says how they are sent. `company_receiving_accounts.ts` (D1217, receiving instructions) is mounted at /api/closings/company-receiving-accounts, before this router (#3214))
 /api/reporting     → reporting.ts       (D1058: reporting duties and periods — the founder's desk, the expected date and reminders; the investor's own duties, ask and waive)
 /api/reporting     → reporting_reports.ts (D1059: a report from the Grow modules — draft, choices, preview, send with frozen figures, correct as a revision, the open, and private statements)
 /api/fund-reporting → fund_reporting.ts
@@ -163,7 +163,8 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
 /api/admin/money-rails → admin_money_rails.ts (each Axal entity's role and each money kind's rail; admin only; D707)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641; GET /catalogue, the offered models with cost and billed unit prices, and cost and billed on /pricing and /rates, D760)
-/api/developer/usage → developer_usage.ts (D845: the caller's own usage reports over `api_usage_events`; GET / grouped by day, key, provider, connector, tool or model, GET /events the request history with a `(created_at, id)` cursor, GET /keys each key's cap, this month's charge and the 80% / 100% flag)
+/api/developer/assistants → developer_assistants.ts (D1316, #3474: GET /overview, the MCP server's address, scopes, tools by their listed name, the limits in force and whether the caller can connect a company; 404 with the MCP flag off)
+/api/developer/usage → developer_usage.ts (D845: the caller's own usage reports over `api_usage_events`; GET / grouped by day, key, provider, connector, tool or model, GET /events the request history with a `(created_at, id)` cursor, GET /keys each key's cap, this month's charge and the 80% / 100% flag) D1320 (#2481): `GET /events/:execution_id` (one of the caller's own requests), `grant=` and `outcome=failed` on `/events`, and `group=category`.
 /api/ai/rail/proposals → ai_rail_proposals.ts (D780: the caller's own drafts, proposals and notes from a rail option's run, `ai_rail_proposals`; GET by option and record, POST /:uid/decide accept, edit or discard)
 /api/founder/validate → founder_validate_structure.ts (structure a session's transcript, compare two runs, ask it; accept, edit then accept or discard each placement; D658. Since D757 (#1925) `POST /sessions/:id/placements/accept` is Accept all, for a module (`{ slug }`) or chosen placements (`{ ids }`, at most 50): each placement's own claim and writer, every outcome reported)
 /api/founder/validate → founder_validate_meetings.ts (D684: schedule, list, cancel and import a Zoom or Google Meet call on an interview; D871: attach a Meet call from the member's own Calendar, and GET …/:refUid/recording, its Drive recording link)
@@ -394,6 +395,8 @@ returns staff identities or free-form audit payloads. An unavailable source is
 D1105 (#2985): `data_room.ts` adds the owner's and a co-founder's `GET /:projectUid/activity` (any period, by investor, paged), `GET /:projectUid/activity.csv` and `GET /:projectUid/checklist`, from `../services/dataRoomActivity.ts`; migration 596 records each file's source (`document`, `connector`, `signed`). See `documentation/architecture/decisions/D1105.md`.
 
 D1102 (#2982, part): `data_room.ts` keeps founder details and mutations owner-only.
+
+D1089 (#2954): `data_room.ts`'s upload stores through `storeDataRoomFile` (the storage guard, the derived key, the row, its log and the notice), which a Notion snapshot calls too, so a file reaches the room one way only.
 The ordinary admin GET returns scoped aggregate counts and checklist coverage,
 with unavailable blocks explicit and no file names, investor identities or access
 rows. `POST /:projectUid/support-read` takes an admin's required reason and must
@@ -412,6 +415,8 @@ D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: 
 D1093 (#2958): `build_google.ts` mounts `/api/cycles/build/google` before the Build cycle's routes: From Google on Solution design and Product roadmap, the sync, and a spec Doc's Accept and Dismiss, on `google_workspace.ts`'s scope check. See `../services/google/README.md`.
 
 D1086 (#2951): `notion.ts` mounts `/api/connectors/notion` (search, the sources a founder picks with their field map, Stop using, a five-row preview that stores nothing) ahead of the integrations router, and its `notionCycleRoutes` on `/api/cycles` (`/:section/notion`: the read, Sync, Accept, Dismiss and Delete) ahead of the section routers. The sync itself is `../services/notion/sync.ts`. Every write checks the owner, the venture and the company; a support session is refused.
+
+D1325 (#3486): `fills.ts` mounts `/api/fills`: `GET /sheet?page=&form=&project=&record=`, the Fill with Eadwyn sheet's read. Per field of a FILL_FIELDS form: the value now and its mark (`../services/fills/provenance.ts`' `marksForRows`), what each source has waiting (`../services/fills/sources.ts`), the never-fill flag and the trigger; then each source's state and as-of, and Eadwyn's quote. A reader and a support session get marks and no trigger; each block that fails is `unreadable` on its own. No model runs; part 3 (D1326) adds the run, the record and the undo.
 
 D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 
@@ -448,3 +453,5 @@ D1051 (#2902): `billing_checkout.ts` mounts `/checkout/quote`, `/checkout/start`
 | File | Purpose |
 | --- | --- |
 | `deal_insights.ts` | D1151: NDA-gated per-deal Team, Market and Traction reads. |
+
+D1319 (#3480, part 1 of #2400): `publish.ts` mounts `/api/publish`: founder publishing to an outside service — destinations and their per-company switches, drafts, a preview and check per destination, the confirm, the sent history, Retry, Check, Mark as not sent, Retract and Mark as removed. Only the venture's founder, through their own connection, never a support session; the team reads the history. The rules and the send's state machine are `../services/publishCore.ts`; the check is `../services/publishLint.ts`. Nothing sends unless the founder presses Send.

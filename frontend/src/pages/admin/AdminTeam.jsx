@@ -17,6 +17,7 @@ import { appOrigin } from '../../lib/branchHost';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { RailFrame, WorkerRail } from '../../ui';
+import Sheet from '../../ui/Sheet.jsx';
 import useRecordCrumb from './useRecordCrumb';
 
 const EMPTY = {
@@ -91,9 +92,9 @@ function FocusAreasInput({ value, onChange }) {
   );
 }
 
-function MemberEditor({ initial, onClose, onSaved, notify }) {
-  useEscapeClose(onClose);
+export function MemberEditor({ initial, onClose, onSaved, notify }) {
   const isNew = !initial?.id;
+  useEscapeClose(onClose, { active: isNew }); // the Sheet answers Escape for an existing member
   // D775 (#2101): the member being edited is the rail's record; a new one has none yet.
   useRecordCrumb(isNew ? null : initial?.name, 'team-member', initial?.id);
   const [form, setForm] = useState({ ...EMPTY, ...(initial || {}) });
@@ -153,6 +154,150 @@ function MemberEditor({ initial, onClose, onSaved, notify }) {
     ? `/api/public/team/${encodeURIComponent(initial.slug)}/photo?v=${form._photo_bust || ''}`
     : null;
 
+  const heading = isNew ? 'Add team member' : `Edit ${initial.name}`;
+  const fields = (
+    <div className="px-5 py-4 space-y-4">
+      {error && (
+        <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 rounded text-xs">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-1 flex flex-col items-center gap-2">
+          <div className="w-32 h-32 rounded-lg border dark:border-slate-700 bg-gray-50 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
+            {photoUrl
+              ? <img src={photoUrl} alt={form.name} className="w-full h-full object-cover" />
+              : <ImageIcon className="w-10 h-10 text-gray-300 dark:text-slate-600" />}
+          </div>
+          <input ref={fileRef} type="file" accept={ALLOWED_MIME.join(',')} className="hidden" onChange={onPhotoPick} />
+          <button
+            type="button"
+            disabled={photoBusy || isNew}
+            onClick={() => fileRef.current?.click()}
+            className="text-xs px-2 py-1 border rounded hover:bg-gray-50 dark:hover:bg-slate-800 dark:border-slate-700 disabled:opacity-50"
+            title={isNew ? 'Save the member first' : 'Upload square photo (max 3MB)'}
+          >
+            {photoBusy ? <Loader2 className="w-3 h-3 animate-spin inline" /> : 'Upload photo'}
+          </button>
+        </div>
+
+        <div className="col-span-2 space-y-3">
+          <div>
+            <label className="text-xs text-gray-500 dark:text-slate-400">Name</label>
+            <input
+              value={form.name}
+              onChange={(e) => update({ name: e.target.value, slug: form.slug || slugify(e.target.value) })}
+              className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
+              placeholder="Guillaume Lauzier"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 dark:text-slate-400">Title</label>
+            <input
+              value={form.title}
+              onChange={(e) => update({ title: e.target.value })}
+              className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
+              placeholder="CEO & Founder · Venture Partner"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500 dark:text-slate-400">Slug</label>
+              <input
+                value={form.slug}
+                onChange={(e) => update({ slug: slugify(e.target.value) })}
+                className="w-full border rounded px-2 py-1 text-sm font-mono dark:bg-slate-900 dark:border-slate-700"
+                placeholder="guillaume-lauzier"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 dark:text-slate-400">Location</label>
+              <input
+                value={form.location || ''}
+                onChange={(e) => update({ location: e.target.value })}
+                className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
+                placeholder="Montréal · Global"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs text-gray-500 dark:text-slate-400">Short bio (one line)</label>
+        <input
+          value={form.short_bio || ''}
+          onChange={(e) => update({ short_bio: e.target.value })}
+          className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
+          maxLength={500}
+        />
+      </div>
+      <div>
+        <label className="text-xs text-gray-500 dark:text-slate-400">Long bio</label>
+        <textarea
+          value={form.long_bio || ''}
+          onChange={(e) => update({ long_bio: e.target.value })}
+          rows={4}
+          className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
+          maxLength={5000}
+        />
+      </div>
+
+      <div>
+        <label className="text-xs text-gray-500 dark:text-slate-400">Focus areas</label>
+        <FocusAreasInput value={form.focus_areas || []} onChange={(v) => update({ focus_areas: v })} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1"><Linkedin className="w-3 h-3" /> LinkedIn</label>
+          <input value={form.social_linkedin || ''} onChange={(e) => update({ social_linkedin: e.target.value })}
+            className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700" placeholder="https://www.linkedin.com/in/…" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1"><Twitter className="w-3 h-3" /> X (Twitter)</label>
+          <input value={form.social_x || ''} onChange={(e) => update({ social_x: e.target.value })}
+            className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700" placeholder="https://x.com/…" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1"><Globe className="w-3 h-3" /> Website</label>
+          <input value={form.social_website || ''} onChange={(e) => update({ social_website: e.target.value })}
+            className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700" placeholder="https://…" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" /> Email</label>
+          <input value={form.social_email || ''} onChange={(e) => update({ social_email: e.target.value })}
+            className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700" placeholder="name@axal.vc" />
+        </div>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={!!form.published} onChange={(e) => update({ published: e.target.checked })} />
+        Published (visible on axal.vc/team)
+      </label>
+    </div>
+  );
+  const actions = (
+    <div className="flex justify-end gap-2">
+      <button onClick={onClose} className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50 dark:hover:bg-slate-800 dark:border-slate-700">
+        Cancel
+      </button>
+      <button
+        onClick={onSave}
+        disabled={busy || !form.name.trim() || !form.title.trim()}
+        className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded disabled:opacity-50 flex items-center gap-1"
+      >
+        {busy && <Loader2 className="w-3 h-3 animate-spin" />} Save
+      </button>
+    </div>
+  );
+
+  // D1317: editing a member is a detail panel, the shared Sheet (640px, its
+  // max-w-2xl); Add team member, a create form, stays the centred modal.
+  if (!isNew) {
+    return <Sheet label={heading} eyebrow="Team" title={heading} width={640} onClose={onClose} testId="team-member-sheet" footer={actions}>{fields}</Sheet>;
+  }
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div
@@ -160,146 +305,13 @@ function MemberEditor({ initial, onClose, onSaved, notify }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b dark:border-slate-800">
-          <h2 className="font-semibold">{isNew ? 'Add team member' : `Edit ${initial.name}`}</h2>
+          <h2 className="font-semibold">{heading}</h2>
           <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-800 dark:hover:text-slate-200">
             <X className="w-5 h-5" />
           </button>
         </div>
-
-        <div className="overflow-y-auto px-5 py-4 space-y-4">
-          {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 rounded text-xs">
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-1 flex flex-col items-center gap-2">
-              <div className="w-32 h-32 rounded-lg border dark:border-slate-700 bg-gray-50 dark:bg-slate-800 overflow-hidden flex items-center justify-center">
-                {photoUrl
-                  ? <img src={photoUrl} alt={form.name} className="w-full h-full object-cover" />
-                  : <ImageIcon className="w-10 h-10 text-gray-300 dark:text-slate-600" />}
-              </div>
-              <input ref={fileRef} type="file" accept={ALLOWED_MIME.join(',')} className="hidden" onChange={onPhotoPick} />
-              <button
-                type="button"
-                disabled={photoBusy || isNew}
-                onClick={() => fileRef.current?.click()}
-                className="text-xs px-2 py-1 border rounded hover:bg-gray-50 dark:hover:bg-slate-800 dark:border-slate-700 disabled:opacity-50"
-                title={isNew ? 'Save the member first' : 'Upload square photo (max 3MB)'}
-              >
-                {photoBusy ? <Loader2 className="w-3 h-3 animate-spin inline" /> : 'Upload photo'}
-              </button>
-            </div>
-
-            <div className="col-span-2 space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 dark:text-slate-400">Name</label>
-                <input
-                  value={form.name}
-                  onChange={(e) => update({ name: e.target.value, slug: form.slug || slugify(e.target.value) })}
-                  className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
-                  placeholder="Guillaume Lauzier"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 dark:text-slate-400">Title</label>
-                <input
-                  value={form.title}
-                  onChange={(e) => update({ title: e.target.value })}
-                  className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
-                  placeholder="CEO & Founder · Venture Partner"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 dark:text-slate-400">Slug</label>
-                  <input
-                    value={form.slug}
-                    onChange={(e) => update({ slug: slugify(e.target.value) })}
-                    className="w-full border rounded px-2 py-1 text-sm font-mono dark:bg-slate-900 dark:border-slate-700"
-                    placeholder="guillaume-lauzier"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 dark:text-slate-400">Location</label>
-                  <input
-                    value={form.location || ''}
-                    onChange={(e) => update({ location: e.target.value })}
-                    className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
-                    placeholder="Montréal · Global"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-500 dark:text-slate-400">Short bio (one line)</label>
-            <input
-              value={form.short_bio || ''}
-              onChange={(e) => update({ short_bio: e.target.value })}
-              className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
-              maxLength={500}
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-slate-400">Long bio</label>
-            <textarea
-              value={form.long_bio || ''}
-              onChange={(e) => update({ long_bio: e.target.value })}
-              rows={4}
-              className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700"
-              maxLength={5000}
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-500 dark:text-slate-400">Focus areas</label>
-            <FocusAreasInput value={form.focus_areas || []} onChange={(v) => update({ focus_areas: v })} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1"><Linkedin className="w-3 h-3" /> LinkedIn</label>
-              <input value={form.social_linkedin || ''} onChange={(e) => update({ social_linkedin: e.target.value })}
-                className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700" placeholder="https://www.linkedin.com/in/…" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1"><Twitter className="w-3 h-3" /> X (Twitter)</label>
-              <input value={form.social_x || ''} onChange={(e) => update({ social_x: e.target.value })}
-                className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700" placeholder="https://x.com/…" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1"><Globe className="w-3 h-3" /> Website</label>
-              <input value={form.social_website || ''} onChange={(e) => update({ social_website: e.target.value })}
-                className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700" placeholder="https://…" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" /> Email</label>
-              <input value={form.social_email || ''} onChange={(e) => update({ social_email: e.target.value })}
-                className="w-full border rounded px-2 py-1 text-sm dark:bg-slate-900 dark:border-slate-700" placeholder="name@axal.vc" />
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={!!form.published} onChange={(e) => update({ published: e.target.checked })} />
-            Published (visible on axal.vc/team)
-          </label>
-        </div>
-
-        <div className="px-5 py-3 border-t dark:border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50 dark:hover:bg-slate-800 dark:border-slate-700">
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={busy || !form.name.trim() || !form.title.trim()}
-            className="px-3 py-1.5 text-sm bg-violet-600 hover:bg-violet-700 text-white rounded disabled:opacity-50 flex items-center gap-1"
-          >
-            {busy && <Loader2 className="w-3 h-3 animate-spin" />} Save
-          </button>
-        </div>
+        <div className="overflow-y-auto">{fields}</div>
+        <div className="px-5 py-3 border-t dark:border-slate-800">{actions}</div>
       </div>
     </div>
   );

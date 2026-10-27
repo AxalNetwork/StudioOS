@@ -7,6 +7,12 @@
  *
  * The console (`../consoles/UsersConsole.jsx`) owns the record and the
  * actions: a row's click and every menu item are handed to it.
+ *
+ * D1307 (#3404, ACC14): below 1024px the same read draws as the phone. One
+ * search, one "Filters and sort" button with its count opening a sheet
+ * (profiles, sub-accounts, every filter, sort, "Show N accounts"), the rows as
+ * cards, each ⋯ opening the row menu as a sheet, and "Show 25 more". The phone
+ * has no row selection, so no bulk bar. Every target is at least 44 × 44px.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -14,11 +20,12 @@ import { MoreHorizontal, Search, X } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { adminAccountWritesApi } from '../../../lib/api/adminAccountWrites.js';
 import { reportError } from '../../../lib/log';
-import { Lightbox } from '../../../ui';
+import { Lightbox, usePhoneWidth } from '../../../ui';
 import {
   COLUMNS, EXPORT_COLUMNS, FILTER_GROUPS, PAGE_SIZES, PROFILE_CHIPS, RESEND_CAP, SORTS, SUB_CHIPS,
   chipsOf, clearFilters, countLine, exportProblem, fromViewQuery, initialState, listParams, narrowed, removeChip,
   resendView, rowMenu, rowView, seenValues, sortLabel, toViewQuery, toggleOption, unreadableOf, viewProblem,
+  cardView, moreOf, phoneFilterCount,
 } from './allAccountsModel';
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -57,11 +64,11 @@ function Dialog({ title, onClose, footer, children, testId }) {
   return <Lightbox label={title} title={title} onClose={onClose} width={560} phone="sheet" testId={testId} footer={footer}>{children}</Lightbox>;
 }
 
-function FiltersPanel({ state, set, rows, matched, onClose }) {
+function FiltersPanel({ state, set, rows, matched, onClose, actions = true, sheet = false }) {
   const [country, setCountry] = useState('');
   return (
-    <div className="flex w-[min(420px,calc(100vw-32px))] flex-col gap-3 p-2" data-testid="accounts-filters-panel">
-      <div className="max-h-[60vh] overflow-y-auto pr-1">
+    <div className={sheet ? 'flex flex-col gap-3' : 'flex w-[min(420px,calc(100vw-32px))] flex-col gap-3 p-2'} data-testid="accounts-filters-panel">
+      <div className={sheet ? '' : 'max-h-[60vh] overflow-y-auto pr-1'}>
         {FILTER_GROUPS.map((g) => {
           const options = g.options || seenValues(rows, g.key, state.filters[g.key]).map((v) => [v, v === 'free' ? 'Free' : v]);
           return (
@@ -78,7 +85,7 @@ function FiltersPanel({ state, set, rows, matched, onClose }) {
                   const on = g.single ? (state[g.key] || '') === v : (state.filters[g.key] || []).includes(v);
                   return (
                     <button key={v || 'any'} type="button" role={g.single ? 'radio' : 'checkbox'} aria-checked={on ? 'true' : 'false'}
-                      onClick={() => set(toggleOption(state, g.key, v))} className={`flex min-h-[32px] items-center gap-2 text-[13px] ${INK}`} data-testid={`accounts-filter-${g.key}-${v || 'any'}`}>
+                      onClick={() => set(toggleOption(state, g.key, v))} className={`flex ${sheet ? 'min-h-[44px]' : 'min-h-[32px]'} items-center gap-2 text-[13px] ${INK}`} data-testid={`accounts-filter-${g.key}-${v || 'any'}`}>
                       <Box on={on} round={g.single} />{label}
                     </button>
                   );
@@ -95,11 +102,78 @@ function FiltersPanel({ state, set, rows, matched, onClose }) {
           );
         })}
       </div>
-      <div className="flex items-center justify-between gap-2">
+      {actions ? <div className="flex items-center justify-between gap-2">
         <button type="button" className={SECONDARY} onClick={() => set(clearFilters(state))} data-testid="accounts-filters-clear">Clear all</button>
-        <button type="button" className={PRIMARY} onClick={onClose} data-testid="accounts-filters-show">{matched == null ? 'Show accounts' : `Show ${fmt(matched)} account${matched === 1 ? '' : 's'}`}</button>
-      </div>
+        <button type="button" className={PRIMARY} onClick={onClose} data-testid="accounts-filters-show">{showLine(matched)}</button>
+      </div> : null}
     </div>
+  );
+}
+
+const showLine = (matched) => (matched == null ? 'Show accounts' : `Show ${fmt(matched)} account${matched === 1 ? '' : 's'}`);
+const TAP = 'min-h-[44px]';
+const PHONE_BTN = `inline-flex ${TAP} items-center justify-center gap-1.5 rounded-[9px] px-3.5 text-[13px] font-semibold`;
+
+/** ACC14 frame 3: profiles, sub-accounts, every filter and sort, in one sheet. */
+function PhoneFiltersSheet({ state, set, rows, env, byRole, onClose }) {
+  const matched = env?.matched ?? null;
+  return (
+    <Lightbox label="Filters and sort" title="Filters and sort" onClose={onClose} width={560} phone="sheet" testId="accounts-phone-filters"
+      footer={(
+        <div className="flex items-center justify-between gap-2">
+          <button type="button" className={`${PHONE_BTN} border border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} onClick={() => set(clearFilters(state))} data-testid="accounts-phone-clear">Clear all</button>
+          <button type="button" className={`${PHONE_BTN} border border-violet-600 bg-violet-600 text-white dark:border-violet-500 dark:bg-violet-600`} onClick={onClose} data-testid="accounts-phone-show">{showLine(matched)}</button>
+        </div>
+      )}>
+      <div className="flex flex-col gap-3">
+        <fieldset data-testid="accounts-phone-profile">
+          <legend className={`mb-1.5 font-mono text-[10.5px] font-bold uppercase tracking-[.07em] ${MUTED}`}>Profile</legend>
+          <div className="flex flex-wrap gap-2">
+            {PROFILE_CHIPS.map((c) => {
+              const on = (state.profile || null) === c.value;
+              const n = byRole ? (c.value ? Number(byRole[c.value] || 0) : Number(env?.total || 0)) : null;
+              return <button key={c.value || 'all'} type="button" aria-pressed={on ? 'true' : 'false'} className={`${CHIP(on)} ${TAP}`} onClick={() => set({ ...state, profile: c.value, page: 0 })} data-testid={`accounts-phone-chip-${c.value || 'all'}`}>{c.label}{n != null ? <span className="font-mono text-[11.5px] font-medium">{fmt(n)}</span> : null}</button>;
+            })}
+          </div>
+        </fieldset>
+        <fieldset data-testid="accounts-phone-sub">
+          <legend className={`mb-1.5 font-mono text-[10.5px] font-bold uppercase tracking-[.07em] ${MUTED}`}>Sub-accounts</legend>
+          <div className="flex flex-wrap gap-2">
+            {SUB_CHIPS.map((c) => {
+              const on = state.sub === c.value;
+              return <button key={c.value} type="button" aria-pressed={on ? 'true' : 'false'} className={`${CHIP(on)} ${TAP}`} onClick={() => set({ ...state, sub: on ? null : c.value, page: 0 })} data-testid={`accounts-phone-chip-${c.value}`}>{c.label}</button>;
+            })}
+          </div>
+        </fieldset>
+        <FiltersPanel state={state} set={set} rows={rows} matched={matched} onClose={onClose} actions={false} sheet />
+        <fieldset data-testid="accounts-phone-sort">
+          <legend className={`mb-1.5 font-mono text-[10.5px] font-bold uppercase tracking-[.07em] ${MUTED}`}>Sort</legend>
+          {SORTS.map(([k, label]) => (
+            <button key={k} type="button" role="radio" aria-checked={state.sort === k ? 'true' : 'false'} className={`${ITEM(state.sort === k)} ${TAP}`} onClick={() => set({ ...state, sort: k, page: 0 })} data-testid={`accounts-phone-sort-${k}`}>
+              <span className="flex-1">{label}</span>{state.sort === k ? '✓' : ''}
+            </button>
+          ))}
+        </fieldset>
+      </div>
+    </Lightbox>
+  );
+}
+
+/** ACC14 frame 4: one row's ⋯ menu, as a sheet. */
+function PhoneRowMenu({ u, env, controls, onClose, onOpen, onAction }) {
+  const r = rowView(u, env);
+  const menu = rowMenu(u, { controls });
+  return (
+    <Lightbox label={`Actions for ${r.name}`} title={r.name} sub={`${r.email}${r.email ? ' · ' : ''}${r.profile}`} onClose={onClose} width={560} phone="sheet" testId={`accounts-phone-menu-${r.id}`}
+      footer={<button type="button" className={`${PHONE_BTN} w-full border border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} onClick={onClose} data-testid="accounts-phone-menu-cancel">Cancel</button>}>
+      <div className="flex flex-col" role="menu">
+        {menu.items.map((m) => (
+          <button key={m.id} type="button" role="menuitem" className={`${ITEM(false)} ${TAP} ${m.danger ? '!text-red-700 dark:!text-red-400' : ''}`}
+            onClick={() => { onClose(); if (m.id === 'open') onOpen?.(u); else onAction?.(m.id, u); }} data-testid={`accounts-phone-menu-${r.id}-${m.id}`}>{m.label}</button>
+        ))}
+        {menu.note ? <p className={`m-0 px-2.5 pb-1 pt-1.5 text-[12px] ${MUTED}`}>{menu.note} <Link to="/admin/licences" className="font-semibold text-axal-violet underline dark:text-violet-300">Licences</Link></p> : null}
+      </div>
+    </Lightbox>
   );
 }
 
@@ -207,7 +281,9 @@ function ExportDialog({ ids, onClose, onDone }) {
  * The table. `controlsFor(u)` is the console's `drawsAccountControls`;
  * `onOpen(u)` opens a record and `onAction(id, u)` runs a menu item.
  */
-export default function AllAccounts({ scopeLine = '', controlsFor = () => false, onOpen, onAction, onRows, reloadKey = 0 }) {
+export default function AllAccounts({ scopeLine = '', controlsFor = () => false, onOpen, onAction, onRows, reloadKey = 0, phone: phoneProp }) {
+  const phoneWidth = usePhoneWidth();
+  const phone = phoneProp ?? phoneWidth;
   const [state, setState] = useState(initialState);
   const [query, setQuery] = useState('');
   const [read, setRead] = useState({ status: 'loading', env: null });
@@ -259,7 +335,22 @@ export default function AllAccounts({ scopeLine = '', controlsFor = () => false,
   })();
 
   return (
-    <div className="flex flex-col gap-3" data-testid="all-accounts">
+    <div className="flex flex-col gap-3" data-testid="all-accounts" data-phone={phone ? 'true' : undefined}>
+      {phone ? (
+        <div className="flex flex-col gap-2" data-testid="accounts-phone-toolbar">
+          <label className="relative">
+            <span className="sr-only">Search name, email or account ID</span>
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-axal-muted" />
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, email or account ID" className={`${TAP} w-full rounded-[9px] border border-axal-hairline bg-white py-1.5 pl-9 pr-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} data-testid="accounts-search" />
+          </label>
+          <div className="flex items-center gap-2">
+            <button type="button" className={`${PHONE_BTN} border border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} onClick={() => setDialog('phoneFilters')} data-testid="accounts-phone-filters-open">
+              Filters and sort{phoneFilterCount(state) ? <span className="font-mono text-[11.5px]" data-testid="accounts-phone-filter-count">{phoneFilterCount(state)}</span> : null}
+            </button>
+            <span className={`ml-auto font-mono text-[12px] ${MUTED}`} data-testid="accounts-count">{env ? countLine(env) : ''}</span>
+          </div>
+        </div>
+      ) : (<>
       <div className="flex flex-wrap items-center gap-2" data-testid="accounts-profile-chips">
         {PROFILE_CHIPS.map((c) => {
           const on = (state.profile || null) === c.value;
@@ -336,6 +427,7 @@ export default function AllAccounts({ scopeLine = '', controlsFor = () => false,
           <span className={`ml-auto font-mono text-[12px] ${MUTED}`} data-testid="accounts-count">{env ? countLine(env) : ''}</span>
         </div>
       )}
+      </>)}
       {scopeLine ? <p className={`-mt-1 text-[12px] ${MUTED}`} data-testid="accounts-scope">{scopeLine}. Type at least two characters.</p> : null}
 
       {chips.length ? (
@@ -376,6 +468,26 @@ export default function AllAccounts({ scopeLine = '', controlsFor = () => false,
               </div>
             ) : null}
           </div>
+        ) : phone ? (
+          <ul className="m-0 flex list-none flex-col divide-y divide-axal-hairline p-0 dark:divide-gray-800" data-testid="accounts-cards">
+            {rows.map((u) => {
+              const r = cardView(u, env, now);
+              return (
+                <li key={r.id} className="flex items-start gap-2 px-3 py-2.5" data-testid={`accounts-card-${r.id}`}>
+                  <button type="button" onClick={() => onOpen?.(u)} className={`flex ${TAP} min-w-0 flex-1 items-start gap-2.5 text-left`} data-testid={`accounts-open-${r.id}`}>
+                    <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-axal-lavender text-[12px] font-bold text-axal-violet-deep dark:bg-violet-950/40 dark:text-violet-200" aria-hidden="true">{r.initials}</span>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className={`truncate font-semibold ${INK}`}>{r.name}</span>
+                      <span className={`truncate text-[12px] ${MUTED}`}>{r.email}</span>
+                      <span className="flex flex-wrap items-center gap-1 text-[12px]"><span className={INK}>{r.profile}</span>{r.subs.map((s) => <span key={s} className="rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] font-semibold dark:border-gray-700">{s}</span>)}</span>
+                      <span className={`text-[12px] ${TONE[r.identity_tone]}`} data-testid={`accounts-card-line-${r.id}`}>{r.line}</span>
+                    </span>
+                  </button>
+                  <button type="button" aria-label={`Actions for ${r.name}`} onClick={() => setDialog({ menu: u })} className={`grid h-11 w-11 flex-none place-items-center rounded-[9px] ${MUTED} hover:bg-gray-50 dark:hover:bg-gray-800`} data-testid={`accounts-menu-${r.id}`}><MoreHorizontal size={18} /></button>
+                </li>
+              );
+            })}
+          </ul>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]" data-testid="accounts-table">
@@ -427,7 +539,20 @@ export default function AllAccounts({ scopeLine = '', controlsFor = () => false,
             </table>
           </div>
         )}
-        {env && rows.length ? (
+        {phone && env && rows.length ? (
+          <div className="flex flex-wrap items-center gap-2 border-t border-axal-hairline px-3 py-2.5 text-[12.5px] dark:border-gray-800" data-testid="accounts-phone-pager">
+            {moreOf(state, env) ? (
+              <button type="button" className={`${PHONE_BTN} flex-1 border border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} onClick={() => set({ ...state, pageSize: moreOf(state, env).pageSize })} data-testid="accounts-phone-more">{moreOf(state, env).label}</button>
+            ) : (
+              <>
+                <button type="button" className={`${PHONE_BTN} border border-axal-hairline bg-white text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} disabled={state.page === 0} onClick={() => set({ ...state, page: state.page - 1 })} data-testid="accounts-prev">Previous</button>
+                <button type="button" className={`${PHONE_BTN} border border-axal-hairline bg-white text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} disabled={env.next_offset == null} onClick={() => set({ ...state, page: state.page + 1 })} data-testid="accounts-next">Next</button>
+              </>
+            )}
+            <span className={`ml-auto font-mono ${MUTED}`}>{countLine(env)}</span>
+          </div>
+        ) : null}
+        {!phone && env && rows.length ? (
           <div className="flex flex-wrap items-center gap-3 border-t border-axal-hairline px-3.5 py-2.5 text-[12.5px] dark:border-gray-800" data-testid="accounts-pager">
             <span className={MUTED}>Rows per page</span>
             {PAGE_SIZES.map((n) => <button key={n} type="button" aria-pressed={state.pageSize === n ? 'true' : 'false'} onClick={() => set({ ...state, pageSize: n, page: 0 })} className={`min-h-[32px] px-1.5 font-mono ${state.pageSize === n ? `font-bold ${INK}` : MUTED}`} data-testid={`accounts-size-${n}`}>{n}</button>)}
@@ -438,6 +563,8 @@ export default function AllAccounts({ scopeLine = '', controlsFor = () => false,
         ) : null}
       </div>
 
+      {dialog === 'phoneFilters' ? <PhoneFiltersSheet state={state} set={set} rows={rows} env={env} byRole={byRole} onClose={() => setDialog(null)} /> : null}
+      {dialog?.menu ? <PhoneRowMenu u={dialog.menu} env={env} controls={controlsFor(dialog.menu)} onClose={() => setDialog(null)} onOpen={onOpen} onAction={onAction} /> : null}
       {dialog === 'save' ? <SaveViewDialog state={state} onClose={() => setDialog(null)} onSaved={(name) => { setDialog(null); setNote(`Saved the view “${name}”.`); loadViews(); }} /> : null}
       {dialog === 'resend' ? <ResendDialog ids={checked} onClose={() => setDialog(null)} onDone={done} /> : null}
       {dialog === 'export' ? <ExportDialog ids={checked} onClose={() => setDialog(null)} onDone={(t) => { setDialog(null); setNote(t); }} /> : null}

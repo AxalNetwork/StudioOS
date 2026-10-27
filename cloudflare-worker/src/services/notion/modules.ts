@@ -22,7 +22,8 @@
 
 export type Section = 'validate' | 'build' | 'raise' | 'grow';
 export type SourceKind = 'page' | 'page_tree' | 'database';
-export type ProposalKind = 'interview' | 'design_note' | 'prospect' | 'prospect_link' | 'data_room_snapshot';
+/** `fact_link` (D1088, migration 644): a fact module's look-alike, "Link to [existing]?", never imported twice. */
+export type ProposalKind = 'interview' | 'design_note' | 'prospect' | 'prospect_link' | 'data_room_snapshot' | 'fact_link';
 
 export interface FieldDef {
   label: string;
@@ -50,7 +51,8 @@ const text = (label: string, required = false): FieldDef => ({ label, type: 'tex
 export const NOTION_MODULES: Readonly<Record<string, NotionModule>> = Object.freeze({
   customer_research: { key: 'customer_research', section: 'validate', label: 'Customer research', kinds: ['page', 'page_tree', 'database'], lands: 'proposal', proposal: 'interview',
     fields: { date: { label: 'Date', type: 'date' }, interviewee: text('Interviewee'), role: text('Role'), company: text('Company') } },
-  market_intelligence: { key: 'market_intelligence', section: 'validate', label: 'Market intelligence', kinds: ['page_tree'], lands: 'fact', fields: {} },
+  // D1087: a tree's page is never mapped; these name what From Notion draws for it (its title and link).
+  market_intelligence: { key: 'market_intelligence', section: 'validate', label: 'Market intelligence', kinds: ['page_tree'], lands: 'fact', fields: { title: text('Title'), url: text('Link') } },
   product_roadmap: { key: 'product_roadmap', section: 'build', label: 'Product roadmap', kinds: ['database'], lands: 'fact',
     fields: { objective: text('Objective', true), key_result: text('Key result'), status: { label: 'Status', type: 'choice', values: ['now', 'next', 'later', 'done'] }, quarter: text('Quarter'), progress: { label: 'Progress', type: 'number' } } },
   prototype_mvp: { key: 'prototype_mvp', section: 'build', label: 'Prototype / MVP', kinds: ['database'], lands: 'fact',
@@ -63,10 +65,12 @@ export const NOTION_MODULES: Readonly<Record<string, NotionModule>> = Object.fre
   data_room: { key: 'data_room', section: 'raise', label: 'Data room', kinds: ['page', 'page_tree'], lands: 'proposal', proposal: 'data_room_snapshot', fields: {} },
   distribution: { key: 'distribution', section: 'grow', label: 'Distribution', kinds: ['database'], lands: 'fact',
     fields: { title: text('Title', true), planned_on: { label: 'Planned on', type: 'date' },
-      status: { label: 'Status', type: 'choice', values: ['idea', 'planned', 'scheduled', 'published', 'dropped'] }, channel: text('Channel') } },
+      status: { label: 'Status', type: 'choice', values: ['idea', 'planned', 'scheduled', 'published', 'dropped'] }, channel: text('Channel'), url: text('Link') } },
   product_improvement: { key: 'product_improvement', section: 'grow', label: 'Product improvement', kinds: ['database'], lands: 'fact',
     fields: { body: text('Feedback', true), theme: text('Theme'), status: { label: 'Status', type: 'choice', values: ['open', 'planned', 'shipped'] },
-      source: { label: 'Source', type: 'choice', values: ['customer', 'investor', 'team'] } },
+      source: { label: 'Source', type: 'choice', values: ['customer', 'investor', 'team'] },
+      // D1090: who gave it, only when the founder maps a column for it.
+      from_name: text('From (name)'), from_email: text('From (email)') },
     defaultSources: ['customer', 'investor', 'team'] },
 } as Record<string, NotionModule>);
 
@@ -130,6 +134,8 @@ export function cleanFieldMap(moduleKey: string, kind: SourceKind, raw: unknown)
     if (!mod.defaultSources?.includes(String(src.default_source))) throw new FieldMapError('invalid_default_source');
     out.default_source = String(src.default_source);
   }
+  // D1090: feedback always says where it came from: a Source column, or the founder's default.
+  if (mod.defaultSources && !out.fields.source && !out.default_source) throw new FieldMapError('source_required', 'source');
   return out;
 }
 
@@ -179,5 +185,7 @@ export function mapRow(moduleKey: string, map: FieldMap, properties: Record<stri
     values[field] = c.value;
   }
   if (mod.defaultSources && values.source == null && map.default_source) values.source = map.default_source;
+  // A row whose Source cell is empty, with no default to fall back on, is not read: never a guessed source.
+  if (mod.defaultSources && values.source == null) return { values: null, skip: { reason: 'empty_required', field: 'source' } };
   return { values, skip: null };
 }

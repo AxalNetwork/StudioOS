@@ -52,13 +52,49 @@ export interface FactWriter {
   remove(env: Env, projectId: number, id: number): Promise<boolean>;
   /** The rows' values, by id, for "From Notion". */
   view?(env: Env, projectId: number, ids: number[]): Promise<Map<number, Record<string, string | number | null>>>;
+  /**
+   * D1088 (#2405 § Module map, rule 4): an item already in the module that a new
+   * Notion row looks like. Found, the row is not imported: it waits as a
+   * `fact_link` proposal, "Link to [existing]?".
+   */
+  lookAlike?(env: Env, ctx: SyncContext, item: FactItem): Promise<{ id: number; label: string } | null>;
+}
+
+/**
+ * What an Accept may need beyond the proposal: the founder's own Notion, opened
+ * only when asked (D1087: an interview reads its page whole, as of now).
+ */
+export interface AcceptDeps { reads: () => Promise<NotionReads> }
+
+/**
+ * An acceptor's refusal: a status, a code and the sentence the page prints.
+ * Nothing is written. Never carries a page's text or a property's value.
+ */
+export class AcceptRefused extends Error {
+  status: number; code: string; detail: string;
+  constructor(status: number, code: string, detail: string) { super(code); this.status = status; this.code = code; this.detail = detail; }
 }
 
 /** A proposal kind's Accept: writes through the module's writer and returns the row it became. */
 export interface Acceptor {
   kind: ProposalKind;
-  accept(env: Env, ctx: SyncContext, proposal: ProposalRow, body: Record<string, unknown>): Promise<{ localTable: string; localId: number }>;
+  accept(env: Env, ctx: SyncContext, proposal: ProposalRow, body: Record<string, unknown>, deps: AcceptDeps): Promise<{ localTable: string; localId: number }>;
+  /**
+   * D1089: how a proposal reads before Accept ("Add Northwind at Meeting?",
+   * "Link to …", "Update the snapshot"), from what it says and the module's own
+   * rows. The fingerprint is unchanged by it. Never a page's text.
+   */
+  describe?(env: Env, ctx: SyncContext, p: { module: string; key: string; title: string; payload: Mapped | null }): Promise<{ title: string } | null>;
 }
+
+/**
+ * D1089: a proposal module's row already linked to a local row (accepted) is
+ * no longer a proposal: its change lands as a fact through this updater, the
+ * module's own writer. Answers whether it changed anything.
+ */
+export type LinkedUpdater = (env: Env, ctx: SyncContext, localId: number, values: Mapped) => Promise<boolean>;
+const LINKED = new Map<string, LinkedUpdater>();
+export const registerLinkedUpdater = (module: string, fn: LinkedUpdater) => { LINKED.set(module, fn); };
 
 const WRITERS = new Map<string, FactWriter>();
 const ACCEPTORS = new Map<ProposalKind, Acceptor>();
@@ -134,6 +170,7 @@ async function landFact(env: Env, ctx: SyncContext, source: SourceRow, item: Fac
     counts.updated += 1;
     return;
   }
+  if (writer.lookAlike && await proposeLink(env, ctx, source, writer, item, counts)) return;
   const id = await writer.write(env, ctx, item, null);
   await env.DB.prepare(
     `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
@@ -143,9 +180,37 @@ async function landFact(env: Env, ctx: SyncContext, source: SourceRow, item: Fac
   counts.written += 1;
 }
 
+/**
+ * D1088 — a new item that looks like one already in the module waits as
+ * "Link to [existing]?" instead of becoming a second row. A row another
+ * connection feeds is named (`fed_by`) and is never linked.
+ */
+async function proposeLink(env: Env, ctx: SyncContext, source: SourceRow, writer: FactWriter, item: FactItem, counts: SourceCounts): Promise<boolean> {
+  const match = await writer.lookAlike!(env, ctx, item);
+  if (!match) return false;
+  let fedBy: string | null = null;
+  if (FED_OWNED.has(writer.localTable)) {
+    let owner: number | null = null;
+    try { owner = await ledgerOwnerOf(env, writer.localTable as FedOwnedTable, match.id); } catch { owner = -1; }
+    if (owner != null && owner !== ctx.integrationId) {
+      const p = owner > 0 ? await env.DB.prepare('SELECT provider_key FROM integrations WHERE id = ?').bind(owner).first<{ provider_key: string }>() : null;
+      fedBy = p?.provider_key ?? 'another_connection';
+    }
+  }
+  const key = item.externalId.slice(item.externalId.lastIndexOf(':') + 1);
+  await landProposal(env, ctx, source, 'fact_link', {
+    key, title: item.title || match.label, extract: null, url: item.url,
+    payload: { local_table: writer.localTable, local_id: match.id, existing: match.label, fed_by: fedBy },
+    basis: JSON.stringify(['fact_link', item.title, match.id, fedBy]),
+  }, counts);
+  return true;
+}
+
 /** One proposal by its fingerprint: new, unchanged (a dismissed one stays dismissed), or back to pending with "Changed in Notion". */
 async function landProposal(env: Env, ctx: SyncContext, source: SourceRow, kind: ProposalKind, p: { key: string; title: string; extract: string | null; url: string | null; payload: Mapped | null; basis: string }, counts: SourceCounts) {
   const fingerprint = await sha256(p.basis);
+  const described = await acceptorFor(kind)?.describe?.(env, ctx, { module: source.module, key: p.key, title: p.title, payload: p.payload });
+  if (described?.title) p = { ...p, title: described.title };
   const old = await env.DB.prepare('SELECT id, fingerprint, status FROM notion_proposals WHERE integration_id = ? AND project_id = ? AND kind = ? AND source_key = ?')
     .bind(ctx.integrationId, ctx.projectId, kind, p.key).first<{ id: number; fingerprint: string; status: string }>();
   const title = p.title.slice(0, 300) || 'Untitled';
@@ -165,6 +230,19 @@ async function landProposal(env: Env, ctx: SyncContext, source: SourceRow, kind:
        decided_by = NULL, decided_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
   ).bind(fingerprint, title, extract, p.url, payload, old.id).run();
   counts.reproposed += 1;
+}
+
+/** A proposal module's row linked by an earlier Accept: true when it was handled as a fact (updated or unchanged). */
+async function landLinked(env: Env, ctx: SyncContext, module: string, rowId: string, values: Mapped, counts: SourceCounts): Promise<boolean> {
+  const externalId = `notion:${ctx.projectId}:${module}:${rowId}`;
+  const l = await env.DB.prepare('SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ?')
+    .bind(ctx.integrationId, externalId).first<{ local_id: number | null }>();
+  if (!l) return false;
+  // Accept always records its row; a row deleted since is found absent by the updater, which then writes nothing.
+  if (await LINKED.get(module)!(env, ctx, Number(l.local_id), values)) counts.updated += 1;
+  await env.DB.prepare('UPDATE connector_fed_items SET last_seen_at = CURRENT_TIMESTAMP WHERE integration_id = ? AND external_id = ?')
+    .bind(ctx.integrationId, externalId).run();
+  return true;
 }
 
 const skip = (counts: SourceCounts, reason: string, field: string | null) => {
@@ -251,6 +329,8 @@ async function syncSource(env: Env, reads: NotionReads, ctx: SyncContext, source
         const externalId = `notion:${ctx.projectId}:${source.module}:${row.id}`;
         if (mod.lands === 'fact') {
           await landFact(env, ctx, source, { externalId, title: null, url: row.url, asOf: row.last_edited, values: mapped.values }, counts);
+        } else if (LINKED.has(source.module) && await landLinked(env, ctx, source.module, row.id, mapped.values, counts)) {
+          // Accepted before: its change is a fact through the module's writer, not a new proposal.
         } else {
           const title = String(Object.values(mapped.values).find((v) => typeof v === 'string' && v) ?? 'Untitled');
           await landProposal(env, ctx, source, mod.proposal!, { key: row.id, title, extract: null, url: row.url, payload: mapped.values, basis: JSON.stringify(mapped.values) }, counts);
@@ -297,7 +377,9 @@ export async function dismissProposal(env: Env, ctx: SyncContext, id: number): P
 }
 
 /** A pending proposal's Accept, through its kind's acceptor; the row it became joins the ledger. */
-export async function acceptProposal(env: Env, ctx: SyncContext, id: number, body: Record<string, unknown>):
+const NO_READS: AcceptDeps = { reads: async () => { throw new NotionReadError('not_connected'); } };
+
+export async function acceptProposal(env: Env, ctx: SyncContext, id: number, body: Record<string, unknown>, deps: AcceptDeps = NO_READS):
   Promise<'not_found' | 'decided' | 'not_ready' | { localTable: string; localId: number }> {
   const row = await env.DB.prepare('SELECT * FROM notion_proposals WHERE id = ? AND project_id = ? AND integration_id = ?')
     .bind(id, ctx.projectId, ctx.integrationId).first<ProposalRow>();
@@ -305,7 +387,7 @@ export async function acceptProposal(env: Env, ctx: SyncContext, id: number, bod
   if (row.status !== 'pending') return 'decided';
   const acceptor = acceptorFor(row.kind);
   if (!acceptor) return 'not_ready';
-  const landed = await acceptor.accept(env, ctx, row, body);
+  const landed = await acceptor.accept(env, ctx, row, body, deps);
   await env.DB.batch([
     env.DB.prepare(`UPDATE notion_proposals SET status = 'accepted', changed = 0, local_table = ?, local_id = ?, decided_by = ?, decided_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'`).bind(landed.localTable, landed.localId, ctx.userId, id),

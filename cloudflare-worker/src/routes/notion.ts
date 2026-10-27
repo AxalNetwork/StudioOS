@@ -38,7 +38,11 @@ import { NotionReadError, notionId, notionReadsFor, type NotionReads } from '../
 import {
   FieldMapError, NOTION_MODULES, SECTIONS, checkAgainstSchema, cleanFieldMap, mapRow, modulesOf, type FieldMap, type Section, type SourceKind,
 } from '../services/notion/modules';
-import { acceptProposal, deleteFact, dismissProposal, factWriterFor, syncSection, type SourceRow } from '../services/notion/sync';
+import { AcceptRefused, acceptProposal, deleteFact, dismissProposal, factWriterFor, syncSection, type SourceRow } from '../services/notion/sync';
+// D1087–D1090: each section's writers and acceptors register themselves on import.
+import '../services/notion/validate';
+import '../services/notion/raise';
+import '../services/notion/grow';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -74,6 +78,7 @@ const SENTENCES: Record<string, string> = {
   invalid_value: 'That value is not one this module accepts.',
   required_field: 'Map every required field.',
   invalid_default_source: 'Choose a source from the list.',
+  source_required: 'Map a Source column, or choose where this feedback comes from.',
   invalid_section: 'Choose Validate, Build, Raise or Grow.',
   proposal_not_found: 'That proposal is not on this venture.',
   proposal_decided: 'That proposal was already decided.',
@@ -85,6 +90,7 @@ const SENTENCES: Record<string, string> = {
 function fail(c: C, e: unknown) {
   if (e instanceof Error && ['Unauthorized', 'Forbidden'].includes(e.message)) throw e;
   let r: Refused;
+  if (e instanceof AcceptRefused) return c.json({ error: e.code, detail: e.detail }, e.status as any);
   if (e instanceof Refused) r = e;
   else if (e instanceof FieldMapError) r = new Refused(400, e.code, e.field);
   else if (e instanceof NotionReadError) {
@@ -309,7 +315,7 @@ notionCycleRoutes.get('/:section/notion', route(async (c, user) => {
   const live = ledger.filter((l: any) => l.local_id != null);
   const values = writer?.view ? await writer.view(c.env, id, live.map((l: any) => Number(l.local_id))) : new Map();
   const proposals = ((await c.env.DB.prepare(
-    "SELECT id, integration_id, kind, source_key, title, extract, url, status, changed, updated_at FROM notion_proposals WHERE project_id = ? AND module = ? AND status IN ('pending', 'dismissed') ORDER BY id",
+    "SELECT id, integration_id, kind, source_key, title, extract, url, payload_json, status, changed, updated_at FROM notion_proposals WHERE project_id = ? AND module = ? AND status IN ('pending', 'dismissed') ORDER BY id",
   ).bind(id, module).all<any>()).results || []);
   return c.json({
     module, label: NOTION_MODULES[module].label, lands: NOTION_MODULES[module].lands,
@@ -318,10 +324,19 @@ notionCycleRoutes.get('/:section/notion', route(async (c, user) => {
     sources: sources.map((s: any) => ({ ...sourceView(s), mine: Number(s.owner_user_id) === Number(user.id) })),
     facts: live.map((l: any) => ({ ledger_id: Number(l.id), mine: Number(l.integration_id) === Number(mine?.id), as_of: l.last_seen_at, values: values.get(Number(l.local_id)) ?? null })),
     kept_deleted: ledger.length - live.length,
-    proposals: proposals.map((x: any) => ({ id: Number(x.id), mine: Number(x.integration_id) === Number(mine?.id), kind: x.kind, title: x.title, extract: x.extract, url: x.url, status: x.status, changed: !!x.changed, as_of: x.updated_at })),
+    proposals: proposals.map((x: any) => ({ id: Number(x.id), mine: Number(x.integration_id) === Number(mine?.id), kind: x.kind, title: x.title, extract: x.extract, url: x.url, status: x.status, changed: !!x.changed, as_of: x.updated_at,
+      // D1088: "Link to [existing]?" names the row it would link, and whose it is when another connection feeds it.
+      ...(x.kind === 'fact_link' ? { link: linkOf(x.payload_json) } : {}) })),
     writer_ready: !!writer,
   });
 }));
+
+/** A `fact_link` proposal's matched row, as the page draws it: its title and, when fed elsewhere, by whom. */
+function linkOf(raw: string | null): { existing: string | null; fed_by: string | null } {
+  let p: any = {};
+  try { p = JSON.parse(raw || '{}'); } catch { p = {}; }
+  return { existing: typeof p.existing === 'string' ? p.existing : null, fed_by: typeof p.fed_by === 'string' ? p.fed_by : null };
+}
 
 notionCycleRoutes.post('/:section/notion/sync', route(async (c, user) => {
   const section = sectionOf(c);
@@ -338,7 +353,7 @@ notionCycleRoutes.post('/:section/notion/proposals/:id/accept', route(async (c, 
   sectionOf(c);
   const b = await body(c);
   const { project, row } = await owner(c, user, b.project);
-  const out = await acceptProposal(c.env, ctxOf(row, project.id, user), proposalId(c), b);
+  const out = await acceptProposal(c.env, ctxOf(row, project.id, user), proposalId(c), b, { reads: () => notionDeps.reads(c.env, row) });
   if (out === 'not_found') throw new Refused(404, 'proposal_not_found');
   if (out === 'decided') throw new Refused(409, 'proposal_decided');
   if (out === 'not_ready') throw new Refused(409, 'not_ready');

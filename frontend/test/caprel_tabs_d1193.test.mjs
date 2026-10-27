@@ -377,6 +377,10 @@ test('Eadwyn’s proposals: each beside its words, accepted, edited or dismissed
   try {
     await v.click('caprel-proposals-open');
     assert.ok(v.has('caprel-proposals'));
+    const sheet = v.props(v.by('caprel-proposals'));
+    assert.equal(sheet.role, 'dialog', 'D1317: the proposals open as the shared Sheet');
+    assert.ok(sheet['aria-labelledby']);
+    assert.equal(sheet['data-width'], 640, 'its own 620, on the Sheet’s list');
     assert.match(v.text('caprel-proposal-group'), /From your note on Bluefern Capital · 2026-10-16[\s\S]*‘ ?Good partner meeting\./);
     assert.match(v.textOf(v.all('caprel-proposal')[0]), /Next step: Send the Q3 metrics pack by 2026-10-23 From: “ ?the Q3 metrics pack by Friday ?”/);
     assert.match(v.text('caprel-proposals-pattern'), /Not read here yet/);

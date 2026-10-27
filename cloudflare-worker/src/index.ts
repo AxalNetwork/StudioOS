@@ -96,6 +96,8 @@ import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
 import aiBudgetRoutes from './routes/ai_budget';
 import { developerUsage } from './routes/developer_usage';
+// D1316 (#3474): Builder › MCP and services' overview.
+import { developerAssistants } from './routes/developer_assistants';
 // D791 (#2216): HQ › AI usage, Super Admin with step-up.
 import adminAiUsageRoutes from './routes/admin_ai_usage';
 import aiRailProposalsRoutes from './routes/ai_rail_proposals';
@@ -136,6 +138,7 @@ import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import closings, { adminClosings } from './routes/closings';
+import companyReceivingAccounts from './routes/company_receiving_accounts';
 import reporting from './routes/reporting';
 import reportingReports from './routes/reporting_reports';
 import fundReporting from './routes/fund_reporting';
@@ -186,6 +189,8 @@ import './integrations/providers/vercel';
 import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
 import './integrations/providers/notion';
+// D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
+import './services/notion/build';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
@@ -234,6 +239,8 @@ import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
 import googleWorkspaceRoutes from './routes/google_workspace';
+// D1319 (#3480): founder publishing to an outside service, pressed by the founder only.
+import publishRoutes from './routes/publish';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
@@ -416,6 +423,8 @@ import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 // D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
 import notionRoutes, { notionCycleRoutes } from './routes/notion';
+// D1325 (#3486): the Fill with Eadwyn sheet's read.
+import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
@@ -997,10 +1006,12 @@ app.route('/api/assistant', assistantRoutes);
 // dev-only Anthropic path, and this endpoint reports on the production
 // Workers AI router, which is a different thing that happens to sit nearby.
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
+app.route('/api/fills', fillsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
 // D845 (#2471): the member's own usage reports over api_usage_events.
 app.route('/api/developer/usage', developerUsage);
+app.route('/api/developer/assistants', developerAssistants);
 app.route('/api/admin/ai-usage', adminAiUsageRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
@@ -1280,6 +1291,8 @@ app.route('/api/fund-ledger', fundLedger);
 app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
+// D1217 (#3214): the company's receiving account, its own module, mounted before the Closing router (S01, 2026-10-26).
+app.route('/api/closings/company-receiving-accounts', companyReceivingAccounts);
 // D1215 (#3212): closings as a record; the admin desk is mounted before the /api/admin catch-all.
 app.route('/api/closings', closings);
 // D1058 (#2928): reporting duties and periods, the founder's desk and the investor's view.
@@ -1463,6 +1476,7 @@ app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/calendar', calendarRoutes);
 app.route('/api/connectors/google-workspace', googleWorkspaceRoutes);
+app.route('/api/publish', publishRoutes);
 // T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
 app.route('/api/financials', financialsRoutes);
 // Task #1 (AG) — kept alphabetically adjacent to /api/financials.
@@ -2457,6 +2471,17 @@ export default {
               if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
             }
           } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }
+        }
+        // D1319 (#3480) — a founder's publish left `sending` for 10 minutes is
+        // `unknown`: not known whether it arrived. Never re-sent, never
+        // `failed`. Every fifth minute, on every deployment (a founder's
+        // sends are not HQ's); the reads close stranded rows too. Never throws.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { releaseStrandedSends } = await import('./services/publishCore');
+            const n = await releaseStrandedSends(env);
+            if (n) console.info(`[cron] publish stranded=${n}`);
+          } catch (e) { console.error('[cron] publish stranded sweep failed', (e as Error)?.name); }
         }
         // D710 (#1775) — Mercury's read-only sync of each Axal entity's
         // accounts and transactions, then the matchers. Hourly at minute 17, a

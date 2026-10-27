@@ -327,8 +327,9 @@ test('proposals: changed text re-proposes as Changed in Notion; a dismissed one 
   assert.equal((t.db.prepare("SELECT COUNT(*) AS n FROM connector_fed_items WHERE integration_id = 5 AND local_table = 'solution_design_notes'").get() as any).n, 1);
   assert.equal((await t.call(22, 'POST', `/api/cycles/build/notion/proposals/${booking.id}/dismiss`, { project: 701 })).status, 403, 'another founder');
   // A kind no part has built yet is not accepted: nothing is written.
-  t.db.exec(`INSERT INTO notion_proposals (integration_id, project_id, module, kind, source_key, fingerprint, title) VALUES (5, 701, 'capital_relationships', 'prospect', 'k1', 'f', '[Firm A]')`);
-  const none = t.db.prepare("SELECT id FROM notion_proposals WHERE kind = 'prospect'").get() as any;
+  // D1089 built `prospect`; `prospect_link` has no acceptor (a link is the prospect acceptor's own Accept).
+  t.db.exec(`INSERT INTO notion_proposals (integration_id, project_id, module, kind, source_key, fingerprint, title) VALUES (5, 701, 'capital_relationships', 'prospect_link', 'k1', 'f', '[Firm A]')`);
+  const none = t.db.prepare("SELECT id FROM notion_proposals WHERE kind = 'prospect_link'").get() as any;
   assert.equal((await t.call(11, 'POST', `/api/cycles/raise/notion/proposals/${none.id}/accept`, { project: 701 })).body.error, 'not_ready');
   // Stop using drops what was never decided, and keeps what was.
   await t.call(11, 'DELETE', `/api/connectors/notion/sources/${added.body.source.uid}`);

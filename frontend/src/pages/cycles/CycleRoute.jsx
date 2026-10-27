@@ -39,6 +39,10 @@ import GrowFromMercury from './GrowFromMercury';
 import MercuryRaiseFeed from './MercuryRaiseFeed';
 import FromLovable from './FromLovable';
 import ValidateFromGoogle from './ValidateFromGoogle';
+import FromNotion from './FromNotion';
+import NotionInterviewImport from './NotionInterviewImport';
+import NotionSnapshotImport from './NotionSnapshotImport';
+import ContentCalendar from './ContentCalendar';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -132,8 +136,12 @@ const CYCLE_DEFS = {
             onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
             onExport={() => api.exportValidateInterviews(ctx.projectId)} />
           <ValidateFromGoogle part={data?.parts?.from_google} module="customer_research" projectId={ctx.projectId} reload={ctx.reload} />
+          {/* D1087 (#2952): interview pages from Notion, imported only with the interviewee's consent. */}
+          <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />
         </>
       ),
+      // D1087 (#2952): research pages from Notion, as sources (title and link).
+      'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
       'demand-signals': (data, ctx) => <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />,
       'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
         onExport={() => api.exportValidatePainMap(ctx.projectId)}
@@ -219,6 +227,15 @@ const CYCLE_DEFS = {
         <>
           <RaiseReceiptMatches role={ctx.role} onChanged={ctx.reload} />
           {mercuryPart('capital-relationships', data, ctx)}
+          {/* D1089 (#2954): an investor CRM in Notion, as investors to add or link; once linked, their stage follows. */}
+          <FromNotion section="raise" projectId={ctx.projectId} module="capital_relationships" />
+        </>
+      ),
+      // D1089 (#2954): Notion pages as dated snapshots, NDA by default; a change adds a version on Accept only.
+      'data-room': (data, ctx) => (
+        <>
+          {mercuryPart('data-room', data, ctx)}
+          <FromNotion section="raise" projectId={ctx.projectId} module="data_room" acceptDialog={NotionSnapshotImport} />
         </>
       ),
     }),
@@ -327,8 +344,13 @@ const CYCLE_DEFS = {
       // The replies customer and partner asks brought in, beside the rows.
       distribution: (data, ctx) => (<>
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
+        {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
+        <ContentCalendar part={data?.parts?.content_calendar} channels={data?.records?.rows} projectId={ctx.projectId} reload={ctx.reload} />
         {fromMercury('distribution', data, ctx)}
+        <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
       </>),
+      // D1090 (#2955): a feedback database in Notion, as product feedback.
+      'product-improvement': (_data, ctx) => <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />,
       'partner-network': (data, ctx) => (<>
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />
         {fromMercury('partner-network', data, ctx)}
