@@ -12,8 +12,7 @@ import { allowanceView, balanceText } from './billingModel';
 import { limitView, packOrdersCard } from './limitsModel';
 import { USAGE_SUBTITLE, costReadable, monthIsEmpty, recentInvoices } from './costModel';
 import { DailyCostChart, TokenUsageChart } from './UsageCharts';
-import { storageView } from './usageModel';
-import { NOT_YET } from './storagePageModel';
+import { allowanceView as storageAllowance } from './storagePageModel';
 
 const OPEN = 'text-xs font-semibold text-axal-violet hover:underline dark:text-violet-300';
 const VALUE = 'font-mono text-[28px] font-medium tracking-tight';
@@ -128,15 +127,25 @@ export function RecentInvoices({ invoices }) {
       </UsageCardState>
   </PanelCard>;
 }
-/** D1166 (#2449), STG17: what the member stores, from D642's read; no plan sets an allowance yet. */
+/**
+ * D1166, D1171 (#2449), STG17a: what the member stores of their plan, from the
+ * storage read: "X of Y" and the bar when the plan has an allowance, the
+ * bytes alone when it has none, Not recorded when a place could not be read.
+ */
 export function StorageOverview({ storage }) {
-  const v = storage.status === 'ready' ? storageView(storage.data) : null;
+  const v = storage.status === 'ready' ? storageAllowance(storage.data, null) : null;
   return <PanelCard title="Storage" action={<Open card="storage">Open storage</Open>} data-testid="overview-storage">
     <UsageCardState read={storage} what="Storage">
-      {v?.total != null
-        ? <p className={VALUE} data-testid="overview-storage-total">{v.total}</p>
-        : <Unrecorded reason={v?.anyUnreadable ? 'A place could not be read.' : 'Some files were stored before sizes were recorded.'}>Not recorded</Unrecorded>}
-      <p className="text-xs text-axal-muted dark:text-gray-400" data-testid="overview-storage-allowance">Your plan's allowance: {NOT_YET}.</p>
+      {v?.mode === 'meter' ? <>
+        <p className={VALUE} data-testid="overview-storage-total">{v.headline}</p>
+        <div className="h-1.5 w-full overflow-hidden rounded-full border border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-800" aria-hidden="true">
+          <span className={`block h-full ${v.over || v.full ? 'bg-red-600 dark:bg-red-400' : v.warn ? 'bg-amber-500 dark:bg-amber-400' : 'bg-axal-violet dark:bg-violet-400'}`} style={{ width: `${v.pct}%` }} />
+        </div>
+        <p className="text-xs text-axal-muted dark:text-gray-400" data-testid="overview-storage-allowance">{v.over ? `${v.over} over your plan` : `${v.pct}% used`}</p>
+      </> : v && v.used ? <>
+        <p className={VALUE} data-testid="overview-storage-total">{v.used}</p>
+        <p className="text-xs text-axal-muted dark:text-gray-400" data-testid="overview-storage-allowance">{v.mode === 'staff' ? 'Staff accounts have no storage allowance.' : v.reason}</p>
+      </> : <Unrecorded reason={v?.reason || 'A place could not be read.'}>Not recorded</Unrecorded>}
     </UsageCardState>
   </PanelCard>;
 }

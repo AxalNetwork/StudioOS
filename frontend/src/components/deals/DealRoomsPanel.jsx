@@ -12,9 +12,9 @@ import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from './DealRo
  *
  * WHERE IT LIVES. `/deals` already serves the investor's Deals bucket board
  * (`InvestorDealsRoutes`), so this is a panel under the board rather than a
- * new address. `/deals/pipeline` stays the investor's own work board (only
- * the deals they are invited to or committed on, `scope=mine`); joining is
- * about the deals they are NOT yet in, so this list is the unscoped one, with
+ * new address. Deal flow's Mine stays the investor's own work board (only
+ * the deals they are invited to or committed on, `scope=mine`; D1243 retired
+ * `/deals/pipeline` into it); joining is about the deals they are NOT yet in, so this list is the unscoped one, with
  * the Worker's `is_member` deciding Join or Leave.
  *
  * `is_member` and the quota's `member_deal_ids` both narrow by the active

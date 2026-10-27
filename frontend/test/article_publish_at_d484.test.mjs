@@ -19,7 +19,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { localInputValue, publishAtFromLocal, utcLabel } from '../src/pages/admin/articlePublishAt.js';
-import { PublishAtControl } from '../src/pages/admin/ArticlesQueuePage.jsx';
+import { MemoryRouter } from 'react-router-dom';
+import QueueDialog from '../src/pages/admin/contentQueue/QueueDialog.jsx';
+import { actionsFor, scheduleAt, scheduleFields } from '../src/pages/admin/contentQueue/pipelineModel.js';
 import { PublishTimes } from '../src/pages/hq/ContentPage.jsx';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -49,42 +51,40 @@ test('a stored time is shown in UTC, and prefilled back into the input in the br
 
 // ── The review page ───────────────────────────────────────────────────────
 
-test('an approved article with no time says it waits for Publish, and cannot send an empty time', () => {
-  const markup = html(PublishAtControl, { article: { id: 3, status: 'approved', publish_at: null }, busy: false, onSet() {}, onClear() {} });
-  assert.match(renderedText(markup), /No publish time set: it waits for Publish/);
-  assert.match(markup, /type="datetime-local"/);
-  assert.match(markup, /value=""/);
-  const set = markup.slice(markup.indexOf('<button'), markup.indexOf('</button>'));
-  assert.match(set, /disabled=""/, 'Set time is live with no time to send');
-  assert.match(renderedText(set), /Set time/);
-  assert.doesNotMatch(markup, /Clear time/, 'there is no time to clear');
+// D1295 (#3391): the time is set in Schedule's in-page dialog (ART6 E), on the
+// same rule: read in the reader's zone, sent as UTC, shown back in UTC.
+
+test('Schedule asks for a date and a time in the reader\'s zone, and sends nothing that is not ahead', () => {
+  const markup = html(MemoryRouter, { children: React.createElement(QueueDialog, { kind: 'schedule', article: { id: 3, title: 'T', status: 'approved', publish_at: null }, onConfirm() {}, onClose() {} }) });
+  assert.match(markup, /type="date"/);
+  assert.match(markup, /type="time"/);
+  const confirm = markup.match(/<button[^>]*data-testid="cq-dialog-confirm"[^>]*>/)[0];
+  assert.match(confirm, /disabled=""/, 'no date, nothing to send');
+  const now = Date.parse('2026-10-01T00:00:00Z');
+  assert.equal(scheduleAt('2026-10-07', '09:00', now), '2026-10-07T07:00:00.000Z', 'Paris summer time is UTC+2');
+  assert.equal(scheduleAt('2026-09-30', '09:00', now), null, 'a time in the past');
+  assert.equal(scheduleAt('2027-12-07', '09:00', now), null, 'more than a year ahead');
+  assert.equal(scheduleAt('', '09:00', now), null);
 });
 
-test('an approved article with a time shows it in the reader\'s zone and in UTC, and can move or clear it', () => {
-  const markup = html(PublishAtControl, {
-    article: { id: 3, status: 'approved', publish_at: '2026-10-07T07:00:00.000Z' }, busy: false, onSet() {}, onClear() {},
-  });
-  const state = renderedText(markup.slice(markup.indexOf('data-testid="article-publish-at-state"'), markup.indexOf('</p>')));
-  assert.match(state, /\(2026-10-07 07:00 UTC\)/);
-  assert.match(state, /checked every minute/);
-  assert.match(markup, /value="2026-10-07T09:00"/, 'the input is prefilled in the reader\'s zone');
-  assert.match(renderedText(markup), /Move time/);
-  assert.match(renderedText(markup), /Clear time/);
-  const buttons = [...markup.matchAll(/<button[^>]*>/g)].map((m) => m[0]);
-  assert.ok(buttons.every((b) => !/disabled=""/.test(b)), 'a prefilled time can be sent');
-  const busy = html(PublishAtControl, {
-    article: { id: 3, status: 'approved', publish_at: '2026-10-07T07:00:00.000Z' }, busy: true, onSet() {}, onClear() {},
-  });
-  assert.ok([...busy.matchAll(/<button[^>]*>/g)].every((m) => /disabled=""/.test(m[0])), 'busy disables both');
+test('a scheduled article\'s dialog shows the stored time in UTC and prefills it in the reader\'s zone', () => {
+  const markup = html(MemoryRouter, { children: React.createElement(QueueDialog, { kind: 'schedule', article: { id: 3, title: 'T', status: 'approved', publish_at: '2026-10-07T07:00:00.000Z' }, onConfirm() {}, onClose() {} }) });
+  assert.match(renderedText(markup), /Set now: 2026-10-07 07:00 UTC/);
+  assert.match(markup, /value="2026-10-07"/);
+  assert.match(markup, /value="09:00"/);
+  assert.deepEqual(scheduleFields(null), { date: '', time: '09:00' });
 });
 
-test('the page offers the control on approved articles only, and sends through api.schedule', () => {
-  const page = codeOnly(read('frontend/src/pages/admin/ArticlesQueuePage.jsx'));
-  assert.match(page, /\{detail\.article\.status === 'approved' && \(\s*<PublishAtControl/);
-  assert.equal(page.split('<PublishAtControl').length - 1, 1);
-  assert.match(page, /onSet=\{\(at\) => schedule\(detail\.article\.id, at\)\}/);
-  assert.match(page, /onClear=\{\(\) => schedule\(detail\.article\.id, null\)\}/);
-  assert.match(page, /const schedule = \(id, publishAt\) => action\(\(\) => api\.schedule\(id, publishAt\)/);
+test('the drawer offers Schedule and Clear time on approved articles only, and sends through api.schedule', () => {
+  const viewer = { userId: 9, superAdmin: false };
+  assert.ok(actionsFor({ status: 'approved', publish_at: null, author_user_id: 2 }, viewer).includes('schedule'));
+  assert.ok(actionsFor({ status: 'approved', publish_at: '2026-10-07T07:00:00.000Z', author_user_id: 2 }, viewer).includes('clear'));
+  for (const status of ['submitted', 'in_review', 'published', 'rejected']) {
+    assert.ok(!actionsFor({ status, author_user_id: 2 }, viewer).some((a) => a === 'schedule' || a === 'clear'), status);
+  }
+  const drawer = codeOnly(read('frontend/src/pages/admin/contentQueue/ReviewDrawer.jsx'));
+  assert.match(drawer, /schedule: \(id, r\) => api\.schedule\(id, r\.publishAt\)/);
+  assert.match(drawer, /clear: \(id\) => api\.schedule\(id, null\)/);
 });
 
 test('api.adminArticles.schedule posts publish_at, a time or null, to the worker route', async () => {

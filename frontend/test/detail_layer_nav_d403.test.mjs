@@ -62,18 +62,11 @@ test('each declared total counts the list its rows are drawn from, and stops at 
   }
 });
 
-test('the investor pipeline counts only the rows it would show (live deals), with no cap', () => {
-  const section = boardFor('investor', '/deals', null).sections.find((s) => s.slug === 'pipeline');
-  assert.ok(section?.total, 'the pipeline declares no total');
-  // deals.ts's list read has no LIMIT, so a long list still has a count, and
-  // a rejected deal (dealStage → null) is neither counted nor shown.
-  const deals = [
-    ...rowsOf(240).map((r) => ({ ...r, status: 'applied' })),
-    ...rowsOf(60).map((r) => ({ ...r, id: 1000 + r.id, status: 'rejected' })),
-  ];
-  assert.equal(section.total(deals), 240, 'the total counts rejected deals, or stops at a cap the read does not have');
-  assert.equal(section.rows(deals).length, 5);
-  assert.equal(section.total([]), 0);
+test('the investor Deals board has no Pipeline section since D1243: Deal flow\'s own board and table count the deals', () => {
+  const board = boardFor('investor', '/deals', null);
+  assert.ok(!board.sections.some((s) => s.slug === 'pipeline'), 'the retired Pipeline section is back on the board');
+  assert.ok(!('deals' in board.sources), 'the board still reads the deal list for a section it no longer draws');
+  assert.deepEqual(board.sections.map((s) => s.slug), ['screening', 'commit', 'closing']);
 });
 
 test('no registry declares a total on a section with no source', () => {

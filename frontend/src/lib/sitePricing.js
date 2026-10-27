@@ -26,56 +26,59 @@ export const MODEL_GROUPS = Object.freeze([
  * Each tab's cards, in the canvas's order. `match` is the catalogue plan's
  * `licence_key` (`aiCredits.planOf`); `free` is the tab's free plan; `custom`
  * is priced by our sales team and never shows a figure. `lane` is the
- * register page's `?lane=` for a visitor.
+ * register page's `?lane=` for a visitor. `storage` is the card's storage
+ * plan key (D1172, #3085): its allowance and "Best suited for" are the public
+ * read's (`storage_bytes`, `best_suited`), never written here. The two firms
+ * have no catalogue plan, so they read "Negotiated" (#2449 owner question 2).
  */
 export const PLAN_CARDS = Object.freeze({
   founder: [
     {
-      id: 'free', name: 'Free', match: 'founder:free', free: true, lane: 'founder',
+      id: 'free', name: 'Free', match: 'founder:free', storage: 'founder:free', free: true, lane: 'founder',
       tag: 'Start validating one idea.',
       feats: ['1 active startup', 'Validate: 5 customer interviews and 3 OKRs', 'Apply to the Spin-Out Lab', 'Public profile and referral link', 'Accept up to 3 introductions a month', 'AI runs from AI tokens you top up'],
     },
     {
-      id: 'growth', name: 'Validate + Build', match: 'founder:growth', lane: 'founder', highlight: true,
+      id: 'growth', name: 'Validate + Build', match: 'founder:growth', storage: 'founder:growth', lane: 'founder', highlight: true,
       tag: 'Prove the idea, then build the company.',
       feats: ['Unlimited startups', 'Unlimited interviews and OKRs', 'Venture-readiness scoring', 'Company data for market research', 'Your full archetype card', 'Accept up to 10 introductions a month'],
     },
     {
-      id: 'studio', name: 'Raise + Grow', match: 'founder:studio', lane: 'founder',
+      id: 'studio', name: 'Raise + Grow', match: 'founder:studio', storage: 'founder:studio', lane: 'founder',
       tag: 'Raise the money, then grow the company.',
       feats: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
     },
   ],
   investor: [
     {
-      id: 'free', name: 'Investor Basic', kick: 'Free plan', match: 'investor:free', free: true, lane: 'investor', cta: 'Start free',
+      id: 'free', name: 'Investor Basic', kick: 'Free plan', match: 'investor:free', storage: 'investor:free', free: true, lane: 'investor', cta: 'Start free',
       tag: 'Browse the network.',
       feats: ['Public deal index', 'Watchlists', 'Read-only market pulses', 'AI runs from AI tokens you top up'],
     },
     {
-      id: 'plus', name: 'Investor Plus', kick: 'Research subscription', match: 'investor:plus', lane: 'investor', cta: 'Get Investor Plus',
+      id: 'plus', name: 'Investor Plus', kick: 'Research subscription', match: 'investor:plus', storage: 'investor:plus', lane: 'investor', cta: 'Get Investor Plus',
       tag: 'For angel investors, independent investors and investment professionals.',
       feats: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
     },
     {
-      id: 'professional', name: 'Investor Pro', kick: 'Research subscription', match: 'investor:professional', lane: 'investor', cta: 'Get Investor Pro', highlight: true,
+      id: 'professional', name: 'Investor Pro', kick: 'Research subscription', match: 'investor:professional', storage: 'investor:professional', lane: 'investor', cta: 'Get Investor Pro', highlight: true,
       tag: 'For professional angels, investment analysts and smaller firms.',
       feats: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
     },
     {
-      id: 'institutional', name: 'Institutional', kick: 'Research subscription', custom: true, cta: 'Contact Sales',
+      id: 'institutional', name: 'Institutional', kick: 'Research subscription', custom: true, storage: 'investor:institutional', cta: 'Contact Sales',
       tag: 'For institutional investors, family offices and investment teams.',
       feats: ['Shared research workspaces', 'Team access controls and permissions', 'Advanced reporting and analytics', 'Custom integrations and workflows', 'Organization-wide administration', 'Negotiated usage limits and support'],
     },
   ],
   advisor: [
     {
-      id: 'free', name: 'Advisor Basic', kick: 'Free plan', free: true, cta: 'Start free',
+      id: 'free', name: 'Advisor Basic', kick: 'Free plan', free: true, storage: 'advisor:free', cta: 'Start free',
       tag: 'Publish a profile.',
       feats: ['Public advisor profile', 'Listed in the advisor directory', 'Office hours and session types', 'Booking links', 'AI runs from AI tokens you top up'],
     },
     {
-      id: 'pro', name: 'Advisor Pro', kick: 'Practice subscription', match: 'advisor', cta: 'Get Advisor Pro', highlight: true,
+      id: 'pro', name: 'Advisor Pro', kick: 'Practice subscription', match: 'advisor', storage: 'advisor:pro', cta: 'Get Advisor Pro', highlight: true,
       tag: 'More reach, better matches.',
       feats: ['More reach in matching', 'Paid sessions through your booking links', 'Deliverables and the client access log', 'Earnings and payouts'],
     },
@@ -87,13 +90,13 @@ export const PLAN_CARDS = Object.freeze({
   ],
   'operating-partner': [
     {
-      id: 'free', name: 'Partner Basic', kick: 'Free plan', free: true, lane: 'partner', cta: 'Start free',
+      id: 'free', name: 'Partner Basic', kick: 'Free plan', free: true, storage: 'partner:free', lane: 'partner', cta: 'Start free',
       tag: 'Get listed.',
       feats: ['Provider profile and directory listing', 'Live founder requests', 'Verification badges', 'AI runs from AI tokens you top up'],
     },
     {
       // The owner's ruling (2026-10-20): the plan is "Operating Partner Pro".
-      id: 'pro', name: 'Operating Partner Pro', kick: 'Delivery subscription', match: 'partner', lane: 'partner', cta: 'Get Operating Partner Pro', highlight: true,
+      id: 'pro', name: 'Operating Partner Pro', kick: 'Delivery subscription', match: 'partner', storage: 'partner:pro', lane: 'partner', cta: 'Get Operating Partner Pro', highlight: true,
       tag: 'Inbound demand on tap.',
       feats: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports', 'Payouts through Stripe Connect'],
     },
@@ -113,6 +116,23 @@ export const LP_ACCESS = Object.freeze({
   note: 'Free access for eligible investors in Axal VC funds. Access is subject to investor verification and fund-specific permissions.',
   link: { label: SITE_ACTIONS.lpLabel, to: SITE_ACTIONS.lpLogin },
   feats: ['Access to relevant fund documents and reports', 'Fund updates and announcements', 'Available capital account and investment information', 'Secure document access', 'Fund-related communications', 'Information for your authorized fund investments'],
+});
+
+/**
+ * D1172 (#3085, STG18–STG19): the Storage group at the end of every Compare
+ * plans table, and the LP band's storage line. The figures are the public
+ * read's; only the words are here. "Best suited for" is on Founder and
+ * Investor only (#2449 owner question 11).
+ */
+export const STORAGE_COMPARE = Object.freeze({
+  group: 'Storage',
+  row: 'Storage',
+  best: 'Best suited for',
+  bestTabs: ['founder', 'investor'],
+  negotiated: 'Negotiated',
+  lpLine: (size) => `${size} personal storage.`,
+  lpExcluded: 'Fund documents are excluded.',
+  lpMissing: 'Storage with LP Access is not recorded yet.',
 });
 
 /**
