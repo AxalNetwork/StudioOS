@@ -63,6 +63,15 @@ async function call(w: World, who: number, tail: string) {
   return { status: r.status, cache: r.headers.get('Cache-Control'), body: await r.json() as any };
 }
 const NEVER = /PRIVATE|987654321|123400|9876|five@example|snapshot_hash|private_reason|source_ref|accepted_by/;
+/** Item ids are random hex. A four-digit last-four can sit inside one, which is not the bank line. */
+const shown = (v: unknown) => JSON.stringify(v).replace(/[0-9a-f]{16,}/gi, '');
+test('a last-four inside a random id is not a bank line, and a real one still is', () => {
+  const id = '0123456789abcdef9876fedcba654321';
+  assert.equal(NEVER.test(shown({ uid: id, value_num: 8 })), false);
+  assert.equal(NEVER.test(shown({ uid: id, value_num: 9876 })), true);
+  assert.equal(NEVER.test(shown({ snapshot_hash: 'hidden' })), true);
+  assert.equal(NEVER.test(shown({ name: 'PRIVATE FILE NAME' })), true);
+});
 /** The investor's own read, less what only a log or a real grant changes. */
 const strip = (v: any) => { const { preview, preview_as, audience, ...rest } = v; return rest; };
 
@@ -81,7 +90,7 @@ test('See as an investor is the investor’s own projection, before and after th
   const rows = (after.items as any).rows;
   assert.ok(rows.some((r: any) => r.kind === 'icp-fit' && r.value_reason === 'Shared as a summary only.'));
   assert.ok(!rows.some((r: any) => r.kind === 'consented-quote'), 'a Private item never shows');
-  assert.ok(!NEVER.test(JSON.stringify([after, before])), 'no balance, account, bank line, investor contact or internal key');
+  assert.ok(!NEVER.test(shown([after, before])), 'no balance, account, bank line, investor contact or internal key');
   // Who can see it now: counts, never names.
   assert.deepEqual(after.audience, { state: 'recorded', data_room: 1, nda_signed: 1 });
   grant(w, 7); grant(w, 6, { status: 'revoked' }); nda(w, 6);
