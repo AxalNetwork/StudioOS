@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireFactor, requireHqAdmin, requireStepUp, requireSuperAdmin } from '../auth';
+import { requireAuth, requireFactor, requireHqAdmin, requireStepUp, requireSuperAdmin, selectJwt } from '../auth';
 import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
   aiPaused, listAiLicenceCaps, loadAiBudget, memberHolds, planView, resolveAiCaps, settleAiBudgetReview, TYPED_CAP_LICENCES, usdToMicro } from '../services/aiBudget';
 import { parseSpendLimit, readSpendLimit, writeSpendLimit } from '../services/aiSpendLimit';
@@ -22,6 +22,23 @@ r.onError((error,c)=>{
   const status=AUTH_ERROR_STATUSES[error.message];
   if (status) return refuse(c,status,{code:'ai_budget_access_refused',message:'This account cannot access that AI budget operation.'});
   return refuse(c,503,{code:'ai_budget_unreadable',message:'Unreadable: the AI budget operation could not be completed.',raw:error});
+});
+/**
+ * D1289 (#3372, CRP9): an Add tokens sheet was opened, for HQ › AI usage
+ * (D791). One `activity_logs` row, `add_tokens_opened`, whose details hold
+ * `from` (the entry point) and nothing else: never a prompt, an amount or a
+ * page's text. A support session writes nothing.
+ */
+export const ADD_TOKENS_FROM=Object.freeze(['rail','assist','billing','usage','ai_tokens','pricing','phone','build','narrative','pitch_deck','digest','refused_run'] as const);
+r.post('/add-tokens/opened',async c=>{
+  const user=await requireAuth(c);
+  const body=await c.req.json().catch(()=>null);
+  const from=typeof body?.from==='string'?body.from:'';
+  if (!(ADD_TOKENS_FROM as readonly string[]).includes(from)) return c.json({error:'invalid_from',message:'Name where Add tokens was opened.'},400);
+  if ((await selectJwt(c))?.payload.impersonated_by) return c.json({ok:true,recorded:false});
+  await c.env.DB.prepare('INSERT INTO activity_logs(action,details,actor,user_id) VALUES(?,?,?,?)')
+    .bind('add_tokens_opened',JSON.stringify({from}),String(user.id),user.id).run();
+  return c.json({ok:true,recorded:true});
 });
 r.get('/me',async c=>{
   const user=await requireAuth(c);

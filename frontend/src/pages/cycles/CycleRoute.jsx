@@ -1005,9 +1005,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else if (reporting && cycle === 'grow') {
     // D1056 (#2427): Grow's Reporting desk, under the tab row with Reporting lit.
+    // D1060 (#2930): and one report, `reporting="report"|"edit"` with its uid as `:id`.
     body = (
       <ReportingDesk tab={reporting} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} />
+        search={location.search} cards={tabs} action={action} phone={phone} reportUid={recordId ?? null} role={user?.role ?? null} />
     );
   } else if (buildPlan && cycle === 'build') {
     // D1063 (#2426): Validate → Build's plan, under Build's header and tab row.
