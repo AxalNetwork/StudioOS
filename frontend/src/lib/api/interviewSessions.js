@@ -26,6 +26,10 @@
 //   deleteSession    DELETE /sessions/:id
 // D690 (#1692), for D697's record (#1659):
 //   audio            GET    /sessions/:id/audio         { parts: [{ seq, url, mime, start_ms, expires_at }] }, one single-use signed URL per chunk
+// D877 (#2524), a call's audio kept apart from its text:
+//   audioRetention   GET    /sessions/audio-retention   { days, chosen, default_days, min_days, max_days }; days null keeps it
+//   setAudioRetention PUT   /sessions/audio-retention   { days }
+//   deleteAudio      DELETE /sessions/:id/audio         the audio goes, the transcript stays
 // D658 (#1494), the review step:
 //   placements       GET    /sessions/:id/placements    every run's placements, and compare
 //   structure        POST   /sessions/:id/structure     { model? } → a new run
@@ -107,6 +111,12 @@ export const interviewSessionsApi = {
   /** One signed, single-use download per recorded chunk (D690): fetch each once, and ask again for fresh URLs. */
   audio: (id) => request(`${P}/sessions/${enc(id)}/audio`),
   remove: (id) => request(`${P}/sessions/${enc(id)}`, { method: 'DELETE' }),
+  /** D877: how long call audio is kept. Declared before `/sessions/:id` on the Worker, so the word is never an id. */
+  audioRetention: () => request(`${P}/sessions/audio-retention`),
+  setAudioRetention: (days) => request(`${P}/sessions/audio-retention`, {
+    method: 'PUT', body: JSON.stringify({ days: days == null ? null : Number(days) }),
+  }),
+  deleteAudio: (id) => request(`${P}/sessions/${enc(id)}/audio`, { method: 'DELETE' }),
   placements: (id) => request(`${P}/sessions/${enc(id)}/placements`),
   structure: (id, model, headers) => request(`${P}/sessions/${enc(id)}/structure`, {
     ...(headers ? { headers } : {}),

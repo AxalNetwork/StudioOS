@@ -8,18 +8,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import React, { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
-import { installDocument } from './_contracts_dom.mjs';
-import RecordChannelPage from '../src/pages/founder/RecordChannelPage.jsx';
-import { INBOX, RECORD_CHANNELS, channelOf } from '../src/pages/founder/recordChannels.js';
+import { RECORD_CHANNELS, channelOf } from '../src/pages/founder/recordChannels.js';
 
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
-const text = (n) => n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '';
-const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
-const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
-const byId = (root, id) => walk(root).find((n) => props(n)['data-testid'] === id);
 
 test('three channels, each at its own address, each naming its task', () => {
   assert.deepEqual(RECORD_CHANNELS.map((c) => c.to), ['/validate/record/whatsapp', '/validate/record/telegram', '/validate/record/calls']);
@@ -39,31 +30,5 @@ test('App.jsx serves each address as a static route, so /validate/:slug/:id neve
   }
 });
 
-async function mount(path) {
-  const restore = installDocument();
-  const create = document.createElement.bind(document);
-  document.createElement = (tag) => { const n = create(tag); n.querySelector = () => null; return n; };
-  const container = document.createElement('div');
-  const root = createRoot(container);
-  await act(async () => root.render(React.createElement(MemoryRouter, { initialEntries: [path] }, React.createElement(RecordChannelPage))));
-  return { container, async done() { await act(async () => root.unmount()); restore(); } };
-}
-
-// D862 (#2507) and D869 (#2515) build WhatsApp's and Telegram's boards, so their pages draw the tool;
-// record_whatsapp_d862.test.mjs and record_telegram_d869.test.mjs mount them.
-for (const c of RECORD_CHANNELS.filter((x) => x.key === 'calls')) {
-  test(`${c.label}: its tabs, where today's version is, and the task that builds the rest`, async () => {
-    const w = await mount(c.to);
-    try {
-      assert.ok(byId(w.container, `record-channel-${c.key}`), 'the page is this channel\'s');
-      for (const t of RECORD_CHANNELS) assert.ok(byId(w.container, `record-tab-${t.key}`), t.key);
-      assert.equal(props(byId(w.container, 'record-channel-connect')).href, c.connect);
-      if (c.key === 'calls') assert.equal(byId(w.container, 'record-channel-inbox'), undefined, 'calls have no chats inbox');
-      else assert.equal(props(byId(w.container, 'record-channel-inbox')).href, INBOX);
-      const wait = text(byId(w.container, 'record-channel-wait'));
-      // Mutation checked: name the wrong task → the number fails.
-      assert.match(wait, new RegExp(`Task #${c.task} \\(${c.decision}\\)`));
-      assert.ok(wait.includes(c.boards));
-    } finally { await w.done(); }
-  });
-}
+// D862 (#2507), D869 (#2515) and D878 (#2525) build every channel's boards, so each page draws its tool;
+// record_whatsapp_d862, record_telegram_d869 and record_calls_d878 mount them.

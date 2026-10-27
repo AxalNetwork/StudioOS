@@ -35,11 +35,12 @@ const SESSION_PAGE = (id) => `/validate/session/${Number(id)}`;
 
 export const DEFAULT_API = { channels: channelsApi, sessions: interviewSessionsApi, analytics: conversationAnalyticsApi, app: appApi };
 
-function SubTabs({ tool, active }) {
+/** The tool's tabs, each a path; the first is the tool's own address. Calls (D878) draws its tabs with it too. */
+export function SubTabs({ tool, active }) {
   return (
     <nav aria-label={tool.label} className="flex gap-5 overflow-x-auto border-b border-gray-200 dark:border-gray-700" data-testid={`${tool.prefix}-tabs`}>
       {tool.tabs.map((t) => (
-        <NavLink key={t.key} to={t.to} end={t.key === 'inbox'} aria-current={active === t.key ? 'page' : undefined} data-testid={`${tool.prefix}-tab-${t.key}`}
+        <NavLink key={t.key} to={t.to} end={t.to === tool.tabs[0].to} aria-current={active === t.key ? 'page' : undefined} data-testid={`${tool.prefix}-tab-${t.key}`}
           className={`-mb-px inline-flex min-h-[44px] shrink-0 items-center whitespace-nowrap border-b-2 text-[13.5px] sm:min-h-[40px] ${active === t.key ? 'border-violet-600 font-bold text-gray-900 dark:border-violet-400 dark:text-gray-100' : 'border-transparent font-semibold text-gray-500 dark:text-gray-400'}`}>
           {t.label}
         </NavLink>

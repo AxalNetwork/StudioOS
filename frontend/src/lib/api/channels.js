@@ -34,6 +34,9 @@
 //   attachMeeting    POST   /founder/validate/interviews/:id/meetings  { attach: { join_url }, session_id, provider } (D685 §5.3.2, #1588)
 //   attachCalendarMeet POST /founder/validate/interviews/:id/meetings  { attach: { event_id | meeting_code | join_url }, consent } (D871)
 //   meetingRecording GET    /founder/validate/interviews/:id/meetings/:refUid/recording  → { recordings: [{ url, started_at }] } (D871)
+//   meetingSetup     GET    /founder/validate/meetings/setup     D875: Zoom's and Google Meet's steps, read from stored rows
+//   upcomingCalls    GET    /founder/validate/meetings/upcoming  D875: the next 14 days of the member's own unattached calls
+//   calls            GET    /founder/validate/meetings           D878 (#2525): { calls, uploads, audio, retention }
 //   googleStatus     GET    /calendar/google/status        → { connected, meet_transcripts: 'granted' | 'available' | 'not_set_up', … } (D757, #1926)
 //   allowMeetTranscripts POST /calendar/google/meet-transcripts/connect?return_to=  then the page goes to Google's consent (D757, #1926)
 //
@@ -191,6 +194,12 @@ export const channelsApi = {
   /** D871: a Meet call's Drive recordings, for "Download it, then upload it here". Never the file itself. */
   meetingRecording: (interviewId, refUid) =>
     request(`/founder/validate/interviews/${enc(interviewId)}/meetings/${enc(refUid)}/recording`),
+  /** D875: is the member set up for Zoom and Google Meet. No provider is called. */
+  meetingSetup: () => request('/founder/validate/meetings/setup'),
+  /** D875: the member's own upcoming calls, not yet attached; a 409 means Google must be reconnected. */
+  upcomingCalls: () => request('/founder/validate/meetings/upcoming'),
+  /** D878 (#2525): every call and uploaded recording of the member's, with each session's audio state. */
+  calls: () => request('/founder/validate/meetings'),
 };
 
 /** The Telegram Business interview bot, for Super Admins (D756): its health, and registering its webhook. */
