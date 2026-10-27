@@ -968,8 +968,9 @@ test('#1523: Experiments marks each claim through the real route and the adapter
   const d = adaptModule('validate', 'experiments', r.body);
   assert.equal(d.records.cols.at(-1).key, 'source');
   assert.deepEqual(d.records.rows.map((x: any) => x.cells.source), [
-    { text: 'Proposed by Eadwyn', tone: 'v1' },
-    { text: 'Proposed by Eadwyn · you edited it', tone: 'v2' },
+    // D1327: the cell is Fill with Eadwyn's one FillMark, with its words for text readers.
+    { fill: { source_kind: 'eadwyn', edited: false }, text: 'Eadwyn' },
+    { fill: { source_kind: 'eadwyn', edited: true }, text: 'Eadwyn · edited' },
     null,
   ]);
 });
@@ -1003,7 +1004,7 @@ test('#1523: a failed provenance read keeps every hypothesis and says the marks 
   assert.equal(r.body.records.rows.length, 3, 'a hypothesis went missing when its mark could not be read');
   assert.ok(r.body.records.rows.every((x: any) => x.provenance === 'unreadable'), 'a failed read passed for "typed by hand"');
   const d = adaptModule('validate', 'experiments', r.body);
-  assert.ok(d.records.rows.every((x: any) => x.cells.source?.text === 'Unreadable' && x.cells.source?.tone === 'muted'));
+  assert.ok(d.records.rows.every((x: any) => x.cells.source?.text === 'Unreadable' && x.cells.source?.fill?.state === 'unreadable'));
 });
 
 test('#1523: the board and the cycle read share one provenance reader', () => {

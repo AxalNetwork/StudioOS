@@ -35,8 +35,10 @@ test('no run is "not recorded", never a zero cost; a read without the field says
 });
 
 test('the Market page\'s Eadwyn mark carries the run line', () => {
+  // D1327: the Market page draws the shared FillMark, whose card ends with the run line.
   const page = codeOnly(readFileSync('frontend/src/pages/SpinoutLabMarketPage.jsx', 'utf8'));
-  const mark = page.slice(page.indexOf('export function FilledMark'), page.indexOf('export function fmtMoney'));
-  assert.match(mark, /fillRunLine\(fill\.run\),\s*\]\.filter\(Boolean\)\.join\('\\n'\);/);
-  assert.match(page, /import \{ fillRunLine \} from '\.\.\/lib\/fillRun\.js';/);
+  assert.match(page, /<FillMark mark=\{marketFillMark\(filled\.population\)\} \/>/);
+  const mark = codeOnly(readFileSync('frontend/src/ui/FillMark.jsx', 'utf8'));
+  assert.match(mark, /import \{ fillRunLine \} from '\.\.\/lib\/fillRun\.js';/);
+  assert.match(mark, /cardLines\(mark, [^;]*fillRunLine\(mark\?\.run\)/);
 });
