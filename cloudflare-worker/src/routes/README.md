@@ -129,6 +129,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/carta/investor → carta_investor.ts (#2634: the caller's own active investor grant; live read-only firms, funds, investments, certificates, convertible notes, warrants and capitalization tables; no support/admin bypass, founder imports or personal-data logs)
 /api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650; connector pages (`GET /directory/:key`, D753))
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
+/api/connectors/webhook/vercel → vercel_webhook.ts (D1096: Vercel's signed deliveries for every installation, mounted ahead of integrations.ts)
                                          (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
@@ -146,7 +147,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/pipeline      → pipeline.ts
 /api/search        → search.ts
 /api/kyc           → kyc_governance.ts, kyc.ts  (D1232: renewals, renewal periods, the audit read and its export, mounted first so `/admin/:userId` does not read them as ids)
-/api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*; D1216: a closing line's paper under /staged — preview, start, read, the line's envelopes and the Super Admin's step-up countersign, `closing.countersign`)
+/api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*; D1216: a closing line's paper under /staged — preview, start, read, the line's envelopes, signed in order (company, investor, then Axal), and the Super Admin's step-up countersign, `closing.countersign`)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts
 /api/profiling     → profiling.ts

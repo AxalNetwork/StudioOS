@@ -3,6 +3,8 @@ const post = (path, body) => request(path, { method: 'POST', body: JSON.stringif
 const base = '/connectors/google-workspace';
 const q = (project) => new URLSearchParams({ project: String(project) }).toString();
 export const googleWorkspace = {
+  // D1091 (GW1, GW2): the member's chosen files across ventures, the connection state and the Google account.
+  mine: () => request(`${base}/mine`),
   pickerConfig: (project) => request(`${base}/picker-config?project=${encodeURIComponent(project)}`),
   connect: (project, enableCompany = false) => post('/calendar/google/workspace-files/connect', { project, enable_company: enableCompany }),
   files: (project) => request(`${base}/files?project=${encodeURIComponent(project)}`),
