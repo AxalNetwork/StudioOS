@@ -320,7 +320,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
 <section aria-label="Top articles" style="background:var(--card);border:1px solid var(--line);border-radius:12px">
 <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px 10px"><h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Top articles</h3><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:var(--mut)">1–10 of 148</span></div>
 <div role="table" aria-label="Top articles">
-<div role="row" style="display:grid;grid-template-columns:48px minmax(0,1fr) 170px 118px 112px 136px 84px 128px;gap:10px;padding:10px 18px;border-top:1px solid var(--line);font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)"><span role="columnheader">Rank</span><span role="columnheader">Title</span><span role="columnheader">Author</span><span role="columnheader">Published</span><span role="columnheader" aria-sort="descending">Views ↓</span><span role="columnheader">Views per day</span><span role="columnheader">Read time</span><span role="columnheader">Followers told</span></div>
+<div role="row" style="display:grid;grid-template-columns:48px minmax(0,1fr) 170px 118px 112px 136px 84px 128px;gap:10px;padding:10px 18px;border-top:1px solid var(--line);font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)"><span role="columnheader">Rank</span><span role="columnheader">Title</span><span role="columnheader">Author</span><span role="columnheader">Published</span><span role="columnheader" aria-sort="descending">Views, all time ↓</span><span role="columnheader">Views per day since publish</span><span role="columnheader">Read time</span><span role="columnheader">Followers told</span></div>
 <sc-for list="{{ tops }}" as="t" hint-placeholder-count="6"><div role="row" style="display:grid;grid-template-columns:48px minmax(0,1fr) 170px 118px 112px 136px 84px 128px;gap:10px;align-items:center;padding:10px 18px;border-top:1px solid var(--line);font-size:12.5px"><span style="font-family:'Roboto Mono',ui-monospace,monospace">{{ t.r }}</span><span style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.t }}</span><span style="color:var(--body)">{{ t.au }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px">{{ t.d }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px">{{ t.vw }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px">{{ t.pd }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px">{{ t.rt }}</span><span title="No count of notified followers is kept yet." style="font-size:12px;color:var(--mut)">Not recorded</span></div></sc-for>
 </div>
 </section>
@@ -365,7 +365,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
 </div>
 
 <sc-if value="{{ dwOn }}" hint-placeholder-val="{{ false }}">
-<sc-if value="{{ scrim }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="position:absolute;inset:0;z-index:8;background:var(--scrim)"></div></sc-if>
+<sc-if value="{{ scrim }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="position:absolute;inset:0 44px 0 0;z-index:8;background:var(--scrim)"></div></sc-if>
 <aside role="dialog" aria-modal="true" aria-label="{{ dwL }}" style="{{ dwSt }}">
 <sc-if value="{{ dwArt }}" hint-placeholder-val="{{ false }}">
 <div style="flex:none;padding:16px 24px 12px;display:flex;flex-direction:column;gap:8px">
@@ -734,7 +734,7 @@ class Component extends DCLogic {
     const dwW = F.dw === 'author' ? 640 : 760;
     const dwSt = F.inl
       ? 'position:relative;width:' + dwW + 'px;max-width:100%;margin:24px auto;box-sizing:border-box;background:var(--card);border:1px solid var(--line);border-radius:16px;display:flex;flex-direction:column;overflow:hidden'
-      : 'position:absolute;top:0;right:0;bottom:0;width:' + dwW + 'px;z-index:9;box-sizing:border-box;background:var(--card);border-radius:16px 0 0 16px;box-shadow:-16px 0 48px rgba(24,24,27,.2);display:flex;flex-direction:column;overflow:hidden';
+      : 'position:absolute;top:0;right:44px;bottom:0;width:' + dwW + 'px;z-index:9;box-sizing:border-box;background:var(--card);border-left:1px solid var(--line);border-radius:16px 0 0 16px;box-shadow:-24px 0 56px rgba(9,9,11,.2);display:flex;flex-direction:column;overflow:hidden';
 
     const afacts = [['Writing since', '3 Feb 2026'], ['Published', '14'], ['Waiting', '1'], ['Rejected', '1'], ['Followers', '42'], ['This week', '1 of 3'], ['Website', '[example.com]']].map(([k, val]) => ({ k, v: val }));
     const MB = [['Nov', 0], ['Dec', 0], ['Jan', 0], ['Feb', 1], ['Mar', 2], ['Apr', 1], ['May', 2], ['Jun', 1], ['Jul', 2], ['Aug', 1], ['Sep', 2], ['Oct', 2]];
