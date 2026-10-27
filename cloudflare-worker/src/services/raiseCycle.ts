@@ -76,7 +76,7 @@ export const DATA_ROOM_ACCESS = '/raise/data-room/access';
 export const TOOL_HREF = {
   pitch: '/raise/pitch',
   capTable: '/raise/cap-table',
-  pipeline: '/raise/capital/pipeline',
+  pipeline: '/raise/capital-relationships/pipeline', // D1194: the old pipeline page is retired
   model: '/raise/capital/model',
   metrics: '/build/kpi',
 } as const;
