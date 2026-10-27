@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { programGrantsApi } from '../../../lib/api/programGrants.js';
 import { reportError } from '../../../lib/log';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import {
   FROZEN_LINE, NOT_RECORDED, REASON_MIN, TERMS, TERM_ORDER, changedKeys, dayWord, liveSentence, requestRefusal,
   termField, termKeysFor, termWord, termsPayload,
@@ -101,6 +102,7 @@ function TermInput({ k, value, onChange, testId }) {
  * GR10a's review. `mode` is 'grant' | 'change'. Terms start from the grant
  * (a change), a draft or request's terms, or the program's defaults; each is
  * marked Default or Changed against the defaults, with Reset to default.
+ * D1317: one grant's terms, so it opens as the shared Sheet (600 → 640px).
  */
 export function GrantLightbox({ mode, licence, defaults, grant, startTerms, request, onClose, onDone }) {
   const keys = useMemo(() => termKeysFor(defaults), [defaults]);
@@ -156,7 +158,7 @@ export function GrantLightbox({ mode, licence, defaults, grant, startTerms, requ
   );
 
   return (
-    <Lightbox label={title} title={step === 'review' ? `${title}?` : title} onClose={close} width={600} size="tall" pageBelow="lg" testId="grant-lightbox" footer={footer}>
+    <Sheet label={title} title={step === 'review' ? `${title}?` : title} onClose={close} width={600} size="tall" pageBelow="lg" testId="grant-lightbox" footer={footer}>
       {step === 'edit' ? (
         <div className="flex flex-col gap-3.5">
           {request ? (
@@ -220,7 +222,7 @@ export function GrantLightbox({ mode, licence, defaults, grant, startTerms, requ
           <span className={SUB}>{STEP_UP}</span>
         </div>
       )}
-    </Lightbox>
+    </Sheet>
   );
 }
 

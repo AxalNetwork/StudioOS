@@ -237,6 +237,12 @@ test('mounted SL8: /participants/:uid opens the founder over the list — strip,
     assert.match(m.of('lab-part-tools'), /Tools unlocked 3 of 20.*Scoring Engine · locked/s);
     assert.match(m.of('lab-part-moderation'), /No open case/);
     assert.match(m.of('lab-part-history'), /Week 1 passed \(the Lab’s clock\).*Week 1 in grace \(an admin\)/s);
+    // D1317: the founder is the shared Sheet over the list, 560px; closing returns to the list.
+    assert.equal(m.props('lab-part-drawer').role, 'dialog');
+    assert.ok(m.props('lab-part-drawer')['aria-labelledby']);
+    assert.equal(m.props('lab-part-drawer')['data-width'], 560);
+    await m.click('lab-part-drawer-close');
+    assert.equal(m.at.path, PARTICIPANTS_PATH);
   } finally { await m.unmount(); }
   const gone = await mount(`${PARTICIPANTS_PATH}/u-9`, { detail: () => json({ error: 'not_a_participant' }, 404) });
   try { assert.ok(gone.has('lab-part-drawer-missing')); } finally { await gone.unmount(); }

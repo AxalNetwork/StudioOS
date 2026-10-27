@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { PieChart, Plus, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import Sheet from '../ui/Sheet.jsx';
 
 const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
 const fmtPct = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
@@ -196,12 +197,8 @@ export default function PortfolioPositionsPage({ embedded = false }) {
       )}
 
       {detail && (
-        <div className="fixed inset-0 bg-black/40 flex justify-end z-50" onClick={() => setDetail(null)}>
-          <div className="w-full max-w-lg bg-white dark:bg-gray-900 h-full p-6 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{detail.project?.name}</h2>
-              <button onClick={() => setDetail(null)} className="text-gray-500 hover:text-gray-800"><X size={18} /></button>
-            </div>
+        <Sheet label={detail.project?.name || "Position"} title={detail.project?.name || "Position"} width={520} testId="portfolio-position-sheet" onClose={() => setDetail(null)}>
+          <div className="p-6">
 
             <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Dilution by round</h3>
             {(detail.rounds || []).length === 0 ? (
@@ -340,7 +337,7 @@ export default function PortfolioPositionsPage({ embedded = false }) {
               )
             )}
           </div>
-        </div>
+        </Sheet>
       )}
     </div>
   );

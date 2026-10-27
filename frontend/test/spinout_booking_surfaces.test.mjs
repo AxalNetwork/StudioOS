@@ -41,6 +41,12 @@ const OFFICE_HOURS = read('../src/pages/SpinoutLabOfficeHoursPage.jsx');
 // The tool grid — where a founder chooses between them.
 // ---------------------------------------------------------------------------
 
+test('D1317: the office-hours booking drawer is the shared right-side Sheet at 480px', () => {
+  assert.match(OFFICE_HOURS, /^import Sheet from '\.\.\/ui\/Sheet\.jsx';$/m);
+  assert.match(OFFICE_HOURS, /<Sheet\s+label=\{drawerFor\.name \|\| 'Partner'\}\s+title=\{drawerFor\.name\}[\s\S]*?onClose=\{\(\) => setDrawerFor\(null\)\}\s+width=\{480\}\s+testId="booking-drawer"/);
+  assert.doesNotMatch(OFFICE_HOURS, /fixed inset-0 z-50 flex justify-end/, 'no own drawer left');
+});
+
 test('the two tiles no longer describe themselves interchangeably', () => {
   // The old pair: "Matched advisor network" / "Book partner sessions".
   assert.doesNotMatch(WORKSPACE, /desc: 'Matched advisor network'/);

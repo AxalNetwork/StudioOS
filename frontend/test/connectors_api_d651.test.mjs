@@ -313,9 +313,9 @@ test('companies are ticked from the sheet and the Worker’s answer is what the 
   } finally { await m.unmount(); f.restore(); }
 });
 
-test('a sheet with no frame is a Lightbox, and the dialog inside it is another layer on the one Escape stack', async () => {
-  // D686 §5.4 (#1597), D753 F8 (#1992): the right-hand side sheet is gone. A
-  // panel drawn with no frame opens a centred Lightbox, and a tool's settings
+test('a sheet with no frame is the shared Sheet, and the dialog inside it is another layer on the one Escape stack', async () => {
+  // D686 §5.4 (#1597), D753 F8 (#1992), D1317: a panel drawn with no frame
+  // opens the shared right-side Sheet (`ui/Sheet.jsx`), and a tool's settings
   // dialog is a nested Lightbox: both join the one Escape stack
   // (`ui/lightboxFocus.js`), so one key press closes one layer. The sheet keeps
   // no Escape listener of its own; this stub DOM mounts no Lightbox listener.
@@ -325,10 +325,12 @@ test('a sheet with no frame is a Lightbox, and the dialog inside it is another l
   try {
     await m.flush();
     const frame = m.byTestId('sheet-dialog');
-    assert.ok(frame, 'the sheet opens a Lightbox around itself');
+    assert.ok(frame, 'the pane opens the shared Sheet around itself');
     assert.equal(m.props(frame).role, 'dialog');
     assert.equal(m.props(frame)['aria-modal'], 'true');
-    assert.equal(m.props(m.byTestId('connector-sheet-detail'))['data-layout'], 'lightbox');
+    assert.ok(m.props(frame)['aria-labelledby']);
+    assert.equal(m.props(frame)['data-width'], 520);
+    assert.equal(m.props(m.byTestId('connector-sheet-detail'))['data-layout'], 'sheet');
     await m.click('Change');
     await m.flush();
     const modal = m.byTestId('hubspot-config-modal');

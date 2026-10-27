@@ -153,21 +153,23 @@ async function scanUserMentions(
     }
   }
 
-  // Name scan: cheap O(N_users) substring match against the body. We bound
-  // this to the ~few thousand users on Axal — acceptable on the admin
-  // request path. Skip very short names (<6 chars) to avoid false hits
-  // on common substrings.
+  // Name scan: a member's full legal name found in the body. Skip very short
+  // names (<6 chars) to avoid false hits on common substrings.
+  // D1319 (#3480): the match runs in SQL against the bound, lower-cased body,
+  // so only the members it names are loaded, never every user on each call;
+  // and it reads only the id, the name and the consent. `full_legal_name` —
+  // there is no `full_name` (the column this scan once read, so it matched
+  // nobody and passed silently).
   try {
     const userRows = await env.DB.prepare(
-      // `full_legal_name` — there is no `full_name`. This query feeds a
-      // redaction check, so the throw meant the check scanned nobody and
-      // passed silently.
-      `SELECT u.id, u.full_legal_name, u.email,
+      `SELECT u.id, u.full_legal_name,
               COALESCE(c.consented, 0) AS consented
          FROM users u
          LEFT JOIN user_promotion_consent c ON c.user_id = u.id
-        WHERE u.full_legal_name IS NOT NULL AND length(u.full_legal_name) >= 6`,
-    ).all<{ id: number; full_legal_name: string; email: string; consented: number }>();
+        WHERE u.full_legal_name IS NOT NULL AND length(trim(u.full_legal_name)) >= 6
+          AND instr(?, lower(trim(u.full_legal_name))) > 0
+        LIMIT 50`,
+    ).bind(bodyLower).all<{ id: number; full_legal_name: string; consented: number }>();
     for (const r of userRows.results || []) {
       const name = (r.full_legal_name || '').trim();
       if (!name) continue;

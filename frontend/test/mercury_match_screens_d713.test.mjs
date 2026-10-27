@@ -228,6 +228,11 @@ test('mounted desk, plain Admin: drafts and deletes, and is never offered Issue 
     try {
       await v.flush();
       assert.deepEqual(calls, [['list', { deal: 4 }]]);
+      // D1317: the deal's settlements open as the shared Sheet, 640px.
+      const sheet = v.props(v.nodes().find((n) => v.props(n)?.['data-testid'] === 'settlements-sheet'));
+      assert.equal(sheet.role, 'dialog');
+      assert.ok(sheet['aria-labelledby']);
+      assert.equal(sheet['data-width'], 640);
       assert.match(v.text(), /Issuing and voiding are the Super Admin’s/);
       await assert.rejects(v.click('Issue'), /Missing button/);
       await assert.rejects(v.click('Void'), /Missing button/);

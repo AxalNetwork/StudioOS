@@ -4,10 +4,10 @@ import AnalyticsTab from './AnalyticsTab';
 import AiUsageTab from './AiUsageTab';
 import DlqTab from './DlqTab';
 import CronTab from './CronTab';
-import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server, Clock, TrendingUp, ChevronDown, X, User as UserIcon, Hash, Copy, Check } from 'lucide-react';
+import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server, Clock, TrendingUp, ChevronDown, User as UserIcon, Hash, Copy, Check } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
-import { useEscapeClose } from '../components/useEscapeClose';
+import Sheet from '../ui/Sheet.jsx';
 import { useAuth } from '../hooks/useAuthSync';
 import { isSuperAdminUser } from '../lib/shellRole';
 import { RailFrame, WorkerRail } from '../ui';
@@ -88,9 +88,8 @@ function ChartPanel({ title, data, dataKey = 'count', color = '#7c3aed', type = 
 // without leaving the page. Operates on data already loaded by /errors so it
 // works against either the FastAPI dev backend or the Cloudflare worker.
 // ---------------------------------------------------------------------------
-function ErrorDetailModal({ error, allErrors, onClose }) {
+export function ErrorDetailModal({ error, allErrors, onClose }) {
   const [copied, setCopied] = useState(false);
-  useEscapeClose(onClose);
   if (!error) return null;
 
   const ts = error.created_at ? new Date(error.created_at + (error.created_at.endsWith('Z') ? '' : 'Z')) : null;
@@ -118,137 +117,115 @@ function ErrorDetailModal({ error, allErrors, onClose }) {
     } catch {}
   };
 
+  const copyButton = (
+    <button
+      onClick={copyAll}
+      className="text-xs px-2.5 py-1.5 rounded-md border border-gray-300 bg-white hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 inline-flex items-center gap-1.5 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+      title="Copy details to clipboard"
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+  const heading = `${error.method} ${error.endpoint} → ${error.status_code}`;
+
+  // D1317: one error's detail is the shared Sheet (760px, its max-w-3xl); Copy sits before its ×.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div
-        className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-900"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-red-50 dark:border-gray-800">
-          <div className="flex items-center gap-2 min-w-0">
-            <Zap size={16} className="text-red-600 shrink-0" />
-            <div className="min-w-0">
-              <div className="font-mono text-sm text-red-900 truncate">
-                {error.method} {error.endpoint} → {error.status_code}
-              </div>
-              <div className="text-xs text-gray-600">
-                {ts ? ts.toLocaleString() : '—'}
-              </div>
+    <Sheet label={`Error #${error.id}`} eyebrow={`Error #${error.id}`} title={<span className="font-mono text-[15px] text-red-900 dark:text-red-300 break-all">{heading}</span>}
+      sub={ts ? ts.toLocaleString() : '—'} width={760} onClose={onClose} testId="monitoring-error-detail" headerActions={copyButton}>
+      <div className="px-5 py-4 space-y-4">
+      {/* Meta grid */}
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div className="border border-gray-200 rounded-lg px-3 py-2 dark:border-gray-800">
+          <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Status</div>
+          <div className="font-mono text-red-700 font-semibold">{error.status_code}</div>
+        </div>
+        <div className="border border-gray-200 rounded-lg px-3 py-2 dark:border-gray-800">
+          <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Method</div>
+          <div className="font-mono text-gray-900 font-semibold dark:text-gray-100">{error.method}</div>
+        </div>
+        <div className="border border-gray-200 rounded-lg px-3 py-2 col-span-2 dark:border-gray-800">
+          <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Endpoint</div>
+          <div className="font-mono text-gray-900 break-all dark:text-gray-100">{error.endpoint}</div>
+        </div>
+        <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2 dark:border-gray-800">
+          <UserIcon size={13} className="text-gray-500 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">User</div>
+            <div className="text-gray-900 truncate dark:text-gray-100">
+              {error.email || (error.user_id ? `user#${error.user_id}` : 'Anonymous')}
             </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={copyAll}
-              className="text-xs px-2.5 py-1.5 rounded-md border border-gray-300 bg-white hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 inline-flex items-center gap-1.5 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
-              title="Copy details to clipboard"
-            >
-              {copied ? <Check size={12} /> : <Copy size={12} />}
-              {copied ? 'Copied' : 'Copy'}
-            </button>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-md hover:bg-white/60 text-gray-500"
-              aria-label="Close"
-            >
-              <X size={16} />
-            </button>
+            {error.name && <div className="text-gray-500 text-[11px] truncate">{error.name}</div>}
           </div>
         </div>
-
-        <div className="overflow-y-auto px-5 py-4 space-y-4">
-          {/* Meta grid */}
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="border border-gray-200 rounded-lg px-3 py-2 dark:border-gray-800">
-              <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Status</div>
-              <div className="font-mono text-red-700 font-semibold">{error.status_code}</div>
-            </div>
-            <div className="border border-gray-200 rounded-lg px-3 py-2 dark:border-gray-800">
-              <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Method</div>
-              <div className="font-mono text-gray-900 font-semibold dark:text-gray-100">{error.method}</div>
-            </div>
-            <div className="border border-gray-200 rounded-lg px-3 py-2 col-span-2 dark:border-gray-800">
-              <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Endpoint</div>
-              <div className="font-mono text-gray-900 break-all dark:text-gray-100">{error.endpoint}</div>
-            </div>
-            <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2 dark:border-gray-800">
-              <UserIcon size={13} className="text-gray-500 mt-0.5 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">User</div>
-                <div className="text-gray-900 truncate dark:text-gray-100">
-                  {error.email || (error.user_id ? `user#${error.user_id}` : 'Anonymous')}
-                </div>
-                {error.name && <div className="text-gray-500 text-[11px] truncate">{error.name}</div>}
-              </div>
-            </div>
-            <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2 dark:border-gray-800">
-              <Hash size={13} className="text-gray-500 mt-0.5 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Error ID</div>
-                <div className="font-mono text-gray-900 dark:text-gray-100">#{error.id}</div>
-              </div>
-            </div>
+        <div className="border border-gray-200 rounded-lg px-3 py-2 flex items-start gap-2 dark:border-gray-800">
+          <Hash size={13} className="text-gray-500 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <div className="text-gray-500 uppercase tracking-wide text-[10px] font-medium">Error ID</div>
+            <div className="font-mono text-gray-900 dark:text-gray-100">#{error.id}</div>
           </div>
-
-          {/* Message */}
-          <div>
-            <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">Message</div>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-800 font-mono whitespace-pre-wrap break-words dark:border-gray-800 dark:text-gray-200">
-              {error.message || '(no message captured)'}
-            </div>
-          </div>
-
-          {/* Stack */}
-          <div>
-            <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">Stack trace</div>
-            {error.stack_snippet ? (
-              <pre className="bg-gray-900 text-gray-100 rounded-lg px-3 py-2.5 text-[11px] leading-relaxed font-mono overflow-x-auto whitespace-pre-wrap">
-                {error.stack_snippet}
-              </pre>
-            ) : (
-              <div className="text-xs text-gray-500 italic">No stack trace captured for this error.</div>
-            )}
-          </div>
-
-          {/* Related occurrences */}
-          {related.length > 0 && (
-            <div>
-              <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">
-                Other occurrences of this error <span className="text-gray-500 font-normal">({related.length})</span>
-              </div>
-              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto dark:border-gray-800">
-                {related.slice(0, 10).map(r => (
-                  <div key={r.id} className="px-3 py-1.5 text-[11px] flex items-center justify-between">
-                    <span className="text-gray-700 truncate dark:text-gray-300">{r.email || (r.user_id ? `user#${r.user_id}` : 'anon')}</span>
-                    <span className="text-gray-500 font-mono shrink-0 ml-2">
-                      {new Date(r.created_at + (r.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Other errors from same user */}
-          {sameUser.length > 0 && (
-            <div>
-              <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">
-                Other recent errors from this user <span className="text-gray-500 font-normal">({sameUser.length})</span>
-              </div>
-              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto dark:border-gray-800">
-                {sameUser.slice(0, 10).map(r => (
-                  <div key={r.id} className="px-3 py-1.5 text-[11px] flex items-center justify-between gap-2">
-                    <span className="text-red-700 font-mono truncate">{r.method} {r.endpoint} → {r.status_code}</span>
-                    <span className="text-gray-500 font-mono shrink-0">
-                      {new Date(r.created_at + (r.created_at.endsWith('Z') ? '' : 'Z')).toLocaleTimeString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
-    </div>
+
+      {/* Message */}
+      <div>
+        <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">Message</div>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-800 font-mono whitespace-pre-wrap break-words dark:border-gray-800 dark:text-gray-200">
+          {error.message || '(no message captured)'}
+        </div>
+      </div>
+
+      {/* Stack */}
+      <div>
+        <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">Stack trace</div>
+        {error.stack_snippet ? (
+          <pre className="bg-gray-900 text-gray-100 rounded-lg px-3 py-2.5 text-[11px] leading-relaxed font-mono overflow-x-auto whitespace-pre-wrap">
+            {error.stack_snippet}
+          </pre>
+        ) : (
+          <div className="text-xs text-gray-500 italic">No stack trace captured for this error.</div>
+        )}
+      </div>
+
+      {/* Related occurrences */}
+      {related.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">
+            Other occurrences of this error <span className="text-gray-500 font-normal">({related.length})</span>
+          </div>
+          <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto dark:border-gray-800">
+            {related.slice(0, 10).map(r => (
+              <div key={r.id} className="px-3 py-1.5 text-[11px] flex items-center justify-between">
+                <span className="text-gray-700 truncate dark:text-gray-300">{r.email || (r.user_id ? `user#${r.user_id}` : 'anon')}</span>
+                <span className="text-gray-500 font-mono shrink-0 ml-2">
+                  {new Date(r.created_at + (r.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Other errors from same user */}
+      {sameUser.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">
+            Other recent errors from this user <span className="text-gray-500 font-normal">({sameUser.length})</span>
+          </div>
+          <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto dark:border-gray-800">
+            {sameUser.slice(0, 10).map(r => (
+              <div key={r.id} className="px-3 py-1.5 text-[11px] flex items-center justify-between gap-2">
+                <span className="text-red-700 font-mono truncate">{r.method} {r.endpoint} → {r.status_code}</span>
+                <span className="text-gray-500 font-mono shrink-0">
+                  {new Date(r.created_at + (r.created_at.endsWith('Z') ? '' : 'Z')).toLocaleTimeString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      </div>
+    </Sheet>
   );
 }
 

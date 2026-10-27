@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
-import { AdminPageHeader, HeaderTab, Lightbox, Skeleton } from '../../../ui';
+import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
 import { BandPill } from './AdminApprovals';
 import {
   BOARDS, INTAKE_PAUSED, INTAKE_PAUSED_LINE, PROFILES, TESTER_TABS,
@@ -11,6 +11,7 @@ import {
   BTN, BTN_PRIMARY, CARD, DecisionDialog, FOOT, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SELECT, SUB,
   TD, TH, Tile, WARN_PILL, nf, useLoad,
 } from './boardParts';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1046 (#2894) — Product testers (APR4, APR5), on D1042's store: five tabs at
@@ -219,7 +220,7 @@ function TesterDrawer({ id, onClose, onDecided }) {
   const done = (line) => { setDialog(null); read.reload(); onDecided(line); };
   return (
     <>
-      <Lightbox label={ready ? `${t.member?.name || 'Member'}, product tester` : 'Product tester'} eyebrow={ready ? EYEBROW[t.status] : 'Product tester'}
+      <Sheet label={ready ? `${t.member?.name || 'Member'}, product tester` : 'Product tester'} eyebrow={ready ? EYEBROW[t.status] : 'Product tester'}
         title={ready ? (t.member?.name || 'Name not recorded') : 'Product tester'} sub={ready ? 'Esc to close' : null} onClose={onClose} testId="tester-drawer" width={600}
         footer={ready ? (
           <div className={`${FOOT} flex-wrap items-center`}>
@@ -277,7 +278,7 @@ function TesterDrawer({ id, onClose, onDecided }) {
             </>
           ) : null}
         </div>
-      </Lightbox>
+      </Sheet>
       {dialog && ready ? <TesterDialog kind={dialog} tester={t} onClose={() => setDialog(null)} onDone={done} /> : null}
     </>
   );

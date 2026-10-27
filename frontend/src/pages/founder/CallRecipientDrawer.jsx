@@ -6,10 +6,10 @@
 // that their name appears once they respond. Nothing the read lacks is drawn.
 import React from 'react';
 import { Link } from 'react-router-dom';
-import Lightbox from '../../ui/Lightbox';
 import {
   HIDDEN, INDICATIVE, NAME_HIDDEN, NOT_RECORDED, furthestOf, isNamed, money, notTold, questionsOf, shortDay, timelineOf, told,
 } from './raiseCallModel';
+import Sheet from '../../ui/Sheet.jsx';
 
 const MUTED = 'text-xs text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[11px] font-bold uppercase tracking-[.06em] text-axal-muted dark:text-gray-400';
@@ -30,7 +30,7 @@ export default function CallRecipientDrawer({ recipient: r, questions, projectId
   const eyebrow = `Recipient · ${r.origin === 'chosen' ? 'chosen' : 'matching'}`;
   const title = named ? r.name : 'Matching investor';
   return (
-    <Lightbox label={title} eyebrow={eyebrow} title={title} onClose={onClose} width={560} testId="call-recipient-drawer">
+    <Sheet label={title} eyebrow={eyebrow} title={title} onClose={onClose} width={560} testId="call-recipient-drawer">
       {named ? (
         <div className="flex flex-col gap-4">
           <div>
@@ -84,6 +84,6 @@ export default function CallRecipientDrawer({ recipient: r, questions, projectId
           <button type="button" className="inline-flex min-h-[36px] items-center self-start rounded-lg border border-axal-hairline bg-white px-3.5 text-sm font-semibold dark:border-gray-700 dark:bg-gray-900" onClick={onClose} data-testid="call-recipient-close">Close</button>
         </div>
       )}
-    </Lightbox>
+    </Sheet>
   );
 }

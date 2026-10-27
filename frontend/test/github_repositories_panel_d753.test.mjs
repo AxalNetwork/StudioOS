@@ -100,10 +100,10 @@ test('no repositories: today\'s empty words, then emptySlot\'s content; without 
 test('GithubSyncSheet renders the same text as before the move: listed, empty and done', async () => {
   connectorsApi.fed = async () => ({ ok: true, modules: [] });
   const props = (api) => ({ p: GH, conn: { uid: 'g1' }, projectId: 7, eyebrow: 'Build', onClose() {}, back() {}, api, wait: async () => {} });
-  // The strings main's GithubSyncSheet rendered at 075c82e51, captured from it.
+  // The strings main's GithubSyncSheet rendered at 075c82e51, captured from it; D1317's shared Sheet adds its × after the head.
   const a = await mount(h(MemoryRouter, null, h(GithubSyncSheet, props(fake().api))));
   try {
-    assert.equal(a.text(), 'Build Connect GitHub Choose what StudioOS reads. You can change this later. Repositories acme/app Private · updated 3 Oct Mark synced with Lovable Selected acme/site Public · last update not recorded Not selected 1 selected Built in Lovable? Sync it to GitHub in Lovable, then pick the repository here. Back Reads issues, pull requests and releases only. Sync selected');
+    assert.equal(a.text(), 'Build Connect GitHub Choose what StudioOS reads. You can change this later. × Repositories acme/app Private · updated 3 Oct Mark synced with Lovable Selected acme/site Public · last update not recorded Not selected 1 selected Built in Lovable? Sync it to GitHub in Lovable, then pick the repository here. Back Reads issues, pull requests and releases only. Sync selected');
     assert.ok(a.by('connector-sheet-sync'));
     await a.click('button-sync-selected');
     assert.ok(a.text().includes('Synced 2 issues and 1 pull request. Product roadmap and Prototype / MVP now show them. Now fed by GitHub'));
@@ -111,7 +111,7 @@ test('GithubSyncSheet renders the same text as before the move: listed, empty an
   } finally { await a.unmount(); }
   const b = await mount(h(MemoryRouter, null, h(GithubSyncSheet, props(fake([]).api))));
   try {
-    assert.equal(b.text(), `Build Connect GitHub Choose what StudioOS reads. You can change this later. Repositories ${EMPTY_WORDS} 0 selected Built in Lovable? Sync it to GitHub in Lovable, then pick the repository here. Back ${FOOTER_LINE} Sync selected`);
+    assert.equal(b.text(), `Build Connect GitHub Choose what StudioOS reads. You can change this later. × Repositories ${EMPTY_WORDS} 0 selected Built in Lovable? Sync it to GitHub in Lovable, then pick the repository here. Back ${FOOTER_LINE} Sync selected`);
   } finally { await b.unmount(); }
 });
 
