@@ -279,7 +279,8 @@ test('liveHost: an exact host match is Vercel\'s line, drawn once; a sub-domain 
 
 test('the reads carry parts.lovable: Prototype / MVP\'s and the experiment record\'s', () => {
   const build = readFileSync(new URL('../src/routes/cycle_build.ts', import.meta.url), 'utf8');
-  assert.match(build, /lovable: await lovablePart\(env, p\.id, 'build', \[\{ id: p\.id, label: 'Prototype \/ MVP' \}\]\)/);
+  // D1082 (#2947) keeps this part as the key's body and adds Build in Lovable's launch beside it.
+  assert.match(build, /lovable: \{ \.\.\.\(await lovablePart\(env, p\.id, 'build', \[\{ id: p\.id, label: 'Prototype \/ MVP' \}\]\)\), launch: await prototypeLovable\(env, p, viewer\) \}/);
   const validate = readFileSync(new URL('../src/services/records/validate.ts', import.meta.url), 'utf8');
   assert.match(validate, /parts: \{ lovable: await lovableExperiments\(ctx, id\) \}/);
   assert.match(validate, /lovablePart\(ctx\.env, ctx\.projectId, 'validate'/);

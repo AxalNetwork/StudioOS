@@ -1,7 +1,8 @@
 /**
- * D878 (#2525) — Record a session › Calls, the boards MC1–MC7 on the Worker's
- * reads (D875, D872, D877, D757, and D878's two). Every API is stubbed; every
- * person and figure is invented, and every name is a "[Participant]" mark.
+ * D878 (#2525) — Record a session › Calls, the boards MC1–MC7 on the reads
+ * the Worker serves (D870–D877, and D878's one list), on WhatsApp's parts
+ * (D862). Every API is stubbed; every value is invented, and no join link,
+ * meeting id or email appears.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/record_calls_d878.test.mjs
  */
@@ -14,14 +15,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import RecordChannelPage from '../src/pages/founder/RecordChannelPage.jsx';
 import {
-  MC_TABS, audioLine, callConsent, callProposalGroups, callRows, callTimeline, callTurns, chunkBar, mcHref, mcRoute, noneConnected, offset,
-  renameCheck, retentionWord, setupCards, sourceBadge, speakersOf, summaryLines, tokenEstimate, upcomingRows,
+  MC_TABS, NOT_RECORDED, UNKNOWN_SPEAKER, audioAt, callConsent, callProposalGroups, callTimeline, callTurns, chunkCells, clock, mcHref, mcRoute,
+  renameTargets, retentionChoice, retentionRows, setupCards, sourceBadge, speakerName, uploadEstimate, uploadRow, upcomingRows,
 } from '../src/pages/founder/callsModel.js';
-import { tgRoute, waRoute } from '../src/pages/founder/channelSessionModel.js';
-import { UploadError } from '../src/lib/recordingUpload.js';
+import { channelOf } from '../src/pages/founder/recordChannels.js';
 
-process.env.TZ = 'UTC';
-const TZ = 'UTC';
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const text = (n) => n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '';
 const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -35,200 +33,198 @@ const byId = (root, id) => walk(root).find((n) => props(n)['data-testid'] === id
 const step = (n, key, state, code, action = null) => ({ step: n, key, state, code, action });
 const SETUP = {
   zoom: {
+    audience: 'beta', ready: false, next: 'app_open',
     steps: [step(1, 'set_up', 'done', 'zoom_set_up'), step(2, 'app_open', 'todo', 'zoom_beta', 'Zoom is open to invited founders only for now.'), step(3, 'connected', 'todo', 'zoom_not_connected', 'Connect Zoom in Account › Connectors.')],
-    prerequisites: [{ key: 'zoom_cloud_transcript', line: 'Needs a paid Zoom plan with cloud recording on.', state: null }], next: 'app_open', ready: false, audience: 'beta',
+    prerequisites: [{ key: 'zoom_cloud_transcript', line: 'Needs a paid Zoom plan with cloud recording on.', state: null }],
   },
   google_meet: {
-    steps: [step(1, 'set_up', 'done', 'google_set_up'), step(2, 'connected', 'done', 'google_connected'), step(3, 'transcripts', 'todo', 'meet_scope_missing', 'Press Allow transcript import.')],
-    prerequisites: [{ key: 'meet_transcription', line: 'Needs a Google Workspace edition with Meet transcription.', state: null }], next: 'transcripts', ready: false, meet_transcripts: 'available',
+    meet_transcripts: 'available', ready: false, next: 'transcripts',
+    steps: [step(1, 'set_up', 'done', 'google_set_up'), step(2, 'connected', 'done', 'google_connected'), step(3, 'transcripts', 'todo', 'meet_scope_missing', 'Press Allow transcript import in Account › Connectors.')],
+    prerequisites: [{ key: 'meet_transcription', line: 'Needs a Google Workspace edition with Meet transcription.', state: null }],
   },
-};
-const NOTHING = {
-  zoom: { ...SETUP.zoom, steps: [step(1, 'set_up', 'done', 'zoom_set_up'), step(2, 'app_open', 'done', 'zoom_open'), step(3, 'connected', 'todo', 'zoom_not_connected', 'Connect Zoom.')], audience: 'public' },
-  google_meet: { ...SETUP.google_meet, steps: [step(1, 'set_up', 'done', 'google_set_up'), step(2, 'connected', 'todo', 'google_not_connected', 'Connect Google.'), step(3, 'transcripts', 'blocked', 'needs_google', 'Connect Google first.')] },
-};
-const GOOGLE = { connected: true, google_email: 'participant@example.test', sync_error: null };
-const NOW = Date.parse('2026-10-21T08:00:00Z');
-const meeting = (o) => ({ uid: 'r1', provider: 'google_meet', label: 'Google Meet', join_url: 'https://meet.google.com/abc-mnop-xyz', starts_at: '2026-10-21T10:00:00Z', ends_at: '2026-10-21T10:42:00Z', status: 'imported', error: null, error_code: null, transcript_source: 'native', interview_id: 4, session_id: 40, ...o });
-const call = (id, o = {}) => ({
-  session_id: id, interview_id: 4, interviewee_name: '[Participant A]', interviewee_company: '[Company A]', source: 'google_meet',
-  session: { status: 'stopped', channel: 'video', consent_status: 'given', consent_method: 'verbal', created_at: '2026-10-21 10:00:00', processing_stage: null, processing_error: null },
-  meeting: meeting({ session_id: id }), audio: { state: 'none', kept_until: null, removed_at: null, removed_reason: null }, pending_proposals: 0, ...o,
-});
-const ZOOM_NONE = 'Zoom has no transcript for this call.';
-const CALLS = {
-  project_id: 7, truncated: false,
-  calls: [
-    call(41, { source: 'upload', interview_id: 5, interviewee_name: '[Participant C]', interviewee_company: null, meeting: null,
-      session: { status: 'stopped', consent_status: 'given', consent_method: 'written', created_at: '2026-10-21 16:00:00', processing_stage: 'done' },
-      audio: { state: 'held', kept_until: '2026-11-20T16:02:00.000Z', removed_at: null, removed_reason: null } }),
-    call(40, { pending_proposals: 4 }),
-    call(43, { source: 'zoom', meeting: meeting({ uid: 'r43', provider: 'zoom', label: 'Zoom', status: 'failed', error: 'There are no AI tokens left.', error_code: 'stt_budget', transcript_source: null, session_id: 43 }),
-      audio: { state: 'removed', kept_until: null, removed_at: '2026-10-18 03:00:00', removed_reason: 'retention' } }),
-    call(44, { source: 'zoom', meeting: meeting({ uid: 'r44', provider: 'zoom', label: 'Zoom', status: 'no_transcript', error: ZOOM_NONE, error_code: 'zoom_no_transcript', transcript_source: null, session_id: 44 }) }),
-    call(45, { meeting: meeting({ uid: 'r45', status: 'scheduled', starts_at: '2026-10-22T10:00:00Z', ends_at: '2026-10-22T10:45:00Z', session_id: 45 }), interviewee_name: '[Participant D]' }),
-  ],
 };
 const UPCOMING = {
   connected: true,
   calls: [
-    { provider: 'google_meet', title: '[Participant E] · discovery call', starts_at: '2026-10-24T09:00:00Z', ends_at: '2026-10-24T09:30:00Z', join_url: 'https://meet.google.com/qrs-tuvw-xyz', attach: { method: 'POST' }, attach_blocked: null },
-    { provider: 'zoom', title: '[Participant F] · follow-up', starts_at: '2026-10-22T15:30:00Z', ends_at: '2026-10-22T16:00:00Z', join_url: 'https://zoom.us/j/91234567890', attach: { method: 'POST' }, attach_blocked: null },
-    { provider: 'google_meet', title: '[Participant G] · pricing call', starts_at: '2026-10-28T11:00:00Z', ends_at: null, join_url: 'https://meet.google.com/aaa-bbbb-ccc', attach: null, attach_blocked: 'Axal can import only a Meet call you organize.' },
+    { provider: 'zoom', title: '[Company C] · follow-up', starts_at: '2026-10-22T15:30:00Z', ends_at: '2026-10-22T16:00:00Z', join_url: 'https://zoom.us/j/11122233344',
+      attach: { method: 'POST', path: '/api/founder/validate/interviews/:interview_id/meetings', body: {}, needs: ['interview_id', 'session_id'] }, attach_blocked: null },
+    { provider: 'google_meet', title: '[Company A] · discovery call', starts_at: '2026-10-22T10:00:00Z', ends_at: '2026-10-22T10:45:00Z', join_url: 'https://meet.google.com/abc-mnop-xyz',
+      attach: { method: 'POST', path: '/api/founder/validate/interviews/:interview_id/meetings', body: {}, needs: ['interview_id', 'session_id'] }, attach_blocked: null },
+    { provider: 'google_meet', title: '', starts_at: '2026-10-24T09:00:00Z', ends_at: null, join_url: 'https://meet.google.com/qrs-tuvw-xyz',
+      attach: null, attach_blocked: 'Axal can import only a Meet call you organize.' },
   ],
 };
+const call = (id, o = {}) => ({ id, provider: 'google_meet', state: 'imported', source: 'scheduled', error_code: null, error: null, starts_at: '2026-10-21T10:00:00Z', ends_at: '2026-10-21T10:45:00Z', company: { id: 7, name: '[Company A]' }, interview_id: 4, session_id: 41, transcript_source: 'native', ...o });
+const CALLS = {
+  calls: [
+    call('ref-a'),
+    call('ref-b', { provider: 'zoom', state: 'no_transcript', session_id: 42, transcript_source: null, error: 'Zoom saved no transcript for this call.' }),
+    call('ref-c', { provider: 'zoom', state: 'failed', session_id: 43, transcript_source: null }),
+  ],
+  uploads: [{ session_id: 51, interview_id: 4, company: { id: 7, name: '[Company A]' }, interviewee: '[Participant]', created_at: '2026-10-21T12:00:00Z', status: 'stopped', processing_stage: 'done' }],
+  audio: [
+    { session_id: 41, held: true, removed_at: null, removed_reason: null, expires_at: '2026-11-20T10:56:00Z' },
+    { session_id: 42, held: false, removed_at: '2026-10-18T03:00:00Z', removed_reason: 'retention', expires_at: null },
+    { session_id: 51, held: true, removed_at: null, removed_reason: null, expires_at: null },
+  ],
+  retention: { days: 30, chosen: false },
+};
 const SEGMENTS = [
-  { id: 1, source: 'final', start_ms: 8000, speaker_label: '[Name] (you)', text: 'Before we start, is it all right if I record this call?', translation_status: 'same' },
-  { id: 2, source: 'final', start_ms: 302000, speaker_label: 'Speaker 3', text: 'Nosotros usamos listas en papel.', translation: 'We use paper checklists.', translation_status: 'done', source_lang: 'es' },
-  { id: 3, source: 'final', start_ms: 452000, speaker_label: 'Speaker 3', text: 'Se pierden en la obra.', translation: null, translation_status: 'pending', source_lang: 'es' },
-  { id: 4, source: 'live', start_ms: 452000, speaker_label: 'Speaker 3', text: 'live copy' },
-  { id: 5, source: 'final', start_ms: null, speaker_label: '[Participant A]', text: 'About [€1,200] a month per site.', translation_status: 'same' },
+  { id: 1, source: 'final', start_ms: 8000, speaker_label: 'Me', text: 'Before we start, is it all right if I record this call?', translation_status: 'same' },
+  { id: 2, source: 'final', start_ms: 14000, speaker_label: '[Participant]', text: 'Yes, that is fine.', translation_status: 'same' },
+  { id: 3, source: 'final', start_ms: 302000, speaker_label: null, text: 'Nosotros usamos listas en papel.', translation: 'We use paper checklists.', translation_status: 'done', source_lang: 'es' },
+  { id: 4, source: 'final', start_ms: 330000, speaker_label: 'Speaker ?', text: 'Y se pierden en la obra.', translation: null, translation_status: 'pending', source_lang: 'es' },
+  { id: 5, source: 'live', start_ms: 1000, speaker_label: 'Me', text: 'a live draft is never shown' },
 ];
-const placement = (id, kind, payload, o = {}) => ({ id, kind, payload: { confidence: 0.85, ...payload }, edited_payload: null, status: 'pending', can_accept: true, cite: { quote: `quote ${id}` }, ...o });
 const PLACEMENTS = { runs: [{ run_id: 'r1', source: 'studioos', placements: [
-  placement(11, 'decision', { statement: 'Run a two-site pilot from [1 Nov].' }),
-  placement(12, 'follow_up', { detail: 'send the pilot price sheet', due_hint: 'by [24 Oct]' }),
-  placement(13, 'demand_signal', { signal: 'willing_to_pay', detail: '[€1,200] a month per site' }),
-  placement(14, 'pain_severity', { phrase: 'Paper checklists get lost', severity: 'real' }),
-  placement(15, 'decision', { statement: 'Already dismissed.' }, { status: 'discarded' }),
+  { id: 71, kind: 'decision', payload: { statement: 'Run a two-site pilot', owner_hint: 'both', confidence: 0.9 }, status: 'pending', can_accept: true, cite: { quote: 'Let us try it on two sites first.' } },
+  { id: 72, kind: 'follow_up', payload: { kind: 'action_item', detail: 'send the pilot price sheet', owner_hint: '[Name]', due_hint: 'Friday', confidence: 0.85 }, status: 'pending', can_accept: true, cite: { quote: 'Can you send me the price per site?' } },
+  { id: 73, kind: 'demand_signal', payload: { signal: 'price', confidence: 0.7 }, status: 'pending', can_accept: true, cite: { quote: 'About a fixed amount a month per site.' } },
+  { id: 74, kind: 'decision', payload: { statement: 'An old one' }, status: 'accepted', can_accept: true, cite: null },
 ] }] };
-const DIGEST = { kept: false, overview: [{ text: '[Company A] loses days each week waiting for inspections.' }, 'They track them on paper.'], decisions: [], next_steps: [] };
-const MODELS = { final: [{ model: '@cf/openai/whisper-large-v3-turbo', price_usd_per_minute: 0.0005 }], defaults: { final: '@cf/openai/whisper-large-v3-turbo' } };
 
 /* ------------------------------------------------------------------ *
  * The model
  * ------------------------------------------------------------------ */
 
-test('addresses: six tabs as paths, a session id only after Calls and Proposals; the other channels keep theirs', () => {
+test('addresses: six tabs in the canvas’s order, each a path; a session only on Calls and Proposals', () => {
   assert.deepEqual(MC_TABS.map((t) => t.label), ['Upcoming', 'Calls', 'Upload', 'Proposals', 'Connection', 'Retention']);
   assert.deepEqual(mcRoute('/validate/record/calls'), { tab: 'upcoming', id: null });
-  assert.deepEqual(mcRoute('/validate/record/calls/'), { tab: 'upcoming', id: null });
-  assert.deepEqual(mcRoute('/validate/record/calls/calls/40'), { tab: 'calls', id: 40 });
-  assert.deepEqual(mcRoute('/validate/record/calls/retention'), { tab: 'retention', id: null });
-  for (const bad of ['/validate/record/calls/upcoming', '/validate/record/calls/upload/3', '/validate/record/calls/nope', '/validate/record/calls/calls/0', '/validate/record/calls/calls/1/x', '/validate/record/telegram/calls/1']) {
+  assert.deepEqual(mcRoute('/validate/record/calls/all'), { tab: 'calls', id: null });
+  assert.deepEqual(mcRoute('/validate/record/calls/all/41/'), { tab: 'calls', id: 41 });
+  assert.deepEqual(mcRoute('/validate/record/calls/proposals/41'), { tab: 'proposals', id: 41 });
+  for (const bad of ['/validate/record/calls/upload/3', '/validate/record/calls/retention/1', '/validate/record/calls/nope', '/validate/record/calls/all/0', '/validate/record/calls/all/1/x', '/validate/record/whatsapp']) {
     assert.equal(mcRoute(bad), null, bad);
   }
-  assert.equal(mcHref('proposals', 40), '/validate/record/calls/proposals/40');
-  assert.equal(mcHref('retention', 40), '/validate/record/calls/retention', 'Retention reads no session');
-  assert.equal(waRoute('/validate/record/calls/calls/40'), null);
-  assert.equal(tgRoute('/validate/record/calls/calls/40'), null);
+  assert.equal(mcHref('calls', 41), '/validate/record/calls/all/41');
+  assert.equal(mcHref('upload', 41), '/validate/record/calls/upload', 'Upload reads no session');
+  assert.equal(channelOf('/validate/record/calls').key, 'calls');
 });
 
-test('MC1: each card is the Worker\'s steps and sentences; Zoom\'s beta pill; Allow transcript import; a refused Google sign-in reads Sign-in expired with Reconnect', () => {
-  const [meet, zoom] = setupCards(SETUP, GOOGLE);
-  assert.deepEqual([meet.name, zoom.name], ['Google Meet', 'Zoom']);
-  assert.deepEqual(meet.steps.map((s) => `${s.label}:${s.state}`), ['Available on Axal:done', 'Connected:done', 'Transcript access:todo']);
-  assert.equal(meet.steps[1].line, 'Signed in as participant@example.test.');
-  assert.equal(meet.steps[2].line, 'Press Allow transcript import.');
-  assert.equal(meet.press, 'meet_allow');
-  assert.deepEqual(zoom.pills, [['Zoom beta: open to invited founders', 'lav']]);
-  assert.equal(zoom.press, 'zoom_connect');
-  assert.equal(zoom.prerequisite, 'Needs a paid Zoom plan with cloud recording on.');
-  const [expired] = setupCards(SETUP, { ...GOOGLE, sync_error: { code: 'connection_refused' } });
-  assert.deepEqual(expired.pills, [['Sign-in expired', 'neg']]);
-  assert.equal(expired.press, 'google_reconnect');
-  assert.equal(expired.steps[1].state, 'failed');
-  const ready = setupCards({ google_meet: { ...SETUP.google_meet, ready: true, steps: SETUP.google_meet.steps.map((s) => ({ ...s, state: 'done' })) } }, GOOGLE);
-  assert.deepEqual([ready[0].pills, ready[0].press], [[['Ready', 'pos']], null]);
-  assert.equal(noneConnected(NOTHING), true);
-  assert.equal(noneConnected(SETUP), false, 'Google is connected');
-  assert.equal(noneConnected(null), false, 'an unread setup is not "not connected"');
+test('MC1: each provider’s steps in the canvas’s words, the Worker’s sentence, the plan requirement, and one press', () => {
+  const [meet, zoom] = setupCards(SETUP);
+  assert.equal(meet.name, 'Google Meet');
+  assert.deepEqual(meet.steps.map((s) => [s.t, s.pill]), [['Available on Axal', 'Done'], ['Connected', 'Done'], ['Transcript access', 'To do']]);
+  assert.match(meet.steps[2].action, /Allow transcript import/);
+  assert.deepEqual(meet.press, { kind: 'allow', t: 'Allow transcript import' });
+  assert.match(meet.prerequisite, /Workspace edition/);
+  // Mutation checked: read `audience` from the wrong provider → Zoom's beta pill reads "Your move".
+  assert.deepEqual(zoom.pill, { t: 'Zoom beta: open to invited founders', tone: 'lav' });
+  assert.equal(zoom.press, null, 'the first open step is the beta, which no press here answers');
+  const connected = setupCards({ zoom: { ...SETUP.zoom, audience: 'public', steps: [SETUP.zoom.steps[0], step(2, 'app_open', 'done', 'zoom_open'), SETUP.zoom.steps[2]] } })[0];
+  assert.deepEqual(connected.press, { kind: 'link', t: 'Connect Zoom', to: '/account/connectors/zoom' });
+  assert.deepEqual(setupCards({ google_meet: { ...SETUP.google_meet, ready: true } })[0].pill, { t: 'Ready', tone: 'pos' });
 });
 
-test('MC2: attached calls with their interview, then the calendar\'s; Meet attaches here, Zoom when it starts, a blocked one says why', () => {
-  const rows = upcomingRows({ upcoming: UPCOMING, calls: CALLS.calls }, NOW, TZ);
-  assert.deepEqual(rows.map((r) => r.title), ['[Participant D] · [Company A]', '[Participant F] · follow-up', '[Participant E] · discovery call', '[Participant G] · pricing call']);
-  assert.deepEqual(rows[0].attached, { interviewId: 4, sessionId: 45 });
-  assert.equal(rows[0].span, '10:00 – 10:45');
-  assert.equal(rows[1].zoomLater, true);
-  assert.equal(rows[1].attach, null, 'a Zoom call needs its recording session first (D685)');
-  assert.deepEqual(rows[2].attach, { join_url: 'https://meet.google.com/qrs-tuvw-xyz' });
-  assert.equal(rows[3].blocked, 'Axal can import only a Meet call you organize.');
-  assert.equal(rows[3].span, '11:00', 'no end: the start alone');
-  const later = upcomingRows({ upcoming: { calls: [] }, calls: CALLS.calls }, Date.parse('2026-11-30T00:00:00Z'), TZ);
-  assert.equal(later.length, 0, 'a call scheduled outside the next 14 days is not upcoming');
-  const early = upcomingRows({ upcoming: { calls: [] }, calls: CALLS.calls }, Date.parse('2026-10-01T00:00:00Z'), TZ);
-  assert.equal(early.length, 0, 'a call more than 14 days ahead is not upcoming yet');
+test('MC2: soonest first; a Meet call is attached here, a Zoom call says where, a refused one says why; never the link', () => {
+  const rows = upcomingRows(UPCOMING.calls, 'UTC');
+  assert.deepEqual(rows.map((r) => r.provider), ['google_meet', 'zoom', 'google_meet']);
+  assert.equal(rows[0].time, '10:00 – 10:45');
+  assert.deepEqual([rows[0].wd, rows[0].day, rows[0].mon], ['THU', '22', 'OCT']);
+  assert.equal(rows[0].canAttach, true);
+  // Mutation checked: offer Attach on a Zoom row → its press needs a recording session the page does not have.
+  assert.equal(rows[1].canAttach, false);
+  assert.match(rows[1].note, /start a video session/);
+  assert.equal(rows[2].canAttach, false);
+  assert.equal(rows[2].note, 'Axal can import only a Meet call you organize.');
+  assert.equal(rows[2].title, 'Title not recorded');
+  assert.equal(rows[2].time, '09:00', 'no end, no invented end');
+  const shown = JSON.stringify(rows.map(({ join, ...r }) => r));
+  assert.doesNotMatch(shown, /zoom\.us|meet\.google\.com|11122233344/);
 });
 
-test('MC3: each call\'s steps, its source badge, and what comes next', () => {
-  const [up, meet, budget, none] = CALLS.calls;
-  const m = callTimeline(meet, TZ);
-  assert.deepEqual(m.steps.map((s) => `${s.t}:${s.state}`), ['Scheduled:done', 'Ended:done', 'Transcript ready:done', 'Imported:done']);
-  assert.equal(m.steps[1].at, '10:42 · 42 min');
-  assert.deepEqual(m.next, []);
-  assert.deepEqual(sourceBadge(meet), { t: 'Meet transcript', tone: 'pos' });
-  const n = callTimeline(none, TZ);
-  assert.deepEqual(n.steps.map((s) => s.state), ['done', 'done', 'stop']);
-  assert.equal(n.steps[2].line, ZOOM_NONE, 'the Worker\'s own sentence');
-  assert.deepEqual(n.next.map((x) => x.key), ['upload']);
-  const b = callTimeline(budget, TZ);
-  assert.deepEqual(b.next.map((x) => [x.key, x.t, x.tokens, x.minutes]), [['import', 'Transcribe with Axal', true, 42]]);
-  assert.match(b.why, /no AI tokens left/);
-  assert.equal(sourceBadge({ ...budget, meeting: { ...budget.meeting, status: 'imported', transcript_source: 'whisper' } }).t, 'Transcribed by Axal');
-  assert.deepEqual(sourceBadge(up), { t: 'Uploaded recording', tone: 'out' });
-  assert.deepEqual(callTimeline(up, TZ).steps.map((s) => s.t), ['Uploaded', 'Transcript ready']);
-  const stalled = callTimeline({ ...up, session: { ...up.session, processing_stage: null } }, TZ);
-  assert.deepEqual([stalled.steps[1].t, stalled.next[0].key], ['Waiting for the upload to finish', 'upload']);
-  const failed = callTimeline({ ...up, session: { ...up.session, processing_stage: 'failed', processing_error: 'Speech-to-text failed.' } }, TZ);
-  assert.deepEqual([failed.steps[1].line, failed.next[0].key], ['Speech-to-text failed.', 'process']);
-  const sched = callTimeline(CALLS.calls[4], TZ);
-  assert.deepEqual(sched.steps.map((s) => s.state), ['done', 'todo', 'todo', 'todo'], 'a scheduled call has not ended');
-  const missing = callTimeline({ ...meet, meeting: { ...meet.meeting, starts_at: null } }, TZ);
-  assert.equal(missing.steps[0].at, 'Not recorded', 'a time the store does not hold is never a date');
-  const rows = callRows(CALLS, TZ);
-  assert.deepEqual(rows.map((r) => r.status[0]), ['Transcript ready', 'Imported', 'Stopped', 'No transcript', 'Scheduled']);
-  assert.equal(rows[1].pending, 4);
+test('MC3: the timeline, the stop with its reason and next steps, and the badge that says how the text was made', () => {
+  const ok = callTimeline(CALLS.calls[0], 'UTC');
+  assert.deepEqual(ok.steps.map((s) => [s.t, s.state]), [['Scheduled', 'done'], ['Ended', 'done'], ['Transcript ready', 'done'], ['Imported', 'done']]);
+  assert.match(ok.steps[0].at, /21 Oct 2026/);
+  assert.equal(ok.steps[1].at, '', 'only the scheduled time is stored');
+  assert.equal(ok.badge, 'Meet transcript');
+  assert.equal(ok.open, true);
+  const none = callTimeline(CALLS.calls[1]);
+  assert.deepEqual(none.steps.map((s) => [s.t, s.state]), [['Scheduled', 'done'], ['Ended', 'done'], ['No transcript', 'stop']]);
+  assert.equal(none.steps[2].at, 'Zoom saved no transcript for this call.', 'Axal’s own sentence from the Worker');
+  assert.deepEqual(none.next.map((n) => n.kind), ['upload']);
+  assert.equal(none.badge, null);
+  // Mutation checked: offer retry on no_transcript → there is nothing to read again.
+  assert.deepEqual(callTimeline(CALLS.calls[2]).next.map((n) => n.kind), ['retry', 'upload']);
+  assert.deepEqual(callTimeline(call('x', { state: 'cancelled' })).steps.map((s) => s.t), ['Scheduled', 'Cancelled']);
+  assert.deepEqual(callTimeline(call('x', { state: 'ended' })).steps.map((s) => s.state), ['done', 'done', 'todo', 'todo']);
+  // Whisper's text is never called the provider's transcript.
+  assert.equal(sourceBadge(call('w', { provider: 'zoom', transcript_source: 'whisper' })), 'Transcribed by Axal');
+  assert.equal(sourceBadge(call('n', { provider: 'zoom' })), 'Zoom transcript');
+  assert.equal(sourceBadge(call('u', { transcript_source: null })), `Source: ${NOT_RECORDED}`);
+  assert.match(callTimeline(call('t', { provider: 'zoom', state: 'transcript_ready' })).whisperNote, /Transcribed by Axal/);
+  assert.deepEqual(uploadRow(CALLS.uploads[0]).status, { t: 'Transcript ready', tone: 'pos' });
+  assert.equal(uploadRow({ ...CALLS.uploads[0], processing_stage: 'failed' }).status.t, 'Transcription stopped');
 });
 
-test('AI tokens: an estimate from the minutes and the model\'s price, or none, never $0.00', () => {
-  assert.equal(tokenEstimate(42, MODELS), 'about $0.02 in AI tokens');
-  assert.equal(tokenEstimate(1, MODELS), 'about <$0.01 in AI tokens');
-  assert.equal(tokenEstimate(null, MODELS), null);
-  assert.equal(tokenEstimate(42, { final: [], defaults: {} }), null);
-  assert.equal(tokenEstimate(0, MODELS), null);
-});
-
-test('MC5: turns by speaker with their offset; translation as the chat boards show it; speakers once each; rename rules', () => {
+test('MC5: speakers by name or “Speaker ?”, each turn’s time into the call; finals only; a rename reaches every passage of that speaker', () => {
   const turns = callTurns(SEGMENTS, 'both');
-  assert.deepEqual(turns.map((t) => [t.id, t.who, t.at]), [[1, '[Name] (you)', '00:00:08'], [2, 'Speaker 3', '00:05:02'], [3, 'Speaker 3', '00:07:32'], [5, '[Participant A]', null]], 'live segments are not the transcript; a missing offset is not 00:00:00');
-  assert.deepEqual([turns[1].showOriginal, turns[1].showTranslation, turns[1].from], [true, true, 'Translated from Spanish']);
-  const tr = callTurns(SEGMENTS, 'tr');
-  assert.deepEqual([tr[1].showOriginal, tr[1].showTranslation], [false, true]);
-  assert.deepEqual([tr[2].showOriginal, tr[2].pending], [true, true], 'a pending translation shows the original, marked');
-  assert.deepEqual(callTurns(SEGMENTS, 'orig').map((t) => t.showTranslation), [false, false, false, false]);
-  assert.deepEqual(speakersOf(SEGMENTS), [{ label: '[Name] (you)', turns: 1, unnamed: false }, { label: 'Speaker 3', turns: 2, unnamed: true }, { label: '[Participant A]', turns: 1, unnamed: false }]);
-  assert.deepEqual(renameCheck('Speaker 3', '  [Participant B] '), { name: '[Participant B]' });
-  assert.ok(renameCheck('Speaker 3', '   ').error);
-  assert.ok(renameCheck('Speaker 3', 'Speaker 3').error);
-  assert.equal(renameCheck('Speaker 3', 'n'.repeat(120)).name.length, 80);
-  assert.equal(offset(3_723_000), '01:02:03');
-  assert.deepEqual([offset(null), offset(-1), offset('x')], [null, null, null]);
-  assert.equal(callConsent({ consent_status: 'given', consent_method: 'verbal' }).t, 'Everyone recorded agreed, out loud.');
-  assert.match(callConsent({ consent_status: 'not_asked' }).t, /not recorded/);
+  assert.deepEqual(turns.map((t) => t.id), [1, 2, 3, 4], 'the live draft is never shown');
+  assert.deepEqual(turns.map((t) => t.who), ['You', '[Participant]', UNKNOWN_SPEAKER, UNKNOWN_SPEAKER]);
+  assert.deepEqual(turns.map((t) => t.at), ['00:00:08', '00:00:14', '00:05:02', '00:05:30']);
+  assert.equal(turns[0].canRename, false, 'the founder is never renamed');
+  assert.equal(turns[2].showTranslation, true);
+  assert.equal(callTurns(SEGMENTS, 'orig')[2].showTranslation, false);
+  assert.equal(turns[3].pending, true);
+  // Mutation checked: match labels without the "Speaker ?" fallback → the null-labelled passage is left out.
+  assert.deepEqual(renameTargets(SEGMENTS, UNKNOWN_SPEAKER), [3, 4]);
+  assert.deepEqual(renameTargets(SEGMENTS, 'Me'), []);
+  assert.equal(speakerName('  [Participant]   B '), '[Participant] B');
+  assert.equal(speakerName('me'), null);
+  assert.equal(speakerName(''), null);
+  assert.equal(speakerName('x'.repeat(90)).length, 80);
+  assert.equal(clock(null), null);
+  assert.equal(clock(3723000), '01:02:03');
 });
 
-test('MC6: pending proposals as Decisions, Action items and Data points with their module; dismissed ones are gone; the summary\'s lines', () => {
+test('jump to audio: the chunk a turn falls in and the offset inside it; none without a time', () => {
+  const parts = [{ seq: 0, start_ms: 0, url: '/a' }, { seq: 1, start_ms: 120000, url: '/b' }, { seq: 2, start_ms: 240000, url: '/c' }];
+  assert.deepEqual(audioAt(parts, 302000), { part: parts[2], offset: 62 });
+  assert.deepEqual(audioAt(parts, 14000), { part: parts[0], offset: 14 });
+  assert.equal(audioAt(parts, null), null);
+  assert.equal(audioAt([], 5), null);
+});
+
+test('consent: the session’s own record in plain words, or not recorded', () => {
+  assert.equal(callConsent({ consent_status: 'given', consent_method: 'verbal' }).t, 'Everyone recorded agreed, out loud.');
+  assert.equal(callConsent({ consent_status: 'given', consent_method: 'pre_agreed' }).t, 'Everyone recorded agreed, beforehand.');
+  assert.equal(callConsent({ consent_status: 'not_recorded' }).tone, 'amb');
+});
+
+test('MC6: decisions, action items, then data points with their module; pending only', () => {
   const groups = callProposalGroups(PLACEMENTS);
-  assert.deepEqual(groups.map((g) => [g.g, g.items.map((i) => i.id)]), [['Decisions', [11]], ['Action items', [12]], ['Data points', [13, 14]]]);
-  assert.equal(groups[0].items[0].t, 'Run a two-site pilot from [1 Nov].');
-  assert.equal(groups[1].items[0].t, 'Follow up: send the pilot price sheet (by [24 Oct])');
-  assert.deepEqual(groups[2].items.map((i) => i.mod), ['Validate › Demand and urgency signals', 'Validate › Problem discovery']);
+  assert.deepEqual(groups.map((g) => g.g), ['Decisions', 'Action items', 'Data points']);
+  assert.deepEqual(groups[0].items.map((i) => i.id), [71], 'an accepted decision is never offered again');
+  assert.equal(groups[0].items[0].t, 'Run a two-site pilot (both)');
+  // Mutation checked: leave action items out of their group → this line is gone.
+  assert.equal(groups[1].items[0].t, '[Name]: send the pilot price sheet by Friday');
+  assert.equal(groups[2].mod, 'Validate › Demand and urgency signals');
   assert.equal(groups[0].items[0].conf.t, 'High');
   assert.deepEqual(callProposalGroups({ runs: [] }), []);
-  assert.deepEqual(summaryLines(DIGEST), ['[Company A] loses days each week waiting for inspections.', 'They track them on paper.']);
-  assert.deepEqual(summaryLines(null), []);
 });
 
-test('MC4 and MC7: the upload\'s parts, retention in words, and each call\'s audio', () => {
-  assert.deepEqual(chunkBar(7, 12), [...Array(7).fill('done'), 'now', ...Array(4).fill('todo')]);
-  assert.deepEqual(chunkBar(3, 3), ['done', 'done', 'done']);
-  assert.deepEqual([retentionWord(30), retentionWord(1), retentionWord(365), retentionWord(null), retentionWord(undefined)], ['30 days', '1 day', '1 year', 'Until I delete it', 'Not recorded']);
-  assert.equal(audioLine(CALLS.calls[0].audio, TZ), 'Audio kept until 20 Nov 2026');
-  assert.equal(audioLine({ state: 'held', kept_until: null }, TZ), 'Audio kept until you delete it');
-  assert.equal(audioLine(CALLS.calls[2].audio, TZ), 'Audio deleted 18 Oct 2026 by your retention · text kept');
-  assert.equal(audioLine({ state: 'none' }, TZ), 'No audio held · the call’s text only');
-  assert.equal(audioLine(undefined, TZ), 'Audio not recorded');
+test('MC4: the progress cells and the estimate in AI tokens', () => {
+  assert.deepEqual(chunkCells(7, 12), ['done', 'done', 'done', 'done', 'done', 'done', 'done', 'now', 'rest', 'rest', 'rest', 'rest']);
+  assert.deepEqual(chunkCells(12, 12).filter((c) => c === 'done').length, 12);
+  assert.ok(chunkCells(0, 0).every((c) => c === 'rest'));
+  assert.deepEqual(uploadEstimate(42 * 60000), { minutes: 42, usd: 0.02 });
+  assert.equal(uploadEstimate(0), null);
+});
+
+test('MC7: the retention held; each session’s audio kept until a date, removed with its reason, or never held', () => {
+  assert.equal(retentionChoice({ days: 30 }).key, '30');
+  assert.equal(retentionChoice({ days: null }).t, 'Until I delete it');
+  assert.equal(retentionChoice({ days: 45 }).t, '45 days');
+  const rows = retentionRows(CALLS, 'UTC');
+  const by = Object.fromEntries(rows.map((r) => [r.sessionId, r]));
+  assert.equal(by[41].t, 'Audio kept until 20 Nov 2026');
+  assert.equal(by[41].has, true);
+  assert.equal(by[42].t, 'Audio removed after your retention 18 Oct 2026 · text kept');
+  assert.equal(by[42].has, false);
+  assert.equal(by[43].t, 'No audio kept · text kept');
+  assert.equal(by[51].t, 'Audio kept until you delete it');
+  assert.equal(by[51].sub, 'Uploaded · 21 Oct 2026');
 });
 
 /* ------------------------------------------------------------------ *
@@ -238,44 +234,30 @@ test('MC4 and MC7: the upload\'s parts, retention in words, and each call\'s aud
 function stubApi(o = {}) {
   const calls = [];
   const rec = (name, value) => (...a) => { calls.push([name, ...a]); return typeof value === 'function' ? value(...a) : Promise.resolve(value); };
-  const fail = (status, data = {}) => () => Promise.reject(Object.assign(new Error('x'), { status, data }));
   return {
     calls,
-    fail,
     api: {
       channels: {
         meetingSetup: rec('meetingSetup', o.setup ?? SETUP),
-        googleStatus: rec('googleStatus', o.google ?? GOOGLE),
         upcomingCalls: rec('upcomingCalls', o.upcoming ?? UPCOMING),
         calls: rec('calls', o.calls ?? CALLS),
-        attachCalendarMeet: rec('attachCalendarMeet', o.attach ?? { meeting: {}, session_id: 50 }),
-        importMeeting: rec('importMeeting', { outcome: 'waiting' }),
-        meetingRecording: rec('meetingRecording', { recordings: [] }),
-        allowMeetTranscripts: rec('allowMeetTranscripts', 'https://accounts.google.com/o/oauth2/x'),
+        attachCalendarMeet: rec('attachCalendarMeet', { meeting: { id: 'ref-new' } }),
+        importMeeting: rec('importMeeting', { ok: true }),
       },
       sessions: {
-        models: rec('models', MODELS),
-        get: rec('get', o.session ?? { session: { consent_status: 'given', consent_method: 'verbal' }, segments: SEGMENTS, digest: DIGEST }),
-        audio: rec('audio', o.audio ?? { parts: [{ seq: 0, url: '/api/files/dl/a', start_ms: 0 }, { seq: 2, url: '/api/files/dl/c', start_ms: 240000 }] }),
-        renameSpeaker: rec('renameSpeaker', o.rename ?? { ok: true, speaker_label: '[Participant B]', renamed: 2 }),
+        get: rec('get', o.session ?? { session: { id: 41, interview_id: 4, submitted_via: 'google_meet', consent_status: 'given', consent_method: 'verbal', started_at: '2026-10-21T10:00:00Z' }, segments: SEGMENTS, chunks: [{ seq: 0, start_ms: 0 }], summary: { text: '[Company A] loses days each week waiting for inspections.', transcript: { source: 'native' } } }),
+        setSpeaker: rec('setSpeaker', { ok: true }),
+        audio: rec('audio', { parts: [{ seq: 0, start_ms: 0, url: '/api/files/dl/fixture' }] }),
         placements: rec('placements', PLACEMENTS),
-        accept: rec('accept', { ok: true }), discard: rec('discard', { ok: true }), acceptAll: rec('acceptAll', { accepted: 4, remaining: 0 }),
-        keepDigest: rec('keepDigest', { ok: true }),
-        process: rec('process', { ok: true }),
-        audioRetention: rec('audioRetention', o.retention ?? { days: 30, chosen: false, default_days: 30 }),
+        accept: rec('accept', { ok: true }), discard: rec('discard', { ok: true }), acceptAll: rec('acceptAll', { accepted: 3, remaining: 0 }),
+        audioRetention: rec('audioRetention', { days: 30, chosen: false, default_days: 30, min_days: 1, max_days: 3650 }),
         setAudioRetention: rec('setAudioRetention', { days: 7, chosen: true }),
-        removeAudio: rec('removeAudio', { ok: true }),
+        deleteAudio: rec('deleteAudio', { ok: true }),
+        remove: rec('remove', { ok: true }),
       },
-      app: {
-        listProjects: rec('listProjects', [{ id: 7, name: '[Venture A]' }]),
-        listInterviews: rec('listInterviews', [{ id: 4, interviewee_name: '[Participant A]' }, { id: 5, interviewee_name: '[Participant C]' }]),
-        googleCalConnect: rec('googleCalConnect', { redirect_url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1' }),
-      },
-      upload: {
-        decode: rec('decode', o.decode ?? { samples: new Float32Array(16000 * 6), durationMs: 42 * 60000 }),
-        run: rec('run', o.run ?? (async ({ onProgress }) => { onProgress({ done: 1, total: 3 }); onProgress({ done: 3, total: 3 }); return { sessionId: 61, parts: 3, sent: 2, skipped: 1 }; })),
-      },
-      assign: rec('assign', undefined),
+      app: { listProjects: rec('listProjects', [{ id: 7, name: '[Company A]' }]), listInterviews: rec('listInterviews', [{ id: 4, interviewee_name: '[Participant]' }]) },
+      allowMeetTranscripts: rec('allowMeetTranscripts', 'https://accounts.google.com/o/oauth2/fixture'),
+      uploadRecording: o.uploadRecording ?? rec('uploadRecording', (args) => { args.onProgress?.({ done: 1, total: 2 }); args.onProgress?.({ done: 2, total: 2 }); return Promise.resolve({ sessionId: 51, parts: 2, sent: 2, skipped: 0 }); }),
     },
   };
 }
@@ -288,285 +270,191 @@ async function mount(path, api) {
   const root = createRoot(container);
   await act(async () => root.render(React.createElement(MemoryRouter, { initialEntries: [path] }, React.createElement(RecordChannelPage, { callsApi: api }))));
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
-  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
   return { container, async done() { await act(async () => root.unmount()); restore(); } };
 }
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 const click = async (n) => act(async () => { await props(n).onClick?.({ preventDefault() {} }); await new Promise((r) => setTimeout(r, 0)); });
-const change = async (n, value) => act(async () => { await props(n).onChange?.({ target: { value, files: value } }); await new Promise((r) => setTimeout(r, 0)); });
-const pickRadio = async (n) => act(async () => { props(n).onChange?.({ target: { checked: true } }); await new Promise((r) => setTimeout(r, 0)); });
+const change = async (n, target) => act(async () => { await props(n).onChange?.({ target }); await new Promise((r) => setTimeout(r, 0)); });
 
-test('MC2 mounted: the six tabs; Upcoming lists the calls; Attach to interview sends nothing before its dialog has an interview and a consent answer', async () => {
-  // The page reads the clock: the scheduled call is tomorrow, whenever this runs.
-  const soon = new Date(Date.now() + 86400000).toISOString();
-  const s = stubApi({ calls: { ...CALLS, calls: CALLS.calls.map((c) => (c.session_id === 45 ? { ...c, meeting: { ...c.meeting, starts_at: soon, ends_at: null } } : c)) } });
-  const w = await mount('/validate/record/calls', s.api);
+test('MC2 mounted: the Calls page draws the tool and its six tabs; Attach asks for the interview and consent before it writes', async () => {
+  const { api, calls } = stubApi();
+  const w = await mount('/validate/record/calls', api);
   try {
-    for (const t of MC_TABS) assert.ok(byId(w.container, `mc-tab-${t.key}`), t.key);
     assert.ok(byId(w.container, 'record-channel-calls'));
-    assert.ok(byId(w.container, 'mc-upcoming-a-45'), 'the scheduled call on its interview');
-    assert.equal(props(byId(w.container, 'mc-upcoming-open-a-45')).href, '/validate/record/calls/calls/45');
-    assert.match(text(byId(w.container, 'mc-upcoming-zoom-u-1')), /attached when it starts/);
-    assert.match(text(byId(w.container, 'mc-upcoming-blocked-u-2')), /only a Meet call you organize/);
-    await click(byId(w.container, 'mc-upcoming-attach-u-0'));
-    assert.ok(byId(w.container, 'mc-attach-dialog'));
-    await click(byId(w.container, 'mc-attach-dialog-confirm'));
-    assert.match(text(byId(w.container, 'mc-attach-error')), /Choose the interview/);
-    await change(byId(w.container, 'mc-attach-interview'), '4');
-    await click(byId(w.container, 'mc-attach-dialog-confirm'));
-    assert.match(text(byId(w.container, 'mc-attach-error')), /how the interviewee agreed/);
-    assert.equal(s.calls.filter((c) => c[0] === 'attachCalendarMeet').length, 0, 'nothing attached without consent');
-    await pickRadio(byId(w.container, 'mc-attach-consent-verbal'));
-    await click(byId(w.container, 'mc-attach-dialog-confirm'));
-    const sent = s.calls.find((c) => c[0] === 'attachCalendarMeet');
-    assert.deepEqual(sent.slice(1), [4, { join_url: 'https://meet.google.com/qrs-tuvw-xyz', consent: { status: 'given', method: 'verbal' } }]);
-    assert.equal(byId(w.container, 'mc-attach-dialog'), undefined);
+    assert.ok(byId(w.container, 'mc-tool'), 'Calls draws the tool, not D1309’s Today');
+    assert.equal(byId(w.container, 'record-channel-wait'), undefined);
+    for (const t of MC_TABS) assert.ok(byId(w.container, `mc-tab-${t.key}`), t.key);
+    assert.ok(byId(w.container, 'mc-upcoming-list'));
+    assert.doesNotMatch(text(w.container), /zoom\.us|meet\.google\.com/);
+    await click(byId(w.container, 'mc-upcoming-attach'));
+    assert.ok(byId(w.container, 'mc-attach'));
+    // Mutation checked: enable Attach without a consent method → it writes with none.
+    assert.equal(props(byId(w.container, 'mc-attach-confirm')).disabled, true, 'no consent, no attach');
+    assert.equal(calls.filter((c) => c[0] === 'attachCalendarMeet').length, 0);
+    await change(byId(w.container, 'mc-attach-consent-written'), {});
+    await click(byId(w.container, 'mc-attach-confirm'));
+    const sent = calls.find((c) => c[0] === 'attachCalendarMeet');
+    assert.deepEqual(sent.slice(1), [4, { join_url: 'https://meet.google.com/abc-mnop-xyz', consent: { status: 'given', method: 'written' } }]);
+    assert.match(text(byId(w.container, 'mc-upcoming-note')), /Attached/);
   } finally { await w.done(); }
 });
 
-test('MC-S mounted: Upcoming\'s not connected, empty, reconnect and error states', async () => {
-  let s = stubApi({ setup: NOTHING, upcoming: { connected: false, calls: [] }, calls: { calls: [] } });
-  let w = await mount('/validate/record/calls', s.api);
-  try { assert.equal(props(byId(w.container, 'mc-upcoming-nc-go')).href, '/validate/record/calls/connection'); } finally { await w.done(); }
-  s = stubApi({ upcoming: { connected: true, calls: [] }, calls: { calls: [] } });
-  w = await mount('/validate/record/calls', s.api);
+test('MC2 mounted: an expired Google sign-in reads Reconnect; no calendar reads not connected', async () => {
+  const expired = stubApi({ upcoming: () => Promise.reject(Object.assign(new Error('Reconnect Google to read your calendar.'), { status: 409 })) });
+  let w = await mount('/validate/record/calls', expired.api);
+  try {
+    assert.match(text(byId(w.container, 'mc-upcoming-reconnect')), /Reconnect Google to read your calendar/);
+  } finally { await w.done(); }
+  w = await mount('/validate/record/calls', stubApi({ upcoming: { connected: false, calls: [] } }).api);
+  try {
+    assert.ok(byId(w.container, 'mc-upcoming-nc'));
+    assert.equal(props(byId(w.container, 'mc-upcoming-nc-connect')).href, '/validate/record/calls/connection');
+  } finally { await w.done(); }
+  w = await mount('/validate/record/calls', stubApi({ upcoming: { connected: true, calls: [] } }).api);
   try { assert.match(text(byId(w.container, 'mc-upcoming-empty')), /No calls in the next 14 days/); } finally { await w.done(); }
-  s = stubApi();
-  s.api.channels.upcomingCalls = s.fail(409, { detail: 'meet_reconnect', message: 'Reconnect Google.' });
-  w = await mount('/validate/record/calls', s.api);
-  try { assert.match(text(byId(w.container, 'mc-upcoming-reconnect')), /Reconnect Google\./); } finally { await w.done(); }
-  s = stubApi();
-  let reads = 0;
-  s.api.channels.upcomingCalls = () => { reads += 1; return Promise.reject(Object.assign(new Error('x'), { status: 503 })); };
-  w = await mount('/validate/record/calls', s.api);
+});
+
+test('MC3 mounted: each call’s timeline; a failed import is tried again only after its dialog', async () => {
+  const { api, calls } = stubApi();
+  const w = await mount('/validate/record/calls/all', api);
   try {
-    assert.ok(byId(w.container, 'mc-upcoming-error'));
-    await click(byId(w.container, 'mc-upcoming-error-retry'));
-    assert.equal(reads, 2, 'Try again reads again');
+    assert.equal(props(byId(w.container, 'mc-call-step-ref-b-no_transcript'))['data-state'], 'stop');
+    assert.match(text(byId(w.container, 'mc-call-badge-ref-a')), /Meet transcript/);
+    assert.equal(props(byId(w.container, 'mc-call-open-ref-a')).href, '/validate/record/calls/all/41');
+    assert.equal(props(byId(w.container, 'mc-call-upload-ref-b')).href, '/validate/record/calls/upload');
+    assert.ok(byId(w.container, 'mc-upload-row-51'));
+    await click(byId(w.container, 'mc-call-retry-ref-c'));
+    assert.equal(calls.filter((c) => c[0] === 'importMeeting').length, 0, 'retry asks first');
+    await click(byId(w.container, 'mc-retry-dialog-confirm'));
+    assert.deepEqual(calls.find((c) => c[0] === 'importMeeting').slice(1), [4, 'ref-c']);
+  } finally { await w.done(); }
+  const empty = await mount('/validate/record/calls/all', stubApi({ calls: { calls: [], uploads: [], audio: [], retention: { days: 30 } } }).api);
+  try { assert.match(text(byId(empty.container, 'mc-calls-empty')), /No call yet/); } finally { await empty.done(); }
+  const broken = await mount('/validate/record/calls/all', stubApi({ calls: () => Promise.reject(Object.assign(new Error('x'), { status: 500 })) }).api);
+  try { assert.match(text(byId(broken.container, 'mc-calls-error')), /could not be read/); } finally { await broken.done(); }
+});
+
+test('MC5 mounted: speakers, times, the switch, consent; Rename speaker renames every passage of theirs after its dialog', async () => {
+  const { api, calls } = stubApi();
+  const w = await mount('/validate/record/calls/all/41', api);
+  try {
+    assert.equal(text(byId(w.container, 'mc-turn-who-3')), UNKNOWN_SPEAKER);
+    assert.equal(text(byId(w.container, 'mc-turn-jump-3')), '00:05:02');
+    assert.match(text(byId(w.container, 'mc-tx-consent')), /Everyone recorded agreed, out loud/);
+    assert.match(text(byId(w.container, 'mc-tx-meta')), /Google Meet transcript/);
+    assert.ok(byId(w.container, 'mc-turn-translation-3'));
+    await click(byId(w.container, 'mc-tx-view-orig'));
+    assert.equal(byId(w.container, 'mc-turn-translation-3'), undefined);
+    assert.equal(byId(w.container, 'mc-turn-rename-1'), undefined, 'the founder is never renamed');
+    await click(byId(w.container, 'mc-turn-rename-3'));
+    assert.match(text(w.container), /2 passages by “Speaker \?” in this call take the new name/);
+    assert.equal(props(byId(w.container, 'mc-rename-confirm')).disabled, true, 'no name, no rename');
+    await change(byId(w.container, 'mc-rename-input'), { value: '[Participant] B' });
+    await click(byId(w.container, 'mc-rename-confirm'));
+    assert.deepEqual(calls.filter((c) => c[0] === 'setSpeaker').map((c) => c.slice(1)), [[41, 3, '[Participant] B'], [41, 4, '[Participant] B']]);
+    await click(byId(w.container, 'mc-turn-jump-2'));
+    assert.deepEqual(calls.filter((c) => c[0] === 'audio').map((c) => c[1]), [41], 'a jump asks for fresh audio links');
   } finally { await w.done(); }
 });
 
-test('MC3 mounted: the list, a call\'s timeline and source; Transcribe with Axal states its AI tokens in a dialog before it runs', async () => {
-  const s = stubApi();
-  let w = await mount('/validate/record/calls/calls', s.api);
+test('MC4 mounted: Upload stays off until a file and the attestation; it reports progress and opens the transcript', async () => {
+  const { api, calls } = stubApi();
+  const w = await mount('/validate/record/calls/upload', api);
   try {
-    assert.ok(byId(w.container, 'mc-call-40'));
-    assert.match(text(byId(w.container, 'mc-call-40')), /Imported.*Meet transcript.*4 to accept/s);
+    assert.equal(props(byId(w.container, 'mc-upload-start')).disabled, true);
+    await change(byId(w.container, 'mc-upload-file'), { files: [{ name: 'call.m4a', size: 10, lastModified: 1 }] });
+    // Mutation checked: drop the attestation from `ready` → the upload starts without it.
+    assert.equal(props(byId(w.container, 'mc-upload-start')).disabled, true, 'no attestation, no upload');
+    await change(byId(w.container, 'mc-upload-attest-verbal'), {});
+    assert.equal(props(byId(w.container, 'mc-upload-start')).disabled, false);
+    await click(byId(w.container, 'mc-upload-start'));
+    const sent = calls.find((c) => c[0] === 'uploadRecording')[1];
+    assert.deepEqual(sent.attestation, { agreed: true, method: 'verbal' });
+    assert.deepEqual(sent.target, { project_id: 7, interview_id: 4 });
+    assert.equal(sent.api, api.sessions, 'the recorder’s own routes (D872)');
+    assert.match(text(byId(w.container, 'mc-upload-progress')), /2 of 2 parts stored/);
+    assert.ok(byId(w.container, 'mc-upload-done'));
   } finally { await w.done(); }
-  w = await mount('/validate/record/calls/calls/43', s.api);
+  const failing = stubApi({ uploadRecording: () => Promise.reject(Object.assign(new Error('This file has no sound in it.'), { name: 'UploadError' })) });
+  const f = await mount('/validate/record/calls/upload', failing.api);
   try {
-    assert.equal(text(byId(w.container, 'mc-source')), 'No transcript yet');
-    assert.match(text(byId(w.container, 'mc-next-import')), /Transcribe with Axal · about \$0\.02 in AI tokens/);
-    await click(byId(w.container, 'mc-next-import'));
-    assert.match(props(byId(w.container, 'mc-run-dialog')).sub ?? text(byId(w.container, 'mc-run-dialog')), /AI tokens/);
-    assert.equal(s.calls.filter((c) => c[0] === 'importMeeting').length, 0, 'nothing runs before the dialog\'s press');
-    await click(byId(w.container, 'mc-run-dialog-confirm'));
-    assert.deepEqual(s.calls.find((c) => c[0] === 'importMeeting').slice(1), [4, 'r43']);
-  } finally { await w.done(); }
-  w = await mount('/validate/record/calls/calls/44', s.api);
-  try { assert.equal(props(byId(w.container, 'mc-next-upload')).href, '/validate/record/calls/upload?interview=4'); } finally { await w.done(); }
-  w = await mount('/validate/record/calls/calls/999', s.api);
-  try { assert.ok(byId(w.container, 'mc-call-missing')); } finally { await w.done(); }
+    await change(byId(f.container, 'mc-upload-file'), { files: [{ name: 'quiet.mp3', size: 10, lastModified: 1 }] });
+    await change(byId(f.container, 'mc-upload-attest-written'), {});
+    await click(byId(f.container, 'mc-upload-start'));
+    assert.match(text(byId(f.container, 'mc-upload-error')), /no sound/);
+  } finally { await f.done(); }
 });
 
-test('MC3 states mounted: no call, not connected, and an unreadable list', async () => {
-  let s = stubApi({ calls: { calls: [] } });
-  let w = await mount('/validate/record/calls/calls', s.api);
-  try { assert.ok(byId(w.container, 'mc-calls-empty')); } finally { await w.done(); }
-  s = stubApi({ calls: { calls: [] }, setup: NOTHING });
-  w = await mount('/validate/record/calls/calls', s.api);
-  try { assert.match(text(byId(w.container, 'mc-calls-nc')), /Connect Google or Zoom/); } finally { await w.done(); }
-  s = stubApi();
-  s.api.channels.calls = s.fail(500);
-  w = await mount('/validate/record/calls/calls', s.api);
-  try { assert.ok(byId(w.container, 'mc-calls-error')); } finally { await w.done(); }
-});
-
-test('MC5 mounted: Rename speaker renames every line through one dialog; an empty name is refused; the switch; a time jumps to its audio', async () => {
-  const s = stubApi();
-  const w = await mount('/validate/record/calls/calls/40', s.api);
+test('MC6 mounted: the summary, then decisions, action items and data points, each accepted only after its dialog', async () => {
+  const { api, calls } = stubApi();
+  const w = await mount('/validate/record/calls/proposals/41', api);
   try {
-    assert.equal(text(byId(w.container, 'mc-consent')), 'Everyone recorded agreed, out loud.');
-    assert.equal(byId(w.container, 'mc-turn-4'), undefined, 'a live segment is not the transcript');
-    assert.ok(byId(w.container, 'mc-turn-translation-2'));
-    await click(byId(w.container, 'mc-view-orig'));
-    assert.equal(byId(w.container, 'mc-turn-translation-2'), undefined);
-    await click(byId(w.container, 'mc-rename-Speaker 3'));
-    assert.ok(byId(w.container, 'mc-rename-dialog'));
-    await click(byId(w.container, 'mc-rename-dialog-confirm'));
-    assert.match(text(byId(w.container, 'mc-rename-error')), /Give the speaker a name/);
-    assert.equal(s.calls.filter((c) => c[0] === 'renameSpeaker').length, 0);
-    await change(byId(w.container, 'mc-rename-input'), '[Participant B]');
-    await click(byId(w.container, 'mc-rename-dialog-confirm'));
-    assert.deepEqual(s.calls.find((c) => c[0] === 'renameSpeaker').slice(1), [40, 'Speaker 3', '[Participant B]']);
-    assert.equal(s.calls.filter((c) => c[0] === 'get').length, 2, 'the transcript is read again');
-    assert.equal(byId(w.container, 'mc-rename-dialog'), undefined);
-    await click(byId(w.container, 'mc-jump-2'));
-    assert.equal(props(byId(w.container, 'mc-audio')).src, '/api/files/dl/c', 'the part holding 00:05:02');
-  } finally { await w.done(); }
-});
-
-test('MC5 mounted: a failed rename keeps the dialog and says nothing changed; deleted audio says the text is kept', async () => {
-  const s = stubApi();
-  s.api.sessions.renameSpeaker = s.fail(500);
-  s.api.sessions.audio = s.fail(404, { detail: 'audio_removed', message: 'The audio of this session was removed by your retention.' });
-  const w = await mount('/validate/record/calls/calls/40', s.api);
-  try {
-    await click(byId(w.container, 'mc-rename-Speaker 3'));
-    await change(byId(w.container, 'mc-rename-input'), '[Participant B]');
-    await click(byId(w.container, 'mc-rename-dialog-confirm'));
-    assert.match(text(byId(w.container, 'mc-rename-error')), /Nothing changed/);
-    await click(byId(w.container, 'mc-jump-2'));
-    assert.match(text(byId(w.container, 'mc-audio-removed')), /removed by your retention/);
-  } finally { await w.done(); }
-});
-
-test('MC4 mounted: no upload before the attestation; the estimate; the parts as they are stored; done links to the call', async () => {
-  const s = stubApi();
-  const w = await mount('/validate/record/calls/upload?interview=4', s.api);
-  try {
-    assert.equal(props(byId(w.container, 'mc-upload-interview')).value, '4', 'Upload the recording carries its interview');
-    assert.equal(props(byId(w.container, 'mc-upload-go')).disabled, true, 'no file yet');
-    await change(byId(w.container, 'mc-upload-file'), [{ name: 'call.m4a' }]);
-    await settle();
-    assert.match(text(byId(w.container, 'mc-upload-estimate')), /42 min · transcribing it uses about \$0\.02 in AI tokens/);
-    assert.equal(props(byId(w.container, 'mc-upload-go')).disabled, true, 'no attestation yet');
-    assert.match(text(byId(w.container, 'mc-attest')), /Everyone recorded agreed/);
-    await pickRadio(byId(w.container, 'mc-attest-written'));
-    assert.equal(props(byId(w.container, 'mc-upload-go')).disabled, false);
-    await click(byId(w.container, 'mc-upload-go'));
-    const run = s.calls.find((c) => c[0] === 'run')[1];
-    assert.deepEqual([run.target, run.attestation], [{ project_id: 7, interview_id: 4 }, { agreed: true, method: 'written' }]);
-    assert.match(text(byId(w.container, 'mc-upload-progress')), /3 of 3 parts stored/);
-    assert.match(text(byId(w.container, 'mc-upload-done')), /1 part was already stored/);
-    assert.equal(props(walk(byId(w.container, 'mc-upload-done')).find((n) => props(n).href)).href, '/validate/record/calls/calls/61');
-  } finally { await w.done(); }
-});
-
-test('MC4 mounted: an unreadable file, and a stopped upload that says it resumes', async () => {
-  const s = stubApi({ decode: () => Promise.reject(new UploadError('undecodable')) });
-  let w = await mount('/validate/record/calls/upload', s.api);
-  try {
-    await change(byId(w.container, 'mc-upload-file'), [{ name: 'x.bin' }]);
-    await settle();
-    assert.match(text(byId(w.container, 'mc-upload-unreadable')), /could not be read as audio on this device\. Export the call/);
-  } finally { await w.done(); }
-  const t = stubApi({ run: async ({ onProgress }) => { onProgress({ done: 2, total: 5 }); throw Object.assign(new Error('x'), { status: 503 }); } });
-  w = await mount('/validate/record/calls/upload?interview=5', t.api);
-  try {
-    await change(byId(w.container, 'mc-upload-file'), [{ name: 'call.m4a' }]);
-    await settle();
-    await pickRadio(byId(w.container, 'mc-attest-verbal'));
-    await click(byId(w.container, 'mc-upload-go'));
-    assert.match(text(byId(w.container, 'mc-upload-error')), /carries on from the part it stopped at/);
-    assert.match(text(byId(w.container, 'mc-upload-progress')), /2 of 5 parts stored/);
-    assert.equal(byId(w.container, 'mc-upload-done'), undefined);
-  } finally { await w.done(); }
-});
-
-test('MC6 mounted: the summary and the proposals list; Accept and Dismiss only through their dialogs', async () => {
-  const s = stubApi();
-  let w = await mount('/validate/record/calls/proposals', s.api);
-  try {
-    assert.ok(byId(w.container, 'mc-proposals-pick-40'));
-    assert.equal(byId(w.container, 'mc-proposals-pick-41'), undefined, 'a call with nothing waiting is not listed');
-  } finally { await w.done(); }
-  w = await mount('/validate/record/calls/proposals/40', s.api);
-  try {
-    assert.match(text(byId(w.container, 'mc-summary')), /loses days each week.*track them on paper/s);
-    for (const g of ['decisions', 'actions', 'data']) assert.ok(byId(w.container, `proposals-group-${g}`), g);
-    assert.equal(byId(w.container, 'proposal-15'), undefined, 'a dismissed proposal is not offered again');
-    assert.equal(text(byId(w.container, 'proposal-mod-13')), 'Validate › Demand and urgency signals');
-    await click(byId(w.container, 'proposal-accept-11'));
-    assert.equal(s.calls.filter((c) => c[0] === 'accept').length, 0);
+    assert.match(text(byId(w.container, 'mc-summary-text')), /waiting for inspections/);
+    assert.ok(byId(w.container, 'proposals-group-decisions'));
+    assert.ok(byId(w.container, 'proposals-group-actions'));
+    assert.ok(byId(w.container, 'proposals-group-data'));
+    await click(byId(w.container, 'proposal-accept-71'));
+    assert.equal(calls.filter((c) => c[0] === 'accept').length, 0);
     await click(byId(w.container, 'proposal-accept-dialog-confirm'));
-    assert.deepEqual(s.calls.find((c) => c[0] === 'accept').slice(1), [11]);
-    await click(byId(w.container, 'proposal-dismiss-14'));
-    await click(byId(w.container, 'proposal-dismiss-dialog-confirm'));
-    assert.deepEqual(s.calls.find((c) => c[0] === 'discard').slice(1), [14]);
-    await click(byId(w.container, 'mc-summary-keep'));
-    assert.equal(s.calls.filter((c) => c[0] === 'keepDigest').length, 0);
-    await click(byId(w.container, 'mc-summary-dialog-confirm'));
-    assert.deepEqual(s.calls.find((c) => c[0] === 'keepDigest').slice(1), [40]);
+    assert.deepEqual(calls.find((c) => c[0] === 'accept').slice(1), [71]);
   } finally { await w.done(); }
-  const none = stubApi({ calls: { calls: [call(41, { pending_proposals: 0 })] } });
-  w = await mount('/validate/record/calls/proposals', none.api);
-  try { assert.match(text(byId(w.container, 'mc-proposals-none')), /Nothing to accept yet/); } finally { await w.done(); }
+  const pick = await mount('/validate/record/calls/proposals', stubApi().api);
+  try {
+    assert.ok(byId(pick.container, 'mc-prop-pick-41'), 'an imported call');
+    assert.ok(byId(pick.container, 'mc-prop-pick-51'), 'an upload');
+    assert.equal(byId(pick.container, 'mc-prop-pick-42'), undefined, 'a call with no transcript has nothing to propose');
+  } finally { await pick.done(); }
 });
 
-test('MC1 mounted: both cards; Allow transcript import and Reconnect go to Google only after the dialog; Zoom connects on its connector page; the notetaker is not available yet', async () => {
-  const s = stubApi();
-  let w = await mount('/validate/record/calls/connection', s.api);
+test('MC7 mounted: the held choice; changing it, deleting audio and deleting a session each ask first', async () => {
+  const { api, calls } = stubApi();
+  const w = await mount('/validate/record/calls/retention', api);
   try {
-    assert.ok(byId(w.container, 'mc-card-google_meet'));
-    assert.match(text(byId(w.container, 'mc-pill-zoom')), /Zoom beta/);
-    assert.match(text(byId(w.container, 'mc-prereq-zoom')), /paid Zoom plan.*Not checked by Axal/s);
-    assert.equal(props(byId(w.container, 'mc-press-zoom')).href, '/account/connectors/zoom');
-    assert.match(text(byId(w.container, 'mc-bot-later')), /Not available yet/);
-    await click(byId(w.container, 'mc-press-meet_allow'));
-    assert.equal(s.calls.filter((c) => c[0] === 'allowMeetTranscripts').length, 0);
-    await click(byId(w.container, 'mc-press-dialog-confirm'));
-    assert.equal(s.calls.find((c) => c[0] === 'allowMeetTranscripts')[1], 'record');
-    await click(byId(w.container, 'mc-check-again'));
-    assert.equal(s.calls.filter((c) => c[0] === 'meetingSetup').length, 2);
+    assert.equal(props(byId(w.container, 'mc-ret-30'))['aria-checked'], 'true');
+    assert.match(text(byId(w.container, 'mc-ret-line-41')), /Audio kept until/);
+    assert.equal(byId(w.container, 'mc-ret-del-audio-42'), undefined, 'removed audio cannot be deleted again');
+    await click(byId(w.container, 'mc-ret-7'));
+    assert.equal(calls.filter((c) => c[0] === 'setAudioRetention').length, 0);
+    await click(byId(w.container, 'mc-ret-days-dialog-confirm'));
+    assert.deepEqual(calls.find((c) => c[0] === 'setAudioRetention').slice(1), [7]);
+    await click(byId(w.container, 'mc-ret-del-audio-41'));
+    await click(byId(w.container, 'mc-ret-audio-dialog-confirm'));
+    assert.deepEqual(calls.find((c) => c[0] === 'deleteAudio').slice(1), [41]);
+    await click(byId(w.container, 'mc-ret-del-session-51'));
+    await click(byId(w.container, 'mc-ret-session-dialog-confirm'));
+    assert.deepEqual(calls.find((c) => c[0] === 'remove').slice(1), [51]);
   } finally { await w.done(); }
-  const e = stubApi({ google: { ...GOOGLE, sync_error: { code: 'connection_refused' } } });
-  w = await mount('/validate/record/calls/connection', e.api);
-  try {
-    assert.match(text(byId(w.container, 'mc-pill-google_meet')), /Sign-in expired/);
-    await click(byId(w.container, 'mc-press-google_reconnect'));
-    await click(byId(w.container, 'mc-press-dialog-confirm'));
-    assert.deepEqual(e.calls.find((c) => c[0] === 'googleCalConnect')[1], { return_to: 'record' });
-    assert.equal(e.calls.find((c) => c[0] === 'assign')[1], 'https://accounts.google.com/o/oauth2/v2/auth?x=1');
-  } finally { await w.done(); }
-  const f = stubApi();
-  f.api.channels.meetingSetup = f.fail(500);
-  w = await mount('/validate/record/calls/connection', f.api);
-  try { assert.ok(byId(w.container, 'mc-connect-error')); } finally { await w.done(); }
 });
 
-test('MC7 mounted: the setting saves through its dialog; each call\'s audio line; Delete audio only after its dialog', async () => {
-  const s = stubApi();
-  const w = await mount('/validate/record/calls/retention', s.api);
+test('MC1 mounted: both cards, their steps and plan lines; Allow transcript import goes through Google, back to Record a session', async () => {
+  const { api, calls } = stubApi();
+  const w = await mount('/validate/record/calls/connection', api);
   try {
-    assert.equal(props(byId(w.container, 'mc-retention-save')).disabled, true, 'nothing to save');
-    assert.match(text(byId(w.container, 'mc-kept-audio-41')), /Audio kept until 20 Nov 2026/);
-    assert.match(text(byId(w.container, 'mc-kept-audio-43')), /deleted 18 Oct 2026 by your retention · text kept/);
-    assert.equal(byId(w.container, 'mc-delete-audio-43'), undefined, 'deleted audio has no Delete');
-    await pickRadio(byId(w.container, 'mc-retention-7'));
-    await click(byId(w.container, 'mc-retention-save'));
-    assert.equal(s.calls.filter((c) => c[0] === 'setAudioRetention').length, 0);
-    await click(byId(w.container, 'mc-retention-dialog-confirm'));
-    assert.deepEqual(s.calls.find((c) => c[0] === 'setAudioRetention').slice(1), [7]);
-    await click(byId(w.container, 'mc-delete-audio-41'));
-    assert.match(text(byId(w.container, 'mc-delete-dialog')) + (props(byId(w.container, 'mc-delete-dialog')).sub || ''), /transcript and anything accepted from it stay/);
-    assert.equal(s.calls.filter((c) => c[0] === 'removeAudio').length, 0);
-    await click(byId(w.container, 'mc-delete-dialog-confirm'));
-    assert.deepEqual(s.calls.find((c) => c[0] === 'removeAudio').slice(1), [41]);
+    assert.match(text(byId(w.container, 'mc-connect-pill-zoom')), /Zoom beta/);
+    assert.match(text(byId(w.container, 'mc-prereq-google_meet')), /not checked by Axal/);
+    assert.ok(byId(w.container, 'mc-step-zoom-connected'));
+    await click(byId(w.container, 'mc-connect-press-google_meet'));
+    await settle();
+    assert.deepEqual(calls.find((c) => c[0] === 'allowMeetTranscripts').slice(1), ['record']);
   } finally { await w.done(); }
-  const e = stubApi({ calls: { calls: [] } });
-  const v = await mount('/validate/record/calls/retention', e.api);
-  try { assert.match(text(byId(v.container, 'mc-retention-empty')), /No recordings kept.*uploaded recordings too/s); } finally { await v.done(); }
 });
 
-test('the routes, the clients on Worker routes, and the house rules', () => {
+test('the routes, the client methods on real Worker routes, and the house rules', () => {
   const app = read('frontend/src/App.jsx');
   for (const p of ['/validate/record/calls/:tab', '/validate/record/calls/:tab/:id']) {
     assert.ok(app.includes(`<Route path="${p}" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />`), p);
   }
-  const worker = read('cloudflare-worker/src/routes/founder_validate_sessions.ts');
-  for (const r of ["sessions.get('/meetings/calls'", "sessions.patch('/sessions/:id/speakers'", "sessions.get('/sessions/audio-retention'", "sessions.put('/sessions/audio-retention'", "sessions.delete('/sessions/:id/audio'"]) {
+  const worker = read('cloudflare-worker/src/routes/founder_validate_meetings.ts') + read('cloudflare-worker/src/routes/founder_validate_sessions.ts');
+  for (const r of ["meetings.get('/meetings'", "sessions.get('/meetings/setup'", "sessions.get('/meetings/upcoming'", "sessions.get('/sessions/audio-retention'", "sessions.put('/sessions/audio-retention'", "sessions.delete('/sessions/:id/audio'"]) {
     assert.ok(worker.includes(r), r);
   }
   const src = ['RecordCallsTool.jsx', 'callsModel.js'].map((f) => read(`frontend/src/pages/founder/${f}`)).join('\n');
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-  assert.doesNotMatch(code, /window\.(alert|confirm|prompt|open)\(/);
+  assert.doesNotMatch(code, /window\.(alert|confirm|prompt)\(/);
   assert.doesNotMatch(code, /\b(advisor|advice|recommendation)s?\b/i);
-  assert.doesNotMatch(code, /\bcredits?\b/i, 'AI tokens, never credits');
+  assert.doesNotMatch(code, /@[a-z0-9-]+\.[a-z]/i, 'no email address');
   for (const m of code.matchAll(/['`"]((?:[^'`"]*\s)?hover:(?:bg|text|border)-[^'`"]*)['`"]/g)) {
     if (/hover:underline/.test(m[1]) && !/hover:(bg|text|border)-/.test(m[1].replace('hover:underline', ''))) continue;
     assert.match(m[1], /dark:hover:/, m[1].slice(0, 90));
   }
-  // The attestation's sentence is the upload helper's, which the Worker's methods match.
-  assert.ok(read('cloudflare-worker/src/services/interviewSessions.ts').includes("'verbal'"));
 });

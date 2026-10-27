@@ -89,8 +89,10 @@ Telegram's boards (TG1–TG7, D869, #2515) are built on the same tool.
 WhatsApp's, and `RecordTelegramTool.jsx` adds Telegram's own tabs (Send to
 Axal, Connection, MCP access) under `/validate/record/telegram`.
 
-Calls' boards (MC1–MC7, D878, #2525) are built. `RecordCallsTool.jsx` draws
-its six tabs as paths under `/validate/record/calls` (Upcoming, Calls[/:id],
-Upload, Proposals[/:id], Connection, Retention), with the chat boards' parts
-(the states, the proposals list, its dialogs); `callsModel.js` holds its rules,
-which are pure. With all three channels built, D1309's "Today" panel is gone.
+Calls' boards (MC1–MC7, D878, #2525) are `RecordCallsTool.jsx`, with its
+rules in `callsModel.js` (pure): Upcoming, Calls (`/all`), Upload, Proposals,
+Connection and Retention, as paths under `/validate/record/calls`. It reuses
+the shared parts and `RecordChatTool.jsx`'s tab bar (`SubTabs`), and reads
+`GET /meetings`. One venture's calls are also `GET /meetings/calls`, and
+`PATCH /sessions/:id/speakers` renames one speaker in every passage. With all
+three channels built, D1309's "Today" panel is gone.

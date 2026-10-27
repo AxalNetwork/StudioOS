@@ -97,12 +97,24 @@ regexes = [
   # characters; this is twelve zeros and a word, and verifyKey refuses its
   # shape. Pinned to the exact literal so nothing looser rides on it.
   '''\baxk_000000000000_placeholder\b''',
+  # D1317 (#2480): the four invented key ids in
+  # frontend/test/api_keys_d1317.test.mjs. Each is 12 [a-z0-9] characters, the
+  # real id shape, and gitleaks' generic-api-key rule reads `key_id: '…'` as a
+  # secret. They are fixtures, not credentials. The commit that added them
+  # stays in this pull request's scan range, so the literals are pinned here
+  # rather than rewritten. Nothing looser rides on the alternation.
+  '''^(?:k7f3m2q9x4p1|r2d8w5n1c6v3|h9j4t7b2m5x8|p3s6v9y2b5e8)$''',
   # D1000 (#2815): the synthetic JWT signing key in
   # cloudflare-worker/test/segment_profiles_d1000.test.ts, which signs the
   # test's own tokens against an in-memory database. Not a credential and
   # not the Worker's JWT_SECRET; pinned to the exact literal so nothing
   # looser rides on it.
   '''\bsegment-test-secret-0123456789-abcdef\b''',
+  # D1082 (#2947): the synthetic JWT signing key in
+  # cloudflare-worker/test/lovable_launch.test.ts, which signs the test's own
+  # tokens against an in-memory database. Not a credential and not the
+  # Worker's JWT_SECRET; pinned to the exact literal so nothing looser rides on it.
+  '''\blovable-launch-test-secret-0123456789-abcdef\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

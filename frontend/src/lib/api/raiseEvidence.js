@@ -9,6 +9,11 @@ export const raiseEvidenceApi = {
   update: (projectId, id, version, body) => request(`/cycles/raise/evidence/items/${encodeURIComponent(id)}?${query(projectId)}`, { method: 'PATCH', body: JSON.stringify({ ...body, version }) }),
   link: (projectId, claimId, itemId, itemVersion, proposalUid) => request(`/cycles/raise/evidence/claims/${encodeURIComponent(claimId)}/link?${query(projectId)}`, { method: 'POST', body: JSON.stringify({ item_id: itemId, item_version: itemVersion, ...(proposalUid != null ? { proposal_uid: proposalUid } : {}) }) }),
   unlink: (projectId, claimId, itemId) => request(`/cycles/raise/evidence/claims/${encodeURIComponent(claimId)}/link?${query(projectId)}`, { method: 'DELETE', body: JSON.stringify({ item_id: itemId }) }),
+  // D900 (#2679): "Keep mine, with a note" on a Mismatch, and clearing it.
+  note: (projectId, claimId, note) => request(`/cycles/raise/evidence/claims/${encodeURIComponent(claimId)}/note?${query(projectId)}`, { method: 'POST', body: JSON.stringify({ note }) }),
+  clearNote: (projectId, claimId) => request(`/cycles/raise/evidence/claims/${encodeURIComponent(claimId)}/note?${query(projectId)}`, { method: 'DELETE' }),
+  // D1266 (#3289): See as an investor — the investor's projection before or after the NDA, never logged as an open.
+  preview: (projectId, nda) => request(`/cycles/raise/evidence/preview?${new URLSearchParams({ project: String(projectId), nda: nda ? '1' : '0' })}`),
   // D1265 (#3288): the investor's read — coverage before the NDA, shared items after it.
   shared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}/evidence`),
   forDeal: (dealId) => request(`/deals/${encodeURIComponent(dealId)}/evidence`),

@@ -27,6 +27,7 @@ import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView, { RecordPhoneProvider } from './RecordView';
+import { prototypeLovable } from './lovable/lovableModel';
 import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
@@ -42,6 +43,7 @@ import ValidateFromGoogle from './ValidateFromGoogle';
 import FromNotion from './FromNotion';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
+import ContentCalendar from './ContentCalendar';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -73,6 +75,7 @@ import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
 import { UseOfFundsHomeNav, UseOfFundsTabPage } from '../raise/useoffunds/UseOfFundsTool';
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import { CapRelHomeNav, CapRelTabPage } from '../raise/caprel/CapRelTool';
+import EvidencePart from './evidence/EvidencePart';
 import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
 
 
@@ -204,14 +207,21 @@ const CYCLE_DEFS = {
     // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
     // D752 (#1989): then the founder's "Match to my Mercury" for committed prospects.
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
+    // D1267 (#3290, VR6): then each module's Evidence part, opening the Evidence view's drawers.
     parts: toFnMap({
-      ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
+      ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => (
+        <>
+          {mercuryPart(m.slug, data, ctx)}
+          <EvidencePart slug={m.slug} projectId={ctx.projectId} />
+        </>
+      )])),
       // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
       // D913: its Objections heard, with no Answer it for an admin.
       'investor-narrative': (data, ctx) => (
         <>
           <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
           {mercuryPart('investor-narrative', data, ctx)}
+          <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
         </>
       ),
       // D1141 (#2433), D1145 (#3031): Product-market fit from `parts.pmf`, beside the raise kit; then From Mercury.
@@ -219,6 +229,7 @@ const CYCLE_DEFS = {
         <>
           <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
           {mercuryPart('fundraising-readiness', data, ctx)}
+          <EvidencePart slug="fundraising-readiness" projectId={ctx.projectId} />
         </>
       ),
       // D1227 (#3226): the Calls history left Overview; Calls for Capital is the Calls tab (D1221).
@@ -228,6 +239,7 @@ const CYCLE_DEFS = {
           {mercuryPart('capital-relationships', data, ctx)}
           {/* D1089 (#2954): an investor CRM in Notion, as investors to add or link; once linked, their stage follows. */}
           <FromNotion section="raise" projectId={ctx.projectId} module="capital_relationships" />
+          <EvidencePart slug="capital-relationships" projectId={ctx.projectId} />
         </>
       ),
       // D1089 (#2954): Notion pages as dated snapshots, NDA by default; a change adds a version on Accept only.
@@ -235,6 +247,7 @@ const CYCLE_DEFS = {
         <>
           {mercuryPart('data-room', data, ctx)}
           <FromNotion section="raise" projectId={ctx.projectId} module="data_room" acceptDialog={NotionSnapshotImport} />
+          <EvidencePart slug="data-room" projectId={ctx.projectId} />
         </>
       ),
     }),
@@ -343,8 +356,13 @@ const CYCLE_DEFS = {
       // The replies customer and partner asks brought in, beside the rows.
       distribution: (data, ctx) => (<>
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
+        {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
+        <ContentCalendar part={data?.parts?.content_calendar} channels={data?.records?.rows} projectId={ctx.projectId} reload={ctx.reload} />
         {fromMercury('distribution', data, ctx)}
+        <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
       </>),
+      // D1090 (#2955): a feedback database in Notion, as product feedback.
+      'product-improvement': (_data, ctx) => <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />,
       'partner-network': (data, ctx) => (<>
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />
         {fromMercury('partner-network', data, ctx)}
@@ -1135,6 +1153,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         add={narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
           : fnOf(def.add, slug)?.(q, openAction)}
+        lovable={narrativeAdmin ? undefined : prototypeLovable(cycle, slug, module)}
         rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,

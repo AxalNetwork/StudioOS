@@ -16,7 +16,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { EvidenceBody, EvidenceSummary } from '../src/pages/cycles/evidence/RaiseEvidence.jsx';
 import {
-  AREAS, BASE, CLAIM_STATE, NOT_YET, SHARING, SOURCES, WAITS, claimHref, claimWord, gradeOf, itemHref, strengthWord, viewOf,
+  AREAS, BASE, CLAIM_STATE, SHARING, SOURCES, WAITS, claimHref, claimWord, gradeOf, itemHref, strengthWord, viewOf,
 } from '../src/pages/cycles/evidence/evidenceModel.js';
 import { cycleTabs } from '../src/pages/cycles/cycleModel.js';
 import { MODULES } from '../src/pages/cycles/modules.js';
@@ -30,10 +30,11 @@ const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
  * ------------------------------------------------------------------ */
 
 test('the address names the page or one drawer; an odd id is no drawer', () => {
-  assert.deepEqual(viewOf('/raise/evidence'), { drawer: null, id: null });
-  assert.deepEqual(viewOf('/raise/evidence/item/ev_12'), { drawer: 'item', id: 'ev_12' });
-  assert.deepEqual(viewOf('/raise/evidence/claim/c9'), { drawer: 'claim', id: 'c9' });
-  assert.deepEqual(viewOf('/raise/evidence/item/a.b'), { drawer: null, id: null });
+  // D1266 (#3289) adds `page` (the view, the review queue, the preview).
+  assert.deepEqual(viewOf('/raise/evidence'), { page: 'view', drawer: null, id: null });
+  assert.deepEqual(viewOf('/raise/evidence/item/ev_12'), { page: 'view', drawer: 'item', id: 'ev_12' });
+  assert.deepEqual(viewOf('/raise/evidence/claim/c9'), { page: 'view', drawer: 'claim', id: 'c9' });
+  assert.deepEqual(viewOf('/raise/evidence/item/a.b'), { page: 'view', drawer: null, id: null });
   assert.equal(itemHref('ev_12', '?project=3'), '/raise/evidence/item/ev_12?project=3');
   assert.equal(claimHref('../x'), BASE);
 });
@@ -59,16 +60,38 @@ test('Raise’s rail: Overview, then Evidence, then Calls, then the modules; Evi
  * Rendered
  * ------------------------------------------------------------------ */
 
-test('the view: every area unread, each block waits, and a drawer from the address', () => {
-  const out = html(h(EvidenceBody));
-  for (const a of AREAS) assert.ok(out.includes(a), a);
-  for (const id of ['claims', 'proposals', 'coverage', 'opens']) assert.ok(out.includes(`data-testid="evidence-wait-${id}"`), id);
-  assert.ok(!out.includes('evidence-drawer-'));
-  const item = html(h(EvidenceBody, { drawer: 'item', search: '?project=3' }));
+// D1266 (#3289): the founder's view is live; `raise_evidence_view_d1266.test.mjs`
+// renders it, its drawers and its states. D1268: the investor's block is live too.
+test('the view is no longer a wait: every area of the canvas is one the model knows', () => {
+  assert.deepEqual(Object.keys(WAITS), []);
+  assert.equal(AREAS.length, 8);
+});
+
+/** A read with nothing in it, enough for the live view and a missing-record drawer. */
+function emptyRead() {
+  const recorded = (rows) => ({ state: 'recorded', rows });
+  return {
+    items: recorded([]), proposals: recorded([]), claims: recorded([]),
+    coverage: { state: 'recorded', groups: [] },
+    opens: { state: 'recorded', count: 0, investors: 0, rows: [] },
+    permissions: { can_decide: false },
+  };
+}
+
+test('a drawer from the address is the shared Sheet over the live view', () => {
+  const state = { status: 'ready', read: emptyRead() };
+  const item = html(h(EvidenceBody, { state, view: viewOf('/raise/evidence/item/ev_12'), search: '?project=3', projectId: 3 }));
+  assert.ok(item.includes('data-testid="raise-evidence"'), 'the live view, under the drawer');
   assert.ok(item.includes('data-testid="evidence-drawer-item"') && item.includes('href="/raise/evidence?project=3"'));
   assert.match(item, /role="dialog" aria-modal="true" aria-labelledby="[^"]+" tabindex="-1" data-testid="evidence-drawer-item" data-width="480"/, 'D1317: the drawer is the shared Sheet at the canvas’s 480');
-  assert.ok(item.indexOf('data-testid="evidence-areas"') < item.indexOf('data-testid="evidence-drawer-item-layer"'), 'over the full-width view, not in its flow');
-  assert.ok(html(h(EvidenceBody, { drawer: 'claim' })).includes('data-testid="evidence-wait-claim"'));
+  assert.ok(item.indexOf('data-testid="raise-evidence"') < item.indexOf('data-testid="evidence-drawer-item-layer"'), 'over the full-width view, not in its flow');
+  const claim = html(h(EvidenceBody, { state, view: viewOf('/raise/evidence/claim/c9'), search: '?project=3', projectId: 3 }));
+  assert.ok(claim.includes('data-testid="evidence-drawer-claim-missing"'));
+});
+
+test('the investor block is live (D1268): RaiseEvidence re-exports it, and it no longer waits', () => {
+  assert.equal(typeof EvidenceSummary, 'function');
+  assert.ok(!read('frontend/src/pages/cycles/evidence/InvestorEvidence.jsx').includes('evidence-wait-investor'));
 });
 
 test('D1317: a drawer’s address opens the Sheet over the view, and closing returns to /raise/evidence with the query', async () => {
@@ -78,10 +101,11 @@ test('D1317: a drawer’s address opens the Sheet over the view, and closing ret
   document.querySelectorAll = () => [];
   document.body.style = { overflow: 'auto', paddingRight: '' };
   let at = null;
+  const state = { status: 'ready', read: emptyRead() };
   function Probe() {
     const loc = useLocation();
     at = `${loc.pathname}${loc.search}`;
-    return h(EvidenceBody, { drawer: viewOf(loc.pathname).drawer, search: loc.search });
+    return h(EvidenceBody, { state, view: viewOf(loc.pathname), search: loc.search, projectId: 3 });
   }
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
@@ -91,18 +115,13 @@ test('D1317: a drawer’s address opens the Sheet over the view, and closing ret
   const byTestId = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
   try {
     assert.equal(props(byTestId('evidence-drawer-claim')).role, 'dialog');
-    assert.ok(byTestId('evidence-areas'), 'over its view');
+    assert.ok(byTestId('raise-evidence'), 'over its view');
     await act(async () => { props(byTestId('evidence-drawer-claim-close')).onClick(); });
     assert.equal(at, '/raise/evidence?project=3', 'closing went back to the view, keeping the query');
     assert.equal(byTestId('evidence-drawer-claim'), undefined);
   } finally { await act(async () => root.unmount()); restore(); }
 });
 
-test('the investor block says what shows before and after the NDA, and waits', () => {
-  const out = html(h(EvidenceSummary));
-  assert.match(out, /Before an NDA you see coverage only/);
-  assert.ok(out.includes('data-testid="evidence-wait-investor"') && out.includes(NOT_YET));
-});
 
 /* ------------------------------------------------------------------ *
  * Wiring
@@ -115,7 +134,7 @@ test('the wiring: three routes before /raise/:slug, the deal page’s Evidence t
     assert.ok(app.indexOf(`path="${p}"`) < app.indexOf('path="/raise/:slug"'), `${p} before the module route`);
   }
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
-  assert.ok(deal.includes("{tab === 'evidence' && <EvidenceSummary />}"));
+  assert.ok(deal.includes("{tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} />}"));
   assert.ok(!deal.includes("['evidence', 'team'"), 'Evidence is no longer a wait card');
   for (const f of ['Raise Evidence Page.dc.html', 'Raise evidence · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Raise evidence · Boards.dc.html').includes('name="Raise Evidence Page"'));

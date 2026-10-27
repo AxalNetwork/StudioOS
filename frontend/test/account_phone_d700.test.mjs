@@ -332,7 +332,7 @@ test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then
   assert.match(t, /This month Resets on the 1st at 00:00 UTC \$3\.10 of \$5\.00/);
   assert.match(t, /Held by runs in progress Returned if a run does not finish in 5 minutes \$0\.05/);
   assert.match(t, /Top-up balance Runs use your allowance first, then your top-up \$10\.00/);
-  assert.match(markup, /<a href="\/pricing\/products#token-packs"[^>]*data-testid="usage-add-tokens">Add tokens<\/a>/);
+  assert.match(markup, /<a href="\/pricing\?for=models#add-tokens"[^>]*data-testid="usage-add-tokens">Add tokens<\/a>/);
   assert.match(markup, /style="width:42%"/, 'Today\'s 7px bar');
   // Kept below, in today's form: the four cards the board does not draw.
   for (const card of ['usage-card-days', 'usage-card-where', 'usage-card-rates', 'usage-card-last-run']) assert.match(markup, new RegExp(`data-testid="${card}"`), card);
@@ -642,7 +642,7 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
   assert.match(html(PHONE_VIEWS.pricing()), /href="\/account\/billing"[^>]*>Manage plan</);
   assert.ok(pricing.includes(`Tokens Past your allowance ${TOKENS_LINE} Add tokens`));
   assert.ok(CANVAS_PAGES.pricing.chunk.includes(TOKENS_LINE), 'the Tokens line is AMP\'s');
-  assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/pricing\/products#token-packs"[^>]*>[\s\S]*?Past your allowance/);
+  assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/pricing\?for=models#add-tokens"[^>]*>[\s\S]*?Past your allowance/);
   // D755 §11: every account type sees the Plans, the phone included.
   assert.deepEqual(sectionTitles(html(h(PricingPhoneView, { pricing: ready(PLANS), budget: ready({ ...BUDGET, licence: 'advisor' }), product: ready(PRODUCT) }))), ['Plans', 'Tokens']);
   assert.match(text(html(h(PricingPhoneView, { pricing: ready(PLANS), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-up isn't available yet\. Runs use your included allowance only\./);
@@ -654,7 +654,7 @@ test('6. the member routes mount the pages that draw A7m and A10m; the public pa
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/my\/events" element=\{guard\(\[[^\]]+\], <MyEventsPage \/>\)\} \/>/);
   // D755 §13, D786: the catalogue (/pricing/products) opens to visitors; a product's page still needs sign-in.
-  assert.match(app, /<Route path="\/pricing\/products" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
+  assert.match(app, /* D1288: wrapped in the old token addresses' redirect. */ /<Route path="\/pricing\/products" element=\{<TokensRedirect>\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\}<\/TokensRedirect>\} \/>/);
   assert.match(app, /<Route path="\/pricing\/products\/:productId" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
   // D1037 (#2878): Events retired A7m for MEV18, and kept the account bar.
   assert.match(read('frontend/src/pages/events/MyEventsPage.jsx'), /<PhoneBar back=\{\{ label: 'Back' \}\} title=\{page\.title\} sub=\{page\.sub\} eadwynLabel=\{page\.title\} \/>/);

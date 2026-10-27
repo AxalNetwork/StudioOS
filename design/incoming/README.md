@@ -211,7 +211,9 @@ and the Eadwyn mark at `/eadwyn-ai.png`. No other value was edited.
 
 **Grade: UPGRADE.** S21's integration (D1309) gives each channel its address
 under `/validate/record/`, pointing at today's connector page, chats inbox and
-session page. The boards are #2507, #2515 and #2525 (S09).
+session page. The boards are #2507, #2515 and #2525 (S09). WhatsApp's (D862)
+and Telegram's (D869) are built; Calls' (MC1–MC7) are built by S21 as D878
+(#2525), so all three canvases are in the app.
 ## Landed 2026-10-26 — Admin › Accounts (#2377)
 
 The owner's artifacts `7DW4GaGy3yFbJaiVcj6NDm` (the board grid) and

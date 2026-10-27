@@ -50,6 +50,7 @@ import * as zoom from '../services/channels/zoom';
 import * as meet from '../services/channels/googleMeet';
 import { googleOAuthAvailable } from '../services/calendar';
 import { CONSENT_METHODS } from '../services/interviewSessions';
+import { callsOf } from '../services/channels/callsList';
 
 const meetings = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -110,6 +111,18 @@ async function zoomConnected(env: Env, userId: number): Promise<boolean> {
 }
 
 const view = (ref: MeetingRef) => meetingView(ref, PROVIDER_LABEL[ref.provider]);
+
+// ---------------------------------------------------------------------------
+// D878 (#2525): the member's calls and uploads, for Record a session › Calls
+// ---------------------------------------------------------------------------
+
+// The caller's own calls (D874's list), their uploaded recordings (D872) and
+// each session's audio state under their retention (D877). Read from Axal's
+// rows only: no provider is called.
+meetings.get('/meetings', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  return c.json(await callsOf(c.env, user));
+});
 
 // ---------------------------------------------------------------------------
 // The interview's calls

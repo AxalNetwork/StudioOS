@@ -213,12 +213,12 @@ test('a deep link opens the sheet over its list, and closing it returns to the l
   const m = await mount(h(MemoryRouter, { initialEntries: ['/account/builder/keys/k7f3'] }, h(Routes, null, h(Route, { path: '*', element: h(Probe) }))));
   try {
     assert.ok(m.byTestId('builder-drawer-key'), 'the address opened the sheet');
-    assert.ok(m.byTestId('builder-wait-keys'), 'over its list page');
+    assert.ok(m.byTestId('apik-page'), 'over its list page');
     assert.equal(m.props(m.byTestId('builder-drawer-key'))['data-width'], 560);
     await act(async () => { m.props(m.byTestId('builder-drawer-key-close')).onClick(); });
     assert.equal(at, '/account/builder/keys', 'closing went back to the list');
     assert.equal(m.byTestId('builder-drawer-key'), undefined, 'and the sheet is gone');
-    assert.ok(m.byTestId('builder-wait-keys'));
+    assert.ok(m.byTestId('apik-page'));
   } finally { await m.unmount(); }
 });
 

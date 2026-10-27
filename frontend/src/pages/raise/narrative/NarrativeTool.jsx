@@ -5,14 +5,16 @@ import { Lightbox, Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import {
-  CHECK_RUNS, FIX_NEWEST_ONLY, HOME_PATH, LINE, NEEDS_NONE, NEW_PATH, NOT_RECORDED, NO_VERSION, SLUG, TABS, TITLE,
-  checkRows, checkSummary, chosenVersion, compareView, deleteLine, duplicateSentence, homeFooter, homePart, homeTiles, homeUnreadable,
+  HOME_PATH, LINE, NEEDS_NONE, NEW_PATH, NOT_RECORDED, NO_VERSION, SLUG, TABS, TITLE,
+  chosenVersion, compareView, deleteLine, duplicateSentence, homeFooter, homePart, homeTiles, homeUnreadable,
   needsYou, nextVersion, readByLine, startFromHref, tabHref, tabSearch, versionHref, versionSub, versionsOf,
 } from './narrativeModel';
 import StoryTab from './StoryTab';
 import { NarrativeNotes, NarrativeOtherVenture, NarrativeReads } from './NarrativeAdmin';
 import PositioningTab from './PositioningTab';
 import { ObjectionsCard } from './ObjectionsPanel';
+import ClaimsTab from './ClaimsTab';
+import CheckTab from './CheckTab';
 
 
 /**
@@ -36,16 +38,19 @@ const PILL = {
 };
 const NOT_SET = 'rounded-full border border-dashed border-gray-300 bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400';
 
+/** The tabs that act on one chosen version (D912 adds Claims). */
+const VERSIONED = ['story', 'claims', 'check'];
+
 /** The tool's own tabs, a second level under the Raise modules: text with an underline. */
 export function NarrativeTabBar({ active, search = '', versions = [], version = null }) {
   const navigate = useNavigate();
-  const picks = active === 'story' || active === 'check';
+  const picks = VERSIONED.includes(active);
   const here = TABS.find((t) => t.id === active) || TABS[0];
   return (
     <div className="flex flex-wrap items-end justify-between gap-2 border-b border-axal-hairline dark:border-gray-700" data-testid="narrative-tabs">
       <nav aria-label={TITLE} className="-mb-px flex gap-1 overflow-x-auto">
         {TABS.map((t) => (
-          <Link key={t.id} to={tabHref(t, search, t.id === 'story' || t.id === 'check' ? version : null)} aria-current={t.id === active ? 'page' : undefined}
+          <Link key={t.id} to={tabHref(t, search, VERSIONED.includes(t.id) ? version : null)} aria-current={t.id === active ? 'page' : undefined}
             className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.id === active
               ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-100'
               : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
@@ -82,20 +87,6 @@ function useVersions(projectId, reload) {
   return state;
 }
 
-function useVersionRecord(projectId, version, reload) {
-  const [state, setState] = useState({ status: 'idle', data: null });
-  useEffect(() => {
-    if (!projectId || version == null) { setState({ status: 'idle', data: null }); return undefined; }
-    let alive = true;
-    setState({ status: 'loading', data: null });
-    cyclesApi.record('raise', projectId, SLUG, version)
-      .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: error?.message || '' }); });
-    return () => { alive = false; };
-  }, [projectId, version, reload]);
-  return state;
-}
-
 function Skeleton({ testId }) {
   return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid={testId} />;
 }
@@ -105,45 +96,6 @@ function NoVersion({ search, admin }) {
     <div className={`${CARD} flex flex-col items-start gap-3 p-5`} data-testid="narrative-no-version">
       <span className={`text-[13.5px] font-bold ${INK}`}>{NO_VERSION}</span>
       {admin ? null : <Link className={BTN} to={`${NEW_PATH}${tabSearch(search, null, false)}`}>New version</Link>}
-    </div>
-  );
-}
-
-/**
- * Check: the version's consistency check, in the Worker's own words. Home's
- * "Phrase the fix" band phrases the first mismatch of the newest version only,
- * and only while AI assistance is on, so the link is drawn only then.
- */
-function CheckTab({ record, search, newest, fixOn }) {
-  const rows = checkRows(record);
-  const summary = checkSummary(rows);
-  const mismatch = rows.some((r) => r.result === 'Mismatch');
-  return (
-    <div className="flex flex-col gap-3.5" data-testid="narrative-check">
-      <section className={CARD}>
-        <div className="flex flex-col gap-1 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
-          <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>Check against the metrics</h2>
-          {summary && <span className={`text-[12.5px] font-semibold ${INK}`} data-testid="narrative-check-summary">{summary}</span>}
-        </div>
-        {rows.length === 0
-          ? <p className={`m-0 px-4 py-4 text-[13px] ${MUTED}`} data-testid="narrative-check-none">Nothing compared yet.</p>
-          : rows.map((r) => (
-            <div key={r.figure} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-2.5 last:border-b-0 dark:border-gray-800" data-testid="narrative-check-row">
-              <div className="flex min-w-0 flex-col">
-                <span className={`text-[13px] font-semibold ${INK}`}>{r.figure}</span>
-                {r.detail && <span className={`text-[12px] ${MUTED}`}>{r.detail}</span>}
-              </div>
-              <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${PILL[r.tone] || PILL.grey}`}>{r.result}</span>
-            </div>
-          ))}
-      </section>
-      <p className={`m-0 text-[12.5px] leading-relaxed ${MUTED}`}>{CHECK_RUNS}</p>
-      {mismatch && fixOn && newest && (
-        <Link className={`${LINK} text-[12.5px]`} to={`${HOME_PATH}${tabSearch(search, null, false)}`} data-testid="narrative-check-fix">
-          Phrase the fix for the first mismatch with Eadwyn on Home
-        </Link>
-      )}
-      {mismatch && fixOn && !newest && <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="narrative-check-fix-newest">{FIX_NEWEST_ONLY}</p>}
     </div>
   );
 }
@@ -369,9 +321,7 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   const list = useVersions(projectId, reload);
   const wanted = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('version');
   const version = chosenVersion(list.versions, wanted);
-  // Story reads the narrative's own stores (D910, StoryTab); Check reads the version's record.
-  const needsRecord = tab === 'check';
-  const record = useVersionRecord(projectId, needsRecord ? version : null, reload);
+  // Story reads the narrative's own stores (D910); Claims and Check read D912's claim routes.
   const here = TABS.find((t) => t.id === tab) || TABS[0];
 
   let body;
@@ -395,10 +345,8 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
       {admin ? null : <NarrativeReads projectId={projectId} />}
     </>
   );
-  else if (record.status === 'loading' || record.status === 'idle') body = <Skeleton testId="narrative-loading" />;
-  else if (record.status === 'refused') body = <p className={`m-0 text-[13px] ${INK}`}>{record.message || 'This version could not be opened.'}</p>;
-  else if (record.status === 'error') body = <Unreadable what={`Version ${version}`} claim="This is not a claim that it is empty." onRetry={retry} />;
-  else body = <CheckTab record={record.data} search={search} newest={version === list.versions[0]?.value} fixOn={fixOn && !admin} />;
+  else if (tab === 'claims') body = <ClaimsTab key={version} projectId={projectId} version={version} search={search} admin={admin} phone={phone} />;
+  else body = <CheckTab key={version} projectId={projectId} version={version} search={search} admin={admin} fixOn={fixOn && !admin} />;
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`narrative-${tab}-page`}>

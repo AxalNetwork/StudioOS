@@ -30,5 +30,5 @@ test('App.jsx serves each address as a static route, so /validate/:slug/:id neve
   }
 });
 
-// D862 (#2507), D869 (#2515) and D878 (#2525) build the three channels' boards, so each page draws its tool;
+// D862 (#2507), D869 (#2515) and D878 (#2525) build every channel's boards, so each page draws its tool;
 // record_whatsapp_d862.test.mjs, record_telegram_d869.test.mjs and record_calls_d878.test.mjs mount them.

@@ -132,7 +132,9 @@ test('/connect/assistant is mounted, signed in, with sign-in and back for a visi
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   assert.match(app, /<Route path="\/connect\/assistant" element=\{user \? <ConnectAssistantPage \/> : <Navigate to=\{assistantSignInPath\(location\)\} replace \/>\} \/>/);
   // D1315: the assistants live in Builder; Connectors keeps one card that opens it.
-  assert.match(readFileSync('frontend/src/pages/account/builder/BuilderSection.jsx', 'utf8'), /<AssistantsSection \/>/);
+  // D1331: Builder's MCP and services draws them in its own callers card, with Revoke.
+  assert.match(readFileSync('frontend/src/pages/account/builder/BuilderSection.jsx', 'utf8'), /<McpServicesPage view=\{view\}/);
+  assert.match(readFileSync('frontend/src/pages/account/builder/McpServicesPage.jsx', 'utf8'), /<CallersCard grants=\{grants\}[^>]*onRevoke=\{revoke\}/);
   assert.match(readFileSync('frontend/src/pages/account/AccountConnectors.jsx', 'utf8'), /<BuilderHandoff \/>/);
   assert.match(readFileSync('frontend/src/lib/api.js', 'utf8'), /export \* from '\.\/api\/assistants\.js';/);
 });

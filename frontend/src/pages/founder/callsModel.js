@@ -1,471 +1,439 @@
 /**
  * D878 (#2525) — Record a session › Calls, the rules behind its boards
  * (`design/incoming/Record a session · Calls Boards.dc.html`, MC1–MC7, over
- * `Session Channels Page.dc.html` variants `mc1`–`mcs`). No React and no
- * fetch, so `frontend/test/record_calls_d878.test.mjs` holds each rule.
+ * `Session Channels Page.dc.html`). No React and no fetch, so
+ * `frontend/test/record_calls_d878.test.mjs` holds each rule.
  *
- * THE TABS (the canvas's six), each a path under `/validate/record/calls`:
- *   Upcoming    MC2  the next 14 days: calls already on an interview, and the
- *                    calendar's calls that can be attached (D875)
- *   Calls       MC3  each call's status and its source; with a session id,
- *               MC5  its transcript by speaker
- *   Upload      MC4  a recording file, after the attestation (D872)
- *   Proposals   MC6  the summary, decisions, action items and data points
- *                    Eadwyn proposed for a call; nothing lands until accepted
- *   Connection  MC1  Google Meet and Zoom, step by step (D875)
- *   Retention   MC7  how long call audio is kept (D877)
+ * THE BOARDS SHARE WHATSAPP'S PARTS (D862). The four states, the dialogs, the
+ * Original · Translation · Both switch and the proposals list are
+ * `ChannelSessionParts.jsx`; the transcript's turns build on
+ * `transcriptTurns`, and a proposal's line and confidence on
+ * `proposalTitle` and `confidenceOf` (`channelSessionModel.js`).
  *
- * WHAT IT READS, all in the Worker:
- *   GET   /founder/validate/meetings/setup        D875: { zoom, google_meet } steps from stored rows
- *   GET   /founder/validate/meetings/upcoming     D875: { connected, calls } from the founder's own calendar
- *   GET   /founder/validate/meetings/calls        D878: one venture's calls, each with its ref and its audio
- *   GET   /calendar/google/status                 the Google sign-in, and whether it was refused
- *   GET   /founder/validate/sessions/:id          the transcript, translation beside the original (D857)
- *   PATCH /founder/validate/sessions/:id/speakers D878: Rename speaker, every passage at once
- *   GET   /founder/validate/sessions/:id/placements  the proposals (D757, D859, D873)
- *   GET/PUT /founder/validate/sessions/audio-retention, DELETE …/sessions/:id/audio  (D877)
+ * WHAT IT READS, all on the Worker:
+ *   GET    /founder/validate/meetings/setup        Zoom's and Meet's steps (D875)
+ *   GET    /founder/validate/meetings/upcoming     the next 14 days, unattached (D875)
+ *   GET    /founder/validate/meetings              calls, uploads, audio state (D878, this task's one read)
+ *   POST   /founder/validate/interviews/:id/meetings  attach a Meet call from the calendar (D871)
+ *   POST   /founder/validate/interviews/:id/meetings/:ref/import  try an import again (D684)
+ *   GET    /founder/validate/sessions/:id          a call's transcript and summary (D657, D873)
+ *   PATCH  /founder/validate/sessions/:id/segments/:seg  rename a speaker
+ *   GET    /founder/validate/sessions/:id/audio    a chunk to play from a turn (D690)
+ *   GET    /founder/validate/sessions/:id/placements  proposals (D859, D873's decisions and action items)
+ *   GET|PUT /founder/validate/sessions/audio-retention, DELETE …/sessions/:id/audio  retention (D877)
+ *   uploads go through `lib/recordingUpload.js` (D872), the attestation first.
  *
- * THINGS THIS FILE MUST NEVER DO: turn a figure the store does not hold into
- * 0 or a date (it is Not recorded, or says why); say a call was transcribed
- * before it was; say a proposal is in Validate before the founder accepts it;
- * or offer the meeting bot's live join, which waits on #2581, #2582 and #2587.
+ * THINGS THIS FILE MUST NEVER DO: show a join link, a meeting id or a
+ * passcode; turn a time the store does not hold into a time (it is Not
+ * recorded); call Whisper's text the provider's transcript; or say a proposal
+ * is in Validate before the founder accepts it.
  */
-import { NOT_RECORDED } from '../../lib/absence.js';
-import { usageMoney } from '../../lib/aiTokens.js';
-import { PROPOSAL_GROUPS, confidenceOf, proposalTitle, transcriptTurns } from './channelSessionModel.js';
+import { NOT_RECORDED, confidenceOf, proposalTitle, transcriptTurns } from './channelSessionModel.js';
+
+export { NOT_RECORDED };
 
 /* ------------------------------------------------------------------ *
- * Addresses
+ * Addresses: each tab is a path under D1309's `/validate/record/calls`
  * ------------------------------------------------------------------ */
 
 export const MC_BASE = '/validate/record/calls';
 
+/** The canvas's six tabs, in its order. */
 export const MC_TABS = Object.freeze([
   { key: 'upcoming', label: 'Upcoming', to: MC_BASE },
-  { key: 'calls', label: 'Calls', to: `${MC_BASE}/calls` },
+  { key: 'calls', label: 'Calls', to: `${MC_BASE}/all` },
   { key: 'upload', label: 'Upload', to: `${MC_BASE}/upload` },
   { key: 'proposals', label: 'Proposals', to: `${MC_BASE}/proposals` },
   { key: 'connection', label: 'Connection', to: `${MC_BASE}/connection` },
   { key: 'retention', label: 'Retention', to: `${MC_BASE}/retention` },
 ]);
+/** The tabs that open one session when its id follows them: a call's transcript (MC5) and its proposals (MC6). */
+const WITH_ID = new Set(['calls', 'proposals']);
+const SEG = { calls: 'all', upload: 'upload', proposals: 'proposals', connection: 'connection', retention: 'retention' };
 
-/** The tabs that read one call (its session) when an id follows them. */
-const RECORD_TABS = new Set(['calls', 'proposals']);
-
-/** The tab and the call a location names: `{ tab, id }`, or null for an address that is not this tool's. */
+/** The tab and the session a location names: `{ tab, id }`, or null for an address that is not the tool's. */
 export function mcRoute(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === MC_BASE) return { tab: 'upcoming', id: null };
   if (!p.startsWith(`${MC_BASE}/`)) return null;
-  const [tab, id, extra] = p.slice(MC_BASE.length + 1).split('/');
-  if (!MC_TABS.some((t) => t.key === tab) || tab === 'upcoming' || extra !== undefined) return null;
+  const [seg, id, extra] = p.slice(MC_BASE.length + 1).split('/');
+  const tab = Object.keys(SEG).find((k) => SEG[k] === seg);
+  if (!tab || extra !== undefined) return null;
   if (id === undefined) return { tab, id: null };
-  if (!RECORD_TABS.has(tab) || !/^[1-9]\d{0,9}$/.test(id)) return null;
+  if (!WITH_ID.has(tab) || !/^[1-9]\d{0,9}$/.test(id)) return null;
   return { tab, id: Number(id) };
 }
 
-/** A tab's address, with a call's session for Calls and Proposals. */
+/** A tab's address, with a session for Calls and Proposals. */
 export function mcHref(tab, id = null) {
   const t = MC_TABS.find((x) => x.key === tab);
   if (!t) throw new Error(`Unknown tab: ${tab}`);
-  return id && RECORD_TABS.has(tab) ? `${t.to}/${Number(id)}` : t.to;
+  return id && WITH_ID.has(tab) ? `${t.to}/${Number(id)}` : t.to;
 }
-
-export const ZOOM_PAGE = '/account/connectors/zoom';
-export const GOOGLE_PAGE = '/account/connectors/google';
 
 /* ------------------------------------------------------------------ *
- * Times
+ * Words
  * ------------------------------------------------------------------ */
 
-const DAY = 86400000;
-const parse = (v) => {
-  if (!v) return NaN;
-  const s = String(v);
-  return Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) || !/\d\d:\d\d/.test(s) ? s.replace(' ', 'T') : `${s.replace(' ', 'T')}Z`);
-};
+export const PROVIDER_WORD = Object.freeze({ zoom: 'Zoom', google_meet: 'Google Meet', upload: 'Uploaded' });
+const providerWord = (p) => PROVIDER_WORD[p] || NOT_RECORDED;
 
-/** "Tue 21 Oct 2026, 10:00", or Not recorded. `timeZone` is the reader's own unless a test fixes it. */
-export function when(v, timeZone) {
-  const t = parse(v);
-  if (!Number.isFinite(t)) return NOT_RECORDED;
-  const d = new Date(t);
-  const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone });
-  return `${day.replace(/,/g, '')}, ${clockOf(d, timeZone)}`;
-}
+const pad = (n) => String(n).padStart(2, '0');
 
-/** "21 Oct 2026", or Not recorded. */
-export function dayOf(v, timeZone) {
-  const t = parse(v);
-  return Number.isFinite(t) ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone }) : NOT_RECORDED;
-}
-
-const clockOf = (d, timeZone) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone });
-
-/** A call's span: "10:00 – 10:45", or its start alone when its end is not known. */
-export function spanOf(start, end, timeZone) {
-  const a = parse(start);
-  const b = parse(end);
-  if (!Number.isFinite(a)) return NOT_RECORDED;
-  return Number.isFinite(b) ? `${clockOf(new Date(a), timeZone)} – ${clockOf(new Date(b), timeZone)}` : clockOf(new Date(a), timeZone);
-}
-
-/** Whole minutes between two times, or null. */
-export function minutesOf(start, end) {
-  const a = parse(start);
-  const b = parse(end);
-  return Number.isFinite(a) && Number.isFinite(b) && b > a ? Math.round((b - a) / 60000) : null;
-}
-
-/** A transcript offset as 00:05:02; a missing one is null, never 00:00:00. */
-export function offset(ms) {
+/** "00:05:02" from milliseconds into the call; null when the store holds no offset. */
+export function clock(ms) {
   const n = Number(ms);
-  if (ms == null || !Number.isFinite(n) || n < 0) return null;
+  if (ms === null || ms === undefined || !Number.isFinite(n) || n < 0) return null;
   const s = Math.floor(n / 1000);
-  return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((x) => String(x).padStart(2, '0')).join(':');
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+}
+
+/** A date and time in the founder's words, or null. `timeZone` is for the tests. */
+export function when(iso, timeZone) {
+  const t = Date.parse(String(iso || ''));
+  if (!iso || !Number.isFinite(t)) return null;
+  return new Date(t).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', ...(timeZone ? { timeZone } : {}) });
 }
 
 /* ------------------------------------------------------------------ *
- * MC1: Connect calls
+ * MC1: Connect calls (D875's setup read)
  * ------------------------------------------------------------------ */
 
-const STEP_LABELS = {
+const STEP_T = {
   zoom: { set_up: 'Available on Axal', app_open: 'Open to your Zoom account', connected: 'Connected' },
   google_meet: { set_up: 'Available on Axal', connected: 'Connected', transcripts: 'Transcript access' },
 };
-
-/** Zoom's distribution in words (D757 §2.12): a pill for each audience but public. */
-const AUDIENCE = {
-  beta: ['Zoom beta: open to invited founders', 'lav'],
-  own_account: ['Zoom: Axal’s own Zoom account only, for now', 'amb'],
-};
+const CONNECT_TO = { zoom: '/account/connectors/zoom', google_meet: '/account/connectors/google' };
 
 /**
- * The two cards of MC1 from the setup read (and Google's status). Each step is
- * the Worker's: its state and, when not done, its sentence. A sign-in Google
- * refused reads "Sign-in expired" with Reconnect; the plan each tool needs is a
- * line Axal cannot check. `press` is what this page offers: Google's own
- * sign-in or transcript permission, or Zoom's connector page.
+ * Each provider's card: its steps in the canvas's words, the Worker's own
+ * sentence for a step still to do, what the provider requires that Axal
+ * cannot see, and the one press the first open step asks for.
  */
-export function setupCards(view, googleStatus = null) {
-  const out = [];
-  for (const provider of ['google_meet', 'zoom']) {
-    const v = view?.[provider];
-    if (!v || !Array.isArray(v.steps)) continue;
-    const steps = v.steps.map((s) => ({
-      key: s.key, n: Number(s.step) || null, state: ['done', 'todo', 'blocked'].includes(s.state) ? s.state : 'blocked',
-      label: STEP_LABELS[provider][s.key] || s.key, line: s.state === 'done' ? null : (s.action || null),
+export function setupCards(view) {
+  return ['google_meet', 'zoom'].filter((p) => view && view[p]).map((p) => {
+    const v = view[p];
+    const steps = (Array.isArray(v.steps) ? v.steps : []).map((s) => ({
+      key: s.key,
+      n: s.step,
+      t: STEP_T[p][s.key] || s.key,
+      state: s.state === 'done' ? 'done' : s.state === 'blocked' ? 'blocked' : 'todo',
+      pill: s.state === 'done' ? 'Done' : s.state === 'blocked' ? 'Waiting' : 'To do',
+      action: s.state === 'done' ? null : (typeof s.action === 'string' && s.action ? s.action : null),
     }));
-    const pills = [];
+    const next = steps.find((s) => s.state !== 'done') || null;
+    const pill = v.ready ? { t: 'Ready', tone: 'pos' }
+      : p === 'zoom' && v.audience === 'beta' ? { t: 'Zoom beta: open to invited founders', tone: 'lav' }
+        : next?.state === 'todo' ? { t: 'Your move', tone: 'amb' } : { t: 'Not available yet', tone: 'mut' };
     let press = null;
-    if (provider === 'google_meet') {
-      const refused = googleStatus?.connected && googleStatus?.sync_error?.code === 'connection_refused';
-      const step = Object.fromEntries(steps.map((s) => [s.key, s]));
-      if (refused) { pills.push(['Sign-in expired', 'neg']); press = 'google_reconnect'; }
-      else if (step.connected?.state === 'todo') press = 'google_connect';
-      else if (step.transcripts?.state === 'todo') press = 'meet_allow';
-      if (googleStatus?.connected && googleStatus.google_email) steps.forEach((s) => { if (s.key === 'connected' && s.state === 'done') s.line = `Signed in as ${googleStatus.google_email}.`; });
-      if (refused) steps.forEach((s) => { if (s.key === 'connected') { s.state = 'failed'; s.line = 'Google no longer accepts Axal’s sign-in. Reconnect to read your calendar and transcripts again.'; } });
-    } else {
-      if (AUDIENCE[v.audience] && !v.ready) pills.push(AUDIENCE[v.audience]);
-      if (steps.find((s) => s.key === 'connected')?.state === 'todo') press = 'zoom_connect';
-    }
-    if (v.ready && !pills.some(([, t]) => t === 'neg')) pills.unshift(['Ready', 'pos']);
-    out.push({
-      provider, name: provider === 'zoom' ? 'Zoom' : 'Google Meet', steps, pills, press,
-      page: provider === 'zoom' ? ZOOM_PAGE : GOOGLE_PAGE,
-      prerequisite: (v.prerequisites || [])[0]?.line || null,
-      ready: !!v.ready,
-    });
-  }
-  return out;
+    if (next?.state === 'todo' && next.key === 'connected') press = { kind: 'link', t: p === 'zoom' ? 'Connect Zoom' : 'Connect Google', to: CONNECT_TO[p] };
+    else if (next?.state === 'todo' && next.key === 'transcripts') press = { kind: 'allow', t: 'Allow transcript import' };
+    return {
+      key: p,
+      name: providerWord(p),
+      pill,
+      steps,
+      prerequisite: (Array.isArray(v.prerequisites) ? v.prerequisites : []).map((x) => x?.line).filter(Boolean)[0] || '',
+      press,
+      ready: v.ready === true,
+    };
+  });
 }
 
-/** Neither tool is connected: the "not connected" state of MC1–MC3 (MC-S). */
-export function noneConnected(view) {
-  const on = (v, key) => (v?.steps || []).some((s) => s.key === key && s.state === 'done');
-  return !!view && !on(view.zoom, 'connected') && !on(view.google_meet, 'connected');
-}
+/** Neither provider can be used yet: the not-connected state the other boards draw. */
+export const noneConnected = (view) => !setupCards(view).some((c) => c.ready);
 
 /* ------------------------------------------------------------------ *
- * MC2: Upcoming calls, the next 14 days
+ * MC2: upcoming calls, the next 14 days (D875)
  * ------------------------------------------------------------------ */
 
-export const UPCOMING_DAYS = 14;
-export const PROVIDER_NAME = { zoom: 'Zoom', google_meet: 'Google Meet', upload: 'Upload', meeting_bot: 'Notetaker' };
-
 /**
- * One list, by start: the calls already on an interview (scheduled, from the
- * venture's calls) and the calendar's own, not yet attached. A Meet call the
- * founder organizes is attached here, with consent; a Zoom call is attached
- * when it starts, to the recording Record a session opens for it (D685: the
- * Worker checks the host then). The calendar's reason stands where attach
- * cannot.
+ * The calls offered, soonest first. A Meet call the founder organizes can be
+ * attached here (D871); a Zoom call is attached to the video recording that
+ * captures it, so the row says where. A row the Worker refused says why.
+ * Never the join link.
  */
-export function upcomingRows({ upcoming, calls }, now = Date.now(), timeZone) {
-  const end = now + UPCOMING_DAYS * DAY;
-  const attached = (calls || [])
-    .filter((c) => c.meeting?.status === 'scheduled' && parse(c.meeting.starts_at) >= now - 60 * 60000 && parse(c.meeting.starts_at) <= end)
-    .map((c) => ({
-      key: `a-${c.session_id}`, at: parse(c.meeting.starts_at), day: dayOf(c.meeting.starts_at, timeZone), span: spanOf(c.meeting.starts_at, c.meeting.ends_at, timeZone),
-      title: c.interviewee_name ? `${c.interviewee_name}${c.interviewee_company ? ` · ${c.interviewee_company}` : ''}` : 'Interviewee not recorded',
-      provider: c.meeting.provider, attached: { interviewId: c.interview_id, sessionId: c.session_id }, attach: null, blocked: null, zoomLater: false,
-    }));
-  const free = (upcoming?.calls || []).map((c, i) => ({
-    key: `u-${i}`, at: parse(c.starts_at), day: dayOf(c.starts_at, timeZone), span: spanOf(c.starts_at, c.ends_at, timeZone),
-    title: c.title || 'Untitled call', provider: c.provider, attached: null,
-    attach: c.attach && c.provider === 'google_meet' ? { join_url: c.join_url } : null,
-    zoomLater: !!c.attach && c.provider === 'zoom',
-    blocked: c.attach ? null : (c.attach_blocked || 'This call cannot be attached from here.'),
-  }));
-  return [...attached, ...free].filter((r) => Number.isFinite(r.at)).sort((a, b) => a.at - b.at);
+export function upcomingRows(calls, timeZone) {
+  return (Array.isArray(calls) ? calls : [])
+    .filter((c) => c && Number.isFinite(Date.parse(c.starts_at)))
+    .slice()
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
+    .map((c, i) => {
+      const d = new Date(Date.parse(c.starts_at));
+      const part = (o) => d.toLocaleString('en-GB', { ...o, ...(timeZone ? { timeZone } : {}) });
+      const end = Number.isFinite(Date.parse(c.ends_at)) ? new Date(Date.parse(c.ends_at)).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', ...(timeZone ? { timeZone } : {}) }) : null;
+      const meet = c.provider === 'google_meet';
+      return {
+        key: `${c.provider}-${c.starts_at}-${i}`,
+        provider: c.provider,
+        word: providerWord(c.provider),
+        day: part({ day: 'numeric' }),
+        mon: part({ month: 'short' }).toUpperCase(),
+        wd: part({ weekday: 'short' }).toUpperCase(),
+        time: `${part({ hour: '2-digit', minute: '2-digit' })}${end ? ` – ${end}` : ''}`,
+        title: String(c.title || '').trim() || 'Title not recorded',
+        startsAt: c.starts_at,
+        canAttach: meet && !!c.attach && !c.attach_blocked,
+        join: meet && c.attach ? { join_url: c.join_url } : null,
+        note: c.attach_blocked || (!meet && c.attach ? 'Attach it from Record a session when the call starts: start a video session, then attach the call to it.' : ''),
+      };
+    });
 }
-
-/** How the interviewee agreed, as attaching takes it (CONSENT_METHODS). */
-export const CONSENT_CHOICES = Object.freeze([
-  { method: 'verbal', label: 'Out loud, at the start' },
-  { method: 'written', label: 'In writing' },
-  { method: 'pre_agreed', label: 'Agreed beforehand' },
-]);
 
 /* ------------------------------------------------------------------ *
  * MC3: a call's status
  * ------------------------------------------------------------------ */
 
-/** The source badge: where the call's text came from, or that none has come. */
+const ORDER = ['scheduled', 'ended', 'transcript_ready', 'imported'];
+const STEP_WORD = { scheduled: 'Scheduled', ended: 'Ended', transcript_ready: 'Transcript ready', imported: 'Imported' };
+const STOP = {
+  no_transcript: { t: 'No transcript', p: 'The call ended without a transcript Axal could read, and no audio to transcribe.' },
+  failed: { t: 'Import failed', p: 'The import stopped. Nothing was lost; it can be tried again.' },
+  cancelled: { t: 'Cancelled', p: 'The call was cancelled.' },
+};
+
+/** The source badge: how the call's text was made. Only an imported call has one. */
 export function sourceBadge(call) {
-  const m = call?.meeting;
-  if (call?.source === 'upload') return { t: 'Uploaded recording', tone: 'out' };
-  if (call?.source === 'meeting_bot') return { t: 'Notetaker recording', tone: 'out' };
-  if (m?.status === 'imported' && m.transcript_source === 'whisper') return { t: 'Transcribed by Axal', tone: 'out' };
-  if (m?.status === 'imported') return { t: m.provider === 'zoom' ? 'Zoom transcript' : 'Meet transcript', tone: 'pos' };
-  return { t: 'No transcript yet', tone: 'mut' };
+  if (call?.state !== 'imported') return null;
+  if (call.transcript_source === 'whisper') return 'Transcribed by Axal';
+  if (call.transcript_source === 'native') return call.provider === 'zoom' ? 'Zoom transcript' : 'Meet transcript';
+  return `Source: ${NOT_RECORDED}`;
 }
-
-/** The ref errors whose next step is to try again: the provider did not answer, or tokens ran out. */
-const RETRY = new Set(['zoom_unreachable', 'zoom_fetch_failed', 'meet_unreachable', 'meet_fetch_failed', 'import_failed', 'stt_failed', 'stt_budget', 'stt_paused']);
-/** The ref errors that need the founder's connection first. */
-const RECONNECT = new Set(['zoom_reconnect', 'zoom_not_connected', 'meet_reconnect', 'meet_not_connected', 'meet_transcripts_unavailable', 'zoom_obf_scope_missing']);
-/** The ref errors after which only the recording file can bring the call in. */
-const UPLOAD = new Set(['zoom_no_transcript', 'meet_no_transcript', 'meet_no_record', 'meet_no_transcript_recording', 'zoom_audio_unreadable', 'zoom_audio_too_large', 'transcript_empty']);
-/** Transcribing the call's audio uses AI tokens (D870). */
-const AUDIO_RUN = new Set(['stt_failed', 'stt_budget', 'stt_paused']);
-
-const step = (t, at, state, line = null) => ({ t, at, state, line });
 
 /**
- * MC3: a call's timeline, its next steps and why. Each step is the store's:
- * a time it does not hold reads Not recorded. A Zoom or Meet call reads
- * Scheduled → Ended → Transcript ready → Imported, or stops where it stopped
- * with the Worker's own sentence; an upload reads Uploaded → Transcribing →
- * Transcript ready.
+ * The timeline: scheduled → ended → transcript ready → imported, each done
+ * once the call has passed it, or a stop with Axal's own sentence for why and
+ * what to do next. Only the scheduled time is stored, so the other steps
+ * carry no time rather than an invented one.
  */
 export function callTimeline(call, timeZone) {
-  const m = call?.meeting;
-  const s = call?.session || {};
-  if (!m) {
-    const stage = s.processing_stage;
-    const steps = [step('Uploaded', when(s.created_at, timeZone), 'done')];
-    if (stage === 'failed') steps.push(step('Transcription stopped', '', 'stop', s.processing_error || 'The transcription stopped before it finished.'));
-    else if (stage === 'done' || ['summarising', 'placing'].includes(stage)) steps.push(step('Transcript ready', '', 'done'));
-    else if (stage === 'uploading' || stage === 'transcribing') steps.push(step('Transcribing', '', 'now'));
-    else steps.push(step('Waiting for the upload to finish', '', 'now', 'Open Upload and drop the same file: it carries on from the part it stopped at.'));
-    const next = stage === 'failed' ? [{ key: 'process', t: 'Try again' }] : stage == null ? [{ key: 'upload', t: 'Finish the upload' }] : [];
-    return { steps, next, why: null };
-  }
-  const code = m.error_code || null;
-  const ORDER = ['scheduled', 'ended', 'transcript_ready', 'imported'];
-  const reached = ORDER.indexOf(m.status);
-  const mins = minutesOf(m.starts_at, m.ends_at);
-  const audioRun = m.transcript_source === 'whisper' || AUDIO_RUN.has(code);
-  const base = [
-    step('Scheduled', when(m.starts_at, timeZone), 'done'),
-    step('Ended', m.ends_at ? `${spanOf(m.ends_at, null, timeZone)}${mins ? ` · ${mins} min` : ''}` : NOT_RECORDED, 'done'),
-    step(audioRun ? 'Transcribing with Axal' : 'Transcript ready', '', 'done'),
-    step('Imported', `Interview with ${call.interviewee_name || 'the interviewee'}`, 'done'),
-  ];
-  let steps;
-  if (m.status === 'cancelled') steps = [base[0], step('Cancelled', '', 'stop', m.error || null)];
-  else if (m.status === 'failed' || m.status === 'no_transcript') {
-    const label = m.status === 'no_transcript' ? 'No transcript' : 'Stopped';
-    steps = [base[0], ...(m.ends_at ? [base[1]] : []), step(label, '', 'stop', m.error || 'The Worker did not say why.')];
-  } else {
-    steps = base.map((b, i) => ({ ...b, state: i < reached ? 'done' : i === reached ? (i === 3 ? 'done' : 'now') : 'todo' }));
-    if (reached === 0) steps[0].state = 'done';
-  }
-  const next = [];
-  if (RETRY.has(code)) next.push({ key: 'import', t: audioRun ? 'Transcribe with Axal' : 'Try again', tokens: audioRun, minutes: mins });
-  if (RECONNECT.has(code)) next.push({ key: 'connection', t: 'Open Connection' });
-  if (UPLOAD.has(code) || (m.status === 'no_transcript' && !next.length)) next.push({ key: 'upload', t: 'Upload the recording' });
-  if (code === 'meet_no_transcript_recording') next.push({ key: 'drive', t: 'Find the recording in Drive' });
-  const why = code === 'stt_budget' ? 'There are no AI tokens left for this. Add tokens, then Transcribe with Axal.'
-    : audioRun && next.some((n) => n.key === 'import') ? 'The badge reads “Transcribed by Axal” once it is done.' : null;
-  return { steps, next, why };
-}
-
-/** The AI tokens an audio run would use: minutes × the default final model's price, or null when either is not known. */
-export function tokenEstimate(minutes, models) {
-  const id = models?.defaults?.final;
-  const price = Number((models?.final || []).find((m) => m.model === id)?.price_usd_per_minute);
-  const mins = Number(minutes);
-  if (!Number.isFinite(price) || price < 0 || !Number.isFinite(mins) || mins <= 0) return null;
-  return `about ${usageMoney(Math.max(1, Math.round(mins * price * 1e6)))} in AI tokens`;
-}
-
-/** The calls list: one line per call, newest first, as the Worker sends it. */
-export function callRows(read, timeZone) {
-  return (read?.calls || []).map((c) => ({
-    id: c.session_id,
-    title: c.interviewee_name ? `${c.interviewee_name}${c.interviewee_company ? ` · ${c.interviewee_company}` : ''}` : 'Interviewee not recorded',
-    provider: PROVIDER_NAME[c.source] || NOT_RECORDED,
-    at: when(c.meeting?.starts_at || c.session?.created_at, timeZone),
-    status: statusWord(c),
-    badge: sourceBadge(c),
-    pending: Number(c.pending_proposals) || 0,
+  const state = String(call?.state || '');
+  const stop = STOP[state] || null;
+  const reached = stop ? (state === 'cancelled' ? 0 : 1) : ORDER.indexOf(state);
+  const steps = ORDER.slice(0, stop ? reached + 1 : ORDER.length).map((k, i) => ({
+    key: k,
+    t: STEP_WORD[k],
+    at: k === 'scheduled' ? (when(call?.starts_at, timeZone) || NOT_RECORDED) : '',
+    state: i <= reached ? 'done' : 'todo',
   }));
+  if (stop) steps.push({ key: state, t: stop.t, at: call?.error || stop.p, state: 'stop' });
+  const next = [];
+  if (state === 'failed') next.push({ kind: 'retry', t: 'Try the import again' });
+  if (state === 'no_transcript' || state === 'failed') next.push({ kind: 'upload', t: 'Upload the recording' });
+  return {
+    id: call?.id,
+    word: providerWord(call?.provider),
+    title: [call?.company?.name || null, `${providerWord(call?.provider)} call`].filter(Boolean).join(' · '),
+    badge: sourceBadge(call),
+    steps,
+    next,
+    sessionId: call?.session_id ?? null,
+    interviewId: call?.interview_id ?? null,
+    open: state === 'imported' && call?.session_id != null,
+    whisperNote: state === 'transcript_ready' && call?.provider === 'zoom' ? 'Axal is transcribing the call’s audio. It reads “Transcribed by Axal” once it is in.' : '',
+  };
 }
 
-const STATUS = {
-  scheduled: ['Scheduled', 'mut'], ended: ['Ended · waiting for the transcript', 'amb'], transcript_ready: ['Transcript coming in', 'amb'],
-  imported: ['Imported', 'pos'], no_transcript: ['No transcript', 'neg'], failed: ['Stopped', 'neg'], cancelled: ['Cancelled', 'mut'],
-};
-function statusWord(c) {
-  if (c.meeting) return STATUS[c.meeting.status] || [NOT_RECORDED, 'mut'];
-  const st = c.session?.processing_stage;
-  return st === 'failed' ? ['Stopped', 'neg'] : st === 'done' || st === 'summarising' || st === 'placing' ? ['Transcript ready', 'pos']
-    : st ? ['Transcribing', 'amb'] : ['Upload not finished', 'amb'];
+/** An uploaded recording as a row of the Calls list: its interview and where its transcription stands. */
+export function uploadRow(u, timeZone) {
+  const stage = String(u?.processing_stage || '');
+  const status = stage === 'done' ? { t: 'Transcript ready', tone: 'pos' }
+    : stage === 'failed' ? { t: 'Transcription stopped', tone: 'neg' }
+      : stage ? { t: 'Transcribing', tone: 'amb' }
+        : u?.status === 'stopped' ? { t: 'Waiting for its parts', tone: 'amb' } : { t: NOT_RECORDED, tone: 'mut' };
+  return {
+    sessionId: Number(u?.session_id),
+    title: [u?.interviewee || null, u?.company?.name || null, 'Uploaded recording'].filter(Boolean).join(' · '),
+    at: when(u?.created_at, timeZone) || NOT_RECORDED,
+    status,
+    badge: 'Transcribed by Axal',
+  };
 }
 
 /* ------------------------------------------------------------------ *
- * MC5: the transcript, by speaker
+ * MC5: the transcript, speakers by name or "Speaker n"
  * ------------------------------------------------------------------ */
 
+/** D872, D870: the label a passage carries until the founder names its speaker. */
+export const UNKNOWN_SPEAKER = 'Speaker ?';
+
 /**
- * The call's turns: speaker, offset, original and translation (the chat
- * boards' rule, D857). A speaker the provider could not name keeps its label
- * ("Speaker 3") until the founder renames it.
+ * A call's turns in the chosen view, each with its time into the call and
+ * its speaker. "Me" is the founder; a missing label is "Speaker ?". The
+ * translation rules are WhatsApp's (`transcriptTurns`).
  */
 export function callTurns(segments, view = 'both') {
   const list = Array.isArray(segments) ? segments : [];
-  const byId = new Map(list.map((s) => [s.id, s]));
-  return transcriptTurns(list, view).map((t) => {
-    const s = byId.get(t.id) || {};
-    const label = String(s.speaker_label || '').trim();
-    return { ...t, who: label || 'Speaker not recorded', label, startMs: Number.isFinite(Number(s.start_ms)) && s.start_ms != null ? Number(s.start_ms) : null, at: offset(s.start_ms) };
-  });
+  const byId = new Map(list.map((s) => [s?.id, s]));
+  return transcriptTurns(list, view)
+    .map((t) => {
+      const seg = byId.get(t.id) || {};
+      const label = String(seg.speaker_label || '').trim();
+      return {
+        ...t,
+        label: label || UNKNOWN_SPEAKER,
+        who: label === 'Me' ? 'You' : (label || UNKNOWN_SPEAKER),
+        at: clock(seg.start_ms),
+        startMs: Number.isFinite(Number(seg.start_ms)) && seg.start_ms !== null ? Number(seg.start_ms) : null,
+        canRename: label !== 'Me',
+      };
+    })
+    .sort((a, b) => (a.startMs ?? Infinity) - (b.startMs ?? Infinity));
 }
 
-/** Each speaker once, in order of first turn, with how many turns they have. */
-export function speakersOf(segments) {
-  const out = new Map();
-  for (const s of Array.isArray(segments) ? segments : []) {
-    const label = String(s?.speaker_label || '').trim();
-    if (!label || s.source !== 'final') continue;
-    out.set(label, (out.get(label) || 0) + 1);
-  }
-  return [...out].map(([label, turns]) => ({ label, turns, unnamed: /^(Speaker \S+|Unknown Speaker)$/i.test(label) }));
+/** The passages a rename changes: every passage by that speaker, the founder's own never. */
+export function renameTargets(segments, label) {
+  const l = String(label || '').trim() || UNKNOWN_SPEAKER;
+  if (l === 'Me') return [];
+  return (Array.isArray(segments) ? segments : [])
+    .filter((s) => s?.source === 'final' && (String(s.speaker_label || '').trim() || UNKNOWN_SPEAKER) === l)
+    .map((s) => s.id);
 }
 
-/** A new name for a speaker: trimmed, at most 80 characters, not empty and not the same. */
-export function renameCheck(from, to) {
-  const name = String(to ?? '').trim().slice(0, 80);
-  if (!name) return { error: 'Give the speaker a name.' };
-  if (name === from) return { error: 'That is already this speaker’s name.' };
-  return { name };
+/** A new name as the route takes it: trimmed, at most 80 characters, never "Me". */
+export function speakerName(input) {
+  const t = String(input ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  return t && t.toLowerCase() !== 'me' ? t : null;
 }
 
-/** The consent line over the transcript: how everyone recorded agreed, or that it is not recorded. */
+/** The chunk a turn's audio is in, and where in it: `{ part, offset }` in seconds, or null. */
+export function audioAt(parts, startMs) {
+  if (startMs === null || startMs === undefined || !Array.isArray(parts) || !parts.length) return null;
+  const known = parts.filter((p) => Number.isFinite(Number(p?.start_ms)) && p.start_ms !== null).sort((a, b) => a.start_ms - b.start_ms);
+  const part = [...known].reverse().find((p) => Number(p.start_ms) <= startMs) || null;
+  return part ? { part, offset: Math.max(0, (startMs - Number(part.start_ms)) / 1000) } : null;
+}
+
+/** The consent line for a call: the session's own record (D872's attestation, or what scheduling took). */
 export function callConsent(session) {
-  const how = { verbal: 'out loud', written: 'in writing', pre_agreed: 'beforehand', in_app: 'in Axal' }[session?.consent_method];
-  if (session?.consent_status === 'given' && how) return { tone: 'pos', t: `Everyone recorded agreed, ${how}.` };
-  if (session?.consent_status === 'given') return { tone: 'pos', t: 'Everyone recorded agreed. How is not recorded.' };
-  return { tone: 'amb', t: 'Consent is not recorded for this call. Nothing from it is summarised or proposed until it is.' };
+  const METHOD = { verbal: 'out loud', written: 'in writing', pre_agreed: 'beforehand' };
+  if (session?.consent_status === 'given' && METHOD[session.consent_method]) {
+    return { tone: 'pos', t: `Everyone recorded agreed, ${METHOD[session.consent_method]}.`, p: session.consent_at ? `Recorded ${String(session.consent_at).replace('T', ' ').slice(0, 16)} UTC.` : '' };
+  }
+  return { tone: 'amb', t: 'Consent for this call is not recorded.', p: 'Nothing from it is used until it is.' };
 }
 
 /* ------------------------------------------------------------------ *
- * MC6: summary, decisions, action items, data points
+ * MC6: summary, decisions, action items and data points
  * ------------------------------------------------------------------ */
 
-const MODULE_OF = Object.fromEntries(PROPOSAL_GROUPS.flatMap((g) => g.kinds.map((k) => [k, g.mod])));
-const ACTION_KINDS = new Set(['follow_up', 'prototype_ask']);
+const isAction = (p) => p?.kind === 'follow_up' && ((p.edited_payload || p.payload || {}).kind === 'action_item');
 
-const item = (p) => ({
-  id: p.id,
-  t: p.kind === 'decision'
-    ? ((p.edited_payload || p.payload || {}).statement || 'Decision, statement not recorded')
-    : proposalTitle(p),
-  q: p.cite?.quote || '',
-  conf: confidenceOf(p),
-  build: p.kind === 'prototype_ask' || (p.payload || {}).build_candidate === true,
-  canAccept: p.can_accept !== false,
-  mod: MODULE_OF[p.kind] || (p.kind === 'decision' || ACTION_KINDS.has(p.kind) ? null : 'Validate'),
-});
+/** A decision's and an action item's line (D873's kinds); the rest are WhatsApp's. */
+export function callItemTitle(p) {
+  const v = p?.edited_payload || p?.payload || {};
+  if (p?.kind === 'decision') return v.statement ? `${v.statement}${v.owner_hint ? ` (${v.owner_hint})` : ''}` : 'Decision, wording not recorded';
+  if (isAction(p)) return v.detail ? `${v.owner_hint ? `${v.owner_hint}: ` : ''}${v.detail}${v.due_hint ? ` by ${v.due_hint}` : ''}` : 'Action item, wording not recorded';
+  return proposalTitle(p);
+}
+
+/** A data point's Validate module, as WhatsApp's groups name them. */
+const MODULE = {
+  demand_signal: 'Validate › Demand and urgency signals', budget: 'Validate › Demand and urgency signals',
+  competitor_mention: 'Validate › Market intelligence', market_fact: 'Validate › Market intelligence',
+  pain_severity: 'Validate › Problem discovery', job_to_be_done: 'Validate › Problem discovery',
+  firmographic: 'Validate › Ideal customer profile', segment: 'Validate › Ideal customer profile', icp_fit: 'Validate › Ideal customer profile',
+  follow_up: 'Validate › Customer research', prototype_ask: 'Validate › Customer research',
+};
 
 /**
- * The call's pending proposals as the canvas groups them: Decisions, Action
- * items, then Data points with the module each lands in. The latest run of
- * each source counts, as the chat boards read them. An accepted or dismissed
- * one is never offered again.
+ * The proposals waiting for the founder in the canvas's groups: Decisions,
+ * Action items, then Data points, each with its module. Pending only, from
+ * the latest run of each source, as `proposalGroups` reads them.
  */
 export function callProposalGroups(read) {
   const runs = Array.isArray(read?.runs) ? read.runs : [];
   const latest = (src) => [...runs].reverse().find((r) => (r.source === 'assistant' ? 'assistant' : 'studioos') === src);
-  const pending = [latest('assistant'), latest('studioos')].filter(Boolean).flatMap((r) => r.placements || []).filter((p) => p.status === 'pending');
+  const items = [latest('assistant'), latest('studioos')].filter(Boolean).flatMap((r) => r.placements || []).filter((p) => p.status === 'pending');
+  const row = (p) => ({
+    id: p.id,
+    t: callItemTitle(p),
+    q: p.cite?.quote || '',
+    conf: confidenceOf(p),
+    build: p.kind === 'prototype_ask' || (p.payload || {}).build_candidate === true,
+    canAccept: p.can_accept !== false,
+  });
   const groups = [
-    { key: 'decisions', g: 'Decisions', mod: 'Validate › Customer research', items: pending.filter((p) => p.kind === 'decision').map(item) },
-    { key: 'actions', g: 'Action items', mod: 'Validate › Customer research', items: pending.filter((p) => ACTION_KINDS.has(p.kind)).map(item) },
-    { key: 'data', g: 'Data points', mod: '', items: pending.filter((p) => p.kind !== 'decision' && !ACTION_KINDS.has(p.kind)).map(item) },
+    { key: 'decisions', g: 'Decisions', mod: 'Validate › Customer research', items: items.filter((p) => p.kind === 'decision') },
+    { key: 'actions', g: 'Action items', mod: 'Validate › Customer research', items: items.filter(isAction) },
+    { key: 'data', g: 'Data points', mod: '', items: items.filter((p) => p.kind !== 'decision' && !isAction(p)) },
   ];
-  return groups.filter((g) => g.items.length);
+  return groups.filter((g) => g.items.length).map((g) => ({
+    ...g,
+    mod: g.key === 'data' ? [...new Set(g.items.map((p) => MODULE[p.kind]).filter(Boolean))].join(' · ') || 'Validate' : g.mod,
+    items: g.items.map(row),
+  }));
 }
 
-/** The summary's lines, as the digest holds them, or none. */
-export function summaryLines(digest) {
-  return (Array.isArray(digest?.overview) ? digest.overview : [])
-    .map((o) => (typeof o === 'string' ? o : o?.text))
-    .filter((t) => typeof t === 'string' && t.trim());
+/** The summary the session holds: its sentences, or null when none was written. */
+export function callSummary(read) {
+  const s = read?.summary;
+  if (!s || !String(s.text || '').trim()) return null;
+  return { text: String(s.text), model: s.model || null, at: s.summarised_at || null };
 }
 
 /* ------------------------------------------------------------------ *
- * MC4: upload
+ * MC4: the upload, attestation first (D872)
  * ------------------------------------------------------------------ */
 
-/** "42 min" from a duration, or Not recorded. */
-export function durationOf(ms) {
-  const n = Number(ms);
-  if (!Number.isFinite(n) || n <= 0) return NOT_RECORDED;
-  const m = Math.round(n / 60000);
-  return m < 1 ? 'under a minute' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
-}
+export const UPLOAD_TYPES = '.mp3,.m4a,.mp4,.webm,.wav,audio/*,video/mp4,video/webm';
 
-/** The upload's parts as the canvas draws them: stored, the one in flight, and to come. */
-export function chunkBar(done, total) {
+/** The progress bar's cells: stored, the one in flight, and the rest. */
+export function chunkCells(done, total, cells = 12) {
   const t = Math.max(0, Number(total) || 0);
-  const d = Math.min(t, Math.max(0, Number(done) || 0));
-  return Array.from({ length: t }, (_, i) => (i < d ? 'done' : i === d ? 'now' : 'todo'));
+  const d = Math.min(Math.max(0, Number(done) || 0), t);
+  if (!t) return Array.from({ length: cells }, () => 'rest');
+  const full = Math.floor((d / t) * cells);
+  return Array.from({ length: cells }, (_, i) => (i < full ? 'done' : i === full && d < t ? 'now' : 'rest'));
+}
+
+/** What an upload costs in AI tokens, before it starts: the default model's price per minute (D872 §3). */
+export const WHISPER_USD_PER_MINUTE = 0.00051293;
+export function uploadEstimate(durationMs) {
+  const min = Math.ceil(Math.max(0, Number(durationMs) || 0) / 60000);
+  if (!min) return null;
+  return { minutes: min, usd: Math.max(0.01, Math.round(min * WHISPER_USD_PER_MINUTE * 100) / 100) };
 }
 
 /* ------------------------------------------------------------------ *
- * MC7: retention
+ * MC7: retention (D877)
  * ------------------------------------------------------------------ */
 
-export const RETENTION_CHOICES = Object.freeze([7, 30, 90, 365, null]);
+export const RETENTION_CHOICES = Object.freeze([
+  { key: '7', days: 7, t: '7 days' },
+  { key: '30', days: 30, t: '30 days' },
+  { key: '90', days: 90, t: '90 days' },
+  { key: 'keep', days: null, t: 'Until I delete it' },
+]);
 
-/** The founder's setting in words. */
-export function retentionWord(days) {
-  if (days === null) return 'Until I delete it';
-  const n = Number(days);
-  if (!Number.isSafeInteger(n) || n <= 0) return NOT_RECORDED;
-  return n === 365 ? '1 year' : `${n} day${n === 1 ? '' : 's'}`;
+/** The choice the member holds; a number of days the list does not offer is shown as itself. */
+export function retentionChoice(r) {
+  if (!r) return null;
+  if (r.days === null) return RETENTION_CHOICES[3];
+  return RETENTION_CHOICES.find((c) => c.days === r.days) || { key: String(r.days), days: r.days, t: `${r.days} days` };
 }
 
-/** One call's audio in words: kept until a day, kept until deleted, deleted with its text kept, or text only. */
-export function audioLine(audio, timeZone) {
-  if (audio?.state === 'held') return audio.kept_until ? `Audio kept until ${dayOf(audio.kept_until, timeZone)}` : 'Audio kept until you delete it';
-  if (audio?.state === 'removed') {
-    const by = audio.removed_reason === 'retention' ? ' by your retention' : audio.removed_reason === 'deleted' ? ' by you' : '';
-    return `Audio deleted ${dayOf(audio.removed_at, timeZone)}${by} · text kept`;
-  }
-  if (audio?.state === 'none') return 'No audio held · the call’s text only';
-  return `Audio ${NOT_RECORDED.toLowerCase()}`;
+/**
+ * Each call and upload with its audio's state: kept until a date, deleted
+ * (by the founder, or after the retention), or never held. Text stays in
+ * every case until the session is deleted.
+ */
+export function retentionRows({ calls = [], uploads = [], audio = [] } = {}, timeZone) {
+  const byId = new Map((Array.isArray(audio) ? audio : []).map((a) => [Number(a.session_id), a]));
+  const day = (iso) => {
+    const t = Date.parse(String(iso || ''));
+    return Number.isFinite(t) ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', ...(timeZone ? { timeZone } : {}) }) : null;
+  };
+  const line = (a) => {
+    if (!a) return { t: 'No audio kept · text kept', has: false };
+    if (a.held) return { t: a.expires_at ? `Audio kept until ${day(a.expires_at)}` : 'Audio kept until you delete it', has: true };
+    if (a.removed_at) return { t: `Audio ${a.removed_reason === 'retention' ? 'removed after your retention' : 'deleted'} ${day(a.removed_at) || ''} · text kept`.replace(/\s+·/, ' ·'), has: false };
+    return { t: 'No audio kept · text kept', has: false };
+  };
+  const rows = [
+    ...(Array.isArray(calls) ? calls : []).filter((c) => c.session_id != null).map((c) => ({ sessionId: Number(c.session_id), title: [c.company?.name || null, `${providerWord(c.provider)} call`].filter(Boolean).join(' · '), sub: `${providerWord(c.provider)} · ${day(c.starts_at) || NOT_RECORDED}`, ...line(byId.get(Number(c.session_id))) })),
+    ...(Array.isArray(uploads) ? uploads : []).map((u) => ({ sessionId: Number(u.session_id), title: [u.interviewee || null, u.company?.name || null].filter(Boolean).join(' · ') || 'Uploaded recording', sub: `Uploaded · ${day(u.created_at) || NOT_RECORDED}`, ...line(byId.get(Number(u.session_id))) })),
+  ];
+  const seen = new Set();
+  return rows.filter((r) => (seen.has(r.sessionId) ? false : seen.add(r.sessionId)));
 }

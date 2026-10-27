@@ -29,11 +29,24 @@ export interface GrantProps {
   keyUid?: string;
 }
 
+/**
+ * D1316 (#3474): why a call was refused, as the call log keeps it beside the
+ * grant: the company is not one the connection was approved for, the member no
+ * longer has the access the tool needs to it, the token lacks the tool's scope,
+ * or a daily limit was reached. Any other refusal keeps no reason.
+ */
+export const REFUSAL_REASONS = Object.freeze(['not_granted', 'not_owned', 'scope', 'daily_limit'] as const);
+export type RefusalReason = typeof REFUSAL_REASONS[number];
+
 export class ToolRefused extends Error {
   sentence: string;
   /** D842: the structured code a caller can branch on (plan §3); `refused` when none more exact applies. */
   code: string;
-  constructor(sentence: string, code = 'refused') { super(sentence); this.sentence = sentence; this.code = code; }
+  /** D1316: the call log's reason, when one of `REFUSAL_REASONS` applies. */
+  reason: RefusalReason | null;
+  constructor(sentence: string, code = 'refused', reason: RefusalReason | null = null) {
+    super(sentence); this.sentence = sentence; this.code = code; this.reason = reason;
+  }
 }
 
 type UserRow = Pick<User, 'id' | 'role' | 'founder_id' | 'spinout_lab_active'> & { email: string | null; is_active: number | null; jwt_min_iat: number | null; deletion_requested_at: string | null };
@@ -57,12 +70,12 @@ export async function grantUser(env: Env, props: GrantProps): Promise<UserRow> {
 export async function grantCompany(env: Env, props: GrantProps, user: UserRow, raw: unknown, write = false): Promise<{ id: number; name: string }> {
   const id = Number(raw);
   if (!Number.isInteger(id) || id <= 0 || !props.companies.map(Number).includes(id)) {
-    throw new ToolRefused('That company is not one this connection was approved for.');
+    throw new ToolRefused('That company is not one this connection was approved for.', 'refused', 'not_granted');
   }
   const p = await env.DB.prepare('SELECT id, name, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
     .bind(id).first<{ id: number; name: string | null; founder_id: number | null }>();
   if (!p || !(write ? canWrite(p, user as unknown as User) : canReadBoard(p, user as unknown as User))) {
-    throw new ToolRefused(`You can no longer ${write ? 'write to' : 'read'} that company, so this connection cannot use it.`);
+    throw new ToolRefused(`You can no longer ${write ? 'write to' : 'read'} that company, so this connection cannot use it.`, 'refused', 'not_owned');
   }
   return { id: p.id, name: p.name || `Company #${p.id}` };
 }
@@ -135,11 +148,21 @@ export async function recordKeyFailure(env: Env, ip: string, now = Date.now()): 
   } catch { /* the check fails closed */ }
 }
 
-/** One activity_logs line per call: tool, company, client, outcome. Never an argument or a result. */
+/**
+ * One activity_logs line per call: tool, company, client, outcome. Never an argument or a result.
+ * D1316 (#3474): an assistant connection's call also names its `grant` (the
+ * grant id, never a token), and a refusal its `reason` (`REFUSAL_REASONS`).
+ * Lines written before carry neither; Builder reads them as "connection not recorded".
+ */
 export type ToolOutcome = 'ok' | 'refused' | 'error' | 'rate_limited' | 'timeout';
-export async function logToolCall(env: Env, user: { id: number; email?: string | null }, entry: { tool: string; company: number | null; client: string | null; outcome: ToolOutcome; keyUid?: string | null }) {
+export async function logToolCall(env: Env, user: { id: number; email?: string | null }, entry: {
+  tool: string; company: number | null; client: string | null; outcome: ToolOutcome; keyUid?: string | null;
+  grant?: string | null; reason?: RefusalReason | null;
+}) {
   await logActorAct(env, user, 'mcp_tool_call', {
     tool: entry.tool, company_id: entry.company, client: entry.client, outcome: entry.outcome,
+    ...(entry.grant ? { grant: entry.grant } : {}),
+    ...(entry.reason ? { reason: entry.reason } : {}),
     // D842: a key's call names the key's uid, never the key itself. The call's
     // execution id is in its result's `_meta`; #2465's usage row records it.
     ...(entry.keyUid ? { api_key_uid: entry.keyUid } : {}),
