@@ -3095,7 +3095,7 @@ const DRAFT_SURFACES: Record<string, {
       await ensureProjectMetricsSchema(c.env);
       const rows = await c.env.DB.prepare(
         `SELECT snapshot_date, mrr, paying_accounts, net_burn, cash_balance
-           FROM project_metrics WHERE project_id = ?
+           FROM project_metrics WHERE project_id = ? AND COALESCE(source, '') <> 'google_sheets'
           ORDER BY snapshot_date DESC, id DESC LIMIT 2`
       ).bind(pid).all<{
         snapshot_date: string | null; mrr: number | null; paying_accounts: number | null;

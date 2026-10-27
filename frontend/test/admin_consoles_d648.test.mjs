@@ -129,8 +129,11 @@ const UNREADABLE = /could not be read\. This is not a sign that there are none\.
 
 /** Each console: its reads, what an empty answer is, and what it then says. */
 const CONSOLES = [
+  // D1305 (#3402): All accounts' table says ACC10's "Reading…", ACC9's "No
+  // accounts yet." and ACC11c's failed read in the canvas's words.
   { name: 'Users', el: () => React.createElement(UsersConsole), reads: ['adminListUsers'],
-    empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading…/ },
+    empty: { adminListUsers: async () => ({ results: [], total: 0, matched: 0, by_role: {} }) }, says: /No accounts yet\./, loading: /Reading…/,
+    unreadable: /We could not load the accounts\.The rest of Accounts still works\.Try again/ },
   // D1233: the KYC console reads `kycPeopleApi` (part 1's queue and figures),
   // not `api`; its loading, empty and unreadable states, and that it reads
   // nothing else, are `kyc_people_d1233.test.mjs`'s.
@@ -154,7 +157,7 @@ for (const c of CONSOLES) {
     let v = await mount(c.el());
     try {
       assert.match(v.text(), c.loading, `${c.name} does not say it is loading`);
-      assert.doesNotMatch(v.text(), /could not be read/);
+      assert.doesNotMatch(v.text(), /could not be read|could not load/);
       if (c.says) assert.doesNotMatch(v.text(), c.says, `${c.name} claims a result before its read answered`);
     } finally { await v.unmount(); restoreApi(); }
 
@@ -163,7 +166,7 @@ for (const c of CONSOLES) {
     v = await mount(c.el());
     try {
       if (c.says) assert.match(v.text(), c.says, `${c.name} does not say it is empty`);
-      assert.doesNotMatch(v.text(), /could not be read/, `${c.name} calls an empty answer unreadable`);
+      assert.doesNotMatch(v.text(), /could not be read|could not load/, `${c.name} calls an empty answer unreadable`);
       assert.doesNotMatch(v.text(), c.loading);
     } finally { await v.unmount(); restoreApi(); }
 
@@ -174,7 +177,7 @@ for (const c of CONSOLES) {
     stubApi(failing);
     v = await mount(c.el());
     try {
-      assert.match(v.text(), UNREADABLE, `${c.name} does not say its read failed`);
+      assert.match(v.text(), c.unreadable || UNREADABLE, `${c.name} does not say its read failed`);
       if (c.says) assert.doesNotMatch(v.text(), c.says, `${c.name} draws a failed read as an empty list`);
     } finally { await v.unmount(); restoreApi(); }
   });
