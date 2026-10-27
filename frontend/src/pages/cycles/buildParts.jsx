@@ -24,6 +24,7 @@ import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
 import FromNotion from './FromNotion';
 import HostingFromVercel from './HostingFromVercel';
+import { RoadmapFromGoogle, SolutionDesignFromGoogle } from './BuildFromGoogle';
 import RunsOnFromVercel from './RunsOnFromVercel';
 
 export const BUILD_PARTS = Object.freeze({
@@ -32,8 +33,8 @@ export const BUILD_PARTS = Object.freeze({
     ['github', (data, ctx) => <SolutionDesignFromCode part={data?.parts?.from_code} projectId={ctx.projectId} reload={ctx.reload} />],
     // VC4a "From Vercel · Runs on", under GitHub's part: #2962 (D1097), RunsOnFromVercel, #from-vercel.
     ['vercel', (data, ctx) => <RunsOnFromVercel part={data?.parts?.vercel_runtime} reload={ctx.reload} />],
-    // GW3/GW6: spec Docs as proposals: #2958 (D1093), FromGoogle, #from-google.
-    ['google', null],
+    // GW3/GW6: spec Docs as proposals (D1093, #2958), anchored at #from-google.
+    ['google', (_data, ctx) => <SolutionDesignFromGoogle projectId={ctx.projectId} reload={ctx.reload} />],
     // NT3/NT6: spec pages as proposals (D1088, #2953), anchored at #from-notion.
     ['notion', (_data, ctx) => <FromNotion section="build" module="solution_design" projectId={ctx.projectId} />],
   ],
@@ -52,8 +53,8 @@ export const BUILD_PARTS = Object.freeze({
     ['vercel', null],
     // D782 (#2111): milestones and releases from GitHub, anchored at #from-github.
     ['github', (data) => <RoadmapFromGithub github={data?.parts?.github} />],
-    // GW3: a mapped roadmap Sheet's rows: #2958 (D1093), FromGoogle, #from-google.
-    ['google', null],
+    // GW3/GW4: a mapped roadmap Sheet's rows and its Map columns (D1093, #2958), anchored at #from-google.
+    ['google', (_data, ctx) => <RoadmapFromGoogle projectId={ctx.projectId} reload={ctx.reload} />],
     // NT3: a roadmap database's rows (D1088, #2953), anchored at #from-notion.
     ['notion', (_data, ctx) => <FromNotion section="build" module="product_roadmap" projectId={ctx.projectId} />],
   ],
