@@ -43,13 +43,6 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 const NO_LEDGER_LINES = 'the operational ledger has its own fund and period controls below; LP accounts receive summaries, and only the assigned administrator or an admin may read journal lines';
 const NO_EXTRACTION_LAYER =
   'the update feed returns submitted values and narratives, never the extraction proposal behind them or the rules that would produce one';
-// The third kind of reason, and the founder table never needed one. `Mine` is
-// not a gap and it is not live either: the board is ALREADY scoped, so a chip
-// would narrow nothing while appearing to, and "no owner is recorded" would be
-// flatly false — `lead_partner_id` is a column and `Unassigned` beside it reads
-// it. What is true is that the question has already been answered upstream.
-const ALREADY_MINE =
-  'every deal on this board is already one of yours; it loads only the deals you were invited to, committed to, or are a room member of';
 // `/network/relationships`. Going cold reads `partner_interactions` (the log's
 // MAX). LPs stay unbuilt: an LP register is a fund record, not a relationship.
 const NO_LP_RELATIONSHIP =
@@ -293,13 +286,6 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Minutes', key: 'minutes' },
   ],
 
-  'deals/pipeline': [
-    { canvas: 'All stages', key: 'all', label: 'All stages {n}' },
-    { canvas: 'Mine', unbuilt: ALREADY_MINE },
-    { canvas: 'Unassigned', key: 'unassigned', label: 'Unassigned {n}' },
-    { canvas: 'Stale', key: 'stale', label: 'Stale {n}' },
-    { canvas: 'Passed', key: 'passed', label: 'Passed {n}' },
-  ],
 
   // ── Network ──────────────────────────────────────────────────────────────
   // Four live chips: Everyone, Founders, Co-investors, Going cold. LPs stay

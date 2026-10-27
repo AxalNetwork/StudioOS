@@ -103,13 +103,13 @@ const GeographyProfile = lazy(() => import('./pages/research/GeographyProfile'))
 const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
 const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
+const DealsPipelineRedirect = lazy(() => import('./pages/investor/dealflow/DealsPipelineRedirect'));
 const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
 const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucketRoutes'));
 const NetworkWorkspace = lazy(() => import('./workspaces/NetworkWorkspace'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
 const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
-const CapitalWorkspacePage = lazy(() => import('./pages/CapitalWorkspacePage'));
 const LegalEnginePage = lazy(() => import('./pages/LegalEnginePage'));
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
 const AcceptCompanyInvitePage = lazy(() => import('./pages/AcceptCompanyInvitePage'));
@@ -309,6 +309,8 @@ const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPag
 // D642 (#1435) — U7, each plan's AI allowance and the runs held for a check.
 const HqPlatformAllowancesPage = lazy(() => import('./pages/hq/PlatformAllowancesPage'));
 const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
+// D1172 (#3085, STG20): what members store, totals only.
+const HqPlatformStoragePage = lazy(() => import('./pages/hq/PlatformStoragePage'));
 // D1253 (#2428): the venture scorecard's method, the founder's page and HQ › Platform › Scoring.
 const ScoringMethodPage = lazy(() => import('./pages/scoring/ScoringMethodPage'));
 const FounderScorecardPage = lazy(() => import('./pages/scoring/FounderScorecardPage'));
@@ -470,6 +472,8 @@ const NewDeck = lazy(() => import('./pages/raise/pitch/NewDeck'));
 const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
 const FundAdminBoundary = lazy(() => import('./pages/admin/fundAdmin/Refusal'));
 const FUND_ADMIN_BOUNDARY_ROLES = new Set(['founder', 'partner', 'investor', 'advisor', 'exploring']);
+// D1295 (#3391, ART17b): a member who opens a Content queue address is told it is for studio admins, with the way to their own articles.
+const ContentQueueBoundary = lazy(() => import('./pages/admin/contentQueue/NoPermission'));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -1174,6 +1178,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/topology">Topology</StripLink>
           <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
           <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
+          <StripLink to="/admin/platform/storage">Storage</StripLink>
           <StripLink to="/admin/platform/payments">Payments</StripLink>
           <StripLink to="/admin/platform/bank-accounts">Bank accounts</StripLink>
           <StripLink to="/admin/platform/product-testing">Product testing</StripLink>
@@ -1913,6 +1918,7 @@ const ROUTE_BOUNDARIES = [
   // D1160 (#3067, FND20b/c): Fund administration refuses a support session and every non-admin in its own words.
   // An admin previewing another role is sent home as before (`notPreview`).
   { under: /^\/admin\/fund-admin(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: FundAdminBoundary, notPreview: true },
+  { under: /^\/admin\/articles(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: ContentQueueBoundary, notPreview: true },
 ];
 
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
@@ -2661,8 +2667,8 @@ function AppInner() {
               replace
             />)} />
       {/* #2339, #2335 (the owner's "Remove", #2297): two retired pages. The
-          Financial Model is Capital's tab, the same FinancialsPage; customer
-          discovery is Validate · Customer research. Each old address forwards,
+          Financial Model is Use of funds › Runway › Forecast (D1178; D1180
+          deleted FinancialsPage); customer discovery is Validate · Customer research. Each old address forwards,
           query and hash kept, until #2319 retires the redirects. */}
       <Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />
       <Route path="/build/discovery" element={<Navigate replace to={{ pathname: '/validate/customer-research', search: location.search, hash: location.hash }} />} />
@@ -2686,6 +2692,9 @@ function AppInner() {
       <Route path="/validate/record/whatsapp/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/whatsapp/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/telegram" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      {/* D869 (#2515): Telegram's tabs are paths under its address, as WhatsApp's are. */}
+      <Route path="/validate/record/telegram/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/telegram/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/calls" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
@@ -3060,6 +3069,7 @@ function AppInner() {
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
       <Route path="/admin/platform/ai-usage" element={guard(['admin'], hqOnly(<HqAiUsagePage />))} />
+      <Route path="/admin/platform/storage" element={guard(['admin'], hqOnly(<HqPlatformStoragePage />))} />
       <Route path="/admin/platform/scoring" element={guard(['admin'], hqOnly(<HqScoringPage />))} />
       <Route path="/scoring/method" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ScoringMethodPage />)} />
       {/* The owner's ruling (2026-10-20) — Integration keys, with GitHub Sync as
@@ -3264,9 +3274,12 @@ function AppInner() {
       {/* D901 (#2680) — present mode (PD16): full screen, reads one version, writes nothing. */}
       <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchPresent />))} />
       <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="notes" />))} />
+      {/* D1180 (#3107): the workspace's default tab was the financial model, now retired, so
+          ?mode=workspace lands on Use of funds › Runway › Forecast as /raise/capital/model does,
+          counting itself (the address is also the Capital page). */}
       <Route path="/raise/capital" element={guard(['admin', 'founder'],
         new URLSearchParams(location.search).get('mode') === 'workspace'
-          ? founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />))
+          ? <UseOfFundsMovedRedirect count="/raise/capital?mode=workspace" />
           : <FounderRaiseCapital />)} />
       {/* D1178 (#3105): the financial model is Use of funds › Runway › Forecast; its old addresses land there with the venture. */}
       <Route path="/raise/capital/model" element={<UseOfFundsMovedRedirect />} />
@@ -3441,7 +3454,8 @@ function AppInner() {
           routing one. */}
       {/* D1236 (#2423): compare up to four ventures from Deal flow. */}
       <Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
-      <Route path="/deals/pipeline" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
+      {/* D1243 (#3256): the Pipeline zone is retired; its job is Deal flow's table. The query and hash travel. */}
+      <Route path="/deals/pipeline" element={<DealsPipelineRedirect />} />
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
@@ -3781,8 +3795,9 @@ function AppInner() {
       <Route path="/offers" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       {/* Partner canvas P3 — the partner Pipeline root is the bucket overview,
           not the investor deal pipeline that owns this prefix for investors.
-          Investor and founder keep the page they had; partner gets the shell. */}
-      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'partner' ? <PartnerBucketRoutes /> : investorWorkspace('deals', <PipelineWorkspace />))} />
+          The founder and an admin keep the board they had; partner gets the shell.
+          D1243 (#3256): an investor's /pipeline lands on Deal flow's table, counted by the forward (ROLE_REDIRECTS). */}
+      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'partner' ? <PartnerBucketRoutes /> : effectiveRole === 'investor' ? <DealsPipelineRedirect countAs="/pipeline" /> : investorWorkspace('deals', <PipelineWorkspace />))} />
 
       {/* D395 — /partner/operations/* RETIRED. Each tab's job has a
           canvas-built home, and each address lands on it. No guard here: the

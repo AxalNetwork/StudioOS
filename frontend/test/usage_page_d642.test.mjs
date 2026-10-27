@@ -325,7 +325,8 @@ test('U6 renders the total or its absence, unknown sizes, an unreadable place, e
   const ok = html(h(StorageCard, { storage: ready(STORAGE) }));
   assert.match(ok, /data-testid="usage-storage-total"[\s\S]*Total not recorded/);
   assert.match(ok, /data-testid="usage-storage-diligence_files"[\s\S]*31 files[\s\S]*Not recorded[\s\S]*3 files with no size recorded/);
-  assert.match(ok, /Identity documents, signed legal copies and fund documents do not count\. No plan sets a storage limit\./);
+  // D1171 (#3084): plans now carry storage, so the line points to Usage › Storage instead of saying none does.
+  assert.match(ok, /Identity documents, signed legal copies and fund documents do not count\. Your plan’s storage is on Usage › Storage\./);
   assert.doesNotMatch(ok, /0 B/, 'an unknown size is never 0 bytes');
   const exact = html(h(StorageCard, { storage: ready({ ...STORAGE, total_bytes: 1_288_490_189, unknown_size_files: 0, areas: STORAGE.areas.map((a) => (a.bytes == null ? area(a.key, a.files, 1000) : a)) }) }));
   assert.match(exact, /1\.2 GB <span[^>]*>in 148 files/);

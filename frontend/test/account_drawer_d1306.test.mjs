@@ -172,6 +172,13 @@ async function mounted(el, { handle = handler() } = {}) {
     // D1305: a row's changes sit in its ⋯ menu (`accounts-menu-<id>`), one item each.
     menu: async (id, item) => { await click(`accounts-menu-${id}`); await click(`accounts-menu-${id}-${item}`); },
     type: async (id, value) => { const n = byId(id); assert.ok(n, `no ${id}`); await act(async () => { props(n).onChange({ target: { value } }); }); await flush(); },
+    // D1305: each row's actions are its ⋯ menu in All accounts (`accounts-menu-<id>`), not row buttons.
+    menu: async (row, item) => {
+      for (const id of [`accounts-menu-${row}`, `accounts-menu-${row}-${item}`]) {
+        const n = byId(id); assert.ok(n, `no ${id}`);
+        await act(async () => { props(n).onClick({ preventDefault() {}, stopPropagation() {} }); }); await flush();
+      }
+    },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
 }

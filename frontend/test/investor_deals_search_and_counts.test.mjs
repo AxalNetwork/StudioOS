@@ -34,9 +34,8 @@ import { INVESTOR_ZONE_FILTERS } from '../src/workspaces/investorZoneFilters.js'
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const ZONE = (n) => read(`frontend/src/pages/investor/deals/${n}.jsx`);
 
-/** The three zones that list rows. `CommitZone` is excluded on purpose — below. */
+/** The zones that list rows. `CommitZone` is excluded on purpose — below; PipelineZone retired with its zone (D1243). */
 const SEARCHABLE = [
-  { file: 'PipelineZone', testid: 'pipeline-search' },
   { file: 'ScreeningZone', testid: 'screening-search' },
   { file: 'ClosingZone', testid: 'closing-search' },
 ];
@@ -77,8 +76,7 @@ test('a count is only ever claimed where the page supplies one', () => {
   // a label may carry `{n}` only where the page actually passes that key —
   // otherwise the chip silently loses its figure and nobody notices.
   const supplied = {
-    'deals/pipeline': ['all', 'unassigned', 'stale', 'passed'],
-    'deals/screening': ['scorecards'], // D1260
+    'deals/screening': ['scorecards'], // D1260; Pipeline's counts left with its zone (D1243)
     'deals/closing': ['close', 'documents', 'blocking', 'wires'],
   };
   for (const [zone, keys] of Object.entries(supplied)) {
@@ -99,8 +97,7 @@ test('a count is only ever claimed where the page supplies one', () => {
 
 test('each page passes the counts its labels promise', () => {
   const pages = {
-    PipelineZone: ['all:', 'unassigned:', 'stale:', 'passed:'],
-    ScreeningZone: ['scorecards:'], // D1260
+    ScreeningZone: ['scorecards:'], // D1260; PipelineZone retired with its zone (D1243)
     ClosingZone: ['close:', 'documents:', 'blocking:', 'wires:'],
   };
   for (const [file, keys] of Object.entries(pages)) {
@@ -120,13 +117,14 @@ test('each page passes the counts its labels promise', () => {
 test('CommitZone is left out on purpose, and the reason is written down', () => {
   // It is a ROOM — one deal's vote plus a decisions history — not a filterable
   // list of commit-stage deals. The legacy PipelineCommitPage WAS that list,
-  // and its replacement is PipelineZone's stage chips, because `DEAL_STAGES`
-  // already carries `commit` and `dealStage()` already assigns it. Forcing a
+  // and its replacement was PipelineZone's stage chips, because `DEAL_STAGES`
+  // already carries `commit` and `dealStage()` already assigns it. D1243
+  // retired PipelineZone into Deal flow, whose table filters by stage. Forcing a
   // room into a table would be the wrong port, so assert the two facts that
   // make the substitution true rather than quietly skipping the zone.
   const flow = read('frontend/src/lib/dealFlow.js');
   assert.match(flow, /\{ id: 'commit', label: 'Commit' \}/,
-    'the commit stage is gone, so PipelineZone can no longer stand in for the legacy commit list');
+    'the commit stage is gone from the shared deal funnel');
   assert.match(flow, /return Number\(deal\?\.capital_committed\) > 0 \? 'commit'/,
     'nothing assigns the commit stage any more');
   const commit = ZONE('CommitZone');

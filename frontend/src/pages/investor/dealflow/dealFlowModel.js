@@ -46,6 +46,18 @@ export function viewHref({ view = 'board', scope = 'mine' } = {}) {
   return s ? `${BASE}?${s}` : BASE;
 }
 
+/**
+ * D1243 (#3256): where `/deals/pipeline` and an investor's `/pipeline` land —
+ * the table, with the address's own query and hash kept. The view is the
+ * table whatever the old query said; every other word travels as it was.
+ */
+export function pipelineMovedHref(search = '', hash = '') {
+  const q = new URLSearchParams(String(search));
+  q.set('view', 'table');
+  const h = String(hash || '');
+  return `${BASE}?${q.toString()}${h && h !== '#' ? (h.startsWith('#') ? h : `#${h}`) : ''}`;
+}
+
 export const MAX_COMPARE = 4;
 const ID = /^[1-9][0-9]{0,15}$/;
 

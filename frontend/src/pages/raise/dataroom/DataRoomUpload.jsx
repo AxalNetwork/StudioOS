@@ -3,6 +3,8 @@ import { api } from '../../../lib/api';
 import { cyclesWrite } from '../../../lib/api/cycles.js';
 import { answerChips } from '../../cycles/forms.js';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
+import StorageRefusal from '../../account/StorageRefusal.jsx';
+import { storageRefusal } from '../../account/storagePageModel.js';
 import { GATES, MAX_UPLOAD_MB, QUEUE_WORDS, folderChoices, queueEntry, storageLine, uploadRefusal } from './filesModel.js';
 
 /**
@@ -79,7 +81,7 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
         await api.dataRoomUploadFile(read.uid, body);
         set(i, { state: 'done' });
         sent += 1;
-      } catch (e) { set(i, { state: 'refused', why: uploadRefusal(e) }); }
+      } catch (e) { set(i, { state: 'refused', why: uploadRefusal(e), storage: storageRefusal(e) }); }
     }
     setBusy(false);
     if (sent) onSaved();
@@ -117,7 +119,8 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
             {queue.map((x) => (
               <div key={x.key} className="flex flex-wrap items-center justify-between gap-2" data-testid="dataroom-upload-entry">
                 <span><strong className="font-bold">{x.name}</strong> <span className={`font-mono text-[11.5px] ${MUTED}`}>{x.size}</span></span>
-                <span className={`text-[12px] font-bold ${TONE[x.state]}`} data-testid={`dataroom-upload-state-${x.state}`}>{x.state === 'refused' ? `✕ ${x.why}` : QUEUE_WORDS[x.state]}</span>
+                <span className={`text-[12px] font-bold ${TONE[x.state]}`} data-testid={`dataroom-upload-state-${x.state}`}>{x.storage ? '✕ Not added' : x.state === 'refused' ? `✕ ${x.why}` : QUEUE_WORDS[x.state]}</span>
+                {x.storage ? <div className="basis-full"><StorageRefusal refusal={x.storage} /></div> : null}
               </div>
             ))}
             <p className={`m-0 text-[11.5px] ${MUTED}`}>Each file shows a state. The browser reports no percentage.</p>

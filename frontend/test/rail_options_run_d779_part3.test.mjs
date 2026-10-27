@@ -71,8 +71,8 @@ test('part 3 is the partner’s 19 other rows, every one a draft band, and the t
   ]);
   assert.ok(PART_3.length <= 30);
   for (const o of PART_3) assert.ok(o.handler === 'draft' && o.surface, `${o.key}: not a draft band`);
-  // Part 1 took the investor's 15 (14 since D1260 retired Screening's memo), part 2 the advisor's 14 and these 9; together, every row.
-  assert.equal(INVESTOR_RAIL_OPTIONS.length + ADVISOR_RAIL_OPTIONS.length + PARTNER_RAIL_OPTIONS.length, 14 + 14 + 9 + 19);
+  // Part 1 took the investor's 15 (13 since D1243 retired the Pipeline zone's band and D1260 retired Screening's memo), part 2 the advisor's 14 and these 9; together, every row.
+  assert.equal(INVESTOR_RAIL_OPTIONS.length + ADVISOR_RAIL_OPTIONS.length + PARTNER_RAIL_OPTIONS.length, 13 + 14 + 9 + 19);
 });
 
 test('each band is a zone draft the Worker drafts, whose Accept writes only the draft', () => {
@@ -123,7 +123,8 @@ function namedKey(row) {
 }
 
 test('every draft band of the three profiles names its own option, and the matrix holds that option', () => {
-  assert.equal(BANDS.length, 10 + 4 + 22); // D1260: the investor's Screening memo is retired
+  // The investor's 9 draft bands: 11 before D1243 retired Pipeline and D1260 retired Screening.
+  assert.equal(BANDS.length, 9 + 4 + 22);
   const options = new Map(matrix.options.map((r) => [`${r.pageKey}|${r.optionKey}`, r]));
   for (const row of BANDS) {
     const page = pageOf(row);

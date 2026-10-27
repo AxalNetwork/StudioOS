@@ -7,8 +7,8 @@
  *     with no notes says so;
  *   · the keys are the canvas's (arrows, Esc) and never step past either end;
  *     a swipe is across, not down;
- *   · the export dialog offers PDF, PowerPoint and HTML, draws Google Slides
- *     unavailable with its reason, says what the export records before it
+ *   · the export dialog offers PDF, PowerPoint, HTML and (D904) Google Slides,
+ *     says what the export records before it
  *     runs, and fails as PD25 says: "… Try again in a moment. Nothing was shared.";
  *   · the routes and buttons agree: Present on the current-deck card for
  *     everyone, Export only for a founder, and present writes nothing.
@@ -100,17 +100,17 @@ test('the addresses: present carries the venture and the version; Esc goes back 
   assert.equal(exitHref(3), '/raise/pitch?project_id=3');
 });
 
-test('the export dialog: four formats, Google Slides unavailable with its reason, what it records said first, PD25 on failure', () => {
-  // Mutation checked: Google Slides available → the unavailable check fails; the failure without "Nothing was shared." → the PD25 check fails.
-  assert.deepEqual(FORMATS.map((f) => [f.id, f.available]), [['pdf', true], ['pptx', true], ['google_slides', false], ['html', true]]);
-  assert.match(FORMATS.find((f) => f.id === 'google_slides').reason, /^Not available yet: /);
+test('the export dialog: four formats, what it records said first, PD25 on failure', () => {
+  // Mutation checked: the failure without "Nothing was shared." → the PD25 check fails.
+  // D904 (#2683): part 10 offers Google Slides; its own states are tested in pitch_google_slides_d904.
+  assert.deepEqual(FORMATS.map((f) => [f.id, f.available]), [['pdf', true], ['pptx', true], ['google_slides', true], ['html', true]]);
   assert.equal(FORMATS.find((f) => f.id === 'html').line, 'One file, offline');
   assert.deepEqual(['pdf', 'pptx', 'html'].map(exportButton), ['Export PDF', 'Export PowerPoint', 'Export HTML']);
   // D1112 (#2992): the two options apply to every format the dialog offers, and say where they go.
   assert.equal(optionsApply('html'), true);
   assert.equal(optionsApply('pdf'), true);
   assert.equal(optionsApply('pptx'), true);
-  assert.equal(optionsApply('google_slides'), false, 'Google Slides is not offered yet');
+  assert.equal(optionsApply('google_slides'), true);
   assert.match(OPTIONS_WHERE.pdf, /notes are a page after the cards/);
   assert.equal(whatExportDoes(DECK), "This makes a file of v4 and records the export in this venture's history: the format, the version and the file's fingerprint. Nothing is shared.");
   assert.equal(exportFailure('pdf', 502, { error: 'pdf_render_failed' }), 'The PDF could not be produced. Try again in a moment. Nothing was shared.');
@@ -141,7 +141,7 @@ test('the routes and the buttons: Present for everyone, Export only for a founde
   const calls = [...present.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]).sort();
   assert.deepEqual([...new Set(calls)], ['deckGet', 'deckListVersions'], 'present only reads');
   const dialog = read('frontend/src/pages/raise/pitch/ExportDialog.jsx');
-  assert.match(dialog, /whatExportDoes\(version\)/, 'the dialog says what the export records');
+  assert.match(dialog, /whatExportDoes\(version, format\)/, 'the dialog says what the export records');
   const api = read('frontend/src/lib/api.js');
   assert.match(api, /deckExportHtml: .*\n\s+fetch\(`\$\{BASE\}\/decks\/\$\{id\}\/export\/html`/);
   assert.match(api, /deckExportList: \(id\) => request\(`\/decks\/\$\{id\}\/exports`\)/);

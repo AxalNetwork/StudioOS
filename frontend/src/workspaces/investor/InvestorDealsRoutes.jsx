@@ -27,8 +27,8 @@ const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorD
  * page. `ZONES` is the registry; a slug that is not in it falls through to the
  * workspace.
  */
+// D1243 (#3256): Pipeline (ID1) is retired; `/deals/pipeline` forwards to Deal flow's table.
 const ZONES = {
-  pipeline: lazy(() => import('../../pages/investor/deals/PipelineZone')),
   screening: lazy(() => import('../../pages/investor/deals/ScreeningZone')),
   commit: lazy(() => import('../../pages/investor/deals/CommitZone')),
   closing: lazy(() => import('../../pages/investor/deals/ClosingZone')),
@@ -76,11 +76,6 @@ const ZONES = {
  * no board is registered. Two copies could describe the same zone differently.
  */
 const ZONE_LINES = {
-  // The stale flag is the sentence the artboard's note is entirely about, and
-  // it belongs on the one line the shell prints — the zone below says it once
-  // or not at all.
-  pipeline: 'Every live deal by stage, and how long each has been sitting where it is. '
-    + 'The stale flag is the product: a stage count cannot say who stopped moving.',
   // WAS "the deal on the desk now", which described the one-record panel
   // rather than the artboard. ID2 is a desk over every scored deal, its
   // flags and the fund's pass memory.
@@ -104,7 +99,7 @@ export default function InvestorDealsRoutes() {
   // Same root opt-out as NetworkWorkspace, ResearchWorkspace,
   // AdvisorBucketRoutes and PartnerBucketRoutes: `zoneForPath` answers a bucket
   // root with its FIRST zone, so without this a reader landing on `/deals`
-  // would get Pipeline lit in the pill row as if they had asked for it.
+  // would get its first zone lit in the pill row as if they had asked for it.
   const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
   const isCompare = location.pathname === COMPARE;
   const zone = zoneForPath(bucket, location.pathname);
@@ -121,14 +116,14 @@ export default function InvestorDealsRoutes() {
       role="investor"
       title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : undefined}
       activeSlug={isRoot || isCompare ? null : undefined}
-      intro={isRoot ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || ZONE_LINES.pipeline)}
+      intro={isRoot || isCompare ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || DEAL_FLOW_LINE)}
       rail={(
         <WorkerRail
           workspace="Deals"
           role="investor"
           stance="Manual workspace"
           note="Your pipeline, deal rooms, votes and invitations work without AI. Scores appear only when they exist in the live deal record. Eadwyn drafts only when you ask. This view never invents a memo, cost, model, or result."
-          coverage={[`${zone?.label || 'Pipeline'} · live deal records only`]}
+          coverage={[`${isRoot || isCompare ? DEAL_FLOW_TITLE : zone?.label || DEAL_FLOW_TITLE} · live deal records only`]}
           coverageNote="Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative."
           unavailable={[
             // WAS "Nothing on this page drafts a memo or produces a score" —
