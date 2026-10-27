@@ -363,6 +363,10 @@ test('D1097: the sync opens what the evidence shows, each with its ledger row, a
   assert.ok(fed.every((r) => r.module === 'operating_systems' && r.kind === 'health_event' && /^health:/.test(r.external_id)));
   const log = one(db, "SELECT payload_json FROM integration_logs WHERE event_type = 'sync' AND status = 'ok' ORDER BY id DESC");
   assert.deepEqual(JSON.parse(log.payload_json), { projects: 1, not_reachable: 0, deployments: 1, health_events: 3 }, 'the sync line’s counts');
+  // The same evidence again: nothing new opens, and the line still counts the three open.
+  const again = await call(env, 'POST', `/api/connectors/${uid}/sync`);
+  assert.equal(again.body.counts.health_events, 3, 'an event still open is counted, not only a new one');
+  assert.equal(one(db, 'SELECT COUNT(*) AS n FROM vercel_health_events').n, 3);
   globalThis.fetch = fakeVercel({ projects: PROJECTS, ...WELL }).fetch as typeof fetch;
   const s2 = await call(env, 'POST', `/api/connectors/${uid}/sync`);
   assert.equal(s2.body.counts.health_events, 0);
@@ -398,6 +402,12 @@ test('D1097: the webhook’s re-read marks its events; a project no longer chose
   await call(env, 'POST', `/api/connectors/${uid}/sync`);
   assert.ok(!events(db).some((e) => e.startsWith('production_failed')), 'acme-docs left the venture, and its event with it');
   assert.equal(one(db, "SELECT COUNT(*) AS n FROM connector_fed_items WHERE local_table = 'vercel_health_events'").n, 3, 'its ledger row too');
+  // Removed in Vercel keeps the connection's row, so nothing cascades: clearVercelRows must take the events.
+  const removed = await signed({ type: 'integration-configuration.removed', payload: { configuration: { id: 'icfg_fixture' } } });
+  assert.equal((await hook(env, removed.text, removed.sig)).status, 200);
+  assert.equal(one(db, 'SELECT COUNT(*) AS n FROM integrations').n, 1);
+  assert.equal(one(db, 'SELECT COUNT(*) AS n FROM vercel_health_events').n, 0, 'Removed in Vercel deletes its health events');
+  assert.equal(one(db, "SELECT COUNT(*) AS n FROM connector_fed_items WHERE local_table = 'vercel_health_events'").n, 0, 'and their ledger rows');
   assert.equal((await call(env, 'DELETE', `/api/connectors/${uid}`)).status, 200);
   assert.equal(one(db, 'SELECT COUNT(*) AS n FROM vercel_health_events').n, 0);
   assert.equal(one(db, "SELECT COUNT(*) AS n FROM connector_fed_items WHERE local_table = 'vercel_health_events'").n, 0);

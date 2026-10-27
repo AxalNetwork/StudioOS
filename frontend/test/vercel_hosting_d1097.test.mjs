@@ -38,7 +38,7 @@ test('the words: stamps in UTC, the reconnect sentence, each health line, and ea
   assert.equal(stamp('2026-10-23 09:12:00'), '23 Oct 2026, 09:12');
   assert.equal(stamp(null), null);
   assert.equal(day('2026-10-20T08:00:00.000Z'), '20 Oct');
-  assert.equal(reconnectSentence({ project: 'acme-web', expired_at: '2026-10-20 08:00:00', as_of: '2026-10-20 07:00:00' }), 'Vercel’s sign-in for acme-web expired on 20 Oct. Figures are as of 20 Oct.');
+  assert.equal(reconnectSentence({ project: 'acme-web', expired_at: '2026-10-20 08:00:00', as_of: '2026-10-19 07:00:00' }), 'Vercel’s sign-in for acme-web expired on 20 Oct. Figures are as of 19 Oct.');
   assert.equal(reconnectSentence({ project: null, expired_at: null, as_of: null }), 'Vercel’s sign-in expired. No figures were read before it expired.');
   assert.deepEqual(healthLine(SYSTEM().health.items[0]), { open: true, text: 'Domain is misconfigured · www.acme.example', when: 'since 18 Oct' });
   assert.deepEqual(healthLine(SYSTEM().health.items[1]), { open: false, text: 'Production deploy failed · dpl_1', when: 'closed 13 Oct' });

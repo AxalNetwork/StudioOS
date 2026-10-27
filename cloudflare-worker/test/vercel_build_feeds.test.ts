@@ -25,6 +25,9 @@ test('the page claims what the list says, and part 1 claims only the connection 
   assert.deepEqual(m.feeds, vercelFedModules());
   // D1097 (part 2): health events land on Operating systems; Runs on reads the projects on Solution design.
   assert.deepEqual(m.feeds, ['operating_systems', 'solution_design']);
+  for (const claim of [{ what: 'Production health', module: 'operating_systems' }, { what: 'Framework, Node version and repository', module: 'solution_design' }]) {
+    assert.ok(m.pulls.some((x: any) => x.what === claim.what && x.module === claim.module), `It brings: ${claim.what}`);
+  }
   assert.deepEqual(m.sends, [], 'Vercel sends nothing');
   for (const l of VERCEL_LANDINGS) {
     assert.ok(Object.hasOwn(MODULE_LABELS, l.module), l.module);
