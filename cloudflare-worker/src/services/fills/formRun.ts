@@ -63,6 +63,18 @@ export function fieldsToAsk(fields: readonly FillField[], values: Record<string,
   return fields.filter((f) => offeredToEadwyn(f) && blank(values[f.field]) && (!row || blank(row[f.column])));
 }
 
+/**
+ * What is already on each form's table for this venture, newest first, so a
+ * proposed row does not repeat one. One literal statement per table (D1328
+ * adds Validate's themes, segments and hypotheses).
+ */
+export const EXISTING_READS: Readonly<Record<string, string>> = Object.freeze({
+  mvp_features: 'SELECT title AS value FROM mvp_features WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  pain_groups: 'SELECT title AS value FROM pain_groups WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  customer_segments: 'SELECT name AS value FROM customer_segments WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 40',
+  hypotheses: 'SELECT claim AS value FROM hypotheses WHERE project_id = ? AND retired_at IS NULL ORDER BY id DESC LIMIT 40',
+});
+
 /** The venture's own records the form's restatement fields pick from. Literal statements only. */
 export async function gatherForm(env: Env, projectId: number, fields: readonly FillField[]): Promise<FormGather> {
   const choices: Choices = new Map();
@@ -78,11 +90,11 @@ export async function gatherForm(env: Env, projectId: number, fields: readonly F
       choices.set(f.field, rows.map((r) => ({ id: Number(r.id), label: `${r.code}: ${r.claim}` })));
     }
   }
-  let existing: string[] = [];
-  if (fields.some((f) => f.table === 'mvp_features')) {
-    existing = (((await env.DB.prepare('SELECT title FROM mvp_features WHERE project_id = ? ORDER BY id DESC LIMIT 40')
-      .bind(projectId).all<{ title: string }>()).results) || []).map((r) => String(r.title));
-  }
+  const table = fields[0]?.table;
+  const read = table ? EXISTING_READS[table] : undefined;
+  const existing = read
+    ? (((await env.DB.prepare(read).bind(projectId).all<{ value: string }>()).results) || []).map((r) => String(r.value))
+    : [];
   return { choices, existing };
 }
 

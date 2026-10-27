@@ -70,6 +70,10 @@ const refuse = (c: any, status: number, code: string) => c.json({ error: code, d
 export const ROW_READS: Readonly<Record<string, string>> = Object.freeze({
   mvp_features: 'SELECT * FROM mvp_features WHERE id = ? AND project_id = ?',
   project_metrics: 'SELECT * FROM project_metrics WHERE id = ? AND project_id = ?',
+  // D1328 (#3489), part one.
+  pain_groups: 'SELECT * FROM pain_groups WHERE id = ? AND project_id = ?',
+  customer_segments: 'SELECT * FROM customer_segments WHERE id = ? AND project_id = ?',
+  hypotheses: 'SELECT * FROM hypotheses WHERE id = ? AND project_id = ?',
 });
 
 const blank = (v: unknown) => v == null || String(v).trim() === '';
