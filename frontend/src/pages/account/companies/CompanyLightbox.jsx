@@ -4,7 +4,7 @@ import { Lightbox, Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import { api } from '../../../lib/api';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import {
-  ACTIVE_HERE, companyPowers, day, memberLine, projectGroups, sentInvitationLine, stageWord,
+  ACTIVE_HERE, companyPowers, companySettingsPathFor, day, memberLine, projectGroups, sentInvitationLine, stageWord,
 } from './companiesModel';
 import {
   ArchiveDialog, InviteDialog, LeaveCompanyDialog, MakeActiveDialog, RenameDialog, RestoreDialog, TransferAdminDialog,
@@ -90,7 +90,7 @@ export default function CompanyLightbox({
   const foot = detail.status === 'ready' && powers.member ? (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <span className={`text-[12px] ${MUTED}`}>
-        {active ? <Link className={LINK} to="/company-settings">Full company settings ›</Link> : 'Full company settings open for the active company.'}
+        {active ? <Link className={LINK} to={companySettingsPathFor(uid)} data-testid="company-full-settings">Full company settings ›</Link> : 'Full company settings open for the active company.'}
         {' '}The profile and team editors keep their own page.
       </span>
       <span className="flex flex-wrap gap-2">

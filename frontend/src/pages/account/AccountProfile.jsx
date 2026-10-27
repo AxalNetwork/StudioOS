@@ -11,6 +11,7 @@ import {
   LOCALES, changedFields, corporateIsEmpty, countryLabel, dayLabel, fieldErrorsFrom, historyLines,
   latestArchetype, localeLabel, locationLabel, phoneLabel, splitPersonalPatch,
 } from './accountCenterModel';
+import { companySettingsPathFor } from './companies/companiesModel';
 
 /**
  * D568 — Profile and identity: the canvas's `ac_profile` block.
@@ -267,13 +268,13 @@ export function CompanyProfileCard() {
   const { loading, failed } = useCompanyReadState();
   return (
     <PanelCard title="Company profile" aside="Selected in the sidebar" data-testid="card-company-profile"
-      action={company && <Link className={BTN.link} to="/company-settings">Company Settings</Link>}>
+      action={company && <Link className={BTN.link} to={companySettingsPathFor(company.uid)}>Company Settings</Link>}>
       {loading ? <LoadingRows lines={3} /> : failed ? (
         <Unreadable what="Your company profile" claim="Your company memberships could not be read." />
       ) : !company ? (
         <EmptyState size="sm" data-testid="company-profile-empty" title="No company selected."
-          body="Create or select a company in Company Settings."
-          cta={{ label: 'Company Settings', to: '/company-settings' }} />
+          body="Create or select a company in Companies and projects."
+          cta={{ label: 'Companies and projects', to: '/account/companies' }} />
       ) : (
         <div>
           <FieldRow label="Company"><Value value={company.company_name} missing="no company name is saved" testid="value-company" /></FieldRow>

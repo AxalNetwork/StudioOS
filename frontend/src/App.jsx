@@ -211,7 +211,8 @@ const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
 // D569 — the commissions-and-payouts console (canvas pea-commissions).
 const AdminCommissions = lazy(() => import('./pages/admin/AdminCommissions'));
 const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
-const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
+// D1140 (#3020): the full company settings live under Companies and projects; /company-settings forwards.
+const CompanySettingsAt = lazy(() => import('./pages/account/companies/CompanySettingsAt'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
 const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
@@ -530,6 +531,7 @@ import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricin
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
 import UseOfFundsMovedRedirect from './pages/raise/useoffunds/UseOfFundsMovedRedirect';
 import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
+import { CompanySettingsRedirect } from './pages/account/companies/CompaniesMoved';
 import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
@@ -2607,6 +2609,9 @@ function AppInner() {
           `:section` above matches one segment only, so without this every
           Usage sub-page answered 404; SettingsPage reads the page from the path. */}
       <Route path="/account/usage/:page" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      {/* D1140: the full company settings (what /company-settings drew), the active company's, before :tab. */}
+      <Route path="/account/companies/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
+      <Route path="/account/companies/:uid/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
       <Route path="/account/companies/:tab" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
@@ -3778,14 +3783,14 @@ function AppInner() {
           destination guards itself, so an unentitled visitor is refused there
           rather than at a URL that no longer has a page (the D118 shape).
           None of the retired pages read a query string, so none is carried.
-            root, overview → /company-settings (the firm profile card, D390)
+            root, overview → /account/companies/settings (the firm profile card, D390; D1140 moved it from /company-settings)
             capabilities   → /offers/catalog (the service catalogue writes)
             portfolio      → /delivery/health (founder reviews, D390)
             engagements    → /pipeline/proposals (withdraw; the lifecycle and
                               invoice ledger are on /delivery/board)
             performance    → /pipeline/analytics (the same quotesAnalytics read) */}
-      <Route path="/partner/operations" element={<Navigate to="/company-settings" replace />} />
-      <Route path="/partner/operations/overview" element={<Navigate to="/company-settings" replace />} />
+      <Route path="/partner/operations" element={<Navigate to="/account/companies/settings" replace />} />
+      <Route path="/partner/operations/overview" element={<Navigate to="/account/companies/settings" replace />} />
       <Route path="/partner/operations/capabilities" element={<Navigate to="/offers/catalog" replace />} />
       <Route path="/partner/operations/portfolio" element={<Navigate to="/delivery/health" replace />} />
       <Route path="/partner/operations/engagements" element={<Navigate to="/pipeline/proposals" replace />} />
@@ -3888,7 +3893,10 @@ function AppInner() {
           page /referrals would have shown them. */}
       <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferralsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferRedirect />)} />
-      <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
+      {/* D1140 (#3020, CMP19b, owner question 2, A): one place for companies. /company-settings forwards to the
+          active company's page under Companies and projects with the moved notice, the query and hash kept; it is
+          counted for #2319. The full settings are at /account/companies/<uid>/settings. */}
+      <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CompanySettingsRedirect />)} />
       {/* D651 — Integrations are Connectors now; both old addresses redirect
           to /account/connectors, keeping ?query= so OAuth returns still land.
           Available to every authenticated profile, as the Account center is. */}
