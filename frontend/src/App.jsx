@@ -109,7 +109,6 @@ const NetworkWorkspace = lazy(() => import('./workspaces/NetworkWorkspace'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
 const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
-const CapitalWorkspacePage = lazy(() => import('./pages/CapitalWorkspacePage'));
 const LegalEnginePage = lazy(() => import('./pages/LegalEnginePage'));
 const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage'));
 const AcceptCompanyInvitePage = lazy(() => import('./pages/AcceptCompanyInvitePage'));
@@ -2664,8 +2663,8 @@ function AppInner() {
               replace
             />)} />
       {/* #2339, #2335 (the owner's "Remove", #2297): two retired pages. The
-          Financial Model is Capital's tab, the same FinancialsPage; customer
-          discovery is Validate · Customer research. Each old address forwards,
+          Financial Model is Use of funds › Runway › Forecast (D1178; D1180
+          deleted FinancialsPage); customer discovery is Validate · Customer research. Each old address forwards,
           query and hash kept, until #2319 retires the redirects. */}
       <Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />
       <Route path="/build/discovery" element={<Navigate replace to={{ pathname: '/validate/customer-research', search: location.search, hash: location.hash }} />} />
@@ -2689,6 +2688,9 @@ function AppInner() {
       <Route path="/validate/record/whatsapp/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/whatsapp/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/telegram" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      {/* D869 (#2515): Telegram's tabs are paths under its address, as WhatsApp's are. */}
+      <Route path="/validate/record/telegram/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/telegram/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/calls" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
@@ -3268,9 +3270,12 @@ function AppInner() {
       {/* D901 (#2680) — present mode (PD16): full screen, reads one version, writes nothing. */}
       <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchPresent />))} />
       <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="notes" />))} />
+      {/* D1180 (#3107): the workspace's default tab was the financial model, now retired, so
+          ?mode=workspace lands on Use of funds › Runway › Forecast as /raise/capital/model does,
+          counting itself (the address is also the Capital page). */}
       <Route path="/raise/capital" element={guard(['admin', 'founder'],
         new URLSearchParams(location.search).get('mode') === 'workspace'
-          ? founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />))
+          ? <UseOfFundsMovedRedirect count="/raise/capital?mode=workspace" />
           : <FounderRaiseCapital />)} />
       {/* D1178 (#3105): the financial model is Use of funds › Runway › Forecast; its old addresses land there with the venture. */}
       <Route path="/raise/capital/model" element={<UseOfFundsMovedRedirect />} />

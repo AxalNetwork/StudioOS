@@ -532,8 +532,8 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
     ? `Searching ${viewer.branch.name || viewer.branch.code} accounts`
     : 'Searching HQ-held accounts';
 
-  // D1305: a row's ⋯ menu item, run by the handler the old row buttons used.
-  // Their browser prompts are D1306's to replace with ACC7's dialogs.
+  // D1305: a row's ⋯ menu item, run by the handler the old row buttons used;
+  // each opens D1306's in-page dialog (ACC7).
   const runAction = (id, u) => {
     if (id === 'profile') setChangeProfile(u);
     else if (id === 'full') handleGrantFullAccess(u);
