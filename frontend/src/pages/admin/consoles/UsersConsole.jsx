@@ -7,6 +7,7 @@ import { useToast } from '../../../components/useToast';
 import { useEscapeClose } from '../../../components/useEscapeClose';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, Unreadable } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 // D128 — the scope caption is fed from `/me.branch` through the same reader
 // the territory badge uses, so the two cannot disagree about which
 // deployment this is.
@@ -608,7 +609,7 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
 }
 
 export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive, onLabAdmit = null, showCredits = false }) {
-  useEscapeClose(onClose);
+  // D1317: the Sheet answers Escape, on the dialog stack the resend dialog shares.
   // D775 (#2101): the open account is the rail's record while the drawer is shown.
   useRecordCrumb(userRow?.name || userRow?.email || null, 'account', userRow?.id);
   const [data, setData] = useState(null);
@@ -745,26 +746,63 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, userRow.id, selectedConvId]);
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-start justify-between dark:border-gray-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{u.name}</h3>
-              <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>{profileLabel(u.role)}</span>
-              <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
-              {u.email_verified ? (
-                <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">Verified</span>
-              ) : (
-                <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">Unverified</span>
-              )}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">{u.email} · joined {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X size={18} /></button>
-        </div>
+  // D1317: the drawer's actions stay at the sheet's foot while its tabs scroll.
+  const footer = (
+    <div className="flex w-full items-center justify-between">
+      <div className="flex gap-2">
+        {/* D221 — absent, never disabled: a handler of null means the
+            server would refuse this viewer on this account. */}
+        {onImpersonate && (
+          <button onClick={onImpersonate}
+            className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
+            <LogIn size={12} /> View As
+          </button>
+        )}
+        {showCredits && (
+          <Link to={`/admin/accounts/credits/${u.id}`} data-testid="user-drawer-credits"
+            className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900 rounded-lg font-medium">
+            Credits
+          </Link>
+        )}
+        {onLabAdmit && (
+          <button type="button" onClick={onLabAdmit} data-testid="drawer-lab-admit"
+            className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg font-medium">
+            Admit to Lab
+          </button>
+        )}
+        {onToggleActive && (
+          <button onClick={onToggleActive}
+            className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+            {u.is_active ? 'Disable account' : 'Enable account'}
+          </button>
+        )}
+      </div>
+      <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
+    </div>
+  );
 
+  return (
+    // D1317: the account opens as the shared Sheet over All accounts (760px, the
+    // panel's own max-w-4xl on the owner's list), docked beside the rail. Its tabs
+    // stay put and only the tab's content scrolls, so the body is tall.
+    <Sheet
+      label={u.name || u.email || 'Account'}
+      title={(
+        <span className="flex flex-wrap items-center gap-2">
+          {u.name}
+          <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>{profileLabel(u.role)}</span>
+          <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
+          {u.email_verified ? (
+            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">Verified</span>
+          ) : (
+            <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700">Unverified</span>
+          )}
+        </span>
+      )}
+      sub={`${u.email} · joined ${u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}`}
+      width={760} size="tall" testId="account-drawer" onClose={onClose} footer={footer}
+    >
+      <div className="flex h-full min-h-0 flex-col">
         {toast && (
           <div className={`mx-6 mt-3 px-3 py-2 rounded-lg text-xs ${toast.kind === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{toast.msg}</div>
         )}
@@ -1184,38 +1222,6 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             </div>
           )}
         </div>
-
-        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between dark:border-gray-800">
-          <div className="flex gap-2">
-            {/* D221 — absent, never disabled: a handler of null means the
-                server would refuse this viewer on this account. */}
-            {onImpersonate && (
-              <button onClick={onImpersonate}
-                className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium flex items-center gap-1">
-                <LogIn size={12} /> View As
-              </button>
-            )}
-            {showCredits && (
-              <Link to={`/admin/accounts/credits/${u.id}`} data-testid="user-drawer-credits"
-                className="px-3 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 dark:hover:bg-violet-900 rounded-lg font-medium">
-                Credits
-              </Link>
-            )}
-            {onLabAdmit && (
-              <button type="button" onClick={onLabAdmit} data-testid="drawer-lab-admit"
-                className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg font-medium">
-                Admit to Lab
-              </button>
-            )}
-            {onToggleActive && (
-              <button onClick={onToggleActive}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
-                {u.is_active ? 'Disable account' : 'Enable account'}
-              </button>
-            )}
-          </div>
-          <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
-        </div>
       </div>
       {resendAsk && (
         <div onClick={(e) => e.stopPropagation()}>
@@ -1223,7 +1229,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
             onConfirm={resend} onDone={() => setResendAsk(false)} />
         </div>
       )}
-    </div>
+    </Sheet>
   );
 }
 
