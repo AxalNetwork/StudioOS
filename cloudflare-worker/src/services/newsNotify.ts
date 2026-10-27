@@ -66,11 +66,9 @@ export async function notifyNews(env: Env, kind: NewsNotifyKind, args: Args): Pr
     // <Navigate> in App.jsx with no wildcard, so `/admin/news/<id>` never
     // matched a route — and it was already broken while `admin_news.ts`
     // still existed, because the SPA never had a per-id page for it.
-    // `articleNotify.ts` solved this on the articles side and its comment
-    // says why: the admin queue route is `/admin/articles` with no per-id
-    // route, and the queue page surfaces the specific article through its
-    // own selection state.
-    const link = `/admin/articles`;
+    // D1290 (#2383): the queue now has one, `/admin/articles/<id>`, which
+    // opens the article's review panel, as `articleNotify.ts` links it.
+    const link = `/admin/articles/${args.articleId}`;
     const recipients = await admins(env);
     for (const uid of recipients) {
       try {

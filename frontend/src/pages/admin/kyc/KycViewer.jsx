@@ -41,7 +41,7 @@ function Watermark({ text }) {
  * `doc` is one row of `peopleModel.documentRows`; `viewer` names who is
  * looking. A removed document never reads: it says when it went.
  */
-export default function KycViewer({ userId, doc, viewer, rejectedOn = null, onClose, nowIso }) {
+export default function KycViewer({ userId, doc, viewer, rejectedOn = null, onClose, nowIso, fetchDoc = null }) {
   const [state, setState] = useState(doc.removed ? { kind: 'refused', why: viewerRefusal({ status: 404 }, { rejectedOn: doc.removed }) } : { kind: 'loading' });
   const [rotate, setRotate] = useState(0);
   const [fit, setFit] = useState(true);
@@ -52,7 +52,8 @@ export default function KycViewer({ userId, doc, viewer, rejectedOn = null, onCl
     if (doc.removed) return;
     setState({ kind: 'loading' });
     try {
-      const { blob, type } = await kycPeopleApi.documentBlob(userId, doc.legacy ? null : doc.id);
+      // D1234: a business's document passes its own loader (`kycPeople.businessDocumentBlob`).
+      const { blob, type } = fetchDoc ? await fetchDoc() : await kycPeopleApi.documentBlob(userId, doc.legacy ? null : doc.id);
       if (url.current && typeof URL !== 'undefined' && URL.revokeObjectURL) URL.revokeObjectURL(url.current);
       url.current = typeof URL !== 'undefined' && URL.createObjectURL ? URL.createObjectURL(blob) : null;
       setState({ kind: 'ok', type, src: url.current });
@@ -60,7 +61,7 @@ export default function KycViewer({ userId, doc, viewer, rejectedOn = null, onCl
       reportError('KycViewer:document', e);
       setState({ kind: 'refused', why: viewerRefusal(e, { rejectedOn }) });
     }
-  }, [userId, doc, rejectedOn]);
+  }, [userId, doc, rejectedOn, fetchDoc]);
   useEffect(() => {
     load();
     return () => { if (url.current && typeof URL !== 'undefined' && URL.revokeObjectURL) URL.revokeObjectURL(url.current); };

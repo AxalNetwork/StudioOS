@@ -1,3 +1,4 @@
+import { UOF_OPTIONS, UOF_PAGE } from '../src/services/useOfFunds/eadwyn.ts';
 import {AI_LOG_SCHEMA,AI_BUDGET_MIGRATION} from './_ai_budget_fixture.mjs';
 import {d1Over} from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
@@ -673,7 +674,9 @@ test('D778: each founder-only band\'s fallback page is the one D771\'s inventory
   assert.equal(WORD_PAGE, (byKey.get(WORD_OPTION) as any)?.page, WORD_OPTION);
   // D1147: these two previews have their own mounted, input-only route; Keep alone persists.
   const pmfPreviews = ['draft:raise/pmf-explain', 'draft:raise/pmf-questions'];
-  const others = FOUNDER_OPTIONS.filter((o: any) => /^draft:[a-z-]+\/[a-z-]+$/.test(o.key) && o.key !== WORD_OPTION && !pmfPreviews.includes(o.key) && !(o.key.slice(6) in FOUNDER_DRAFT_PAGES));
+  const uofPreviews = Object.values(UOF_OPTIONS).filter(k => k.startsWith('draft:'));
+  for (const option of uofPreviews) assert.equal((byKey.get(option) as any)?.page, UOF_PAGE);
+  const others = FOUNDER_OPTIONS.filter((o: any) => /^draft:[a-z-]+\/[a-z-]+$/.test(o.key) && o.key !== WORD_OPTION && !pmfPreviews.includes(o.key) && !uofPreviews.includes(o.key) && !(o.key.slice(6) in FOUNDER_DRAFT_PAGES));
   assert.deepEqual(others.map((o: any) => o.key).sort(),
     ['draft:network/introductions', 'draft:network/relationships', 'draft:research/ask', 'draft:research/library']);
 });
