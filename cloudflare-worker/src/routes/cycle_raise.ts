@@ -67,6 +67,14 @@
  *   A module's read carries `parts.mercury` for the founder alone
  *   (`services/mercury/raiseFeeds.ts`).
  *
+ *   D1094 (#2959): the member's chosen Google files and calendar feed the modules.
+ *   POST   /google/sync                  reads the chosen files and the calendar → { counts }
+ *   POST   /google/proposals/:id/accept  a deck version (Pitch deck) or a "last met" meeting (Capital relationships)
+ *   POST   /google/proposals/:id/dismiss               never proposed again
+ *   DELETE /google/facts/:id                           a data-room copy; a re-sync never copies it again
+ *   Pitch deck, Data room and Capital relationships carry `parts.google` for the
+ *   member's own connection (`services/google/raise.ts`).
+ *
  *   D1190 (#3124): Capital relationships' two reads (`services/capRelReads.ts`).
  *   GET /capital-relationships/commitments?project=   one read across the stores:
  *     → { currency, round, totals, investors: [{ key, prospect_id, name, chosen, lines }], sources, words, basis }
@@ -144,6 +152,11 @@ import { logCycleWrite } from '../services/cycleActivity';
 import {
   AcceptError, RAISE_PART_FOR, acceptRaiseProposal, deleteRaiseFact, dismissRaiseProposal, syncRaise,
 } from '../services/mercury/raiseFeeds';
+import {
+  RAISE_GOOGLE_SLUGS, acceptRaiseGoogleProposal, calendarEventDays, deleteRaiseGoogleCopy, dismissRaiseGoogleProposal, raiseGooglePart, syncRaiseGoogle,
+} from '../services/google/raise';
+import { WorkspaceError, workspaceRead } from '../services/google/workspace';
+import { workspaceContext } from './google_workspace';
 import { founderRaiseReads, founderMercuryConnection } from '../services/mercury/raiseAccess';
 import { memberMercury } from '../services/mercury/memberConnection';
 import { isSupportSession } from '../integrations/providers/mercury';
@@ -376,6 +389,13 @@ cycleRaise.get('/modules/:slug', async (c) => {
         ? { state: connection.state, reason: connection.sentence, connection }
         : { integration_uid: String(conn.uid), connection, ...(await RAISE_PART_FOR[slug](c.env, Number(conn.id), s.projectId) as object) };
     } catch { parts.mercury = { state: 'unreadable', reason: 'What Mercury fed this module could not be read' }; }
+  }
+  // D1094: what Google fed this module, for the member's own connection. It fails on its own.
+  if ((RAISE_GOOGLE_SLUGS as readonly string[]).includes(slug)) {
+    try {
+      const own = await googleOwner(c, s);
+      if (!(own instanceof Response)) parts.google = await raiseGooglePart(c.env, { integrationId: own.integration.id, userId: Number(s.user.id), projectId: s.projectId, slug });
+    } catch { parts.google = { state: 'unreadable', reason: 'What Google fed this module could not be read' }; }
   }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: mod.records_title }, card, records,
     ...(Object.keys(parts).length ? { parts } : {}) });
@@ -1169,6 +1189,77 @@ cycleRaise.delete('/mercury/facts/:id', async (c) => {
   const own = await mercuryOwner(c, s);
   if (own instanceof Response) return own;
   if (!(await deleteRaiseFact(c.env, { integrationId: own.integrationId, projectId: s.projectId, id }))) return c.json({ detail: 'Fact not found' }, 404);
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// D1094 — the member's own Google Workspace
+// ---------------------------------------------------------------------------
+
+/** Part 2's gates (`workspaceContext`): no support session, a writer of the venture, their own connection enabled for its company. */
+async function googleOwner(c: any, s: { user: User; projectId: number }): Promise<{ integration: { id: number } } | Response> {
+  try { return await workspaceContext(c, s.user, s.projectId); }
+  catch (e) {
+    const w = e instanceof WorkspaceError ? e : new WorkspaceError('workspace_unreadable');
+    return c.json({ error: w.code }, w.status as any);
+  }
+}
+
+cycleRaise.post('/google/sync', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const own = await googleOwner(c, s);
+  if (own instanceof Response) return own;
+  const userId = Number(s.user.id);
+  try {
+    const counts = await syncRaiseGoogle(c.env, {
+      integrationId: own.integration.id, projectId: s.projectId, user: s.user,
+      read: (call, id, options) => workspaceRead(c.env, userId, call, id, options), eventDays: calendarEventDays(c.env, userId),
+    });
+    await logCycleWrite(c.env, { projectId: s.projectId, userId, cycle: 'raise', module: 'data-room', entityId: s.projectId, action: 'google_raise_sync',
+      summary: `Synced from Google: ${Number(counts.decks_proposed)} deck, ${Number(counts.copies_added) + Number(counts.copies_replaced)} files, ${Number(counts.last_met_proposed)} meetings` }).catch(() => {});
+    return c.json({ ok: true, counts });
+  } catch (e) {
+    // A code only: no file name, address or event reaches a log.
+    console.error('[cycle_raise] google sync failed:', e instanceof WorkspaceError ? e.code : 'error');
+    return c.json({ error: 'google_sync_failed', detail: 'Google could not be read. Nothing changed; try again.' }, 502);
+  }
+});
+
+cycleRaise.post('/google/proposals/:id/accept', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const own = await googleOwner(c, s);
+  if (own instanceof Response) return own;
+  try {
+    const out = await acceptRaiseGoogleProposal(c.env, { integrationId: own.integration.id, projectId: s.projectId, id, user: s.user });
+    if (!out.ok) return c.json({ error: out.code, detail: out.message }, OUTCOME_STATUS(out));
+    return c.json(out);
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.post('/google/proposals/:id/dismiss', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const own = await googleOwner(c, s);
+  if (own instanceof Response) return own;
+  const out = await dismissRaiseGoogleProposal(c.env, { integrationId: own.integration.id, projectId: s.projectId, id, user: s.user });
+  if (!out.ok) return c.json({ error: out.code, detail: out.message }, OUTCOME_STATUS(out));
+  return c.json(out);
+});
+
+cycleRaise.delete('/google/facts/:id', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'File not found' }, 404);
+  const own = await googleOwner(c, s);
+  if (own instanceof Response) return own;
+  if (!(await deleteRaiseGoogleCopy(c.env, { integrationId: own.integration.id, projectId: s.projectId, id, user: s.user }))) return c.json({ detail: 'File not found' }, 404);
   return c.json({ ok: true });
 });
 

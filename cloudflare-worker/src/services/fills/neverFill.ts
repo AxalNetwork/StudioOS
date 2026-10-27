@@ -103,14 +103,21 @@ export const NEVER_FILL_RULES: readonly NeverFillRule[] = Object.freeze([
   },
   {
     category: 'money_term',
-    label: 'Financial plan inputs',
-    tables: ['financial_models', 'pct'],
+    // D1325 (#3486, #2431): every money amount and term, not only the plan's
+    // inputs. Commitments, valuations, caps, discounts, cap-table amounts and
+    // SAFE terms are a person's (CAPITAL #2424, CAPTABLE #2432).
+    label: 'Money amounts and terms',
+    tables: ['financial_models', 'pct',
+      'commitments', 'safe_issuances', 'fund_position_valuations',
+      'cap_table_holders', 'cap_table_issuances', 'cap_table_option_pools', 'cap_table_securities', 'cap_table_share_classes', 'cap_table_vesting',
+      'captable_holders', 'captable_scenarios', 'captable_securities'],
     exceptions: ['project_market_assumptions.runway'],
     fields: ['uof_scenarios.amount_to_raise_cents', 'uof_scenarios.target_runway_months', 'uof_scenarios.cash_cents', 'uof_scenarios.start_month', 'uof_scenarios.raise_month', 'uof_scenario_lines.share_pct', 'uof_milestones.cost_cents', 'use_of_funds_hires.annual_cents', 'use_of_funds_hires.start_month', 'projects.use_of_funds', 'projects.use_of_funds_meta', 'projects.funding_needed'],
     columns: ['cents', 'amount_to_raise', 'amount_to_raise_cents', 'funding_needed', 'share_pct',
       'target_runway_months', 'runway_months', 'runway', 'cash_cents', 'cash_balance', 'burn',
       'burn_cents', 'net_burn', 'hire_cost', 'annual_cents', 'annual_cost', 'cost_cents', 'forecast_driver',
-      'use_of_funds', 'use_of_funds_meta', 'milestone_costs'],
+      'use_of_funds', 'use_of_funds_meta', 'milestone_costs',
+      'valuation_cap', 'pre_money', 'post_money', 'pre_money_valuation', 'post_money_valuation'],
   },
 ]);
 

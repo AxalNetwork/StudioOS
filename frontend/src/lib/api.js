@@ -75,6 +75,7 @@ export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
+export * from './api/fills.js';
 export * from './api/fundAdmin.js';
 export * from './api/fundBooklets.js';
 export * from './api/fundFees.js';
@@ -2969,6 +2970,20 @@ export const api = {
   // Response, like deckExport: the caller reads the file or the refusal.
   deckExportHtml: (id, { notes = false, sources = false } = {}) =>
     fetch(`${BASE}/decks/${id}/export/html`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
+  // D904 (#2683) — the version as a new presentation in the member's own
+  // Google Drive; the answer is `{created, url, converted, …}` or `{error}`.
+  // Raw Response, like deckExport: the caller reads the answer or the refusal.
+  deckExportGoogleSlides: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/google-slides`, {
       method: 'POST',
       credentials: 'include',
       headers: {

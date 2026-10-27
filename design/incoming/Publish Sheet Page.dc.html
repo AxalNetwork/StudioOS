@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>body{margin:0;-webkit-font-smoothing:antialiased}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="width:{{ W }}px;height:{{ H }}px;position:relative;overflow:hidden;background:{{ t.page }};color:{{ t.ink }};font-family:'Space Grotesk',system-ui,sans-serif;font-size:13px;line-height:1.45;box-sizing:border-box">
+
+<sc-if value="{{ desk }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;height:100%">
+<aside aria-label="Founder navigation" style="width:232px;flex:none;background:{{ t.card }};border-right:1px solid {{ t.line }};display:flex;flex-direction:column;gap:2px;padding:16px 12px;box-sizing:border-box">
+<div style="display:flex;align-items:center;gap:9px;padding:2px 8px 14px"><img src="/axal-mark.png" alt="" style="width:26px;height:26px;display:block;object-fit:contain"><span style="font-weight:800;font-size:15px;letter-spacing:-0.02em">Axal VC</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border:1px solid {{ t.line }};border-radius:9px;margin-bottom:12px"><span style="width:22px;height:22px;flex:none;border-radius:6px;background:{{ t.lav }};color:{{ t.vtext }};font:700 10px 'Roboto Mono',monospace;display:grid;place-items:center">ND</span><span style="flex:1;font-weight:600;font-size:12.5px">[Northwind Data]</span><span style="color:{{ t.muted }};font-size:11px">▾</span></div>
+<sc-for list="{{ side }}" as="n" hint-placeholder-count="8"><div style="{{ n.st }}"><span style="{{ n.ic }}"></span><span>{{ n.n }}</span></div></sc-for>
+</aside>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="height:56px;flex:none;display:flex;align-items:center;gap:12px;padding:0 24px;border-bottom:1px solid {{ t.line }};background:{{ t.card }};box-sizing:border-box">
+<div style="width:380px;height:34px;border:1px solid {{ t.line }};border-radius:9px;display:flex;align-items:center;padding:0 12px;color:{{ t.muted }};font-size:12.5px;box-sizing:border-box">Search Axal VC</div>
+<div style="flex:1"></div>
+<span aria-label="Notifications" style="width:34px;height:34px;border-radius:9px;border:1px solid {{ t.line }};display:grid;place-items:center;color:{{ t.muted }};box-sizing:border-box" dangerouslySetInnerHTML="{{ ic.bell }}"></span>
+<div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px"><span style="width:30px;height:30px;border-radius:50%;background:{{ t.lav }};color:{{ t.vtext }};display:grid;place-items:center;font:700 11px 'Roboto Mono',monospace">NA</span><span>[Name]</span><span style="color:{{ t.muted }};font-size:11px">▾</span></div>
+</div>
+
+<sc-if value="{{ modulePage }}" hint-placeholder-val="{{ true }}">
+<div style="padding:26px 30px;display:flex;flex-direction:column;gap:16px">
+<span style="{{ st.eb }}">Grow › Product improvement</span>
+<div style="display:flex;align-items:flex-start;gap:14px">
+<div style="flex:1;min-width:0"><h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">Product improvement</h1><p style="margin:4px 0 0;font-size:13px;color:{{ t.muted }}">What you shipped, what users asked for, and what changed because of it.</p></div>
+<div style="display:flex;gap:8px;flex:none"><span style="{{ st.bOn }}">Publish to…</span><span style="{{ st.b1 }}">Share an update</span></div>
+</div>
+<div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ gtabs }}" as="g" hint-placeholder-count="9"><span style="{{ g.st }}">{{ g.n }}</span></sc-for></div>
+<div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px">
+<div style="{{ st.card }};padding:16px 18px">
+<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px"><span style="font-weight:800;font-size:15px">Shipped in October</span><span style="{{ st.m11 }}">3 items</span></div>
+<sc-for list="{{ shipped }}" as="r" hint-placeholder-count="3"><div style="{{ r.st }}"><span style="flex:1;font-weight:600">{{ r.n }}</span><span style="{{ st.chip }}"><span style="{{ st.dotA }}"></span>Recorded</span><span style="{{ st.m11 }}">{{ r.d }}</span></div></sc-for>
+</div>
+<div style="{{ st.card }};padding:16px 18px">
+<div style="font-weight:800;font-size:15px;margin-bottom:6px">Asked for by users</div>
+<sc-for list="{{ asks }}" as="r" hint-placeholder-count="3"><div style="{{ r.st }}"><span style="flex:1">{{ r.n }}</span><span style="{{ st.m11 }}">{{ r.d }}</span></div></sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ history }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;display:flex">
+<div style="flex:1;min-width:0;padding:26px 28px;display:flex;flex-direction:column;gap:16px">
+<span style="{{ st.eb }}">Grow › Updates</span>
+<div style="display:flex;align-items:flex-start;gap:14px">
+<div style="flex:1;min-width:0"><h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">Updates</h1><p style="margin:4px 0 0;font-size:13px;color:{{ t.muted }}">What you sent to your investors and team, and what you published outside Axal VC.</p></div>
+<div style="display:flex;gap:8px;flex:none"><span style="{{ st.b2 }}">Publish to…</span><span style="{{ st.b1 }}">Share an update</span></div>
+</div>
+<div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ gtabs }}" as="g" hint-placeholder-count="9"><span style="{{ g.st }}">{{ g.n }}</span></sc-for></div>
+<div style="{{ st.card }};padding:14px 16px">
+<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px"><span style="font-weight:800;font-size:15px">Updates you shared</span><span style="{{ st.m11 }}">3</span></div>
+<sc-for list="{{ upd }}" as="u" hint-placeholder-count="3"><div style="{{ u.st }}"><span style="flex:1;font-weight:600">{{ u.n }}</span><span style="font-size:12px;color:{{ t.muted }}">{{ u.to }}</span><span style="{{ st.m11 }}">{{ u.d }}</span></div></sc-for>
+</div>
+<div style="display:flex;align-items:baseline;gap:10px;margin-top:4px"><h2 style="margin:0;font-size:17px;font-weight:800;letter-spacing:-0.02em">Published outside</h2><span style="{{ st.m11 }}">8</span><span style="flex:1"></span><span style="{{ st.m11 }}">1–8 of 8</span></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><span style="{{ st.sel }}">Module · All ▾</span><span style="{{ st.sel }}">Destination · All ▾</span><span style="{{ st.sel }}">Status · All ▾</span><span style="{{ st.search }}">Search the text</span></div>
+<div style="{{ st.card }};position:relative">
+<div style="{{ st.hdr }}"><span>Sent</span><span>Module</span><span>Destination</span><span>Status</span><span></span><span></span></div>
+<sc-for list="{{ hrows }}" as="r" hint-placeholder-count="8">
+<div style="{{ r.st }}">
+<div style="display:flex;flex-direction:column"><span style="font:500 11.5px 'Roboto Mono',monospace;font-variant-numeric:tabular-nums">{{ r.d }}</span><span style="{{ st.m11 }}">{{ r.tm }}</span></div>
+<span>{{ r.mod }}</span>
+<div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="{{ r.tile }}">{{ r.l }}</span><div style="min-width:0"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.acct }}</div><div style="font-size:11.5px;color:{{ t.muted }};white-space:nowrap">{{ r.prov }}{{ r.aud }}</div></div></div>
+<span><span style="{{ r.pill.st }}">{{ r.pill.g }} {{ r.pill.w }}</span></span>
+<span>
+<sc-if value="{{ r.isLink }}" hint-placeholder-val="{{ true }}"><a href="#" style="{{ st.link }}">{{ r.link }}</a></sc-if>
+<sc-if value="{{ r.isBtn }}" hint-placeholder-val="{{ false }}"><span style="{{ st.bSm }}">Retry</span></sc-if>
+<sc-if value="{{ r.isNone }}" hint-placeholder-val="{{ false }}"><span style="color:{{ t.muted }}">—</span></sc-if>
+</span>
+<span style="position:relative;display:flex;justify-content:center"><span aria-label="Actions" style="{{ st.dots }}">⋯</span>
+<sc-if value="{{ r.menu }}" hint-placeholder-val="{{ false }}"><div role="menu" style="{{ st.menu }}"><span style="{{ st.mi }}">Open</span><span style="{{ st.mi }}">View on X ↗</span><span style="{{ st.miNeg }}">Retract…</span></div></sc-if>
+</span>
+</div>
+</sc-for>
+</div>
+</div>
+<aside aria-label="Sent post" style="width:420px;flex:none;border-left:1px solid {{ t.line }};background:{{ t.card }};display:flex;flex-direction:column">
+<div style="padding:18px 20px 14px;border-bottom:1px solid {{ t.line }};display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:10px"><span style="{{ tl.x28 }}">X</span><div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px">@northwind_demo on X</div><div style="{{ st.m11 }}">Product improvement · 26 Oct 2026, 14:02</div></div><span aria-label="Close" style="{{ st.x }}">×</span></div>
+<span><span style="{{ pl.sent.st }}">✓ Sent</span></span>
+</div>
+<div style="flex:1;min-height:0;padding:16px 20px;display:flex;flex-direction:column;gap:14px;overflow:hidden">
+<span style="{{ st.eb }}">Exact text</span>
+<div style="padding:12px 13px;border-radius:10px;background:{{ t.raised }};border:1px solid {{ t.line }};font-size:13px;line-height:1.55">Shipped in October: bulk CSV import, faster search, and SSO for teams. Import up to 5,000 rows at once, find any record in under a second, and let your whole team sign in with the identity provider you use today.</div>
+<div style="display:flex;flex-direction:column"><sc-for list="{{ facts }}" as="f" hint-placeholder-count="5"><div style="{{ f.row }}"><span style="width:104px;flex:none;font-size:12px;color:{{ t.muted }}">{{ f.k }}</span><span style="{{ f.vst }}">{{ f.v }}</span><sc-if value="{{ f.cp }}" hint-placeholder-val="{{ false }}"><span style="{{ st.bSm }}">Copy</span></sc-if></div></sc-for></div>
+<span style="{{ st.eb }}">From</span>
+<div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ srcs }}" as="c" hint-placeholder-count="3"><span style="{{ st.chip }}"><span style="{{ st.dotA }}"></span>Recorded · Product improvement · {{ c.n }}</span></sc-for></div>
+<p style="margin:0;font-size:12px;color:{{ t.muted }}">X lets Axal VC delete this post. Facebook posts can be deleted on Facebook only.</p>
+</div>
+<div style="padding:14px 20px;border-top:1px solid {{ t.line }};display:flex;gap:10px"><a href="#" style="{{ st.b2 }}">View on X ↗</a><span style="flex:1"></span><span style="{{ st.bNegO }}">Retract…</span></div>
+</aside>
+</div>
+</sc-if>
+</div>
+
+<sc-if value="{{ railOpen }}" hint-placeholder-val="{{ false }}">
+<aside aria-label="Eadwyn" style="width:320px;flex:none;background:{{ t.card }};border-left:1px solid {{ t.line }};display:flex;flex-direction:column">
+<div style="height:56px;flex:none;display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid {{ t.line }};box-sizing:border-box"><img src="/eadwyn-ai.png" alt="" style="width:32px;height:32px;border-radius:8px;object-fit:contain;display:block"><div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px">Eadwyn</div><div style="font-size:11.5px;color:{{ t.muted }}">On Grow › Product improvement</div></div><span style="color:{{ t.muted }};font-size:16px">›</span></div>
+<div style="flex:1;min-height:0;padding:16px;display:flex;flex-direction:column;gap:12px">
+<div style="{{ st.lavBox }};font-weight:700;color:{{ t.vtext }}">Eadwyn drafts. You send.</div>
+<div style="align-self:flex-end;max-width:236px;padding:9px 12px;border-radius:12px 12px 4px 12px;background:{{ t.raised }};border:1px solid {{ t.line }};font-size:13px">Draft an X post about what shipped in October.</div>
+<div style="display:flex;gap:8px;align-items:flex-start"><img src="/eadwyn-ai.png" alt="" style="{{ st.eimg }}"><div style="flex:1;padding:9px 12px;border-radius:12px 12px 12px 4px;border:1px solid {{ t.line }};font-size:13px">I read the 3 shipped items in Product improvement and put a draft in the sheet. Your text changes only if you press Use this draft.<div style="{{ st.m11 }};margin-top:6px">This run: [$0.0011] in AI tokens</div></div></div>
+</div>
+<div style="padding:12px 16px 16px;border-top:1px solid {{ t.line }}"><div style="height:40px;border:1px solid {{ t.inputEdge }};border-radius:9px;display:flex;align-items:center;padding:0 12px;color:{{ t.faint }};font-size:13px;box-sizing:border-box">Ask Eadwyn…</div><div style="font-size:11.5px;color:{{ t.muted }};margin-top:7px">Eadwyn never posts or sends.</div></div>
+</aside>
+</sc-if>
+<sc-if value="{{ railSpine }}" hint-placeholder-val="{{ true }}">
+<aside aria-label="Eadwyn" style="width:48px;flex:none;background:{{ t.card }};border-left:1px solid {{ t.line }};display:flex;flex-direction:column;align-items:center;gap:12px;padding-top:12px;box-sizing:border-box"><img src="/eadwyn-ai.png" alt="Eadwyn" style="width:32px;height:32px;border-radius:8px;object-fit:contain;display:block"><span style="writing-mode:vertical-rl;font:700 10px 'Roboto Mono',monospace;letter-spacing:.14em;text-transform:uppercase;color:{{ t.muted }}">Eadwyn</span></aside>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ sheetDesk }}" hint-placeholder-val="{{ true }}"><div style="{{ dimSt }}"></div></sc-if>
+
+<sc-if value="{{ sheetOn }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Publish to" style="{{ sheetPos }};background:{{ t.card }};display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box">
+<div style="padding:18px 24px 14px;border-bottom:1px solid {{ t.line }};display:flex;align-items:flex-start;gap:12px">
+<div style="flex:1;min-width:0">
+<div style="{{ st.ebV }}">Publish from · Product improvement</div>
+<sc-if value="{{ titlePublish }}" hint-placeholder-val="{{ true }}"><h2 style="{{ st.h2 }};margin-top:5px">Publish to…</h2></sc-if>
+<sc-if value="{{ titleResult }}" hint-placeholder-val="{{ false }}"><h2 style="{{ st.h2 }};margin-top:5px">Sent to 2 of 3</h2><p style="margin:3px 0 0;font-size:12.5px;color:{{ t.muted }}">Confirmed by [Name] · 26 Oct 2026, 14:02</p></sc-if>
+</div>
+<span aria-label="Close" style="{{ st.x }}">×</span>
+</div>
+<div style="flex:1;min-height:0;overflow:hidden;padding:18px 24px;display:flex;flex-direction:column;gap:18px">
+
+<sc-if value="{{ secDest }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="{{ st.eb }}">Destinations</span><span style="{{ st.m11 }}">3 of 4 ticked</span><span style="flex:1"></span><a href="#" style="{{ st.link }}">Manage in Connectors</a></div>
+<div style="{{ st.card }};overflow:hidden"><sc-for list="{{ dests }}" as="d" hint-placeholder-count="4"><div style="{{ d.rowSt }}"><span style="{{ d.boxSt }}">{{ d.mark }}</span><span style="{{ d.tileSt }}">{{ d.l }}</span><span style="flex:1;min-width:0;font-weight:600;font-size:13px">{{ d.a }}</span><span style="{{ d.audSt }}">{{ d.au }}</span></div></sc-for></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ secDestSum }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid {{ t.line }};border-radius:10px;font-size:12.5px"><span style="{{ st.eb }}">To</span><span style="{{ tl.x16 }}">X</span><span style="{{ tl.bh16 }}">B</span><span style="{{ tl.fb16 }}">f</span><span style="font-weight:600">X · Beehiiv · Facebook</span><span style="flex:1"></span><a href="#" style="{{ st.link }}">Change</a></div>
+</sc-if>
+
+<sc-if value="{{ secDraft }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:8px"><span style="{{ st.eb }}">Draft</span><span style="flex:1"></span><span style="{{ st.ask }}"><img src="/eadwyn-ai.png" alt="" style="{{ st.eimg }}">Ask Eadwyn for a draft</span></div>
+<div style="{{ st.ta }}">Shipped in October: bulk CSV import, faster search, and SSO for teams. Import up to 5,000 rows at once, find any record in under a second, and let your whole team sign in with the identity provider you use today.</div>
+<div style="display:flex;gap:7px;flex-wrap:wrap"><span style="{{ st.chip }}"><span style="{{ st.dotA }}"></span>Recorded · From Product improvement · 3 shipped items · Oct 2026</span></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ secDraftE }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:8px"><span style="{{ st.eb }}">Draft</span><span style="flex:1"></span><span style="{{ st.askOn }}"><img src="/eadwyn-ai.png" alt="" style="{{ st.eimg }}">Ask Eadwyn for a draft</span></div>
+<div style="{{ st.taE }}">Write your post, or ask Eadwyn for a draft.</div>
+<div style="border:1px solid {{ t.lavEdge }};background:{{ t.lav }};border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:8px"><img src="/eadwyn-ai.png" alt="" style="{{ st.eimg }}"><span style="{{ st.ebV }}">Proposed by Eadwyn · not in your text yet</span></div>
+<div style="font-size:13.5px;line-height:1.55">Shipped in October: bulk CSV import, faster search, and SSO for teams. Import up to 5,000 rows at once, find any record in under a second, and let your whole team sign in with the identity provider you use today.</div>
+<div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ srcs }}" as="c" hint-placeholder-count="3"><span style="{{ st.chip }}"><span style="{{ st.dotA }}"></span>Recorded · {{ c.n }}</span></sc-for></div>
+<div style="{{ st.m11 }}">This run: [$0.0011] in AI tokens</div>
+<div style="display:flex;gap:8px"><span style="{{ st.bOn }};background:{{ t.card }}">Use this draft</span><span style="{{ st.bTxt }}">Discard</span></div>
+</div>
+<p style="margin:0;font-size:12px;color:{{ t.muted }}">Eadwyn never fills the text on its own. Your text changes only when you press Use this draft.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ secDraftB }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:8px"><span style="{{ st.eb }}">Draft</span><span style="flex:1"></span><span style="{{ st.ask }}"><img src="/eadwyn-ai.png" alt="" style="{{ st.eimg }}">Ask Eadwyn for a draft</span></div>
+<div style="{{ st.ta }}">Shipped in October: bulk CSV import, faster search, and SSO for teams. Ask for early access at <span style="{{ st.hlNeg }}">ops@northwind-demo.example</span> and try the API with <span style="{{ st.hlNeg }}">nd_live_7Q2K9X4M1B8V</span>. Thanks to <span style="{{ st.hlOk }}">[Name]</span> for testing every build.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ secPrev }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:10px">
+<span style="{{ st.eb }}">Preview</span>
+<div role="tablist" style="display:flex;gap:20px;border-bottom:1px solid {{ t.line }}"><sc-for list="{{ ptabs }}" as="p" hint-placeholder-count="3"><span role="tab" style="{{ p.st }}"><span style="{{ p.tileSt }}">{{ p.l }}</span>{{ p.n }}<span style="font:600 10.5px 'Roboto Mono',monospace;color:{{ t.muted }}">{{ p.c }}</span></span></sc-for></div>
+<div style="{{ st.card }};padding:14px;display:flex;gap:11px">
+<span style="width:38px;height:38px;flex:none;border-radius:50%;background:{{ t.lav }};color:{{ t.vtext }};display:grid;place-items:center;font:700 12px 'Roboto Mono',monospace">ND</span>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+<div style="font-size:13px"><b>[Northwind Data]</b> <span style="color:{{ t.muted }}">@northwind_demo · now</span></div>
+<div style="font-size:13.5px;line-height:1.5">Shipped in October: bulk CSV import, faster search, and SSO for teams. Import up to 5,000 rows at once, find any record in under a second, and let your whole team sign in with the identity provider you use today.</div>
+<div style="height:44px;border:1px solid {{ t.line }};border-radius:10px;display:flex;align-items:center;justify-content:center;color:{{ t.muted }};font-size:12px">No image · Add image</div>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:12px;font-size:12px"><span style="color:{{ t.muted }}">Up to 4 images · JPG, PNG, WEBP</span><span style="flex:1"></span><span aria-label="212 of 280 characters" style="font:600 12px 'Roboto Mono',monospace;color:{{ t.ink }}">212 / 280</span><a href="#" style="{{ st.link }}">Edit for this destination</a></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ secPrevE }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="{{ st.eb }}">Preview</span><span style="font-size:12.5px;color:{{ t.muted }}">A preview for each place appears when there is text.</span></div>
+</sc-if>
+
+<sc-if value="{{ secCheckP }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:8px"><span style="{{ st.eb }}">Check</span><div style="display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border-radius:10px;background:{{ t.posTint }};border:1px solid {{ t.posEdge }}"><span style="{{ st.okDot }}">✓</span><div style="font-size:12.5px"><b style="color:{{ t.pos }}">Check passed.</b> No email addresses, keys, Axal member names or team-only figures in the text.</div></div></div>
+</sc-if>
+
+<sc-if value="{{ secCheckW }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px"><span style="{{ st.eb }}">Check</span><span style="font-size:12.5px;color:{{ t.muted }}">The check runs when there is text to send.</span></div>
+</sc-if>
+
+<sc-if value="{{ secCheckB }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="{{ st.eb }}">Check</span><span style="font:600 11.5px 'Roboto Mono',monospace;color:{{ t.neg }}">2 to fix</span></div>
+<ol aria-label="Findings" style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px">
+<li style="{{ st.fNeg }}"><span style="{{ st.fNum }}">1</span><div style="flex:1;min-width:0"><div style="font-weight:700">Email address</div><div style="{{ st.m11 }}">ops@northwind-demo.example</div><div style="font-size:12px;margin-top:2px">Remove it from the text.</div></div><span style="{{ pl.failed.st }}">! To fix</span></li>
+<li style="{{ st.fNeg }}"><span style="{{ st.fNum }}">2</span><div style="flex:1;min-width:0"><div style="font-weight:700">Looks like an API key</div><div style="{{ st.m11 }}">nd_live_7Q2K…</div><div style="font-size:12px;margin-top:2px">Remove it from the text. Keys are never posted.</div></div><span style="{{ pl.failed.st }}">! To fix</span></li>
+<li style="{{ st.fOk }}"><span style="{{ st.fNum }}">3</span><div style="flex:1;min-width:0"><div style="font-weight:700">Names an Axal member</div><div style="{{ st.m11 }}">[Name]</div><div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12.5px;font-weight:600"><span style="{{ st.cbOn }}">✓</span>They agreed to be named</div></div><span style="{{ pl.sent.st }}">✓ Cleared</span></li>
+<li style="{{ st.fOk }}"><span style="{{ st.fNum }}">4</span><div style="flex:1;min-width:0"><div style="font-weight:700">Team-only figure</div><div style="font-size:12px;margin-top:2px">None in this text. Team-only figures stay in Axal VC.</div></div><span style="{{ pl.sent.st }}">✓ None found</span></li>
+</ol>
+<p style="margin:0;font-size:12px;color:{{ t.muted }}">A finding is fixed in the text. Nothing sends past one.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ secResult }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="{{ st.lavBox }}">2 places received it. Facebook did not. Nothing was sent anywhere else.</div>
+<div style="{{ st.card }};overflow:hidden">
+<div style="{{ st.rr }}"><span style="{{ tl.x26 }}">X</span><div style="flex:1;min-width:0"><div style="font-weight:700">@northwind_demo on X</div><div style="font-size:12px;color:{{ t.muted }}">Public · 14:02</div></div><span style="{{ pl.sent.st }}">✓ Sent</span><a href="#" style="{{ st.link }}">View on X ↗</a></div>
+<div style="{{ st.rr2 }}"><span style="{{ tl.bh26 }}">B</span><div style="flex:1;min-width:0"><div style="font-weight:700">[Northwind Notes] on Beehiiv</div><div style="font-size:12px;color:{{ t.muted }}">Draft only: not sent to subscribers · 14:02</div></div><span style="{{ pl.sent.st }}">✓ Sent</span><a href="#" style="{{ st.link }}">Open in Beehiiv ↗</a></div>
+<div style="{{ st.rr2 }}"><span style="{{ tl.fb26 }}">f</span><div style="flex:1;min-width:0"><div style="font-weight:700">[Northwind Data] on Facebook</div><div style="font-size:12px;color:{{ t.neg }};font-weight:600">Facebook is busy. Try again after 14:20.</div></div><span style="{{ pl.failed.st }}">! Failed</span><span style="{{ st.bSm }}">Retry</span></div>
+</div>
+<p style="margin:0;font-size:12px;color:{{ t.muted }}">Retry opens the confirm step again, for Facebook only.</p>
+</div>
+</sc-if>
+
+</div>
+<div style="padding:14px 24px;border-top:1px solid {{ t.line }};display:flex;align-items:center;gap:10px;background:{{ t.card }}">
+<sc-if value="{{ footNormal }}" hint-placeholder-val="{{ true }}"><span style="{{ st.b2 }}">Save draft</span><span style="flex:1"></span><span style="{{ st.b1 }}">Review and send</span></sc-if>
+<sc-if value="{{ footOff }}" hint-placeholder-val="{{ false }}"><span style="{{ st.b2 }}">Save draft</span><span style="flex:1;text-align:right;font-size:12px;color:{{ t.muted }}">{{ footOffText }}</span><span aria-disabled="true" style="{{ st.b0 }}">Review and send</span></sc-if>
+<sc-if value="{{ footResult }}" hint-placeholder-val="{{ false }}"><a href="#" style="{{ st.link }}">Open sent history ›</a><span style="flex:1"></span><span style="{{ st.b2 }}">Close</span></sc-if>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ dialogOn }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;background:rgba(9,9,11,.46);display:flex;align-items:center;justify-content:center">
+<div role="dialog" aria-label="Send to 3 places?" style="{{ st.dlg }};width:540px;display:flex;flex-direction:column;gap:16px">
+<h2 style="{{ st.h2 }}">Send to 3 places?</h2>
+<div style="{{ st.card }};overflow:hidden"><sc-for list="{{ confirm }}" as="c" hint-placeholder-count="3"><div style="{{ c.row }}"><span style="{{ c.tile }}">{{ c.l }}</span><div style="flex:1;min-width:0"><div style="font-weight:700">{{ c.a }}</div><div style="font-size:12px;color:{{ t.muted }}">{{ c.s }}</div></div></div></sc-for></div>
+<p style="margin:0;font-size:13.5px">This posts in your name. Nothing else is sent.</p>
+<div style="display:flex;justify-content:flex-end;gap:10px"><span style="{{ st.b2f }}">Cancel</span><span style="{{ st.b1 }}">Send to 3 places</span></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ b6 }}" hint-placeholder-val="{{ false }}">
+<div style="height:100%;padding:30px;box-sizing:border-box;display:flex;gap:24px;align-items:flex-start">
+<div style="{{ st.card }};width:470px;flex:none;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px"><span style="{{ tl.x28 }}">X</span><div style="flex:1;min-width:0"><div style="font-weight:700">@northwind_demo on X</div><div style="{{ st.m11 }}">Revenue and traction · 24 Oct 2026, 09:40</div></div><span style="{{ pl.unknown.st }}">? Not known</span></div>
+<div style="{{ st.amb }}">Not known whether this arrived. Check X before sending again.</div>
+<p style="margin:0;font-size:12.5px;color:{{ t.muted }}">X did not answer before the connection timed out. Axal VC will not send it again on its own.</p>
+<div style="display:flex;gap:8px"><a href="#" style="{{ st.b2 }}">Check X ↗</a><span style="{{ st.bTxt }}">Mark as not sent</span></div>
+</div>
+<div role="dialog" aria-label="Mark as not sent?" style="{{ st.dlg }};width:480px;flex:none;display:flex;flex-direction:column;gap:10px">
+<h3 style="{{ st.h3 }}">Mark as not sent?</h3>
+<p style="margin:0;font-size:13px">Do this only after you checked X and the post is not there.</p>
+<div style="{{ st.amb }}">If it did arrive, sending it again posts it twice.</div>
+<p style="margin:0;font-size:12.5px;color:{{ t.muted }}">The history then reads "Marked not sent by [Name]", and Retry opens the confirm step again.</p>
+<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px"><span style="{{ st.b2 }}">Cancel</span><span style="{{ st.b1 }}">Mark as not sent</span></div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ b7 }}" hint-placeholder-val="{{ false }}">
+<div style="height:100%;padding:30px;box-sizing:border-box;display:flex;gap:24px;align-items:flex-start">
+<div role="dialog" aria-label="Delete this post" style="{{ st.dlg }};width:480px;flex:none;display:flex;flex-direction:column;gap:12px">
+<h3 style="{{ st.h3 }}">Delete this post from @northwind_demo on X?</h3>
+<p style="margin:0;font-size:13px">People who saw it may have copied it.</p>
+<p style="margin:0;font-size:12.5px;color:{{ t.muted }}">The row then reads Retracted. Your text stays in the history.</p>
+<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px"><span style="{{ st.b2 }}">Cancel</span><span style="{{ st.bNeg }}">Delete post</span></div>
+</div>
+<div style="{{ st.card }};width:500px;flex:none;padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px"><span style="{{ tl.tt28 }}">T</span><div style="flex:1;min-width:0"><div style="font-weight:700">@northwind.demo on TikTok</div><div style="{{ st.m11 }}">Inbox draft · 12 Oct 2026, 11:03</div></div><span style="{{ pl.sent.st }}">✓ Sent</span></div>
+<p style="margin:0;font-size:13px">Axal VC cannot delete posts on TikTok. Delete it there, then mark it here.</p>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><a href="#" style="{{ st.b2 }}">Delete it on TikTok ↗</a><span style="{{ st.b2 }}">Mark as removed</span></div>
+<p style="margin:0;font-size:12px;color:{{ t.muted }}">A marked row reads Removed outside.</p>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ b8 }}" hint-placeholder-val="{{ false }}">
+<div style="height:100%;padding:30px;box-sizing:border-box;display:flex;gap:24px;align-items:flex-start">
+<div style="{{ st.card }};width:520px;flex:none;padding:22px 24px;display:flex;flex-direction:column;gap:14px">
+<span style="{{ st.ebV }}">Publish to…</span>
+<h3 style="{{ st.h3 }}">Connect a place to publish</h3>
+<p style="margin:0;font-size:13px;color:{{ t.muted }}">Publish to… sends what you choose to Beehiiv, X, TikTok or a Facebook Page. Connect one first. Nothing is posted until you confirm it.</p>
+<div style="{{ st.card }};overflow:hidden"><sc-for list="{{ conns }}" as="c" hint-placeholder-count="4"><div style="{{ c.row }}"><span style="{{ c.tile }}">{{ c.l }}</span><span style="flex:1;font-weight:600">{{ c.n }}</span><span style="font-size:12px;color:{{ t.muted }}">Not connected</span><a href="#" style="{{ st.link }}">Connect</a></div></sc-for></div>
+<div><span style="{{ st.b1 }}">Open Connectors</span></div>
+<div style="{{ st.lavBox }}"><div style="{{ st.eb }}">When publishing is off</div><div style="display:flex;align-items:center;gap:10px;margin-top:4px"><span style="flex:1">Publishing is off for [Northwind Data].</span><a href="#" style="{{ st.link }}">Turn on</a></div></div>
+</div>
+<div style="{{ st.card }};width:520px;flex:none;padding:22px 24px;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:8px"><span style="{{ st.eb }}">Grow › Product improvement</span><span style="flex:1"></span><span style="{{ st.chip }}">Co-founder view</span></div>
+<h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">Product improvement</h1>
+<p style="margin:0;font-size:13px;color:{{ t.muted }}">What you shipped, what users asked for, and what changed because of it.</p>
+<div style="{{ st.lavBox }};display:flex;align-items:flex-start;gap:10px"><span style="color:{{ t.vtext }};display:flex;padding-top:2px" dangerouslySetInnerHTML="{{ ic.lock }}"></span><div><div style="font-weight:700">Only the founder publishes for [Northwind Data].</div><div style="color:{{ t.muted }};margin-top:2px">You can read what was published in Updates › Published outside.</div></div></div>
+<a href="#" style="{{ st.link }}">Open Published outside ›</a>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ b10a }}" hint-placeholder-val="{{ false }}">
+<div style="height:100%;display:flex;flex-direction:column;background:{{ t.card }}">
+<div style="{{ st.phTop }}"><span aria-label="Back" style="{{ st.t44 }}">‹</span><span style="flex:1;font-weight:800;font-size:16px;letter-spacing:-0.02em">Publish to…</span><span aria-label="Close" style="{{ st.t44m }}">×</span></div>
+<div style="flex:1;min-height:0;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:16px">
+<span style="{{ st.ebV }}">Publish from · Product improvement</span>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="{{ st.eb }}">Destinations · 3 of 4</span><div style="display:flex;gap:7px;flex-wrap:wrap"><sc-for list="{{ dests }}" as="d" hint-placeholder-count="4"><span style="{{ d.chipSt }}"><span style="{{ d.tile18 }}">{{ d.l }}</span>{{ d.cm }}{{ d.sh }}</span></sc-for></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px"><span style="{{ st.eb }}">Draft</span><span style="flex:1"></span><span style="{{ st.ask }};height:44px"><img src="/eadwyn-ai.png" alt="" style="{{ st.eimg }}">Ask Eadwyn</span></div><div style="{{ st.ta }}">Shipped in October: bulk CSV import, faster search, and SSO for teams. Import up to 5,000 rows at once, find any record in under a second, and let your whole team sign in with the identity provider you use today.</div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span style="{{ st.eb }}">Preview</span>
+<div style="position:relative"><div role="tablist" style="display:flex;gap:8px;overflow:hidden"><sc-for list="{{ phtabs }}" as="p" hint-placeholder-count="3"><span role="tab" style="{{ p.st }}"><span style="{{ p.tileSt }}">{{ p.l }}</span>{{ p.n }}<span style="font:600 10.5px 'Roboto Mono',monospace">{{ p.c }}</span></span></sc-for></div><div style="position:absolute;top:0;right:0;bottom:0;width:44px;background:linear-gradient(90deg,rgba(255,255,255,0),{{ t.card }})"></div></div>
+<div style="{{ st.card }};padding:12px;display:flex;gap:10px"><span style="width:32px;height:32px;flex:none;border-radius:50%;background:{{ t.lav }};color:{{ t.vtext }};display:grid;place-items:center;font:700 11px 'Roboto Mono',monospace">ND</span><div style="flex:1;min-width:0;font-size:13px;line-height:1.5"><div><b>[Northwind Data]</b> <span style="color:{{ t.muted }}">@northwind_demo</span></div><div>Shipped in October: bulk CSV import, faster search, and SSO for teams.</div><div style="color:{{ t.muted }}">… 142 more characters</div></div></div>
+<div style="display:flex;align-items:center;font-size:12px;color:{{ t.muted }}"><span>Up to 4 images</span><span style="flex:1"></span><span aria-label="212 of 280 characters" style="font:600 12px 'Roboto Mono',monospace;color:{{ t.ink }}">212 / 280</span></div>
+</div>
+<div style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:{{ t.posTint }};border:1px solid {{ t.posEdge }};font-size:12.5px"><span style="{{ st.okDot }}">✓</span><span><b style="color:{{ t.pos }}">Check passed.</b> Nothing to remove.</span></div>
+</div>
+<div style="flex:none;padding:10px 16px 20px;border-top:1px solid {{ t.line }};display:flex;gap:10px;background:{{ t.card }}"><span style="{{ st.b2m }}">Save draft</span><span style="{{ st.b1m }}">Review and send</span></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ b10b }}" hint-placeholder-val="{{ false }}">
+<div style="height:100%;position:relative;background:{{ t.card }}">
+<div style="{{ st.phTop }}"><span style="{{ st.t44 }}">‹</span><span style="flex:1;font-weight:800;font-size:16px">Publish to…</span><span style="{{ st.t44m }}">×</span></div>
+<div style="padding:16px;display:flex;flex-direction:column;gap:12px"><div style="height:14px;width:60%;border-radius:999px;background:{{ t.raised }}"></div><div style="height:120px;border-radius:10px;background:{{ t.raised }}"></div><div style="height:180px;border-radius:12px;background:{{ t.raised }}"></div></div>
+<div style="position:absolute;inset:0;background:rgba(9,9,11,.5)"></div>
+<div role="dialog" aria-label="Send to 3 places?" style="position:absolute;left:0;right:0;bottom:0;background:{{ t.card }};border-radius:16px 16px 0 0;padding:10px 18px 24px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box">
+<span style="width:40px;height:4px;border-radius:999px;background:{{ t.line }};align-self:center"></span>
+<h2 style="{{ st.h2 }}">Send to 3 places?</h2>
+<div style="{{ st.card }};overflow:hidden"><sc-for list="{{ confirm }}" as="c" hint-placeholder-count="3"><div style="{{ c.row }}"><span style="{{ c.tile }}">{{ c.l }}</span><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px">{{ c.a }}</div><div style="font-size:12px;color:{{ t.muted }}">{{ c.s }}</div></div></div></sc-for></div>
+<p style="margin:0;font-size:13.5px">This posts in your name. Nothing else is sent.</p>
+<span style="{{ st.b1w }}">Send to 3 places</span>
+<span style="{{ st.b2w }}">Cancel</span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ b11 }}" hint-placeholder-val="{{ false }}">
+<div style="height:100%;display:flex;flex-direction:column">
+<div style="{{ st.phTop }}"><span aria-label="Back to Updates" style="{{ st.t44 }}">‹</span><span style="flex:1;font-weight:800;font-size:16px;letter-spacing:-0.02em">Published outside</span><span style="{{ st.m11 }};padding-right:12px">8</span></div>
+<div style="padding:12px 16px;display:flex;gap:8px"><span style="{{ st.b2m }}">Filters</span><span style="{{ st.b2m }}">Status · All ▾</span></div>
+<div style="flex:1;min-height:0;overflow:hidden;padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{ hrows }}" as="r" hint-placeholder-count="8">
+<div style="{{ st.card }};padding:11px 13px 2px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:9px"><span style="{{ r.tileM }}">{{ r.l }}</span><span style="flex:1;min-width:0;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.acct }}</span><span style="{{ r.pill.st }}">{{ r.pill.g }} {{ r.pill.w }}</span></div>
+<div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.first }}</div>
+<div style="display:flex;align-items:center;min-height:44px"><span style="{{ st.m11 }}">{{ r.d }} · {{ r.tm }}</span><span style="flex:1"></span><sc-if value="{{ r.hasLink }}" hint-placeholder-val="{{ true }}"><a href="#" style="{{ st.link }};min-height:44px;display:inline-flex;align-items:center">{{ r.link }}</a></sc-if></div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1020},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;PUB1&quot;,&quot;PUB2&quot;,&quot;PUB3&quot;,&quot;PUB4&quot;,&quot;PUB5&quot;,&quot;PUB6&quot;,&quot;PUB7&quot;,&quot;PUB8&quot;,&quot;PUB9&quot;,&quot;PUB10A&quot;,&quot;PUB10B&quot;,&quot;PUB11&quot;,&quot;PUB12&quot;],&quot;default&quot;:&quot;PUB1&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const b = this.props.board ?? 'PUB1';
+    const dark = b === 'PUB12';
+    const t = dark ? {
+      page:'#0b1220', card:'#111827', raised:'#1f2937', line:'#374151', ink:'#e5e7eb', muted:'#9ca3af', faint:'#6b7280',
+      vtext:'#a78bfa', vdeep:'#c4b5fd', lav:'rgba(124,58,237,.18)', lavEdge:'rgba(167,139,250,.42)',
+      pos:'#34d399', posTint:'rgba(52,211,153,.10)', posEdge:'rgba(52,211,153,.38)',
+      neg:'#f87171', negTint:'rgba(248,113,113,.12)', negEdge:'rgba(248,113,113,.42)',
+      amb:'rgba(252,211,77,.14)', ambEdge:'rgba(252,211,77,.5)', ambText:'#fcd34d',
+      dim:'rgba(0,0,0,.55)', input:'#0b1220', inputEdge:'#4b5563', offBg:'#1f2937', offFg:'#9ca3af', xTile:'#e5e7eb', xFg:'#111827'
+    } : {
+      page:'#f4f3f7', card:'#ffffff', raised:'#f7f6fa', line:'#ececf1', ink:'#18181b', muted:'#6b6577', faint:'#a1a1aa',
+      vtext:'#7c3aed', vdeep:'#6d28d9', lav:'#f4f0fe', lavEdge:'#ddd0fb',
+      pos:'#047857', posTint:'#ecfdf5', posEdge:'#a7f3d0',
+      neg:'#b91c1c', negTint:'#fef2f2', negEdge:'#fecaca',
+      amb:'#fef3c7', ambEdge:'#fcd34d', ambText:'#92400e',
+      dim:'rgba(24,24,27,.34)', input:'#ffffff', inputEdge:'#dcd8e4', offBg:'#ece9f2', offFg:'#5f5a69', xTile:'#18181b', xFg:'#ffffff'
+    };
+    const mono = "'Roboto Mono',ui-monospace,monospace";
+    const sizes = { PUB1:[1440,1020], PUB2:[1440,1020], PUB4:[1440,1020], PUB12:[1440,1020], PUB9:[1440,1040], PUB3:[560,740], PUB5:[560,580], PUB6:[1040,420], PUB7:[1060,380], PUB8:[1120,560], PUB10A:[390,844], PUB10B:[390,844], PUB11:[390,844] };
+    const [W, H] = sizes[b] || sizes.PUB1;
+    const has = (...a) => a.includes(b);
+    const P = { x:['X', t.xTile, t.xFg], bh:['B', dark?'rgba(252,211,77,.18)':'#fef3c7', dark?'#fcd34d':'#92400e'], fb:['f', dark?'rgba(14,165,233,.18)':'#e0f2fe', dark?'#7dd3fc':'#075985'], tt:['T', dark?'#374151':'#27272a', '#ffffff'] };
+    const tile = (k, s) => `width:${s}px;height:${s}px;flex:none;border-radius:${Math.round(s*0.27)}px;background:${P[k][1]};color:${P[k][2]};display:grid;place-items:center;font-weight:800;font-size:${Math.round(s*0.5)}px;line-height:1`;
+    const tl = { x26:tile('x',26), x28:tile('x',28), bh26:tile('bh',26), fb26:tile('fb',26), tt28:tile('tt',28), x16:tile('x',16), bh16:tile('bh',16), fb16:tile('fb',16) };
+    const PILL = { sent:[t.pos,t.posTint,t.posEdge], sending:[t.vtext,t.lav,t.lavEdge], failed:[t.neg,t.negTint,t.negEdge], unknown:[t.ambText,t.amb,t.ambEdge], retracted:[t.muted,'transparent',t.line], removed:[t.muted,'transparent',t.line] };
+    const WORD = { sent:['✓','Sent'], sending:['◌','Sending'], failed:['!','Failed'], unknown:['?','Not known'], retracted:['↩','Retracted'], removed:['↗','Removed outside'] };
+    const pill = k => ({ g:WORD[k][0], w:WORD[k][1], st:`display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;box-sizing:border-box;color:${PILL[k][0]};background:${PILL[k][1]};border:1px solid ${PILL[k][2]}` });
+    const pl = { sent:pill('sent'), failed:pill('failed'), unknown:pill('unknown') };
+    const btn = (h, extra) => `display:inline-flex;align-items:center;justify-content:center;gap:6px;height:${h}px;padding:0 15px;border-radius:9px;font-weight:700;font-size:13px;white-space:nowrap;box-sizing:border-box;text-decoration:none;${extra}`;
+    const ring = `box-shadow:0 0 0 2px ${t.card},0 0 0 4px #7c3aed`;
+    const st = {
+      eb:`font:700 10.5px ${mono};letter-spacing:.07em;text-transform:uppercase;color:${t.muted}`,
+      ebV:`font:700 10.5px ${mono};letter-spacing:.07em;text-transform:uppercase;color:${t.vtext}`,
+      b2: btn(40, `border:1px solid ${t.line};background:${t.card};color:${t.ink}`),
+      b2f: btn(40, `border:1px solid ${t.line};background:${t.card};color:${t.ink};${ring}`),
+      bOn: btn(40, `border:1px solid ${t.lavEdge};background:${t.lav};color:${t.vtext}`),
+      b1: btn(40, 'background:#7c3aed;color:#ffffff'),
+      b0: btn(40, `background:${t.offBg};color:${t.offFg}`),
+      bNeg: btn(40, 'background:#b91c1c;color:#ffffff'),
+      bNegO: btn(40, `border:1px solid ${t.negEdge};background:${t.card};color:${t.neg}`),
+      bTxt: btn(40, `padding:0 8px;color:${t.vtext}`),
+      bSm: btn(30, `padding:0 11px;font-size:12px;border:1px solid ${t.line};background:${t.card};color:${t.ink}`),
+      b2m: btn(44, `flex:1;border:1px solid ${t.line};background:${t.card};color:${t.ink}`),
+      b1m: btn(44, 'flex:1.4;background:#7c3aed;color:#ffffff'),
+      b1w: btn(48, 'width:100%;background:#7c3aed;color:#ffffff'),
+      b2w: btn(48, `width:100%;border:1px solid ${t.line};background:${t.card};color:${t.ink};${ring}`),
+      card:`background:${t.card};border:1px solid ${t.line};border-radius:12px;box-sizing:border-box`,
+      dlg:`background:${t.card};border:1px solid ${t.line};border-radius:16px;box-shadow:0 22px 60px rgba(9,9,11,.18);padding:22px 24px;box-sizing:border-box`,
+      chip:`display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:2px 9px;border-radius:999px;border:1px solid ${t.line};background:${t.raised};font-size:11.5px;color:${t.ink};box-sizing:border-box`,
+      dotA:'width:7px;height:7px;flex:none;border-radius:50%;background:#f59e0b',
+      m11:`font:500 11.5px ${mono};color:${t.muted};font-variant-numeric:tabular-nums`,
+      ta:`border:1px solid ${t.inputEdge};border-radius:7px;background:${t.input};padding:11px 12px;font-size:13.5px;line-height:1.55;color:${t.ink}`,
+      taE:`border:1px solid ${t.inputEdge};border-radius:7px;background:${t.input};padding:11px 12px;font-size:13.5px;color:${t.faint}`,
+      ask:`display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px 0 6px;border-radius:9px;border:1px solid #7c3aed;color:${t.vtext};font-weight:700;font-size:12px;white-space:nowrap;box-sizing:border-box`,
+      askOn:`display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px 0 6px;border-radius:9px;border:1px solid #7c3aed;background:${t.lav};color:${t.vtext};font-weight:700;font-size:12px;white-space:nowrap;box-sizing:border-box`,
+      eimg:'width:20px;height:20px;flex:none;border-radius:5px;object-fit:contain;display:block',
+      x:`width:32px;height:32px;flex:none;border-radius:9px;border:1px solid ${t.line};display:grid;place-items:center;color:${t.muted};font-size:18px;line-height:1;box-sizing:border-box`,
+      h2:'margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em',
+      h3:'margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em',
+      link:`color:${t.vtext};font-weight:700;font-size:12.5px;text-decoration:none;white-space:nowrap`,
+      amb:`padding:11px 13px;border-radius:10px;background:${t.amb};border:1px solid ${t.ambEdge};color:${t.ambText};font-size:12.5px;font-weight:600`,
+      lavBox:`padding:11px 13px;border-radius:10px;background:${t.lav};border:1px solid ${t.lavEdge};font-size:12.5px;color:${t.ink}`,
+      hlNeg:`background:${t.negTint};box-shadow:inset 0 -2px 0 ${t.neg};border-radius:3px;padding:0 2px`,
+      hlOk:`background:${t.lav};border-radius:3px;padding:0 2px`,
+      fNeg:`display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid ${t.negEdge};background:${t.negTint}`,
+      fOk:`display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid ${t.line};background:${t.card}`,
+      fNum:`width:20px;height:20px;flex:none;border-radius:50%;border:1px solid ${t.line};background:${t.card};display:grid;place-items:center;font:700 10.5px ${mono};color:${t.ink};box-sizing:border-box`,
+      cbOn:'width:18px;height:18px;flex:none;border-radius:5px;background:#7c3aed;color:#ffffff;display:grid;place-items:center;font-size:12px;font-weight:800;line-height:1',
+      okDot:`width:20px;height:20px;flex:none;border-radius:50%;background:${t.pos};color:${t.card};display:grid;place-items:center;font-size:12px;font-weight:800`,
+      rr:'display:flex;align-items:center;gap:11px;padding:12px 14px',
+      rr2:`display:flex;align-items:center;gap:11px;padding:12px 14px;border-top:1px solid ${t.line}`,
+      sel:`display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:9px;border:1px solid ${t.line};background:${t.card};font-size:12.5px;font-weight:600;box-sizing:border-box`,
+      search:`display:inline-flex;align-items:center;flex:1;min-width:160px;height:34px;padding:0 12px;border-radius:9px;border:1px solid ${t.line};background:${t.card};font-size:12.5px;color:${t.muted};box-sizing:border-box`,
+      hdr:`display:grid;grid-template-columns:96px 120px minmax(0,1fr) 124px 100px 30px;gap:8px;align-items:center;height:36px;padding:0 14px;font:700 10.5px ${mono};letter-spacing:.07em;text-transform:uppercase;color:${t.muted}`,
+      dots:`width:28px;height:28px;border-radius:7px;display:grid;place-items:center;color:${t.muted};font-size:16px;line-height:1`,
+      menu:`position:absolute;right:0;top:32px;z-index:5;width:180px;background:${t.card};border:1px solid ${t.line};border-radius:10px;box-shadow:0 14px 36px rgba(9,9,11,.16);padding:5px;display:flex;flex-direction:column;box-sizing:border-box`,
+      mi:`display:flex;align-items:center;height:36px;padding:0 10px;border-radius:7px;font-size:13px;font-weight:600;color:${t.ink}`,
+      miNeg:`display:flex;align-items:center;height:36px;padding:0 10px;border-radius:7px;font-size:13px;font-weight:600;color:${t.neg};border-top:1px solid ${t.line}`,
+      phTop:`height:56px;flex:none;display:flex;align-items:center;gap:2px;padding:0 6px;border-bottom:1px solid ${t.line};background:${t.card};box-sizing:border-box`,
+      t44:`width:44px;height:44px;flex:none;display:grid;place-items:center;font-size:20px;color:${t.ink}`,
+      t44m:`width:44px;height:44px;flex:none;display:grid;place-items:center;font-size:20px;color:${t.muted}`,
+    };
+    const side = ['Studio','Spin-Out Lab','Validate','Build','Raise','Grow','Network','Research'].map(n => { const on = n === 'Grow'; return { n, st:`display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:9px;font-size:13px;font-weight:${on?700:500};color:${on?t.vtext:t.ink};background:${on?t.lav:'transparent'};${on?`box-shadow:inset 0 0 0 1px ${t.lavEdge};`:''}`, ic:`width:6px;height:6px;flex:none;border-radius:50%;background:${on?t.vtext:t.line}` }; });
+    const litTab = b === 'PUB9' ? 'Updates' : 'Product improvement';
+    const gtabs = ['Overview','Updates','Product improvement','Distribution','Revenue and traction','Team expansion','Partner network','Market expansion','Durable company-building'].map(n => { const on = n === litTab; return { n, st:`display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:${on?700:500};box-sizing:border-box;${on?`background:${t.lav};border:1px solid ${t.lavEdge};color:${t.vdeep}`:`background:${t.card};border:1px solid ${t.line};color:${t.muted}`}` }; });
+    const row = i => `display:flex;align-items:center;gap:10px;min-height:42px;${i?`border-top:1px solid ${t.line};`:''}`;
+    const shipped = [['Bulk CSV import','8 Oct 2026'],['Faster search','15 Oct 2026'],['SSO for teams','22 Oct 2026']].map(([n,d],i) => ({ n, d, st:row(i) }));
+    const asks = [['Export to the accounting tool','9 asks'],['Saved filters','6 asks'],['Audit log for admins','4 asks']].map(([n,d],i) => ({ n, d, st:row(i) }));
+    const upd = [['October update','Team and 3 investors','26 Oct 2026'],['[Q3 2026] report','3 investors','2 Oct 2026'],['September update','Team','28 Sep 2026']].map(([n,to,d],i) => ({ n, to, d, st:row(i) }));
+    const box = on => `width:18px;height:18px;flex:none;border-radius:5px;display:grid;place-items:center;font-size:12px;font-weight:800;line-height:1;box-sizing:border-box;${on?'background:#7c3aed;color:#ffffff':`background:${t.input};border:1.5px solid ${t.inputEdge};color:transparent`}`;
+    const dests = [['x','@northwind_demo on X','@northwind_demo','Public',true],['bh','[Northwind Notes] on Beehiiv','[Northwind Notes]','Draft only',true],['fb','[Northwind Data] on Facebook','[Northwind Data]','Public',true],['tt','@northwind.demo on TikTok','@northwind.demo','Inbox draft',false]].map(([k,a,sh,au,on],i) => ({
+      l:P[k][0], tileSt:tile(k,26), tile18:tile(k,18), a, sh, au, mark:on?'✓':'', boxSt:box(on), cm:on?'✓ ':'',
+      rowSt:`display:flex;align-items:center;gap:11px;min-height:46px;padding:7px 12px;box-sizing:border-box;${i?`border-top:1px solid ${t.line}`:''}`,
+      audSt:`flex:none;height:22px;padding:0 9px;border-radius:999px;border:1px solid ${t.line};display:inline-flex;align-items:center;font-size:11.5px;font-weight:600;color:${t.muted};box-sizing:border-box`,
+      chipSt:`display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 14px 0 10px;border-radius:999px;font-size:12.5px;font-weight:600;box-sizing:border-box;${on?`background:${t.lav};border:1px solid ${t.lavEdge};color:${t.vdeep}`:`background:${t.card};border:1px solid ${t.line};color:${t.muted}`}`
+    }));
+    const tabs = (h, phone) => [['x','X','212 / 280',true],['bh','Beehiiv','',false],['fb','Facebook','',false]].map(([k,n,c,on]) => ({ l:P[k][0], tileSt:tile(k,16), n, c,
+      st: phone
+        ? `flex:none;display:inline-flex;align-items:center;gap:7px;height:44px;padding:0 14px;border-radius:999px;font-size:12.5px;font-weight:700;box-sizing:border-box;${on?`background:${t.lav};border:1px solid ${t.lavEdge};color:${t.vdeep}`:`border:1px solid ${t.line};color:${t.muted}`}`
+        : `display:inline-flex;align-items:center;gap:7px;height:${h}px;font-size:12.5px;font-weight:${on?700:600};color:${on?t.ink:t.muted};box-shadow:${on?'inset 0 -2px 0 #7c3aed':'none'};white-space:nowrap` }));
+    const ptabs = tabs(36, false), phtabs = tabs(44, true);
+    const confirm = [['x','@northwind_demo on X','Public · Can be deleted later'],['bh','[Northwind Notes] on Beehiiv','Draft only: not sent to subscribers'],['fb','[Northwind Data] on Facebook','Public · Cannot be deleted from Axal VC']].map(([k,a,s],i) => ({ l:P[k][0], tile:tile(k,26), a, s, row:`display:flex;align-items:center;gap:11px;padding:11px 14px;${i?`border-top:1px solid ${t.line}`:''}` }));
+    const ship = 'Shipped in October: bulk CSV import, faster search, and SSO for teams.';
+    const hraw = [
+      ['26 Oct 2026','14:02','Product improvement','x','@northwind_demo','sent','View on X ↗',ship],
+      ['26 Oct 2026','14:02','Product improvement','bh','[Northwind Notes]','sent','Open in Beehiiv ↗',ship],
+      ['26 Oct 2026','14:02','Product improvement','fb','[Northwind Data]','failed','Retry',ship],
+      ['26 Oct 2026','14:05','Distribution','x','@northwind_demo','sending','','Northwind is now listed in the [Partner] app marketplace.'],
+      ['24 Oct 2026','09:40','Revenue and traction','x','@northwind_demo','unknown','Check X ↗','[38] teams now pay for Northwind, up from [21] in July.'],
+      ['18 Oct 2026','16:12','Team expansion','x','@northwind_demo','retracted','','We are hiring a founding designer in [Lisbon].'],
+      ['12 Oct 2026','11:03','Product improvement','tt','@northwind.demo','removed','','60 seconds on bulk CSV import.'],
+      ['3 Oct 2026','10:20','Market expansion','x','@northwind_demo','sent','View on X ↗','Northwind is now live for teams in [Berlin].'],
+    ];
+    const AUD = { x:'', bh:' · Draft only', fb:'', tt:' · Inbox draft' };
+    const PROV = { x:'X', bh:'Beehiiv', fb:'Facebook', tt:'TikTok' };
+    const hrows = hraw.map(([d,tm,mod,k,acct,s,link,first],i) => ({ d, tm, mod, l:P[k][0], tile:tile(k,20), tileM:tile(k,26), acct, prov:PROV[k], aud:AUD[k], first, pill:pill(s), link,
+      isLink: !!link && link !== 'Retry', isBtn: link === 'Retry', isNone: !link, hasLink: !!link, menu: i === 7,
+      st:`display:grid;grid-template-columns:96px 120px minmax(0,1fr) 124px 100px 30px;gap:8px;align-items:center;min-height:50px;padding:7px 14px;border-top:1px solid ${t.line};font-size:12.5px;position:relative;box-sizing:border-box;${i===0?`background:${t.lav};box-shadow:inset 3px 0 0 #7c3aed;`:''}` }));
+    const facts = [['Account','@northwind_demo on X',0,0],['Audience','Public',0,0],['Confirmed by','[Name] · 26 Oct 2026, 14:01',0,0],['Sent at','26 Oct 2026, 14:02',1,0],['Post ID','1849273650012345678',1,1]].map(([k,v,m,cp],i) => ({ k, v, cp: !!cp,
+      row:`display:flex;align-items:center;gap:10px;min-height:38px;${i?`border-top:1px solid ${t.line}`:''}`,
+      vst: m ? `flex:1;min-width:0;font:500 12.5px ${mono};font-variant-numeric:tabular-nums` : 'flex:1;min-width:0;font-size:13px;font-weight:600' }));
+    const srcs = ['Bulk CSV import','Faster search','SSO for teams'].map(n => ({ n }));
+    const conns = [['x','X'],['bh','Beehiiv'],['tt','TikTok'],['fb','Facebook Page']].map(([k,n],i) => ({ l:P[k][0], tile:tile(k,26), n, row:`display:flex;align-items:center;gap:11px;min-height:48px;padding:7px 14px;box-sizing:border-box;${i?`border-top:1px solid ${t.line}`:''}` }));
+    const ic = {
+      bell:{ __html:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>' },
+      lock:{ __html:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>' }
+    };
+    const railW = b === 'PUB2' ? 320 : 48;
+    const sheetDesk = has('PUB1','PUB2','PUB4','PUB12');
+    return {
+      t, st, tl, pl, ic, W, H, side, gtabs, shipped, asks, upd, dests, ptabs, phtabs, confirm, hrows, facts, srcs, conns,
+      desk: has('PUB1','PUB2','PUB4','PUB9','PUB12'), modulePage: sheetDesk, history: b === 'PUB9',
+      railOpen: b === 'PUB2', railSpine: b !== 'PUB2', sheetDesk, sheetOn: sheetDesk || has('PUB3','PUB5'),
+      dimSt:`position:absolute;top:0;bottom:0;left:232px;right:${railW}px;background:${t.dim}`,
+      sheetPos: sheetDesk
+        ? `position:absolute;top:0;bottom:0;right:${railW}px;width:560px;border-left:1px solid ${t.line};border-radius:16px 0 0 16px;box-shadow:-24px 0 56px rgba(9,9,11,.2)`
+        : `position:absolute;inset:0;border:1px solid ${t.line};border-radius:16px`,
+      titlePublish: b !== 'PUB5', titleResult: b === 'PUB5',
+      secDest: sheetDesk, secDestSum: b === 'PUB3', secDraft: has('PUB1','PUB4','PUB12'), secDraftE: b === 'PUB2', secDraftB: b === 'PUB3',
+      secPrev: has('PUB1','PUB4','PUB12'), secPrevE: b === 'PUB2', secCheckP: has('PUB1','PUB4','PUB12'), secCheckW: b === 'PUB2', secCheckB: b === 'PUB3', secResult: b === 'PUB5',
+      footNormal: has('PUB1','PUB4','PUB12'), footOff: has('PUB2','PUB3'), footResult: b === 'PUB5',
+      footOffText: b === 'PUB3' ? 'Remove the highlighted text to continue.' : 'Use the draft or write your own to continue.',
+      dialogOn: b === 'PUB4', b6: b === 'PUB6', b7: b === 'PUB7', b8: b === 'PUB8', b10a: b === 'PUB10A', b10b: b === 'PUB10B', b11: b === 'PUB11',
+    };
+  }
+}
+</script>
+</body>
+</html>

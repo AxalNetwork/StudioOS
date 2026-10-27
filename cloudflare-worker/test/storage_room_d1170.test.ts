@@ -226,6 +226,8 @@ const SITES: Array<[string, string, string]> = [
   ['services/records/build.ts', 'async function uploadProof', 'await files.put(key, bytes'],
   ['services/growWriters.ts', 'export async function markHeld', 'await env.FILES.put(key, await file.arrayBuffer()'],
   ['services/mercury/raiseFeeds.ts', 'async function acceptStatement', 'await env.FILES.put(key, pdf.bytes'],
+  // D1094: a Drive file copied into the data room is the member's, weighed before it lands.
+  ['services/google/raise.ts', 'async function copyFile', 'await env.FILES.put(key, bytes'],
   ['routes/founder_validate_sessions.ts', 'async function openOn', 'const insert = env.DB.prepare('],
   ['services/interviewIntake.ts', 'export async function openSession', 'const [inserted] = await env.DB.batch(['],
 ];
