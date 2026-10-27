@@ -123,6 +123,7 @@ visualiser points at `ring-viz.js` instead of its asset id. No other value was e
 the grid does not draw; they are not landed here.
 
 **Grade: UPGRADE.** D1330 ports `ring-viz.js`'s maths into `frontend/src/lib/ringViz.js`.
+
 ## Landed 2026-10-27 — Grow › Publish to… and sent history (#2400)
 
 The owner's artifacts came from the prompt on #2400:
