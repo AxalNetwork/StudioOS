@@ -9,6 +9,7 @@ import { railOptionFor } from '../../lib/railOptions';
 import useRecordCrumb from '../admin/useRecordCrumb';
 import { StatedLimit } from '../advisor/expertise/kit';
 import { activityLine, day, fileSize, roomFileState, when } from './diligenceRead';
+import { SharedEvidence } from '../cycles/evidence/InvestorEvidence';
 
 /**
  * `/research/diligence/:grantUid` — one data room, read by the investor who
@@ -307,6 +308,9 @@ export default function DiligenceRoom({ role = 'investor' }) {
               )}
               <p className="mt-2.5 text-[11px] text-axal-muted">{room.download_note}</p>
             </Card>
+
+            {/* D1268 (#3291): the founder's shared evidence, by the same NDA and sharing rules as the deal page (D1265). */}
+            <SharedEvidence projectUid={room.project.uid} company={room.project.name} />
 
             <ZoneDraft
               surface="research/diligence"

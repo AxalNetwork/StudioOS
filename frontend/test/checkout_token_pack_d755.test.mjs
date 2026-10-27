@@ -181,7 +181,8 @@ async function packCheckout() {
     assert.match(w.text(), /\$25 of tokens · One-time purchase/);
     assert.match(w.text(), /Adds \$25\.00 to your top-up balance once the payment is confirmed\./);
     assert.match(w.text(), /Sold by Axal VC Management LLC\./);
-    assert.match(w.text(), /Back to Plans & Pricing/);
+    // D1288: the old storefront's back link goes to Models.
+    assert.match(w.text(), /Back to Models/);
     assert.doesNotMatch(w.text(), /Save this payment method|Remove|EXISTINGPROMO/);
     assert.equal(w.nodes().some(n => props(n).placeholder === 'Promo code'), false);
     assert.equal(w.nodes().some(n => n.tagName === 'BUTTON' && ['+','−'].includes(textOf(n).trim())), false);
@@ -201,7 +202,7 @@ async function unavailable() {
     await withWorld(async w => {
       await w.mount(CHECKOUT, '/checkout?token_pack=pack25');
       assert.match(w.text(), /Top-up isn't available yet\./);
-      assert.equal(props(w.nodes().find(n => n.tagName === 'A')).href, '/pricing/products');
+      assert.equal(props(w.nodes().find(n => n.tagName === 'A')).href, '/pricing?for=models');
       assert.deepEqual(w.requests, []); assert.equal(w.cartMounts,0);
     }, { reading });
   }
@@ -246,7 +247,7 @@ async function paymentSuccess() {
 async function retiredPath() {
   await withWorld(async w => {
     await w.mount(CHECKOUT, '/checkout?ai_topup=1');
-    assert.equal(w.path, '/pricing/products#token-packs');
+    assert.equal(w.path, '/pricing?for=models#add-tokens');
     assert.equal(w.cartMounts, 0); assert.deepEqual(w.requests, []); assert.deepEqual(w.cartCalls, []);
   });
   assert.equal(existsSync(new URL('../src/hooks/useAiTopupCart.js', import.meta.url)), false, 'obsolete hook is removed');
@@ -312,7 +313,7 @@ async function ordinaryReceipt() {
   for (const load of [async () => ({order:null}), async () => { throw Object.assign(new Error('Not found'),{status:404}); }]) {
     await withWorld(async w => {
       await w.mount(RECEIPT, '/checkout/confirmation?order=missing');
-      assert.equal(w.path, '/pricing/products'); assert.equal(w.timers.length,0); assert.deepEqual(w.writes,[]);
+      assert.equal(w.path, '/pricing?for=models'); assert.equal(w.timers.length,0); assert.deepEqual(w.writes,[]);
     }, {load});
   }
   await withWorld(async w => {
@@ -349,7 +350,7 @@ async function pricingPacks() {
     assert.ok(w.nodes().some(n => props(n).id === 'token-packs'));
     const links = w.nodes().filter(n => n.tagName === 'A');
     assert.deepEqual(links.map(n => [textOf(n),props(n).href]),
-      [['Buy','/checkout?token_pack=pack25'],['Buy','/checkout?token_pack=price_Pack50']]);
+      [['Buy','/pricing?for=models&pack=pack25#add-tokens'],['Buy','/pricing?for=models&pack=price_Pack50#add-tokens']]);
     assert.match(w.text(), /\$25 of tokens/);
     assert.match(w.text(), /\$1 of tokens buys \$1 of AI use\. Tokens never expire\./);
     assert.match(w.text(), /Sold by Axal VC Management LLC\./);
@@ -376,7 +377,7 @@ async function pricingReadStates() {
     assert.match(w.text(), /Unreadable/); assert.ok(!w.nodes().some(n=>n.tagName==='A'));
     await w.click('Retry');
     assert.match(w.text(), /\$25 of tokens/);
-    assert.ok(w.nodes().some(n=>n.tagName==='A' && props(n).href==='/checkout?token_pack=pack25'));
+    assert.ok(w.nodes().some(n=>n.tagName==='A' && props(n).href==='/pricing?for=models&pack=pack25#add-tokens'));
   },{publicPacks:async()=>{if(n++===0)throw new Error('unavailable');return {packs:[PACK]};}});
   await withWorld(async w => {
     await w.mount(PACKS, '/pricing/products');
@@ -390,7 +391,7 @@ async function pricingVisitor() {
     assert.equal(links.length,2);
     for(const link of links){
       assert.equal(textOf(link),'Sign in to buy');
-      assert.equal(new URL(props(link).href,'https://example.test').searchParams.get('next'),'/pricing/products#token-packs');
+      assert.equal(new URL(props(link).href,'https://example.test').searchParams.get('next'),'/pricing?for=models#add-tokens');
     }
     assert.equal(w.cartMounts,0);
   },{visitor:true});
@@ -401,7 +402,7 @@ for (const check of scenarios) test('D755 CR7: ' + check.name, check);
 
 const mutations = [
   {name:'missing purchase is hidden behind adding',file:RECEIPT,before:"topup?.state === 'unreadable' ? <p>",after:"false ? <p>",check:incompleteProjection},
-  {name:"pack links lose their identifier",file:PACKS,before:"encodeURIComponent(pack.uid || pack.price_id)",after:"encodeURIComponent('wrong_pack')",check:pricingPacks},
+  {name:"pack links lose their identifier",file:PACKS,before:"addTokensHref(pack.uid || pack.price_id)",after:"addTokensHref('wrong_pack')",check:pricingPacks},
   {name:"pack price becomes hardcoded",file:PACKS,before:"packLabel(pack.unit_amount)",after:"'$5 of tokens'",check:pricingPacks},
   {name:"pack price is admitted to the shared cart",file:PACKS,before:"packs.some(pack => pack.price_id === price.id)",after:"false",check:pricingPacks},
   {name:"no packs are called unreadable",file:PACKS,before:"<p>{TOPUP_UNAVAILABLE}</p>",after:"<p>Unreadable</p>",check:pricingReadStates},
@@ -416,7 +417,7 @@ const mutations = [
   {name:'ordinary fulfilment confirmation lost',file:CHECKOUT,before:"if (paymentIntentId && !pack)",after:"if (false)",check:ordinaryCheckout},
   {name:'ordinary receipt becomes a token receipt',file:RECEIPT,before:"order.status === 'paid' ? 'Order confirmed'",after:"order.status === 'paid' ? 'Tokens added'",check:ordinaryReceipt},
   {name:'unmount leaves its poll scheduled',file:RECEIPT,before:"if (timer !== null) cancel(timer);",after:"",check:cancelledReads},
-  {name:'back link names the retired page',file:CHECKOUT,before:'Back to Plans &amp; Pricing',after:'Back to Products',all:true,check:packCheckout},
+  {name:'back link names the retired page',file:CHECKOUT,before:'Back to Models',after:'Back to Plans &amp; Pricing',all:true,check:packCheckout},
   {name:'a pack is added to the shared cart',file:CHECKOUT,
     before:"  const state = aiTokenState(",after:"  const shared = useCart(); shared.add(PACK_PLACEHOLDER, 1);\n  const state = aiTokenState(",check:packCheckout},
   {name:'wrong pack selected',file:CHECKOUT,before:"reading.data.packs.find(p => p.uid === uid || (p.uid == null && p.price_id === uid))",after:"reading.data.packs[0]",check:packCheckout},

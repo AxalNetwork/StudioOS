@@ -618,3 +618,97 @@ test('D1053 PAYX19a: back from sign-in, Pricing opens the sheet on the kept plan
     Object.assign(publicPricingApi, savedPricing); Object.assign(checkoutApi, savedCheckout); restore();
   }
 });
+
+// ---------------------------------------------------------------- D1055 (#2906): the phone (PAYX20) and dark (PAYX21)
+
+test('D1055 PAYX20: the summary row is "[Plan] · [$20]/month"; the phone\'s total only when the Worker sent it', async () => {
+  const { summaryRow, payTotal } = await import('../src/components/checkout/checkoutModel.js');
+  const ivs = intervalsOf(GROWTH);
+  // Mutation checked: keep the price line whole → "· $20 / month".
+  assert.equal(summaryRow(GROWTH, SPEC, ivs.monthly), 'Validate + Build · $20/month');
+  // Mutation checked: keep the billed-yearly tail → the row runs past 390.
+  assert.equal(summaryRow(GROWTH, SPEC, ivs.yearly), 'Validate + Build · $17/month');
+  assert.equal(summaryRow({ ...GROWTH, plan_name: null }, SPEC, null), 'Validate + Build');
+  assert.deepEqual(payTotal(quoteView(NEW_QUOTE)), { label: 'Due today', value: '$21.00' });
+  // Mutation checked: draw a total without the Worker's → "$0.00" for a missing figure.
+  assert.equal(payTotal(quoteView({ ...NEW_QUOTE, total_due_today: null, total_reason: 'Not recorded: VAT is not read.' })), null);
+  assert.equal(payTotal(null), null);
+});
+
+test('D1055 PAYX20 at 390: ‹ Back and Checkout, the summary as one row with Details, Pay held at the bottom with the total', async () => {
+  let closed = 0;
+  const v = await sheet({ ...FOUNDER, onClose: () => { closed += 1; }, bridge: fakeBridge([]) }, { quote: NEW_QUOTE, methods: { methods: [] } });
+  try {
+    const back = v.props('checkout-back');
+    assert.equal(v.text('checkout-back'), '‹ Back');
+    // Mutation checked: drop sm:hidden → the desktop gets a second close.
+    assert.match(back.className, /(^|\s)sm:hidden(\s|$)/);
+    assert.match(back.className, /min-h-\[44px\]/);
+    // Mutation checked: show the × on the phone → two ways out in the top bar.
+    assert.match(v.props('checkout-close').className, /^hidden .*\bsm:grid\b/);
+    const row = v.props('checkout-summary-row');
+    assert.equal(v.text('checkout-summary-row'), 'Validate + Build · $20/monthDetails ⌄');
+    assert.equal(row['aria-expanded'], false);
+    assert.match(row.className, /(^|\s)sm:hidden(\s|$)/);
+    // Mutation checked: draw the panel open → the whole summary above Pay at 390.
+    assert.equal(v.props('checkout-summary-panel').className, 'hidden sm:block');
+    await v.click('checkout-summary-row');
+    assert.equal(v.props('checkout-summary-row')['aria-expanded'], true);
+    assert.equal(v.props('checkout-summary-panel').className, 'block');
+    assert.match(v.text('checkout-summary-row'), /Details ⌃$/);
+    const bar = v.props('checkout-pay-bar').className;
+    // Mutation checked: drop sticky → Pay scrolls away under the card form.
+    assert.match(bar, /^sticky bottom-0 /);
+    assert.match(bar, /\bsm:static\b/);
+    assert.match(bar, /\bdark:bg-gray-900\b/, 'the held bar keeps its dark ground');
+    assert.equal(v.text('checkout-pay-total'), 'Due today$21.00');
+    assert.match(v.props('checkout-pay-total').className, /\bsm:hidden\b/);
+    await v.click('checkout-back');
+    assert.equal(closed, 1, '‹ Back closes the sheet');
+  } finally { await v.close(); }
+});
+
+test('D1055 PAYX20: every target on the sheet and the renewal banner is 44px tall below sm; Accepted is one column', async () => {
+  const src = read('frontend/src/components/checkout/CheckoutSheet.jsx');
+  // Mutation checked: restore the 36px interval buttons → this pin fails.
+  assert.match(src, /className=\{`min-h-\[44px\] sm:min-h-\[36px\] rounded-\[7px\] px-3 text-\[12\.5px\] font-bold/);
+  assert.match(src, /const LINK = 'inline-flex min-h-\[44px\] items-center [^']*sm:min-h-0';/);
+  assert.match(src, /const INPUT = 'min-h-\[44px\] sm:min-h-\[40px\] /);
+  assert.match(src, /<button type="submit" className="min-h-\[44px\] sm:min-h-\[40px\] /);
+  assert.equal((src.match(/<label (key=\{m\.id\} )?className="flex min-h-\[44px\] items-center gap-2 [^"]*sm:min-h-0">/g) || []).length, 2, 'both Pay with rows');
+  assert.ok(!/min-h-\[(3[0-9]|40)px\](?! )/.test(src.replace(/sm:min-h-\[\d+px\]/g, '')), 'no target under 44px left below sm');
+  const banner = read('frontend/src/components/checkout/RenewalBanner.jsx');
+  assert.match(banner, /const BTN = 'inline-flex min-h-\[44px\] sm:min-h-\[36px\] items-center/);
+  assert.match(banner, /const LINK = 'inline-flex min-h-\[44px\] items-center [^']*sm:min-h-0';/);
+  assert.match(banner, /className=\{`flex flex-wrap items-center gap-x-3 gap-y-2 border-b/, 'the banner wraps');
+  const v = await sheet({ ...FOUNDER, bridge: fakeBridge([]) }, {
+    quote: NEW_QUOTE, methods: { methods: [] }, start: { mode: 'new', client_secret: 'cs_fake_2', ref: 'sub_fake2' },
+    status: { state: 'active', result: { ai_allowance_microusd: 5_000_000, storage_bytes: null, included: [], reasons: {} }, changes: { before: null } },
+  });
+  try {
+    await v.click('checkout-pay');
+    assert.ok(v.has('checkout-after-active'));
+    // Mutation checked: keep flex-wrap on the phone → Close, Open Billing and Back side by side at 390.
+    assert.match(v.props('checkout-after-actions').className, /^flex w-full flex-col gap-1 sm:w-auto sm:flex-row/);
+  } finally { await v.close(); }
+});
+
+test('D1055 PAYX21: the Payment Element\'s dark tabs on the sheet; light and the shared appearance unchanged; Apple Pay first', async () => {
+  const { SHEET_DARK_RULES, sheetAppearance } = await import('../src/components/checkout/checkoutModel.js');
+  const base = { theme: 'night', rules: { '.Input': { color: '#f3f4f6' } } };
+  const dark = sheetAppearance(base, true);
+  assert.equal(dark.rules['.Input'].color, '#f3f4f6', 'the shared rules stay');
+  // Mutation checked: drop the selected tab's rule → no violet edge in dark.
+  assert.equal(dark.rules['.Tab--selected'].border, '1px solid #a78bfa');
+  assert.equal(dark.rules['.Tab'].border, '1px solid #374151');
+  // Mutation checked: drop the selected label's pair → the shared deep violet on the dark card.
+  assert.equal(dark.rules['.TabLabel--selected, .TabIcon--selected'].color, '#c4b5fd');
+  assert.deepEqual(Object.keys(SHEET_DARK_RULES).sort(), ['.Tab', '.Tab--selected', '.Tab:hover', '.TabLabel, .TabIcon', '.TabLabel--selected, .TabIcon--selected']);
+  // Mutation checked: apply the dark rules in light → light tabs on a dark ground.
+  assert.equal(sheetAppearance(base, false), base);
+  assert.equal(base.rules['.Tab'], undefined, 'the shared appearance is never written to');
+  const form = read('frontend/src/components/checkout/PlanCardForm.jsx');
+  assert.match(form, /appearance: sheetAppearance\(buildAppearance\(isDark\), isDark\)/);
+  assert.match(form, /paymentMethodOrder: \['apple_pay', 'google_pay', 'card'\]/);
+  assert.doesNotMatch(read('frontend/src/lib/stripe.js'), /#c4b5fd|SHEET_DARK/, 'lib/stripe.js is the six forms\' and stays as it was');
+});

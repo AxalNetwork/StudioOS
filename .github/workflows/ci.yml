@@ -168,7 +168,10 @@ jobs:
     name: lfs size gate
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Full history (fetch-depth: 0 below) so `git diff base...HEAD` has a
+    # merge base. That checkout has exceeded this job's old 5-minute limit
+    # before the gate ran (#3514, 2026-10-27), so the job allows 15.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

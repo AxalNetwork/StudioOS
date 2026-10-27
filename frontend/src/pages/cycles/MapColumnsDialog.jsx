@@ -19,6 +19,12 @@ import {
  * "Date column has 3 rows that are not dates. They will be skipped.", with the
  * rows named and marked Skipped in the preview. The dialog says the check is
  * over the preview's rows only. Axal VC never changes the sheet.
+ *
+ * D1093 (#2958) and D1095 (#2960): a feed whose Worker stores its mapping in
+ * another shape passes
+ * `encode(mapping, header)` (what the PUT sends) and `decode(saved, header)`
+ * (the saved mapping as `{ column: field }`, for the first guess). Both default
+ * to the dialog's own shape, `{ column: field }`.
  */
 
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -36,14 +42,9 @@ export function guessMapping(header, fields, saved = null) {
   return out;
 }
 
-/**
- * D1095 (#2960): a feed whose Worker keeps its mapping in another shape hands
- * `encode(mapping, header)` (the dialog's column → field, into the body it
- * saves) and `decode(saved, header)` (back into column → field). Without them
- * the dialog saves what it shows.
- */
-const asIs = (m) => m;
-export default function MapColumnsDialog({ file, fields, onClose, onSaved, encode = asIs, decode = asIs }) {
+const identity = (m) => m;
+
+export default function MapColumnsDialog({ file, fields, onClose, onSaved, encode = identity, decode = identity }) {
   const [read, setRead] = useState({ status: 'loading', rows: null });
   const [tick, setTick] = useState(0);
   const [mapping, setMapping] = useState(null);
@@ -60,7 +61,7 @@ export default function MapColumnsDialog({ file, fields, onClose, onSaved, encod
 
   const header = useMemo(() => (read.rows?.[0] || []).map((c, i) => String(c ?? '').trim() || `Column ${i + 1}`), [read.rows]);
   const body = useMemo(() => (read.rows || []).slice(1), [read.rows]);
-  useEffect(() => { if (read.status === 'ready') setMapping(guessMapping(header, fields, file.mapping ? decode(file.mapping, header) : null)); }, [read.status, header, fields, file.mapping, decode]);
+  useEffect(() => { if (read.status === 'ready') setMapping(guessMapping(header, fields, decode(file.mapping ?? null, header))); }, [read.status, header, fields, file.mapping, decode]);
   const problems = mapping ? mappingProblems(header, body, mapping, fields) : [];
   const skipped = new Set(problems.flatMap((p) => p.rows.map((r) => r.row)));
   const used = mapping ? Object.values(mapping).filter((v) => v !== DONT_USE) : [];
