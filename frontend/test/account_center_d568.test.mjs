@@ -614,17 +614,18 @@ test('SettingsPage lists the canvas sections in its order, and mounts each secti
   // D642 (#1435) — the Usage canvas's acNav puts Usage after Billing and orders.
   // D651 (#1463) — the Connectors canvas puts Connectors after Usage.
   // D1134 (#2422) — Companies and projects, second, below Profile and identity.
-  assert.deepEqual(labels.slice(0, 9), ['Profile and identity', 'Companies and projects', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Connectors', 'Following', 'Developer']);
-  assert.match(block, /\{ id: 'developer', label: 'Developer', roles: \['admin'\] \}/);
+  assert.deepEqual(labels.slice(0, 9), ['Profile and identity', 'Companies and projects', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Connectors', 'Following', 'Builder']);
+  // D1315 (#2418): Developer is Builder, for every profile.
+  assert.match(block, /\{ id: 'builder', label: 'Builder' \}/);
   for (const id of ['onboarding', 'appearance', 'activity']) {
     assert.match(block, new RegExp(`\\{ id: '${id}', label: '[^']+', group: 'more' \\}`), `${id} is kept, under More`);
   }
   // D700 — the deep-link map moved, unchanged, to account/accountPhone.js.
   const paths = read('frontend/src/pages/account/accountPhone.js');
-  for (const [path, id] of [['following', 'following'], ['developer', 'developer'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity'], ['usage', 'usage'], ['connectors', 'connectors'], ['integrations', 'connectors']]) {
+  for (const [path, id] of [['following', 'following'], ['builder', 'builder'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity'], ['usage', 'usage'], ['connectors', 'connectors'], ['integrations', 'connectors']]) {
     assert.match(paths, new RegExp(`\\n  ${path.replace(/[-']/g, (c) => (c === '-' ? '\\-' : "'"))}: '${id}',`), `${path} resolves to ${id}`);
   }
-  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<ConnectorsTab connectorKey={connectorKey} />', '<DeveloperSection role={data.role} />']) {
+  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<ConnectorsTab connectorKey={connectorKey} />', '<BuilderSection view={builderView ?? undefined} />']) {
     assert.ok(page.includes(mount), `${mount} is mounted`);
   }
   assert.match(page, /<ProfileTabs key=\{profileRev\}/, 'the editors below the profile cards remount after a card saves');
@@ -676,10 +677,14 @@ test('the sign-in pane uses the signed-in enrolment routes, never the login-flow
   assert.doesNotMatch(page, /api\.revokeAllSessions\(/);
 });
 
-test('App.jsx gates /account/developer the way its route does', () => {
+test('App.jsx: Builder opens for every role, and /account/developer… forwards to it before :section (D1315)', () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/account\/developer" element=\{guard\(\['admin'\], <SettingsPage \/>\)\} \/>/);
+  const six = "guard\\(\\['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'\\], <SettingsPage \\/>\\)";
+  for (const path of ['/account/builder', '/account/builder/*']) assert.match(app, new RegExp(`<Route path="${path.replaceAll('/', '\\/').replace('*', '\\*')}" element=\\{${six}\\} \\/>`));
+  for (const path of ['/account/developer', '/account/developer/*']) assert.ok(app.includes(`<Route path="${path}" element={<BuilderRedirect />} />`), path);
   assert.ok(app.indexOf('path="/account/developer"') < app.indexOf('path="/account/:section"'));
+  assert.ok(app.indexOf('path="/account/builder/*"') < app.indexOf('path="/account/:section"'));
+  // The admin panel's own routes stay admin-only until D1316 retires them.
   const settings = read('cloudflare-worker/src/routes/settings.ts');
   const dev = settings.slice(settings.indexOf("settings.get('/developer'"), settings.indexOf("settings.put('/developer'"));
   assert.match(dev, /if \(\(user\.role \|\| ''\)\.toLowerCase\(\) !== 'admin'\) return c\.json\(\{ error: 'Admin role required' \}, 403\);/);

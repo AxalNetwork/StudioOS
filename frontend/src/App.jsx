@@ -78,6 +78,7 @@ import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
 import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
+import { BuilderRedirect } from './pages/account/builder/BuilderRedirect.jsx';
 import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
@@ -2598,11 +2599,14 @@ function AppInner() {
       <Route path="/account/email/revoke" element={<EmailChangeRevokePage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
-      {/* D568 — the Account center's Developer section reads GET
-          /settings/developer, which answers 403 to every role but admin, so
-          its address carries the same gate. The static path outranks
-          `:section` below; the page also lists the section for admins only. */}
-      <Route path="/account/developer" element={guard(['admin'], <SettingsPage />)} />
+      {/* D1315 (#2418) — Account › Builder, which was Developer, for every profile: MCP and services
+          (/account/builder), /keys, /usage, /activity and the drawers under them. The old addresses
+          forward here keeping the sub-path and the query (the Worker answers a page load with a 308)
+          and are counted (REDIRECT_ROUTES) until #2319. */}
+      <Route path="/account/developer" element={<BuilderRedirect />} />
+      <Route path="/account/developer/*" element={<BuilderRedirect />} />
+      <Route path="/account/builder" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      <Route path="/account/builder/*" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       {/* D753 — a connector's own page, inside the Account center. */}
       <Route path="/account/connectors/:key" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/account/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />

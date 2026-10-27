@@ -86,7 +86,9 @@ custom_domain  = true
 # `not_found_handling = "single-page-application"` would intercept
 # `/api/*` and `/landing/*` and serve `index.html` instead of
 # invoking the Hono router. `/mcp` and `/mcp/*` are the MCP server
-# (D784), answered before the Hono app. Patterns use the same syntax as Workers
+# (D784), answered before the Hono app. `/account/developer` and
+# `/account/developer/*` are D1315's 308s to `/account/builder`, so a page load
+# of an old address is redirected by the Worker. Patterns use the same syntax as Workers
 # routes (`*` wildcards, not regex).
 #
 # Vite is configured (frontend/vite.config.js) to build into the
@@ -116,7 +118,7 @@ not_found_handling = "single-page-application"
 # URL, and the one every `location.replace('/login')` uses — and sends
 # `/login/` to `/login` once.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -733,7 +735,7 @@ not_found_handling = "single-page-application"
 # production deploy that kept the default would 307 `/login` back to
 # `/login/` — the URL Safari crashes on.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get

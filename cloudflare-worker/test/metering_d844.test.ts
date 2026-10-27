@@ -205,7 +205,8 @@ test('the composite rule: an AI run inside a priced tool is charged by its own h
 
 test('the policy: v1 lists every registered tool at 0; quotes are server-side integers; an unlisted operation is refused', () => {
   // Mutation checked: delete a tool's line from METERING_POLICY → this fails naming it.
-  const missing = registeredTools().map((t) => toolOperation(t.name)).filter((op) => !(op in METERING_POLICY.operations));
+  // D1315: a renamed tool is priced, as it is metered, under its stored name.
+  const missing = registeredTools().map((t) => toolOperation(t.storedAs ?? t.name)).filter((op) => !(op in METERING_POLICY.operations));
   assert.deepEqual(missing, [], 'every registered tool has a price');
   for (const [op, p] of Object.entries(METERING_POLICY.operations)) assert.equal(p.price_microusd, 0, op);
   assert.equal(METERING_POLICY.version, 'd844-1');
