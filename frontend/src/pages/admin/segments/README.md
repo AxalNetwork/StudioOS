@@ -31,8 +31,9 @@ Admin Console's `?tab=personas` forwards here with `?moved=personas`, in
   parameters and rows, the 30-day ask, the edit's body and words, the suggest
   and decline checks, a suggestion's row).
 - `MoveDialog.jsx` — D1005: SEG4's Move dialog, shared. It says what changes
-  before D1002's move, refuses an admin account for an Admin, and is a bottom
-  sheet on a phone. #2377's account drawer is to open it from "Retag…".
+  before D1002's move, refuses an admin account for an Admin, and is a
+  full-screen sheet on a phone (D1007, SEG14b), with its own "‹ back" bar and
+  Cancel and Move at the foot. #2377's account drawer is to open it from "Retag…".
 - `segmentPageModel.js` — pure: the segment page's addresses, counts ("<5" for
   a suppressed count, "Not recorded" for none), rows and the Move dialog's words.
 - `segModel.js` — pure. The addresses and tabs, the moved notices, D997's
@@ -42,6 +43,9 @@ Admin Console's `?tab=personas` forwards here with `?moved=personas`, in
 
 ## Rules
 
+- The phone (D1007) is below `sm`, `segModel.js`'s `PHONE_QUERY`, as the admin
+  header reads it. Every control there is at least 44 by 44 px: `max-sm:` on its
+  class, or `TAP` for a text button or link.
 - Admin accounts are left out of every count.
 - No figure here comes from the persona list capped at 500: Overview's counts
   are D999's and Unclassified is D1002's paged list with a total (D1006), so
