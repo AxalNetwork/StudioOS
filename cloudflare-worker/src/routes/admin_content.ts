@@ -864,7 +864,7 @@ async function readBoard(
     {
       key: 'scheduled', label: 'Scheduled', parts: [await articlesPart(lane('scheduled').statuses, lane('scheduled').publishAt)],
       note:
-        'Approved articles with a publish time: they go out when that time passes. Publications have no publish time.',
+        'Approved articles with a publish time: an article goes out at that time. Publications have no publish time.',
     },
     {
       key: 'published', label: 'Published', parts: [await articlesPart(lane('published').statuses), await publicationsPart('published')],

@@ -137,7 +137,7 @@ const BOARD = {
     {
       key: 'scheduled', label: 'Scheduled', total: 1,
       parts: [part('articles', ['approved'], 1, [article({ id: 14, title: 'Timed piece', status: 'approved' })])],
-      note: 'Approved articles with a publish time: they go out when that time passes.',
+      note: 'Approved articles with a publish time: an article goes out at that time.',
     },
     {
       key: 'published', label: 'Published', total: 3,
