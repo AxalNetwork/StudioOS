@@ -28,6 +28,7 @@ import { isSuperAdminUser } from '../lib/shellRole';
 import { addState, autoReloadLine, planBlock, storageLine } from './tokensBandModel';
 import { TOPUP_UNAVAILABLE, usageMoney } from '../lib/aiTokens';
 import CheckoutSheet from '../components/checkout/CheckoutSheet';
+import { planKeyOf } from '../components/checkout/checkoutModel';
 import {
   PRICING_TABS, compareCell, heldCard, initialTab, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
 } from '../lib/pricingModel';
@@ -449,6 +450,22 @@ export function PricingBody({ user = null }) {
     : null;
   const ready = built && !built.unreadable;
   const D = user ? '' : ' ax-display';
+
+  // D1053 (#2904, PAYX19a): back from sign-in, the sheet opens on the plan the member chose
+  // (`?checkout=<plan key>&interval=`), and the address drops the request so Back does not reopen it.
+  const wanted = new URLSearchParams(location.search).get('checkout');
+  useEffect(() => {
+    if (!wanted || !ready) return;
+    const q = new URLSearchParams(location.search);
+    const iv = q.get('interval');
+    q.delete('checkout'); q.delete('interval');
+    navigate({ pathname: location.pathname, search: q.toString() ? `?${q}` : '', hash: location.hash }, { replace: true });
+    const card = built.cards.find((c) => c.button?.checkout && planKeyOf(c.plan) === wanted);
+    if (!card) return;
+    if (iv === 'yearly' || iv === 'monthly') setBilling(iv);
+    setCheckout(card);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted, ready]);
 
   return (
     <Face.Provider value={D}>

@@ -91,6 +91,7 @@ async function mounted(url) {
   return {
     calls, where: () => where,
     has: (id) => nodes().some((x) => props(x)['data-testid'] === id),
+    ids: () => nodes().map((x) => props(x)['data-testid']).filter(Boolean),
     of: (id) => text(find(id)),
     prop: (id, k) => props(find(id))[k],
     async click(id) { await act(async () => { props(find(id)).onClick(); }); await flush(); },
@@ -160,5 +161,18 @@ test('INS1: the block keeps twelve countries; "See all countries" lists every on
     await v.change('insights-countries-search', { value: 'mal' });
     assert.equal(v.of('insights-countries-table').replace(/\s+/g, ' ').trim(), 'Accounts by country, every countryCountryAccountsShareMalta101%', 'Malta, 10 accounts, 1%');
     assert.equal(groupReads(v).length, 0, 'the list is the page\'s read, not another');
+  } finally { await v.close(); }
+});
+
+test('D1308 (#2366, revised canvas): "Account health" heads Identity checks and "Support and AI use" heads Open support tickets', async () => {
+  const v = await mounted('/admin/insights');
+  try {
+    // Mutation checked: drop a BLOCK_HEADS entry → its heading is missing; key it to another block → the order fails.
+    assert.equal(v.of('insights-head-identity'), 'Account health');
+    assert.equal(v.of('insights-head-tickets'), 'Support and AI use');
+    const order = v.ids().filter((id) => /^insights-(head|block)-/.test(id));
+    assert.equal(order.indexOf('insights-head-identity') + 1, order.indexOf('insights-block-identity'), 'the heading sits right before its block');
+    assert.equal(order.indexOf('insights-head-tickets') + 1, order.indexOf('insights-block-tickets'));
+    assert.equal(order.filter((id) => id.startsWith('insights-head-')).length, 2, 'no other block is headed');
   } finally { await v.close(); }
 });

@@ -8,7 +8,7 @@ import { CycleBar } from '../../cycles/PhoneModulePage';
 import MercuryRaiseFeed from '../../cycles/MercuryRaiseFeed';
 import { recordHref } from '../../cycles/recordModel';
 import {
-  FORECAST_LINE, HOME_PATH, LINE, NOT_RECORDED, NOT_YET, SECTIONS, SLUG, TABS, TITLE, WAITS, afterRaiseView, baseOf, dayText,
+  FORECAST_LINE, HOME_PATH, LINE, NOT_RECORDED, SECTIONS, SLUG, TABS, TITLE, afterRaiseView, baseOf, dayText,
   forecastHref, historyRows, homeTiles, initials, money, monthsText, needsRows, planEmpty, planVsActual, runwayCandidates,
   runwayTodayView, sectionOf, sectionRows, tabHref, tabSearch, tiesRows,
 } from './useOfFundsModel';
@@ -17,6 +17,7 @@ import {
   FIELD, H3, LINK, MONO, MUTED, NotRecorded, Pill, RoundSizeDialog, SECTION_BG, Skeleton, Source, StackBar, WhereUsedDialog,
   useRead, usePlan,
 } from './UseOfFundsParts';
+import { Compare, Forecast, Scenarios } from './ScenariosForecast';
 
 /**
  * D1173 (#2455) — the Use of funds tool's tab bar and tab pages. CycleRoute
@@ -29,7 +30,11 @@ import {
  * its actual share, and Edit split; Milestones and hires (UF5, UF6); Runway
  * (UF7); Plan vs actual (UF12); History (UF15). Runway today is never the
  * forecast; a missing input is Not recorded; an admin works under a banner.
- * Scenarios waits for part 5.
+ *
+ * D1178 (#3105): Scenarios (UF9) and Scenarios compared (UF10, UF11), and
+ * Runway › Forecast (UF8), drawn from `ScenariosForecast.jsx`. A `sub` names
+ * the page under a tab: `compare` under Scenarios, `forecast` under Runway.
+ * No tab waits any more.
  */
 
 /** The tool's own tabs, a second level under the Raise modules. */
@@ -265,16 +270,6 @@ export function UseOfFundsHomeNav({ search = '', projectId = null, api }) {
       <UseOfFundsTabBar active="home" search={search} />
       {projectId ? <UseOfFundsHome projectId={projectId} search={search} api={api} /> : null}
     </>
-  );
-}
-
-function Wait({ tab, children }) {
-  return (
-    <section className="flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900" data-testid={`uof-wait-${tab}`}>
-      <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
-      <p className={`m-0 text-[12.5px] ${MUTED}`}>{WAITS[tab]}</p>
-      {children}
-    </section>
   );
 }
 
@@ -623,7 +618,10 @@ function History({ projectId, api }) {
   );
 }
 
-export function UseOfFundsTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, api = useOfFundsApi }) {
+/** A page under a tab (D1178): its phone bar's title. */
+const SUB_TITLE = { forecast: 'Forecast', compare: 'Scenarios compared' };
+
+export function UseOfFundsTabPage({ tab, sub = null, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, api = useOfFundsApi }) {
   const here = TABS.find((t) => t.id === tab) || TABS[0];
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
@@ -631,14 +629,20 @@ export function UseOfFundsTabPage({ tab, projectId, projectStatus = 'ready', onR
   else if (!projectId) body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="uof-loading" />;
   else if (tab === 'allocation') body = <Allocation projectId={projectId} search={search} api={api} phone={phone} />;
   else if (tab === 'milestones') body = <Milestones projectId={projectId} search={search} api={api} />;
+  else if (tab === 'runway' && sub === 'forecast') body = <Forecast projectId={projectId} search={search} api={api} />;
   else if (tab === 'runway') body = <Runway projectId={projectId} search={search} api={api} />;
+  else if (tab === 'scenarios' && sub === 'compare') body = <Compare projectId={projectId} search={search} api={api} />;
+  else if (tab === 'scenarios') body = <Scenarios projectId={projectId} search={search} api={api} />;
   else if (tab === 'actuals') body = <Actuals projectId={projectId} api={api} />;
-  else if (tab === 'history') body = <History projectId={projectId} api={api} />;
-  else body = <Wait tab={tab} />;
+  else body = <History projectId={projectId} api={api} />;
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid={`uof-${tab}-page`}>
+    <div className="flex min-w-0 flex-col gap-4" data-testid={sub ? `uof-${sub}-page` : `uof-${tab}-page`}>
       {phone
-        ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
+        ? <CycleBar
+            back={sub ? { label: here.label, to: tabHref(here, search) } : { label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }}
+            title={SUB_TITLE[sub] || here.label}
+            eadwynLabel={`Raise · ${TITLE}`}
+          />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
       <UseOfFundsTabBar active={tab} search={search} />
       {body}

@@ -11,7 +11,8 @@ import { NavLink } from 'react-router-dom';
  * above zero; a program without a queue has no Queue tab, so no tab reads
  * "[0]". On a phone the strip scrolls sideways. D962 adds Activity to
  * Mentor, Refer & Earn, Perks and Learning; no page has a Terms tab, because
- * part 1's store holds no program's terms.
+ * part 1's store holds no program's terms. D963 adds Referral partners' Queue
+ * and Activity and Investor cohort access's Activity.
  */
 
 function Tab({ to, end = false, count = null, testId, children }) {
@@ -90,11 +91,23 @@ export function LearningTabs() {
   );
 }
 
-export function PartnersTabs() {
+// D963 (#2796): Referral partners' Queue (terms sent to HQ) and Activity, and Investor cohort access's Activity.
+export function PartnersTabs({ queue }) {
   return (
     <Strip label="Referral partners">
       <Tab to="/admin/programs/referral-partners" end testId="programs-tab-overview">Overview</Tab>
       <Tab to="/admin/programs/referral-partners/how-it-runs" testId="programs-tab-how">How it runs</Tab>
+      <Tab to="/admin/programs/referral-partners/queue" count={queue} testId="programs-tab-queue">Queue</Tab>
+      <Tab to="/admin/programs/referral-partners/activity" testId="programs-tab-activity">Activity</Tab>
+    </Strip>
+  );
+}
+
+export function InvestorTabs() {
+  return (
+    <Strip label="Investor cohort access">
+      <Tab to="/admin/programs/investor-cohorts" end testId="programs-tab-overview">Overview</Tab>
+      <Tab to="/admin/programs/investor-cohorts/activity" testId="programs-tab-activity">Activity</Tab>
     </Strip>
   );
 }
