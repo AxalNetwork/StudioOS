@@ -3,8 +3,8 @@
  * Raise shell with Evidence lit after Overview, and the item and claim drawers
  * at `/raise/evidence/item/:id` and `/raise/evidence/claim/:id` (VR2, VR3) as
  * addresses. Every block waits for its part: nothing is counted as zero.
- * `EvidenceSummary` is the investor block (VR8, VR9), placed by the deal page's
- * Evidence tab.
+ * The investor block (VR8–VR10) is `InvestorEvidence.jsx` (D1268), placed by
+ * the deal page's Evidence tab, an investor's round call and the diligence room.
  */
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -76,13 +76,5 @@ export default function RaiseEvidence() {
   );
 }
 
-/** VR8, VR9: what an investor sees on the deal page's Evidence tab. */
-export function EvidenceSummary() {
-  return (
-    <section className={box} data-testid="evidence-summary">
-      <h2 className="m-0 text-[15px] font-bold">Evidence</h2>
-      <p className="m-0 text-[13px]">Before an NDA you see coverage only: each kind of evidence, how many, its source and its newest date. After it, the items the founder shared, each with its source, strength and date.</p>
-      <EvidenceWait id="investor" />
-    </section>
-  );
-}
+/** VR8–VR10: the investor's block lives in `InvestorEvidence.jsx` (D1268), which imports no `ui` index. */
+export { EvidenceSummary } from './InvestorEvidence';

@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react';
 import { roundCallsApi } from '../../lib/api/roundCalls';
 import { reportError } from '../../lib/log';
 import RoundCallSheet from './RoundCallSheet';
+import { InvestorEvidence } from '../cycles/evidence/InvestorEvidence';
 import { useCallRead, CallReadState, callButton, callInput, moneyCents, dollarsToCents, callDate } from './roundCallParts';
 
 export function RoundCallIndex() {
@@ -36,6 +37,7 @@ export default function RoundCallPage() {
     close:()=>perform(()=>roundCallsApi.manage(uid,{action:'close'}),'Call closed. It is now read-only.'),
     counsel:()=>perform(()=>roundCallsApi.counsel(uid,{reference,terms_hash:read.data.call.terms_hash,revision:read.data.call.revision}),'Counsel’s approval reference recorded for this version.'),
     edit:()=>setShowSheet(true),
+    retry:()=>read.retry(),
   };
   // D686: a founder's call lives in the Raise shell; investors and counsel keep this page.
   // D1224: a founder's call, a draft included, opens under Calls in the Raise shell.
@@ -149,6 +151,8 @@ export function InvestorCallView({state:s,on}) {
               :<><p>NDA signed. The founder must grant access before files can be read.</p>{!d.read_only&&<button type="button" className={callButton} disabled={s.busy} onClick={on.requestRoom}>Ask for access</button>}</>}
           </section>
         </div>
+        {/* D1268 (#3291): the founder's shared evidence as this recipient may see it (D1265); null when the read does not admit them. */}
+        <InvestorEvidence read={d.evidence??null} company={company} onRetry={on.retry}/>
       </div>
       <div className="space-y-4">
         <section className={card} data-testid="call-indicate"><h2 className="font-semibold">Indicate an amount</h2>

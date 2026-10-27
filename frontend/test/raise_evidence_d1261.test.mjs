@@ -67,10 +67,9 @@ test('the view: every area unread, each block waits, and a drawer from the addre
   assert.ok(html(h(EvidenceBody, { drawer: 'claim' })).includes('data-testid="evidence-wait-claim"'));
 });
 
-test('the investor block says what shows before and after the NDA, and waits', () => {
-  const out = html(h(EvidenceSummary));
-  assert.match(out, /Before an NDA you see coverage only/);
-  assert.ok(out.includes('data-testid="evidence-wait-investor"') && out.includes(NOT_YET));
+test('the investor block is live (D1268): RaiseEvidence re-exports it, and it no longer waits', () => {
+  assert.equal(typeof EvidenceSummary, 'function');
+  assert.ok(!read('frontend/src/pages/cycles/evidence/InvestorEvidence.jsx').includes('evidence-wait-investor'));
 });
 
 /* ------------------------------------------------------------------ *
@@ -84,7 +83,7 @@ test('the wiring: three routes before /raise/:slug, the deal page’s Evidence t
     assert.ok(app.indexOf(`path="${p}"`) < app.indexOf('path="/raise/:slug"'), `${p} before the module route`);
   }
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
-  assert.ok(deal.includes("{tab === 'evidence' && <EvidenceSummary />}"));
+  assert.ok(deal.includes("{tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} />}"));
   assert.ok(!deal.includes("['evidence', 'team'"), 'Evidence is no longer a wait card');
   for (const f of ['Raise Evidence Page.dc.html', 'Raise evidence · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Raise evidence · Boards.dc.html').includes('name="Raise Evidence Page"'));
