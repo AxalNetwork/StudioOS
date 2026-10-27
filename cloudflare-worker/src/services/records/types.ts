@@ -71,6 +71,8 @@ export type RecordContent = {
   uid?: string;
   createdBy?: number | null;
   createdAt?: string | null;
+  /** D1083 (#2948): a connector's part on the record page, e.g. `lovable` on an experiment's claim. */
+  parts?: Record<string, unknown>;
 };
 
 export type RecordFact = { label: string; value: string | number | null; reason?: string };

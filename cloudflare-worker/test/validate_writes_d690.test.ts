@@ -598,8 +598,11 @@ test('17: 460 adds no column that any other migration or the baseline already ha
       }
     }
   }
+  // D1083 (#2948): a name in a comment or a quoted value is not a use of the table:
+  // 585's `record_table` CHECK names 'hypothesis_experiments' as the table a link sits on.
+  const statementsOnly = (sql: string) => sql.replace(/--[^\n]*/g, ' ').replace(/'(?:[^']|'')*'/g, "''");
   for (const t of ['hypothesis_experiments', 'hypothesis_evidence_links', 'competitor_tracking']) {
-    for (const sql of others) assert.doesNotMatch(sql, new RegExp(`\\b${t}\\b`), `${t} appears in another migration`);
+    for (const sql of others) assert.doesNotMatch(statementsOnly(sql), new RegExp(`\\b${t}\\b`), `${t} appears in another migration`);
   }
   // Over a fresh database, and with foreign keys on, hardDeleteProject still removes the venture.
   const db = fixture({ fk: true });

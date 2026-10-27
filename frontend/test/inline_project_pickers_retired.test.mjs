@@ -56,7 +56,6 @@ const FROM_URL = [
   // FounderGrowBrand.jsx stood here; #2343 folded it into the brand builder,
   // which reads `?project_id=` (pages/BrandBuilderPage.jsx).
   'pages/BrandBuilderPage.jsx',
-  'pages/founder/FounderGrowCapitalMatch.jsx',
   'pages/founder/FounderGrowCustomers.jsx',
   'pages/founder/FounderGrowFocus.jsx',
   'pages/founder/FounderGrowLaunch.jsx',
@@ -70,8 +69,8 @@ const FROM_URL = [
   'pages/founder/FounderRaiseStatus.jsx',
   // D1109 (#2989): `DataRoomPage.jsx` and `FounderRaiseDataRoom.jsx` are retired; the Data room
   // tool reads `?project_id=` through CycleRoute (below).
-  // #2443: an explicit venture replaces the legacy first-fetched fallback.
-  'pages/RaisePipelinePage.jsx',
+  // D1194 (#3128): FounderGrowCapitalMatch.jsx and RaisePipelinePage.jsx are retired; Capital
+  // relationships reads `?project_id=` through CycleRoute (below).
   // The cycle pages that replaced the four desks (D661, #1474).
   'pages/cycles/CycleRoute.jsx',
 ];

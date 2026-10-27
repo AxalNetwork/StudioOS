@@ -26,7 +26,7 @@ export const MODULE_NAME = Object.fromEntries(VALIDATE_MODULES);
 export const VERDICT_NOTE = 'Axal never suggests a verdict. Accepted evidence is there when you record a decision.';
 
 const CHANNEL_WORDS = { in_person: 'In person', video: 'Video', phone: 'Phone', text: 'Text chat' };
-const PROVIDER_WORDS = { zoom: 'Zoom', google_meet: 'Google Meet', whatsapp: 'WhatsApp', telegram: 'Telegram' };
+const PROVIDER_WORDS = { zoom: 'Zoom', google_meet: 'Google Meet', whatsapp: 'WhatsApp', telegram: 'Telegram', google_docs: 'Google Docs' };
 const THREADS = new Set(['whatsapp', 'telegram']);
 
 /**

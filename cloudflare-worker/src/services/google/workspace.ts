@@ -28,7 +28,7 @@ export async function workspaceConnection(env: Env, userId: number): Promise<'go
 }
 /** Bounded response, no redirects, error codes only; never include a provider's body in an exception. */
 export async function workspaceRead(env: Env, userId: number, call: WorkspaceRead, id: string,
-  options: { range?: string; mimeType?: string; pageToken?: string } = {}, fetcher: typeof fetch = fetch): Promise<any> {
+  options: { range?: string; mimeType?: string; pageToken?: string; pageSize?: number } = {}, fetcher: typeof fetch = fetch): Promise<any> {
   if (!validFileId(id) || !Object.hasOwn(GOOGLE_WORKSPACE_READS, call)) throw new WorkspaceError('invalid_workspace_read', 400);
   const state = await workspaceConnection(env, userId);
   if (state !== 'ready') throw new WorkspaceError(state, 409);
@@ -46,7 +46,11 @@ export async function workspaceRead(env: Env, userId: number, call: WorkspaceRea
     url.pathname += '/values/' + encodeURIComponent(range);
   }
   if (call === 'forms.responses.list') {
-    url.pathname += '/responses'; url.searchParams.set('pageSize', '5');
+    url.pathname += '/responses';
+    // Five for the mapping preview; a sync (D1092) reads up to 100 a page.
+    const size = options.pageSize ?? 5;
+    if (!Number.isInteger(size) || size < 1 || size > 100) throw new WorkspaceError('invalid_page_size', 400);
+    url.searchParams.set('pageSize', String(size));
     if (options.pageToken) {
       if (options.pageToken.length > 2048) throw new WorkspaceError('invalid_page_token', 400);
       url.searchParams.set('pageToken', options.pageToken);
