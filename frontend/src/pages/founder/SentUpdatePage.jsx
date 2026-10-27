@@ -182,7 +182,7 @@ export function SentUpdateView({ data, onReply = null, onAskAgain = null, initia
           return (
             <li key={a.uid} className="border-b border-axal-hairline py-2.5 text-[12.5px] dark:border-gray-800" data-testid="sent-ask">
               <div className="font-semibold">{ASK_LABELS[a.kind]} · {a.text}</div>
-              {a.kind==='capital'&&(a.link_ref?<Link className={LINK} to={(author?'/raise/calls/':'/round-calls/')+encodeURIComponent(a.link_ref)}>{author?'Open the call':'Open the private round call'}</Link>:a.link_reason&&<p className="text-axal-muted">{a.link_reason}</p>)}
+              {a.kind==='capital'&&(a.link_ref?<Link className={LINK} to={(author?'/raise/capital-relationships/calls/':'/round-calls/')+encodeURIComponent(a.link_ref)}>{author?'Open the call':'Open the private round call'}</Link>:a.link_reason&&<p className="text-axal-muted">{a.link_reason}</p>)}
               {replies.map((r) => {
                 const href = moduleHref(r.landed_module, data.project_id);
                 const when = dayMon(r.created_at);
