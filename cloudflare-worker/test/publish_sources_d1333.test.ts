@@ -74,7 +74,6 @@ function fixture() {
   return { db, env, seed, call };
 }
 type F = ReturnType<typeof fixture>;
-const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
 
 /** One record in every Grow store, each with a PRIVATE value in a never-list field. */
