@@ -31,7 +31,7 @@ const CLAIM_TONE = {
   not_backed: 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
 
-function Unreadable({ line, onRetry, testId }) {
+function ReadFailed({ line, onRetry, testId }) {
   return (
     <div className="flex flex-col gap-2" data-testid={testId}>
       <p className="m-0 text-[13px]">{line}</p>
@@ -42,7 +42,7 @@ function Unreadable({ line, onRetry, testId }) {
 
 /** VR8 and VR9's coverage: one tile per area, kind and Source, with a count and the newest date. Never a value. */
 function Coverage({ coverage, onRetry }) {
-  if (!coverage.ok) return <Unreadable line={coverage.reason} onRetry={onRetry} testId="evidence-coverage-unreadable" />;
+  if (!coverage.ok) return <ReadFailed line={coverage.reason} onRetry={onRetry} testId="evidence-coverage-unreadable" />;
   if (!coverage.rows.length) return <p className={`m-0 text-[13px] ${MUTED}`} data-testid="evidence-coverage-empty">The founder has shared no evidence yet.</p>;
   return (
     <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 sm:grid-cols-2" data-testid="evidence-coverage">
@@ -107,7 +107,7 @@ export function InvestorEvidence({ read, onRetry = null, company = null, heading
   return (
     <section className={box} data-testid="evidence-summary" data-stage={v.stage}>
       <h2 className="m-0 text-[15px] font-bold">{heading}</h2>
-      {v.stage === 'unreadable' && <Unreadable line={v.reason} onRetry={onRetry} testId="evidence-unreadable" />}
+      {v.stage === 'unreadable' && <ReadFailed line={v.reason} onRetry={onRetry} testId="evidence-unreadable" />}
       {v.stage === 'before' && (
         <>
           <span className={`${PILL} border-gray-200 text-axal-muted dark:border-gray-700 dark:text-gray-400`} data-testid="evidence-before-nda">Before the NDA</span>
@@ -120,7 +120,7 @@ export function InvestorEvidence({ read, onRetry = null, company = null, heading
         <>
           <span className={`${PILL} border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200`} data-testid="evidence-after-nda">✓ NDA signed</span>
           <p className="m-0 text-[13.5px]">You see what {company || 'the founder'} chose to share. Each item names where it came from and when.</p>
-          {!v.items.ok ? <Unreadable line={v.items.reason} onRetry={onRetry} testId="evidence-items-unreadable" />
+          {!v.items.ok ? <ReadFailed line={v.items.reason} onRetry={onRetry} testId="evidence-items-unreadable" />
             : v.items.rows.length === 0 ? <p className={`m-0 text-[13px] ${MUTED}`} data-testid="evidence-items-empty">The founder has shared no evidence yet.</p>
               : (
                 <>
@@ -142,7 +142,7 @@ export function InvestorEvidence({ read, onRetry = null, company = null, heading
                   ))}
                 </>
               )}
-          {!v.claims.ok && <Unreadable line="Which claims these items back could not be read. Try again." onRetry={onRetry} testId="evidence-claims-unreadable" />}
+          {!v.claims.ok && <ReadFailed line="Which claims these items back could not be read. Try again." onRetry={onRetry} testId="evidence-claims-unreadable" />}
         </>
       )}
       {v.partial && <p className="m-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="evidence-partial">Some of the founder’s evidence could not be checked against its record just now, so it is left out. Try again later.</p>}
