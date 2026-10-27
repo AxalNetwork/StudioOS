@@ -82,3 +82,9 @@ Analytics, Proposals, Connection). `ChannelSessionParts.jsx` holds the parts
 Telegram (#2515) and Calls (#2525) reuse: the inbox, the transcript, the
 analytics, the proposals, the guided connect and the four states.
 `channelSessionModel.js` holds their rules, which are pure.
+
+Telegram's boards (TG1–TG7, D869, #2515) are built on the same tool.
+`RecordChatTool.jsx` is the chat tool with the channel as its argument
+(`CHAT_TOOLS` in `channelSessionModel.js`); `RecordWhatsAppTool.jsx` re-exports
+WhatsApp's, and `RecordTelegramTool.jsx` adds Telegram's own tabs (Send to
+Axal, Connection, MCP access) under `/validate/record/telegram`.

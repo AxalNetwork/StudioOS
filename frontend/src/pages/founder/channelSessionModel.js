@@ -17,6 +17,13 @@
  *   GET  /validate/conversations/analytics  a venture's chats over a range (D858, D866)
  *   GET  /founder/validate/sessions/:id/placements  the proposals to accept (D859)
  *
+ * D869 (#2515): Telegram's boards (TG1–TG7) share these rules. Its tabs are
+ * `TG_TABS` at `/validate/record/telegram`; consent, the transcript's edited
+ * and deleted markers and the setup steps take the channel as an argument.
+ * It also reads:
+ *   GET  /channels/telegram/setup           the six steps (D863): { account, prerequisites, steps, next, ready }
+ *   POST /channels/telegram/link            a link code, on the founder's press: { code, url, expires_at }
+ *
  * THINGS THIS FILE MUST NEVER DO: show a full phone number; turn a figure the
  * store does not hold into 0 (it is "Not recorded", with the Worker's reason);
  * call a translation the original, or the original a translation; or say a
@@ -42,26 +49,53 @@ export const WA_TABS = Object.freeze([
   { key: 'connection', label: 'Connection', to: `${WA_BASE}/connection` },
 ]);
 
-const TAB_KEYS = new Set(WA_TABS.map((t) => t.key));
+/** D869: Telegram's tabs, the canvas's seven: WhatsApp's five, then Send to Axal and MCP access. */
+export const TG_BASE = '/validate/record/telegram';
+export const TG_TABS = Object.freeze([
+  { key: 'inbox', label: 'Inbox', to: TG_BASE },
+  { key: 'sessions', label: 'Sessions', to: `${TG_BASE}/sessions` },
+  { key: 'analytics', label: 'Analytics', to: `${TG_BASE}/analytics` },
+  { key: 'proposals', label: 'Proposals', to: `${TG_BASE}/proposals` },
+  { key: 'send', label: 'Send to Axal', to: `${TG_BASE}/send` },
+  { key: 'connection', label: 'Connection', to: `${TG_BASE}/connection` },
+  { key: 'mcp', label: 'MCP access', to: `${TG_BASE}/mcp` },
+]);
+/** The tabs that read one session's record when an id follows them. */
+const RECORD_TABS = new Set(['sessions', 'analytics', 'proposals']);
 
-/** The tab and the record a location names: `{ tab, id }`, or null for an address that is not the tool's. */
-export function waRoute(pathname) {
+function toolRoute(base, tabs, pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
-  if (p === WA_BASE) return { tab: 'inbox', id: null };
-  if (!p.startsWith(`${WA_BASE}/`)) return null;
-  const [tab, id, extra] = p.slice(WA_BASE.length + 1).split('/');
-  if (!TAB_KEYS.has(tab) || tab === 'inbox' || extra !== undefined) return null;
+  if (p === base) return { tab: 'inbox', id: null };
+  if (!p.startsWith(`${base}/`)) return null;
+  const [tab, id, extra] = p.slice(base.length + 1).split('/');
+  if (!tabs.some((t) => t.key === tab) || tab === 'inbox' || extra !== undefined) return null;
   if (id === undefined) return { tab, id: null };
-  if (tab === 'connection' || !/^[1-9]\d{0,9}$/.test(id)) return null;
+  if (!RECORD_TABS.has(tab) || !/^[1-9]\d{0,9}$/.test(id)) return null;
   return { tab, id: Number(id) };
 }
-
-/** A tab's address, with a session for Sessions, Analytics and Proposals. */
-export function waHref(tab, id = null) {
-  const t = WA_TABS.find((x) => x.key === tab);
+function toolHref(tabs, tab, id) {
+  const t = tabs.find((x) => x.key === tab);
   if (!t) throw new Error(`Unknown tab: ${tab}`);
-  return id && tab !== 'inbox' && tab !== 'connection' ? `${t.to}/${Number(id)}` : t.to;
+  return id && RECORD_TABS.has(tab) ? `${t.to}/${Number(id)}` : t.to;
 }
+
+/** The tab and the record a location names: `{ tab, id }`, or null for an address that is not the tool's. */
+export const waRoute = (pathname) => toolRoute(WA_BASE, WA_TABS, pathname);
+/** A tab's address, with a session for Sessions, Analytics and Proposals. */
+export const waHref = (tab, id = null) => toolHref(WA_TABS, tab, id);
+/** D869: the same for Telegram's seven tabs. */
+export const tgRoute = (pathname) => toolRoute(TG_BASE, TG_TABS, pathname);
+export const tgHref = (tab, id = null) => toolHref(TG_TABS, tab, id);
+
+/**
+ * D869: each chat channel's tool, as the shared tool draws it. `prefix` keeps
+ * each board's test ids (`wa-…`, `tg-…`); `filter` is the inbox's first
+ * filter (TG2 opens on All, WA2 on WhatsApp).
+ */
+export const CHAT_TOOLS = Object.freeze({
+  whatsapp: Object.freeze({ provider: 'whatsapp', label: 'WhatsApp', prefix: 'wa', tabs: WA_TABS, route: waRoute, href: waHref, filter: 'whatsapp', connect: '/account/connectors/whatsapp' }),
+  telegram: Object.freeze({ provider: 'telegram', label: 'Telegram', prefix: 'tg', tabs: TG_TABS, route: tgRoute, href: tgHref, filter: 'all', connect: '/account/connectors/telegram' }),
+});
 
 /* ------------------------------------------------------------------ *
  * Numbers and names
@@ -88,14 +122,16 @@ export function contactName(t) {
  * permission (WA11), empty (WA8), or ready. A refused read (401/403) is "no
  * permission", never "nothing here"; a failed one is "could not be read".
  */
-export function pageState({ overview, threads }) {
+export function pageState({ overview, threads }, provider = 'whatsapp') {
   if (overview.status === 'loading' || threads.status === 'loading') return 'loading';
   if (threads.status === 'forbidden' || overview.status === 'forbidden') return 'nop';
   if (overview.status === 'unreadable' || threads.status === 'unreadable') return 'error';
   const o = overview.overview;
   // D757 §2.11: a member who cannot hold a venture is offered no channel at all.
   if (!o || !Object.keys(o.providers || {}).length) return 'nop';
-  if (!o.connections?.whatsapp) return 'empty';
+  // D869 (TG-S): Telegram during its canary is offered, but not open, to a founder outside it.
+  if (provider === 'telegram' && o.providers.telegram && o.providers.telegram.available === false && !o.connections?.telegram) return 'canary';
+  if (!o.connections?.[provider]) return 'empty';
   return 'ready';
 }
 
@@ -114,9 +150,22 @@ const CONSENT = {
   withdrawn: ['Withdrawn', 'neg'],
 };
 
+/**
+ * D869 (TG2): Telegram's words. Its text enters an assigned session at once
+ * (D684); its notes wait for the contact's own YES (D756 §1.5), so until then
+ * they are "held". A withdrawal is the contact's "stop".
+ */
+const TG_CONSENT = {
+  not_asked: ['Text in · notes held', 'amb'],
+  awaiting: ['Asked · notes held', 'amb'],
+  given: ['Given', 'pos'],
+  declined: ['Declined', 'neg'],
+  withdrawn: ['Stopped', 'neg'],
+};
+
 /** The consent pill: the Worker's state in the canvas's words. A state it does not send is Not recorded. */
-export function consentPill(status) {
-  const [t, tone] = CONSENT[status] || [NOT_RECORDED, 'mut'];
+export function consentPill(status, provider = 'whatsapp') {
+  const [t, tone] = (provider === 'telegram' ? TG_CONSENT : CONSENT)[status] || [NOT_RECORDED, 'mut'];
   return { t, tone };
 }
 
@@ -135,7 +184,7 @@ export function inboxRows(items, channel = 'whatsapp', now = Date.now()) {
     .sort((a, b) => String(b.last_message_at || '').localeCompare(String(a.last_message_at || '')))
     .map((t) => {
       const row = threadRow(t, now);
-      const consent = consentPill(t.consent_status);
+      const consent = consentPill(t.consent_status, t.provider);
       return {
         uid: t.uid,
         name: contactName(t),
@@ -172,6 +221,10 @@ export function languageName(code) {
 }
 
 const SPEECH = /whisper|nova|deepgram|speech/i;
+/** D866 §4: a Telegram message deleted at the source keeps its span with this text (`interviewSessions.ts`). */
+export const SOURCE_DELETED_TEXT = '[Deleted at the source]';
+/** An edit in Telegram rewrites the segment under this model (`telegramSource.ts`). */
+const EDITED_MODEL = 'channel:telegram:change:';
 
 /**
  * The turns of a chat session in the chosen view. A translation is shown only
@@ -189,6 +242,9 @@ export function transcriptTurns(segments, view = 'both') {
         who: s.speaker_label === 'Me' ? 'You' : (String(s.speaker_label || '').trim() || 'Contact'),
         at: s.created_at || null,
         voice: SPEECH.test(String(s.model || '')),
+        // D869 (TG3): a tombstone where the contact deleted the message, a marker where they edited it.
+        deleted: String(s.text).trim() === SOURCE_DELETED_TEXT,
+        edited: String(s.model || '').startsWith(EDITED_MODEL) && String(s.text).trim() !== SOURCE_DELETED_TEXT,
         original: String(s.text),
         translation: hasTr ? s.translation : null,
         showOriginal: view !== 'tr' || !hasTr,
@@ -216,7 +272,8 @@ export function pendingNotice(n) {
 }
 
 /** The consent banner from the session read's `channel_consent` (D754). */
-export function consentBanner(consent) {
+export function consentBanner(consent, provider = 'whatsapp') {
+  if (provider === 'telegram' && consent?.status === 'given') return { tone: 'pos', t: 'Consent is given for this chat. Notes sent before it were held, then kept.', p: 'If the person sends “stop”, Axal stops keeping new messages at once.' };
   if (!consent || typeof consent !== 'object') return { tone: 'mut', t: 'Consent for this chat is not recorded on this page.', p: 'Open the chat in the inbox to see where consent stands.' };
   const state = consent.status;
   if (state === 'given') return { tone: 'pos', t: 'Consent is given for this chat.', p: 'If the person withdraws it, new messages stop being kept at once.' };
@@ -422,3 +479,51 @@ export function setupSteps(view) {
     press: next === s ? (s.state === 'blocked' ? 'Resume from this step' : 'Run this step') : null,
   }));
 }
+
+/* ------------------------------------------------------------------ *
+ * D869 (TG1): Telegram's six steps (D863's read)
+ * ------------------------------------------------------------------ */
+
+const TG_STEP_TITLES = {
+  linked: 'Link with a code', bot_added: 'Bot added in Telegram Business', bot_enabled: 'Bot on',
+  replies_allowed: 'Replies allowed', first_chat: 'First chat in', consent_notice: 'Consent notice ready',
+};
+const TG_STEP_LINES = {
+  linked: 'Your Telegram account, linked to Axal with a one-time code.',
+  bot_added: 'Settings › Telegram Business › Chatbots › add the Axal bot.',
+  bot_enabled: 'In Chatbots, the bot is on for all chats, or for the chats you choose.',
+  replies_allowed: 'In Chatbots, “Reply to messages” is on, so the bot can ask each person for consent.',
+  first_chat: 'A customer has written to you on Telegram.',
+  consent_notice: 'The bot asks each person before anything is kept.',
+};
+
+/**
+ * D863's steps as TG1 draws them. Telegram's steps are done in Telegram, so
+ * no step is pressed here but the first: Link with a code. A step the
+ * Worker marks blocked waits for an earlier one; one still to do carries the
+ * Worker's own sentence for what to change in Telegram.
+ */
+export function telegramSteps(view) {
+  const steps = Array.isArray(view?.steps) ? view.steps : [];
+  return steps.map((s) => ({
+    key: s.key,
+    n: s.step,
+    t: TG_STEP_TITLES[s.key] || s.key,
+    line: TG_STEP_LINES[s.key] || '',
+    state: s.state === 'done' ? 'done' : s.state === 'blocked' ? 'blocked' : 'todo',
+    pill: s.state === 'done' ? 'Done' : s.state === 'blocked' ? 'Waiting' : 'To do',
+    action: s.state === 'done' ? null : (typeof s.action === 'string' && s.action ? s.action : null),
+    link: s.key === 'linked' && s.state !== 'done' && s.code === 'not_linked',
+  }));
+}
+
+/**
+ * The Premium prerequisite. Axal cannot see a member's Premium (D863: its
+ * state is null), so the page says it is needed and never that it is held.
+ */
+export function premiumLine(view) {
+  const p = (Array.isArray(view?.prerequisites) ? view.prerequisites : []).find((x) => x?.key === 'telegram_premium');
+  if (!p) return null;
+  return { t: 'Needs Telegram Premium', p: 'Business chatbots only run on Telegram Premium accounts. Axal cannot see whether yours has it; check in Telegram › Settings.', known: p.state === true || p.state === false ? p.state : null };
+}
+

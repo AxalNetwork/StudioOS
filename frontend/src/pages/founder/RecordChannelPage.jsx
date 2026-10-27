@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
 import { INBOX, PAGE_LINE, RECORD_CHANNELS, channelOf } from './recordChannels';
 import RecordWhatsAppTool from './RecordWhatsAppTool.jsx';
-import { waRoute } from './channelSessionModel.js';
+import RecordTelegramTool from './RecordTelegramTool.jsx';
+import { tgRoute, waRoute } from './channelSessionModel.js';
 
 const LINK = 'font-semibold text-violet-700 underline underline-offset-2 dark:text-violet-300';
 
@@ -16,11 +17,15 @@ const LINK = 'font-semibold text-violet-700 underline underline-offset-2 dark:te
  *
  * D862 (#2507): WhatsApp's boards are built. Its address and its tab paths
  * draw `RecordWhatsAppTool` under the same header; `whatsappApi` is the
- * tests' stub. Telegram and Calls keep this page until #2515 and #2525.
+ * tests' stub.
+ *
+ * D869 (#2515): Telegram's boards are built too, the same tool with Telegram
+ * as the channel (`RecordTelegramTool`); `telegramApi` is the tests' stub.
+ * Calls keeps this page until #2525.
  */
-export default function RecordChannelPage({ whatsappApi }) {
+export default function RecordChannelPage({ whatsappApi, telegramApi }) {
   const { pathname } = useLocation();
-  const ch = (waRoute(pathname) ? RECORD_CHANNELS[0] : channelOf(pathname)) || RECORD_CHANNELS[0];
+  const ch = (waRoute(pathname) ? RECORD_CHANNELS[0] : tgRoute(pathname) ? RECORD_CHANNELS[1] : channelOf(pathname)) || RECORD_CHANNELS[0];
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-6" data-testid={`record-channel-${ch.key}`}>
       <AdminPageHeader
@@ -28,11 +33,13 @@ export default function RecordChannelPage({ whatsappApi }) {
         title="Record a session"
         line={PAGE_LINE}
         tabs={RECORD_CHANNELS.map((c) => (
-          <HeaderTab key={c.key} to={c.to} end={c.key !== 'whatsapp'} data-testid={`record-tab-${c.key}`}>{c.label}</HeaderTab>
+          <HeaderTab key={c.key} to={c.to} end={c.key === 'calls'} data-testid={`record-tab-${c.key}`}>{c.label}</HeaderTab>
         ))}
         data-testid="record-channels-header"
       />
-      {ch.key === 'whatsapp' ? <RecordWhatsAppTool {...(whatsappApi ? { api: whatsappApi } : {})} /> : <ChannelToday ch={ch} />}
+      {ch.key === 'whatsapp' ? <RecordWhatsAppTool {...(whatsappApi ? { api: whatsappApi } : {})} />
+        : ch.key === 'telegram' ? <RecordTelegramTool {...(telegramApi ? { api: telegramApi } : {})} />
+          : <ChannelToday ch={ch} />}
     </div>
   );
 }
