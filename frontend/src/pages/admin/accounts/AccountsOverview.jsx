@@ -24,6 +24,8 @@ const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-8
 const H3 = 'm-0 text-[15px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const LINK = 'font-semibold text-axal-violet underline-offset-2 hover:underline dark:text-[#a78bfa]';
+// D1307 (ACC14): every target on a phone is at least 44px tall; the desktop keeps its size.
+const TAP = 'inline-flex min-h-[44px] items-center lg:min-h-0';
 const EYEBROW = 'font-mono text-[10.5px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const DOT = {
   violet: 'bg-axal-violet dark:bg-[#a78bfa]', sky: 'bg-[#0ea5e9]', amber: 'bg-[#f59e0b]', emerald: 'bg-[#10b981]',
@@ -39,7 +41,7 @@ export function BlockFailed({ reason, onRetry, testId }) {
   return (
     <div className="flex flex-col gap-1.5" role="alert" data-testid={testId}>
       <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300">{reason}</p>
-      <button type="button" onClick={onRetry} className="w-fit rounded-lg border border-axal-hairline px-3 py-1 text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`${testId}-retry`}>Try again</button>
+      <button type="button" onClick={onRetry} className={`w-fit rounded-lg border border-axal-hairline px-3 py-1 ${TAP} text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100`} data-testid={`${testId}-retry`}>Try again</button>
     </div>
   );
 }
@@ -65,7 +67,7 @@ function KpiTile({ t, onRetry }) {
           {t.delta && <span className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">{t.delta}</span>}
           {t.sub && <span className={`text-[12px] ${MUTED}`} data-testid={`accounts-kpi-${t.key}-sub`}>{t.sub}</span>}
           {t.note && <span className={`text-[11.5px] ${MUTED}`}>{t.note}</span>}
-          {t.link && <Link to={t.link.to} className={`text-[12px] ${LINK}`}>{t.link.label} →</Link>}
+          {t.link && <Link to={t.link.to} className={`${TAP} text-[12px] ${LINK}`}>{t.link.label} →</Link>}
         </>
       ) : <Absent state={t.state} onRetry={onRetry} testId={`accounts-kpi-${t.key}-absent`} />}
     </div>
@@ -114,7 +116,7 @@ function Widget({ w, onRetry }) {
                   <dt className={MUTED}>{f.label}</dt>
                   <dd className="m-0 text-right">
                     {f.value !== undefined && <span className="font-mono font-semibold tabular-nums text-axal-ink dark:text-gray-100">{f.value}</span>}
-                    {f.link && <> <Link to={f.link.to} className={LINK}>{f.link.label}</Link></>}
+                    {f.link && <> <Link to={f.link.to} className={`${TAP} ${LINK}`}>{f.link.label}</Link></>}
                     {f.reason && (f.failed
                       ? <BlockFailed reason={f.reason} onRetry={onRetry} testId={`accounts-fact-${w.key}-${f.key}-failed`} />
                       : <span className={`italic ${MUTED}`}>{f.reason}</span>)}
@@ -123,7 +125,7 @@ function Widget({ w, onRetry }) {
               ))}
             </dl>
           )}
-          {w.link && !w.none && <Link to={w.link.to} className={`mt-auto text-[12px] ${LINK}`}>{w.link.label}</Link>}
+          {w.link && !w.none && <Link to={w.link.to} className={`mt-auto ${TAP} text-[12px] ${LINK}`}>{w.link.label}</Link>}
         </>
       )}
     </div>
@@ -137,7 +139,7 @@ function ChartBlock({ id, title, chart, alt, children, extra }) {
     <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} aria-label={title} data-testid={`accounts-${id}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className={H3}>{title}</h3>
-        {chart && <button type="button" className={`text-[12px] ${LINK}`} onClick={() => setTable(!table)} data-testid={`accounts-${id}-toggle`}>{table ? 'View as chart' : 'View as table'}</button>}
+        {chart && <button type="button" className={`${TAP} text-[12px] ${LINK}`} onClick={() => setTable(!table)} data-testid={`accounts-${id}-toggle`}>{table ? 'View as chart' : 'View as table'}</button>}
       </div>
       {extra}
       {chart && (table
@@ -158,7 +160,7 @@ function Readiness({ ov, onRetry }) {
         <div role="radiogroup" aria-label="Profile" className="flex flex-wrap gap-1" data-testid="accounts-readiness-segments">
           {READINESS_SEGMENTS.map((s) => (
             <button key={s.key} type="button" role="radio" aria-checked={seg === s.key} onClick={() => setSeg(s.key)} data-testid={`accounts-readiness-seg-${s.key}`}
-              className={`min-h-[30px] rounded-lg px-2.5 text-[12px] font-semibold ${seg === s.key ? 'bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-200' : 'text-axal-ink dark:text-gray-300'}`}>{s.label}</button>
+              className={`min-h-[44px] lg:min-h-[30px] rounded-lg px-2.5 text-[12px] font-semibold ${seg === s.key ? 'bg-violet-50 text-violet-800 dark:bg-violet-950 dark:text-violet-200' : 'text-axal-ink dark:text-gray-300'}`}>{s.label}</button>
           ))}
         </div>
       )}>
@@ -191,7 +193,7 @@ function People({ id, title, rows, state, onRetry, empty, children, viewAll }) {
     <section className={`${CARD} flex min-w-0 flex-col px-[18px] py-3.5`} aria-label={title} data-testid={`accounts-${id}`}>
       <div className="flex items-baseline justify-between pb-1.5">
         <h3 className={H3}>{title}</h3>
-        {viewAll && <Link to="/admin/accounts/all" className={`text-[12px] ${LINK}`}>View all</Link>}
+        {viewAll && <Link to="/admin/accounts/all" className={`${TAP} text-[12px] ${LINK}`}>View all</Link>}
       </div>
       {state.kind !== 'ok' && <Absent state={state} onRetry={onRetry} testId={`accounts-${id}-absent`} />}
       {state.kind === 'ok' && rows.length === 0 && <p className={`m-0 py-2 text-[12.5px] ${MUTED}`} data-testid={`accounts-${id}-empty`}>{empty}</p>}
@@ -203,11 +205,11 @@ function People({ id, title, rows, state, onRetry, empty, children, viewAll }) {
             <span className={`truncate text-[12px] ${MUTED}`}>{r.why || r.country}</span>
           </div>
           {r.why
-            ? <Link to={accountRecordHref(r.id)} className="inline-flex min-h-[34px] items-center rounded-lg border border-axal-hairline px-3 text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`accounts-${id}-open-${r.id}`}>Open</Link>
+            ? <Link to={accountRecordHref(r.id)} className="inline-flex min-h-[44px] lg:min-h-[34px] items-center rounded-lg border border-axal-hairline px-3 text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`accounts-${id}-open-${r.id}`}>Open</Link>
             : (
               <>
                 <span className="hidden items-center gap-1.5 text-[12px] text-axal-ink sm:inline-flex dark:text-gray-200"><span className={`h-[7px] w-[7px] rounded-full ${DOT[r.tone]}`} aria-hidden="true" />{r.profile}</span>
-                <Link to={accountRecordHref(r.id)} className={`whitespace-nowrap text-[12px] ${LINK}`} data-testid={`accounts-${id}-open-${r.id}`}>{r.joined}</Link>
+                <Link to={accountRecordHref(r.id)} className={`whitespace-nowrap ${TAP} text-[12px] ${LINK}`} data-testid={`accounts-${id}-open-${r.id}`}>{r.joined}</Link>
               </>
             )}
         </div>
@@ -283,7 +285,7 @@ export default function AccountsOverview({ now }) {
         <div className={`${CARD} flex flex-col items-start gap-2 p-5`} data-testid="accounts-empty">
           <h2 className="m-0 text-[17px] font-extrabold text-axal-ink dark:text-gray-100">No accounts yet.</h2>
           <p className={`m-0 text-[13px] ${MUTED}`}>People appear here when they sign up or accept an invitation.</p>
-          <Link to="/admin/partner-invitations" className="inline-flex min-h-[40px] items-center rounded-lg border border-axal-hairline px-3.5 text-[13px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">Open Partner invitations</Link>
+          <Link to="/admin/partner-invitations" className="inline-flex min-h-[44px] lg:min-h-[40px] items-center rounded-lg border border-axal-hairline px-3.5 text-[13px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">Open Partner invitations</Link>
         </div>
       )}
       {!empty && (

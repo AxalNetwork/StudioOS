@@ -29,7 +29,7 @@ import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
 import { deckReaders, readBySentence } from '../narrative/readers';
 import { RAISE_STAGES } from '../../routes/contacts';
 import {
-  type Ctx, type ProspectRow, READINESS_ITEMS, TOOL_HREF, DATA_ROOM_ACCESS, DILIGENCE_CHECKLIST, EVIDENCE, FIGURES, FIGURE_LABEL, INVESTOR_TYPES,
+  type Ctx, type ProspectRow, READINESS_ITEMS, TOOL_HREF, DATA_ROOM_ACCESS, DILIGENCE_CHECKLIST, EVIDENCE, NARRATIVE_CHECK_FIGURES, FIGURE_LABEL, INVESTOR_TYPES,
   INVESTOR_TYPE_LABEL, FUND_SECTIONS, FIT_LABEL, LIST_STAGE_LABEL, NEVER_EXPIRES, accessText, capIdOf, capEntryOf, checkInputs, consistencyCheck,
   basedOnLabel, checklistLabel, computeReadiness, fmtFigure, fundCells, groupOf, instrumentOf, loadCap, loadFunds, loadProspects, loadReadiness,
   loadVersions, prospectFunds, requestTitles, timeOnDeck,
@@ -296,7 +296,7 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
     const { stated, metrics } = await checkInputs(rc.env, rc.projectId, n);
     const found = consistencyCheck(stated, metrics);
     return {
-      rows: [{ a: 'Pitch deck', b: 'No deck bindings are recorded.', c: 'Not compared', tone: 'grey' }, ...FIGURES.map((f) => {
+      rows: [{ a: 'Pitch deck', b: 'No deck bindings are recorded.', c: 'Not compared', tone: 'grey' }, ...NARRATIVE_CHECK_FIGURES.map((f) => {
         const m = found.find(m => m.figure === f);
         if (m) return { a: FIGURE_LABEL[f], b: `stated ${fmtFigure(f, Number(m.stated_value))} · metrics ${fmtFigure(f, Number(m.metric_value))}`, c: 'Mismatch', tone: 'bad' };
         if (stated.some((s) => s.figure === f && Number.isFinite(s.value)) && Number.isFinite(metrics[f]?.value)) return { a: FIGURE_LABEL[f], b: 'consistent everywhere', c: 'OK', tone: 'ok' };

@@ -126,7 +126,11 @@ jobs:
     needs: deploy
     if: needs.deploy.outputs.url != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Chromium's system libraries come from apt. On a slow Ubuntu mirror that
+    # download alone used the whole 15 minutes (run 40508033042, still fetching
+    # when the job was cancelled) while the two specs themselves finish in
+    # under a minute. 30 leaves room for a slow mirror.
+    timeout-minutes: 30
     permissions:
       contents: read
     env:

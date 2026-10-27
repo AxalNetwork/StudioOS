@@ -294,8 +294,10 @@ test('7. the source: only reads.ts opens a Notion session; no source names a Not
   const d = getDescriptor('notion')!;
   assert.deepEqual([d.status, d.auth_type, d.audience_rule, d.docs_url], ['beta', 'oauth_mcp', 'venture', 'https://developers.notion.com/docs/mcp']);
   assert.deepEqual(CONNECTOR_METADATA.notion.sends, []);
-  assert.deepEqual(CONNECTOR_METADATA.notion.feeds, [], 'nothing lands until a part builds a feed');
-  assert.deepEqual([...NOTION_FEEDS], []);
+  // D1087 (#2952): Validate's two feeds are the first; parts 4–6 add theirs.
+  assert.deepEqual(CONNECTOR_METADATA.notion.feeds, ['customer_research', 'market_intelligence']);
+  assert.deepEqual(NOTION_FEEDS.map((f) => [f.module, f.decision]), [['customer_research', 'D1087'], ['market_intelligence', 'D1087']]);
+  for (const f of NOTION_FEEDS) for (const t of f.tools) assert.ok((NOTION_READ_TOOLS as readonly string[]).includes(t), `${f.key} calls only a read tool`);
   assert.equal(writesProjectData('notion'), true);
   assert.equal(FED_LEDGER_PROVIDERS.has('notion'), true);
   assert.equal(MODULE_LABELS.product_improvement, 'Product improvement');

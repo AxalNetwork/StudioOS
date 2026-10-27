@@ -26,7 +26,7 @@ import { cellText, day, errorSentence, skippedSentence, syncSummary } from '../a
  * On a phone the part starts collapsed to one line: "Roadmap 2027 · 6 rows ·
  * as of 2026-10-21".
  */
-export default function FromNotion({ section, projectId, module, api = notionApi, phone = false, notionHref = '/account/connectors/notion#notion-sources' }) {
+export default function FromNotion({ section, projectId, module, api = notionApi, phone = false, notionHref = '/account/connectors/notion#notion-sources', acceptDialog: AcceptDialog = null }) {
   const [read, setRead] = useState({ status: 'loading', data: null });
   const [round, setRound] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -34,6 +34,8 @@ export default function FromNotion({ section, projectId, module, api = notionApi
   const [note, setNote] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [busy, setBusy] = useState(null);
+  // D1087: a kind whose Accept needs the founder's answers (an interview's consent) opens its own dialog first.
+  const [accepting, setAccepting] = useState(null);
   const [open, setOpen] = useState(!phone);
   useEffect(() => {
     let live = true;
@@ -64,6 +66,7 @@ export default function FromNotion({ section, projectId, module, api = notionApi
     setSyncing(false);
   };
   const decide = async (p, how) => {
+    if (how === 'accept' && AcceptDialog) { setAccepting(p); return; }
     setBusy(p.id); setNote(null);
     try { await (how === 'accept' ? api.accept(section, projectId, p.id) : api.dismiss(section, projectId, p.id)); again(); } catch (e) { setNote({ tone: 'bad', text: errorSentence(e) }); }
     setBusy(null);
@@ -149,6 +152,10 @@ export default function FromNotion({ section, projectId, module, api = notionApi
       {d?.lands === 'fact' && <FactsFooter facts={facts} fields={fields} keptDeleted={Number(d?.kept_deleted) || 0} />}
       {d?.lands === 'proposal' && <Proposals proposals={proposals} canAct={canAct} busy={busy} onDecide={decide} />}
       {phone && <button type="button" className={`${LINK} self-start`} onClick={() => setOpen(false)} aria-expanded="true">Show less</button>}
+      {accepting && AcceptDialog && (
+        <AcceptDialog proposal={accepting} onClose={() => setAccepting(null)}
+          onAccept={async (extra) => { await api.accept(section, projectId, accepting.id, extra); setAccepting(null); setNote({ tone: 'ok', text: 'Accepted.' }); again(); }} />
+      )}
       {deleting && (
         <DeleteRow fact={deleting} fields={fields} label={d?.label || 'this module'} sourceTitle={first?.title || null}
           onClose={() => setDeleting(null)}
