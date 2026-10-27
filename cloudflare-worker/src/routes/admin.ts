@@ -380,6 +380,27 @@ admin.get('/users/:user_id/profile', async (c) => {
     totpReason = 'Whether an authenticator is enrolled is unknown, which is not the same as "No".';
   }
 
+  // D1306 (#3403, ACC4) — the onboarding-profile line under the firm card: the
+  // account's partner profile (D989), its verdict and when (D991, migration
+  // 557), and its reference for the Partner profiles link. The profile's own
+  // `user_id` names its member; the address is only a fallback for a profile
+  // written before an account existed. Null when there is none; its own
+  // `available: false` when the store cannot be read, never the drawer's 500.
+  let onboardingProfile: any = null;
+  try {
+    const p: any = await c.env.DB.prepare(
+      `SELECT ref, admin_status, reviewed_at FROM partner_profiles
+        WHERE user_id = ? OR (user_id IS NULL AND lower(email) = lower(?))
+        ORDER BY (user_id = ?) DESC, datetime(updated_at) DESC LIMIT 1`
+    ).bind(userId, userRow.email, userId).first();
+    onboardingProfile = p
+      ? { available: true, ref: p.ref ?? null, status: p.admin_status ?? null, reviewed_at: p.reviewed_at ?? null }
+      : null;
+  } catch (e) {
+    console.warn('[admin/profile] onboarding profile unreadable', (e as Error)?.name);
+    onboardingProfile = { available: false, reason: 'unreadable' };
+  }
+
   // Audit trail — admin viewed this profile. Epic 11 — actor stores
   // hashEmail(adminUser.email), never the plaintext, to keep PII out of
   // activity_logs. user_id is the join key for support workflows.
@@ -412,6 +433,7 @@ admin.get('/users/:user_id/profile', async (c) => {
     integrations,
     founder,
     partner,
+    onboarding_profile: onboardingProfile,
     // Task #11 — Personal Advisor transcripts for the admin user-profile drawer.
     // See the fetch block above for shape; either may be null when the user
     // has never started an advisor session.

@@ -20,6 +20,13 @@ import TrustScoreBadge from '../../../components/TrustScoreBadge';
 import { ROLE_BADGES, Field, ConsoleUnreadable, CONSOLE_LOADING } from './shared';
 import useRecordCrumb from '../useRecordCrumb';
 import LabAdmitDialog from '../lab/LabAdmitDialog';
+// D1306 (#3403): the drawer's tabs and ACC7's dialogs, in place of every browser pop-up.
+import AccountDialog from '../accounts/AccountDialog';
+import AccountSubAccounts from '../accounts/AccountSubAccounts';
+import {
+  DRAWER_TABS, PROFILE_CHOICES, PROFILE_LABEL, SUPPORT_SESSION_CEILING_MINUTES, SUPPORT_SESSION_MINUTES,
+  accountDialog, day, drawerRefusal, identityWord, notesSavedLine, onboardingProfileLine, profileLabel,
+} from '../accounts/accountDrawerModel';
 
 /**
  * D648 (#1448) — the Users console: the account directory, its role picker,
@@ -98,18 +105,11 @@ function RoleDropdown({ user, onRoleChange, canOverride = false }) {
     };
   }, [open, place]);
 
-  const OPTIONS = [
-    { value: 'founder', label: 'Founder' },
-    { value: 'partner', label: 'Partner' },
-    { value: 'investor', label: 'Investor' },
-    { value: 'advisor', label: 'Advisor' },
-    // Task #9 follow-up — lets an admin send any user (e.g. a partner) back
-    // into the exploring holding state for re-review. The reverse direction
-    // (exploring → founder/partner/investor) is intentionally NOT offered
-    // here — that transition requires a signed binding agreement and must
-    // go through the Exploring Users queue (/admin/exploring).
-    { value: 'exploring', label: 'Exploring' },
-  ];
+  // D1306 (#2377 G1): the canvas's order and names — `partner` is an Operating
+  // Partner, `exploring` an Explorer. Task #9 follow-up: any account may be sent
+  // back to Explorer for re-review; leaving it needs a signed binding agreement
+  // and goes through the Exploring board (/admin/exploring).
+  const OPTIONS = PROFILE_CHOICES.map((value) => ({ value, label: PROFILE_LABEL[value] }));
   const currentLabel = OPTIONS.find(o => o.value === user.role)?.label ?? user.role;
   const isExploring = user.role === 'exploring';
 
@@ -118,6 +118,7 @@ function RoleDropdown({ user, onRoleChange, canOverride = false }) {
       <button
         type="button"
         aria-label={`Change role for ${user.name || user.email}`}
+        data-testid={`role-trigger-${user.id}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         title="Click to change this user's role"
@@ -169,6 +170,7 @@ function RoleDropdown({ user, onRoleChange, canOverride = false }) {
             return (
               <li
                 key={opt.value}
+                data-testid={`role-option-${opt.value}`}
                 role="option"
                 aria-selected={user.role === opt.value}
                 aria-disabled={disabled}
@@ -265,7 +267,7 @@ function RoleDropdown({ user, onRoleChange, canOverride = false }) {
  * step-up prompt is request()'s), and tells the person: their own activity
  * says the role was assigned by override, and why. The dialog says both.
  */
-function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
+function RoleOverrideDialog({ target, nextRole, busy, error = '', onCancel, onConfirm }) {
   const [reason, setReason] = useState('');
   useEscapeClose(onCancel);
   const tooShort = reason.trim().length < 10;
@@ -314,6 +316,7 @@ function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
             ? 'At least ten characters — this is the line someone reads in the audit later.'
             : 'Stored on the role change and shown in Governance.'}
         </p>
+        {error && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700" data-testid="role-override-error">{error}</p>}
 
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel} disabled={busy}
@@ -330,7 +333,7 @@ function RoleOverrideDialog({ target, nextRole, busy, onCancel, onConfirm }) {
   );
 }
 
-function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
+function SupportSessionDialog({ target, busy, error = '', onCancel, onBegin }) {
   const [reason, setReason] = useState('');
   useEscapeClose(onCancel);
   const tooShort = reason.trim().length < 10;
@@ -350,11 +353,15 @@ function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
         <dl className="mt-4 space-y-2 rounded-lg border border-gray-200 p-3 text-[12px] dark:border-gray-700">
           <div className="flex justify-between gap-3">
             <dt className="text-gray-500 dark:text-gray-400">Scope</dt>
-            <dd className="font-medium text-gray-800 dark:text-gray-200">Read and write as user</dd>
+            <dd className="font-medium text-gray-800 dark:text-gray-200">Read and write, as this account</dd>
           </div>
+          {/* D1306 (#2377 item 11): the session's real limit, as auth.ts enforces it —
+              thirty minutes, extendable up to the ceiling from when it opened. */}
           <div className="flex justify-between gap-3">
-            <dt className="text-gray-500 dark:text-gray-400">Expiry</dt>
-            <dd className="font-medium text-gray-800 dark:text-gray-200">30 minutes · hard</dd>
+            <dt className="text-gray-500 dark:text-gray-400">Length</dt>
+            <dd className="text-right font-medium text-gray-800 dark:text-gray-200" data-testid="support-session-length">
+              {SUPPORT_SESSION_MINUTES} minutes. You can extend it, up to {SUPPORT_SESSION_CEILING_MINUTES} minutes in all.
+            </dd>
           </div>
         </dl>
 
@@ -374,6 +381,10 @@ function SupportSessionDialog({ target, busy, onCancel, onBegin }) {
             ? 'At least ten characters — this is the line someone reads in the audit later.'
             : 'This is stored with the session and shown in Governance.'}
         </p>
+        <p className="mt-2 text-[11.5px] text-gray-500 dark:text-gray-400">
+          They are told a support session was opened on their account. It is recorded in Governance.
+        </p>
+        {error && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700" data-testid="support-session-error">{error}</p>}
 
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel} disabled={busy}
@@ -515,10 +526,12 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
   // buttons already went through, so intercepting here covers both.
   const [supportTarget, setSupportTarget] = useState(null);
   const [supportBusy, setSupportBusy] = useState(false);
-  const handleImpersonate = (user) => setSupportTarget(user);
+  const [supportError, setSupportError] = useState('');
+  const handleImpersonate = (user) => { setSupportError(''); setSupportTarget(user); };
   const beginSupportSession = async (reason) => {
     if (!supportTarget) return;
     setSupportBusy(true);
+    setSupportError('');
     try {
       const res = await api.adminImpersonate(supportTarget.id, reason);
       setSupportTarget(null);
@@ -526,53 +539,36 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
       // failed), passed on for the H25 bar; the shell never reads the typed
       // text back from this dialog.
       if (onImpersonate) onImpersonate(res.token, res.user, null, res.reason ?? null);
-    } catch (e) { alert(e.message || 'The support session could not be started'); }
-    finally { setSupportBusy(false); }
+    } catch (e) {
+      // D1306: the refusal stays in the dialog, in one sentence, never an alert.
+      setSupportError(e.message || 'The support session could not be started. Nothing changed.');
+    } finally { setSupportBusy(false); }
   };
-  // D247 — an administrator's account takes a typed reason, the way Demote
-  // asks for one on the licence's Administrators tab; anyone else's is one
-  // click, as before. The route also asks for a fresh step-up, which request()
-  // prompts for and retries.
-  const handleToggleActive = async (user) => {
-    let reason;
-    if (user.role === 'admin') {
-      reason = window.prompt(
-        `Why is this administrator account being ${user.is_active ? 'closed' : 're-opened'}? At least 10 characters, and it is recorded.`,
-      );
-      if (!reason) return;
-    }
-    try { await api.adminToggleActive(user.id, reason); loadAll(); } catch (e) { alert(e.message); }
-  };
-  const handleGrantFullAccess = async (user) => {
-    const ok = window.confirm(
-      `Grant ${user.name || user.email} full access without requiring KYC?\n\n` +
-      `This marks their KYC status as approved, lets them out of the verification gate, ` +
-      `and is logged in their activity history. Use this only when you've verified their ` +
-      `identity through another channel.`
-    );
-    if (!ok) return;
-    try { await api.kycAdminApprove(user.id); loadAll(); }
-    catch (e) { alert(e.message || 'Failed to grant access'); }
-  };
-  const handleGrantLimitedAccess = async (user) => {
-    const ok = window.confirm(
-      `Grant ${user.name || user.email} limited access?\n\n` +
-      `They will be able to log in and browse the platform without completing KYC, ` +
-      `BUT they will NOT be able to sign any legal agreements (subscription docs, SPA, ` +
-      `side letters, etc.) until they complete full KYC verification.`
-    );
-    if (!ok) return;
-    try { await api.adminSetAccessLevel(user.id, 'limited'); loadAll(); }
-    catch (e) { alert(e.message || 'Failed to grant limited access'); }
-  };
-  const handleRevokeLimitedAccess = async (user) => {
-    const ok = window.confirm(
-      `Revoke limited access from ${user.name || user.email}?\n\n` +
-      `They will be redirected back to the KYC verification flow on next page load.`
-    );
-    if (!ok) return;
-    try { await api.adminSetAccessLevel(user.id, null); loadAll(); }
-    catch (e) { alert(e.message || 'Failed to revoke limited access'); }
+
+  // D1306 (#3403, ACC7) — every other change on an account opens one in-page
+  // dialog: what it does, who is told, a reason where the Worker wants one.
+  // `{ kind, user, nextRole? }` while it is open; the dialog itself keeps a
+  // refusal and closes only on success.
+  const [accountChange, setAccountChange] = useState(null);
+  const ask = (kind, user, extra = {}) => setAccountChange({ kind, user, ...extra });
+  // D247 — an administrator's account takes a typed reason. Another
+  // administrator's is the Super Admin's (D132): `drawsAccountControls` draws
+  // no toggle a plain Admin could press on it (D221), and a 403 that still
+  // comes back stays in the dialog as one sentence.
+  const handleToggleActive = (user) => ask(user.is_active ? 'deactivate' : 'reactivate', user);
+  const handleGrantFullAccess = (user) => ask('full_access', user);
+  const handleGrantLimitedAccess = (user) => ask('limited_grant', user);
+  const handleRevokeLimitedAccess = (user) => ask('limited_revoke', user);
+  // What each dialog sends when it is confirmed. The Worker is the control:
+  // a refusal comes back into the dialog that asked.
+  const SENDS = {
+    role: (c) => api.adminUpdateRole(c.user.id, c.nextRole),
+    // D1303 (#3400) keeps the reason on the approval's case event.
+    full_access: (c, reason) => api.kycAdminApprove(c.user.id, { reason }),
+    limited_grant: (c) => api.adminSetAccessLevel(c.user.id, 'limited'),
+    limited_revoke: (c) => api.adminSetAccessLevel(c.user.id, null),
+    deactivate: (c, reason) => api.adminToggleActive(c.user.id, reason || undefined),
+    reactivate: (c, reason) => api.adminToggleActive(c.user.id, reason || undefined),
   };
   // Task #7 — admit a founder to the next Spin-Out Lab cohort. Sends the
   // "You're in" email (production Worker; dev backend sets flags only).
@@ -583,37 +579,35 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
   // them regardless.
   const [roleOverride, setRoleOverride] = useState(null);
   const [roleOverrideBusy, setRoleOverrideBusy] = useState(false);
+  const [roleOverrideError, setRoleOverrideError] = useState('');
   const { user: viewer } = useAuth();
   const canOverrideRole = Number(viewer?.is_super_admin ?? 0) === 1;
 
-  const ROLE_LABELS = { admin: 'Admin', founder: 'Founder', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Exploring' };
+  const ROLE_LABELS = PROFILE_LABEL;
 
   const handleRoleChange = async (user, newRole) => {
     if (newRole === user.role) return;
     // Leaving `exploring` skips a signed binding agreement, so it is not a
-    // yes/no confirm — it needs a reason that goes into the audit. Everything
-    // else keeps the plain confirm it has always had.
+    // yes/no question — it needs a reason that goes into the audit. Every
+    // other change opens ACC7 A's dialog, which says what changes and who is told.
     if (String(user.role).toLowerCase() === 'exploring' && newRole !== 'exploring') {
+      setRoleOverrideError('');
       setRoleOverride({ user, nextRole: newRole });
       return;
     }
-    const ok = window.confirm(
-      `Change ${user.name || user.email}'s role from ${ROLE_LABELS[user.role] || user.role} ` +
-      `to ${ROLE_LABELS[newRole] || newRole}?\n\nThis takes effect immediately and is logged in their activity history.`
-    );
-    if (!ok) return;
-    try { await api.adminUpdateRole(user.id, newRole); loadAll(); } catch (e) { alert(e.message); }
+    ask('role', user, { nextRole: newRole });
   };
 
   const confirmRoleOverride = async (reason) => {
     if (!roleOverride) return;
     setRoleOverrideBusy(true);
+    setRoleOverrideError('');
     try {
       await api.adminUpdateRole(roleOverride.user.id, roleOverride.nextRole, reason);
       setRoleOverride(null);
       loadAll();
     } catch (e) {
-      alert(e.message);
+      setRoleOverrideError(e.message || 'The profile could not be changed. Nothing changed.');
     } finally {
       setRoleOverrideBusy(false);
     }
@@ -656,7 +650,7 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
                   filter === role ? 'bg-violet-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-700 hover:border-violet-300'
                 }`}>
                 <div className="text-lg font-bold">{count === null ? <Unrecorded /> : count}</div>
-                <div className="capitalize">{role === 'all' ? 'All Users' : role === 'exploring' ? 'Exploring' : `${role}s`}</div>
+                <div>{role === 'all' ? 'All Users' : `${profileLabel(role)}s`}</div>
               </button>
             ))}
           </div>
@@ -785,7 +779,7 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
                             {/* Admins always have access; only show "Grant Full Access" for
                                 non-admin users whose KYC isn't already approved. */}
                             {u.role !== 'admin' && u.kyc_status !== 'approved' && (
-                              <button onClick={() => handleGrantFullAccess(u)}
+                              <button onClick={() => handleGrantFullAccess(u)} data-testid={`row-full-access-${u.id}`}
                                 className="px-2.5 py-1.5 text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg font-medium transition-colors flex items-center gap-1"
                                 title="Mark KYC approved without requiring submission">
                                 <ShieldCheck size={12} /> Grant Access
@@ -794,14 +788,14 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
                             {/* Limited access: browse-only without KYC, no signing.
                                 Only meaningful for non-admins not yet approved. */}
                             {u.role !== 'admin' && u.kyc_status !== 'approved' && u.access_level !== 'limited' && (
-                              <button onClick={() => handleGrantLimitedAccess(u)}
+                              <button onClick={() => handleGrantLimitedAccess(u)} data-testid={`row-limited-${u.id}`}
                                 className="px-2.5 py-1.5 text-xs bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-medium transition-colors flex items-center gap-1"
                                 title="Allow login & browsing without KYC. Signing remains blocked.">
                                 <ShieldCheck size={12} /> Grant Limited
                               </button>
                             )}
                             {u.role !== 'admin' && u.access_level === 'limited' && u.kyc_status !== 'approved' && (
-                              <button onClick={() => handleRevokeLimitedAccess(u)}
+                              <button onClick={() => handleRevokeLimitedAccess(u)} data-testid={`row-revoke-limited-${u.id}`}
                                 className="px-2.5 py-1.5 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg font-medium transition-colors flex items-center gap-1"
                                 title="Remove limited access. User will be redirected to KYC.">
                                 Revoke Limited
@@ -822,12 +816,12 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
                                 holds the one rule both controls follow. */}
                             {drawsAccountControls(u, viewer) && (
                               <>
-                                <button onClick={() => handleImpersonate(u)}
+                                <button onClick={() => handleImpersonate(u)} data-testid={`row-support-${u.id}`}
                                   className="px-2.5 py-1.5 text-xs bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg font-medium transition-colors flex items-center gap-1"
                                   title="Login as this user">
                                   <LogIn size={12} /> View As
                                 </button>
-                                <button onClick={() => handleToggleActive(u)}
+                                <button onClick={() => handleToggleActive(u)} data-testid={`row-toggle-${u.id}`}
                                   className={`px-2.5 py-1.5 text-xs rounded-lg font-medium transition-colors ${
                                     u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'
                                   }`}>
@@ -852,6 +846,7 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
         <SupportSessionDialog
           target={supportTarget}
           busy={supportBusy}
+          error={supportError}
           onCancel={() => setSupportTarget(null)}
           onBegin={beginSupportSession}
         />
@@ -861,8 +856,17 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
           target={roleOverride.user}
           nextRole={ROLE_LABELS[roleOverride.nextRole] || roleOverride.nextRole}
           busy={roleOverrideBusy}
+          error={roleOverrideError}
           onCancel={() => setRoleOverride(null)}
           onConfirm={confirmRoleOverride}
+        />
+      )}
+      {accountChange && (
+        <AccountDialog
+          spec={accountDialog(accountChange.kind, accountChange.user, accountChange)}
+          onCancel={() => setAccountChange(null)}
+          onConfirm={(reason) => SENDS[accountChange.kind](accountChange, reason)}
+          onDone={() => { setAccountChange(null); loadAll(); }}
         />
       )}
       {openUser && (
@@ -872,7 +876,8 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
           // D221 — the drawer follows the row's rule: where the server can
           // only refuse, it is handed no handler and draws no button.
           onImpersonate={drawsAccountControls(openUser, viewer) ? () => { handleImpersonate(openUser); closeRecord(); } : null}
-          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser); closeRecord(); } : null}
+          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser); } : null}
+          onLabAdmit={openUser.role && openUser.role !== 'admin' ? () => handleSpinoutAdmit(openUser) : null}
           // D633 (#1391, Q2) — the member's credits are the Super Admin's.
           showCredits={isSuperAdminUser(viewer)}
         />
@@ -881,7 +886,7 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
   );
 }
 
-export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive, showCredits = false }) {
+export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive, onLabAdmit = null, showCredits = false }) {
   useEscapeClose(onClose);
   // D775 (#2101): the open account is the rail's record while the drawer is shown.
   useRecordCrumb(userRow?.name || userRow?.email || null, 'account', userRow?.id);
@@ -889,7 +894,11 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
   const [tab, setTab] = useState('profile');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
-  const [resending, setResending] = useState(false);
+  // D1306: resending the verification email opens its dialog, never a confirm().
+  const [resendAsk, setResendAsk] = useState(false);
+  // ACC13a: the read's refusal, as `drawerRefusal` words it.
+  const [refusal, setRefusal] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   // T19 — toast lifecycle now handled by useToast (cleans up on unmount).
   const { toast, showToast: setToastSafe } = useToast(3000);
   const [err, setErr] = useState('');
@@ -898,16 +907,17 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
     let alive = true;
     (async () => {
       try {
+        setRefusal(null);
         const res = await api.adminUserProfile(userRow.id);
         if (!alive) return;
         setData(res);
         setNotes(res.user.admin_notes || '');
       } catch (e) {
-        if (alive) setErr(e.message || 'Failed to load profile');
+        if (alive) { setErr(e.message || 'Failed to load profile'); setRefusal(drawerRefusal(e)); }
       }
     })();
     return () => { alive = false; };
-  }, [userRow.id]);
+  }, [userRow.id, reloadKey]);
 
   const flash = (kind, msg) => setToastSafe({ kind, msg });
 
@@ -921,13 +931,8 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
   };
 
   const resend = async () => {
-    if (!confirm(`Resend verification email to ${userRow.email}?`)) return;
-    setResending(true);
-    try {
-      const r = await api.adminResendVerification(userRow.id);
-      flash('ok', r.already_verified ? 'User is already verified' : 'Verification email sent');
-    } catch (e) { flash('err', e.message || 'Failed to send'); }
-    finally { setResending(false); }
+    const r = await api.adminResendVerification(userRow.id);
+    flash('ok', r.already_verified ? 'This account is already verified.' : 'Verification email sent.');
   };
 
   const u = data?.user || userRow;
@@ -1024,7 +1029,7 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{u.name}</h3>
-              <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>{u.role}</span>
+              <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${ROLE_BADGES[u.role] || 'bg-gray-100 text-gray-700'}`}>{profileLabel(u.role)}</span>
               <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{u.is_active ? 'Active' : 'Inactive'}</span>
               {u.email_verified ? (
                 <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">Verified</span>
@@ -1042,38 +1047,51 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
         )}
 
         <div className="px-6 pt-3 border-b border-gray-200 flex gap-1 overflow-x-auto dark:border-gray-800">
-          {['profile', 'registration', 'onboarding', 'advisor', 'kyc', 'agreements', 'activity', 'notes'].map(t => {
+          {DRAWER_TABS.map(({ key: t, label }) => {
             // Task #11 — onboarding tab now reads from the user's first
-            // advisor conversation; the new 'advisor' tab reads from their
+            // advisor conversation; Conversations reads from their
             // most-recent. Fall back to the legacy `data.onboarding` shape
             // for safety so a stale worker response still renders something.
             const onboardingMsgs = data?.onboarding_conversation?.messages || data?.onboarding || [];
             const ongoingMsgs = data?.ongoing_conversation?.messages || [];
+            const count = t === 'registration' ? data?.timeline?.length
+              : t === 'agreements' ? data?.agreements?.length
+                : t === 'onboarding' ? onboardingMsgs.length
+                  : t === 'advisor' ? ongoingMsgs.length
+                    : t === 'activity' ? data?.activity?.length : 0;
             return (
-              <button key={t} onClick={() => setTab(t)}
-                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px capitalize whitespace-nowrap transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
-                {t === 'kyc' ? 'KYC & Verification' :
-                 t === 'registration' ? `Registration${(data?.timeline?.length ?? 0) ? ` · ${data.timeline.length}` : ''}` :
-                 t === 'agreements' ? `Agreements${(data?.agreements?.length ?? 0) ? ` · ${data.agreements.length}` : ''}` :
-                 t === 'onboarding' ? `Onboarding${onboardingMsgs.length ? ` · ${onboardingMsgs.length}` : ''}` :
-                 t === 'advisor' ? `Ongoing Conversation${ongoingMsgs.length ? ` · ${ongoingMsgs.length}` : ''}` :
-                 t === 'activity' ? `Activity${(data?.activity?.length ?? 0) ? ` · ${data.activity.length}` : ''}` :
-                 t}
+              <button key={t} type="button" onClick={() => setTab(t)} aria-current={tab === t ? 'page' : undefined} data-testid={`drawer-tab-${t}`}
+                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === t ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+                {label}{count ? ` · ${count}` : ''}
               </button>
             );
           })}
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
-          {err && <div className="text-sm text-red-600 mb-4">{err}</div>}
+          {err && refusal && (
+            refusal.kind === 'hq_only' ? (
+              <section className="rounded-xl border border-gray-200 p-5 dark:border-gray-800" data-testid="drawer-hq-only">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[.07em] text-gray-500">{refusal.eyebrow}</p>
+                <h4 className="mt-1 text-[17px] font-extrabold text-gray-900 dark:text-gray-100">{refusal.title}</h4>
+                <p className="mt-1 text-[13.5px] leading-relaxed text-gray-600 dark:text-gray-400">{refusal.line}</p>
+                <button type="button" onClick={onClose} className="mt-3 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 dark:border-gray-600 dark:text-gray-200">Close</button>
+              </section>
+            ) : (
+              <div className="text-sm text-gray-600 dark:text-gray-400" data-testid="drawer-unreadable">
+                {refusal.title} {refusal.line}{' '}
+                <button type="button" onClick={() => { setErr(''); setReloadKey((k) => k + 1); }} className="font-semibold text-violet-700 underline dark:text-violet-300">Try again</button>
+              </div>
+            )
+          )}
           {!data && !err && <div className="text-sm text-gray-500">Loading…</div>}
 
           {data && tab === 'profile' && (
             <div className="grid grid-cols-2 gap-4 text-sm">
               <Field label="Name" value={u.name} />
               <Field label="Email" value={u.email} />
-              <Field label="Role" value={u.role} />
-              <Field label="UID" value={u.uid} mono />
+              <Field label="Profile" value={profileLabel(u.role)} />
+              <Field label="Account ID" value={u.uid} mono />
               <Field label="Founder ID" value={u.founder_public_id || (u.founder_id ? `#${u.founder_id}` : '—')} mono={!!u.founder_public_id} />
               <Field label="Partner ID" value={u.partner_public_id || (u.partner_id ? `#${u.partner_id}` : '—')} mono={!!u.partner_public_id} />
               <Field label="Joined" value={u.created_at ? new Date(u.created_at).toLocaleString() : '—'} />
@@ -1119,6 +1137,20 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                   </div>
                 </div>
               )}
+              {/* D1306 (ACC4): the onboarding-profile line from #2380, under the firm card. */}
+              {(() => {
+                const op = onboardingProfileLine(data.onboarding_profile);
+                return (
+                  <div className="col-span-2 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-[12.5px] dark:border-gray-800" data-testid="drawer-onboarding-profile">
+                    {op.kind === 'profile' ? (
+                      <>
+                        <span>Onboarding profile: <b className="font-bold">{op.status}</b>{op.when ? ` ${op.when}` : ''}</span>
+                        <Link to={op.href} className="font-semibold text-violet-700 hover:underline dark:text-violet-300">Open in Partner profiles</Link>
+                      </>
+                    ) : <span className="text-gray-600 dark:text-gray-400">{op.text}</span>}
+                  </div>
+                );
+              })()}
               {integrations.length > 0 && (
                 <div className="col-span-2 mt-3">
                   <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Connected integrations</div>
@@ -1134,6 +1166,8 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
               )}
             </div>
           )}
+
+          {data && tab === 'sub' && <AccountSubAccounts userId={userRow.id} />}
 
           {data && tab === 'registration' && (
             <div className="space-y-2">
@@ -1359,22 +1393,35 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
 
           {data && tab === 'kyc' && (
             <div className="space-y-3 text-sm">
-              <Field label="KYC status" value={kyc.status || 'unknown'} />
+              <Field label="Identity check" value={identityWord(kyc.status)} />
+              <Field label="Submitted" value={day(kyc.submitted_at) || 'Not recorded'} />
+              <Field label="Provider" value={kyc.provider || 'Not recorded'} />
               <Field label="Email verified" value={u.email_verified ? 'Yes' : 'No'} />
               <TotpEnrolmentField kyc={kyc} />
               <Field label="ID document uploaded" value={kyc.id_uploaded ? 'Yes' : 'No'} />
-              <div className="pt-2">
-                <button onClick={resend} disabled={resending || u.email_verified}
-                  className="px-3 py-2 text-xs bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:bg-gray-300">
-                  {resending ? 'Sending…' : u.email_verified ? 'Already verified' : 'Resend verification email'}
-                </button>
+              {userRow.access_level === 'limited' && kyc.status !== 'approved' && (
+                <p className="text-[12.5px] text-gray-600 dark:text-gray-400" data-testid="drawer-limited-access">
+                  Limited access is on: they can browse, but cannot sign any agreement until the identity check is approved.
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                {/* D1306: shown only while the email is not verified; it opens its dialog. */}
+                {!u.email_verified && (
+                  <button type="button" onClick={() => setResendAsk(true)} data-testid="drawer-resend"
+                    className="px-3 py-2 text-xs bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700">
+                    Resend verification email
+                  </button>
+                )}
+                <Link to={`/admin/kyc/people/${u.id}`} className="text-[12.5px] font-semibold text-violet-700 hover:underline dark:text-violet-300">Open in KYC & KYB</Link>
               </div>
+              <p className="text-[12px] text-gray-500 dark:text-gray-400">Identity is decided in KYC & KYB.</p>
             </div>
           )}
 
           {data && tab === 'activity' && (
             <div className="space-y-2">
               {activity.length === 0 && <div className="text-sm text-gray-500">No activity recorded.</div>}
+              {activity.length >= 100 && <p className="text-[12px] text-gray-500" data-testid="drawer-activity-cap">Showing the latest 100.</p>}
               {activity.map(a => (
                 <div key={a.id} className="text-xs border border-gray-200 rounded-lg p-2.5 dark:border-gray-800">
                   <div className="flex items-center justify-between">
@@ -1400,11 +1447,12 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
 
           {data && tab === 'notes' && (
             <div className="space-y-3">
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Admin notes (visible only to admins)</label>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={8}
+              <label htmlFor="drawer-notes" className="text-xs font-semibold text-gray-700 dark:text-gray-300">Notes only admins see</label>
+              <textarea id="drawer-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={8}
                 className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-gray-700"
                 placeholder="Internal notes about this user…" />
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[12px] text-gray-500 dark:text-gray-400" data-testid="drawer-notes-saved">{notesSavedLine(data.notes_saved)}</span>
                 <button onClick={saveNotes} disabled={saving}
                   className="px-3 py-2 text-xs bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:bg-gray-300">
                   {saving ? 'Saving…' : 'Save notes'}
@@ -1430,6 +1478,12 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                 Credits
               </Link>
             )}
+            {onLabAdmit && (
+              <button type="button" onClick={onLabAdmit} data-testid="drawer-lab-admit"
+                className="px-3 py-1.5 text-xs bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg font-medium">
+                Admit to Lab
+              </button>
+            )}
             {onToggleActive && (
               <button onClick={onToggleActive}
                 className={`px-3 py-1.5 text-xs rounded-lg font-medium ${u.is_active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
@@ -1440,6 +1494,12 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
           <button onClick={onClose} className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900">Close</button>
         </div>
       </div>
+      {resendAsk && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <AccountDialog spec={accountDialog('resend', u)} onCancel={() => setResendAsk(false)}
+            onConfirm={resend} onDone={() => setResendAsk(false)} />
+        </div>
+      )}
     </div>
   );
 }
