@@ -113,8 +113,8 @@ export async function applyHealth(env: Env, ctx: { integrationId: number; projec
   findings: { checked: HealthKind[]; open: Finding[] }, now: Date = new Date()): Promise<{ opened: number; closed: number; still: number }> {
   const at = now.toISOString();
   const rows = (await env.DB.prepare(
-    'SELECT id, kind, subject, opened_at FROM vercel_health_events WHERE integration_id = ? AND project_id = ? AND closed_at IS NULL',
-  ).bind(ctx.integrationId, ctx.projectId).all<{ id: number; kind: HealthKind; subject: string; opened_at: string }>()).results || [];
+    'SELECT id, kind, subject, opened_at, vercel_project_id FROM vercel_health_events WHERE integration_id = ? AND project_id = ? AND closed_at IS NULL',
+  ).bind(ctx.integrationId, ctx.projectId).all<{ id: number; kind: HealthKind; subject: string; opened_at: string; vercel_project_id: string | null }>()).results || [];
   const key = (k: string, s: string) => `${k}\u0000${s}`;
   const openNow = new Map(rows.map((r) => [key(r.kind, r.subject), r]));
   const wanted = new Set(findings.open.map((f) => key(f.kind, f.subject)));
@@ -143,6 +143,9 @@ export async function applyHealth(env: Env, ctx: { integrationId: number; projec
   const checked = new Set(findings.checked);
   for (const r of rows) {
     if (!checked.has(r.kind) || wanted.has(key(r.kind, r.subject))) continue;
+    // D1097: a venture can read several Vercel projects. One project's evidence closes only
+    // the events it opened; an event another project holds (a shared domain) is left to it.
+    if ((ctx.vercelProjectId ?? null) !== (r.vercel_project_id ?? null)) continue;
     closed += 1;
     statements.push(env.DB.prepare('UPDATE vercel_health_events SET closed_at = ? WHERE id = ? AND closed_at IS NULL').bind(at, r.id));
   }

@@ -537,7 +537,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     tagline: 'Your Vercel projects, deployments and domains, for the venture you choose. Read-only.',
     long_description: [
       'Connect Vercel through its own install screen, pick a personal account or a team, and choose the projects that feed one venture. Read-only: Axal VC cannot deploy, cancel, roll back or change anything.',
-      'Each sync records the projects you chose: name, framework, Node version, production branch, linked repository, production domain, plan, and whether production is live, failing, building or not deployed. In Build › Operating systems, Vercel is listed in Tools with each sync.',
+      'Each sync records the projects you chose: name, framework, Node version, production branch, linked repository, production domain, plan, and whether production is live, failing, building or not deployed. In Build › Operating systems, Vercel is the Hosting system, with each sync and its production health: a failed deploy, a rollback, a domain unverified, misconfigured or expiring. Solution design shows what the product runs on.',
       'Axal VC asks Vercel for Read on projects, deployments and domains, nothing else. If Vercel grants more, Axal VC uninstalls the integration and refuses the connection. Disconnecting uninstalls it on Vercel and deletes what Axal VC read.',
     ],
     tools: [
@@ -545,9 +545,9 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
         ['`/v1/integrations/configuration/${key(auth.configuration_id)}`)']),
       tool('read_projects', 'project names and settings', 'read', 'Lists the projects the installation reaches, so you can choose, and reads each chosen project.', 'operating_systems',
         ["'/v10/projects'", '`/v9/projects/${key(id)}`)']),
-      tool('read_domains', 'domains', 'read', 'Reads each chosen project\'s domains, to record its production domain.', 'operating_systems',
-        ['`/v9/projects/${key(id)}/domains`']),
-      tool('read_deployments', 'deployments', 'read', 'Reads deployments, their state, promotions and rollbacks. Vercel parts 2 and 3 use it; part 1\'s sync does not.', null,
+      tool('read_domains', 'domains', 'read', 'Reads each chosen project\'s domains, to record its production domain, and each domain\'s configuration and the account\'s registered domains, for production health.', 'operating_systems',
+        ['`/v9/projects/${key(id)}/domains`', '`/v6/domains/${key(name)}/config`', "'/v5/domains'"]),
+      tool('read_deployments', 'deployments', 'read', 'Reads deployments, their state, promotions and rollbacks. The sync reads one page of production deployments per project, for production health (D1097); Vercel part 3 reads more.', 'operating_systems',
         ["'/v7/deployments'", '`/v13/deployments/${key(id)}`']),
       tool('uninstall', 'the installation', 'account', 'Uninstalls the integration on Vercel when you disconnect, and when Vercel grants more than read.', null,
         ["`/v1/integrations/configuration/${key(auth.configuration_id)}`, {}, 'DELETE'", "method: 'GET' | 'DELETE' = 'GET'"]),

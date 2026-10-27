@@ -24,7 +24,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import build from '../src/routes/cycle_build.ts';
 import { EXPIRY_WINDOW_DAYS, HEALTH_KINDS, applyHealth, fedKey, healthFindings } from '../src/services/vercel/health.ts';
-import { PART1_WAIT, SYNC_WAIT } from '../src/services/vercel/hosting.ts';
+import { EMPTY, NO_PROJECTS, NO_SYNC, vercelSyncText } from '../src/services/vercel/hosting.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const JWT_SECRET = 'x'.repeat(64); // synthetic test fixture
@@ -70,7 +70,7 @@ function fixture() {
     INSERT INTO projects(id, founder_id, company_id) VALUES (101, 11, 10), (102, 11, 10), (202, 22, 20), (303, 11, NULL);
     INSERT INTO user_company_links VALUES (1, 10), (2, 10), (2, 20);
   `);
-  for (const m of ['441_build_cycle_stores.sql', '445_connector_fed_items.sql', '455_core_systems_workspace.sql', '459_cycle_activity_convention.sql', '461_build_record_stores.sql', '590_vercel_health_events.sql']) db.exec(mig(m));
+  for (const m of ['441_build_cycle_stores.sql', '445_connector_fed_items.sql', '455_core_systems_workspace.sql', '459_cycle_activity_convention.sql', '461_build_record_stores.sql', '589_vercel_installations.sql', '590_vercel_health_events.sql']) db.exec(mig(m));
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', KEK_PII: 'fixture-cipher-key-'.repeat(4) } as any;
   return { db, env };
 }
@@ -219,10 +219,10 @@ test('Dismiss: the founder dismisses an open event; it stays dismissed while its
 
 // ───────────────────────────────────────────────────────────── the Hosting read
 
-test('the Hosting read: empty with no Vercel connection, the events with Open and Closed, and the facts waiting for part 1', async () => {
+test('the Hosting read: empty with no Vercel connection, the events with Open and Closed, and no project chosen yet', async () => {
   const { db, env } = fixture();
   const none = await tools(env);
-  assert.deepEqual([none.hosting.state, none.hosting.reason], ['empty', 'Vercel has not brought anything to this venture yet.']);
+  assert.deepEqual([none.hosting.state, none.hosting.reason], ['empty', EMPTY]);
   vercel(db);
   await applyHealth(env, CTX, healthFindings(BAD as any, NOW), NOW);
   const fixed = new Date(NOW.getTime() + DAY);
@@ -234,8 +234,8 @@ test('the Hosting read: empty with no Vercel connection, the events with Open an
   assert.deepEqual([sys.health.open, sys.health.closed], [5, 1]);
   assert.equal(sys.health.items[0].state, 'open', 'open ones first');
   assert.ok(sys.health.items.some((e: any) => e.kind === 'certificate_failed' && e.state === 'closed' && e.closed_at === fixed.toISOString()));
-  assert.deepEqual([sys.facts, sys.facts_reason], [null, PART1_WAIT], 'the project’s facts wait for part 1, never empty or zero');
-  assert.deepEqual([h.syncs.state, h.syncs.reason], ['not_recorded', SYNC_WAIT]);
+  assert.deepEqual([sys.projects, sys.projects_total, sys.projects_reason], [[], 0, NO_PROJECTS], 'no project chosen: said, never zero');
+  assert.deepEqual([h.syncs.state, h.syncs.reason], ['empty', NO_SYNC]);
   assert.match(sys.action.href, /vercel/);
   // An event closed more than 30 days ago is not drawn; an open one is drawn first even when older than a closed one.
   const put = db.prepare('INSERT INTO vercel_health_events (integration_id, project_id, kind, subject, opened_at, closed_at, source) VALUES (50, 101, ?, ?, ?, ?, ?)');

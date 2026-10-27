@@ -23,11 +23,14 @@ test('the page claims what the list says, and part 1 claims only the connection 
   const m = CONNECTOR_METADATA.vercel;
   assert.deepEqual(m.pulls, vercelPulls());
   assert.deepEqual(m.feeds, vercelFedModules());
-  assert.deepEqual(m.feeds, ['operating_systems'], 'no part has landed a module yet');
+  // D1097 (part 2): health events land on Operating systems; Runs on reads the projects on Solution design.
+  assert.deepEqual(m.feeds, ['operating_systems', 'solution_design']);
   assert.deepEqual(m.sends, [], 'Vercel sends nothing');
   for (const l of VERCEL_LANDINGS) {
     assert.ok(Object.hasOwn(MODULE_LABELS, l.module), l.module);
-    assert.equal(m.feeds.includes(l.module) && !(VERCEL_READ_BY as readonly string[]).includes(l.module), l.store !== null, `${l.kind} → ${l.module} is claimed exactly when it has a store`);
+    // A landing with a store is claimed; one without is claimed only when its module reads the connection anyway.
+    if (l.store !== null) assert.ok(m.feeds.includes(l.module), `${l.kind} → ${l.module} has a store and is claimed`);
+    else assert.equal(m.feeds.includes(l.module), (VERCEL_READ_BY as readonly string[]).includes(l.module), `${l.kind} → ${l.module} is claimed only by a module that reads the connection`);
   }
   for (const t of CONNECTOR_PAGES.vercel.tools) assert.ok(t.lands_in === null || m.feeds.includes(t.lands_in), `${t.name} lands in ${t.lands_in}, which the page does not claim`);
 });
@@ -54,6 +57,7 @@ test('Now fed by: Operating systems reads the connection (no ledger zero); a lan
   assert.ok(FED_LEDGER_PROVIDERS.has('vercel'));
   const env = { DB: { prepare: () => ({ bind: () => ({ all: async () => ({ results: [] }) }) }) } } as any;
   const out = await fedCounts(env, 1, 'vercel');
-  assert.deepEqual(out.map((m) => [m.module, m.count]), [['operating_systems', null]]);
+  assert.deepEqual(out.map((m) => [m.module, m.count]), [['operating_systems', null], ['solution_design', null]]);
   assert.match(out[0].reason!, /^Read from the connection: Vercel/);
+  assert.match(out[1].reason!, /^Read from the connection: Runs on/);
 });

@@ -47,6 +47,9 @@ const CLIENT = { VERCEL_CLIENT_ID: 'oac_fixture', VERCEL_CLIENT_SECRET: 'fixture
 const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const m435 = readFileSync('cloudflare-worker/sql/migrations/435_connector_companies.sql', 'utf8');
 const m589 = readFileSync('cloudflare-worker/sql/migrations/589_vercel_installations.sql', 'utf8');
+// D1097: the sync opens health events (590), each with its ledger row (445).
+const m445 = readFileSync('cloudflare-worker/sql/migrations/445_connector_fed_items.sql', 'utf8');
+const m590 = readFileSync('cloudflare-worker/sql/migrations/590_vercel_health_events.sql', 'utf8');
 const FOUNDER = 1, OTHER = 2;
 const PROJECTS = [
   { id: 'prj_web', name: 'acme-web', framework: 'nextjs', nodeVersion: '20.x', plan: 'hobby', link: { type: 'github', org: 'acme', repo: 'web', productionBranch: 'main' },
@@ -83,6 +86,8 @@ function fixture(env: Record<string, string> = CLIENT) {
   db.exec(m435);
   db.exec(tableFromBaseline(baseline, 'oauth_state_tokens'));
   db.exec(m589);
+  db.exec(m445);
+  db.exec(m590);
   const kv = memKV();
   const e = { DB: d1Over(db), RATE_LIMITS: kv, JWT_SECRET, ENVIRONMENT: 'development', OAUTH_CALLBACK_BASE_URL: 'https://app.example', ...env } as any;
   return { db, env: e };
@@ -216,7 +221,10 @@ test('D1096: the sync records each chosen project\'s facts, prunes what is no lo
     ['prj_web', 100, 'acme-web', 'nextjs', '20.x', 'main', 'acme/web', 'app.acme.example', 'hobby', 'live', new Date(1792886400000).toISOString()],
   ]);
   assert.ok(f.calls.every((x) => x.method === 'GET' || x.path === '/v2/oauth/access_token'), 'the sync only reads');
-  assert.ok(!f.calls.some((x) => /deployments|runtime-logs|web-analytics/.test(x.path)), 'part 1 reads no deployment list, log or analytics');
+  assert.ok(!f.calls.some((x) => /runtime-logs|web-analytics|\/events$/.test(x.path)), 'the sync reads no log, event stream or analytics');
+  // D1097 (part 2): the health evidence is one deployment list per project, each domain's configuration, and the account's domains.
+  assert.deepEqual([...new Set(f.calls.filter((x) => /deployments|\/config$|^\/v5\/domains$/.test(x.path)).map((x) => x.path.replace(/\/v6\/domains\/[^/]+/, '/v6/domains/:name')))].sort(),
+    ['/v5/domains', '/v6/domains/:name/config', '/v7/deployments']);
   await call(env, 'PATCH', `/api/connectors/${uid}/config`, FOUNDER, { projects: ['prj_web'] });
   await call(env, 'POST', `/api/connectors/${uid}/sync`);
   assert.deepEqual(all(db, 'SELECT vercel_project_id FROM vercel_projects').map((r) => r.vercel_project_id), ['prj_web']);
@@ -316,6 +324,83 @@ test('D1096: integration-configuration.removed marks the connection Removed in V
   for (const t of ['vercel_installations', 'vercel_projects']) assert.equal(one(db, `SELECT COUNT(*) AS n FROM ${t}`).n, 0, t);
   const later = await signed({ type: 'deployment.created', payload: { configuration: { id: 'icfg_fixture' } } });
   assert.equal((await hook(env, later.text, later.sig)).status, 404, 'a removed installation takes no more deliveries');
+});
+
+// ───────────────────────────────────────────────────────────── D1097: health from the sync
+
+const DAY_MS = 86_400_000;
+/** prj_web's production is its newest ready deployment: no rollback. */
+const WEB_DEPLOYS = (projectId: string | null) => projectId === 'prj_docs'
+  ? [{ uid: 'dpl_2', readyState: 'ERROR', target: 'production', createdAt: 1792886000000 }]
+  : [{ uid: 'dpl_1', readyState: 'READY', target: 'production', createdAt: 1792886300000 }, { uid: 'dpl_preview', readyState: 'ERROR', target: 'preview', createdAt: 1792886900000 }];
+const SICK = { deployments: WEB_DEPLOYS, domainConfig: (n: string) => ({ misconfigured: n === 'app.acme.example' }),
+  accountDomains: () => [{ name: 'acme.example', expiresAt: Date.now() + 5 * DAY_MS, renew: true }] };
+const WELL = { deployments: WEB_DEPLOYS, domainConfig: () => ({ misconfigured: false }),
+  accountDomains: () => [{ name: 'acme.example', expiresAt: Date.now() + 400 * DAY_MS, renew: true }],
+  domains: { prj_web: DOMAINS.prj_web.map((d) => ({ ...d, verified: true })), default: [] } };
+const events = (db: DatabaseSync) => all(db, 'SELECT kind, subject, source, closed_at IS NOT NULL AS closed FROM vercel_health_events ORDER BY kind, subject')
+  .map((r) => `${r.kind}:${r.subject}:${r.source}:${r.closed ? 'closed' : 'open'}`);
+
+async function chosen(env: any, db: DatabaseSync, projects = ['prj_web']) {
+  await signIn(env);
+  const uid = one(db, "SELECT uid FROM integrations WHERE provider_key = 'vercel'").uid;
+  await call(env, 'GET', `/api/connectors/${uid}/action/projects`);
+  await call(env, 'PATCH', `/api/connectors/${uid}/config`, FOUNDER, { projects, project_id: 100 });
+  return uid;
+}
+
+test('D1097: the sync opens what the evidence shows, each with its ledger row, and closes it when the evidence clears', async () => {
+  const { env, db } = fixture();
+  const uid = await chosen(env, db);
+  globalThis.fetch = fakeVercel({ projects: PROJECTS, domains: DOMAINS, ...SICK }).fetch as typeof fetch;
+  const s1 = await call(env, 'POST', `/api/connectors/${uid}/sync`);
+  assert.equal(s1.status, 200, JSON.stringify(s1.body));
+  assert.deepEqual(events(db), ['domain_expiring:acme.example:sync:open', 'domain_misconfigured:app.acme.example:sync:open', 'domain_unverified:www.acme.example:sync:open'],
+    'a preview that failed is no production failure, and production on its newest ready deploy is no rollback');
+  assert.deepEqual([s1.body.counts.deployments, s1.body.counts.health_events], [1, 3], 'one production deployment read; three events open');
+  const fed = all(db, "SELECT module, kind, external_id FROM connector_fed_items WHERE local_table = 'vercel_health_events' ORDER BY external_id");
+  assert.equal(fed.length, 3);
+  assert.ok(fed.every((r) => r.module === 'operating_systems' && r.kind === 'health_event' && /^health:/.test(r.external_id)));
+  const log = one(db, "SELECT payload_json FROM integration_logs WHERE event_type = 'sync' AND status = 'ok' ORDER BY id DESC");
+  assert.deepEqual(JSON.parse(log.payload_json), { projects: 1, not_reachable: 0, deployments: 1, health_events: 3 }, 'the sync line’s counts');
+  globalThis.fetch = fakeVercel({ projects: PROJECTS, ...WELL }).fetch as typeof fetch;
+  const s2 = await call(env, 'POST', `/api/connectors/${uid}/sync`);
+  assert.equal(s2.body.counts.health_events, 0);
+  assert.deepEqual(events(db), ['domain_expiring:acme.example:sync:closed', 'domain_misconfigured:app.acme.example:sync:closed', 'domain_unverified:www.acme.example:sync:closed']);
+});
+
+test('D1097: a read that fails checks nothing, so it closes nothing; a 429 stops the sync Partly synced before that project’s health', async () => {
+  const { env, db } = fixture();
+  const uid = await chosen(env, db);
+  globalThis.fetch = fakeVercel({ projects: PROJECTS, domains: DOMAINS, ...SICK }).fetch as typeof fetch;
+  await call(env, 'POST', `/api/connectors/${uid}/sync`);
+  // The domains are well now, but each configuration read fails and the account's domains cannot be read.
+  globalThis.fetch = fakeVercel({ projects: PROJECTS, ...WELL, domainConfig: () => 500, accountDomains: () => 500 }).fetch as typeof fetch;
+  const s = await call(env, 'POST', `/api/connectors/${uid}/sync`);
+  assert.equal(s.status, 200, 'a failed health read is no failed sync');
+  assert.deepEqual(events(db), ['domain_expiring:acme.example:sync:open', 'domain_misconfigured:app.acme.example:sync:open', 'domain_unverified:www.acme.example:sync:closed'],
+    'only what was read is judged: the verified domain closes, the unread configuration and expiry stay open');
+  globalThis.fetch = fakeVercel({ projects: PROJECTS, ...WELL, rateLimited: (p) => p === '/v7/deployments' }).fetch as typeof fetch;
+  const partly = await call(env, 'POST', `/api/connectors/${uid}/sync`);
+  assert.match(JSON.stringify(partly.body), /Partly synced/);
+  assert.deepEqual(events(db).filter((e) => e.endsWith(':open')), ['domain_expiring:acme.example:sync:open', 'domain_misconfigured:app.acme.example:sync:open'], 'a 429 applies nothing for that project');
+});
+
+test('D1097: the webhook’s re-read marks its events; a project no longer chosen takes its events and ledger rows; disconnect clears the rest', async () => {
+  const { env, db } = fixture();
+  const uid = await chosen(env, db, ['prj_web', 'prj_docs']);
+  globalThis.fetch = fakeVercel({ projects: PROJECTS, domains: DOMAINS, ...SICK, allowAccountWrites: true }).fetch as typeof fetch;
+  const { text, sig } = await signed({ type: 'deployment.error', payload: { configuration: { id: 'icfg_fixture' }, deployment: { id: 'dpl_2' } } });
+  assert.equal((await hook(env, text, sig)).status, 200);
+  assert.deepEqual(events(db), ['domain_expiring:acme.example:webhook:open', 'domain_misconfigured:app.acme.example:webhook:open',
+    'domain_unverified:www.acme.example:webhook:open', 'production_failed:dpl_2:webhook:open'], 'the docs project’s newest production deploy failed');
+  await call(env, 'PATCH', `/api/connectors/${uid}/config`, FOUNDER, { projects: ['prj_web'] });
+  await call(env, 'POST', `/api/connectors/${uid}/sync`);
+  assert.ok(!events(db).some((e) => e.startsWith('production_failed')), 'acme-docs left the venture, and its event with it');
+  assert.equal(one(db, "SELECT COUNT(*) AS n FROM connector_fed_items WHERE local_table = 'vercel_health_events'").n, 3, 'its ledger row too');
+  assert.equal((await call(env, 'DELETE', `/api/connectors/${uid}`)).status, 200);
+  assert.equal(one(db, 'SELECT COUNT(*) AS n FROM vercel_health_events').n, 0);
+  assert.equal(one(db, "SELECT COUNT(*) AS n FROM connector_fed_items WHERE local_table = 'vercel_health_events'").n, 0);
 });
 
 test('D1096: the rules, unit by unit', () => {

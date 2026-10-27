@@ -19,14 +19,26 @@ export const VERCEL_LANDINGS = [
   { kind: 'deployment', what: 'Deployments and what is live', module: 'prototype_mvp', store: null, part: 3 },
   { kind: 'deployment', what: 'Production deploys', module: 'product_roadmap', store: null, part: 3 },
   // Part 2 (#2962): production health events, and what the product runs on.
-  { kind: 'health_event', what: 'Production health', module: 'operating_systems', store: null, part: 2 },
-  { kind: 'runtime', what: 'Framework, Node version and repository', module: 'solution_design', store: null, part: 2 },
+  // D1097: health events land in `vercel_health_events`, each with its ledger row; "Runs on" reads `vercel_projects`.
+  { kind: 'health_event', what: 'Production health', module: 'operating_systems', store: 'vercel_health_events', part: 2 },
+  { kind: 'runtime', what: 'Framework, Node version and repository', module: 'solution_design', store: 'vercel_projects', part: 2 },
   // Part 4: where production runs, and a proposed step for a Hobby project.
   { kind: 'hosting_step', what: 'Where production runs', module: 'company_creation', store: null, part: 4 },
 ] as const satisfies ReadonlyArray<{ kind: string; what: string; module: string; store: string | null; part: number }>;
 
-/** The modules that read the connection itself rather than ledger rows: Vercel is Operating systems' Hosting system. */
-export const VERCEL_READ_BY = ['operating_systems'] as const;
+/**
+ * The modules that read the connection itself rather than counting ledger
+ * rows: Vercel is Operating systems' Hosting system, and Solution design's
+ * "Runs on" reads the projects the sync recorded (D1097). A count there would
+ * be a ledger zero that says nothing arrived.
+ */
+export const VERCEL_READ_BY = ['operating_systems', 'solution_design'] as const;
+
+/** What "Now fed by" says for a module that reads the connection. */
+export const VERCEL_READ_REASON: Record<(typeof VERCEL_READ_BY)[number], string> = {
+  operating_systems: 'Read from the connection: Vercel is listed in Tools here, with its projects and each sync.',
+  solution_design: 'Read from the connection: Runs on reads the framework, Node version and repository of the projects each sync records.',
+};
 
 const built = () => VERCEL_LANDINGS.filter((l) => (l.store as string | null) !== null);
 
@@ -34,7 +46,7 @@ const built = () => VERCEL_LANDINGS.filter((l) => (l.store as string | null) !==
 export function vercelPulls(): Array<{ what: string; module: string }> {
   return [
     ...built().map((l) => ({ what: l.what, module: l.module as string })),
-    ...VERCEL_READ_BY.map((m) => ({ what: 'The connection, its projects and each sync', module: m as string })),
+    { what: 'The connection, its projects and each sync', module: 'operating_systems' },
   ];
 }
 
