@@ -16,11 +16,11 @@ const MUTED = 'text-[12px] text-axal-muted dark:text-gray-400';
 const SELECT = 'rounded-md border border-axal-hairline bg-white px-1.5 py-0.5 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
 /** One card: the venture, the round, how it entered, the ask, the card scopes, fit, days, owner, compare and Move to. */
-export function FlowCard({ row, cards, picked, onPick, onMove, busy, draggable = true }) {
+export function FlowCard({ row, cards, picked, onPick, onMove, busy, draggable = true, onPeek = null }) {
   const ticked = picked.includes(row.id);
   return (
     <article className={CARD} draggable={draggable && !busy} onDragStart={(e) => { e.dataTransfer?.setData?.('text/plain', row.id); }} data-testid={`dealflow-card-${row.id}`}>
-      <VentureCell row={row} />
+      <VentureCell row={row} onPeek={onPeek} />
       <div className="flex flex-wrap gap-1">
         <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] dark:border-gray-700">{row.round}</span>
         {row.enteredVia && <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 dark:bg-gray-800 dark:text-gray-300">{enteredWord(row.enteredVia)}</span>}
@@ -52,7 +52,7 @@ export function FlowCard({ row, cards, picked, onPick, onMove, busy, draggable =
 }
 
 /** A column of one stage: its count, its asks, its cards, and a drop target while a card is dragged over it. */
-function Column({ stage, rows, cards, picked, onPick, onMove, busy, byId }) {
+function Column({ stage, rows, cards, picked, onPick, onMove, busy, byId, onPeek }) {
   const [over, setOver] = useState(false);
   const asks = columnAsks(rows);
   return (
@@ -65,18 +65,18 @@ function Column({ stage, rows, cards, picked, onPick, onMove, busy, byId }) {
         {asks && <span className={MUTED} data-testid={`dealflow-col-${stage}-asks`}>{asks}</span>}
         {over && <span className="text-[12px] font-semibold text-violet-700 dark:text-violet-300">Drop to move to {STAGE_WORD[stage]}</span>}
       </header>
-      {rows.map((r) => <FlowCard key={r.id} row={r} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} />)}
+      {rows.map((r) => <FlowCard key={r.id} row={r} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} onPeek={onPeek} />)}
     </section>
   );
 }
 
 /** DLS1: one column per stage. Passed rows show only when the filters ask for them, in their own column. */
-export function FlowBoard({ rows, cards, picked, onPick, onMove, busy, showPassed = false }) {
+export function FlowBoard({ rows, cards, picked, onPick, onMove, busy, showPassed = false, onPeek = null }) {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const stages = showPassed ? [...BOARD_STAGES, 'passed'] : BOARD_STAGES;
   return (
     <div className="flex gap-3 overflow-x-auto pb-2" data-testid="dealflow-board">
-      {stages.map((s) => <Column key={s} stage={s} rows={rows.filter((r) => r.stage === s)} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} byId={byId} />)}
+      {stages.map((s) => <Column key={s} stage={s} rows={rows.filter((r) => r.stage === s)} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} byId={byId} onPeek={onPeek} />)}
     </div>
   );
 }
@@ -91,7 +91,7 @@ export function FlowBoardLoading() {
 }
 
 /** DLS18b: one stage at a time, its count on each tab, and Move to in place of dragging. */
-export function PhoneBoard({ rows, cards, picked, onPick, onMove, busy }) {
+export function PhoneBoard({ rows, cards, picked, onPick, onMove, busy, onPeek = null }) {
   const [stage, setStage] = useState('sourcing');
   return (
     <div className="flex flex-col gap-2" data-testid="dealflow-phone-board">
@@ -102,7 +102,7 @@ export function PhoneBoard({ rows, cards, picked, onPick, onMove, busy }) {
             data-testid={`dealflow-phone-stage-${s}`}>{STAGE_WORD[s]} {rows.filter((r) => r.stage === s).length}</button>
         ))}
       </nav>
-      {rows.filter((r) => r.stage === stage).map((r) => <FlowCard key={r.id} row={r} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} draggable={false} />)}
+      {rows.filter((r) => r.stage === stage).map((r) => <FlowCard key={r.id} row={r} cards={cards} picked={picked} onPick={onPick} onMove={onMove} busy={busy} draggable={false} onPeek={onPeek} />)}
     </div>
   );
 }

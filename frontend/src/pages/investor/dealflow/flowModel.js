@@ -163,6 +163,8 @@ export function flowRows(scope, { flow, deals }) {
     enteredVia: f?.entered_via || null,
     enteredAt: f?.entered_at || null,
     daysInStage: f ? num(f.days_in_stage) : null,
+    // D1241: the firm's note on its row, for the peek (DLS7).
+    note: f?.note ?? null,
     // A door only where DEAL's rule holds (D1238 `can_open`); a listed round alone is never one.
     canOpen: !!f?.can_open,
   });
