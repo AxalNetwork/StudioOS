@@ -47,6 +47,8 @@ const CLIENT = { VERCEL_CLIENT_ID: 'oac_fixture', VERCEL_CLIENT_SECRET: 'fixture
 const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const m435 = readFileSync('cloudflare-worker/sql/migrations/435_connector_companies.sql', 'utf8');
 const m589 = readFileSync('cloudflare-worker/sql/migrations/589_vercel_installations.sql', 'utf8');
+const m445 = readFileSync('cloudflare-worker/sql/migrations/445_connector_fed_items.sql', 'utf8');
+const m591 = readFileSync('cloudflare-worker/sql/migrations/591_vercel_deployments.sql', 'utf8');
 const FOUNDER = 1, OTHER = 2;
 const PROJECTS = [
   { id: 'prj_web', name: 'acme-web', framework: 'nextjs', nodeVersion: '20.x', plan: 'hobby', link: { type: 'github', org: 'acme', repo: 'web', productionBranch: 'main' },
@@ -83,6 +85,8 @@ function fixture(env: Record<string, string> = CLIENT) {
   db.exec(m435);
   db.exec(tableFromBaseline(baseline, 'oauth_state_tokens'));
   db.exec(m589);
+  db.exec(m445);
+  db.exec(m591);
   const kv = memKV();
   const e = { DB: d1Over(db), RATE_LIMITS: kv, JWT_SECRET, ENVIRONMENT: 'development', OAUTH_CALLBACK_BASE_URL: 'https://app.example', ...env } as any;
   return { db, env: e };
@@ -216,7 +220,8 @@ test('D1096: the sync records each chosen project\'s facts, prunes what is no lo
     ['prj_web', 100, 'acme-web', 'nextjs', '20.x', 'main', 'acme/web', 'app.acme.example', 'hobby', 'live', new Date(1792886400000).toISOString()],
   ]);
   assert.ok(f.calls.every((x) => x.method === 'GET' || x.path === '/v2/oauth/access_token'), 'the sync only reads');
-  assert.ok(!f.calls.some((x) => /deployments|runtime-logs|web-analytics/.test(x.path)), 'part 1 reads no deployment list, log or analytics');
+  assert.ok(!f.calls.some((x) => x.path.endsWith('/runtime-logs') || x.path.endsWith('/events') || x.path.includes('/web-analytics/')), 'the sync reads no log, event or analytics');
+  assert.deepEqual(f.calls.filter((x) => /deployments/.test(x.path)).map((x) => x.path), ['/v7/deployments', '/v7/deployments'], 'one deployment list per chosen project (D1098)');
   await call(env, 'PATCH', `/api/connectors/${uid}/config`, FOUNDER, { projects: ['prj_web'] });
   await call(env, 'POST', `/api/connectors/${uid}/sync`);
   assert.deepEqual(all(db, 'SELECT vercel_project_id FROM vercel_projects').map((r) => r.vercel_project_id), ['prj_web']);
