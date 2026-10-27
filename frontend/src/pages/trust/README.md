@@ -1,6 +1,6 @@
 # Member Trust Center
 
-D1078, `/trust/me`: the caller’s requirements and their detail lightbox,
+D1078, `/trust/me`: the caller’s requirements and their detail sheet (D1317),
 agreements, and data controls. `memberTrustModel.js` counts required rows;
 `MemberOverview.jsx` draws TRU7–TRU10; `RequirementDialog.jsx` draws TRU11 at
 its query address, full-screen on a phone; `MemberData.jsx` owns TRU13’s

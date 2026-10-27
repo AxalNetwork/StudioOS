@@ -270,6 +270,12 @@ test('the ticket at /my/events/ticket/1: the code, when and where, Add to calend
   try {
     assert.ok(ui.has('my-events-ticket-drawer'));
     assert.ok(ui.has('my-events'), 'the drawer sits over Upcoming');
+    // D1317: the shared right-side Sheet, named by its own label.
+    const sheet = ui.nodes().find((n) => ui.props(n)['data-testid'] === 'my-events-ticket-drawer');
+    assert.equal(ui.props(sheet).role, 'dialog');
+    assert.equal(ui.props(sheet)['aria-modal'], 'true');
+    assert.equal(ui.props(sheet)['data-width'], 640);
+    assert.ok(ui.has('my-events-ticket-drawer-scrim'));
     assert.equal(ui.textIn('my-events-ticket-code-text'), 'K7Q2-9X4M');
     assert.match(ui.textIn('my-events-ticket-code'), /Show this at the door\. The host scans it to check you in\./);
     assert.equal(ui.textIn('my-events-ticket-place'), 'Going');

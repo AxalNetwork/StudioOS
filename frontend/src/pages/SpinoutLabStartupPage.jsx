@@ -26,6 +26,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import Sheet from '../ui/Sheet.jsx';
 import { TOOL_INFO, WEEK_DEFS, countDeliverables, milestoneKeySet } from './SpinoutLabWorkspace';
 
 // Past-tense titles for the activity timeline; falls back to the raw key.
@@ -785,31 +786,41 @@ export default function SpinoutLabStartupPage() {
         </div>
       )}
 
-      {/* Edit-record lightbox — replaces the old navigation out to
-          /projects/:id so the founder keeps their place in the Lab. */}
+      {/* Edit-record sheet — replaces the old navigation out to
+          /projects/:id so the founder keeps their place in the Lab. D1317:
+          the shared right-side Sheet at 520px; Save submits the form from
+          the fixed footer. While it saves, nothing closes it. */}
       {editOpen && project && editForm && (
-        <div
-          className="fixed inset-0 z-[70] bg-gray-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-6 sm:p-10"
-          onClick={() => (saving ? null : setEditOpen(false))}
-          data-testid="modal-edit-record"
-        >
-          <form
-            onSubmit={saveEdit}
-            className="w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-              <span className="text-sm font-bold text-gray-900 dark:text-gray-50">Edit company record</span>
+        <Sheet
+          label="Edit company record"
+          title="Edit company record"
+          onClose={() => { if (!saving) setEditOpen(false); }}
+          width={520}
+          testId="modal-edit-record"
+          footer={(
+            <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
-                data-testid="button-close-edit"
                 onClick={() => setEditOpen(false)}
                 disabled={saving}
-                className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-50"
+                className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-semibold disabled:opacity-50"
               >
-                <X size={15} />
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="edit-record-form"
+                disabled={saving}
+                data-testid="button-save-edit"
+                className="h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60"
+              >
+                {saving && <Loader2 size={13} className="animate-spin" />}
+                {saving ? 'Saving…' : 'Save changes'}
               </button>
             </div>
+          )}
+        >
+          <form id="edit-record-form" onSubmit={saveEdit}>
             <div className="p-5 grid gap-3.5">
               {[
                 { k: 'name', label: 'Company name', required: true },
@@ -913,27 +924,8 @@ export default function SpinoutLabStartupPage() {
                 </p>
               )}
             </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-100 dark:border-gray-800">
-              <button
-                type="button"
-                onClick={() => setEditOpen(false)}
-                disabled={saving}
-                className="h-9 px-3.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-semibold disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                data-testid="button-save-edit"
-                className="h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60"
-              >
-                {saving && <Loader2 size={13} className="animate-spin" />}
-                {saving ? 'Saving…' : 'Save changes'}
-              </button>
-            </div>
           </form>
-        </div>
+        </Sheet>
       )}
 
       {previewOpen && project && (

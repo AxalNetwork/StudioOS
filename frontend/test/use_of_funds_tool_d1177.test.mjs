@@ -265,6 +265,9 @@ test('UF3 Edit split: a total other than 100 waits; a good split saves the raise
   const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': () => response({ ok: true }) } });
   try {
     await v.click('uof-edit-split-open');
+    assert.equal(v.pr(v.by('uof-edit-split')).role, 'dialog', 'D1317: Edit split opens as the shared Sheet');
+    assert.ok(v.pr(v.by('uof-edit-split'))['aria-labelledby']);
+    assert.equal(v.pr(v.by('uof-edit-split'))['data-width'], 640);
     assert.equal(v.text('uof-split-total'), '100%');
     await v.type('uof-split-go-to-market', '21');
     assert.equal(v.text('uof-split-total'), '96%');
@@ -370,9 +373,15 @@ test('UF13: where the plan is used, and Choose the round size changes only the p
   const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/scenarios/9': () => response({ ok: true }) } });
   try {
     await v.click('uof-ties-open');
+    assert.equal(v.pr(v.by('uof-where-used')).role, 'dialog', 'D1317: Where this plan is used opens as the shared Sheet');
+    assert.ok(v.pr(v.by('uof-where-used'))['aria-labelledby']);
+    assert.equal(v.pr(v.by('uof-where-used'))['data-width'], 720);
     assert.ok(v.text('uof-round-table').includes('Round call Seed'));
     await v.click('uof-need-round_disagreement-act');
     assert.ok(v.by('uof-round-size'));
+    assert.equal(v.pr(v.by('uof-round-size')).role, 'dialog', 'D1317: the round size opens as the shared Sheet');
+    assert.ok(v.pr(v.by('uof-round-size'))['aria-labelledby']);
+    assert.equal(v.pr(v.by('uof-round-size'))['data-width'], 640);
   } finally { await v.close(); }
 });
 

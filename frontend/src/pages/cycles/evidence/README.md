@@ -6,11 +6,11 @@ The founder's Evidence view and the investor's evidence block, from the owner's 
 |---|---|
 | `evidenceModel.js` | The address (`/raise/evidence`, `/review`, `/preview`, `/item/:id`, `/claim/:id`), the five Source labels with SCORING's grade mapping, strengths, claim states, sharing levels, the Raise areas, and the words of the block no read carries yet (the investor's) |
 | `evidenceView.js` | D1266: the view's model from `GET /api/cycles/raise/evidence` — the tiles, claims by area, Needs you first, the filters, coverage by source, what investors see, Accept all's cap of 50, and the words of each change |
-| `RaiseEvidence.jsx` | The route in the Raise shell: one read, Look again, the page and the drawer the address names; and `EvidenceSummary`, the investor block the deal page's Evidence tab places (VR8, VR9) |
+| `RaiseEvidence.jsx` | The route in the Raise shell: one read, Look again, the page and the drawer the address names as the shared Sheet over the view at 480 (D1317); and `EvidenceSummary`, the investor block the deal page's Evidence tab places (VR8, VR9) |
 | `EvidenceView.jsx` | D1266: VR1's tiles and cards, and the empty, loading, error, partial, admin and refused states (VR12–VR16) |
 | `EvidenceDrawers.jsx` | D1266: the claim drawer (VR2) and the item drawer (VR3) |
 | `EvidenceReview.jsx` | D1266: Waiting for review (VR4), the Share dialog (VR5) and See as an investor (VR11) |
-| `EvidenceParts.jsx` | D1266: the pills, the drawer frame and the in-page dialog every change opens |
+| `EvidenceParts.jsx` | D1266: the pills, the drawer frame (the shared Sheet at 480, D1317) and the in-page dialog every change opens |
 
 `../cycleModel.js` lights Evidence after Overview in Raise's tab rail; `../../DealRoomPage.jsx` mounts `EvidenceSummary`.
 

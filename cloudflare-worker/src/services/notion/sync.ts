@@ -79,7 +79,22 @@ export class AcceptRefused extends Error {
 export interface Acceptor {
   kind: ProposalKind;
   accept(env: Env, ctx: SyncContext, proposal: ProposalRow, body: Record<string, unknown>, deps: AcceptDeps): Promise<{ localTable: string; localId: number }>;
+  /**
+   * D1089: how a proposal reads before Accept ("Add Northwind at Meeting?",
+   * "Link to …", "Update the snapshot"), from what it says and the module's own
+   * rows. The fingerprint is unchanged by it. Never a page's text.
+   */
+  describe?(env: Env, ctx: SyncContext, p: { module: string; key: string; title: string; payload: Mapped | null }): Promise<{ title: string } | null>;
 }
+
+/**
+ * D1089: a proposal module's row already linked to a local row (accepted) is
+ * no longer a proposal: its change lands as a fact through this updater, the
+ * module's own writer. Answers whether it changed anything.
+ */
+export type LinkedUpdater = (env: Env, ctx: SyncContext, localId: number, values: Mapped) => Promise<boolean>;
+const LINKED = new Map<string, LinkedUpdater>();
+export const registerLinkedUpdater = (module: string, fn: LinkedUpdater) => { LINKED.set(module, fn); };
 
 const WRITERS = new Map<string, FactWriter>();
 const ACCEPTORS = new Map<ProposalKind, Acceptor>();
@@ -194,6 +209,8 @@ async function proposeLink(env: Env, ctx: SyncContext, source: SourceRow, writer
 /** One proposal by its fingerprint: new, unchanged (a dismissed one stays dismissed), or back to pending with "Changed in Notion". */
 async function landProposal(env: Env, ctx: SyncContext, source: SourceRow, kind: ProposalKind, p: { key: string; title: string; extract: string | null; url: string | null; payload: Mapped | null; basis: string }, counts: SourceCounts) {
   const fingerprint = await sha256(p.basis);
+  const described = await acceptorFor(kind)?.describe?.(env, ctx, { module: source.module, key: p.key, title: p.title, payload: p.payload });
+  if (described?.title) p = { ...p, title: described.title };
   const old = await env.DB.prepare('SELECT id, fingerprint, status FROM notion_proposals WHERE integration_id = ? AND project_id = ? AND kind = ? AND source_key = ?')
     .bind(ctx.integrationId, ctx.projectId, kind, p.key).first<{ id: number; fingerprint: string; status: string }>();
   const title = p.title.slice(0, 300) || 'Untitled';
@@ -213,6 +230,19 @@ async function landProposal(env: Env, ctx: SyncContext, source: SourceRow, kind:
        decided_by = NULL, decided_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
   ).bind(fingerprint, title, extract, p.url, payload, old.id).run();
   counts.reproposed += 1;
+}
+
+/** A proposal module's row linked by an earlier Accept: true when it was handled as a fact (updated or unchanged). */
+async function landLinked(env: Env, ctx: SyncContext, module: string, rowId: string, values: Mapped, counts: SourceCounts): Promise<boolean> {
+  const externalId = `notion:${ctx.projectId}:${module}:${rowId}`;
+  const l = await env.DB.prepare('SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ?')
+    .bind(ctx.integrationId, externalId).first<{ local_id: number | null }>();
+  if (!l) return false;
+  // Accept always records its row; a row deleted since is found absent by the updater, which then writes nothing.
+  if (await LINKED.get(module)!(env, ctx, Number(l.local_id), values)) counts.updated += 1;
+  await env.DB.prepare('UPDATE connector_fed_items SET last_seen_at = CURRENT_TIMESTAMP WHERE integration_id = ? AND external_id = ?')
+    .bind(ctx.integrationId, externalId).run();
+  return true;
 }
 
 const skip = (counts: SourceCounts, reason: string, field: string | null) => {
@@ -299,6 +329,8 @@ async function syncSource(env: Env, reads: NotionReads, ctx: SyncContext, source
         const externalId = `notion:${ctx.projectId}:${source.module}:${row.id}`;
         if (mod.lands === 'fact') {
           await landFact(env, ctx, source, { externalId, title: null, url: row.url, asOf: row.last_edited, values: mapped.values }, counts);
+        } else if (LINKED.has(source.module) && await landLinked(env, ctx, source.module, row.id, mapped.values, counts)) {
+          // Accepted before: its change is a fact through the module's writer, not a new proposal.
         } else {
           const title = String(Object.values(mapped.values).find((v) => typeof v === 'string' && v) ?? 'Untitled');
           await landProposal(env, ctx, source, mod.proposal!, { key: row.id, title, extract: null, url: row.url, payload: mapped.values, basis: JSON.stringify(mapped.values) }, counts);

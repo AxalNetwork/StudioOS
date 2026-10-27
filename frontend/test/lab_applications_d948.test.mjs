@@ -296,9 +296,15 @@ test('mounted SL3: /applications/:id opens the drawer — the idea, facts, plan,
     assert.match(m.of('lab-app-interview-ask'), /I teach on Wednesdays/);
     assert.match(m.of('lab-app-sees'), /Your application is at the partner interview/);
     assert.match(m.of('lab-app-history'), /Applied for Nov 2026.*Carried forward from Nov 2026/s);
+    // D1317: the application is the shared Sheet over the list, 560px.
+    assert.equal(m.props('lab-app-drawer').role, 'dialog');
+    assert.ok(m.props('lab-app-drawer')['aria-labelledby']);
+    assert.equal(m.props('lab-app-drawer')['data-width'], 560);
     await m.click('lab-app-drawer-cancel');
     await m.click('lab-app-cancel-go');
     assert.equal(writesTo(m.seen, /\/applications\/21\/interview\/cancel$/).length, 1);
+    await m.click('lab-app-drawer-close');
+    assert.equal(m.at.path, APPLICATIONS_PATH, 'closing returns to the list');
   } finally { await m.unmount(); }
   const gone = await mount(`${APPLICATIONS_PATH}/999`, { detail: () => json({ error: 'applicant_not_found' }, 404) });
   try { assert.ok(gone.has('lab-app-drawer-missing')); } finally { await gone.unmount(); }

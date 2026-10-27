@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox, PhoneRows, usePhoneWidth } from '../../../ui';
+import { PhoneRows, usePhoneWidth } from '../../../ui';
 import { programsApi } from '../../../lib/api/programs';
 import {
   BlockFailed, Card, ChartCard, DIALOG_BODY, DialogButtons, EYE, INPUT, LINK, Pill, Skeleton, SUB, TD, TH, Tile,
@@ -14,6 +14,7 @@ import {
   ASSIGNED_TO_YOU, ENROLMENTS_NOTE, LEARNING_ADMIN_LINE, NOT_RECORDED, enrolmentWord, learnersFrom, learningFigures,
   learningStatusWord, parseStamp,
 } from './programsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D953 (#2371), completed by D962 (#2795) on part 1's reads (D954 §6–§8) —
@@ -132,7 +133,7 @@ function LearnerDialog({ programUid, learner, onClose }) {
     ? [p ? [p.name, p.region].filter(Boolean).join(' · ') : null, `last activity ${shortDay(l?.last_activity_at) || NOT_RECORDED.toLowerCase()}`].filter(Boolean).join(' · ')
     : null;
   return (
-    <Lightbox label={title} title={title} sub={sub} onClose={onClose} testId="programs-learner-dialog"
+    <Sheet label={title} title={title} sub={sub} onClose={onClose} width={560} testId="programs-learner-dialog"
       footer={<DialogButtons onClose={onClose} back="Close" testId="programs-learner" />}>
       <div className={DIALOG_BODY}>
         {read.status === 'loading' ? <Skeleton lines={4} /> : null}
@@ -157,7 +158,7 @@ function LearnerDialog({ programUid, learner, onClose }) {
         ) : null}
         <p className={`m-0 ${SUB}`} data-testid="programs-learner-foot">{LEARNER_FOOT}</p>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

@@ -4,6 +4,7 @@ import { CreditCard, Loader2, FileText, AlertTriangle, RotateCcw, Plus, Lock, X,
 import { api } from '../lib/api';
 import { useSettings } from '../contexts/SettingsContext';
 import { getStripe, buildAppearance } from '../lib/stripe';
+import { cancelWords, openCheckout, planKeyOfProduct } from './checkout/checkoutEntry';
 
 /**
  * Task #5 — In-app billing dashboard.
@@ -13,7 +14,10 @@ import { getStripe, buildAppearance } from '../lib/stripe';
  * and recent invoices, plus controls to:
  *   - cancel a subscription (sets cancel_at_period_end; access kept till renewal)
  *   - resume a subscription scheduled to cancel
- *   - swap plans with a live proration preview, confirmed without leaving Axal VC
+ *   - change plan: since D1054 (#2905, PAYX11) Change plan opens the checkout
+ *     sheet over this page (`openCheckout`), which quotes and makes the change
+ *     on D1051's routes; Cancel asks in an in-page dialog, never a browser
+ *     pop-up, and a cancelled plan says when it ends, with Resume plan
  *   - add / replace a card (Stripe SetupIntent + Elements `confirmSetup`),
  *     set a saved card as default, and remove a saved card
  *
@@ -34,13 +38,11 @@ const fmtMoney = (amt, cur) =>
       }).format(amt / 100);
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—');
-
 export default function BillingDashboard({ scope = 'founder', variant = 'subscriber', flash, onChanged }) {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState([]);
   const [busy, setBusy] = useState(null);          // action key in flight
-  const [preview, setPreview] = useState(null);    // { sub_id, price_id, label, data }
   const [loadError, setLoadError] = useState(null); // overview load failed (inline panel)
 
   const load = useCallback(() => {
@@ -76,21 +78,13 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
     api.catalogProducts('subscription')
       .then((res) => {
         if (cancelled) return;
+        // D1054: one entry per plan (product), by its catalogue key; the sheet reads the prices.
         const out = [];
         for (const p of res?.products || []) {
-          const meta = p.metadata || {};
-          const isMine = scope === 'investor' ? !!meta.investor_tier : !!meta.tier;
-          if (!isMine) continue;
-          for (const pr of p.prices || []) {
-            if (pr.active === false || pr.type !== 'recurring') continue;
-            out.push({
-              price_id: pr.id,
-              product: p.name,
-              amount: pr.unit_amount,
-              currency: pr.currency,
-              interval: pr.interval,
-            });
-          }
+          const key = planKeyOfProduct(p);
+          if (!key || !key.startsWith(scope === 'investor' ? 'investor:' : 'founder:')) continue;
+          if (!(p.prices || []).some((pr) => pr.active !== false && pr.type === 'recurring')) continue;
+          out.push({ key, product_id: p.id, product: p.name });
         }
         setPlans(out);
       })
@@ -100,12 +94,14 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
 
   const refreshAll = () => { load(); onChanged?.(); };
 
+  // PAYX11: Cancel asks in the page's own dialog; "Keep plan" changes nothing.
+  const [asking, setAsking] = useState(null); // { sub, name }
   const cancel = async (subId) => {
-    if (!window.confirm('Cancel this subscription? You keep access until the end of the current period.')) return;
     setBusy(`cancel:${subId}`);
     try {
       await api.billingCancelSubscription(subId, scope);
-      flash?.('Subscription will cancel at period end.');
+      flash?.('Your plan will end at the end of the paid period.');
+      setAsking(null);
       refreshAll();
     } catch (e) { flash?.(e.message || 'Could not cancel', 'error'); }
     finally { setBusy(null); }
@@ -115,37 +111,18 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
     setBusy(`resume:${subId}`);
     try {
       await api.billingResumeSubscription(subId, scope);
-      flash?.('Subscription resumed.');
+      flash?.('Your plan is back on. It renews as before.');
       refreshAll();
     } catch (e) { flash?.(e.message || 'Could not resume', 'error'); }
     finally { setBusy(null); }
   };
 
-  const startSwap = async (sub, plan) => {
-    setBusy(`preview:${plan.price_id}`);
-    try {
-      const data = await api.billingSwapPreview(sub.id, plan.price_id, scope);
-      setPreview({
-        sub_id: sub.id,
-        price_id: plan.price_id,
-        label: `${plan.product}${plan.interval ? ` / ${plan.interval}` : ''}`,
-        data,
-      });
-    } catch (e) { flash?.(e.message || 'Could not preview plan change', 'error'); }
-    finally { setBusy(null); }
-  };
-
-  const confirmSwap = async () => {
-    if (!preview) return;
-    setBusy('confirm');
-    try {
-      await api.billingSwapConfirm(preview.sub_id, preview.price_id, scope);
-      flash?.('Plan updated.');
-      setPreview(null);
-      refreshAll();
-    } catch (e) { flash?.(e.message || 'Could not change plan', 'error'); }
-    finally { setBusy(null); }
-  };
+  // D1054: Change plan opens the checkout sheet, which quotes and makes the change (D1051).
+  const changeTo = (plan, sub) => openCheckout({
+    plan_key: plan.key,
+    interval: sub?.items?.[0]?.interval === 'year' ? 'yearly' : 'monthly',
+    from: { label: 'Billing', href: '/account/billing' },
+  });
 
   // ---- Payment-method management ------------------------------------------
   const [addingCard, setAddingCard] = useState(false); // SetupIntent modal open
@@ -178,10 +155,11 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
   };
 
   const subs = overview?.subscriptions || [];
-  const currentPriceIds = useMemo(
-    () => new Set(subs.flatMap((s) => (s.items || []).map((i) => i.price_id))),
+  const currentProducts = useMemo(
+    () => new Set(subs.flatMap((s) => (s.items || []).map((i) => i.product_id))),
     [subs],
   );
+  const nameOf = (item) => plans.find((p) => p.product_id === item?.product_id)?.product || item?.nickname || 'your plan';
 
   if (loading) {
     return (
@@ -258,52 +236,55 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
           <div className="space-y-3">
             {subs.map((sub) => {
               const item = sub.items?.[0];
+              const name = nameOf(item);
+              const words = cancelWords(sub, name);
+              const others = plans.filter((p) => !currentProducts.has(p.product_id));
               return (
-                <div key={sub.id} className="border border-gray-100 dark:border-gray-800 rounded-lg p-3">
+                <div key={sub.id} className="border border-gray-100 dark:border-gray-800 rounded-lg p-3" data-testid={`billing-sub-${sub.id}`}>
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {item?.nickname || item?.product_id || 'Subscription'}
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 flex flex-wrap items-center gap-2">
+                        <span>{name}</span>
+                        {sub.cancel_at_period_end ? (
+                          <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="billing-ends-pill">{words.pill}</span>
+                        ) : null}
                         {item?.amount != null && (
                           <span className="text-gray-500 dark:text-gray-400 font-normal">
-                            {' '}— {fmtMoney(item.amount, item.currency)}{item.interval ? ` / ${item.interval}` : ''}
+                            {fmtMoney(item.amount, item.currency)}{item.interval ? ` / ${item.interval}` : ''}
                           </span>
                         )}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Status: <span className="capitalize">{sub.status}</span>
                         {sub.cancel_at_period_end
-                          ? <> · Cancels {fmtDate(sub.cancel_at || sub.current_period_end)}</>
-                          : sub.current_period_end ? <> · Renews {fmtDate(sub.current_period_end)}</> : null}
+                          ? <span data-testid="billing-cancelled-line">{words.cancelled}</span>
+                          : <>Status: <span className="capitalize">{sub.status}</span>{sub.current_period_end ? <> · Renews {fmtDate(sub.current_period_end)}</> : null}</>}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {sub.cancel_at_period_end ? (
-                        <button type="button" disabled={busy === `resume:${sub.id}`} onClick={() => resume(sub.id)}
+                        <button type="button" disabled={busy === `resume:${sub.id}`} onClick={() => resume(sub.id)} data-testid="billing-resume"
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md text-xs font-medium disabled:opacity-50">
                           <RotateCcw className="w-3.5 h-3.5" />
-                          {busy === `resume:${sub.id}` ? 'Resuming…' : 'Resume'}
+                          {busy === `resume:${sub.id}` ? 'Resuming…' : 'Resume plan'}
                         </button>
                       ) : (
-                        <button type="button" disabled={busy === `cancel:${sub.id}`} onClick={() => cancel(sub.id)}
+                        <button type="button" onClick={() => setAsking({ sub, name })} data-testid="billing-cancel"
                           className="px-3 py-1.5 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md text-xs font-medium disabled:opacity-50">
-                          {busy === `cancel:${sub.id}` ? 'Cancelling…' : 'Cancel'}
+                          Cancel plan
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Plan switch options (other recurring prices in this scope). */}
-                  {plans.filter((p) => !currentPriceIds.has(p.price_id)).length > 0 && (
+                  {/* D1054: Change plan opens the checkout sheet over this page. */}
+                  {!sub.cancel_at_period_end && others.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
                       <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Change plan</div>
                       <div className="flex flex-wrap gap-2">
-                        {plans.filter((p) => !currentPriceIds.has(p.price_id)).map((p) => (
-                          <button key={p.price_id} type="button"
-                            disabled={busy === `preview:${p.price_id}`}
-                            onClick={() => startSwap(sub, p)}
-                            className="px-3 py-1.5 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-md text-xs font-medium disabled:opacity-50">
-                            {busy === `preview:${p.price_id}` ? 'Previewing…' : `Switch to ${p.product}${p.interval ? ` (${p.interval})` : ''} — ${fmtMoney(p.amount, p.currency)}`}
+                        {others.map((p) => (
+                          <button key={p.key} type="button" onClick={() => changeTo(p, sub)} data-testid={`billing-change-${p.key}`}
+                            className="px-3 py-1.5 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 rounded-md text-xs font-medium">
+                            {`Change to ${p.product}`}
                           </button>
                         ))}
                       </div>
@@ -317,33 +298,20 @@ export default function BillingDashboard({ scope = 'founder', variant = 'subscri
       </section>
       )}
 
-      {/* Proration preview modal */}
-      {preview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setPreview(null)}>
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full p-5" onClick={(e) => e.stopPropagation()}>
-            <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100">Confirm plan change</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Switching to <span className="font-medium">{preview.label}</span>.</p>
-            <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800 text-sm">
-              <div className="flex justify-between px-3 py-2">
-                <span className="text-gray-500 dark:text-gray-400">Proration {Number(preview.data?.proration_amount) < 0 ? '(credit)' : ''}</span>
-                <span className="text-gray-900 dark:text-gray-100">{fmtMoney(preview.data?.proration_amount, preview.data?.currency)}</span>
-              </div>
-              <div className="flex justify-between px-3 py-2">
-                <span className="text-gray-500 dark:text-gray-400">Due now</span>
-                <span className="font-medium text-gray-900 dark:text-gray-100">{fmtMoney(preview.data?.amount_due, preview.data?.currency)}</span>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-              Charges/credits are applied to your existing payment method on file.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setPreview(null)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg text-sm font-medium">
-                Cancel
+      {/* PAYX11: the Cancel dialog. "Keep plan" changes nothing. */}
+      {asking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setAsking(null)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="billing-cancel-title" className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full p-5" onClick={(e) => e.stopPropagation()} data-testid="billing-cancel-dialog">
+            <h4 id="billing-cancel-title" className="text-base font-semibold text-gray-900 dark:text-gray-100">{cancelWords(asking.sub, asking.name).title}</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{cancelWords(asking.sub, asking.name).line}</p>
+            <div className="mt-4 flex justify-end gap-2 flex-wrap">
+              <button type="button" disabled={busy === `cancel:${asking.sub.id}`} onClick={() => cancel(asking.sub.id)} data-testid="billing-cancel-confirm"
+                className="px-4 py-2 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium disabled:opacity-50">
+                {busy === `cancel:${asking.sub.id}` ? 'Cancelling…' : 'Cancel at period end'}
               </button>
-              <button type="button" disabled={busy === 'confirm'} onClick={confirmSwap}
-                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                {busy === 'confirm' ? 'Updating…' : 'Confirm change'}
+              <button type="button" onClick={() => setAsking(null)} data-testid="billing-cancel-keep"
+                className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium">
+                Keep plan
               </button>
             </div>
           </div>

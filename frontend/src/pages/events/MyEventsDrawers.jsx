@@ -1,8 +1,9 @@
 // D1035 (#2876, part 5 of #2387) — My events' drawers and dialogs, to the
 // owner's canvas: the ticket (MEV3, MEV3a–d) at /my/events/ticket/[id], the
 // hosted event (MEV5, MEV5b) at /my/events/hosting/[id], the publish dialogs
-// (MEV6a–c), the cancel dialogs (MEV7a–b) and MEV17. Each is the shared
-// Lightbox, so it traps focus, closes on Escape and gives focus back to what
+// (MEV6a–c), the cancel dialogs (MEV7a–b) and MEV17. The ticket and the hosted
+// event are the shared right-side Sheet (D1317); the dialogs are the shared
+// Lightbox. Each traps focus, closes on Escape and gives focus back to what
 // opened it. Every change opens a dialog that says what it changes and who is
 // told; nothing here uses a browser pop-up. The words and rules are in
 // eventDrawersModel.js.
@@ -10,7 +11,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
-import { Lightbox, Unreadable, actionDanger, actionGhost, actionPrimary } from '../../ui';
+import { Lightbox, Sheet, Unreadable, actionDanger, actionGhost, actionPrimary } from '../../ui';
 import EventQRCode from '../../components/events/EventQRCode';
 import { onEventDay } from './hostHeaderModel';
 import { dateBlock, statusOf, visibilityWord } from './myEventsModel';
@@ -183,7 +184,7 @@ export function TicketDrawer({ id, list, onClose, onDone, page = false, bar = un
   );
   return (
     <>
-      <Lightbox label={title} onClose={onClose} width={600} testId="my-events-ticket-drawer" footer={footer} pageBelow={page ? 'lg' : undefined} bar={page ? bar : undefined}>
+      <Sheet label={title} onClose={onClose} width={600} testId="my-events-ticket-drawer" footer={footer} pageBelow={page ? 'lg' : undefined} bar={page ? bar : undefined}>
         {waiting ? <Reading testId="my-events-ticket-reading" /> : unread ? (
           <div className="px-5 py-5"><Unreadable what="Your ticket" claim="That is not the same as having none." onRetry={() => { list.reload?.(); retryDetail(); }} /></div>
         ) : !place ? (
@@ -271,7 +272,7 @@ export function TicketDrawer({ id, list, onClose, onDone, page = false, bar = un
             })()}
           </div>
         )}
-      </Lightbox>
+      </Sheet>
       {asking && place ? (
         <ChangeDialog copy={cancelPlaceDialog(place)} danger onClose={() => setAsking(false)} testId="my-events-cancel-place"
           onConfirm={async () => { await eventsApi.cancelPlace(place.id); setAsking(false); onDone(cancelPlaceDialog(place).done); }} />
@@ -337,7 +338,7 @@ export function HostedDrawer({ id, list, user, onClose, onDone }) {
   ) : null;
   return (
     <>
-      <Lightbox label={label} onClose={onClose} width={600} phone="sheet" testId="my-events-hosted-drawer" footer={footer}>
+      <Sheet label={label} onClose={onClose} width={600} phone="sheet" testId="my-events-hosted-drawer" footer={footer}>
         {waiting ? <Reading testId="my-events-hosted-reading" /> : missing ? (
           [403, 404].includes(Number(detail.error?.status))
             ? <NotHostCard event={null} onClose={onClose} />
@@ -405,7 +406,7 @@ export function HostedDrawer({ id, list, user, onClose, onDone }) {
             </Section>
           </div>
         )}
-      </Lightbox>
+      </Sheet>
       {asking === 'publish' && event ? <PublishDialog event={event} counts={counts} onClose={() => setAsking(null)} onDone={done} /> : null}
       {asking === 'cancel' && event ? (
         <ChangeDialog copy={cancelEventDialog(event, counts)} danger note onClose={() => setAsking(null)} testId="my-events-cancel-event"

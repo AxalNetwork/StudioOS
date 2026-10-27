@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox, Unreadable, actionGhost, actionPrimary } from '../../../ui';
+import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import { api } from '../../../lib/api';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { day, seatWord, ventureTeam } from './companiesModel';
@@ -70,7 +71,7 @@ export default function VentureLightbox({ venture, companies, meId, onClose, onC
 
   return (
     <>
-      <Lightbox label={venture.name} eyebrow="Venture" title={venture.name} onClose={onClose} width={720} testId="venture-lightbox" footer={foot}
+      <Sheet label={venture.name} eyebrow="Venture" title={venture.name} onClose={onClose} width={720} testId="venture-lightbox" footer={foot}
         sub={venture.company ? `In ${venture.company}` : 'Not in a company: it shows under every company you belong to.'}>
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -121,7 +122,7 @@ export default function VentureLightbox({ venture, companies, meId, onClose, onC
             </>
           )}
         </div>
-      </Lightbox>
+      </Sheet>
 
       {dialog === 'move' ? (
         <MoveVentureDialog venture={venture} companies={companies} onClose={() => setDialog(null)}

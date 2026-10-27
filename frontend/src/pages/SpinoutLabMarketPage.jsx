@@ -37,10 +37,10 @@ import {
   Pencil,
   ShieldCheck,
   Sparkles,
-  X,
 } from 'lucide-react';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
+import Sheet from '../ui/Sheet.jsx';
 import { api, spinoutLab } from '../lib/api';
 import { cycleValidateApi } from '../lib/api/cycleValidate';
 import { markMilestone } from '../lib/spinoutLabHooks';
@@ -785,6 +785,23 @@ export default function SpinoutLabMarketPage() {
   const compShown = compRows.slice(0, 6); // design caps the grid at 6
   const youDot = { x: POS_W * 0.72, y: POS_H * 0.28 };
 
+  // D1317: the sizing drawer's fixed footer — the error line and Recalculate.
+  const sizingFooter = (
+    <>
+      {saveError && <div className="text-[11.5px] text-red-600 dark:text-red-400 mb-2.5" data-testid="sizing-error">{saveError}</div>}
+      <button
+        type="button"
+        data-testid="button-save-sizing"
+        onClick={recalcMarket}
+        disabled={saving}
+        className="w-full h-[42px] rounded-[11px] bg-violet-600 hover:bg-violet-700 text-white text-[13.5px] font-bold disabled:opacity-60 inline-flex items-center justify-center gap-2"
+      >
+        {saving && <Loader2 size={14} className="animate-spin" />} Recalculate market sizing
+      </button>
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 leading-relaxed text-center">Recalculating updates TAM, SAM, SOM cards and the Pitch Deck Market slide automatically.</div>
+    </>
+  );
+
   const page = (
     <LabPageShell width="full" spaceY="" testId="page-spinout-market">
       {/* Header — brand rule, back control inline with the title, and the tool
@@ -1475,196 +1492,174 @@ export default function SpinoutLabMarketPage() {
         </>
       )}
 
-      {/* Market-assumptions drawer (spec A, design 1458-1549) — replaces the
-          old centered modal. Test-id names from the modal are kept for
-          continuity: modal-edit-sizing = overlay, button-close-sizing = ×,
-          button-save-sizing = "Recalculate market sizing", sizing-error = the
-          validation line; input-tam/-sam/-som map to the drawer controls that
-          now drive each figure (TAM override / % reachable / win rate). */}
+      {/* Market-assumptions drawer (spec A, design 1458-1549) — the shared
+          right-side Sheet (D1317) at 480px. Test-id names from the old modal
+          are kept for continuity: modal-edit-sizing = the sheet (its × is
+          modal-edit-sizing-close), button-save-sizing = "Recalculate market
+          sizing", sizing-error = the validation line; input-tam/-sam/-som map
+          to the drawer controls that now drive each figure (TAM override /
+          % reachable / win rate). While it saves, nothing closes it. */}
       {editOpen && project && (
-        <div className="fixed inset-0 z-[75] bg-zinc-900/35" data-testid="modal-edit-sizing" onClick={() => !saving && setEditOpen(false)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="absolute top-0 right-0 bottom-0 w-[400px] max-w-full bg-white dark:bg-gray-900 shadow-[-20px_0_50px_-20px_rgba(24,24,27,.35)] flex flex-col"
-          >
-            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-start justify-between gap-3 flex-none">
-              <div>
-                <div className="text-[15px] font-extrabold text-gray-900 dark:text-gray-50">Edit Market Assumptions</div>
-                {/* The design shows an "Auto-saves" chip here. Still omitted, and
-                    for a narrower reason than before: migration 247 persists every
-                    field on this drawer, but on the explicit Recalculate — nothing
-                    is written as you type, so "Auto-saves" would still be wrong. */}
-                <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 max-w-[280px] leading-relaxed">
-                  Saved with your startup when you recalculate — these figures, and the TAM/SAM/SOM they produce.
-                </div>
-              </div>
-              <button type="button" data-testid="button-close-sizing" onClick={() => setEditOpen(false)} disabled={saving} className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-center flex-none">
-                <X size={15} />
-              </button>
+        <Sheet
+          label="Edit Market Assumptions"
+          title="Edit Market Assumptions"
+          sub="Saved with your startup when you recalculate — these figures, and the TAM/SAM/SOM they produce."
+          onClose={() => { if (!saving) setEditOpen(false); }}
+          width={480}
+          testId="modal-edit-sizing"
+          footer={sizingFooter}
+        >
+          {/* The design shows an "Auto-saves" chip by the title. Still omitted, and
+              for a narrower reason than before: migration 247 persists every
+              field on this drawer, but on the explicit Recalculate — nothing
+              is written as you type, so "Auto-saves" would still be wrong. */}
+          <div className="px-5 py-4 flex flex-col gap-[22px]">
+            <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 rounded-[10px] px-3 py-2.5">
+              <Lock size={13} className="text-amber-700 dark:text-amber-400 flex-none mt-0.5" />
+              <span className="text-[11.5px] text-amber-800 dark:text-amber-200 leading-relaxed">Pitch Deck Market slide will update when you recalculate.</span>
             </div>
 
-            <div className="px-5 py-4 flex-1 overflow-y-auto flex flex-col gap-[22px]">
-              <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/40 rounded-[10px] px-3 py-2.5">
-                <Lock size={13} className="text-amber-700 dark:text-amber-400 flex-none mt-0.5" />
-                <span className="text-[11.5px] text-amber-800 dark:text-amber-200 leading-relaxed">Pitch Deck Market slide will update when you recalculate.</span>
+            {/* Market definition */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>Market definition</div>
+              <div className="flex flex-col gap-2.5">
+                <label>
+                  <span className={FLD}>Market category</span>
+                  <input type="text" value={assume.category} onChange={setA('category')} className={INP} data-testid="input-market-category" />
+                </label>
+                <label>
+                  <span className={FLD}>Geography</span>
+                  <select value={assume.geography} onChange={setA('geography')} className={INP} data-testid="select-geography">
+                    <option>Global</option>
+                    <option>North America</option>
+                    <option>Europe</option>
+                    <option>APAC</option>
+                    <option>Custom</option>
+                  </select>
+                </label>
+                <label>
+                  <span className={FLD}>Target year</span>
+                  <select value={assume.targetYear} onChange={setA('targetYear')} className={INP} data-testid="select-target-year">
+                    <option>2025</option>
+                    <option>2026</option>
+                    <option>2027</option>
+                    <option>2028</option>
+                  </select>
+                </label>
               </div>
+            </div>
 
-              {/* Market definition */}
-              <div>
-                <div className={`${LBL} mb-2.5`}>Market definition</div>
-                <div className="flex flex-col gap-2.5">
-                  <label>
-                    <span className={FLD}>Market category</span>
-                    <input type="text" value={assume.category} onChange={setA('category')} className={INP} data-testid="input-market-category" />
-                  </label>
-                  <label>
-                    <span className={FLD}>Geography</span>
-                    <select value={assume.geography} onChange={setA('geography')} className={INP} data-testid="select-geography">
-                      <option>Global</option>
-                      <option>North America</option>
-                      <option>Europe</option>
-                      <option>APAC</option>
-                      <option>Custom</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span className={FLD}>Target year</span>
-                    <select value={assume.targetYear} onChange={setA('targetYear')} className={INP} data-testid="select-target-year">
-                      <option>2025</option>
-                      <option>2026</option>
-                      <option>2027</option>
-                      <option>2028</option>
-                    </select>
-                  </label>
+            {/* TAM inputs */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>TAM inputs</div>
+              <div className="flex flex-col gap-2.5">
+                <div className="flex gap-1.5">
+                  {['Top-down', 'Bottom-up'].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setAV('methodology', m)}
+                      className={`flex-1 h-8 rounded-lg border text-xs font-semibold ${assume.methodology === m ? SEG_ON : SEG_OFF}`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <label>
+                  <span className={FLD}>Total addressable population (units)<FilledMark fill={filled.population} /></span>
+                  <input type="number" min="0" value={assume.population} onChange={setA('population')} className={INP} data-testid="input-population" />
+                </label>
+                <label>
+                  <span className={FLD}>Average contract value ($)<FilledMark fill={filled.acv} /></span>
+                  <input type="number" min="0" value={assume.acv} onChange={setA('acv')} className={INP} data-testid="input-acv" />
+                </label>
+                <label>
+                  <span className={FLD}>TAM override ($M, optional)</span>
+                  <input type="number" min="0" placeholder="Override calculated TAM" value={assume.tamOverride} onChange={setA('tamOverride')} className={INP} data-testid="input-tam" />
+                </label>
+              </div>
+            </div>
+
+            {/* SAM inputs */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>SAM inputs</div>
+              <div className="flex flex-col gap-2.5">
+                <label>
+                  <span className={FLD}>% of TAM reachable</span>
+                  <input type="number" min="0" max="100" value={assume.samPct} onChange={setA('samPct')} className={INP} data-testid="input-sam" />
+                </label>
+                <div>
+                  <span className={FLD}>Segment filter</span>
+                  {picks.length === 0 ? (
+                    <div className="text-[11px] text-gray-400 dark:text-gray-500">No aggregator segments this period.</div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {picks.map((p) => (
+                        <button
+                          key={p.sector}
+                          type="button"
+                          onClick={() => toggleSeg(p.sector)}
+                          className={`h-7 px-2.5 rounded-full border text-[11px] font-semibold ${(assume.segFilter || []).includes(p.sector) ? SEG_ON : SEG_OFF}`}
+                        >
+                          {p.sector}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
+            </div>
 
-              {/* TAM inputs */}
-              <div>
-                <div className={`${LBL} mb-2.5`}>TAM inputs</div>
-                <div className="flex flex-col gap-2.5">
+            {/* SOM inputs */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>SOM inputs</div>
+              <div className="flex flex-col gap-2.5">
+                <label>
+                  <span className={FLD}>Win rate (%)</span>
+                  <input type="number" min="0" value={assume.winRate} onChange={setA('winRate')} className={INP} data-testid="input-som" />
+                </label>
+                <label>
+                  <span className={FLD}>Runway (months)</span>
+                  <input type="number" min="0" value={assume.runway} onChange={setA('runway')} className={INP} data-testid="input-runway" />
+                </label>
+                <label>
+                  <span className={FLD}>Sales capacity (deals/month)</span>
+                  <input type="number" min="0" value={assume.capacity} onChange={setA('capacity')} className={INP} data-testid="input-capacity" />
+                </label>
+              </div>
+            </div>
+
+            {/* Growth */}
+            <div>
+              <div className={`${LBL} mb-2.5`}>Growth</div>
+              <div className="flex flex-col gap-2.5">
+                <label>
+                  <span className={FLD}>CAGR estimate (%)<FilledMark fill={filled.cagr} /></span>
+                  <input type="number" min="0" value={assume.cagr} onChange={setA('cagr')} className={INP} data-testid="input-cagr" />
+                </label>
+                <label>
+                  <span className={FLD}>Growth driver</span>
+                  <textarea rows={2} value={assume.growthDriver} onChange={setA('growthDriver')} className={TXA} data-testid="input-growth-driver" />
+                </label>
+                <div>
+                  <span className={FLD}>Market maturity</span>
                   <div className="flex gap-1.5">
-                    {['Top-down', 'Bottom-up'].map((m) => (
+                    {['Early', 'Growing', 'Mature'].map((m) => (
                       <button
                         key={m}
                         type="button"
-                        onClick={() => setAV('methodology', m)}
-                        className={`flex-1 h-8 rounded-lg border text-xs font-semibold ${assume.methodology === m ? SEG_ON : SEG_OFF}`}
+                        onClick={() => setAV('maturity', m)}
+                        className={`flex-1 h-[30px] rounded-lg border text-[11.5px] font-semibold ${assume.maturity === m ? SEG_ON : SEG_OFF}`}
                       >
                         {m}
                       </button>
                     ))}
                   </div>
-                  <label>
-                    <span className={FLD}>Total addressable population (units)<FilledMark fill={filled.population} /></span>
-                    <input type="number" min="0" value={assume.population} onChange={setA('population')} className={INP} data-testid="input-population" />
-                  </label>
-                  <label>
-                    <span className={FLD}>Average contract value ($)<FilledMark fill={filled.acv} /></span>
-                    <input type="number" min="0" value={assume.acv} onChange={setA('acv')} className={INP} data-testid="input-acv" />
-                  </label>
-                  <label>
-                    <span className={FLD}>TAM override ($M, optional)</span>
-                    <input type="number" min="0" placeholder="Override calculated TAM" value={assume.tamOverride} onChange={setA('tamOverride')} className={INP} data-testid="input-tam" />
-                  </label>
                 </div>
               </div>
-
-              {/* SAM inputs */}
-              <div>
-                <div className={`${LBL} mb-2.5`}>SAM inputs</div>
-                <div className="flex flex-col gap-2.5">
-                  <label>
-                    <span className={FLD}>% of TAM reachable</span>
-                    <input type="number" min="0" max="100" value={assume.samPct} onChange={setA('samPct')} className={INP} data-testid="input-sam" />
-                  </label>
-                  <div>
-                    <span className={FLD}>Segment filter</span>
-                    {picks.length === 0 ? (
-                      <div className="text-[11px] text-gray-400 dark:text-gray-500">No aggregator segments this period.</div>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {picks.map((p) => (
-                          <button
-                            key={p.sector}
-                            type="button"
-                            onClick={() => toggleSeg(p.sector)}
-                            className={`h-7 px-2.5 rounded-full border text-[11px] font-semibold ${(assume.segFilter || []).includes(p.sector) ? SEG_ON : SEG_OFF}`}
-                          >
-                            {p.sector}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* SOM inputs */}
-              <div>
-                <div className={`${LBL} mb-2.5`}>SOM inputs</div>
-                <div className="flex flex-col gap-2.5">
-                  <label>
-                    <span className={FLD}>Win rate (%)</span>
-                    <input type="number" min="0" value={assume.winRate} onChange={setA('winRate')} className={INP} data-testid="input-som" />
-                  </label>
-                  <label>
-                    <span className={FLD}>Runway (months)</span>
-                    <input type="number" min="0" value={assume.runway} onChange={setA('runway')} className={INP} data-testid="input-runway" />
-                  </label>
-                  <label>
-                    <span className={FLD}>Sales capacity (deals/month)</span>
-                    <input type="number" min="0" value={assume.capacity} onChange={setA('capacity')} className={INP} data-testid="input-capacity" />
-                  </label>
-                </div>
-              </div>
-
-              {/* Growth */}
-              <div>
-                <div className={`${LBL} mb-2.5`}>Growth</div>
-                <div className="flex flex-col gap-2.5">
-                  <label>
-                    <span className={FLD}>CAGR estimate (%)<FilledMark fill={filled.cagr} /></span>
-                    <input type="number" min="0" value={assume.cagr} onChange={setA('cagr')} className={INP} data-testid="input-cagr" />
-                  </label>
-                  <label>
-                    <span className={FLD}>Growth driver</span>
-                    <textarea rows={2} value={assume.growthDriver} onChange={setA('growthDriver')} className={TXA} data-testid="input-growth-driver" />
-                  </label>
-                  <div>
-                    <span className={FLD}>Market maturity</span>
-                    <div className="flex gap-1.5">
-                      {['Early', 'Growing', 'Mature'].map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setAV('maturity', m)}
-                          className={`flex-1 h-[30px] rounded-lg border text-[11.5px] font-semibold ${assume.maturity === m ? SEG_ON : SEG_OFF}`}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800 flex-none">
-              {saveError && <div className="text-[11.5px] text-red-600 dark:text-red-400 mb-2.5" data-testid="sizing-error">{saveError}</div>}
-              <button
-                type="button"
-                data-testid="button-save-sizing"
-                onClick={recalcMarket}
-                disabled={saving}
-                className="w-full h-[42px] rounded-[11px] bg-violet-600 hover:bg-violet-700 text-white text-[13.5px] font-bold disabled:opacity-60 inline-flex items-center justify-center gap-2"
-              >
-                {saving && <Loader2 size={14} className="animate-spin" />} Recalculate market sizing
-              </button>
-              <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 leading-relaxed text-center">Recalculating updates TAM, SAM, SOM cards and the Pitch Deck Market slide automatically.</div>
             </div>
           </div>
-        </div>
+        </Sheet>
       )}
     </LabPageShell>
   );

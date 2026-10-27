@@ -5,8 +5,9 @@
  * says "Not read here yet" and names the task that builds it. Never sample data.
  */
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AssistantsSection, CopyUrl } from '../AssistantsGroup';
+import Sheet from '../../../ui/Sheet.jsx';
 import { assistantsApi } from '../../../lib/api/assistants.js';
 import { BUILDER_LINES, BUILDER_PAGES, BUILDER_WORDS, builderPathFor, builderTrailFor } from './builderModel';
 
@@ -31,9 +32,9 @@ export const WAITS = Object.freeze({
   request: 'One request: its tool, company, outcome and cost. #2481 draws it (APIU4).',
 });
 
-export function Wait({ id, title }) {
+export function Wait({ id, title, bare = false }) {
   return (
-    <section className={`${CARD} flex flex-col gap-2`} data-testid={`builder-wait-${id}`}>
+    <section className={bare ? 'flex flex-col gap-2 p-5' : `${CARD} flex flex-col gap-2`} data-testid={`builder-wait-${id}`}>
       {title && <h3 className={H3}>{title}</h3>}
       <span className="w-fit rounded-axal-pill border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
       <p className={`m-0 text-[12.5px] ${MUTED}`}>{WAITS[id]}</p>
@@ -42,7 +43,6 @@ export function Wait({ id, title }) {
 }
 
 const DRAWER_TITLES = { assistant: 'AI assistant', service: 'Service', key: 'API key', request: 'Request' };
-const BACK = { assistant: 'MCP and services', service: 'MCP and services', key: 'API keys', request: 'Activity' };
 
 /** The once-per-member notice that AI assistants left Connectors (DEV14, MCPX13). */
 function MovedNotice({ storage }) {
@@ -105,6 +105,7 @@ function ServicesPage() {
  */
 export default function BuilderSection({ view = { page: 'services', drawer: null }, storage = typeof window !== 'undefined' ? window.localStorage : null }) {
   const { page, drawer } = view;
+  const navigate = useNavigate();
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="account-builder" data-page={page}>
       <header className="flex flex-col gap-1">
@@ -120,18 +121,18 @@ export default function BuilderSection({ view = { page: 'services', drawer: null
         ))}
       </nav>
       {page === 'services' && !drawer && <MovedNotice storage={storage} />}
-      {drawer ? (
-        <section className={`${CARD} flex flex-col gap-2`} data-testid={`builder-drawer-${drawer.kind}`}>
-          <Link to={builderPathFor({ page })} className="w-fit text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300">‹ {BACK[drawer.kind]}</Link>
-          <Wait id={drawer.kind} title={DRAWER_TITLES[drawer.kind]} />
-        </section>
-      ) : (
-        <>
-          {page === 'services' && <ServicesPage />}
-          {page === 'keys' && <Wait id="keys" title="API keys" />}
-          {page === 'usage' && <Wait id="usage" title="Requests and AI tokens by day" />}
-          {page === 'activity' && <Wait id="activity" title="Calls by day" />}
-        </>
+      {page === 'services' && <ServicesPage />}
+      {page === 'keys' && <Wait id="keys" title="API keys" />}
+      {page === 'usage' && <Wait id="usage" title="Requests and AI tokens by day" />}
+      {page === 'activity' && <Wait id="activity" title="Calls by day" />}
+      {/* D1317: a drawer's address opens it as the shared Sheet over its page
+          (560px, the canvases' width); closing returns to the page's address.
+          Builder has no Eadwyn rail, so the sheet meets the window's edge. */}
+      {drawer && (
+        <Sheet eyebrow={builderTrailFor(view)} title={DRAWER_TITLES[drawer.kind]} width={560}
+          testId={`builder-drawer-${drawer.kind}`} onClose={() => navigate(builderPathFor({ page }))}>
+          <Wait id={drawer.kind} bare />
+        </Sheet>
       )}
     </div>
   );

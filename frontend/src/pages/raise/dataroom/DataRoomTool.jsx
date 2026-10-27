@@ -192,7 +192,7 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
       <DataRoomMovedNotice />
       <DataRoomTabBar active={tab} search={search} />
       {body}
-      {/* D1106 (#2986): DR3, a file's lightbox over Files at /raise/data-room/file/<id>. */}
+      {/* D1106 (#2986): DR3, a file's Sheet (D1317) over Files at /raise/data-room/file/<id>. */}
       {tab === 'files' && fileId && read.status === 'ready' && read.room?.mode !== 'summary' ? (
         <DataRoomFile fileId={fileId} room={read.room} projectUid={read.uid} projectId={projectId} onChanged={retry}
           onClose={() => navigate(`${HOME_PATH}/files${tabSearch(search)}`)} />

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import PageExplainer from '../components/PageExplainer';
+import Sheet from '../ui/Sheet.jsx';
 
 const ASSET_TYPES = ['webinar', 'blog', 'podcast', 'event', 'newsletter', 'other'];
 
@@ -319,162 +320,153 @@ function PitchDetailDrawer({ pitch, onClose }) {
   const peak = weeks.reduce((m, b) => Math.max(m, b.n), 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <button aria-label="Close" onClick={onClose} className="flex-1 bg-black/30" />
-      <div className="w-full max-w-xl bg-white dark:bg-gray-900 h-full overflow-y-auto shadow-xl">
-        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-5 py-4 flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{pitch.title}</h2>
-              <StatusPill status={pitch.status} />
+    <Sheet
+      label={pitch.title}
+      title={pitch.title}
+      sub={`${pitch.asset_type || ''}${pitch.published_at ? ` · published ${fmtStamp(pitch.published_at)}` : ` · created ${fmtStamp(pitch.created_at)}`}`}
+      headerActions={<StatusPill status={pitch.status} />}
+      onClose={onClose}
+      width={560}
+      testId="comarketing-pitch-drawer"
+    >
+      <div className="p-5 space-y-6">
+        {pitch.angle && (
+          <p className="-mb-3 text-sm font-medium text-violet-700 dark:text-violet-300">{pitch.angle}</p>
+        )}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            ['Visits', counts.visit], ['Signups', counts.signup],
+            ['Leads', counts.lead], ['Conversions', counts.conversion],
+          ].map(([label, v]) => (
+            <div key={label} className="rounded-xl border border-gray-200 dark:border-gray-800 p-3">
+              <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
+              <div className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">
+                {v == null ? 'Not recorded' : v}
+              </div>
             </div>
-            {pitch.angle && (
-              <p className="mt-1 text-sm font-medium text-violet-700 dark:text-violet-300">{pitch.angle}</p>
-            )}
-            <p className="text-xs text-gray-500 mt-0.5">
-              {pitch.asset_type}
-              {pitch.published_at ? ` · published ${fmtStamp(pitch.published_at)}` : ` · created ${fmtStamp(pitch.created_at)}`}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none px-1">×</button>
+          ))}
         </div>
 
-        <div className="p-5 space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              ['Visits', counts.visit], ['Signups', counts.signup],
-              ['Leads', counts.lead], ['Conversions', counts.conversion],
-            ].map(([label, v]) => (
-              <div key={label} className="rounded-xl border border-gray-200 dark:border-gray-800 p-3">
-                <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">
-                  {v == null ? 'Not recorded' : v}
-                </div>
-              </div>
-            ))}
+        {err && <div className="text-sm text-red-600 dark:text-red-400">{err}</div>}
+        {!rows && !err && <div className="text-sm text-gray-500">Loading attribution events…</div>}
+
+        {rows && rows.length === 0 && (
+          <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-6 text-center text-sm text-gray-500">
+            <p className="font-medium text-gray-700 dark:text-gray-300">No tracked events yet.</p>
+            <p className="mt-1">
+              Traffic is counted once your UTM code
+              {pitch.attribution_code ? ` (${pitch.attribution_code})` : ''} appears on a link
+              someone follows.
+            </p>
           </div>
+        )}
 
-          {err && <div className="text-sm text-red-600 dark:text-red-400">{err}</div>}
-          {!rows && !err && <div className="text-sm text-gray-500">Loading attribution events…</div>}
-
-          {rows && rows.length === 0 && (
-            <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 p-6 text-center text-sm text-gray-500">
-              <p className="font-medium text-gray-700 dark:text-gray-300">No tracked events yet.</p>
-              <p className="mt-1">
-                Traffic is counted once your UTM code
-                {pitch.attribution_code ? ` (${pitch.attribution_code})` : ''} appears on a link
-                someone follows.
+        {rows && rows.length > 0 && (
+          <>
+            {truncated && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                Showing the most recent {rows.length} of {counts.total} events. The chart and
+                breakdown below cover that window only; the totals above are complete.
               </p>
-            </div>
-          )}
+            )}
 
-          {rows && rows.length > 0 && (
-            <>
-              {truncated && (
-                <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                  Showing the most recent {rows.length} of {counts.total} events. The chart and
-                  breakdown below cover that window only; the totals above are complete.
-                </p>
-              )}
-
-              {weeks.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                    Inbound leads attributed · by week
-                  </h3>
-                  <div className="flex items-end gap-1.5 h-24">
-                    {weeks.map((b) => (
-                      <div key={b.wk} className="flex-1 flex flex-col items-center justify-end gap-1">
-                        <span className="text-[10px] text-gray-500 tabular-nums">{b.n}</span>
-                        <div
-                          className="w-full rounded-t bg-violet-500 min-h-[2px]"
-                          style={{ height: peak > 0 ? `${Math.round((b.n / peak) * 100)}%` : '2px' }}
-                        />
-                        <span className="text-[9px] text-gray-400 whitespace-nowrap">{fmtWeek(b.wk)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
+            {weeks.length > 0 && (
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                  Where the traffic came from
+                  Inbound leads attributed · by week
+                </h3>
+                <div className="flex items-end gap-1.5 h-24">
+                  {weeks.map((b) => (
+                    <div key={b.wk} className="flex-1 flex flex-col items-center justify-end gap-1">
+                      <span className="text-[10px] text-gray-500 tabular-nums">{b.n}</span>
+                      <div
+                        className="w-full rounded-t bg-violet-500 min-h-[2px]"
+                        style={{ height: peak > 0 ? `${Math.round((b.n / peak) * 100)}%` : '2px' }}
+                      />
+                      <span className="text-[9px] text-gray-400 whitespace-nowrap">{fmtWeek(b.wk)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                Where the traffic came from
+              </h3>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+                {channels.map((ch) => (
+                  <div key={ch.name} className="p-3 flex items-center justify-between gap-3">
+                    <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{ch.name}</span>
+                    <span className="text-xs text-gray-500 tabular-nums whitespace-nowrap">
+                      {ch.leads} leads · {ch.events} events
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                Measured from the referrer on each tracked event. Audience reach per channel is
+                not recorded anywhere, so it is not shown.
+              </p>
+            </div>
+
+            {leads.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                  Recent leads on your profile
                 </h3>
                 <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-                  {channels.map((ch) => (
-                    <div key={ch.name} className="p-3 flex items-center justify-between gap-3">
-                      <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{ch.name}</span>
-                      <span className="text-xs text-gray-500 tabular-nums whitespace-nowrap">
-                        {ch.leads} leads · {ch.events} events
+                  {leads.map((l) => (
+                    <div key={l.uid || l.id} className="p-3 flex items-center gap-3">
+                      <span className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
+                        {initialsOf(l.lead_email)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                          {l.lead_email || 'Email not recorded'}
+                        </div>
+                        <div className="text-[11px] text-gray-500 truncate">
+                          {fmtStamp(l.created_at)}
+                          {l.landing_path ? ` · ${l.landing_path}` : ''}
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                        {l.event_kind}
                       </span>
                     </div>
                   ))}
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1.5">
-                  Measured from the referrer on each tracked event. Audience reach per channel is
-                  not recorded anywhere, so it is not shown.
-                </p>
               </div>
+            )}
+          </>
+        )}
 
-              {leads.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                    Recent leads on your profile
-                  </h3>
-                  <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-                    {leads.map((l) => (
-                      <div key={l.uid || l.id} className="p-3 flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
-                          {initialsOf(l.lead_email)}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm text-gray-900 dark:text-gray-100 truncate">
-                            {l.lead_email || 'Email not recorded'}
-                          </div>
-                          <div className="text-[11px] text-gray-500 truncate">
-                            {fmtStamp(l.created_at)}
-                            {l.landing_path ? ` · ${l.landing_path}` : ''}
-                          </div>
-                        </div>
-                        <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                          {l.event_kind}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+        {pitch.what_you_bring && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              What you said you would bring
+            </h3>
+            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+              {pitch.what_you_bring}
+            </p>
+          </div>
+        )}
 
-          {pitch.what_you_bring && (
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                What you said you would bring
-              </h3>
-              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                {pitch.what_you_bring}
-              </p>
-            </div>
-          )}
-
-          {pitch.distribution_channels && (
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                Channels you proposed
-              </h3>
-              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                {pitch.distribution_channels}
-              </p>
-              <p className="text-[11px] text-gray-400 mt-1">
-                As written on the pitch — not a measured figure.
-              </p>
-            </div>
-          )}
-        </div>
+        {pitch.distribution_channels && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+              Channels you proposed
+            </h3>
+            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+              {pitch.distribution_channels}
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              As written on the pitch — not a measured figure.
+            </p>
+          </div>
+        )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 

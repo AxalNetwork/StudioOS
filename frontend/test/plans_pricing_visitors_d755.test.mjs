@@ -122,6 +122,17 @@ test('a visitor gets none of the member-only parts, and none of their reads', ()
   assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /useAccountRead\(\(\) => aiBudgetApi\.mine\(\), \{ enabled: member \}\)/);
 });
 
+test('D1317: the product opens as the shared right-side Sheet at 760px, and closes back to /pricing/products', () => {
+  // Read, not rendered: the sheet's checkout (AxalCheckout → lib/stripe.js) reads import.meta.env, which Node has not.
+  const src = read('frontend/src/components/products/ProductSlideOver.jsx');
+  assert.match(src, /^import Sheet from '\.\.\/\.\.\/ui\/Sheet\.jsx';$/m);
+  assert.match(src, /<Sheet label=\{product\.name\} title=\{product\.name\} onClose=\{onClose\} width=\{760\} testId="product-sheet" footer=\{footer\}>/, 'titled by the product, at its own 760px, Confirm Purchase in the fixed footer');
+  assert.doesNotMatch(src, /fixed inset-0|addEventListener\('keydown'/, 'no own overlay and no own Escape: the Sheet owns both');
+  const page = read('frontend/src/pages/ProductsPage.jsx');
+  assert.match(page, /const handleCloseProduct = useCallback\(\(\) => \{\s*setModalIntent\(null\);\s*navigate\('\/pricing\/products'\);/);
+  assert.match(page, /<ProductSlideOver\s+product=\{openProduct\}[\s\S]*?onClose=\{handleCloseProduct\}/);
+});
+
 test('the public /pricing page takes its prices from the read, never the typed figures', () => {
   const growth = FOUNDER_TIERS.find((t) => t.id === 'growth');
   const priced = pricedTier(growth, 'founder', ready(READ));

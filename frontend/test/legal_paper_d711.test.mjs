@@ -98,3 +98,33 @@ test('D711: an envelope lists its files by kind, signer, renderer, size, date an
   assert.match(detail, /contractsApi\.files\(uid\)/);
   assert.ok(!detail.includes('r2_key'));
 });
+
+test('D1317: an existing template opens as the shared Sheet (760px); New template stays the centred modal', async () => {
+  const { act } = await import('react');
+  const { mountContracts } = await import('./_contracts_dom.mjs');
+  const { api } = await import('../src/lib/api.js');
+  const { default: AdminTemplates } = await import('../src/pages/admin/AdminTemplates.jsx');
+  const original = { ...api };
+  const never = () => new Promise(() => {});
+  const row = { slug: 'nda', title: 'Fixture NDA', category: 'gp', version: 2, usage_count: 0, body_md: 'Body.' };
+  api.adminTemplateStoreList = async () => ({ templates: [row], items: [row] });
+  api.adminTemplateStoreGet = async () => ({ template: row });
+  api.adminTemplateStoreVersions = async () => ({ versions: [] });
+  api.adminTemplateStorePreviewPdfBlob = never;
+  const view = await mountContracts(createElement(AdminTemplates), '/admin/templates');
+  const by = (id) => view.nodes().find((n) => view.props(n)?.['data-testid'] === id);
+  const press = async (n) => { assert.ok(n, 'the control'); await act(async () => { view.props(n).onClick({ stopPropagation() {}, preventDefault() {} }); }); for (let i = 0; i < 4; i++) await view.flush(); };
+  try {
+    for (let i = 0; i < 4; i++) await view.flush();
+    await press(by('template-card-nda'));
+    const sheet = view.props(by('template-editor'));
+    assert.equal(sheet.role, 'dialog');
+    assert.ok(sheet['aria-labelledby']);
+    assert.equal(sheet['data-width'], 760);
+    await press(by('template-editor-close'));
+    assert.equal(by('template-editor'), undefined, 'the × closes it');
+    await view.click('New template'); await view.flush();
+    assert.equal(by('template-editor'), undefined, 'a new template is not the Sheet');
+    assert.ok(by('template-save'), 'the centred modal is open');
+  } finally { await view.unmount(); Object.assign(api, original); }
+});

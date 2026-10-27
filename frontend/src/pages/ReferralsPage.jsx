@@ -21,6 +21,7 @@ import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCs
 import { useToast } from '../components/useToast';
 import ToastMessage from '../components/ToastMessage';
 import { Unreadable } from '../ui';
+import Sheet from '../ui/Sheet.jsx';
 import BrandIcon from '../ui/BrandIcon.jsx';
 import './referrals/referrals.css';
 import { appOrigin } from '../lib/branchHost';
@@ -1379,21 +1380,13 @@ function DetailDrawer({ detail, onClose, onUpdated, notify }) {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const onKey = (ev) => { if (ev.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   if (detail.loading) {
     return (
-      <div className="rf-drawer-backdrop" onClick={onClose}>
-        <div className="rf-drawer rf-drawer-wide" onClick={stop}>
-          <div className="flex items-center gap-2 py-8 text-sm text-zinc-500">
-            <Loader2 size={16} className="animate-spin" /> Loading…
-          </div>
+      <Sheet label="Referral" title="Referral" onClose={onClose} width={480} testId="rf-detail-drawer">
+        <div className="flex items-center gap-2 px-7 py-8 text-sm text-zinc-500">
+          <Loader2 size={16} className="animate-spin" /> Loading…
         </div>
-      </div>
+      </Sheet>
     );
   }
 
@@ -1416,18 +1409,16 @@ function DetailDrawer({ detail, onClose, onUpdated, notify }) {
   };
 
   return (
-    <div className="rf-drawer-backdrop" onClick={onClose}>
-      <div className="rf-drawer rf-drawer-wide" onClick={stop}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-[17px] font-extrabold tracking-tight">{detail.referred_name}</h3>
-            <p className="mt-0.5 text-xs text-[#8b8798]">{detail.referred_org || '—'} · {detail.category_name}</p>
-          </div>
-          <button type="button" className="rf-btn flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-[#ececf1] text-zinc-500" onClick={onClose}>
-            <X size={14} />
-          </button>
-        </div>
-        <div className="mt-3"><StatusChip status={detail.status} label={detail.status_label} /></div>
+    <Sheet
+      label={detail.referred_name}
+      title={detail.referred_name}
+      sub={`${detail.referred_org || '—'} · ${detail.category_name}`}
+      onClose={onClose}
+      width={480}
+      testId="rf-detail-drawer"
+    >
+      <div className="px-7 pb-6 pt-4">
+        <div><StatusChip status={detail.status} label={detail.status_label} /></div>
 
         {detail.fit_notes && (
           <div className="mt-5 border-t border-[#f4f3f7] pt-4">
@@ -1482,7 +1473,7 @@ function DetailDrawer({ detail, onClose, onUpdated, notify }) {
           </div>
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 

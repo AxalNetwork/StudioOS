@@ -303,6 +303,10 @@ test('the card stack’s unique capabilities survived the table', () => {
     'Decline']) {
     assert.ok(page.includes(kept), `the rewrite lost: ${kept}`);
   }
+  // D1317: Why this match opens as the shared right-side Sheet at its own 480px, named by the member.
+  assert.match(page, /import Sheet from '\.\.\/ui\/Sheet\.jsx';/);
+  assert.match(page, /<Sheet label=\{t\.name \|\| 'Member'\} eyebrow="Why this match" title=\{t\.name \|\| 'Member'\} onClose=\{onClose\} width=\{480\} testId="intro-match-detail" footer=\{footer\}>/);
+  assert.ok(!/function MatchDetail[\s\S]*?fixed inset-0[\s\S]*?function Tile/.test(page), 'no own overlay left in MatchDetail');
   // And the duplicate control went: the panel's own status chip row selected the
   // same thing the zone row does, and two controls onto one state disagree.
   assert.ok(!page.includes('STATUS_FILTERS'), 'the panel still holds a second status filter row');

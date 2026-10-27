@@ -39,7 +39,7 @@ export default function AgreementDetail({ uid, onClose, onChanged }) {
   const row = detail.data;
   // D775 (#2101): the open agreement is the rail's record once it is read.
   useRecordCrumb(row?.title || null, 'agreement', uid);
-  return <SidePanel title={row?.title || 'Agreement'} onClose={onClose}>
+  return <SidePanel title={row?.title || 'Agreement'} onClose={onClose} testId="contract-agreement-sheet">
     <ReadState read={detail} what="Agreement">{row && <><p>{row.doc_type_label || row.doc_type} · <span className="font-mono">{row.source}</span> · {row.provider || 'Not recorded'}</p><p>{row.status}</p>
       <h3 className="font-bold">Parties</h3><p>Company: <Recorded value={row.project_name} reason="This agreement has no recorded company link." /></p>
       <p>Recipient: <Recorded value={row.recipient_name || row.recipient_email} reason="No recipient is recorded in this store." /></p>
