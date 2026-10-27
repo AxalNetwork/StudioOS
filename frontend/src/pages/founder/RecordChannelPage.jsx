@@ -2,6 +2,8 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
 import { INBOX, PAGE_LINE, RECORD_CHANNELS, channelOf } from './recordChannels';
+import RecordWhatsAppTool from './RecordWhatsAppTool.jsx';
+import { waRoute } from './channelSessionModel.js';
 
 const LINK = 'font-semibold text-violet-700 underline underline-offset-2 dark:text-violet-300';
 
@@ -11,10 +13,14 @@ const LINK = 'font-semibold text-violet-700 underline underline-offset-2 dark:te
  * version of its boards is (the connector page, the chats inbox, the session
  * page) and which task builds the rest. Nothing here reads or writes: the
  * screens it points at do.
+ *
+ * D862 (#2507): WhatsApp's boards are built. Its address and its tab paths
+ * draw `RecordWhatsAppTool` under the same header; `whatsappApi` is the
+ * tests' stub. Telegram and Calls keep this page until #2515 and #2525.
  */
-export default function RecordChannelPage() {
+export default function RecordChannelPage({ whatsappApi }) {
   const { pathname } = useLocation();
-  const ch = channelOf(pathname) || RECORD_CHANNELS[0];
+  const ch = (waRoute(pathname) ? RECORD_CHANNELS[0] : channelOf(pathname)) || RECORD_CHANNELS[0];
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-6" data-testid={`record-channel-${ch.key}`}>
       <AdminPageHeader
@@ -22,10 +28,19 @@ export default function RecordChannelPage() {
         title="Record a session"
         line={PAGE_LINE}
         tabs={RECORD_CHANNELS.map((c) => (
-          <HeaderTab key={c.key} to={c.to} data-testid={`record-tab-${c.key}`}>{c.label}</HeaderTab>
+          <HeaderTab key={c.key} to={c.to} end={c.key !== 'whatsapp'} data-testid={`record-tab-${c.key}`}>{c.label}</HeaderTab>
         ))}
         data-testid="record-channels-header"
       />
+      {ch.key === 'whatsapp' ? <RecordWhatsAppTool {...(whatsappApi ? { api: whatsappApi } : {})} /> : <ChannelToday ch={ch} />}
+    </div>
+  );
+}
+
+/** D1309's "Today" and "Not built yet", for a channel whose boards are still to build. */
+function ChannelToday({ ch }) {
+  return (
+    <>
       <section className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-900" data-testid="record-channel-today">
         <h2 className="m-0 text-[15px] font-extrabold text-gray-900 dark:text-gray-100">Today</h2>
         <ul className="mt-2 flex flex-col gap-1.5 pl-4 text-[13px] text-gray-700 dark:text-gray-300">
@@ -43,6 +58,6 @@ export default function RecordChannelPage() {
           The approved design ({ch.boards}) adds {ch.builds}. Task #{ch.task} ({ch.decision}) builds them on the data that is already in place.
         </p>
       </section>
-    </div>
+    </>
   );
 }
