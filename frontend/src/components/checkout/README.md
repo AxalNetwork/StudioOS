@@ -11,15 +11,19 @@ that opens in place, over the page the member is on, to buy a plan.
 | `packModel.js` | D1287: pack mode's pure rules — the pack rows and offers, the balance line, the totals, the one-line intent body, the pack rules' sentences, the landing after Pay, the count-up frames and auto-reload's words. |
 | `PackSheet.jsx` | D1287: the sheet in pack mode, "Add tokens" (CRP2–CRP5, CRP7, CRP8, CRP15, CRP17), with its History tab. Opened by Models' Add tokens and each pack's Buy on `/pricing`. |
 | `stripeBridge.js` | Confirming without the card form (D1053): a saved card, and an upgrade's invoice. Loaded on Pay. |
+| `checkoutEntry.js` | D1054: `openCheckout` (the one way any page opens the sheet), the plan an Upgrade or Change plan offers, the renewal banner's words, and Billing's cancel words. No React. |
+| `CheckoutHost.jsx` | D1054: the one host of the sheet outside Pricing, mounted beside the paywall in `App.jsx`. It reads the plans, an Advisor's or Partner's plan status, and a Super Admin's test mode, only when a plan is asked for. |
+| `RenewalBanner.jsx` | D1054 (PAYX10): the banner over the shell for a failed renewal, a payment to confirm, or a plan that ended, with its small payment sheet. |
+| `RenewalPayForm.jsx` | D1054: the card form for that sheet, a Payment Element on the Worker's own intent. Lazy: Stripe loads on a press. |
 
 The rule for adding here: a figure is one the Worker sent, never one worked out
 in the browser. Nothing is made in Stripe until Pay: the card form is a
 deferred intent, and `POST /api/billing/checkout/start` makes the
 subscription (D1053). A decline is one of `checkoutModel.declineFamily`'s
 five families of words, never a raw code, and every failure says whether
-money moved. Pricing's Upgrade
-opens the sheet today; every other entry point (the paywall, Billing, Usage)
-opens the same sheet, never a page of its own.
+money moved. Pricing opens the sheet itself; every other entry point (the
+paywall, Billing, Usage, Perks, any Upgrade) calls `openCheckout`, never a
+page of its own and never Stripe's hosted checkout (D1054).
 
 D1133 passes D1049’s Pricing plan read into the sheet: Reading and Unreadable with Try again cannot start a payment; a held account plan uses the existing change mode. D1051’s changed-field status contract was extended on #2902; D1053 draws it (Accepted, Scheduled, Failed).
 
