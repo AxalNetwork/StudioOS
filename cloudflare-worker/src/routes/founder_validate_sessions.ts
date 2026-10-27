@@ -83,6 +83,7 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { consentForSession } from '../services/channels/consent';
 import { meetingSetup, upcomingCalls } from '../services/channels/meetingSetup';
 import { MEETING_ERRORS, MeetingProviderError } from '../services/channels/meetings';
+import { assertStorageRoom } from '../services/storageRoom';
 
 const sessions = new Hono<{ Bindings: Env }>();
 
@@ -365,6 +366,10 @@ async function sessionBody(env: Env, session: SessionRow) {
  */
 async function openOn(env: Env, user: User, interview: { id: number | null; project_id: number }, plan: OpenPlan, body: any,
   create: D1PreparedStatement | null = null): Promise<SessionRow> {
+  // D1170 — Record a Session checks storage once, at its start, against the
+  // venture owner's plan (D1169 §1). It refuses only a plan already full; a
+  // session in progress is never cut, so its chunks are never weighed.
+  if (plan.audio) await assertStorageRoom(env, { projectId: interview.project_id }, 0, user);
   const uid = crypto.randomUUID();
   // D872: an upload records nothing live. It opens stopped, its length the file's, and takes chunks at once.
   const up = plan.upload;

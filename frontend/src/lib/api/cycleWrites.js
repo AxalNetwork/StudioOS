@@ -127,12 +127,17 @@ export function makeCycleWrites(request) {
       systemChoices: (projectId) => request(`/cycles/build/systems/choices?${q(projectId)}`),
       // D782 (#2114): the founder's decision on an architecture note GitHub proposed.
       acceptDesignProposal: (projectId, id) => request(`/cycles/build/solution-design/proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST' }),
+      // D1097 (#2962): dismiss an open Vercel health event; it stays dismissed until its evidence clears.
+      dismissVercelHealthEvent: (projectId, id) => request(`/cycles/build/vercel/health-events/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
       dismissDesignProposal: (projectId, id) => request(`/cycles/build/solution-design/proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
       // D782 (#2115): the founder matches a GitHub login to a founder, and decides on the IP step GitHub proposed.
       matchGithubLogin: (projectId, body) => request(`/cycles/build/founding-team/github-logins?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       unmatchGithubLogin: (projectId, login) => request(`/cycles/build/founding-team/github-logins/${seg(login)}?${q(projectId)}`, { method: 'DELETE' }),
       acceptCompanyProposal: (projectId, id) => request(`/cycles/build/company-creation/proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST' }),
       dismissCompanyProposal: (projectId, id) => request(`/cycles/build/company-creation/proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
+      // D1099 (#2964): the founder's decision on the step Vercel's facts proposed. Nothing changes on Vercel.
+      acceptVercelProposal: (projectId, id) => request(`/cycles/build/company-creation/vercel-proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST' }),
+      dismissVercelProposal: (projectId, id) => request(`/cycles/build/company-creation/vercel-proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
     },
   };
 }

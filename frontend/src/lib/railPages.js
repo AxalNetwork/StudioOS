@@ -126,7 +126,7 @@ const FOUNDER = [
   alias('/raise/status', key(F, 'Raise', 'Fundraising readiness'), 'The legacy Status zone: where the raise stands.'),
   alias('/raise/pitch', key(F, 'Raise', 'Pitch deck'), 'The Pitch deck studio, its tabs and the deck builder (D894).'),
   alias('/raise/capital', key(F, 'Raise', 'Capital relationships'), 'The legacy Capital zone: investors and rounds.'),
-  alias('/raise/capital-match', key(F, 'Raise', 'Capital relationships'), 'Investor match finds capital relationships.'),
+  // D1194: /raise/capital-match forwards to Capital relationships › Match, which the module key covers.
   // D1189 (#3123): a Call for Capital is Raise's call to investors (D686), not a phone call.
   alias('/raise/calls', key(F, 'Raise', 'Capital relationships'), 'The history of Calls for Capital, on Capital relationships’ Calls tab.'),
   alias('/raise/call', key(F, 'Raise'), 'Call for Capital opens over Raise’s overview; its history is /raise/calls.'),
@@ -471,6 +471,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/perks', railCount: 0, pageTestIds: ['perks-desk'], roles: ['founder', 'investor', 'advisor', 'admin', 'exploring'], why: 'Owner request: the standalone Perks page has no AI rail on desktop or phone. Partner Perk deals remains in its own workspace.' },
   { route: '/learning', railCount: 0, pageTestIds: ['learning-home'], roles: ['founder', 'investor', 'advisor', 'partner', 'admin'], why: 'Owner request: Learning home has no AI rail on desktop or phone. Learning subpages retain their rails.' },
   { route: '/studio', roles: ['admin'], why: 'Admin · Studio has no rail (D598).' },
+  { route: '/grow/reporting', prefix: true, roles: ['advisor', 'partner'], why: 'D1060 (#2930), RPT14: an Advisor or an Operating Partner of the venture reads the Reporting desk, Duties and a sent report read only; the rail canvas draws no Reporting page in their profiles, so the founder’s Grow page key is not theirs.' },
   { route: '/raise/pitch', railCount: 0, pageTestIds: ['pitch-studio-boundary'], roles: ['advisor', 'partner'], why: 'D905 (#2684), PD22: an Advisor or an Operating Partner opening the Pitch deck studio reads its boundary inside their own shell, with no rail and nothing from a deck.' },
   { route: '/studio', railCount: 0, pageTestIds: ['advisor-studio-home'], roles: ['advisor'], why: 'Owner request: Advisor Studio has no AI side rail; its interview and practice modules remain.' },
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },

@@ -69,7 +69,8 @@ test('the panel draws the eleven scopes unread, the method door, and no number',
   const out = html(h(VentureScorecard));
   for (const s of SCOPES) assert.ok(out.includes(`data-testid="scorecard-scope-${s.key}"`), s.key);
   assert.ok(out.includes(`href="${METHOD}"`));
-  assert.ok(out.includes('data-testid="scorecard-wait-scores"') && out.includes('data-testid="scorecard-wait-weighting"'));
+  // D1257: with no deal there is nothing to read, so the scores' wait is gone; the weighting is part 5's.
+  assert.ok(!out.includes('scorecard-wait-scores') && out.includes('data-testid="scorecard-wait-weighting"'));
   assert.ok(!/>\s*0\s*</.test(out), 'no zero is drawn');
   const founder = html(h(VentureScorecard, { audience: 'founder' }));
   assert.ok(founder.includes('data-testid="scorecard-wait-sharing"') && !founder.includes('scorecard-wait-weighting'));
@@ -84,13 +85,15 @@ test('the strip: unread is one outlined strip read as Not read here yet; locked 
   assert.ok(locked.includes('data-testid="scope-strip-locked"') && !locked.includes('height:'), 'a locked strip draws no bar');
 });
 
-test('the method page draws the scopes and grades, and says model v1 is not published; HQ waits on each part', () => {
+test('the method page draws the scopes and grades, and says model v1 is not published; HQ reads its part 6 blocks and waits on part 3', () => {
   const m = html(h(ScoringMethodPage));
   assert.match(m, /It is not published yet, so no venture carries a score from it today\./);
   for (const s of SCOPE_LABELS) assert.ok(m.includes(s), s);
   assert.match(m, /Measured<\/b> · 1\.0/);
   const hq = html(h(HqScoringPage));
-  for (const id of ['models', 'indices', 'fairness']) assert.ok(hq.includes(`data-testid="scorecard-wait-${id}"`), id);
+  // D1259 (part 6) reads the model versions and the indices; only the fairness check still waits, on part 3.
+  assert.ok(hq.includes('data-testid="scorecard-wait-fairness"'));
+  for (const id of ['models', 'indices']) assert.ok(!hq.includes(`data-testid="scorecard-wait-${id}"`) && hq.includes(`data-testid="hq-scoring-${id}-loading"`), id);
   assert.match(hq, /HQ only/);
 });
 
@@ -105,9 +108,12 @@ test('the wiring: the three routes, the deal tab, the deal flow column, HQ’s s
   assert.ok(app.includes(`<Route path="/raise/scorecard" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage />)} />`));
   assert.ok(app.indexOf('path="/raise/scorecard"') < app.indexOf('path="/raise/:slug"'), 'the static path is declared before the module route');
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
-  assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard />}"));
+  assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}"), 'D1257: the tab reads its deal');
   assert.ok(!deal.includes("['scorecard', 'evidence'"), 'the scorecard tab is no longer a wait card');
-  assert.ok(read('frontend/src/pages/investor/dealflow/DealFlow.jsx').includes('<td><ScopeStrip /></td>'));
+  // D1240 (#3253): the live table's Scorecard column draws the strip from SCORING's batch.
+  assert.ok(read('frontend/src/pages/investor/dealflow/FlowTable.jsx').includes('<ScopeStrip scopes={stripScopes(row.scores)} />'));
+  // D1257: a row list already read still draws each strip from that same batch.
+  assert.ok(read('frontend/src/pages/investor/dealflow/DealFlow.jsx').includes('<td><DealStrip read={strips} dealId={r.id} /></td>'), 'D1257: the column reads the batch');
   assert.ok(read('frontend/src/lib/hqStrips.js').includes("['Scoring', '/admin/platform/scoring']"));
   assert.ok(app.includes('<StripLink to="/admin/platform/scoring">Scoring</StripLink>'), 'HQ’s Platform strip in the shell holds the door');
   for (const f of ['Venture Scorecard Page.dc.html', 'Venture scorecard · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);

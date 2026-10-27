@@ -14,7 +14,7 @@ each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
 **Corpus:** 181 canonical canvases at `design/canvases/`, listed
-279 times below — a canvas serving two workspaces appears under both.
+281 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -39,12 +39,12 @@ it, where in their nav, and how do they get there.*
 | Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/history` · `/raise/cap-table/h-<n>` · `/new` · `/raise/cap-table/proposal/<id>` · `/raise/cap-table/instrument/<uid>` · `/raise/cap-table/scenarios/<uid>` · `/raise/cap-table/scenarios/compare?ids=` · `/share/captable/:token` · `/raise/capital/cap-table` · `/build/captable` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Cap Table | `/spinout-lab/captable` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Capital | `/spinout-lab/capital` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Capital relationships | `/raise/capital-relationships` · `/raise/capital/pipeline` · `/raise/capital-match` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Capital relationships | `/raise/capital-relationships` · `/raise/capital/pipeline` · `/raise/capital-match` · `/grow/capital-match` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
 | Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Co-founder Match | `/spinout-lab/cofounder-match` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Company Settings | `/company-settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Company Settings | `/account/companies/<uid>/settings` · `/account/companies/settings` · `/company-settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Compliance | `/spinout-lab/compliance` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Customer Acquisition Landing Page | `/spinout-lab/brand` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | CURRENT | High |
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Headerless | Full page | Sidebar → Headerless → Grow | CURRENT | High |
@@ -96,7 +96,7 @@ it, where in their nav, and how do they get there.*
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Revenue | `/spinout-lab/revenue` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Round Manager | `/raise/capital/pipeline` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Round Manager | `/raise/capital-relationships/pipeline?moved=pipeline` | Headerless | Full page | Sidebar → Headerless → Raise | RETIRED | High |
 | Scoring Engine | `/spinout-lab/scoring` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 | Spin-Out Lab · Intro | `/spinout-lab` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | UPGRADE | High |
@@ -111,9 +111,9 @@ it, where in their nav, and how do they get there.*
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | NEW | Low |
 | Validate · Record a session › channels | `/validate/inbox` | Headerless | Full page | Sidebar → Headerless → Validate | UPGRADE | High |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
+| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
 
-## Advisor — 23 canvases
+## Advisor — 24 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -130,6 +130,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Advisor Network | `/network/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Network | UPGRADE | Low |
 | Pages · Advisor Research | `/research/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Research | UPGRADE | Low |
 | Pitch Deck Studio | `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/builder` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Reporting to investors | `/portfolio/updates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Research · Companies | `/research/companies` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Company | `/research/companies/company/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -139,7 +140,7 @@ it, where in their nav, and how do they get there.*
 | Signals | `/signals` · `/research` | Headerless | Full page | Sidebar → Headerless → Research | RETIRED | High |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Practice | NEW | Low |
 
 ## LP / Investor — 37 canvases
 
@@ -181,9 +182,9 @@ it, where in their nav, and how do they get there.*
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | Headerless | Full page | Sidebar → Headerless → Trust | NEW | High |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | NEW | Low |
+| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | NEW | Low |
 
-## Partner / Operator — 20 canvases
+## Partner / Operator — 21 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -199,6 +200,7 @@ it, where in their nav, and how do they get there.*
 | Partner Operator Canvas | `/studio` · `/spinout-lab` · `/needs` · `/partner/insights` · `/partner/operations/*` · `/services` · `/perks` · `/comarketing` · `/partner/office-hours` · `/network` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | Perks & Products | `/perks` | Headerless | Full page | Sidebar → Headerless → Offers | NEW | High |
 | Pitch Deck Studio | `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/builder` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Reporting to investors | `/portfolio/updates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Main | `/research` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -206,7 +208,7 @@ it, where in their nav, and how do they get there.*
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
 ## Subsidiary Admin — 41 canvases
 
@@ -252,7 +254,7 @@ it, where in their nav, and how do they get there.*
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Validate · Record a session › channels | `/validate/inbox` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
 ## Super Admin — 29 canvases
 
@@ -329,7 +331,7 @@ it, where in their nav, and how do they get there.*
 | Studio · Persona hubs | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Trust Center | `/trust` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Trust Center v2 | `/trust` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
 ## Public (pre-login) — 12 canvases
 
@@ -361,7 +363,7 @@ it, where in their nav, and how do they get there.*
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 116 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 77 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Medium | 79 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 86 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

@@ -11,7 +11,10 @@ import { lovableRepositories } from '../integrations/providers/github/lovableMar
 import { lovablePart } from '../services/lovableAppLinks';
 import { foundingTeamFromCode, mapLogin, unmapLogin } from '../integrations/providers/github/team';
 import { acceptCompanyProposal, companyFromCode, dismissCompanyProposal } from '../integrations/providers/github/company';
+import { acceptVercelProposal, companyFromVercel, dismissVercelProposal } from '../services/vercel/company';
 import { validateConnectorSettings } from '../integrations/connectorRules';
+import { dismissHealthEvent } from '../services/vercel/health';
+import { hostingSystems } from '../services/vercel/hosting';
 import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
@@ -499,6 +502,15 @@ async function fromGithub(module: 'founding_team' | 'company_creation', read: ()
   }
 }
 
+/** D1099 (#2964): Company creation's part from Vercel. Its own failure leaves the module readable. */
+async function fromVercel(read: () => Promise<Record<string, unknown>>) {
+  try { return { state: 'ok', ...(await read()) }; }
+  catch (error) {
+    console.error('[cycle_build] vercel company_creation read failed', (error as Error)?.message);
+    return { state: 'unreadable', reason: 'What Vercel brought could not be read.' };
+  }
+}
+
 async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
@@ -543,7 +555,10 @@ async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null },
-    parts: { github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))) } };
+    parts: {
+      github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
+      vercel: await fromVercel(async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
+    } };
 }
 
 const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'] as const;
@@ -625,6 +640,10 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   });
   const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));
   const code = p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
+  // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
+  let hosting: any;
+  try { hosting = await hostingSystems(env, p, viewer, viewerMember, connectHref('vercel', p.id)); }
+  catch { hosting = { state: 'unreadable', systems: [], reason: 'Unreadable: Vercel could not be read. The rest of this page is current.', syncs: { state: 'unreadable', rows: [], reason: null } }; }
 
   const rituals = rows(await env.DB.prepare(
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?
@@ -656,6 +675,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
       code: code?.code ?? { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.' },
       syncs: code?.syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
+      hosting,
     } } };
 
 }
@@ -996,6 +1016,23 @@ app.post('/solution-design/proposals/:id/dismiss', async c => {
   return c.json({ ok: true });
 });
 
+// D1097 (#2962): the founder dismisses an open Vercel health event. It stays dismissed: the next sync finds it open and opens nothing new.
+const HEALTH_DISMISS = {
+  not_found: [404, 'That health event is not on this venture.'],
+  closed: [409, 'That health event has closed, so there is nothing to dismiss.'],
+  already: [409, 'That health event is already dismissed.'],
+} as const;
+
+app.delete('/vercel/health-events/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: HEALTH_DISMISS.not_found[1] }, 404);
+  const out = await dismissHealthEvent(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'operating-systems', entityId: null,
+    action: 'build_vercel_health_dismissed', summary: 'A Vercel health event dismissed' })]);
+  if (out !== 'ok') return c.json({ detail: HEALTH_DISMISS[out][1] }, HEALTH_DISMISS[out][0]);
+  return c.json({ ok: true });
+});
+
 // D782 (#2115): the founder maps a GitHub login to a founder, once; it is never guessed.
 // The activity line never names the login: it is personal data.
 const LOGIN_OUTCOME = {
@@ -1042,6 +1079,27 @@ app.post('/company-creation/proposals/:id/dismiss', async c => {
   const out = await dismissCompanyProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
     projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
     action: 'build_ip_step_dismissed', summary: 'Proposed filing from GitHub dismissed' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+// D1099 (#2964): the founder's decision on the step Vercel's facts proposed. Accept changes nothing on Vercel.
+app.post('/company-creation/vercel-proposals/:id/accept', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await acceptVercelProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
+    action: 'build_hosting_step_accepted', summary: 'Filing added from Vercel: move the production project to the company’s team on a paid plan' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+app.post('/company-creation/vercel-proposals/:id/dismiss', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await dismissVercelProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
+    action: 'build_hosting_step_dismissed', summary: 'Proposed filing from Vercel dismissed' })]);
   if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
   return c.json({ ok: true });
 });

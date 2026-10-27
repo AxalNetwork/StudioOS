@@ -31,6 +31,7 @@ import {
 import { encryptBytes, decryptBytes } from '../services/cryptoBox';
 import { DOWNLOAD_TTL_MS, REMINDER_GAP_MS, dueDateOf, markRequestAnsweredByFile, tokenHash } from '../services/ddRequests';
 import { createIcRecordForCase, icRecordForCase, caseSentToIc } from './ic';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const dd = new Hono<{ Bindings: Env }>();
 type AppContext = Context<{ Bindings: Env }>;
@@ -59,6 +60,12 @@ function genUid(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** D1251: a person's name for the case read, or null when the account is gone or the read fails. */
+async function nameOf(env: Env, userId: number): Promise<string | null> {
+  if (!Number.isSafeInteger(userId) || userId <= 0) return null;
+  try { return (await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first<{ name: string | null }>())?.name ?? null; } catch { return null; }
 }
 
 async function getCaseByUid(env: Env, uid: string): Promise<Record<string, unknown> | null> {
@@ -94,6 +101,19 @@ const leadsOrOpened = (user: AppUser, cs: Record<string, unknown>) => isLead(use
  *   notify_founder         an Admin, on a project or founder case
  *                          (`POST /report/share`);
  *   audit                  an Admin, the lead or opener, or any reviewer.
+ * D1251 (#3266) adds the writes the case's tabs draw:
+ *   decide, update         an Admin or the lead, on a case that is not archived
+ *                          (`POST /decision`, `PATCH /cases/:uid` and its
+ *                          archive, `PUT /memo`, `POST /ic`: `deciderRefusal`);
+ *   memo_read              an Admin, the lead or opener (`GET /memo`);
+ *   widen                  an Admin or the lead, on an open or in-review case;
+ *   team                   an Admin, the lead or opener, on a case that is not
+ *                          archived (`DELETE …/reviewers/:userId`);
+ *   work                   per section id: an Admin, the lead or opener on
+ *                          every section; otherwise that section's reviewer,
+ *                          never an observer (the checklist's items, their
+ *                          evidence, and raising or working a flag there);
+ *   work_case_wide         an Admin, the lead or opener: a flag with no section.
  * A flag says who may ask, not that the call succeeds: `report` still asks for
  * a recent TOTP step-up, and a reviewer's verdict still needs their signed NDA.
  * Pure, so the tests hold it against each route's gate.
@@ -110,7 +130,13 @@ export function caseAllowed(
   const lead = isLead(user as AppUser, cs);
   const works = new Set(mine.filter((r) => String(r.role ?? 'reviewer') !== 'observer').map((r) => Number(r.section_id)));
   const verdict: Record<string, boolean> = {};
-  for (const id of sectionIds) verdict[String(id)] = admin || lead || works.has(Number(id));
+  const work: Record<string, boolean> = {};
+  for (const id of sectionIds) {
+    verdict[String(id)] = admin || lead || works.has(Number(id));
+    work[String(id)] = admin || runsIt || works.has(Number(id));
+  }
+  const archived = cs.status === 'archived';
+  const decides = (admin || lead) && !archived;
   return {
     scan: writerStaff,
     assign: writerStaff,
@@ -119,6 +145,13 @@ export function caseAllowed(
     report: writerStaff,
     notify_founder: admin && (cs.subject_type === 'project' || cs.subject_type === 'founder'),
     audit: admin || runsIt || reviewer,
+    decide: decides,
+    update: decides,
+    memo_read: admin || runsIt,
+    widen: (admin || lead) && (cs.status === 'open' || cs.status === 'in_review'),
+    team: (admin || runsIt) && !archived,
+    work,
+    work_case_wide: admin || runsIt,
   };
 }
 
@@ -535,6 +568,9 @@ dd.get('/cases/:uid', async (c) => {
       // D1246: the lead, the decision and the archive. A section reviewer is
       // told the decision, never its reason, the cheque or the linked deal.
       lead_user_id: leadOf(cs),
+      // D1251 (#3266): the header and Sign-off name the lead and who recorded the decision; a name only, never an email.
+      lead_name: await nameOf(c.env, leadOf(cs)),
+      decided_by_name: cs.decided_by == null ? null : await nameOf(c.env, Number(cs.decided_by)),
       decision_reason: isScoped ? null : await decField(c.env, 'dd_cases', 'decision_reason', caseId, cs.decision_reason_enc as string | null),
       archived_reason: isScoped ? null : await decField(c.env, 'dd_cases', 'archived_reason', caseId, cs.archived_reason_enc as string | null),
       decision_reason_enc: undefined, archived_reason_enc: undefined,
@@ -1732,6 +1768,8 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
     if (size > 10 * 1024 * 1024) return c.json({ error: 'NDA file too large (max 10MB)' }, 413);
 
     let storageKey = `inline:${genUid()}`;
+    // D1170 — a diligence upload counts to its uploader (D1169 §1).
+    const storage = c.env.FILES ? await assertStorageRoom(c.env, { userId: user.id }, size, user) : null;
     if (c.env.FILES) {
       storageKey = `dd-ndas/${caseId}/${sectionId}/${Date.now()}-${genUid().slice(0, 8)}-${filename}`;
       try { await c.env.FILES.put(storageKey, buf, { httpMetadata: { contentType: mime } }); }
@@ -1747,6 +1785,7 @@ dd.post('/cases/:uid/sections/:sectionId/nda', async (c) => {
     await sql`UPDATE dd_sections SET reviewer_signed_nda_at = CURRENT_TIMESTAMP WHERE id = ${sectionId}`;
     await sql`UPDATE dd_reviewers SET nda_signed_at = CURRENT_TIMESTAMP WHERE section_id = ${sectionId} AND user_id = ${user.id}`;
     await audit(c.env, caseId, user, 'nda_uploaded', { type: 'dd_section', id: sectionId }, { filename, size_bytes: size });
+    if (storage && !storageKey.startsWith('inline:')) await noteStorageLanded(c.env, storage);
     return c.json({ ok: true, filename, size_bytes: size });
   } finally { await sql.end(); }
 });
@@ -1793,6 +1832,8 @@ dd.post('/cases/:uid/items/:itemId/evidence', async (c) => {
     const filename = ((file as File).name || 'evidence').slice(0, 200);
     const mime = (file as File).type || 'application/octet-stream';
     const key = `dd-evidence/${caseId}/${item.section_id}/${uid}`;
+    // D1170 — a diligence upload counts to its uploader (D1169 §1).
+    const storage = await assertStorageRoom(c.env, { userId: user.id }, buf.byteLength, user);
     await c.env.FILES.put(key, buf, { httpMetadata: { contentType: mime } });
     const attachment = await c.env.DB.prepare(
       `INSERT INTO dd_attachments (case_id, section_id, file_key, filename, mime_type, size_bytes, uploaded_by_user_id)
@@ -1803,6 +1844,7 @@ dd.post('/cases/:uid/items/:itemId/evidence', async (c) => {
        VALUES (?, ?, ?, 'file', ?, ?, ?, ?)`,
     ).bind(uid, caseId, item.id, attachment!.id, user.id, at, at).run();
     await audit(c.env, caseId, user, 'item_evidence_added', { type: 'dd_checklist_item', id: item.id }, { kind: 'file', size_bytes: buf.byteLength });
+    await noteStorageLanded(c.env, storage);
     return c.json({ ok: true, evidence: { uid, item_id: item.id, kind: 'file', attachment_id: attachment!.id, filename, created_at: at } }, 201);
   }
   const body = await c.req.json().catch(() => ({}));

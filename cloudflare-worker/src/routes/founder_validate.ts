@@ -69,6 +69,7 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 import { currentDecision } from '../services/verdict';
 import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 import { CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS } from '../services/interviewProcessing';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -1061,6 +1062,8 @@ founderValidate.post('/interviews/:id/recording', async (c) => {
   // DERIVED SERVER-SIDE, NEVER TAKEN FROM THE REQUEST. A caller-supplied key is
   // a path-traversal write into another account's prefix.
   const key = `validate-audio/${s.user.id}/${crypto.randomUUID()}.${ext}`;
+  // D1170 — an interview recording counts to the venture's owner (D1169 §1).
+  const storage = await assertStorageRoom(c.env, { projectId: Number(owner.project_id) }, file.size, s.user);
   try {
     await c.env.FILES.put(key, await file.arrayBuffer(), {
       httpMetadata: { contentType: mime },
@@ -1086,6 +1089,7 @@ founderValidate.post('/interviews/:id/recording', async (c) => {
             updated_at = datetime('now')
       WHERE id = ?`,
   ).bind(key, mime, file.size, durationSec, id).run();
+  await noteStorageLanded(c.env, storage);
 
   return json({
     ok: true,
