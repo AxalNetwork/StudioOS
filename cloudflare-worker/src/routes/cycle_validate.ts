@@ -13,6 +13,18 @@
  *       what the bottom sections draw, each part under its own store's gate)
  *       `parts.suggestions` (D757 §2.7, #1925): a writer's pending interview
  *       suggestions for this module, each linked to its line on the session page
+ *       `parts.from_google` (D1092, #2957): on Customer research, Demand
+ *       signals and Experiments, the viewer's own Google files, what landed
+ *       and what waits (`services/google/validateFeeds.ts`)
+ *
+ *   From Google (D1092): the member's own Workspace connection, the venture
+ *   in the query, gated as `routes/google_workspace.ts` gates (founders and
+ *   their team, never an admin or a support session).
+ *   POST   /google/sync                     land the chosen Docs and Forms
+ *   POST   /google/forms/:uid/preview       { mapping? } GW5's count; stores nothing
+ *   POST   /google/proposals/:id/accept     { hypothesis_id, direction?, strength? }
+ *   POST   /google/proposals/:id/dismiss
+ *   DELETE /google/facts/:id                a landed signal or session; stays deleted
  *
  * The reads are `services/cycleValidate.ts`; the shapes and the five states
  * are `services/cycleCards.ts`. Every write below calls the one writer in
@@ -48,6 +60,14 @@ import {
 import { ownedRow } from '../services/records/owned';
 import { moduleSuggestions } from '../services/interviewSuggestions';
 import type { Store } from '../services/records/types';
+import { context as workspaceContext, member as workspaceMember } from './google_workspace';
+import { WorkspaceError } from '../services/google/workspace';
+import { IntakeError } from '../services/interviewIntake';
+import { logCycleWriteStatement } from '../services/cycleActivity';
+import {
+  MODULE_SLUG, acceptEvidenceProposal, deleteValidateFact, dismissProposal, previewFormMapping, syncValidateFromGoogle,
+  validateFromGoogle, type ValidateGoogleModule,
+} from '../services/google/validateFeeds';
 
 const cycleValidate = new Hono<{ Bindings: Env }>();
 
@@ -148,11 +168,112 @@ cycleValidate.get('/modules/:slug', async (c) => {
       parts = { ...parts, suggestions: null };
     }
   }
+  const google = GOOGLE_MODULE[slug];
+  if (google) parts = { ...parts, from_google: await googlePart(c, s.user, s.projectId, google) };
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card,
     records: { ...records, linkable: hasRecords('validate') }, parts: { can_write: writer, ...parts },
     // D693 decision 7: every Validate module read says so too.
     can_read_decisions: canReadDecision(s.project, s.user) });
 });
+
+// ---------------------------------------------------------------------------
+// From Google (D1092, #2957)
+// ---------------------------------------------------------------------------
+
+const GOOGLE_MODULE: Partial<Record<ModuleSlug, ValidateGoogleModule>> = Object.freeze({
+  'customer-research': 'customer_research', 'demand-signals': 'demand_signals', experiments: 'experiments',
+});
+const GOOGLE_STATES: Record<string, { state: string; reason: string; href?: string }> = Object.freeze({
+  project_not_available: { state: 'team_only', reason: 'Only the venture’s founders choose and sync Google files.' },
+  support_session_refused: { state: 'team_only', reason: 'A support session cannot read a member’s Google files.' },
+  company_not_enabled: { state: 'not_connected', reason: 'Google files are not allowed for this venture yet.', href: '/account/connectors/google_workspace' },
+});
+
+/** The viewer's own From Google section. One failed read is this part only, never the page. */
+async function googlePart(c: any, user: User, projectId: number, module: ValidateGoogleModule) {
+  try {
+    await workspaceMember(c);
+    const { integration } = await workspaceContext(c, user, projectId);
+    return await validateFromGoogle(c.env, { userId: Number(user.id), projectId, integrationId: Number(integration.id) }, module);
+  } catch (e) {
+    if (e instanceof WorkspaceError && GOOGLE_STATES[e.code]) return GOOGLE_STATES[e.code];
+    console.warn('[cycle_validate] from google unreadable:', module, e instanceof WorkspaceError ? e.code : (e as Error)?.name);
+    return { state: 'unreadable', reason: 'Unreadable: the Google files could not be read. The rest of this page is current.' };
+  }
+}
+
+/** A From Google write: the member, their venture and connection, and each refusal as its own code. */
+function googleWrite(handler: (c: any, g: { user: User; projectId: number; integrationId: number }) => Promise<Response>) {
+  return async (c: any) => {
+    try {
+      const user = await workspaceMember(c);
+      const { project, integration } = await workspaceContext(c, user, c.req.query('project'));
+      return await handler(c, { user, projectId: Number(project.id), integrationId: Number(integration.id) });
+    } catch (e) {
+      if (e instanceof Error && ['Unauthorized', 'Forbidden'].includes(e.message)) return c.json({ detail: e.message }, e.message === 'Unauthorized' ? 401 : 403);
+      if (e instanceof WorkspaceError) return c.json({ error: e.code }, e.status);
+      if (e instanceof IntakeError) return c.json({ error: e.code, detail: e.message }, e.status);
+      return writeFailed(c, e);
+    }
+  };
+}
+const GOOGLE_DECIDED: Record<string, [string, number, string]> = Object.freeze({
+  not_found: ['proposal_not_found', 404, 'That proposal is not on this venture.'],
+  decided: ['proposal_decided', 409, 'That proposal was already decided.'],
+  not_confirmed: ['signal_not_confirmed', 409, 'Confirm the signal on Demand signals before using it as evidence.'],
+});
+const decidedOr = (c: any, out: string) => {
+  const [error, status, detail] = GOOGLE_DECIDED[out];
+  return c.json({ error, detail }, status);
+};
+
+cycleValidate.post('/google/sync', googleWrite(async (c, g) => {
+  const counts = await syncValidateFromGoogle(c.env, Number(g.user.id), g.projectId, g.integrationId);
+  // Counts only: never a file name, an answer or a person.
+  const logs = ([
+    ['customer-research', counts.imported, 'Interview notes synced from Google Docs'],
+    ['demand-signals', counts.proposed_signals, `${counts.proposed_signals} signals to confirm from Google Forms`],
+    ['experiments', counts.offered_evidence, `${counts.offered_evidence} confirmed signals offered as evidence`],
+  ] as const).filter(([, n]) => n > 0).map(([module, , summary]) => logCycleWriteStatement(c.env, {
+    projectId: g.projectId, userId: Number(g.user.id), cycle: 'validate', module, entityId: null, action: 'google_synced', summary,
+  }));
+  if (logs.length) await c.env.DB.batch(logs);
+  return c.json({ ok: true, counts });
+}));
+
+cycleValidate.post('/google/forms/:uid/preview', googleWrite(async (c, g) => {
+  const file = await c.env.DB.prepare("SELECT * FROM google_workspace_files WHERE uid = ? AND integration_id = ? AND user_id = ? AND project_id = ? AND status <> 'stopped'")
+    .bind(String(c.req.param('uid')), g.integrationId, Number(g.user.id), g.projectId).first();
+  if (!file) throw new WorkspaceError('file_not_found', 404);
+  const b = await body(c);
+  return c.json(await previewFormMapping(c.env, Number(g.user.id), file, b.mapping ?? null));
+}));
+
+cycleValidate.post('/google/proposals/:id/accept', googleWrite(async (c, g) => {
+  const id = idParam(c.req.param('id'));
+  if (id == null) return decidedOr(c, 'not_found');
+  const b = await body(c);
+  const out = await acceptEvidenceProposal(c.env, { userId: Number(g.user.id), projectId: g.projectId, integrationId: g.integrationId }, id,
+    { hypothesis_id: b.hypothesis_id, direction: b.direction, strength: b.strength });
+  if (out !== 'ok') return decidedOr(c, out);
+  return c.json({ ok: true, id, state: 'accepted' });
+}));
+
+cycleValidate.post('/google/proposals/:id/dismiss', googleWrite(async (c, g) => {
+  const id = idParam(c.req.param('id'));
+  if (id == null) return decidedOr(c, 'not_found');
+  const out = await dismissProposal(c.env, { userId: Number(g.user.id), projectId: g.projectId, integrationId: g.integrationId }, id);
+  if (out !== 'ok') return decidedOr(c, out);
+  await logCycleWriteStatement(c.env, { projectId: g.projectId, userId: Number(g.user.id), cycle: 'validate', module: 'experiments', entityId: id, action: 'google_proposal_dismissed', summary: 'Google evidence offer dismissed' }).run();
+  return c.json({ ok: true, id, state: 'dismissed' });
+}));
+
+cycleValidate.delete('/google/facts/:id', googleWrite(async (c, g) => {
+  const id = idParam(c.req.param('id'));
+  const module = id == null ? null : await deleteValidateFact(c.env, { userId: Number(g.user.id), projectId: g.projectId, integrationId: g.integrationId }, id);
+  if (!module) return c.json({ error: 'fact_not_found', detail: 'That Google fact is not on this venture.' }, 404);
+  return c.json({ ok: true, id, module: MODULE_SLUG[module] });
+}));
 
 /** The Lab market page's three stored checks. */
 cycleValidate.get('/market-readiness', async (c) => {
