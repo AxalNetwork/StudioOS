@@ -236,6 +236,7 @@ import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
+import deckImages from './routes/deck_images';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1348,6 +1349,8 @@ app.route('/api/decks', deckSources);
 app.route('/api/decks', deckNew);
 // D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
 app.route('/api/decks', deckAssist);
+// D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
+app.route('/api/decks', deckImages);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

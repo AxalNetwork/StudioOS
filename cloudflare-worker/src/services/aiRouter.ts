@@ -89,6 +89,10 @@ export type TaskClass =
   // D766 (#2094) PR 3 — Build › Brand's logo, which called FLUX.1 Schnell
   // directly. Now a member's press, drawn through D761's image shape.
   | 'brand_logo'
+  // D903 (#2682) — the pitch deck's card and background images, the logo's
+  // text-to-image path (#2434 owner question 1, A): a member's press, quoted
+  // and charged per image.
+  | 'deck_image'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -853,6 +857,7 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   image_screen: { provider: 'workers-ai', model: VISION_SCOUT },
   image_alt_text: { provider: 'workers-ai', model: VISION_SCOUT },
   brand_logo:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
+  deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
   system_job:   { provider: 'workers-ai', model: SMALL_LLAMA },

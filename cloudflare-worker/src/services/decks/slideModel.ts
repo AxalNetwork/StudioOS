@@ -42,6 +42,9 @@ export const CHART_TYPES = ['line', 'columns', 'stacked', 'percent_bar', 'ranked
 export const CHART_RANGES = ['3m', '6m', '12m', 'all'] as const;
 export const TEXT_STYLES = ['heading', 'paragraph', 'list'] as const;
 export const IMAGE_TAGS = ['illustration', 'photo', 'screenshot', 'logo'] as const;
+/** D903 (#2682): how an image fills its range, and a background's overlay in the brand ink (PD12b–PD12d). */
+export const IMAGE_FITS = ['cover', 'contain'] as const;
+export const OVERLAYS = ['none', 'light', 'strong'] as const;
 export const VIDEO_RATIOS = ['16:9', '9:16'] as const;
 export const THEME_KINDS = ['brand', 'neutral_light', 'neutral_dark'] as const;
 
@@ -109,11 +112,28 @@ export function videoOf(raw: unknown): { provider: 'youtube' | 'vimeo'; video_id
   return { provider: 'youtube', video_id: id, url: `https://www.youtube.com/watch?v=${id}` };
 }
 
-function backgroundOf(v: any, url: UrlGuard): { color: string | null; image_url: string | null } | null {
+const IMAGE_ID = /^[0-9a-f-]{36}$/;
+type Background = { color: string | null; image_url: string | null; image_id?: string; overlay?: string };
+
+/** A colour or an image; an image from D903 keeps its id and its overlay (none, light or strong). */
+function backgroundOf(v: any, url: UrlGuard): Background | null {
   if (!v || typeof v !== 'object') return null;
   const color = typeof v.color === 'string' && COLOUR.test(v.color) ? v.color.toLowerCase() : null;
   const image_url = typeof v.image_url === 'string' ? url(v.image_url) : null;
-  return color || image_url ? { color, image_url } : null;
+  if (!color && !image_url) return null;
+  const out: Background = { color, image_url };
+  if (image_url && typeof v.image_id === 'string' && IMAGE_ID.test(v.image_id)) out.image_id = v.image_id;
+  const overlay = image_url ? oneOf(v.overlay, OVERLAYS) : null;
+  if (overlay) out.overlay = overlay;
+  return out;
+}
+
+/** D903: the point an image keeps in view when it is cropped to its range, in percent of each side. */
+function cropOf(v: any): { x: number; y: number } | null {
+  if (!v || typeof v !== 'object') return null;
+  const n = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? Math.round(Math.min(100, Math.max(0, x))) : null);
+  const x = n(v.x), y = n(v.y);
+  return x === null || y === null ? null : { x, y };
 }
 
 function pointsOf(v: unknown): Array<{ x: string; y: number }> | null {
@@ -143,7 +163,17 @@ function blockBody(kind: BlockKind, v: any, url: UrlGuard): Record<string, unkno
       };
     }
     case 'graphic': return { graphic: str(v.graphic, 60), ratio: v.ratio === '2x2' ? '2x2' : '1x1' };
-    case 'image': return { image_url: typeof v.image_url === 'string' ? url(v.image_url) : null, alt: str(v.alt, 200), tag: oneOf(v.tag, IMAGE_TAGS) };
+    case 'image': {
+      const image_url = typeof v.image_url === 'string' ? url(v.image_url) : null;
+      const out: Record<string, unknown> = { image_url, alt: str(v.alt, 200), tag: oneOf(v.tag, IMAGE_TAGS) };
+      // D903: an image from the deck's own store keeps its id, its fit and its crop.
+      if (image_url && typeof v.image_id === 'string' && IMAGE_ID.test(v.image_id)) out.image_id = v.image_id;
+      const fit = oneOf(v.fit, IMAGE_FITS);
+      if (fit) out.fit = fit;
+      const crop = cropOf(v.crop);
+      if (crop) out.crop = crop;
+      return out;
+    }
     case 'video': {
       const vid = videoOf(v.url);
       return vid ? { ...vid, poster_url: typeof v.poster_url === 'string' ? url(v.poster_url) : null, ratio: oneOf(v.ratio, VIDEO_RATIOS) ?? '16:9', title: str(v.title, 200) } : null;
@@ -189,7 +219,7 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
 }
 
 /** The deck's theme (PD8), or null for the default (the brand kit, no deck background). */
-export function sanitizeTheme(v: any, url: UrlGuard): { kind: string; background: { color: string | null; image_url: string | null } | null } | null {
+export function sanitizeTheme(v: any, url: UrlGuard): { kind: string; background: Background | null } | null {
   if (!v || typeof v !== 'object') return null;
   const kind = oneOf(v.kind, THEME_KINDS);
   if (!kind) return null;
