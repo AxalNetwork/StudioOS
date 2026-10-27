@@ -70,10 +70,9 @@ const TITLES: Record<ArticleNotifyKind, (a: Args) => { title: string; body: stri
 export async function notifyArticle(env: Env, kind: ArticleNotifyKind, args: Args): Promise<void> {
   const { title, body } = TITLES[kind](args);
   if (kind === 'admin_submitted') {
-    // Admin queue route is `/admin/articles` (no per-id route on the
-    // frontend); the queue page surfaces the specific article via its
-    // own selection state.
-    const link = `/admin/articles`;
+    // D1290 (#2383): each article has its own address in the queue,
+    // `/admin/articles/<id>`, which opens its review panel.
+    const link = `/admin/articles/${args.articleId}`;
     const recipients = await admins(env);
     for (const uid of recipients) {
       try {
