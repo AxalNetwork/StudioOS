@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ExternalLink, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
-import Lightbox from '../../ui/Lightbox';
+import DetailSheet from '../../ui/Sheet.jsx';
 import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
@@ -108,8 +108,12 @@ export function useConnectors({ companyId = null } = {}) {
  * `Sheet` is only its header, body and footer: no overlay, no dialog role, no
  * Escape of its own (the lightbox's), and its × is `onDismiss`, which closes
  * the whole lightbox, while the panel's own `onClose` steps back to the list.
- * With no frame, a `Sheet` opens that same frame around itself: a centred
- * dialog (D753 F8, #1992). The right-hand side sheet is gone.
+ * With no frame, a `Sheet` opens the shared detail Sheet around itself
+ * (`ui/Sheet.jsx`, D1317; it was a centred dialog under D753 F8): the pane's
+ * eyebrow, mark, title, sub and action go in that Sheet's fixed header, its
+ * footer in the fixed footer, and only its body scrolls. This file's pane is
+ * `ConnectorPane`, still exported as `Sheet` for its users (GitHub's sync
+ * sheet, and the Mercury sheet HQ's Bank accounts console opens).
  *
  * D753 — `layout: 'page'` is a connector's own page (`ConnectorPage.jsx`): the
  * sheet sits in the page's flow, with no overlay, no dialog role, no × and no
@@ -117,20 +121,20 @@ export function useConnectors({ companyId = null } = {}) {
  */
 export const SheetFrame = createContext(null);
 
-/** A centred dialog of its own; inside a `SheetFrame`, the frame's content. `action` sits in the head, before its ×. */
-export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider = null, providerName = '', action = null, 'data-testid': testId }) {
+/** The shared detail Sheet of its own; inside a `SheetFrame`, the frame's content. `action` sits in the head, before its ×. */
+export function ConnectorPane({ eyebrow, title, sub, onClose, children, footer, provider = null, providerName = '', action = null, 'data-testid': testId }) {
   const frame = useContext(SheetFrame);
-  // With no frame (a sheet opened on its own, as HQ's Bank accounts console does), open Build's one:
-  // a centred Lightbox, whose Escape stack a nested dialog shares.
+  // With no frame (a pane opened on its own, as HQ's Bank accounts console does): the shared
+  // right-side Sheet (D1317, 520px), whose Escape stack a nested dialog shares.
   if (!frame) {
     return (
-      <Lightbox label={title} size="tall" width={520} onClose={onClose} testId="sheet-dialog">
-        <SheetFrame.Provider value={{ onDismiss: onClose }}>
-          <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} provider={provider} providerName={providerName} action={action} data-testid={testId}>
-            {children}
-          </Sheet>
+      <DetailSheet label={title} eyebrow={eyebrow} sub={sub} width={520} onClose={onClose} testId="sheet-dialog" headerActions={action}
+        title={<span className="flex items-center gap-2">{provider && <BrandIcon provider={provider} name={providerName} size={24} />}{title}</span>}
+        footer={footer && <div className="flex flex-wrap items-center justify-end gap-2">{footer}</div>}>
+        <SheetFrame.Provider value={{ onDismiss: onClose, layout: 'sheet' }}>
+          <div className="pb-4" data-testid={testId} data-layout="sheet">{children}</div>
         </SheetFrame.Provider>
-      </Lightbox>
+      </DetailSheet>
     );
   }
   const head = (
@@ -163,6 +167,9 @@ export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider
     </div>
   );
 }
+
+/** This file's pane under the name its users import. */
+export const Sheet = ConnectorPane;
 
 const BANNER = {
   warn: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200',
@@ -745,12 +752,12 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     : null;
 
   return (
-    <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} provider={p.key} providerName={p.display_name} action={pageLink} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
+    <ConnectorPane eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} provider={p.key} providerName={p.display_name} action={pageLink} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
       {note}
       {banner}
       {body}
       <ToolModals conn={conn} flow={flow} onChanged={onChanged} />
-    </Sheet>
+    </ConnectorPane>
   );
 }
 
