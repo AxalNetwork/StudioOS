@@ -1,8 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { DollarSign, TrendingUp } from 'lucide-react';
+import { DollarSign } from 'lucide-react';
 import FinancialsPage from './FinancialsPage';
-import RaisePipelinePage from './RaisePipelinePage';
 
 // RAISE Workspaces (Task #1) — Capital workspace.
 //
@@ -17,10 +16,12 @@ import RaisePipelinePage from './RaisePipelinePage';
 // /build/financials page is retired (#2339, the owner's "Remove") and forwards
 // to the model tab. D1029 (#2866): the Cap Table tab is gone; the Cap table
 // tool at /raise/cap-table took it, and /raise/capital/cap-table forwards there.
+// D1194 (#3128): the Raise Pipeline tab is gone too. Capital relationships
+// took it, and /raise/capital/pipeline forwards to its Pipeline tab. This page
+// leaves with Use of funds part 7.
 
 const TABS = [
   { id: 'model', to: '/raise/capital/model', label: 'Financial Model', icon: DollarSign },
-  { id: 'pipeline', to: '/raise/capital/pipeline', label: 'Raise Pipeline', icon: TrendingUp },
 ];
 
 /**
@@ -42,9 +43,7 @@ export default function CapitalWorkspacePage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const active = location.pathname.includes('/pipeline')
-    ? 'pipeline'
-    : 'model';
+  const active = 'model';
 
   return (
     <div data-testid="capital-workspace" className="p-6 max-w-[1600px] mx-auto">
@@ -53,7 +52,7 @@ export default function CapitalWorkspacePage() {
           <DollarSign className="w-6 h-6 text-violet-600" /> Capital
         </h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Your financial model and investor raise pipeline in one place.
+          Your financial model.
         </p>
       </div>
 
@@ -80,7 +79,6 @@ export default function CapitalWorkspacePage() {
       </div>
 
       {active === 'model' && <FinancialsPage embedded />}
-      {active === 'pipeline' && <RaisePipelinePage embedded />}
     </div>
   );
 }

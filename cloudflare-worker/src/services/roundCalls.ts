@@ -476,7 +476,7 @@ export async function recordCounsel(env:Env,call:CallRow,actor:User,reference:un
     await notify(env,{userId:call.created_by,type:'round_call_counsel_approved',category:'deals',channels:['in_app'],
       title:'Round call approved by counsel',
       body:call.state==='awaiting_counsel'?'Counsel approved the updated terms. Your call has resumed.':'Counsel approved the terms. Your round call is ready for the send step.',
-      link:'/raise/calls/'+call.uid});
+      link:'/raise/capital-relationships/calls/'+call.uid});
   } catch { /* An approval already recorded must survive a notice failure. */ }
   return {ok:true,terms_hash:call.terms_hash};
 }

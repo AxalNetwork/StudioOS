@@ -21,13 +21,16 @@ import type { Tier } from '../middleware/requireTier';
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
 import { MERCURY_FEEDS, mercuryFedModules } from './mercuryFeeds';
 import { NOTION_FEEDS } from './notionFeeds';
+import { vercelPulls, vercelFedModules } from './vercelFeeds';
+import { VERCEL_READ_SCOPES } from '../services/vercel/api';
+import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 /** `oauth_mcp`: a member's sign-in through a provider's MCP server (D840's Mercury, D847's shared client). */
 export type AuthType = 'none' | 'api_key' | 'oauth2' | 'webhook' | 'oauth_mcp';
 export type IntegrationType = 'crm' | 'scheduling' | 'cap_table' | 'messaging' | 'e_sign' | 'data_feed' | 'custom';
-export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build';
+export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build' | 'Hosting';
 export interface ConnectorMetadata {
   category: ConnectorCategory;
   verified: boolean;
@@ -421,6 +424,24 @@ export const REGISTRY: ProviderDescriptor[] = [
     oauth_scopes: ['issues:read', 'pull_requests:read', 'contents:read', 'metadata:read'],
   },
   {
+    key: 'vercel',
+    display_name: 'Vercel',
+    integration_type: 'data_feed',
+    description: 'Read your Vercel projects, their deployments and their domains, for the venture you choose. Read-only: Axal VC cannot deploy, cancel, roll back or change anything.',
+    // D1096 (#2961, #2408 part 1). A Vercel Integration (a connectable account)
+    // with Read on Projects, Deployments and Domains only. The callback reads the
+    // installation's scopes and refuses, and uninstalls, anything wider.
+    status: 'beta',
+    tier: 'free',
+    auth_type: 'oauth2',
+    supports_pat: false,
+    audience_rule: 'venture',
+    capabilities: ['Read projects', 'Read deployments', 'Read domains', 'Choose projects'],
+    docs_url: 'https://vercel.com/docs/integrations/create-integration/vercel-api-integrations',
+    icon: 'Triangle',
+    oauth_scopes: [...VERCEL_READ_SCOPES],
+  },
+  {
     key: 'zoom',
     display_name: 'Zoom',
     integration_type: 'messaging',
@@ -521,8 +542,17 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   crunchbase: { category: 'Data', verified: false, pulls: [{ what: 'Company data', module: 'market_intelligence' }], sends: [], feeds: ['market_intelligence'], permissions: ['Read company profiles with your Crunchbase key.'] },
   stripe: { category: 'Payments', verified: false, pulls: [{ what: 'Payments and subscriptions', module: 'revenue_and_traction' }], sends: [], feeds: ['revenue_and_traction', 'customers'], permissions: ['Read charges and subscriptions from your Stripe account.'] },
   github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Milestones', module: 'product_roadmap' }, { what: 'Releases', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Release checks', module: 'prototype_mvp' }, { what: 'The connection and each sync', module: 'operating_systems' }, { what: 'Architecture notes and decisions', module: 'solution_design' }, { what: 'Languages and topics', module: 'solution_design' }, { what: 'Contributors and their commits', module: 'founding_team' }, { what: 'Where the code sits and its licence', module: 'company_creation' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp', 'operating_systems', 'solution_design', 'founding_team', 'company_creation'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases, the README, the Markdown in docs/, doc/ and adr/, and the last 90 days of commits in the repositories you choose.', 'Read repository names, visibility, owners, licences, contributors, languages and topics.'] },
+  // D1096: what lands is `vercelFeeds.ts`'s; part 1 lands no module's rows, so it claims the connection on Operating systems only.
+  vercel: { category: 'Hosting', verified: false, pulls: vercelPulls(), sends: [], feeds: vercelFedModules(), permissions: ['Read your Vercel projects, their settings and their linked repository.', 'Read your deployments, their state, promotions and rollbacks.', 'Read your domains, their configuration and expiry. Axal VC cannot deploy, cancel, roll back or change anything.'] },
   zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], used_by: [{ label: 'Validate › Record a session', href: '/validate/record' }], suggests: ['problem_discovery', 'customer_research', 'ideal_customer_profile', 'market_intelligence', 'demand_signals', 'experiments'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.', 'Read a recording’s details, which Zoom grants with transcript notifications; Axal VC uses only the recording files above.', 'Open inside a Zoom meeting, which Zoom grants to every app of this kind; Axal VC does not use it.', 'Let Axal’s notetaker join a call on your behalf, only while you are in it.'] },
-  google_workspace: { category: 'Docs', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read only the Google files you choose. The file permission also permits writes at Google; Axal VC uses only read methods.'] },
+  // D1092, D1093 and D1095: what lands is `googleWorkspaceFeeds.ts`'s, one entry per feed a part built.
+  google_workspace: {
+    category: 'Docs', verified: false,
+    pulls: GOOGLE_WORKSPACE_FEEDS.map((f) => ({ what: f.what, module: f.module })),
+    sends: [],
+    feeds: [...new Set(GOOGLE_WORKSPACE_FEEDS.map((f) => f.module))],
+    permissions: ['Read only the Google files you choose. The file permission also permits writes at Google; Axal VC uses only read methods.'],
+  },
   google_calendar: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
   // D879: the founder's Grow and Raise modules, read from `mercuryFeeds.ts` (D840 parts 2 and 3).
   mercury: {

@@ -20,6 +20,8 @@ import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import GithubRepositoriesSection from './GithubRepositoriesSection';
 import NotionSourcesSection from './NotionSourcesSection';
+import GoogleWorkspaceFiles from './GoogleWorkspaceFiles';
+import VercelProjectsSection from './VercelProjectsSection';
 import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -157,6 +159,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
   return (
     <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} repositories={!!returned?.repositories} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
       {p.key === 'zoom' && <ZoomValidate p={p} />}
+      {/* D1091 (GW1, GW2, GW8): Google Workspace's own section draws its permission and the files chosen. */}
+      {p.key === 'google_workspace' && <GoogleWorkspaceFiles />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
         : (
@@ -287,6 +291,8 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false,
       {p.key === 'github' && <GithubRepositoriesSection p={p} focus={repositories} onChanged={onChanged} />}
       {/* D1086 (#2951): the pages a founder shared with Axal VC, and Add a source. */}
       {p.key === 'notion' && <NotionSourcesSection p={p} phone={phone} />}
+      {/* D1096 (#2961): Vercel's Choose projects. */}
+      {p.key === 'vercel' && <VercelProjectsSection p={p} onChanged={onChanged} />}
       <div className="-mx-5">
         {mercury ? (
           <div data-testid="connector-page-mercury">

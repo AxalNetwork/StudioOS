@@ -13,8 +13,8 @@
  * audience-and-section digest.
  *
  * THE BOARD (D214, H19's C3) DRAWS BOTH IN ONE SET OF LANES AND MERGES
- * NOTHING. Six lanes — Draft, Review, Localisation, Brand approval,
- * Scheduled, Published — built from the same by-status reads the route
+ * NOTHING. Seven lanes — Draft, Review, Localisation, Brand approval,
+ * Ready to publish, Scheduled, Published — built from the same by-status reads the route
  * reports beside them, every row labelled with its store. The canvas's "one
  * meaning of published" is refused in the band, because there are still two.
  * Localisation and Brand approval split the content escalations HQ has not
@@ -233,7 +233,7 @@ function Stat({ label, value, note }) {
 /* ── the band ────────────────────────────────────────────────────────────── */
 
 /**
- * The header band's count. The canvas reads "{n} items · six lanes · one
+ * The header band's count. The canvas reads "{n} items · seven lanes · one
  * meaning of published"; the first is the board's own measure of what is
  * short of published, and the last is refused, because two stores still mean
  * two different things by "published". A board that could not count a lane
@@ -276,15 +276,37 @@ export function cardMeta(card) {
 
 function BoardCard({ card }) {
   const title = card.store === 'escalation' ? card.subject : card.title;
-  return (
-    <li className="rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-2" data-testid="hq-content-card">
+  const meta = cardMeta(card);
+  const chip = card.store === 'escalation' && card.branch_code && (
+    <span className={`mt-1 inline-block ${PILL} ${PILL_NEUTRAL}`}>{card.branch_code}</span>
+  );
+  const body = (
+    <>
       <div className="truncate text-[11.5px] font-medium text-axal-ink dark:text-white">{title}</div>
-      <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{cardMeta(card)}</div>
+      <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{meta}</div>
       {/* Only an escalation knows which branch it came from. An article or a
           publication names none, so it draws no chip rather than a blank one. */}
-      {card.store === 'escalation' && card.branch_code && (
-        <span className={`mt-1 inline-block ${PILL} ${PILL_NEUTRAL}`}>{card.branch_code}</span>
-      )}
+      {chip}
+    </>
+  );
+  // D1298 — article cards link to the single-article review; publications and
+  // escalations have no such address here.
+  if (card.store === 'article') {
+    return (
+      <li>
+        <Link
+          to={`/admin/articles/${card.id}`}
+          className="block rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-2 hover:border-violet-400 hover:bg-violet-50/30 dark:hover:bg-violet-900/10"
+          data-testid="hq-content-card"
+        >
+          {body}
+        </Link>
+      </li>
+    );
+  }
+  return (
+    <li className="rounded-lg border border-axal-hairline bg-axal-ground px-2.5 py-2" data-testid="hq-content-card">
+      {body}
     </li>
   );
 }
@@ -377,7 +399,7 @@ function LaneColumn({ lane }) {
 }
 
 /**
- * H19 · C3 — the six lanes, each part named by its store. Pure: it renders
+ * H19 · C3 — the seven lanes, each part named by its store. Pure: it renders
  * what it is given, so every state can be drawn by a test without a fetch.
  */
 export function ContentBoard({ loading, unreadable, board, pipeline, unifiedReason }) {
@@ -904,8 +926,8 @@ export default function ContentPage() {
         // branch never sends.
         ['Localisation link', 'A submission that names an item records whether it localises that item or asks for a change to it. A submission raised before that was recorded has no relation and is not counted as a localisation, and a branch that localises in its own database without sending it to HQ is not seen here.'],
         ['Per-article attribution', 'An escalation names the branch that submitted it; an ARTICLE still names no licence (U1).'],
-        // D214 — what H18 and H19 draw that nothing stores.
-        ['Publish time', 'Scheduled means approved; publishing is a manual step, and nothing stores when a piece goes out.'],
+        // D1298 — `publish_at` stores when an approved article goes out (D484,
+        // migration 346), so the rail line that said nothing stores it is gone.
         ['Games on branches', 'No call sends a game to a branch, so none is live on one and no branch run reaches HQ.'],
         ['Persona schema', 'The twelve personas are defined in code, so no console adds, renames or retires one.'],
         ['Roster nominations', 'Nothing records who put a person on the roster, and a branch has no route to propose anyone to HQ.'],
@@ -919,7 +941,7 @@ export default function ContentPage() {
       <div className="min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#1e3a8a] px-4 py-2.5 text-white">
           <span className="text-[12.5px] font-bold">All subsidiaries</span>
-          {/* The artboard's header counts "N items · six lanes · one meaning
+          {/* The artboard's header counts "N items · seven lanes · one meaning
               of published". The count is the board's own; the claim of one
               meaning is refused, and localisation is named rather than
               filled with a number. */}
@@ -934,7 +956,7 @@ export default function ContentPage() {
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Content</h1>
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Six lanes, from Draft to Published, drawn from the stores that exist: articles, publications, and the
+            Seven lanes, from Draft to Published, drawn from the stores that exist: articles, publications, and the
             content escalations branches send HQ. Every row names its store, because the two stores still mean two
             different things by &ldquo;published&rdquo;, and a lane that cannot be counted says why rather than
             holding a number. Below it, the deck roster, assessment games and the personas taxonomy — each a read-only
@@ -953,7 +975,7 @@ export default function ContentPage() {
         )}
 
         <div className="mt-4 space-y-4">
-          <Zone title="Pipeline" sub="Draft → Review → Localisation → Brand approval → Scheduled → Published" testid="hq-content-board-zone">
+          <Zone title="Pipeline" sub="Draft → Review → Localisation → Brand approval → Ready to publish → Scheduled → Published" testid="hq-content-board-zone">
             <ContentBoard
               loading={loading}
               unreadable={unreadable}

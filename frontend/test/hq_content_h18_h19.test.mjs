@@ -130,9 +130,14 @@ const BOARD = {
       note: 'Content escalations a branch raised and HQ has not answered.',
     },
     {
+      key: 'ready_to_publish', label: 'Ready to publish', total: 1,
+      parts: [part('articles', ['approved'], 1, [article({ id: 13, title: 'Approved piece', status: 'approved' })])],
+      note: 'Approved articles with no publish time: they wait for a manual publish.',
+    },
+    {
       key: 'scheduled', label: 'Scheduled', total: 1,
-      parts: [part('articles', ['approved'], 1, [])],
-      note: 'Approved and waiting for someone to publish it.',
+      parts: [part('articles', ['approved'], 1, [article({ id: 14, title: 'Timed piece', status: 'approved' })])],
+      note: 'Approved articles with a publish time: an article goes out at that time.',
     },
     {
       key: 'published', label: 'Published', total: 3,
@@ -140,10 +145,16 @@ const BOARD = {
       note: 'Two meanings of "published".',
     },
   ],
-  total: 12,
-  in_flight: 9,
+  total: 13,
+  in_flight: 10,
   other_publication_statuses: [],
-  publish_time: { recorded: false, reason: 'Scheduled means approved; publishing is a manual step, and nothing stores when a piece is meant to go out.' },
+  publish_time: {
+    recorded: true,
+    scheduled: 1,
+    unscheduled: 1,
+    next: [{ id: 14, title: 'Timed piece', publish_at: '2026-10-28T09:00:00Z' }],
+    note: 'An approved article with a publish time goes out when it passes.',
+  },
   origin: { recorded: false, reason: 'Neither an article nor a publication names a branch.' },
 };
 const withLane = (key, lane) => ({ ...BOARD, lanes: BOARD.lanes.map((l) => (l.key === key ? { ...l, ...lane } : l)) });
@@ -222,11 +233,14 @@ test('the visible-text helper decodes each entity once, as React encoded it', ()
 
 // ──────────────────────────────────────────── the artboards and the page ──
 
-test('H18 draws C1 then C2, and H19 draws the six lanes then the C4 roster', () => {
+test('H18 draws C1 then C2, and H19 draws the lanes then the C4 roster', () => {
   assert.ok(H18.indexOf('C1 · Assessment Studio') >= 0, 'H18 no longer draws the Assessment Studio');
   assert.ok(H18.indexOf('C2 · Personas taxonomy') > H18.indexOf('C1 · Assessment Studio'), 'H18 draws C2 before C1');
+  // D1298 added Ready to publish between Brand approval and Scheduled. The
+  // integrated canvas still shows the old six-lane string (D1290), so the new
+  // order is asserted from the page code below, not from H19.
   const lanes = 'Draft → Review → Localisation → Brand approval → Scheduled → Published';
-  assert.ok(H19.includes(lanes), 'H19 no longer names the six lanes in this order');
+  assert.ok(H19.includes(lanes), 'H19 no longer names its lanes in this order');
   assert.ok(H19.indexOf('C4 · Advisors & Partners — deck roster') > H19.indexOf(lanes), 'H19 draws the roster above the lanes');
 });
 
@@ -250,17 +264,16 @@ test('the page runs board → templates and localisation → roster → assessme
   for (const panel of ['<ContentBoard', '<AssessmentPanel', '<PersonasPanel', '<RosterPanel']) {
     assert.equal(count(P, panel), 1, `${panel} is mounted ${count(P, panel)} times`);
   }
-  // The zone's subtitle is the canvas's own lane sequence, character for character.
-  assert.ok(P.includes('sub="Draft → Review → Localisation → Brand approval → Scheduled → Published"'));
+  // D1298: the zone subtitle now names the seven lanes.
+  assert.ok(P.includes('sub="Draft → Review → Localisation → Brand approval → Ready to publish → Scheduled → Published"'));
 });
 
-test('the route builds its six lanes in the canvas\'s order, with the canvas\'s names', () => {
-  const at = ROUTE.indexOf('const lanes = [');
+test('the route builds its seven lanes in order, with the new Ready to publish lane', () => {
+  const at = ROUTE.indexOf('const LANES: Array<');
   assert.ok(at >= 0, 'the board no longer declares its lanes in one list');
-  const block = ROUTE.slice(at, ROUTE.indexOf('].map(', at));
+  const block = ROUTE.slice(at, ROUTE.indexOf('\n];', at));
   const labels = [...block.matchAll(/key: '[a-z_]+', label: '([^']+)'/g)].map((m) => m[1]);
-  const canvas = H19.match(/Draft → Review → Localisation → Brand approval → Scheduled → Published/)[0].split(' → ');
-  assert.deepEqual(labels, canvas);
+  assert.deepEqual(labels, ['Draft', 'Review', 'Ready to publish', 'Scheduled', 'Published']);
 });
 
 test('every console is linked by a literal path, once, and the network-profiles route is never linked', () => {
@@ -278,7 +291,7 @@ test('the band counts what is short of published and refuses "one meaning of pub
   assert.equal(bandLine({ unreadable: true }), 'the content summary could not be read');
   // RE-AIMED IN D275: localisation is counted now, as branches send it, so the
   // band says whose count it is rather than "not recorded".
-  assert.equal(bandLine({ board: BOARD }), '9 in pipeline · localisation as branches send it · two meanings of published');
+  assert.equal(bandLine({ board: BOARD }), '10 in pipeline · localisation as branches send it · two meanings of published');
   assert.equal(
     bandLine({ board: { ...BOARD, in_flight: null } }),
     'in pipeline: not fully counted · localisation as branches send it · two meanings of published',
@@ -319,27 +332,35 @@ test('the board: loading and a failed summary draw no lanes, and say which', () 
   }
 });
 
-test('the board draws six lanes in the order given, each part named by its store', () => {
+test('the board draws seven lanes in the order given, each part named by its store', () => {
   const html = render(ContentBoard, { board: BOARD, unifiedReason: 'Two stores, two consoles.' });
   const keys = [...html.matchAll(/data-testid="hq-content-lane-([a-z_]+)"/g)].map((m) => m[1]).filter((k) => k !== 'no');
-  assert.deepEqual(keys, ['draft', 'review', 'localisation', 'brand_approval', 'scheduled', 'published']);
+  assert.deepEqual(keys, ['draft', 'review', 'localisation', 'brand_approval', 'ready_to_publish', 'scheduled', 'published']);
   const draft = text(laneSlice(html, 'draft'));
   assert.match(draft, /Draft 3/);
   assert.match(draft, /2 articles/);
   assert.match(draft, /1 publications/);
   assert.match(draft, /article · draft · 2026-09-20 10:00/);
   assert.match(draft, /publication · draft · 2026-09-19 09:30/);
-  assert.equal(count(html, 'data-testid="hq-content-card"'), 4);
+  assert.equal(count(html, 'data-testid="hq-content-card"'), 6);
   // Only an escalation knows its branch, so only it carries the chip.
   const brand = laneSlice(html, 'brand_approval');
   assert.match(text(brand), /French landing page/);
   assert.match(text(brand), /escalation · raised 2026-09-18 08:00 · past SLA/);
   assert.match(text(brand), /\bfr\b/);
   assert.ok(!text(laneSlice(html, 'draft')).match(/\bfr\b/), 'an article drew a branch chip');
-  assert.match(text(html), /Publish time · Not recorded — Scheduled means approved/);
+  // D1298 — article cards link to the single-article review.
+  const ready = laneSlice(html, 'ready_to_publish');
+  assert.match(text(ready), /Ready to publish 1/);
+  assert.match(text(ready), /1 articles/);
+  assert.ok(ready.includes('href="/admin/articles/13"'), 'the Ready to publish card does not link to the article');
+  const scheduled = laneSlice(html, 'scheduled');
+  assert.match(text(scheduled), /Scheduled 1/);
+  assert.ok(scheduled.includes('href="/admin/articles/14"'), 'the Scheduled card does not link to the article');
+  assert.match(text(html), /Publish time · 1 approved article set to go out, 1 waiting for a manual publish\./);
   assert.match(text(html), /Branch of origin · Not recorded — Neither an article nor a publication names a branch\./);
   assert.match(text(html), /Two stores, two consoles\./);
-  assert.deepEqual(hrefs(html), ['/admin/articles', '/admin/publications']);
+  assert.deepEqual(hrefs(html), ['/admin/articles/11', '/admin/articles/12', '/admin/articles/13', '/admin/articles/14', '/admin/articles', '/admin/publications']);
 });
 
 test('a lane with no source: "Not recorded" with its reason, never a number or "Unreadable"', () => {
@@ -615,9 +636,11 @@ test('the rail counts the three new reads and names what H18 and H19 draw that n
     assert.ok(coverage.includes(read), `the rail's coverage no longer counts ${read}`);
   }
   const unavailable = P.slice(P.indexOf('unavailable={['), P.indexOf(']}', P.indexOf('unavailable={[')));
-  for (const title of ['Publish time', 'Games on branches', 'Persona schema', 'Roster nominations', 'Localisation link']) {
+  // D1298 — the "Publish time" rail line is gone because `publish_at` stores it.
+  for (const title of ['Games on branches', 'Persona schema', 'Roster nominations', 'Localisation link']) {
     assert.equal(count(unavailable, `['${title}',`), 1, `the rail names "${title}" ${count(unavailable, `['${title}',`)} times`);
   }
+  assert.equal(count(unavailable, "['Publish time',"), 0, 'the stale Publish time rail line is still present');
 });
 
 // ─────────────────────────────────────────── Branch Programs, same fact ──

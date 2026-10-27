@@ -42,10 +42,14 @@ test('the dialog asks for the three things the artboard asks for', () => {
   // Read off the canvas rather than retyped, so the page cannot drift from
   // the design without this failing.
   const board = h4();
-  for (const label of ['Scope', 'Expiry', 'Reason']) {
+  for (const label of ['Scope', 'Reason']) {
     assert.ok(board.includes(label), `the artboard no longer draws ${label}`);
     assert.ok(ADMIN_PAGE.includes(label), `the dialog dropped ${label}`);
   }
+  // D1306 (#3403): H4's Expiry is the Accounts canvas's Length (ACC7 F), which
+  // says the session's real limit: thirty minutes, extendable to 120.
+  assert.ok(board.includes('Expiry'), 'the artboard changed');
+  assert.ok(ADMIN_PAGE.includes('Length'), 'the dialog dropped Length');
   assert.ok(board.includes('Recorded in Governance'), 'the artboard changed');
   assert.match(ADMIN_PAGE, /Recorded in Governance/, 'the dialog no longer says where this is recorded');
   assert.match(ADMIN_PAGE, /Start a support session/, 'the dialog lost its title');
@@ -59,10 +63,15 @@ test('scope and expiry are stated, not offered as choices', () => {
   const src = codeOnly(ADMIN_PAGE);
   const a = src.indexOf('function SupportSessionDialog(');
   assert.ok(a >= 0, 'the dialog is gone');
-  const body = src.slice(a, src.indexOf('const KYC_BADGES', a));
+  // D1305 retired KYC_BADGES with the old table; Change profile's dialog follows this one now.
+  const body = src.slice(a, src.indexOf('function ChangeProfileDialog(', a));
   assert.ok(body.length > 200, "the dialog's end marker moved");
-  assert.match(body, /Read and write as user/, 'the scope is no longer stated');
-  assert.match(body, /30 minutes · hard/, 'the expiry is no longer stated');
+  assert.match(body, /Read and write, as this account/, 'the scope is no longer stated');
+  // D1306 (#3403, ACC7 F; #2377 item 11): the length and its ceiling, from the
+  // constants auth.ts enforces, never "30 minutes · hard" against a 120-minute ceiling.
+  assert.match(body, /\{SUPPORT_SESSION_MINUTES\} minutes\. You can extend it, up to \{SUPPORT_SESSION_CEILING_MINUTES\} minutes in all\./,
+    'the length is no longer stated');
+  assert.doesNotMatch(body, /· hard/, 'the dialog still calls the 30 minutes a hard limit');
   assert.doesNotMatch(body, /<select/, 'scope or expiry became a picker over options that do not exist');
 });
 

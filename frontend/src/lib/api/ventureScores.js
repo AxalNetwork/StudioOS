@@ -32,6 +32,9 @@ export const ventureScoresApi = {
     request(`/venture-scores/${enc(projectId)}/corrections`, {
       method: 'POST', body: JSON.stringify({ scope, input_key: inputKey, message }),
     }),
+  // D1258: each scope's stored rows by model version, for the trajectory (SC12).
+  trajectory: (projectId) => request(`/venture-scores/${enc(projectId)}/trajectory`),
+  // { investors, advisors, candidates: { readable, items: [{ user_id, name }] } } — the venture's own advisors.
   sharing: (projectId) => request(`/venture-scores/${enc(projectId)}/sharing`),
   // { investors?: boolean, advisors?: [userId] }
   saveSharing: (projectId, change) =>
