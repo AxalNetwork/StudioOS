@@ -413,6 +413,8 @@ D1093 (#2958): `build_google.ts` mounts `/api/cycles/build/google` before the Bu
 
 D1086 (#2951): `notion.ts` mounts `/api/connectors/notion` (search, the sources a founder picks with their field map, Stop using, a five-row preview that stores nothing) ahead of the integrations router, and its `notionCycleRoutes` on `/api/cycles` (`/:section/notion`: the read, Sync, Accept, Dismiss and Delete) ahead of the section routers. The sync itself is `../services/notion/sync.ts`. Every write checks the owner, the venture and the company; a support session is refused.
 
+D1325 (#3486): `fills.ts` mounts `/api/fills`: `GET /sheet?page=&form=&project=&record=`, the Fill with Eadwyn sheet's read. Per field of a FILL_FIELDS form: the value now and its mark (`../services/fills/provenance.ts`' `marksForRows`), what each source has waiting (`../services/fills/sources.ts`), the never-fill flag and the trigger; then each source's state and as-of, and Eadwyn's quote. A reader and a support session get marks and no trigger; each block that fails is `unreadable` on its own. No model runs; part 3 (D1326) adds the run, the record and the undo.
+
 D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
