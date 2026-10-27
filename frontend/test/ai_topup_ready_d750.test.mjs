@@ -73,7 +73,7 @@ test('the shared reader: ready only with a sellable price; not_ready and unset a
 // three cases; the rail's are `rail: Add tokens is always drawn` below.
 test('the rail: Add tokens is always drawn: a link when ready, disabled with the reason when not ready or unset, disabled with Retry on a failed read', () => {
   const ready = rail(CASES.ready);
-  assert.match(ready, /<a href="\/pricing\/products#token-packs"[^>]*>Add tokens</);
+  assert.match(ready, /<a href="\/pricing\?for=models#add-tokens"[^>]*>Add tokens</);
   assert.doesNotMatch(words(ready), /isn't available|could not be read/);
   for (const c of ['not_ready', 'unset']) {
     const html = rail(CASES[c]);
@@ -91,7 +91,7 @@ test('the rail: Add tokens is always drawn: a link when ready, disabled with the
 for (const [name, draw] of [['the rail', rail], ['the compact card', card]]) {
   if (name === 'the compact card') test(`${name}: Add tokens when ready, "isn't available yet" with no Retry when not ready or unset, Unreadable with Retry on a failed read`, () => {
     const ready = draw(CASES.ready);
-    assert.match(ready, /href="\/pricing\/products#token-packs"[^>]*>Add tokens</);
+    assert.match(ready, /href="\/pricing\?for=models#add-tokens"[^>]*>Add tokens</);
     assert.doesNotMatch(words(ready), /isn't available|could not be read/);
     for (const c of ['not_ready', 'unset']) {
       const html = draw(CASES[c]);

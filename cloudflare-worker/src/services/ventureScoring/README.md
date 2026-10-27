@@ -27,3 +27,5 @@ Rules for adding to it:
   or `kyc_data`. `../../../test/venture_scoring_d1255.test.ts` scans every statement.
 - No client sends a computed field, and no score sets a deal or venture
   status. Callers gate the venture first.
+
+**The Raise evidence pack (D1269 §3).** SCORING's one read of the founder's evidence is `evidencePack(env, projectId, { audience: 'scoring' })` in `../raiseEvidence.ts` (D1265 §5): items shared beyond Private and current at read, each with its `backs`, Source label and the value an investor after the NDA would see, the linked claim states, and `pack_hash`. The collectors here do not call it yet; only `mercuryRunway` is read from `../raiseEvidence.ts`. When a part wires it, no input is read from a Private item, the grade stays `SOURCE_GRADE`'s, and the pack's hash is stored with the scorecard row.
