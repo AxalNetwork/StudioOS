@@ -9,6 +9,12 @@ Every new read must have a fixed origin/path in the allowlist, a timeout,
 a response limit and a fake. Never add a provider write here. Five-row previews
 are ephemeral. No module importer is built in part 2.
 
+`driveCreate.ts` (D904, #2683) is the one exception the owner allowed
+(2026-10-27): creating the new presentation a founder exports from the Pitch
+deck studio, by one frozen POST to Drive's upload endpoint, with no file id,
+no parents and no sharing. Nothing else may write with this grant; D904's test
+scans the Worker for any other Drive upload.
+
 `raise.ts` (D1094, #2959) is part 5, Raise: a chosen Slides deck becomes a
 deck-version proposal, chosen Drive files are copied into the data room (a
 Google file exported to PDF, replaced only when Google's `modifiedTime`
