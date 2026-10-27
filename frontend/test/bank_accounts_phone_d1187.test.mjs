@@ -128,7 +128,8 @@ test('BNK12b: one account is a full-height sheet whose bar holds Reveal full num
   try {
     const box = one(v, 'bank-account-lightbox');
     assert.ok(box);
-    assert.match(cls(v, box), /max-sm:h-full/, 'not full height on a phone');
+    // D1317: the account is the shared Sheet, full height at every width (`sheet.css` makes it full width below 640px).
+    assert.match(cls(v, box), /\baxs-sheet\b.*\binset-y-0\b/, 'not full height on a phone');
     const bar = one(v, 'bank-account-phone-bar');
     assert.ok(bar, 'no phone bar');
     assert.match(textOf(bar), /^Reveal full number…Close$/);

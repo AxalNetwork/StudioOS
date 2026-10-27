@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ExternalLink, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ExternalLink, Search, SlidersHorizontal } from 'lucide-react';
 import { Card, Skeleton, Unrecorded } from '../../ui';
+import Sheet from '../../ui/Sheet.jsx';
 import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import {
   EMPTY_QUERY, PAGE_SIZES, SIZE_BANDS, SORT_OPTIONS, STAGE_REASON, VERDICT_LABELS,
@@ -415,28 +416,22 @@ function Drawer({ item, drawer, onClose, onAdd, busy, isAdded, dossierOf, notice
   const note = notice && notice.uid === item.uid ? notice : null;
   const reportsState = drawer.loading ? 'loading' : (drawer.error || drawer.data?.reports_status === 'unreadable') ? 'unreadable' : 'ok';
   return (
-    <aside id="fd-drawer" aria-labelledby="fd-d-title"
-      className="fixed inset-x-0 bottom-0 z-30 max-h-[85vh] overflow-auto rounded-t-2xl border border-axal-hairline bg-white p-5 shadow-xl dark:border-gray-800 dark:bg-gray-950 md:static md:z-auto md:max-h-none md:w-full md:max-w-[410px] md:flex-[1_1_340px] md:rounded-xl md:shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint">Fund details</div>
-          <h3 id="fd-d-title" className="mt-1 text-[18px] font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{item.name}</h3>
+    <Sheet label={item.name} eyebrow="Fund details" title={item.name} onClose={onClose} width={480} phone="sheet" testId="fd-drawer-sheet">
+      <div id="fd-drawer" className="px-5 pb-5 pt-1">
+        <div className="mt-3 flex flex-wrap gap-2">
+          <AddOrOpen item={item} dossier={dossier} added={added} busy={busy} onAdd={onAdd} listState={listState} />
+          <Link to={`/research/funds/catalog/${encodeURIComponent(item.uid)}`} className={GHOST}>Open full profile</Link>
         </div>
-        <button type="button" className={GHOST} onClick={onClose} aria-label="Close fund details"><X size={16} aria-hidden="true" /></button>
+        {/* The add's outcome, beside the control that made it. Always in the
+            tree, so a screen reader hears the sentence when it arrives. */}
+        <p role="status" className={note ? `mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}` : 'sr-only'}>
+          {note ? note.text : ''}
+        </p>
+        <div className="mt-4">
+          <FundDetails item={item} reports={drawer.data?.reports || null} reportsState={reportsState} />
+        </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <AddOrOpen item={item} dossier={dossier} added={added} busy={busy} onAdd={onAdd} listState={listState} />
-        <Link to={`/research/funds/catalog/${encodeURIComponent(item.uid)}`} className={GHOST}>Open full profile</Link>
-      </div>
-      {/* The add's outcome, beside the control that made it. Always in the
-          tree, so a screen reader hears the sentence when it arrives. */}
-      <p role="status" className={note ? `mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}` : 'sr-only'}>
-        {note ? note.text : ''}
-      </p>
-      <div className="mt-4">
-        <FundDetails item={item} reports={drawer.data?.reports || null} reportsState={reportsState} />
-      </div>
-    </aside>
+    </Sheet>
   );
 }
 
@@ -570,16 +565,19 @@ export function FundDirectoryView({
                 </div>
               )}
             </Card>
-            {selected && (
-              <Drawer item={selected} drawer={drawer} onClose={onClose}
-                onAdd={onAdd} busy={busy} isAdded={isAdded} dossierOf={dossierOf} notice={notice} listState={listState} />
-            )}
           </div>
           <Pager data={data} onQuery={onQuery} />
         </div>
       )}
 
       {data && <SourcesList data={data} />}
+
+      {/* D1317: the fund's details, the shared right-side Sheet over the list;
+          a bottom sheet on a phone, as it was. */}
+      {data && selected && (
+        <Drawer item={selected} drawer={drawer} onClose={onClose}
+          onAdd={onAdd} busy={busy} isAdded={isAdded} dossierOf={dossierOf} notice={notice} listState={listState} />
+      )}
     </section>
   );
 }

@@ -35,7 +35,7 @@ test('Team draws the users console, whose account drawer names the open account'
   assert.match(read('pages/hq/AccountsPage.jsx'), /<UsersConsole onImpersonate=\{onImpersonate\} \/>/, 'Team no longer draws the users console');
   const code = read('pages/admin/consoles/UsersConsole.jsx');
   const drawer = code.slice(code.indexOf('export function UserDetailModal('));
-  assert.match(drawer, /^export function UserDetailModal\([^)]*\) \{\s*useEscapeClose\(onClose\);\s*useRecordCrumb\(userRow\?\.name \|\| userRow\?\.email \|\| null, 'account', userRow\?\.id\);/,
+  assert.match(drawer, /^export function UserDetailModal\([^)]*\) \{\s*(?:\/\/[^\n]*\n\s*)*useRecordCrumb\(userRow\?\.name \|\| userRow\?\.email \|\| null, 'account', userRow\?\.id\);/,
     'the account drawer no longer names its account first thing');
   // The drawer is the one record: the console's list names none.
   assert.equal(code.split('useRecordCrumb(').length - 1, 1, 'a second record in the users console');

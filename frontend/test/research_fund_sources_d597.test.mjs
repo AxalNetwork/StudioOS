@@ -97,7 +97,8 @@ test('every row cites its list by name and link, with its publisher and terms', 
 
 test('the drawer and the profile show the list, its publisher, the terms with the reason, and link the list', () => {
   const { html } = directory({ selected: GAMMA, drawer: { loading: false, error: null, data: { item: GAMMA, reports: [], reports_status: 'ok' } } });
-  const drawer = html.slice(html.indexOf('<aside id="fd-drawer"'), html.indexOf('</aside>'));
+  // D1317: the drawer is the shared Sheet, drawn last in the section.
+  const drawer = html.slice(html.indexOf('<div id="fd-drawer"'), html.lastIndexOf('</section>'));
   const card = drawer.slice(drawer.indexOf('data-testid="fund-source-card"'));
   const text = renderedText(card);
   assert.match(text, /Deep Tech Investors Mapping - Public version/);

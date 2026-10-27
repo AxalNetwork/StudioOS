@@ -266,6 +266,9 @@ test('Edit drivers opens a dialog that names what changes, and saves all ten as 
   try {
     await v.click('uof-drivers-edit');
     assert.ok(v.by('uof-drivers-dialog'));
+    assert.equal(v.pr(v.by('uof-drivers-dialog')).role, 'dialog', 'D1317: Edit drivers opens as the shared Sheet');
+    assert.ok(v.pr(v.by('uof-drivers-dialog'))['aria-labelledby']);
+    assert.equal(v.pr(v.by('uof-drivers-dialog'))['data-width'], 560);
     assert.equal(v.pr(v.by('uof-drivers-dialog-go')).disabled, true, 'nothing changed, nothing to save');
     await v.change('uof-driver-cac', '');
     assert.equal(v.pr(v.by('uof-drivers-dialog-go')).disabled, true, 'an empty driver never saves');

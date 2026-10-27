@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox, usePhoneWidth } from '../../../ui';
+import { usePhoneWidth } from '../../../ui';
 import { api } from '../../../lib/api';
 import { partnerProfilesApi } from '../../../lib/api/partnerProfiles';
 import { reportError } from '../../../lib/log';
@@ -13,6 +13,7 @@ import {
 } from './profileModel';
 import { DecisionDialog, ReopenDialog, UnbindDialog } from './ProfileDialogs';
 import { CARD, DANGER_GHOST, EYE, GHOST, H2, INPUT, MONO, OUTLINE, PRIMARY, STICKY_BAR, SUB, TAP, TONE, TONE_GLYPH } from './ppStyles';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D995 (#2806) — one partner profile as PRF3's lightbox, at its own address
@@ -566,7 +567,7 @@ export default function ProfileRecord({ refId, rows, viewerSuper = false, onGo, 
   );
 
   return (
-    <Lightbox label={label} onClose={onClose} testId="pp-record" size="tall" pageBelow="lg" bar={phone ? () => pageHead : undefined}>
+    <Sheet label={label} onClose={onClose} testId="pp-record" size="tall" pageBelow="lg" bar={phone ? () => pageHead : undefined}>
       {phone ? phoneBody : (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {head}
@@ -582,6 +583,6 @@ export default function ProfileRecord({ refId, rows, viewerSuper = false, onGo, 
         <UnbindDialog profile={{ ...p, ref: p.ref || refId }} onClose={() => setDialog(null)}
           onDone={() => { setDialog(null); onChanged?.(); setResult({ tone: 'green', text: 'Unbound. The right account can answer now. This is recorded in Governance.' }); retryProfile(); }} />
       ) : null}
-    </Lightbox>
+    </Sheet>
   );
 }

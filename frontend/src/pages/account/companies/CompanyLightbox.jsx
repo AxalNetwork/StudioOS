@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox, Unreadable, actionGhost, actionPrimary } from '../../../ui';
+import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import { api } from '../../../lib/api';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import {
@@ -104,7 +105,7 @@ export default function CompanyLightbox({
 
   return (
     <>
-      <Lightbox label={name} title={title} eyebrow="Company" onClose={onClose} width={720} testId="company-lightbox" footer={foot}>
+      <Sheet label={name} title={title} eyebrow="Company" onClose={onClose} width={720} testId="company-lightbox" footer={foot}>
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap gap-2">
             {active ? <Link className={actionPrimary} to="/studio" data-testid="company-open-studio">Open Studio</Link> : null}
@@ -173,7 +174,7 @@ export default function CompanyLightbox({
             </section>
           ) : null}
         </div>
-      </Lightbox>
+      </Sheet>
 
       {dialog === 'rename' ? <RenameDialog company={company} onClose={() => setDialog(null)} onDone={(n) => done(`${name} is now ${n}.`, { switcher: true })} /> : null}
       {dialog === 'active' ? (

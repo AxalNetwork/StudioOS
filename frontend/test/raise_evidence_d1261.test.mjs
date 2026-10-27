@@ -60,6 +60,7 @@ test('Raise’s rail: Overview, then Evidence, then Calls, then the modules; Evi
 
 // D1266 (#3289): the founder's view is live; `raise_evidence_view_d1266.test.mjs`
 // renders it, its drawers and its states. Only the investor's block still waits.
+// D1317's Sheet covered the waiting drawers this view replaced.
 test('the view is no longer a wait: every area of the canvas is one the model knows', () => {
   assert.deepEqual(Object.keys(WAITS), ['investor']);
   assert.equal(AREAS.length, 8);

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Pill, Unrecorded, Unreadable } from '../../../ui';
+import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import { adminMercuryApi } from '../../../lib/api/adminMercury';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
-import { Banner, Group, Row, Sheet } from '../../account/ConnectorSheet';
+import { Banner, Group, Row } from '../../account/ConnectorSheet';
 import { agoLabel } from '../../account/connectorsModel';
 import {
   ADMIN_ONLY, DISCONNECT_REASON_MIN, ENTITY_BRANCH_MANAGED, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, ENTITY_SHEET_AUDIT_FOOT, OPEN_BANKING,
@@ -211,17 +212,25 @@ export function MercuryEntityConnections({ superAdmin = false, branch = null, ap
   );
 }
 
-/** The entity sheet: the rows, what they feed, and the audit note at its foot. */
+/**
+ * The entity sheet: the rows, what they feed, and the audit note at its foot.
+ * D1317: the shared detail Sheet at 520px (the width Build's centred frame
+ * gave it), docked beside the Eadwyn rail; the service's mark leads its title.
+ */
 export function MercuryEntitySheet({ p, superAdmin = false, branch = null, api = adminMercuryApi, onClose, eyebrow = 'Fund administration' }) {
   const name = p?.display_name || 'Mercury';
+  const title = `${name} · Axal entities`;
   return (
-    <Sheet eyebrow={eyebrow} title={`${name} · Axal entities`} provider={p?.key || 'mercury'} providerName={name}
-      sub="The four Axal entities' Mercury organizations." onClose={onClose} data-testid="mercury-entity-sheet"
-      footer={<span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="mercury-audit-foot">{ENTITY_SHEET_AUDIT_FOOT}</span>}>
-      <MercuryEntityConnections superAdmin={superAdmin} branch={branch} api={api} docsUrl={p?.docs_url || null} />
-      {!branch && <p className="mx-5 mt-4 text-[12px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="mercury-feeds">{ENTITY_FEEDS}</p>}
-      {/* #1780 decision 12: the door to fund administration's Banking tab (D714 PR 4a mounts it). */}
-      {!branch && <Link className={`${BTN.link} mx-5 mt-2 inline-block`} to={OPEN_BANKING.href} data-testid="mercury-open-banking">{OPEN_BANKING.text}</Link>}
+    <Sheet label={title} eyebrow={eyebrow} width={520} onClose={onClose} testId="mercury-entity-sheet"
+      title={<span className="flex items-center gap-2"><BrandIcon provider={p?.key || 'mercury'} name={name} size={24} />{title}</span>}
+      sub="The four Axal entities' Mercury organizations."
+      footer={<span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="mercury-audit-foot">{ENTITY_SHEET_AUDIT_FOOT}</span>}>
+      <div className="pb-4">
+        <MercuryEntityConnections superAdmin={superAdmin} branch={branch} api={api} docsUrl={p?.docs_url || null} />
+        {!branch && <p className="mx-5 mt-4 text-[12px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="mercury-feeds">{ENTITY_FEEDS}</p>}
+        {/* #1780 decision 12: the door to fund administration's Banking tab (D714 PR 4a mounts it). */}
+        {!branch && <Link className={`${BTN.link} mx-5 mt-2 inline-block`} to={OPEN_BANKING.href} data-testid="mercury-open-banking">{OPEN_BANKING.text}</Link>}
+      </div>
     </Sheet>
   );
 }

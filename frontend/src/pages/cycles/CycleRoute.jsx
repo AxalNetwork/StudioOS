@@ -41,6 +41,7 @@ import FromLovable from './FromLovable';
 import ValidateFromGoogle from './ValidateFromGoogle';
 import FromNotion from './FromNotion';
 import NotionInterviewImport from './NotionInterviewImport';
+import NotionSnapshotImport from './NotionSnapshotImport';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -234,7 +235,17 @@ const CYCLE_DEFS = {
         <>
           <RaiseReceiptMatches role={ctx.role} onChanged={ctx.reload} />
           {mercuryPart('capital-relationships', data, ctx)}
+          {/* D1089 (#2954): an investor CRM in Notion, as investors to add or link; once linked, their stage follows. */}
+          <FromNotion section="raise" projectId={ctx.projectId} module="capital_relationships" />
           <EvidencePart slug="capital-relationships" projectId={ctx.projectId} />
+        </>
+      ),
+      // D1089 (#2954): Notion pages as dated snapshots, NDA by default; a change adds a version on Accept only.
+      'data-room': (data, ctx) => (
+        <>
+          {mercuryPart('data-room', data, ctx)}
+          <FromNotion section="raise" projectId={ctx.projectId} module="data_room" acceptDialog={NotionSnapshotImport} />
+          <EvidencePart slug="data-room" projectId={ctx.projectId} />
         </>
       ),
     }),

@@ -12,9 +12,10 @@
 // are replaced there by a stated reason, never by placeholder numbers.
 
 import { Link } from 'react-router-dom';
-import { AlertCircle, Check, Lock, X } from 'lucide-react';
+import { AlertCircle, Check, Lock } from 'lucide-react';
 import { DIM_ICONS } from './dimIcons';
 import TeamCoveragePanel from './TeamCoveragePanel';
+import Sheet from '../../ui/Sheet.jsx';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 
@@ -23,36 +24,22 @@ export default function DimensionDrawer({ dim, investorView, onClose, skillState
   const Icon = DIM_ICONS[dim.iconKey] || null;
 
   return (
-    <>
-      <div className="fixed inset-0 z-[60] bg-gray-900/30 backdrop-blur-[2px]" onClick={onClose} data-testid="scoring-drawer-scrim" />
-      <aside
-        className="fixed inset-y-0 right-0 z-[61] w-full lg:w-[460px] bg-white dark:bg-gray-900 shadow-2xl overflow-y-auto"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${dim.name} drill-down`}
-        data-testid="scoring-drawer"
-      >
-        <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <span className={`w-9 h-9 flex-none rounded-[9px] flex items-center justify-center ${dim.tintClass || 'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400'}`}>
-              {Icon && <Icon size={16} />}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-50">{dim.name}</div>
-              <div className="text-[11.5px] text-gray-400 dark:text-gray-500" data-testid="text-drawer-meta">
-                Weight {dim.weightLabel} · {dim.confidence} · {dim.total}/{dim.max} pts
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              data-testid="button-close-drawer"
-              className="w-8 h-8 flex-none rounded-lg border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-800"
-            >
-              <X size={14} />
-            </button>
-          </div>
-          <div className="mt-3.5 flex items-center gap-3">
+    // D1317: the dimension opens as the shared Sheet (480px, its own lg:w-[460px]).
+    <Sheet
+      label={`${dim.name} drill-down`}
+      title={(
+        <span className="flex items-center gap-2.5">
+          <span className={`w-9 h-9 flex-none rounded-[9px] flex items-center justify-center ${dim.tintClass || 'bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400'}`}>
+            {Icon && <Icon size={16} />}
+          </span>
+          {dim.name}
+        </span>
+      )}
+      sub={<span data-testid="text-drawer-meta">Weight {dim.weightLabel} · {dim.confidence} · {dim.total}/{dim.max} pts</span>}
+      width={480} testId="scoring-drawer" onClose={onClose}
+    >
+        <div className="border-b border-gray-100 dark:border-gray-800 px-5 py-4">
+          <div className="flex items-center gap-3">
             <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
               <div className={`h-full rounded-full ${dim.scoreBarClass}`} style={{ width: dim.scorePct }} />
             </div>
@@ -110,7 +97,6 @@ export default function DimensionDrawer({ dim, investorView, onClose, skillState
             )
           )}
         </div>
-      </aside>
-    </>
+    </Sheet>
   );
 }

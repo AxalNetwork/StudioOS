@@ -81,7 +81,8 @@ function withDrawer(props = {}) {
     ...props,
   }));
 }
-const drawerOf = (out) => out.slice(out.indexOf('<aside id="fd-drawer"'), out.indexOf('</aside>'));
+// D1317: the drawer is the shared Sheet, drawn last in the section.
+const drawerOf = (out) => out.slice(out.indexOf('<div id="fd-drawer"'), out.lastIndexOf('</section>'));
 const tabsOf = (out) => [...out.matchAll(/<button[^>]*role="tab"[^>]*>([^<]*)<\/button>/g)].map((m) => ({ tag: m[0], label: m[1] }));
 
 // ── F0: the two tabs ────────────────────────────────────────────────────────
