@@ -1,7 +1,7 @@
 import type { Env } from '../types';
 import { connectorFeeds } from './registry';
 import { GITHUB_READ_BY } from './githubFeeds';
-import { VERCEL_READ_BY } from './vercelFeeds';
+import { VERCEL_READ_BY, VERCEL_READ_REASON } from './vercelFeeds';
 
 /**
  * D655 — "Now fed by": how many items each connector delivered into each
@@ -58,7 +58,7 @@ export async function fedCounts(env: Env, integrationId: number, providerKey: st
     }
     if (providerKey === 'vercel' && (VERCEL_READ_BY as readonly string[]).includes(m)) {
       return { module: m, label: label(m), href: moduleHref(m), count: null, linked: null, unlanded: null,
-        reason: 'Read from the connection: Vercel is listed in Tools here, with its projects and each sync.' };
+        reason: VERCEL_READ_REASON[m as keyof typeof VERCEL_READ_REASON] };
     }
     const r = by.get(m);
     const count = Number(r?.n || 0), linked = Number(r?.linked || 0);

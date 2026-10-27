@@ -19,7 +19,7 @@ import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, usePhoneWidt
 import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
 // D568 — the Account center canvas (`ac-*`): its section list, the five
 // profile cards, the push devices and sessions cards, the plan line and
-// orders, and the two sections the page did not have (Following, Developer).
+// orders, and the two sections the page did not have (Following, Developer, now Builder: D1315).
 import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switch, useAccountRead } from './account/AccountCenter';
 // D700 — the phone's `/account`: A1m's bar copy and the address rules.
 import { accountPathFor, accountViewFor, connectorKeyFor } from './account/accountPhone';
@@ -43,7 +43,9 @@ import AiTokensPage from './account/AiTokensPage';
 import { USAGE_PAGES, usagePageFor } from './account/limitsModel';
 import ConnectorsSection from './account/AccountConnectors';
 import ConnectorPage from './account/ConnectorPage';
-import DeveloperSection from './account/AccountDeveloper';
+// D1315 (#2418): Account › Builder replaced Developer; its pages and drawers are addresses under /account/builder.
+import BuilderSection from './account/builder/BuilderSection';
+import { BUILDER_PAGES, builderViewFor, builderPathFor } from './account/builder/builderModel';
 import { channelOn } from './account/accountCenterModel';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
@@ -232,7 +234,7 @@ const ActivityPage = lazy(() => import('./ActivityPage'));
 // D568 — THE ACCOUNT CENTER'S SECTION LIST, in the canvas's order and with its
 // names (`acNav` in `design/incoming/ops-data.js`): Profile and identity,
 // Notifications, Sign-in and security, Billing and orders, Following, and
-// Developer for the one role its routes answer. The ids did not change, so
+// Developer for the one role its routes answer (Builder for every profile since D1315). The ids did not change, so
 // every deep link that names a section still lands on it. The four sections
 // the canvas does not draw are kept, under "More" (`group: 'more'`), rather
 // than dropped with the screens they hold.
@@ -249,8 +251,8 @@ const SECTIONS = [
   // Connectors canvas draws the list. Integrations left "More" with it.
   { id: 'connectors', label: 'Connectors' },
   { id: 'following', label: 'Following' },
-  // `GET /settings/developer` answers 403 to every role but admin.
-  { id: 'developer', label: 'Developer', roles: ['admin'] },
+  // D1315 (#2418): Builder, for every profile (owner question 2, A): MCP and services, API keys, API usage, Activity.
+  { id: 'builder', label: 'Builder' },
   { id: 'onboarding', label: 'Onboarding', group: 'more' },
   { id: 'appearance', label: 'Appearance', group: 'more' },
   { id: 'activity', label: 'Activity Log', group: 'more' },
@@ -277,6 +279,8 @@ export default function SettingsPage() {
   const connectorKey = active === 'connectors' ? connectorKeyFor(location.pathname) : null;
   // D807 — which Usage page the address opens: the overview, or Limits.
   const usagePage = active === 'usage' ? usagePageFor(location.pathname) : null;
+  // D1315 — Builder's page and drawer, read from the address.
+  const builderView = active === 'builder' ? builderViewFor(location.pathname) : null;
   // D1138 — Companies and projects' tabs are addresses of their own; the canonicalising effect keeps them.
   const companiesTab = active === 'companies' ? companiesTabFor(location.pathname) : null;
   // D1139 — `/account/companies/<uid>` is that company's lightbox, kept by the same effect.
@@ -289,7 +293,7 @@ export default function SettingsPage() {
   // section through its address. On a phone each section is a page of its own,
   // so it is pushed and Back returns to the index; on desktop it replaces, as
   // the column always has.
-  const setActive = (id, page = null) => navigate({ pathname: accountPathFor({ section: id, phone, usagePage: page }) }, { replace: !phone });
+  const setActive = (id, page = null) => navigate({ pathname: id === 'builder' ? builderPathFor({ page: page ?? 'services' }) : accountPathFor({ section: id, phone, usagePage: page }) }, { replace: !phone });
 
   // Keep the URL in lockstep with the open section so deep links work both
   // ways (bell → /account/notifications, sidebar click → URL update).
@@ -310,7 +314,7 @@ export default function SettingsPage() {
   // account recovery. A canonicalising hop must not eat the part of the link
   // that said why it was sent.
   useEffect(() => {
-    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid });
+    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid, builderView });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
       navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true, state: location.state });
     }
@@ -412,13 +416,13 @@ export default function SettingsPage() {
 
   const role = (data.role || '').toLowerCase();
   const sections = SECTIONS.filter(s => !s.roles || s.roles.includes(role));
-  // Render-time gate: a non-admin who deep-links to /account/developer must
-  // not get the Developer UI rendered just because the URL parsed `active`
+  // Render-time gate: a role that deep-links to a section it may not open
+  // must not get that section rendered just because the URL parsed `active`
   // before role was known. Mirror the nav filter on the content side.
   const allowedIds = new Set(sections.map(s => s.id));
   const safeActive = allowedIds.has(active) ? active : 'account';
   const reloadAccount = () => api.getSettings().then(setData);
-  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey, usagePage };
+  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey, usagePage, builderView };
 
   const toastNote = toast && (
     <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -461,7 +465,7 @@ export default function SettingsPage() {
 
       <div className="grid lg:grid-cols-[200px_1fr] gap-6">
         <AccountSectionNav sections={sections} active={safeActive} onSelect={setActive}
-          subpages={{ usage: USAGE_PAGES }} activeSubpage={safeActive === 'usage' ? usagePage : null} />
+          subpages={{ usage: USAGE_PAGES, builder: BUILDER_PAGES }} activeSubpage={safeActive === 'usage' ? usagePage : safeActive === 'builder' ? builderView?.page ?? 'services' : null} />
         <AccountPanes safeActive={safeActive} {...paneProps} />
       </div>
     </div>
@@ -471,7 +475,7 @@ export default function SettingsPage() {
 }
 
 /** One section's pane: the same cards at every width. */
-function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null, usagePage = null }) {
+function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null, usagePage = null, builderView = null }) {
   return (
     <div className="min-w-0 space-y-6">
       {safeActive === 'account' && (
@@ -519,7 +523,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
       {safeActive === 'companies' && <CompaniesProjects role={role} entityRecords={<YourCompaniesSection flash={flash} />} />}
       {safeActive === 'following' && <FollowingSection />}
       {safeActive === 'usage' && (usagePage === 'storage' ? <StoragePage role={role} /> : usagePage === 'ai-tokens' ? <AiTokensPage /> : usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
-      {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
+      {safeActive === 'builder' && <BuilderSection view={builderView ?? undefined} />}
       {safeActive === 'onboarding' && <OnboardingSettingsTab />}
       {safeActive === 'connectors' && <ConnectorsTab connectorKey={connectorKey} />}
       {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}

@@ -61,9 +61,11 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // D1264 (#3287) adds the claim check: it maps a pinned vesting item to its
   // holder (two ids) through this venture's holders, to compare a holding's
   // shares with its own vesting, and writes nothing there — pinned below.
+  // D1325 (#3486): the never-fill registry names the cap-table stores so no
+  // fill may target them; it holds no SQL and reads nothing — pinned below.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseClaims.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/fills/neverFill.ts', 'services/raiseClaims.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
     'only the importer, declared readers and reviewed writer should touch these tables',
   );
   const claims = read('cloudflare-worker/src/services/raiseClaims.ts');
@@ -71,6 +73,8 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
     'the claim check reaches vesting only through this venture\u2019s holders, and reads two ids');
   assert.doesNotMatch(claims, /cap_table_option_pools/, 'the claim check reads vesting rows, not pools');
   assert.doesNotMatch(claims, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'the claim check reads, never writes');
+  const neverFill = read('cloudflare-worker/src/services/fills/neverFill.ts');
+  assert.doesNotMatch(neverFill, /\b(SELECT|INSERT INTO|UPDATE|DELETE FROM)\b|\.prepare\(/, 'the never-fill registry names tables; it never reads one');
   const raise = read('cloudflare-worker/src/services/raiseCycle.ts');
   assert.match(raise, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
     'Raise reads vesting through the requested project’s holders and their own users');

@@ -194,7 +194,7 @@ no new schema, runtime or billing path is introduced.
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
 | `decks/` | Deck assembly and export. |
 | `email/` | Transactional mail. |
-| `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. `neverFill.ts` lists the fields Eadwyn never fills (D777), mirrored by `frontend/src/lib/neverFill.js`; propose, accept and `recordFill` each refuse one. |
+| `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. `neverFill.ts` lists the fields Eadwyn never fills (D777), mirrored by `frontend/src/lib/neverFill.js`; propose, accept and `recordFill` each refuse one. D1325 (#3486): `fields.ts` is FILL_FIELDS, which form fields Fill with Eadwyn may fill, how and from where (mirrored by `frontend/src/lib/fillFields.js`); `sources.ts` is FILL_SOURCES, the read-only adapters the sheet gathers; `provenance.ts` adds migration 643's source columns and `marksForRows`. |
 | `apiUsageReport.ts` | D845: a member's own usage reports over `api_usage_events` (D843). Every statement is `WHERE e.user_id = ?` from the session and joins only the same user's hold; a `key=` is re-checked by `ownsKey`. Grouping is a bound `CASE ?1`, never a spliced column. A charge is the settled hold's, else the row's own, and stays NULL when unknown. |
 | `railProposals.ts` | D780: `ai_rail_proposals` (migration 506), what a rail option's run leaves for the member to decide. `proposeRail` stores a draft, proposal or note with the run's page, option, record, model and `usage_log_id` (refusing a field D777 never fills); `decideRail` is the member's accept, edit or discard, once and on their own rows only; `listRail`, `getRail` and `withdrawRail`. Every option outside Validate and the zone drafts writes here. |
 | `narrative/` | D908: the Investor narrative's sections, positioning and bound figures, and the compare of two versions, behind `/api/cycles/raise/narrative/*`. Its README has the rules. |
@@ -418,7 +418,7 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 `roundCalls.ts` orchestrates private founder calls, counsel fingerprints, idempotent counsel requests and the independent HQ queue, structured term seeds, recipient entitlements, notification outcomes and atomic Raise pipeline responses. Unchanged drafts and computed audience sets preserve approval (D686 #1594, migration 456). `roundCallPolicy.ts` contains flag, verification, readiness, matching and identity policies. The GP capital-call domain is separate. See [D653](../../../documentation/architecture/decisions/D653.md).
 
 D667 (#1497): `assistantInterviews.ts` holds `submit_interview`,
-`propose_placements` and `structure_with_studioos` for #1496's MCP server.
+`propose_placements` and `structure_with_axalvc` (listed; `structure_with_studioos` until D1315, kept as an alias and as the stored name) for #1496's MCP server.
 Each takes the grant, re-checks the company and the founder's right to write,
 and throws a `ToolError` with the issue's status. Consent `given` comes first,
 and a placement's quote must be verbatim in the stored transcript. Nothing is

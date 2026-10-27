@@ -9,7 +9,7 @@ Logs, runtime logs and Web Analytics wrappers are reserved, never called by the
 part 1 sync. Analytics remains off. Provider tests replace fetch with
 `test/_vercel_api_fake.mjs`; no test reaches Vercel.
 
-D1096 completes part 1 around it: `integrations/providers/vercel.ts` is its only caller in the connection, sync and Choose projects, and `routes/vercel_webhook.ts` re-reads through the same provider when a delivery nudges it. The part 1 sync calls the installation, projects and project-domains reads only.
+D1096 completes part 1 around it: `integrations/providers/vercel.ts` is its only caller in the connection, sync and Choose projects, and `routes/vercel_webhook.ts` re-reads through the same provider when a delivery nudges it. The sync calls the installation, projects and project-domains reads; D1097 adds one page of production deployments per project, each domain's configuration and the account's domains, for production health; D1098 adds each project's newest 200 deployments.
 
 `company.ts` is Vercel part 4 (D1099, #2964): where production runs on Build ›
 Company creation. Per chosen project it writes the account and plan as facts
@@ -24,8 +24,11 @@ deploy, a rollback, a misconfigured or unverified domain, a failed
 certificate, a Vercel-registered domain inside its expiry window) and the
 kinds it could check; `applyHealth` opens and closes `vercel_health_events`
 (migration 590) with their ledger rows; `dismissHealthEvent` keeps a
-dismissal. `hosting.ts` is Operating systems › Tools' Hosting read under the
-Tools rule.
+dismissal. The sync and the webhook's re-read call `applyHealth`; one
+project's evidence closes only the events it opened. `hosting.ts` is
+Operating systems › Tools' Hosting read (facts from `vercel_projects`, the
+sync lines, the Hobby line, an expired sign-in) and Solution design's Runs on
+(`vercelRuntime`), both under the Tools rule.
 
 `deployments.ts` (D1098, #2963) keeps each chosen project's deployments in
 `vercel_deployments` (migration 591): `deploymentRow` reads what is kept (never
