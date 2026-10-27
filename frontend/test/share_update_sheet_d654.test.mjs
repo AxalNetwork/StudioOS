@@ -325,7 +325,8 @@ test('D686: a capital ask linked to a call has no noreply row, and links to the 
   const data = { ...PAGE, asks: [{ uid: 'c1', kind: 'capital', text: 'Seed', link_ref: 'call-1', replies: [], can_ask_again: true }] };
   const html = page(data);
   assert.doesNotMatch(renderedText(html), /No replies after 14 days/);
-  assert.match(html, /href="\/raise\/calls\/call-1"/);
+  // D1227 (#3226): a call's own page is under Capital relationships › Calls.
+  assert.match(html, /href="\/raise\/capital-relationships\/calls\/call-1"/);
 });
 
 test('D686: the Opened states, and module links keep the venture once the Worker sends it', () => {
