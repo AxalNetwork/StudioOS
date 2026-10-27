@@ -233,6 +233,8 @@ import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
 import googleWorkspaceRoutes from './routes/google_workspace';
+// D1319 (#3480): founder publishing to an outside service, pressed by the founder only.
+import publishRoutes from './routes/publish';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
@@ -1454,6 +1456,7 @@ app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/calendar', calendarRoutes);
 app.route('/api/connectors/google-workspace', googleWorkspaceRoutes);
+app.route('/api/publish', publishRoutes);
 // T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
 app.route('/api/financials', financialsRoutes);
 // Task #1 (AG) — kept alphabetically adjacent to /api/financials.
@@ -2448,6 +2451,17 @@ export default {
               if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
             }
           } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }
+        }
+        // D1319 (#3480) — a founder's publish left `sending` for 10 minutes is
+        // `unknown`: not known whether it arrived. Never re-sent, never
+        // `failed`. Every fifth minute, on every deployment (a founder's
+        // sends are not HQ's); the reads close stranded rows too. Never throws.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { releaseStrandedSends } = await import('./services/publishCore');
+            const n = await releaseStrandedSends(env);
+            if (n) console.info(`[cron] publish stranded=${n}`);
+          } catch (e) { console.error('[cron] publish stranded sweep failed', (e as Error)?.name); }
         }
         // D710 (#1775) — Mercury's read-only sync of each Axal entity's
         // accounts and transactions, then the matchers. Hourly at minute 17, a

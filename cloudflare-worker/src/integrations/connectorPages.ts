@@ -17,7 +17,7 @@
  * quoted in `endpoints` are checked by the test, not imported.
  */
 import type { ConnectorCategory, DescriptorViewer, ProviderDescriptor } from './registry';
-import { audienceFor } from './registry';
+import { audienceFor, PUBLISHERS } from './registry';
 
 export type ToolAccess = 'read' | 'write' | 'account' | 'inbound';
 
@@ -826,6 +826,7 @@ export const PAGE_ALIAS = Object.freeze({ google: 'google_calendar', microsoft: 
 /** Connectors that can move money. None can. */
 export const MONEY_MOVERS: ReadonlySet<string> = new Set<string>();
 
+
 export interface Trust {
   built_by: 'Axal VC';
   reads: string[];
@@ -876,6 +877,7 @@ export function trustFor(key: string, variant?: string): Trust | null {
     parts.push(reads.length ? `It reads ${listWords(reads)} from ${service}.` : `It reads nothing from ${service}.`);
     parts.push(readOnly ? `It never writes to ${service}.` : `It writes to ${service}: ${listWords(writes)}. Each tool below says when.`);
   }
+  if (PUBLISHERS.has(k)) parts.push('It posts only when you press Send.');
   if (!movesMoney) parts.push('Nothing it does can move money.');
   return { built_by: 'Axal VC', reads, writes, read_only: readOnly, moves_money: movesMoney, sentence: parts.join(' ') };
 }
