@@ -240,10 +240,11 @@ test('D1310: a conflict marker anywhere in ROUTE_MAP fails rather than ending a 
 });
 
 test('D1310: ROUTE_MAP and its two projections merge with union, and carry nothing a union leaves', () => {
-  const attrs = read('.gitattributes');
+  // Whole lines, compared as text: no pattern is built from a path.
+  const attrs = read('.gitattributes').split('\n').map((l) => l.trim());
   for (const f of ['documentation/architecture/ROUTE_MAP.md', 'documentation/architecture/PROFILE_ROUTING.md', 'documentation/architecture/PAGE_INVENTORY.md']) {
     // Mutation checked: drop the ROUTE_MAP line → every pair of row-adding branches conflicts again.
-    assert.match(attrs, new RegExp(`^${f.replace(/[.]/g, '\\.')} merge=union$`, 'm'), `${f} has no merge=union line`);
+    assert.ok(attrs.includes(`${f} merge=union`), `${f} has no merge=union line`);
     assert.deepEqual(unionArtifacts(read(f)), [], `${f} carries what a union merge left (scripts/lib/readmeUnion.mjs)`);
   }
 });
