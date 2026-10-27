@@ -444,7 +444,7 @@ async function weeklyHeld(ctx: Ctx, n: number): Promise<number[]> {
  * counted once it is confirmed or counted. The bar and the "Waitlist sign-ups"
  * figure read both.
  */
-async function weeklySignups(ctx: Ctx, n: number): Promise<{ weeks: number[]; total: number; last30: number }> {
+export async function weeklySignups(ctx: Ctx, n: number): Promise<{ weeks: number[]; total: number; last30: number }> {
   const res = await ctx.env.DB.prepare(
     `SELECT CAST((julianday(?) - julianday(d)) / 7 AS INTEGER) AS wk, COUNT(*) AS n
        FROM (SELECT substr(created_at, 1, 10) AS d FROM waitlist_signups
