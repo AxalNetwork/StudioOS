@@ -133,7 +133,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 177 (D1270, #2381): `Promo codes`, Codes, Usage and one code's drawer.
   // 178 (D1277, #2482): `AI tokens`, Usage's third page.
   // 179 (D1290, #2383): `Content queue`, its four tabs and one address per article.
-  assert.equal(recs.length, 179);
+  // 180 (D1299, #2377): `Accounts`, Overview and All accounts at their own addresses.
+  // 181 (D1309, #2507, #2515, #2525): `Validate · Record a session › channels`, WhatsApp, Telegram and Calls.
+  assert.equal(recs.length, 181);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');

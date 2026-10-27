@@ -1,7 +1,9 @@
 /**
  * D861 (#2506): rollout gates on isolated D1 fixtures for each environment.
- * These checks certify code behaviour, not Meta approval, W1/W2 integration,
- * live credentials or an operator's authorization to enable the channel.
+ * These checks certify code behaviour, not Meta approval, live credentials or
+ * an operator's authorization to enable the channel. Since W1 merged (D856),
+ * the guided setup's own switch is a gate too: it stays closed for every
+ * value but "on", so the rollout PR cannot open it by accident.
  */
 import assert from 'node:assert/strict';
 import * as whatsapp from '../src/services/channels/whatsapp.ts';
@@ -9,14 +11,15 @@ import * as threads from '../src/services/channels/threads.ts';
 import * as events from '../src/services/channels/events.ts';
 import * as connections from '../src/services/channels/connections.ts';
 import * as translation from '../src/services/sessionTranslation.ts';
+import * as setupFlow from '../src/services/channels/whatsappSetup.ts';
 import { withGuard } from './_guard_stub.mjs';
 import { decryptColumn } from '../src/services/columnCipher.ts';
 import { ME, INTERVIEW, PROJECT, sign } from './_channels_fixture.ts';
 import { AT, readinessFixture as fixture, runReadiness, type Mutation } from './_channel_readiness.ts';
 
 const TEXT = 'Synthetic readiness message.';
-type Api = { whatsapp: typeof whatsapp; threads: typeof threads; events: typeof events; connections: typeof connections; translation: typeof translation };
-const original: Api = { whatsapp, threads, events, connections, translation };
+type Api = { whatsapp: typeof whatsapp; threads: typeof threads; events: typeof events; connections: typeof connections; translation: typeof translation; setup: typeof setupFlow };
+const original: Api = { whatsapp, threads, events, connections, translation, setup: setupFlow };
 
 const message = (over = {}) => ({
   externalChatId: 'd861-chat', externalMessageId: 'd861-message', side: 'contact' as const,
@@ -150,6 +153,21 @@ async function rollout(environment: string, api = original) {
   });
 }
 
+// D856 (W1): the guided setup is its own switch, separate from WHATSAPP_CHANNEL.
+// Only "on" opens it; unset, empty, "off", the channel's own "canary" and any
+// other spelling of yes keep its routes at 404. The rollout PR leaves it "off".
+async function setup(environment: string, api = original) {
+  await fixture(environment, async ({ env }) => {
+    for (const value of [undefined, '', 'off', 'canary', 'true', '1', 'yes', 'enabled', 'onn']) {
+      assert.equal(api.setup.whatsappMcpSetupOn({ ...env, WHATSAPP_MCP_SETUP: value }), false, String(value));
+    }
+    assert.equal(api.setup.whatsappMcpSetupOn({ ...env, WHATSAPP_MCP_SETUP: 'on' }), true);
+    // The channel's rollout does not open the setup, and the setup does not open the channel.
+    assert.equal(api.setup.whatsappMcpSetupOn({ ...env, WHATSAPP_CHANNEL: 'on', WHATSAPP_MCP_SETUP: 'off' }), false);
+    assert.equal(api.connections.channelOpenTo({ ...env, WHATSAPP_CHANNEL: 'canary', WHATSAPP_MCP_SETUP: 'on' }, 'whatsapp', { role: 'founder' } as any), false);
+  });
+}
+
 const mutations: Mutation<Api>[] = [
   ['signature accepts a mismatch', 'whatsapp', 'whatsapp.ts',
     " ? 'ok' : 'mismatch';", " ? 'ok' : 'ok';", signature],
@@ -188,5 +206,10 @@ const mutations: Mutation<Api>[] = [
     "return mode === 'on' || (mode === 'canary' && isSuperAdmin(user));", 'return true;', rollout],
   ['rollout denies everyone', 'connections', 'connections.ts',
     "return mode === 'on' || (mode === 'canary' && isSuperAdmin(user));", 'return false;', rollout],
+  ['setup opens for any value but off', 'setup', 'whatsappSetup.ts',
+    "return String(env.WHATSAPP_MCP_SETUP ?? '').trim().toLowerCase() === 'on';",
+    "return String(env.WHATSAPP_MCP_SETUP ?? '').trim().toLowerCase() !== 'off';", setup],
+  ['setup never opens', 'setup', 'whatsappSetup.ts',
+    "return String(env.WHATSAPP_MCP_SETUP ?? '').trim().toLowerCase() === 'on';", 'return false;', setup],
 ];
-runReadiness('D861', original, { signature, consent, voiceCap, connectionLimit, retention, encryptedText, rollout }, mutations);
+runReadiness('D861', original, { signature, consent, voiceCap, connectionLimit, retention, encryptedText, rollout, setup }, mutations);

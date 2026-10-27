@@ -16,7 +16,9 @@ const CRUMB_LINK = 'text-axal-muted hover:text-axal-violet dark:text-gray-400 da
  * pill and grant badge as on the card, the program's line, and the facts
  * strip where the canvas draws one), the moved notice where a redirect lands,
  * then the tab strip and the tab. A page that passes `actionsOnPhone`
- * false draws no header buttons on a phone (D962, PG20b).
+ * false draws no header buttons on a phone (D962, PG20b). D963: a page that
+ * read part 1's registry passes its `status` in the canvas's words; until
+ * then, or when that read fails, the frontend constant's stands.
  *
  * D1124 (#3004): the ⋯ menu holds Download (CSV) on the canvas's program
  * pages that have figures (`CSV_PROGRAMS`). It opens an in-page dialog that
@@ -24,7 +26,7 @@ const CRUMB_LINK = 'text-axal-muted hover:text-axal-violet dark:text-gray-400 da
  * logged (`POST /api/admin/programs/:key/export`). Pause waits for OD-PAUSE,
  * so the menu does not offer it.
  */
-export default function ProgramFrame({ program, superAdmin = false, actions = null, actionsOnPhone = true, tabs = null, children }) {
+export default function ProgramFrame({ program, superAdmin = false, status = null, actions = null, actionsOnPhone = true, tabs = null, children }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const phone = usePhoneWidth();
@@ -44,7 +46,7 @@ export default function ProgramFrame({ program, superAdmin = false, actions = nu
         <div className="flex min-w-0 flex-col gap-[7px]">
           <h1 className="m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] text-axal-ink dark:text-gray-100">{page.title}</h1>
           <div className="flex flex-wrap gap-1.5">
-            <StatusPill status={card.status} testId="programs-header-status" />
+            <StatusPill status={status || card.status} testId="programs-header-status" />
             <GrantBadge grant={superAdmin ? card.hqGrant : card.grant} badge={grantBadge} testId="programs-header-grant" />
           </div>
           {page.line
