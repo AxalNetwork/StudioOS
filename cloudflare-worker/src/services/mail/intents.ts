@@ -4,7 +4,8 @@
  * imports this file to draw the intent chips, as `redirectRoutes.ts` is shared.
  * No imports and no side effects, so the SPA can read it.
  *
- * A relationship comes from the person's ref kind (`RELATIONSHIP_OF`). Each
+ * A relationship comes from the person's ref kind (`RELATIONSHIP_OF`); an
+ * interviewee's recruiting row is its own interview's stage, so it has no kind. Each
  * intent has its chip's words and the instruction the prompt carries.
  */
 
@@ -39,7 +40,6 @@ export const INTENTS: Readonly<Record<Relationship, readonly Intent[]>> = Object
 /** A person ref's kind (`kind:id`) and the relationship it is. */
 export const RELATIONSHIP_OF: Readonly<Record<string, Relationship>> = Object.freeze({
   interviewee: 'customer',
-  recruit: 'customer',
   prospect: 'investor',
   cofounder: 'cofounder',
   advisor: 'advisor',
