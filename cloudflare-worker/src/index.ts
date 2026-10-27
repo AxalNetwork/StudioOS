@@ -95,6 +95,7 @@ import { investorProfile } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
 import aiBudgetRoutes from './routes/ai_budget';
+import railRunRoutes from './routes/rail_run';
 import { developerUsage } from './routes/developer_usage';
 // D791 (#2216): HQ › AI usage, Super Admin with step-up.
 import adminAiUsageRoutes from './routes/admin_ai_usage';
@@ -1002,6 +1003,8 @@ app.route('/api/assistant', assistantRoutes);
 // dev-only Anthropic path, and this endpoint reports on the production
 // Workers AI router, which is a different thing that happens to sit nearby.
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
+// D1326 (#3487): D720 §7's run path, with its `form` handler.
+app.route('/api/ai/rail', railRunRoutes);
 app.route('/api/fills', fillsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
