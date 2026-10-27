@@ -31,6 +31,7 @@ import { notifyArticle } from '../services/articleNotify';
 import { notify } from '../services/notify';
 import { ensureFollowsSchema } from './follows';
 import { logAdminAction } from '../services/adminAudit';
+import { MetricsRefusal, authorsRead, performanceRead, recordFollowerReach } from '../services/articleMetrics';
 import { parseQueueQuery, publicationChips, queueRows, stageCounts } from '../services/articleQueue';
 
 const adminArticles = new Hono<{ Bindings: Env }>();
@@ -39,10 +40,15 @@ const adminArticles = new Hono<{ Bindings: Env }>();
 // author (entity_type='user'). Best-effort: never blocks or fails publish.
 // Excludes the author so they aren't pinged about their own piece. Mirrors
 // notifyProjectFollowers in routes/portfolio_updates.ts.
+//
+// D1294 (#3390): the publish's reach is stored with it — how many followers
+// the fan-out tried and how many notices were written — as counts only, no
+// follower id (`article_follower_reach`, migration 637).
 async function notifyAuthorFollowers(
   env: Env,
   authorUserId: number | null | undefined,
   article: { id: number; slug: string; title: string },
+  publishedAt: string = new Date().toISOString(),
 ): Promise<void> {
   if (!authorUserId) return;
   try {
@@ -54,9 +60,12 @@ async function notifyAuthorFollowers(
     const followers = await env.DB.prepare(
       "SELECT follower_user_id AS uid FROM follows WHERE entity_type = 'user' AND entity_id = ?",
     ).bind(authorUserId).all<{ uid: number }>();
+    let tried = 0;
+    let notified = 0;
     for (const f of followers.results || []) {
       if (f.uid === authorUserId) continue;
-      await notify(env, {
+      tried += 1;
+      const sent = await notify(env, {
         userId: f.uid,
         type: 'followed_entity_news',
         title: `${author.name || 'Someone you follow'} published an article`,
@@ -65,7 +74,9 @@ async function notifyAuthorFollowers(
         payload: { entity_type: 'user', handle: author.uid, article_id: article.id },
         category: 'proactive_nudges',
       });
+      if (sent !== null) notified += 1;
     }
+    await recordFollowerReach(env, article.id, publishedAt, tried, notified);
   } catch (e) {
     console.warn('[admin_articles] author follower fan-out failed', e);
   }
@@ -110,6 +121,27 @@ adminArticles.get('/queue', async (c) => {
   });
 });
 
+// D1294 (#3390) — what Authors and Performance read. Registered before
+// `/:id`, which would otherwise take `authors` and `performance` as an id.
+adminArticles.get('/authors', async (c) => {
+  await requireAdmin(c);
+  await ensureNewsSchema(c.env);
+  c.header('Cache-Control', 'no-store');
+  return c.json(await authorsRead(c.env));
+});
+
+adminArticles.get('/performance', async (c) => {
+  await requireAdmin(c);
+  await ensureNewsSchema(c.env);
+  c.header('Cache-Control', 'no-store');
+  try {
+    return c.json(await performanceRead(c.env, c.req.query('from'), c.req.query('to')));
+  } catch (e) {
+    if (e instanceof MetricsRefusal) return c.json({ error: e.code, message: e.sentence }, e.status as 400);
+    throw e;
+  }
+});
+
 adminArticles.get('/:id', async (c) => {
   await requireAdmin(c);
   await ensureNewsSchema(c.env);
@@ -138,12 +170,17 @@ adminArticles.get('/:id', async (c) => {
   ).bind(id).all<any>();
   let tags: string[] = [];
   try { tags = row.tags ? JSON.parse(row.tags) : []; } catch { tags = []; }
+  // D1294: each publish's follower reach, newest first; none before migration 637.
+  const reach = await c.env.DB.prepare(
+    'SELECT published_at, followers, notified FROM article_follower_reach WHERE article_id = ? ORDER BY id DESC LIMIT 20',
+  ).bind(id).all<any>().catch(() => null);
   return c.json({
     // D1293 — `rendered_html` is the body as readers would see it now, from
     // the current markdown. `body_html` stays what was rendered at publish.
     article: { ...row, tags, rendered_html: renderMarkdown(row.body_markdown || '') },
     revisions: revs.results || [],
     comments: cmts.results || [],
+    follower_reach: reach ? reach.results || [] : null,
   });
 });
 
@@ -269,7 +306,7 @@ export async function publishApprovedArticle(env: Env, row: any, actorUserId: nu
   // Task #66 — fan out to followers of the author (best-effort, non-blocking).
   await notifyAuthorFollowers(env, row.author_user_id, {
     id: row.id, slug: row.slug, title: row.title,
-  });
+  }, now);
   return true;
 }
 
