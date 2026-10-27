@@ -31,6 +31,7 @@ import { ingestContact } from './contacts';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const brand = new Hono<{ Bindings: Env }>();
 
@@ -1224,6 +1225,8 @@ brand.post('/logo/upload', async (c) => {
   const files = c.env.FILES;
   if (files) {
     const key = `brand-logos/${user.id}/${crypto.randomUUID()}.${markExtension(mime)}`;
+    // D1170 — a brand logo counts to its member (D1169 §1).
+    const storage = await assertStorageRoom(c.env, { userId: user.id }, logoBytes.byteLength, user);
     try {
       await files.put(key, logoBytes, {
         httpMetadata: { contentType: mime },
@@ -1236,6 +1239,7 @@ brand.post('/logo/upload', async (c) => {
     // the metadata store fails; storage maintenance never deletes a file.
     try { await memberFileStatement(c.env,key,user.id,'brand_logo',logoBytes.byteLength).run(); }
     catch { return c.json({code:'upload_metadata_unavailable',error:'The logo could not be saved. Try again.'},503); }
+    await noteStorageLanded(c.env, storage);
     // asset_id is the R2 key; the frontend can resolve it via a future
     // signed-URL route. For now, inline the logo for immediate preview.
     let previewUrl: string | null = null;

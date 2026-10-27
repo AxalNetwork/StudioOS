@@ -20,6 +20,7 @@ import { closePosting, createPosting, submitForReview } from './jobBoardCommon';
 import { APPLICATION_STAGES, MARKET_PARTS, type GrowSlug } from './growCycle';
 import { calendarDay } from './growKpis';
 import { mintDownloadToken } from './signedDownload';
+import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
 
 export class Refused extends Error {
   status: number; sentence: string; field: string | null;
@@ -759,12 +760,15 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
   if (!heldOn) throw new Refused(400, 'When was it held?', 'held_on');
   const file = b.minutes && typeof b.minutes === 'object' && 'arrayBuffer' in (b.minutes as object) ? b.minutes as File : null;
   let key: string | null = null;
+  let storage: StorageTicket | null = null;
   if (file) {
     if (!env.FILES) throw new Refused(503, 'File storage is not configured', 'minutes');
     const ext = MINUTES_TYPES[String(file.type || '').toLowerCase()];
     if (!ext) throw new Refused(415, 'Minutes are a PDF or a DOCX file', 'minutes');
     if (file.size > MINUTES_MAX_BYTES) throw new Refused(413, 'Minutes are 20 MB at most', 'minutes');
     key = `${minutesPrefix(pid)}${newUid()}.${ext}`;
+    // D1170 — Grow minutes count to the venture's owner (D1169 §1).
+    storage = await assertStorageRoom(env, { projectId: pid }, file.size, user);
     await env.FILES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
   }
   const months = REPEAT_MONTHS[e.recurrence];
@@ -785,6 +789,7 @@ export async function markHeld(env: Env, pid: number, user: User, eventId: numbe
     if (key) { try { await env.FILES?.delete(key); } catch { /* the stored file is orphaned, never served */ } }
     obligationClash(error, obligationKind(e), next);
   }
+  if (storage) await noteStorageLanded(env, storage);
   return { id: e.id, occurrence, due_at: next, status: months ? 'pending' : 'completed' };
 }
 

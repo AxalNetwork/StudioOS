@@ -19,6 +19,15 @@ throw fixed words. `planCatalogue.ts` and the public plans rows project the same
 table. Negotiated and staff values stay null with distinct reasons. Later
 storage readers and guards must consume it rather than copy figures.
 
+`storageRoom.ts` (D1170, #3083) is the storage guard every member upload calls
+before its R2 write, and the 80/95/100% notices sent once the write lands. Its
+refusal is the one exception to "never a Response" here: it throws the 413
+`storage_full` Response, because the same shape must answer from routes,
+record actions and writers alike, and every caller passes a thrown Response
+through. `storageHq.ts` is HQ's totals over every member (by kind, plan and
+state), from `storageUsage.ts`'s per-owner statements and `storagePlans.ts`'s
+`chooseStoragePlanKey`: no second copy of either rule.
+
 `dealAccess.ts` is D1149's shared invited-or-committed investor predicate, used
 by the deal reader and diligence opener. A room request is not a grant.
 
@@ -192,8 +201,8 @@ no new schema, runtime or billing path is introduced.
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
 | `fundAdminAccess.ts` / `fundAdminOverview.ts` | D1159 (#3066): Admin-tier fund creation and valuation acts, with existing institutional GP scope preserved; independent submitted/applicant-signed/not-yet-sent booklet counts per administered fund. Distribution preview LP names come from the shared LP selection in `fundDistributionSplit.ts`, without changing its arithmetic. |
 | `closings.ts` | D1215 (#3212): a closing as a record over migration 612 — `closings`, `closing_lines`, `closing_evidence` and the append-only `closing_events`. An admin or the venture's founder reads every line; anyone else only through a line of their own, and then their own lines and the round's total. A line is `received` only on receiving-side evidence; every write appends one event in its own batch, with no amount, name or account number. The operator's runbook is `documentation/operations/CLOSING.md` (D1220). |
-| `companyReceivingAccounts.ts` | D1217 (#3214): a company's receiving instructions over migration 613 — versioned, held with the column cipher, read masked (the last four digits), saved by the founder who owns the project, and revealed in full to a signed investor only through a reveal ledger written before decryption. Its routes (`../routes/company_receiving_accounts.ts`) are not mounted yet. Also the sender-only Mercury report: an accepted match records Sent, never Received. |
-| `capTableClose.ts` | D1021 (#2858): a Raise close's investors as proposed issuances on the cap-table record, keyed `raise_prospect:<uid>`, so Raise › Cap table and the closing room decide the same row. Money is the close's own; nothing is guessed. |
+| `companyReceivingAccounts.ts` | D1217 (#3214): a company's versioned receiving instructions on migration 613, encrypted with the column cipher; masked reads, the founder's save, an investor's logged 30-second reveal (the ledger row is written before decryption) and the account-change notice. Moves no money. Its router, `../routes/company_receiving_accounts.ts`, is NOT mounted until #3214, so no page reads it yet (D1218 §4). Also the sender-only Mercury report: an accepted match records Sent, never Received. |
+| `capTableClose.ts` | D1021 (#2858): a Raise close's investors as proposed issuances on the cap-table record, keyed `raise_prospect:<uid>`. Its header expects the Closing room's CP11 to decide the same row by the same key. That link is not built (D1218 §4): a closing records its own decision (D1215), and the holder is written by the cap table's own path (#2432). |
 | `reportFigures.ts` | D1059 (#2929): `REPORT_FIGURES`, one registry of the figures a report carries (Share an update's five keys and migration 168's KPI rule keys mapped onto it, each with its Grow module, sources and unit); `assembleReport` reads every module's stores for a venture and period, each figure with its source and `as_of`, nothing missing read as 0, a Mercury figure team only; the founders' choices, the canonical frozen list and its SHA-256, and what a reader outside the team is shown. |
 | `reportingDuties.ts` | D1058 (#2928): reporting duties over migration 579 — `INFORMATION_RIGHTS` (the templates' information-rights clauses), `createReportingDuties(closingId)` called by `completeClosing`, the period arithmetic, `periodState` (late and missing worked out on read, never stored), reminder settings, and `runReportingDaily` (duties a closing missed, periods as they end, the team's reminders, each claimed once). No event holds a figure. |
 | `articleMetrics.ts` | D1294 (#3390): the Content queue's Authors and Performance reads over migration 637 — `countDailyView` (one row per article per UTC day on the public read, no personal data; an admin, the author and an impersonated session are not counted), `recordFollowerReach` (counts only, per publish), `authorsRead` and `performanceRead` (views null before the first daily row, never 0). |

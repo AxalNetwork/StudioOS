@@ -348,7 +348,8 @@ test('Company profile follows the selected company even when the signing entity 
   setReadState({ loading: false, failed: false });
   const first = html(companyCard(COMPANY_A));
   assert.match(text(companyCard(COMPANY_A)), /Company Example Labs Role Founder Stage Seed Website https:\/\/example.com/);
-  assert.match(first, /href="\/company-settings"/);
+  // D1140 (#3020): the card opens this company's settings at their new address.
+  assert.match(first, /href="\/account\/companies\/company-a\/settings"/);
   assert.doesNotMatch(first, /No company|Add company profile/);
   assert.match(text(companyCard(COMPANY_B)), /Company Other Labs Role Viewer/);
   assert.doesNotMatch(html(companyCard(COMPANY_B)), /Example Labs|https:\/\/example.com/);
@@ -362,7 +363,7 @@ test('Company profile distinguishes an empty membership list, loading and a fail
   setReadState({ loading: false, failed: false });
   const empty = html(companyCard(null));
   assert.match(empty, /No company selected/);
-  assert.match(empty, /href="\/company-settings"/);
+  assert.match(empty, /href="\/account\/companies"/); // D1140: Companies and projects
   setReadState({ loading: true, failed: false });
   assert.match(html(companyCard(null)), /account-loading/);
   assert.doesNotMatch(html(companyCard(null)), /No company selected/);

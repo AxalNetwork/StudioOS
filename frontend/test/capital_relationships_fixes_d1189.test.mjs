@@ -13,14 +13,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import React from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
 import { api } from '../src/lib/api.js';
 import { FORMS } from '../src/pages/cycles/forms.js';
-import FounderGrowCapitalMatch, { hasWarmPath } from '../src/pages/founder/FounderGrowCapitalMatch.jsx';
 import { ContactsPanel } from '../src/pages/ContactsPage.jsx';
-import { contactHubPath } from '../src/pages/RaisePipelinePage.jsx';
 import { pageFor } from '../src/lib/railPages.js';
 
 const h = React.createElement;
@@ -37,55 +34,8 @@ test('Fit copy: Add investor says Fit reads sector focus only, never fund size',
   assert.doesNotMatch(form.foot, /fund size/i);
 });
 
-test('warm paths: a row has one only when it names who can introduce you', () => {
-  assert.equal(hasWarmPath({ warm_path: 'Via Lin Park' }), true);
-  assert.equal(hasWarmPath({ warm_path: '   ' }), false);
-  assert.equal(hasWarmPath({ warm_path: null, contact_id: 100 }), false, 'a linked contact is not an introduction');
-  assert.equal(hasWarmPath({}), false);
-});
-
-test('Investor match: the warm-path stat counts the paths the rows draw', async () => {
-  const rows = [
-    { id: 1, name: 'Northwind Capital', stage: 'contacted', contact_id: 100, warm_path: 'Via Lin Park' },
-    { id: 2, name: 'Harbour Angels', stage: 'to_contact', contact_id: 101, warm_path: null },
-    { id: 3, name: 'Quinn Ventures', stage: 'meeting', contact_id: null, warm_path: '' },
-  ];
-  await withApi({
-    listProjects: async () => ({ items: [{ id: 7, name: 'Kestrel Labs' }] }),
-    raiseProspects: async () => ({ items: rows }),
-  }, async () => {
-    const view = await mountContracts(h(FounderGrowCapitalMatch, { user: { role: 'founder' } }), '/raise/capital-match?project_id=7');
-    try {
-      await view.flush(); await view.flush();
-      const text = view.text();
-      assert.match(text, /With a warm path1Who can introduce you, as recorded/);
-      const paths = view.nodes().filter((n) => view.props(n)?.['data-testid'] === 'fg-capital-path').map((n) => view.props(n).children);
-      assert.deepEqual(paths, ['Via Lin Park', 'Not recorded', 'Not recorded']);
-    } finally { await view.unmount(); }
-  });
-});
-
-test('Investor match: no named path reads as none, whatever contacts are linked', async () => {
-  await withApi({
-    listProjects: async () => ({ items: [{ id: 7, name: 'Kestrel Labs' }] }),
-    raiseProspects: async () => ({ items: [{ id: 2, name: 'Harbour Angels', stage: 'to_contact', contact_id: 101 }] }),
-  }, async () => {
-    const view = await mountContracts(h(FounderGrowCapitalMatch, { user: { role: 'founder' } }), '/raise/capital-match?project_id=7');
-    try {
-      await view.flush(); await view.flush();
-      assert.match(view.text(), /With a warm path0No prospect names a warm path yet/);
-    } finally { await view.unmount(); }
-  });
-});
-
-test('Contacts hub door: the drawer links the contact, not the inbox', () => {
-  assert.equal(contactHubPath('c100'), '/network?tab=contacts&contact=c100');
-  assert.equal(contactHubPath('a b'), '/network?tab=contacts&contact=a%20b');
-  assert.equal(contactHubPath(null), '/network?tab=contacts');
-  const src = readFileSync(new URL('../src/pages/RaisePipelinePage.jsx', import.meta.url), 'utf8');
-  assert.match(src, /<Link to=\{contactHubPath\(contact\.uid\)\}/);
-  assert.doesNotMatch(src, /<Link to="\/network\?tab=contacts"/);
-});
+// D1194 (#3128): Investor match (FounderGrowCapitalMatch) and the old pipeline's Contacts hub door
+// (RaisePipelinePage) are retired into Capital relationships; its Match and Pipeline tabs carry them.
 
 test('Contacts hub: ?contact= opens that contact\'s drawer', async () => {
   const asked = [];

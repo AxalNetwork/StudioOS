@@ -1,164 +1,327 @@
-# Run a closing, end to end
+# Run a closing, end to end (D1220)
 
-A **closing** is the step from "the terms are agreed" to "the money is in the
-company's account and the cap table says so". This runbook takes one closing
-from open to Closed, through the pages built for it: D1213, D1215–D1219 and
-D1058. It is the operator's order of work. Each decision file has the full
-rules.
+A closing is one deal's round brought from commitments to money received and a
+cap table decided. Since #2424 (D1213, D1215–D1219) it is a record:
+- **the stores:** `closings`, one line per commitment, the evidence on each line, and an append-only event log (migration 612);
+- **the paper:** signed in order, with Axal's countersign last (migration 633);
+- **the pages:** for the founder, the investor and the studio team.
 
-**The platform never moves money.** It records paper, routes, evidence and
-decisions. Every money figure is integer cents with a currency. Every act
-appends one row to `closing_events`, and that row holds no amount, name or
-account number. Nothing in this runbook asks for a secret, a bank login or a
-token. None belongs in a runbook, an issue or a log.
+This runbook is the order an operator follows, from opening a closing to
+marking it Closed. Each step says:
+- who does it;
+- which page they use, and the route behind it;
+- what the system refuses, and what it never does.
+
+**The platform never moves money.** It records paper, routes and evidence, and
+matches what a bank already shows. No step below sends, holds or releases a
+payment. Nobody pays because a page told them to: payment details are confirmed
+by phone, on a number already held (step 5).
+
+**Never** paste an account number, an amount, an investor's name, a signing
+link or a session token into an issue, a pull request, a commit or a chat. The
+repository is public. A closing is named by its deal id or its uid, and nothing
+else.
 
 ## Who does what
 
-| Who | Where | What they do |
-|---|---|---|
-| An Admin | **Contracts › Closings**: `/admin/contracts/closings`, then `/admin/contracts/closings/:dealId` | Opens the closing, prepares and sends the paper, chooses each line's route, withdraws a line, marks Closed |
-| The Super Admin | the same closing page | Countersigns for Axal, with a fresh authenticator code |
-| The founder | **Raise › Capital relationships › Closing**: `/raise/capital-relationships/closing` | Signs first, then decides the cap-table change |
-| An investor | **Deals › [company] › Closing**: `/deals/:dealId/closing` | Signs their line's paper, sends the money, accepts a match from their Mercury |
-| An Operating Partner | the deal's closing room | Reads the checklist, transfers and total, marked "Read only". Records no transfer (D1215 §4) |
+| Role | Does | Never does |
+| --- | --- | --- |
+| **Admin** (the studio team) | Opens the closing, adds lines, chooses routes, prepares and sends the paper, records evidence, marks Closed | Countersigns for Axal, commits or releases fund money, decides the cap table |
+| **Super Admin** | Everything an Admin does, and countersigns for Axal with a fresh step-up (`closing.countersign`) | Decides the cap table |
+| **Founder** of the venture | Signs first, reads every line, decides the cap-table change | Records evidence or marks Closed |
+| **Investor** on a line | Signs their paper, reads payment instructions, sends the money, accepts their own Mercury match | Sees any other investor's line, name or amount |
+| **Operating Partner** | Ticks the deal's closing checklist, reads the checklist, transfers and total | Records a transfer (`admin_records_transfers`) or reads the closing record |
 
-**A support session is refused every closing write.** Sign in as yourself.
+A support session is refused every closing write (`support_session_refused`).
 
-## Before you start
+## The pages
 
-- **The deal has its commitments.** A closing opens with one line per live commitment on the deal. A Raise prospect can be added as a line afterwards.
-- **There is no open closing on the deal.** A deal holds at most one open closing (migration 612's partial unique index). The desk lists every open one.
-- **The paper has counsel's text.** A document type with no counsel text on file previews as a counsel draft and is never sent (`counsel_draft_only`, D1216 §5). Today that includes the SAFE, until D578's text is on file. Check this before you promise a date.
-- **Everyone who signs has an account.** The founder's account comes from the deal, and the investor's from their line. A missing account is named on the paper drawer, and the paper cannot be sent.
+| Page | Who | Address |
+| --- | --- | --- |
+| Contracts › Closings, the desk | Admin, Super Admin | `/admin/contracts/closings` |
+| One closing | Admin, Super Admin | `/admin/contracts/closings/:dealId` |
+| The founder's room | Founder | `/raise/capital-relationships/closing` |
+| The room under a deal | Founder, investor, Admin, Operating Partner | `/deals/:dealId/closing` |
 
-## 1. Open the closing
+The desk lists every open closing, deadline first. **Waiting on** says whose
+turn it is (Studio team, Investors or Founder) and why. That is the Worker's
+`next_actor` (`services/closings.ts`), and the quickest way to find the next
+step on any closing.
 
-1. Go to **Contracts › Closings** and press **Open a closing**.
-2. Choose the deal. Optionally give the round label and the deadline. Then confirm.
-3. You land on the closing's page. Its tiles read Lines, Committed, Received and the deadline.
+---
 
-The call is `POST /api/closings`. With no deal chosen, the dialog refuses and writes nothing. A deal that already has an open closing is refused.
+## 1. Open a closing (Admin)
 
-**Check:** the desk row shows the closing, its lines, and **Waiting on: Studio team**.
+**Where:** Contracts › Closings › **Open a closing**. Route: `POST /api/closings`.
 
-## 2. Prepare and send the paper (CP3)
+1. Choose the deal. The dialog lists only deals with no open closing; a deal
+   holds at most one (`closing_open`).
+2. Optionally give a round label and a deadline (`YYYY-MM-DD`). With no
+   deadline, the deal's own closing deadline is taken when it is a date.
+3. Confirm. The closing opens with:
+   - **one line per live commitment** (pending or confirmed) that has an amount in cents;
+   - you as its owner;
+   - the deal's currency, else USD.
 
-For each commitment line, press **Prepare paper**:
+**A commitment with no amount in cents gets no line.** It is not drawn as $0.
+Fix the commitment's amount on the deal, then add its line:
+- `POST /api/closings/:uid/lines` with `{ "commitment_uid": … }`;
+- or, for a Raise prospect of the venture with an amount in cents,
+  `{ "prospect_id": … }`.
 
-1. **Choose the paper.** It is one of seven closing papers.
-2. **Preview.** The drawer shows the exact text every signer will sign (`POST /api/legal/esign/staged/preview`).
-3. **Fill the open fields, then preview again.**
-   - Three facts are sourced and say where they came from: the company (the deal), the investor (the line) and the purchase amount (the line's cents).
-   - Every other field is typed. Editing a sourced field marks it Typed.
-   - **Eadwyn never fills money.** Amount, price, cap, valuation, discount, fee and carry are typed by a person from the deal, the commitment or the cap table (AUTOFILL #2431).
-4. **Send for signature,** then confirm in the same dialog (`POST /api/legal/esign/staged`).
+A line that already exists answers `line_exists`. No page has an "Add a line"
+control yet (§10).
 
-**The signing order is fixed by the database.** It is the company first, then the investor, then Axal last. You cannot reorder it. Each stage is emailed to its signer when the stage ahead has signed. The founder and the investor sign on the e-sign page from that email. The rooms show who has signed and whose turn it is, but carry no signing link.
+## 2. Choose each line's route (Admin)
 
-**A Raise prospect line** has no commitment, so it has no paper here.
+**Where:** one closing › the line › **Choose the route** (CP5). Route:
+`PUT /api/closings/:uid/lines/:lineUid/route`.
 
-## 3. Countersign for Axal (CP4)
+| Route | Use it when | The vehicle |
+| --- | --- | --- |
+| `direct` | The investor pays the company | None |
+| `syndicate` | An SPV collects members' money and makes one payment | `syndicate:<id>`, chosen from the venture's syndicates |
+| `axal_fund` | An Axal VC fund invests | The fund |
+| `third_party_fund` | Another fund invests | Its legal name, recorded in the third-party fund drawer (CP8) |
 
-When every stage ahead has signed, the envelope's Axal stage reads **awaiting release**.
+- **Every route but Direct names its vehicle.** The dialog refuses one without
+  it before anything is sent.
+- **A withdrawn line keeps its route** (`line_withdrawn`).
+- **The route's other needs read "Not read here yet":** the receiving account,
+  identity and business checks, joinders, the fund's cash. Check those outside
+  this page.
 
-- **The Super Admin** presses **Countersign for Axal** on that line and confirms. The authenticator prompt opens if the session's step-up has lapsed. Then the signing link is shown to the Super Admin alone. It is never logged.
-- **An Admin** sees the act's sentence instead of a button.
+## 3. Prepare and send the paper (Admin)
 
-The call is `POST /api/legal/esign/staged/:uid/countersign`. Its refusals:
-- `step_up_required`: sign in again with your authenticator code. Nothing was sent.
-- `not_your_turn`: a stage ahead has not signed.
-- `no_countersign`: this envelope has no Axal stage.
+**Where:** one closing › the line › **Prepare paper** (CP3). Routes under
+`/api/legal/esign/staged` (D1216).
 
-**Check:** the line's paper reads Signed in every room. The founder's step strip moves past **Sign**.
+1. **Choose the paper:**
+   - Portfolio: SAFE, Term Sheet, Stock Purchase Agreement;
+   - Fund: Subscription Agreement, SPV Joinder, Co-Investment Side Letter,
+     Strategic Side Letter / Focused SPV.
+2. **Preview** (`POST /staged/preview`), fill the fields the text leaves open,
+   then preview again.
+   - **Three facts are sourced:** the company (from the deal), the investor
+     (from the line) and the purchase amount (from the line's cents).
+   - **Every other field is typed.** Editing a sourced field marks it Typed.
+   - **Eadwyn never fills money** (amount, price, cap, valuation, discount,
+     fee, carry).
+3. **Send for signature**, and confirm in the same dialog (`POST /staged`).
+   - The signers are, in this order: the company, through the deal's
+     `founder_user_id`; then the line's investor; then Axal's countersign, by
+     default.
+   - The order is the database's, and cannot be changed.
 
-## 4. Choose each line's route (CP5–CP8)
+**Refusals you will meet:**
 
-Press **Choose the route** on each line. Each route needs:
+| Code | Means | Do |
+| --- | --- | --- |
+| `counsel_draft_only` | No counsel text is on file for this paper. It previews as a draft, never sends. | Get counsel's text published in the template store. A SAFE stays a draft until D578's text is on file. |
+| `fields_unfilled` | A field is still open. The list comes with it. | Fill each field named. |
+| `signer_unknown` | A signer has no account: often the venture's founder account is not linked. | Link the founder's account to the venture. The drawer names who is missing. |
+| `investor_not_on_line` | The investor named is not this line's. | Send the line's own investor. |
+| `line_not_in_closing` | The commitment is not a line of this closing. | Add the line (step 1). |
 
-| Route | What it needs | Notes |
-|---|---|---|
-| Direct | nothing more | The investor pays the company |
-| Syndicate | the venture's syndicate, chosen from its list | Stored as `syndicate:<id>`. Its lead and members read the SPV card (CP6) |
-| Axal VC fund | the fund | Commit fund money and Record the release have no route yet (D1215 §3). Capital calls are issued in Fund admin |
-| Third-party fund | the fund's legal name | StudioOS does not run that fund's calls or hold its money |
+**How each stage is sent:** each one goes to its signer by email, as an ordinary
+envelope.
+- The company signs first. The investor's stage is sent only after that.
+- Axal's stage then reads **awaiting release**. It is never sent on its own.
 
-- A route with no vehicle (every route but Direct) is refused before anything is sent.
-- The call is `PUT /api/closings/:uid/lines/:lineUid/route`.
-- **Withdraw** takes a line out of the closing. A withdrawn line stays in the record and the activity.
+No page returns a founder's or an investor's signing link. The paper drawer
+shows the order: Signed (with the day), Your turn, Waiting, Declined, and
+Waiting for the Super Admin.
 
-## 5. Share the payment instructions (CP9)
+## 4. Countersign for Axal (Super Admin)
 
-**Not available through the platform yet.** D1217's receiving-account routes (`/api/closings/company-receiving-accounts`) are built but not mounted on `main`. #3214 is still open for that remainder.
+**Where:** one closing › **Countersign for Axal**. The button shows on each
+envelope whose Axal stage reads `awaiting_release`. Route:
+`POST /api/legal/esign/staged/:uid/countersign` (`closing.countersign`).
 
-Until they are mounted:
-- The investor's **See payment instructions** drawer shows the warning first: call the company on a number you already hold. It then says the instructions are not read here, and that nothing on the page tells anyone where to pay. No account number, mask or reveal is drawn.
-- **Never send account details through the platform's comments, notes or issues.** The company gives its instructions to each investor directly, and the investor confirms them by phone on a number they already hold.
+1. Press it and confirm the dialog.
+2. If your session is stale, the authenticator prompt opens
+   (`step_up_required`). Enter the code, and the call retries. Nothing is sent
+   until the step-up passes.
+3. The signing link is drawn for you alone. Sign on the e-sign page. The
+   envelope is then complete.
 
-## 6. The investor sends the money
+**An Admin never sees this act enabled.** They read the act's sentence in its
+place.
 
-The investor pays from their own bank. The platform does not initiate or hold any payment.
+**Its other refusals:**
+- `not_your_turn`: a stage ahead has not signed;
+- `no_countersign`: the envelope was sent without Axal's stage.
 
-- **With Mercury connected,** the investor's room shows their own closing matches (`GET /api/mercury/investor/proposals?kind=closing`). They press **Accept this match?** to record **Sent, not yet confirmed** (D1217). That is the sending side: it never makes a line Received.
-- **Without Mercury,** "I have sent it" says the investor's word is recorded only through a match. Ask the investor to tell you directly, and wait for receiving-side evidence (step 7).
+## 5. Share the payment instructions (founder, then the investor)
 
-## 7. Record the receipt
+**Today this step happens outside StudioOS.** The company's receiving
+instructions (D1217, migration 613) are built but **not mounted**. #3214 holds
+their mount, pending S01's answer. Until it lands:
+- The founder's room reads "Your company's receiving account: Not read here yet".
+- The investor's **See payment instructions** drawer opens with CP9's warning,
+  then says the instructions are not read here, naming #3214. It shows no
+  account number and no mask.
 
-**A line reads Received only on receiving-side evidence** that has not been withdrawn (D1215 §2, #2424 owner question 4). The evidence kinds are:
+**The rule, before and after the mount.** The investor calls the company on a
+phone number they already hold, and confirms the details before paying. They
+never use a number supplied with a change of payment instructions.
+
+**Once #3214 mounts `/api/closings/company-receiving-accounts`:**
+- The founder saves the account there (`PUT /:projectId`).
+- An investor with a signed line reveals it (`POST /:projectId/reveal`). That
+  writes the reveal to its ledger before decrypting, and answers no-store, for
+  30 seconds of display.
+- Replacing the account notifies every investor with a pending commitment
+  across the company's projects.
+
+Update this step when that happens.
+
+## 6. The investor sends the money; record the evidence (Admin)
+
+The investor pays outside StudioOS. A line's money status is worked out from
+its evidence, never typed:
+
+| Status | Means |
+| --- | --- |
+| Waiting for money (`open`) | No evidence yet |
+| Sent, not yet confirmed (`sent`) | Only sending-side evidence: the investor's own Mercury |
+| Received (`received`) | Receiving-side evidence that is not withdrawn |
+| Withdrawn | The line was withdrawn |
+
+**Only receiving-side evidence makes a line Received:**
 
 | Kind | Side | Source it names |
-|---|---|---|
+| --- | --- | --- |
 | `company_mercury` | receiving | `mercury:<id>`: the company's Mercury transaction |
 | `axal_mercury` | receiving | `mercury:<id>`: an Axal entity's Mercury transaction |
-| `phone_verified_record` | receiving | `deal_transfer:<uid>`: an Admin's phone-verified transfer on this deal |
-| `bank_confirmation` | receiving | `file:<key>`: an uploaded bank confirmation |
-| `investor_mercury` | sending | `mercury:<id>`: reads Sent, never Received |
+| `phone_verified_record` | receiving | `deal_transfer:<uid>`: a transfer recorded on this deal with Phone-verified ticked |
+| `bank_confirmation` | receiving | `file:<key>`: a bank confirmation file already stored |
+| `investor_mercury` | sending | `mercury:<id>`: the investor's own Mercury |
 
-- A source names a stored record by its id. Free text (a memo, an account number, a name) is refused, and the refusal echoes nothing back.
-- **A phone-verified transfer** is recorded by an Admin on the deal (`POST /api/deals/:id/transfers`, the `closing.evidence` act). An Operating Partner is refused: "An Admin records transfers."
-- **The evidence route** is `POST /api/closings/:uid/lines/:lineUid/evidence`, the `closing.evidence` act.
-  - **No page calls it yet.** The receipt drawer (CP10) lists a line's evidence and its side, but has no "record" control.
-  - Until a page records evidence, a line cannot reach Received from the UI. Raise it with S1 on #2424 rather than writing to D1 by hand.
-- **To take evidence back,** use `POST /api/closings/:uid/evidence/:evidenceUid/withdraw` with a reason of 10 to 200 characters. The line's status is recomputed in the same batch.
+**The sender's side.** In their room, the investor accepts their own Mercury
+match ("Accept this match?", `POST /api/mercury/investor/proposals/:uid/accept`).
+That records Sent, not yet confirmed. It never records Received.
 
-**Check:** Received counts received lines only. A Sent line is not money in the account.
+**The receiving side, a phone-verified transfer:**
+1. Call the investor on a number already held, and confirm the payment.
+2. Record it on the deal's page: Commitments › **Record a wire**, or the deal
+   room's Transfers tab. Use the amount in integer cents, and tick
+   **Phone-verified** (`POST /api/deals/:id/transfers`, `closing.evidence`).
+   - Open IC conditions on the deal block a transfer
+     (`open_conditions_block_transfer`). Clear them first.
+   - An Operating Partner is refused (`admin_records_transfers`).
+3. Link it to the line as evidence:
+   `POST /api/closings/:uid/lines/:lineUid/evidence` with
+   `{ "kind": "phone_verified_record", "source_ref": "deal_transfer:<uid>" }`.
+   **No page has this control yet (§10).**
 
-## 8. The founder decides the cap-table change (CP11)
+**Mercury and bank-file evidence** go through the same route, naming the stored
+record by its id:
+- **Free text is refused.** A memo, an account number or a name gets
+  `source_ref_invalid`, and the refusal echoes nothing back.
+- **The status is recomputed in the same batch as the evidence.**
 
-- The proposal is `not_ready` until every line is Received or Withdrawn, with at least one Received. It is then `proposed`.
-- **Only the venture's founder decides,** in their closing room: **Add to cap table** or **Dismiss the proposal**. **Not now** writes nothing. An Admin or an investor is told "The founder decides the cap-table change."
-- Accepting records the decision only. The holder is written by Raise › Cap table's own path (#2432). Nothing about the cap table is guessed.
+**Wrong evidence is withdrawn, never deleted.** Use
+`POST /api/closings/:uid/evidence/:evidenceUid/withdraw` with a reason of 10 to
+200 characters. The line's status is recomputed. The evidence and its event
+stay on record.
 
-## 9. Mark Closed (CP12)
+**A line that will not close in this round:** one closing › the line ›
+**Withdraw**. It then counts in no total. Its evidence and history stay.
 
-1. On the closing's page, press **Mark Closed**. It is offered only once every line is settled and the founder has decided. Otherwise the page says why, in D1215's words.
-2. Confirm. The dialog says nothing changes afterwards, and that reporting duties start.
+**A syndicate line.** The SPV panel (CP6) shows the members and what each
+committed. The SPV's one payment to the company is the line's status.
 
-- The call is `POST /api/closings/:uid/complete`.
-- After it, every write on the closing is refused with 409 `closing_not_open`.
-- Completing creates the round's reporting duties (`createReportingDuties`, D1058). The founder's room lists the duties on this closing's lines. A term the paper left blank reads "Default, not in the paper".
+**An Axal VC fund line.** Its commitment and release are Super Admin acts with
+no route yet. Issue the capital call in Fund admin › Capital calls.
 
-## Reading the activity (CP15)
+## 7. The cap-table decision (founder)
 
-The closing's **Activity** drawer lists every event, newest first, with its step: Paper, Route, Receipt, Cap table, Reporting. Filter by step, and export the rows drawn as CSV. Actors read "Account #n", because the log holds no names.
+**When the proposal appears.** Once every line is received or withdrawn, with at
+least one received, the proposal reads **proposed**. The desk then shows
+**Waiting on: Founder**.
 
-## When something is refused
+**Where:** the founder's room › **Needs you** › the cap-table change (CP11).
+Routes: `POST /api/closings/:uid/captable/accept` or `…/dismiss`. **Not now**
+writes nothing.
 
-Every refusal carries a code and a sentence, and says whether anything changed. The common ones:
+**What the decision does:**
+- **Accepting records the decision only.** Raise › Cap table writes the holder (#2432).
+- **Only the founder decides.** An Admin or an investor is refused with "The
+  founder decides the cap-table change." (`founder_decides`).
+- **A decision is made once** (`captable_decided`).
 
-| Code | Meaning | What to do |
-|---|---|---|
-| `support_session_refused` | A support session tried to write | Sign in as yourself |
-| `closing_open` | The deal already has an open closing | Work on that one: the desk lists it |
-| `closing_not_open` | The closing is Closed or cancelled | Nothing changes after Closed |
-| `counsel_draft_only` | The paper has no counsel text on file | Wait for counsel's text; do not send a draft |
-| `fields_unfilled` | The paper has open fields | Fill them, preview again, then send |
-| `step_up_required` | The countersign needs a fresh code | Enter your authenticator code |
-| `admin_records_transfers` | An Operating Partner tried to record a transfer | An Admin records it |
-| `closings_unreadable` | A read or save failed | Try again. It is not proof that nothing is there |
+**When the founder has not decided:** remind them. Do not decide for them. The
+closing cannot close until they do.
 
-## What stays unverified until the owner's live check
+## 8. Mark Closed (Admin)
 
-- A closing run end to end on production, with real paper, a real countersign and a real receipt.
-- Migration 612's backfill and triggers, and migration 633's signing-order triggers, on production D1.
-- The receiving-account routes (D1217) once they are mounted, with their 30-second reveal and change notice.
-- A page that records receiving-side evidence (step 7): until one exists, Received is reached only through the API.
+**Where:** one closing › **Mark Closed**. Route: `POST /api/closings/:uid/complete`.
+
+**When it is offered:** only once every line is settled and the founder has
+decided. Otherwise the page says why:
+- `lines_not_settled`: every line must be received or withdrawn, with one received;
+- `captable_undecided`: the founder has not decided the cap-table proposal.
+
+**After Closed, nothing on the closing changes.** Every write answers
+`closing_not_open`.
+
+**Reporting duties start** (D1058):
+- The reply carries `reporting_duties`, the number created.
+- If creating them fails, the close still stands. The daily step creates any
+  duty a closing missed.
+- The founder's room then shows the duties for this closing's lines.
+
+## 9. Read the history
+
+**Where:** one closing › **Activity** (CP15). It shows `closing_events`, newest
+first, filtered by step and exportable as CSV.
+- **The log can't be changed.** Triggers refuse an update or a delete.
+- **It holds no amount, name or account number.** An actor is "Account #n".
+- **An evidence event's source** is `closing_evidence:<uid>`, never the bank's
+  reference.
+
+## 10. What no page does yet
+
+These are recorded on the Worker but have no control on any page.
+
+| Act | Route | Until a control exists |
+| --- | --- | --- |
+| Add a line for a commitment or a prospect | `POST /api/closings/:uid/lines` | An engineer sends it as an Admin, from the Admin's own signed-in session |
+| Record evidence on a line | `POST /api/closings/:uid/lines/:lineUid/evidence` | The same |
+| Withdraw evidence | `POST /api/closings/:uid/evidence/:evidenceUid/withdraw` | The same |
+| Commit or release fund money (`fund_investment.commit`, `.release`) | none | Not recordable. The page says "No route records this yet". |
+| Show the receiving account, and reveal it (CP1, CP9) | not mounted (#3214) | Step 5 |
+
+A call made by hand is still the Admin's act: it is checked and logged the same
+way. Never paste the session token anywhere.
+
+## Troubleshooting
+
+| You see | Means | Do |
+| --- | --- | --- |
+| "This deal already has an open closing." (`closing_open`) | A deal holds one open closing | Open the existing one from the desk |
+| "This commitment has no amount recorded in cents…" (`amount_not_recorded`) | The commitment's amount is missing or not a whole number of cents | Fix the amount on the deal, then add the line |
+| "This closing could not be read. That is not the same as there being nothing to close." | The read failed | Try again. Never read it as empty. |
+| "Unreadable" on a desk tile | That tile's read failed; the others stand | Try again |
+| A line stuck on "Sent, not yet confirmed" | Only the investor's side is recorded | Record receiving-side evidence (step 6) |
+| Paper and Sign read "Not read here" | That line's paper read failed | Reload. That cell alone is affected. |
+| "Waiting for the Super Admin" | Axal's stage is awaiting release | A Super Admin countersigns (step 4) |
+
+## Where it lives
+
+- **Worker:**
+  - `cloudflare-worker/src/routes/closings.ts` and `cloudflare-worker/src/services/closings.ts`;
+  - `cloudflare-worker/src/services/stagedSigning.ts`;
+  - `cloudflare-worker/src/services/reportingDuties.ts`;
+  - `cloudflare-worker/src/routes/company_receiving_accounts.ts`, not mounted.
+- **Pages:** `frontend/src/pages/closing/`.
+- **Decisions:**
+  - D1213: the pages;
+  - D1215: the record, the acts and the money gates;
+  - D1216: the staged paper;
+  - D1217: receiving instructions;
+  - D1218: the room;
+  - D1219: the desk;
+  - D1220: this runbook.
+- **The map at its date:** `documentation/audits/CLOSING_MAP_2026-10-26.md`.

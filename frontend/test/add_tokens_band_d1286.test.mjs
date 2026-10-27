@@ -143,7 +143,10 @@ test('CRP1: the plan block, the storage line with its link, the labelled bar and
     const auto = byId(w.container, 'pricing-tokens-auto');
     assert.ok(text(auto).includes('Auto-reload: off') && text(auto).includes('Set up ›'));
     assert.equal(props(walk(auto).find((n) => n.tagName === 'A')).href, '/account/billing#auto-reload');
-    assert.equal(props(byId(w.container, 'pricing-tokens-add')).href, '#token-packs');
+    // D1287: Add tokens opens the sheet in place. The control is a button, not the old #token-packs link.
+    const add = byId(w.container, 'pricing-tokens-add');
+    assert.equal(add.tagName, 'BUTTON');
+    assert.equal(typeof props(add).onClick, 'function');
   } finally { await w.done(); }
 });
 

@@ -99,6 +99,7 @@ test('the words, alone: a link out only to a pull request or release page on git
 
 test('Build draws the part on Prototype / MVP', () => {
   // Mutation checked: drop the 'prototype-mvp' part → this fails.
-  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.ok(route.includes("'prototype-mvp': (data) => <MvpFromGithub github={data?.parts?.github} />,"));
+  // D1311: Build's parts live in buildParts.jsx, one line per connector.
+  const route = readFileSync(new URL('../src/pages/cycles/buildParts.jsx', import.meta.url), 'utf8');
+  assert.ok(route.includes("['github', (data) => <MvpFromGithub github={data?.parts?.github} />],"));
 });
