@@ -202,6 +202,18 @@ test('a Sheet row the founder deletes stays deleted; Stop using keeps the rows, 
   assert.match(src('routes/google_workspace.ts'), /module IN \(\?, \?\)[\s\S]*GOOGLE_WORKSPACE_LEDGER_MODULE\[row\.module\] \?\? row\.module/);
 });
 
+test('two Sheets naming the same day keep one row: the second Sheet\'s row is skipped with its reason', async () => {
+  const { db, env } = await world();
+  db.prepare(`INSERT INTO google_workspace_files (uid, integration_id, user_id, project_id, module, drive_file_id, mime_type, kind, name, mapping_json)
+    VALUES ('f-second', ?, ?, ?, 'revenue_traction', 'sheetSecond', 'application/vnd.google-apps.spreadsheet', 'sheet', 'Second', ?)`).run(WORKSPACE, FOUNDER, PID, JSON.stringify(MAPPING));
+  const res = await withGoogle(google(SHEET, EVENTS), () => call(env, FOUNDER, 'POST', '/api/cycles/grow/google/sync', { project: PID, part: 'sheets' }));
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.sheets.files, 2); assert.equal(res.body.sheets.written, 3);
+  assert.deepEqual(res.body.sheets.skipped.filter((s: any) => s.file === 'f-second' && s.reason === 'date_in_another_sheet').map((s: any) => s.row), [2, 3, 4]);
+  assert.equal(sheetRowsOf(db).length, 3);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM connector_fed_items WHERE substr(external_id, 1, 12) = 'sheetSecond:'").get().n, 0);
+});
+
 test('an unmapped or wrongly mapped Sheet lands nothing and says so; a mapping naming a refused column is refused when it is saved', async () => {
   const { db, env } = await world();
   db.prepare("UPDATE google_workspace_files SET mapping_json = ? WHERE uid = 'f-metrics'").run(JSON.stringify({ date: 'A', active_users: 'B' }));
