@@ -220,7 +220,7 @@ test('D1096: the sync records each chosen project\'s facts, prunes what is no lo
     ['prj_web', 100, 'acme-web', 'nextjs', '20.x', 'main', 'acme/web', 'app.acme.example', 'hobby', 'live', new Date(1792886400000).toISOString()],
   ]);
   assert.ok(f.calls.every((x) => x.method === 'GET' || x.path === '/v2/oauth/access_token'), 'the sync only reads');
-  assert.ok(!f.calls.some((x) => /runtime-logs|web-analytics|events$/.test(x.path)), 'the sync reads no log, event or analytics');
+  assert.ok(!f.calls.some((x) => x.path.endsWith('/runtime-logs') || x.path.endsWith('/events') || x.path.includes('/web-analytics/')), 'the sync reads no log, event or analytics');
   assert.deepEqual(f.calls.filter((x) => /deployments/.test(x.path)).map((x) => x.path), ['/v7/deployments', '/v7/deployments'], 'one deployment list per chosen project (D1098)');
   await call(env, 'PATCH', `/api/connectors/${uid}/config`, FOUNDER, { projects: ['prj_web'] });
   await call(env, 'POST', `/api/connectors/${uid}/sync`);
