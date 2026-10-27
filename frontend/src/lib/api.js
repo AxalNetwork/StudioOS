@@ -86,6 +86,7 @@ export * from './api/fundReports.js';
 export * from './api/fundStructure.js';
 export * from './api/googleSignIn.js';
 export * from './api/googleWorkspace.js';
+export * from './api/googleWorkspaceBuild.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';

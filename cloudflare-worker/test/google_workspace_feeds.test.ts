@@ -7,14 +7,17 @@ import { pageDescriptor } from '../src/integrations/connectorPages.ts';
 import { writesProjectData } from '../src/integrations/companyScope.ts';
 import { FED_LEDGER_PROVIDERS } from '../src/integrations/fed.ts';
 
-test('Workspace exposes the read foundation honestly, with no module feed or verified live connection',()=>{
+test('Workspace exposes the read foundation honestly: its claims are the feeds list, with no verified live connection',()=>{
  const row=getDescriptor('google_workspace')!;
  const page=pageDescriptor(row,{role:'founder',hq:true,venture:true})!;
  assert.equal(row.auth_type,'oauth2');assert.equal(row.audience_rule,'venture');assert.equal(row.status,'coming_soon');
  assert.equal(CONNECTOR_METADATA.google_workspace.category,'Docs');
- assert.deepEqual(GOOGLE_WORKSPACE_FEEDS,[]);assert.ok(Object.isFrozen(GOOGLE_WORKSPACE_FEEDS));
- assert.deepEqual(CONNECTOR_METADATA.google_workspace.pulls,GOOGLE_WORKSPACE_FEEDS);
- assert.deepEqual(CONNECTOR_METADATA.google_workspace.feeds,[]);assert.deepEqual(CONNECTOR_METADATA.google_workspace.sends,[]);
+ // D1093 (#2958) added Build's two feeds; each later part adds its own. The registry's claims are the list's.
+ assert.ok(Object.isFrozen(GOOGLE_WORKSPACE_FEEDS));
+ for(const f of GOOGLE_WORKSPACE_FEEDS){assert.ok(Object.isFrozen(f),f.key);for(const r of f.reads) assert.ok(Object.hasOwn(GOOGLE_WORKSPACE_READS,r),`${f.key}: ${r}`);}
+ assert.deepEqual(GOOGLE_WORKSPACE_FEEDS.filter(f=>f.decision==='D1093').map(f=>[f.key,f.module]),[['spec_doc','solution_design'],['roadmap_sheet','product_roadmap']]);
+ assert.deepEqual(CONNECTOR_METADATA.google_workspace.pulls,GOOGLE_WORKSPACE_FEEDS.map(f=>({what:f.what,module:f.module})));
+ assert.deepEqual(CONNECTOR_METADATA.google_workspace.feeds,[...new Set(GOOGLE_WORKSPACE_FEEDS.map(f=>f.module))]);assert.deepEqual(CONNECTOR_METADATA.google_workspace.sends,[]);
  assert.equal(page.sign_in.kind,'first_party');assert.equal(page.sign_in.label,'Allow Google files');
  assert.equal(page.verified_on,null);assert.equal(page.added,null);assert.deepEqual(page.prompts,[]);
  assert.match(page.long_description.join(' '),/await their approved design/);
