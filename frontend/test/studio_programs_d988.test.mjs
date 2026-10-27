@@ -223,6 +223,10 @@ test('GR8: View all terms opens the read-only terms, each with its schedule; Req
     await act(async () => { v.props('licence-program-terms-refer-and-earn').onClick(); });
     await v.settle();
     const d = v.of('program-terms-dialog');
+    // D1317: one program's terms are the shared right-side Sheet, at 640px (its own 600 snapped).
+    assert.equal(v.props('program-terms-dialog').role, 'dialog');
+    assert.ok(v.props('program-terms-dialog')['aria-labelledby']);
+    assert.equal(v.props('program-terms-dialog')['data-width'], 640);
     assert.match(d, /Refer & Earn · your terms/);
     assert.match(v.of('program-term-credits'), /400 credits a quarter.*Program schedule · sent/);
     assert.match(v.of('program-term-money'), /Program fee to HQ €2,000 a year · HQ share 10%/);
