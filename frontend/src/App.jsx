@@ -528,6 +528,7 @@ import { signInPath as assistantSignInPath } from './pages/connect/assistantCons
 import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
+import UseOfFundsMovedRedirect from './pages/raise/useoffunds/UseOfFundsMovedRedirect';
 import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
 import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
@@ -2656,7 +2657,7 @@ function AppInner() {
           Financial Model is Capital's tab, the same FinancialsPage; customer
           discovery is Validate · Customer research. Each old address forwards,
           query and hash kept, until #2319 retires the redirects. */}
-      <Route path="/build/financials" element={<Navigate replace to={{ pathname: '/raise/capital/model', search: location.search, hash: location.hash }} />} />
+      <Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />
       <Route path="/build/discovery" element={<Navigate replace to={{ pathname: '/validate/customer-research', search: location.search, hash: location.hash }} />} />
 
       {/* ── Validate ─────────────────────────────────────────────────────────
@@ -3220,7 +3221,7 @@ function AppInner() {
           existing pages via an `embedded` prop; each guarded for the roles of
           the pages it wraps. Standalone routes (/incorporate, /incorporate/*,
           /compliance) stay intact for the investor/partner personas that share
-          them; /build/financials forwards to Capital's tab (#2339) and /build/captable
+          them; /build/financials forwards to Use of funds › Forecast (#2339, D1178) and /build/captable
           to the Cap table tool (#2340, D1029). */}
       {/* D894 (#2434) — the Pitch deck studio. Its home, Review and Share &
           analytics tabs are the studio's own; the deck builder moved to
@@ -3254,7 +3255,8 @@ function AppInner() {
         new URLSearchParams(location.search).get('mode') === 'workspace'
           ? founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />))
           : <FounderRaiseCapital />)} />
-      <Route path="/raise/capital/model" element={guard(['admin', 'founder'], founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />)))} />
+      {/* D1178 (#3105): the financial model is Use of funds › Runway › Forecast; its old addresses land there with the venture. */}
+      <Route path="/raise/capital/model" element={<UseOfFundsMovedRedirect />} />
       {/* D1029 (#2866): the old cap table and its draft variants (D632) are the
           Cap table tool's Overview and Scenarios now. */}
       <Route path="/raise/capital/cap-table" element={<CapTableMovedRedirect to="/raise/cap-table" moved="cap-table" />} />
@@ -3845,6 +3847,8 @@ function AppInner() {
       <Route path="/raise/evidence" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/item/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/claim/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/use-of-funds/runway/forecast" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="use-of-funds" uofSub="forecast" />)} />
+      <Route path="/raise/use-of-funds/scenarios/compare" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="use-of-funds" uofSub="compare" />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       {/* D1106 (#2986): a data-room file's lightbox over Files. */}
       <Route path="/raise/data-room/file/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="data-room" record dataRoomFile />)} />
