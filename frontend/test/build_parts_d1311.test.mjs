@@ -37,15 +37,15 @@ test('a part not built yet is a null on its own line, named with the task that b
     ['#2962', 'D1097', 'RunsOnFromVercel'], ['#2962', 'D1097', 'HostingFromVercel'],
     ['#2963', 'D1098', 'MvpFromVercel'], ['#2963', 'D1098', 'RoadmapFromVercel'],
     ['#2964', 'D1099', 'CompanyFromVercel'], ['#2948', 'D1083', 'FromLovable'],
-    ['#2958', 'D1093', 'FromGoogle'],
   ]) {
     assert.ok(src.includes(`${issue} (${decision}), ${component}`), `${component} names ${issue}`);
   }
   // The unbuilt ones are left out of what draws; GitHub's stay.
   // D1088 (#2953) filled Notion's three lines: From Notion draws last on each module.
-  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['github', 'notion']);
+  // D1093 (#2958) filled Google's two lines: From Google draws before From Notion.
+  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['github', 'google', 'notion']);
   assert.deepEqual(builtParts('prototype-mvp').map(([k]) => k), ['github', 'notion']);
-  assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'notion'], 'D1097\'s Runs on, then From Notion');
+  assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion'], 'D1097\'s Runs on, From Google, then From Notion');
   // CycleRoute takes Build's parts from here, and from nowhere else.
   assert.match(read('frontend/src/pages/cycles/CycleRoute.jsx'), /parts: toFnMap\(buildPartsMap\(\)\),/);
 });

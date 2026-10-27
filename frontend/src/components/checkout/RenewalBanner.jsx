@@ -32,8 +32,9 @@ export const RENEWAL_BRIDGE = {
 };
 
 const SUB = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
-const LINK = 'text-[13px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
-const BTN = 'inline-flex min-h-[36px] items-center rounded-[8px] px-3 text-[13px] font-bold';
+// D1055 (PAYX20): 44px targets below sm.
+const LINK = 'inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 sm:min-h-0';
+const BTN = 'inline-flex min-h-[44px] sm:min-h-[36px] items-center rounded-[8px] px-3 text-[13px] font-bold';
 const PRIMARY = 'inline-flex min-h-[44px] w-full items-center justify-center rounded-[9px] bg-axal-violet px-4 text-[14px] font-bold text-white hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-60';
 
 const store = {

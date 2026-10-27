@@ -18,7 +18,7 @@ import DealSyndicates from '../components/deals/DealSyndicates';
 import { TAB_DEFS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
 import ClosingRoom from './closing/ClosingRoom';
 import VentureScorecard from '../components/scoring/scorecard/Scorecard';
-import { EvidenceSummary } from './cycles/evidence/RaiseEvidence';
+import { EvidenceSummary } from './cycles/evidence/InvestorEvidence';
 import { dealContextApi } from '../lib/api/dealContext';
 import { blockedRole, keyStrip, readFailure, trackOf } from './deal/dealFrameModel';
 import { BTN_P, BTN_S, DealLoading, DealNotFound, DealUnreadable, KeyStrip, NoPermission, RespondDialog, StageTrack } from './deal/DealFrame';
@@ -177,8 +177,8 @@ export default function DealRoomPage() {
       )}
       {/* D1253 (#2428), D1257 (#3280): SC1's panel, read by the deal's visibility rule. */}
       {tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}
-      {/* D1261 (#2430): VR8, VR9's investor block; its read is PIPE-RAISE part 4. */}
-      {tab === 'evidence' && <EvidenceSummary />}
+      {/* D1268 (#3291): VR8–VR10, the investor's block on D1265's read; the founder is pointed to Raise › Evidence. */}
+      {tab === 'evidence' && <EvidenceSummary dealId={deal.id} company={deal.project_name || null} />}
       {tab === 'team' && <DealTeam deal={deal} />}
       {tab === 'market' && <DealMarket deal={deal} />}
       {tab === 'traction' && <DealTraction deal={deal} />}
