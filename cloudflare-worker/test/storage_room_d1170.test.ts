@@ -209,7 +209,8 @@ test('a session in progress is never cut: its chunks are stored on a full plan',
 const src = (p: string) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 /** Each member upload: the file, a marker inside its handler, and its write. The guard sits between them. */
 const SITES: Array<[string, string, string]> = [
-  ['routes/data_room.ts', "r.post('/:projectUid/files'", 'await c.env.FILES.put(key, bytes'],
+  // D1089: the upload's storage step is `storeDataRoomFile`, which the route and a Notion snapshot both call.
+  ['routes/data_room.ts', 'export async function storeDataRoomFile', 'await env.FILES.put(key, bytes'],
   ['routes/data_room.ts', 'export async function replaceDataRoomFile', 'await env.FILES.put(key, a.bytes'],
   ['routes/dd.ts', "dd.post('/cases/:uid/sections/:sectionId/nda'", 'await c.env.FILES.put(storageKey, buf'],
   ['routes/dd.ts', "dd.post('/cases/:uid/items/:itemId/evidence'", 'await c.env.FILES.put(key, buf'],

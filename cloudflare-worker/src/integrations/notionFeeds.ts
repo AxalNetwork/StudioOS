@@ -26,4 +26,7 @@ export const NOTION_FEEDS: readonly NotionFeed[] = Object.freeze([
   // D1087 (#2952): Validate. Interview pages wait for Accept with consent; research pages land as sources.
   { key: 'notion_interviews', what: 'Interview notes, as interviews you accept with the interviewee’s consent', module: 'customer_research', tools: ['notion-fetch'], decision: 'D1087' },
   { key: 'notion_research', what: 'Research pages, as market sources (title and link)', module: 'market_intelligence', tools: ['notion-fetch'], decision: 'D1087' },
+  // D1089 (#2954): Raise. CRM rows wait for Add or Link, then their stage follows; pages wait as snapshots (NDA by default).
+  { key: 'notion_investor_crm', what: 'An investor CRM database, as investors you add or link, then their stage', module: 'capital_relationships', tools: ['notion-query-data-sources'], decision: 'D1089' },
+  { key: 'notion_data_room', what: 'Pages, as dated snapshots you add to the data room (NDA by default)', module: 'data_room', tools: ['notion-fetch'], decision: 'D1089' },
 ]);
