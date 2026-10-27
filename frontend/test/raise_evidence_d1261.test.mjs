@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { EvidenceBody, EvidenceSummary } from '../src/pages/cycles/evidence/RaiseEvidence.jsx';
+import { EvidenceSummary } from '../src/pages/cycles/evidence/RaiseEvidence.jsx';
 import {
   AREAS, BASE, CLAIM_STATE, NOT_YET, SHARING, SOURCES, WAITS, claimHref, claimWord, gradeOf, itemHref, strengthWord, viewOf,
 } from '../src/pages/cycles/evidence/evidenceModel.js';
@@ -28,10 +28,11 @@ const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
  * ------------------------------------------------------------------ */
 
 test('the address names the page or one drawer; an odd id is no drawer', () => {
-  assert.deepEqual(viewOf('/raise/evidence'), { drawer: null, id: null });
-  assert.deepEqual(viewOf('/raise/evidence/item/ev_12'), { drawer: 'item', id: 'ev_12' });
-  assert.deepEqual(viewOf('/raise/evidence/claim/c9'), { drawer: 'claim', id: 'c9' });
-  assert.deepEqual(viewOf('/raise/evidence/item/a.b'), { drawer: null, id: null });
+  // D1266 (#3289) adds `page` (the view, the review queue, the preview).
+  assert.deepEqual(viewOf('/raise/evidence'), { page: 'view', drawer: null, id: null });
+  assert.deepEqual(viewOf('/raise/evidence/item/ev_12'), { page: 'view', drawer: 'item', id: 'ev_12' });
+  assert.deepEqual(viewOf('/raise/evidence/claim/c9'), { page: 'view', drawer: 'claim', id: 'c9' });
+  assert.deepEqual(viewOf('/raise/evidence/item/a.b'), { page: 'view', drawer: null, id: null });
   assert.equal(itemHref('ev_12', '?project=3'), '/raise/evidence/item/ev_12?project=3');
   assert.equal(claimHref('../x'), BASE);
 });
@@ -57,14 +58,11 @@ test('Raise’s rail: Overview, then Evidence, then Calls, then the modules; Evi
  * Rendered
  * ------------------------------------------------------------------ */
 
-test('the view: every area unread, each block waits, and a drawer from the address', () => {
-  const out = html(h(EvidenceBody));
-  for (const a of AREAS) assert.ok(out.includes(a), a);
-  for (const id of ['claims', 'proposals', 'coverage', 'opens']) assert.ok(out.includes(`data-testid="evidence-wait-${id}"`), id);
-  assert.ok(!out.includes('evidence-drawer-'));
-  const item = html(h(EvidenceBody, { drawer: 'item', search: '?project=3' }));
-  assert.ok(item.includes('data-testid="evidence-drawer-item"') && item.includes('href="/raise/evidence?project=3"'));
-  assert.ok(html(h(EvidenceBody, { drawer: 'claim' })).includes('data-testid="evidence-wait-claim"'));
+// D1266 (#3289): the founder's view is live; `raise_evidence_view_d1266.test.mjs`
+// renders it, its drawers and its states. Only the investor's block still waits.
+test('the view is no longer a wait: every area of the canvas is one the model knows', () => {
+  assert.deepEqual(Object.keys(WAITS), ['investor']);
+  assert.equal(AREAS.length, 8);
 });
 
 test('the investor block says what shows before and after the NDA, and waits', () => {

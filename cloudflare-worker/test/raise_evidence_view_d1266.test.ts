@@ -23,7 +23,7 @@ function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true }); for (const sql of DDL) db.exec(sql);
   db.exec(`INSERT INTO users(id,name,email,role,founder_id,is_active,spinout_lab_active,kyc_status,display_name) VALUES
    (1,'Synthetic Founder','one@example.invalid','founder',100,1,0,NULL,NULL),(3,'Synthetic Admin','three@example.invalid','admin',NULL,1,0,NULL,NULL),
-   (5,'Synthetic Investor','five@example.invalid','investor',NULL,1,0,'approved','Synthetic Fund'),(7,'Second Investor','seven@example.invalid','investor',NULL,1,0,'approved',NULL);
+   (5,'Synthetic Investor','five@example.invalid','investor',NULL,1,0,'approved','Synthetic Fund'),(7,'Second Investor','seven@example.invalid','investor',NULL,1,0,'approved',NULL),(6,'Revoked Investor','six@example.invalid','investor',NULL,1,0,'approved',NULL);
    INSERT INTO projects(id,uid,name,founder_id,company_id) VALUES(1,'venture-one','Synthetic Venture',100,10);
    INSERT INTO company_profiles(id,uid,company_name) VALUES(10,'company-one','Synthetic One');
    INSERT INTO user_company_links(uid,user_id,company_id) VALUES('one',1,10),('three',3,10);`);
@@ -84,7 +84,7 @@ test('See as an investor is the investor’s own projection, before and after th
   assert.ok(!NEVER.test(JSON.stringify([after, before])), 'no balance, account, bank line, investor contact or internal key');
   // Who can see it now: counts, never names.
   assert.deepEqual(after.audience, { state: 'recorded', data_room: 1, nda_signed: 1 });
-  grant(w, 7); grant(w, 6, { status: 'revoked' });
+  grant(w, 7); grant(w, 6, { status: 'revoked' }); nda(w, 6);
   assert.deepEqual((await previewEvidence(w.ctx, true)).audience, { state: 'recorded', data_room: 2, nda_signed: 1 });
 });
 
