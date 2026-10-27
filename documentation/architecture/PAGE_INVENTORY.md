@@ -64,7 +64,7 @@ canvas behind it still shows up here.
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
 | Admin | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Accounts | `/admin/accounts` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Accounts | `/admin/accounts` | Accounts |
 | Admin | Approvals | `/admin/approvals` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Programs | `/admin/programs` | Admin · Programs |
 | Admin | Community | `/admin/community` | — (no canvas; shipped ahead of the design corpus) |
@@ -116,7 +116,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-30 of the 66 sidebar rows above are not claimed
+29 of the 66 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -129,7 +129,6 @@ rather than merely absent.
 - partner · Headerless · Delivery (`/delivery`)
 - partner · Headerless · Offers (`/offers`)
 - admin · Admin · Studio (`/studio`)
-- admin · Admin · Accounts (`/admin/accounts`)
 - admin · Admin · Approvals (`/admin/approvals`)
 - admin · Admin · Community (`/admin/community`)
 - admin · Admin · Fund admin (`/admin/fund-admin`)
@@ -153,4 +152,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Licences (`/admin/my-licence`)
 
-**Canvas corpus:** 178. **Workspace assignments:** 274.
+**Canvas corpus:** 181. **Workspace assignments:** 279.

@@ -13,7 +13,7 @@ import brand from '../src/routes/brand.ts';
 import shareActions from '../src/routes/deck_share_actions.ts';
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import cycleRecords from '../src/routes/cycle_records.ts';
-import { recordedDeckRunway, autofillDeck, formatDeckRunway } from '../src/services/decks/autofill.ts';
+import { recordedDeckRunway, autofillDeck, formatDeckRunway, deckRunwayRead } from '../src/services/decks/autofill.ts';
 import { getMethod } from '../src/services/decks/methods.ts';
 import { fetchLandingPageForProject, applyBrandKitToSlides } from '../src/services/decks/branding.ts';
 import { generateReview, normalizeReview, DECK_SECTIONS } from '../src/services/deckExtract.ts';
@@ -274,6 +274,13 @@ test('D895: template Ask runway cells use records, including Mercury, rather tha
   f.db.prepare("INSERT INTO mercury_raise_facts(integration_id,project_id,kind,fact_key,value,as_of) VALUES(99,1,'runway','runway',4,'2026-10-20')").run();
   assert.deepEqual(await runway(),['4 months runway','4 mo']);
   f.db.exec("UPDATE mercury_raise_facts SET value=0");assert.deepEqual(await runway(),['0 months runway','0 mo']);
+  // D1178 (#3105): the financial model is Use of funds › Runway › Forecast, so its runway is labelled Modelled.
+  if(!(f.db.prepare('PRAGMA table_info(financial_models)').all() as any[]).some(x=>x.name==='computed_json'))f.db.exec('ALTER TABLE financial_models ADD COLUMN computed_json TEXT');
+  f.db.prepare("INSERT INTO financial_models(project_id,computed_json,updated_by) VALUES(1,?,2)").run(JSON.stringify({runway_months:7}));
+  assert.deepEqual(await runway(),['7 months runway · Modelled forecast','7 mo · Modelled'],'the forecast is never shown as runway today');
+  assert.deepEqual(await deckRunwayRead(f.env,1,2),{months:7,source:'Modelled'});
+  f.db.exec('DELETE FROM financial_models');
+  assert.deepEqual(await deckRunwayRead(f.env,1,2),{months:0,source:'Connector'},'Mercury\'s fact is a Connector reading');
  }finally{f.db.close()}
 });
 

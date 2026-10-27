@@ -1,7 +1,7 @@
 // D1173 (#2455) — the Use of funds tool inside the Raise module page: its tab
 // words (the canvas's seven), Allocation's sections from the module read, the
-// five tabs that say what they wait for, the financial model's link with the
-// venture kept, and the wiring.
+// tabs (none waits since D1178), the forecast's link with the venture kept,
+// and the wiring.
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/use_of_funds_d1173.test.mjs
@@ -13,7 +13,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
-import { NOT_YET, TABS, WAITS, forecastHref, isUseOfFundsTab, tabHref, tabSearch } from '../src/pages/raise/useoffunds/useOfFundsModel.js';
+import { TABS, forecastHref, isUseOfFundsTab, tabHref, tabSearch } from '../src/pages/raise/useoffunds/useOfFundsModel.js';
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -82,14 +82,9 @@ test('the canvas\'s seven tabs, and only their words are tabs; a section is stil
   assert.equal(tabSearch('?project_id=7%3Cb%3E'), '', 'a malformed venture never reaches the address');
   assert.equal(tabSearch('?project_id=0'), '');
   assert.equal(tabHref(TABS[3], '?project_id=3&x=1'), '/raise/use-of-funds/runway?project_id=3');
-  assert.equal(forecastHref('?project_id=3'), '/raise/capital/model?project_id=3');
-  assert.equal(forecastHref(''), '/raise/capital/model');
-});
-
-test('every waiting tab says why, never zero or none', () => {
-  // D1177 (#3104) drew Milestones and hires, Runway, Plan vs actual and History; only Scenarios waits (part 5).
-  assert.deepEqual(Object.keys(WAITS), ['scenarios']);
-  for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\$0|\bnone\b/i.test(w), w);
+  // D1178 (#3105): the financial model moved under Runway as Forecast.
+  assert.equal(forecastHref('?project_id=3'), '/raise/use-of-funds/runway/forecast?project_id=3');
+  assert.equal(forecastHref(''), '/raise/use-of-funds/runway/forecast');
 });
 
 /* ------------------------------------------------------------------ *
@@ -107,24 +102,16 @@ test('Allocation draws the module read\'s sections, each opening its record, nev
   } finally { await v.close(); }
 });
 
-test('Scenarios says what it waits for, and makes no read of its own; Runway keeps the forecast link', async () => {
-  for (const tab of ['scenarios']) {
-    const v = await mounted(`/raise/use-of-funds/${tab}?project_id=3`);
-    try {
-      assert.ok(v.testIds().includes(`uof-wait-${tab}`), tab);
-      assert.ok(v.text().includes(NOT_YET) && v.text().includes(WAITS[tab].slice(0, 30)), tab);
-      assert.ok(!v.requests.some((u) => /\/records\/|\/financials\//.test(u)), `${tab} reads nothing it cannot use`);
-    } finally { await v.close(); }
-  }
+test('Runway keeps the forecast link with the venture (D1178: Scenarios draws its own read, in use_of_funds_d1178)', async () => {
   const r = await mounted('/raise/use-of-funds/runway?project_id=3');
-  try { assert.ok(r.hrefs().includes('/raise/capital/model?project_id=3'), 'the forecast keeps the venture'); } finally { await r.close(); }
+  try { assert.ok(r.hrefs().includes('/raise/use-of-funds/runway/forecast?project_id=3'), 'the forecast keeps the venture'); } finally { await r.close(); }
 });
 
 test('Home is the module page with the tabs; a section is still its record page; another module is not this tool', async () => {
   const home = await mounted('/raise/use-of-funds?project_id=3');
   try {
     assert.ok(home.testIds().includes('cycle-module') && home.testIds().includes('uof-tabs'));
-    assert.ok(home.hrefs().includes('/raise/capital/model?project_id=3'), 'the tool link keeps the venture (broken item 8)');
+    assert.ok(home.hrefs().includes('/raise/use-of-funds/runway/forecast?project_id=3'), 'the tool link keeps the venture (broken item 8)');
   } finally { await home.close(); }
   const row = await mounted('/raise/use-of-funds/product?project_id=3');
   try {
@@ -147,11 +134,12 @@ test('a failed plan read says so where the sections would be (D1177: Allocation 
  * The source
  * ------------------------------------------------------------------ */
 
-test('the wiring: no route is added, CycleRoute branches on the tab word, and the canvas sits in incoming', () => {
+test('the wiring: CycleRoute branches on the tab word, only D1178\'s two pages under a tab are routes, and the canvas sits in incoming', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.ok(route.includes('isUseOfFundsTab(slug, recordId)') && route.includes('!uofTab && !capRelTab && !!projectId'));
-  assert.ok(route.includes("'use-of-funds': (q) => ({ label: 'Open the financial model', href: forecastHref(q) })"));
-  assert.ok(!read('frontend/src/App.jsx').includes('path="/raise/use-of-funds'), 'no route is added');
+  assert.ok(route.includes("'use-of-funds': (q) => ({ label: 'Open the forecast', href: forecastHref(q) })"));
+  const routes = read('frontend/src/App.jsx').match(/path="\/raise\/use-of-funds[^"]*"/g) || [];
+  assert.deepEqual(routes, ['path="/raise/use-of-funds/runway/forecast"', 'path="/raise/use-of-funds/scenarios/compare"'], 'a tab is never its own route');
   for (const f of ['Raise Use Of Funds Page.dc.html', 'Use of funds · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Use of funds · Boards.dc.html').includes('Raise Use Of Funds Page'), 'the boards import the page by name');
   assert.ok(existsSync('documentation/architecture/decisions/D1173.md'));

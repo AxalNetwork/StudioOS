@@ -13,6 +13,7 @@ export type ArticleNotifyKind =
   | 'admin_submitted'
   | 'author_in_review'
   | 'author_changes_requested'
+  | 'author_unpublished'
   | 'author_approved'
   | 'author_published'
   | 'author_rejected';
@@ -53,6 +54,12 @@ const TITLES: Record<ArticleNotifyKind, (a: Args) => { title: string; body: stri
     title: 'Changes requested on your article',
     body: `An admin requested changes on “${a.title}”${a.reason ? `: ${a.reason}` : '.'}`,
   }),
+  // D1293 (#3389): its own notice, with the admin's reason, instead of
+  // "Changes requested". The article is back in Approved, not with the author.
+  author_unpublished: (a) => ({
+    title: 'Your article was unpublished',
+    body: `An admin unpublished “${a.title}”${a.reason ? `: ${a.reason}` : '.'} It is back in Approved and no longer on Articles.`,
+  }),
   author_approved: (a) => ({
     title: 'Article approved',
     body: `“${a.title}” was approved and is ready to be published.`,
@@ -70,10 +77,9 @@ const TITLES: Record<ArticleNotifyKind, (a: Args) => { title: string; body: stri
 export async function notifyArticle(env: Env, kind: ArticleNotifyKind, args: Args): Promise<void> {
   const { title, body } = TITLES[kind](args);
   if (kind === 'admin_submitted') {
-    // Admin queue route is `/admin/articles` (no per-id route on the
-    // frontend); the queue page surfaces the specific article via its
-    // own selection state.
-    const link = `/admin/articles`;
+    // D1290 (#2383): each article has its own address in the queue,
+    // `/admin/articles/<id>`, which opens its review panel.
+    const link = `/admin/articles/${args.articleId}`;
     const recipients = await admins(env);
     for (const uid of recipients) {
       try {
@@ -107,5 +113,29 @@ export async function notifyArticle(env: Env, kind: ArticleNotifyKind, args: Arg
     });
   } catch (e) {
     console.warn('[articleNotify] author notify failed', e);
+  }
+}
+
+/**
+ * D1293 (#3389) — the author answered an admin's review comment. The admin
+ * who wrote the comment is told, with a link to the article's review panel
+ * (D1290's `/admin/articles/<id>`). The reply's text stays out of the notice.
+ */
+export async function notifyCommentReply(
+  env: Env,
+  args: { articleId: number; slug: string; title: string; commentAuthorId: number; commentId: number },
+): Promise<void> {
+  try {
+    await notify(env, {
+      userId: args.commentAuthorId,
+      type: 'articles_admin_comment_reply',
+      title: 'The author replied to your comment',
+      body: `On “${args.title}”.`,
+      link: `/admin/articles/${args.articleId}`,
+      payload: { article_id: args.articleId, slug: args.slug, comment_id: args.commentId },
+      channels: ['in_app'],
+    });
+  } catch (e) {
+    console.warn('[articleNotify] reply notify failed', (e as Error)?.message);
   }
 }

@@ -12,9 +12,10 @@
  * WHAT IS READ TODAY. `GET /api/cycles/raise/modules/use-of-funds` draws Home
  * as today and Allocation's section rows. Milestones and hires, Runway,
  * Scenarios, Plan vs actual and History have no read of their own on `main`,
- * so each says "Not read here yet" with its reason (D1173 §2). Today's
- * financial model stays at `/raise/capital/model` until part 5 moves it under
- * Runway as Forecast; the tool links it with the venture kept.
+ * so each said "Not read here yet" with its reason (D1173 §2) until D1177
+ * and D1178 drew them. D1178 (#3105) moved the financial model under Runway
+ * as Forecast (`/raise/use-of-funds/runway/forecast`); the tool links it with
+ * the venture kept, and the old addresses land there.
  */
 
 export const SLUG = 'use-of-funds';
@@ -46,19 +47,12 @@ export function tabSearch(search = '') {
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
 
-/** Today's financial model, with the venture kept (#2455 broken item 8). Part 5 makes it Runway › Forecast. */
-export const forecastHref = (search = '') => `/raise/capital/model${tabSearch(search)}`;
+/** Runway › Forecast, the financial model moved there (D1178), with the venture kept (#2455 broken item 8). */
+export const forecastHref = (search = '') => `${HOME_PATH}/runway/forecast${tabSearch(search)}`;
 
-export const NOT_YET = 'Not read here yet';
-
-/** Why a tab draws no blocks today. Never a zero, never "none". */
-export const WAITS = {
-  // D1177 (#3104) drew Milestones and hires, Runway, Plan vs actual and History; their waits are retired.
-  scenarios: 'Scenarios are not stored yet. Today the plan is one split and one raise.',
-};
 
 /** Runway's line under the wait: where the forecast is today. */
-export const FORECAST_LINE = 'The forecast is a model you set. It is not your runway today. It is still the financial model, until it moves here as Forecast.';
+export const FORECAST_LINE = 'The forecast is a model you set. It is not your runway today.';
 
 /* ------------------------------------------------------------------ *
  * D1177 (#3104) — the tool complete: what each tab draws from D1176's

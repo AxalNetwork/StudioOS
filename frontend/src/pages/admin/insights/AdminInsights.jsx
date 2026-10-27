@@ -11,7 +11,7 @@ import {
 import {
   EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NO_PERMISSION, NO_PERMISSION_FILTER,
   PAGE_UNREADABLE, PROFILE_FILTERS, RANGES, SCOPE_NOTE, SCOPE_TITLE, SOURCE_LINE,
-  activeFilterCount, allCountries, asOfLabel, buildBlocks, buildGroup, buildKpis, countryOptions, definitionOf,
+  BLOCK_HEADS, activeFilterCount, allCountries, asOfLabel, buildBlocks, buildGroup, buildKpis, countryOptions, definitionOf,
   EXPORT_FORMATS, EXPORT_LOGGED, EXPORT_NO_GROUP, EXPORT_WHAT, exportBody, exportToast,
   filterCountries, filtersFromSearch, groupFromSearch, isEmptyStudio, pageFailed, rangeLabel, rangeLine,
   readParams, scopeChip, scopeLines, scopeParam, scopeState,
@@ -554,12 +554,17 @@ export default function AdminInsights() {
             ) : (
               <div className="grid grid-cols-12 gap-3.5" data-testid="insights-blocks">
                 {blocks.map((b) => (
-                  <Block key={b.key} b={b} phone={phone}
-                    onRetry={reload}
-                    onCount={setCount}
-                    onSelect={(key) => setParam('group', key)}
-                    onMore={() => setAllOpen(true)}
-                    onPick={setPick} />
+                  <React.Fragment key={b.key}>
+                    {BLOCK_HEADS[b.key] ? (
+                      <h2 className="col-span-12 px-0.5 pt-2.5 text-[16px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100" data-testid={`insights-head-${b.key}`}>{BLOCK_HEADS[b.key]}</h2>
+                    ) : null}
+                    <Block b={b} phone={phone}
+                      onRetry={reload}
+                      onCount={setCount}
+                      onSelect={(key) => setParam('group', key)}
+                      onMore={() => setAllOpen(true)}
+                      onPick={setPick} />
+                  </React.Fragment>
                 ))}
               </div>
             )}

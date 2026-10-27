@@ -13,6 +13,7 @@ import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { titleCase } from '../../lib/absence';
 import { companyHref } from '../cycles/reportingModel';
+import PortfolioReports from './PortfolioReports';
 
 const money = (value) => value == null || !Number.isFinite(Number(value)) ? '—' : `$${Math.round(Number(value)).toLocaleString()}`;
 const title = (value, fallback = 'Not recorded') => titleCase(value) || fallback;
@@ -172,6 +173,8 @@ export default function InvestorPortfolioUpdates() {
 
   return <div className="i4-shell ip2-shell"><main className="i4-portfolio ip2-updates" data-testid="investor-portfolio-updates"><header className="i4-heading"><div><h1>Updates &amp; KPI collection</h1><p>Inbox, cadence compliance and source-preserved founder updates from the investor-accessible portfolio.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh portfolio updates"><RefreshCw size={15} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
+    {/* D1061 (#2931): RPT9, what each company the investor signed into owes them and what it sent. */}
+    <PortfolioReports />
     <ZoneToolbar
       role="investor"
       className="mb-3"
