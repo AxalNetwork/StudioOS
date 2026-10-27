@@ -63,6 +63,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services',  'logic the routes call; no HTTP in here'],
   ['cloudflare-worker/src/services/mercury', 'Mercury, read-only: D710\'s bank client, D840\'s MCP client and its typed reads'],
   ['cloudflare-worker/src/services/calendar', 'personal sources, external copies and calendar sync state'],
+  ['cloudflare-worker/src/services/ventureScoring', 'the venture scorecard engine: model versions, collectors, the signed store, access, jobs, publishing and the country indices'],
   ['cloudflare-worker/sql',           'the canonical D1 schema and its migrations'],
   ['cloudflare-worker/sql/historical', 'retired schema scripts preserved for archaeology'],
   ['cloudflare-worker/test',          'what the worker guarantees'],

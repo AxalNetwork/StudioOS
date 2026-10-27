@@ -44,9 +44,10 @@ test('states in promoState’s order: off, then expired, then at its cap, then a
   for (const [k, w] of Object.entries(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), k);
 });
 
-test('rendered: Usage waits (part 6); the drawer and the list are D1275’s (promo_page_d1275)', () => {
-  assert.ok(html(h(PromoUsage)).includes('data-testid="promo-wait-usage"'));
-  assert.deepEqual(Object.keys(WAITS), ['usage'], 'D1275 drew the drawer, the scope and the redeemed note');
+test('rendered: Usage is drawn (D1276, promo_usage_d1276); only the discount by week still waits', () => {
+  const out = html(h(PromoUsage, { now: NOW }));
+  assert.ok(out.includes('data-testid="promo-usage"') && !out.includes('data-testid="promo-wait-usage"'));
+  assert.deepEqual(Object.keys(WAITS), ['discountWeeks'], 'D1275 drew the drawer, the scope and the redeemed note; D1276 the Usage tab');
 });
 
 test('the wiring: the routes, HQ only, the tabs, the row door, the canvas and the docs', () => {
