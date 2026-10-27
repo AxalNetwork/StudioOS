@@ -160,6 +160,6 @@ test('Trust stays in the user menu and Company Settings stays in the pinned foot
   assert.ok(!targets.includes('/trust'));
   assert.ok(!targets.includes('/company-settings'));
   const sidebar = read('frontend/src/ui/SidebarNav.jsx');
-  assert.match(sidebar, /to="\/company-settings"/);
+  assert.match(sidebar, /to="\/account\/companies"/); // D1140 (#3020)
   assert.ok(!/to="\/settings"/.test(sidebar));
 });
