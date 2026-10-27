@@ -131,6 +131,7 @@ export * from './api/programs.js';
 export * from './api/promoUsage.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
+export * from './api/publish.js';
 export * from './api/railPrefs.js';
 export * from './api/railProposals.js';
 export * from './api/raiseEvidence.js';
