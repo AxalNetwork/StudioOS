@@ -417,20 +417,15 @@ test('5. at desktop width neither section draws the bar, and each keeps its own 
 
 // --- 7. Not recorded, never 0 ----------------------------------------------------
 
-test('7. a storage read with files and no total reads Not recorded with its reason, never 0', () => {
-  const g = storageGroup({ storage: ready({ ...STORAGE, total_bytes: null, unknown_size_files: 3 }) });
+// D1171 (#3084, STG15): A2m's Storage figures moved to Usage › Storage, which
+// draws them on a phone as on a desk, with "Not recorded, never 0" pinned by
+// storage_page_d1171. The group keeps the canvas's section title and opens it.
+test('7. A2m\'s Storage keeps its section and opens Usage › Storage, drawing no figure of its own', () => {
+  const g = storageGroup();
+  assert.equal(g.label, ACCOUNT_PHONE_PAGES.usage.sections[2]);
   const markup = html(h(PhoneRows, { groups: [g] }));
-  const all = markup.slice(markup.indexOf('All your files'), markup.indexOf('Files with no size recorded'));
-  assert.match(all, /title="Some files were stored before sizes were recorded\."[^>]*>Not recorded</);
-  assert.doesNotMatch(text(all), /\b0\b|0 B/);
-  assert.match(text(markup), /Files with no size recorded 3 files/);
-  assert.match(text(markup), /All your files Data room, Diligence files, Research library, Message attachments, Interview recordings, Earlier data room versions, Record a Session audio, Deck reviews, Validate evidence, Build proofs, Grow minutes, Your photo and logos, Imports/);
-  assert.match(text(markup), /Identity documents, signed legal copies and fund documents do not count\. No plan sets a storage limit\./);
-  // With a total, the value is the total and the file count; with no unsized files there is no such row.
-  const whole = text(html(h(PhoneRows, { groups: [storageGroup({ storage: ready(STORAGE) })] })));
-  assert.match(whole, /All your files [^›]*1\.2 GB · 148/);
-  assert.doesNotMatch(whole, /Files with no size recorded/);
-  assert.match(text(html(h(PhoneRows, { groups: [storageGroup({ storage: UNREADABLE })] }))), /Storage could not be read\. This is not a claim that you stored nothing\./);
+  assert.match(markup, /href="\/account\/usage\/storage"/);
+  assert.doesNotMatch(text(markup), /\b\d+(\.\d+)? ?(B|KB|MB|GB)\b/, 'no figure');
 });
 
 test('8. Usage\'s Models rows: the canvas note, no invented rows, and Not counted for an uncounted model', () => {
