@@ -27,8 +27,8 @@ const fail = (status, error) => () => response({ error, message: 'Refused.' }, s
 
 const STATS = (o = {}) => ({ calls: 0, ok: 0, errors: 0, refused: 0, rate_limited: 0, insufficient_tokens: 0, error: 0, charged_microusd: null, refunded_microusd: null, metered_calls: 0, p50_ms: null, ...o });
 const KEYS = { month: '2026-10', near_limit_percent: 80, keys: [
-  { uid: 'k1', name: 'Deploy bot', key_id: 'k7f3m2q9x4p1', live: true, monthly_limit_microusd: 20_000_000, calls: 40, charged_microusd: 16_400_000, metered_calls: 40, used_percent: 82, alert: 'near_limit' },
-  { uid: 'k2', name: 'Nightly sync', key_id: 'r2d8w5n1c6v3', live: true, monthly_limit_microusd: null, calls: 9, charged_microusd: 850_000, metered_calls: 9, used_percent: null, alert: null },
+  { uid: 'k1', name: 'Deploy bot', key_id: 'aaaaaaaaaaa1', live: true, monthly_limit_microusd: 20_000_000, calls: 40, charged_microusd: 16_400_000, metered_calls: 40, used_percent: 82, alert: 'near_limit' },
+  { uid: 'k2', name: 'Nightly sync', key_id: 'bbbbbbbbbbb2', live: true, monthly_limit_microusd: null, calls: 9, charged_microusd: 850_000, metered_calls: 9, used_percent: null, alert: null },
   { uid: 'k3', name: 'Old laptop', key_id: 'aaaaaaaaaaaa', live: false, monthly_limit_microusd: null, calls: 0, charged_microusd: null, metered_calls: 0, used_percent: null, alert: null },
 ] };
 const GRANTS = { grants: [{ id: 'g1', client_name: 'Assistant A', companies: [] }] };
@@ -165,7 +165,7 @@ test('the key alerts say what D849 sends: 80% and 100% of a key\'s limit, and mo
 
 test('callers: a key by name and preview, an assistant recognised by its connection, or unrecognised', () => {
   const ctx = { keys: KEYS.keys, grants: GRANTS.grants };
-  assert.deepEqual(callerOf(EVENT(), ctx), { kind: 'key', name: 'Deploy bot', sub: 'axk_k7f3m2q9x4p1_••••' });
+  assert.deepEqual(callerOf(EVENT(), ctx), { kind: 'key', name: 'Deploy bot', sub: 'axk_aaaaaaaaaaa1_••••' });
   assert.equal(callerOf(EVENT({ api_key_uid: null, grant_id: 'g1' }), ctx).name, 'Recognised as Assistant A');
   assert.deepEqual(callerOf(EVENT({ api_key_uid: null, grant_id: 'gone', client: 'Tool X' }), ctx), { kind: 'assistant', name: 'Unrecognised assistant', sub: 'It called itself “Tool X”' });
   assert.equal(callerOf(EVENT({ api_key_uid: 'kx' }), ctx).name, 'A key no longer listed');
@@ -272,7 +272,7 @@ test('APIU1: tiles, Chart 1, the breakdown, limits and alerts, each from its rea
     assert.equal(v.attr('usage-breakdown', 'data-group'), 'key');
     assert.equal(v.of('usage-breakdown-summary'), 'Deploy bot spent the most: $4.10 of $6.42.');
     assert.match(v.of('usage-breakdown-table'), /Assistants \(no key\)42\$2\.32Not recorded/);
-    assert.match(v.of('usage-limits-keys'), /Deploy bot axk_k7f3m2q9x4p1_••••.*\$16\.40 of \$20\.00.*Resets on 1 Nov/s);
+    assert.match(v.of('usage-limits-keys'), /Deploy bot axk_aaaaaaaaaaa1_••••.*\$16\.40 of \$20\.00.*Resets on 1 Nov/s);
     assert.match(v.of('usage-limits-keys'), /Nightly sync.*No limit/s);
     assert.doesNotMatch(v.of('usage-limits-keys'), /Old laptop/, 'a revoked key has no limit to show');
     assert.match(v.of('usage-limit-account'), /\$6\.42 of \$50\.00/);
@@ -353,7 +353,7 @@ test('APIU3: the log with caller, surface, tool, company, outcome, time and AI t
     assert.match(v.of('builder-trail'), /Builder › Activity/);
     assert.equal(v.count('activity-row'), 3);
     const t = v.of('activity-table');
-    assert.match(t, /21 Oct · 14:32:07Deploy botaxk_k7f3m2q9x4p1_••••MCPstructure_with_axalvcNorthwind LabsOK420 ms\$0\.004/);
+    assert.match(t, /21 Oct · 14:32:07Deploy botaxk_aaaaaaaaaaa1_••••MCPstructure_with_axalvcNorthwind LabsOK420 ms\$0\.004/);
     assert.match(t, /Recognised as Assistant A.*get_validate_contextThe key lacks the permission for this tool\..*Refused420 msNot recorded/s);
     assert.match(t, /Unrecognised assistantIt called itself “Tool X”.*search_docs.*Free/s);
     assert.doesNotMatch(v.text(), /secret-model-name/);
@@ -398,7 +398,7 @@ test('APIU4: the drawer reads one request; no argument, result, model or secret;
   const v = await mount('/account/builder/activity/11111111-2222-4333-8444-555555555555');
   try {
     assert.ok(v.has('activity-log'), 'the log stays under the drawer');
-    assert.match(v.of('activity-drawer-who'), /CallerDeploy botaxk_k7f3m2q9x4p1_••••SurfaceMCPCompanyNorthwind Labs/);
+    assert.match(v.of('activity-drawer-who'), /CallerDeploy botaxk_aaaaaaaaaaa1_••••SurfaceMCPCompanyNorthwind Labs/);
     assert.match(v.of('activity-drawer-when'), /Started21 Oct · 14:32:07 UTCTook420 ms/);
     assert.match(v.of('activity-drawer-tokens'), /Held\$0\.01Charged\$0\.004Returned\$0\.006/);
     assert.match(v.of('activity-drawer-ids'), /Execution11111111-2222-4333-8444-555555555555/);
