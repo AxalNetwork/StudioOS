@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { reportingApi } from '../../lib/api/reporting';
-import { Lightbox, Unreadable } from '../../ui';
+import { Lightbox, Unreadable, usePhoneWidth } from '../../ui';
 import { CARD, H2, LINK, MUTED, Pill } from './PortfolioReports';
 import {
   FIGURE_KEYS, HOLDING_NOTES, dayOf, formatValue, periodWord, readerModules, seriesLine, seriesOf, termsRows, timelineRows, whatChanged,
@@ -13,11 +13,30 @@ import {
  * the holding notes. Every change opens an in-page dialog that says what it
  * changes; nothing here is a browser pop-up, and nothing names another
  * investor.
+ *
+ * D1062 (#2932), the investor at 390 (RPT21): one chart per screen width,
+ * the Reports as a list whose rows each open a full-screen sheet (the reader
+ * for a sent report, the period for one still owed) with "‹ Reports" back
+ * and the period's own pill, and "Ask for this report" pinned at its foot.
+ * Every press is at least 44px tall there.
  */
 
-const BTN = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink hover:border-axal-violet/40 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-const PRIMARY = 'inline-flex min-h-[36px] items-center justify-center rounded-lg bg-axal-violet px-3 text-[12.5px] font-semibold text-white hover:bg-axal-violet-deep disabled:opacity-50';
-const Foot = ({ children }) => <div className="flex flex-wrap items-center justify-end gap-2 border-t border-axal-hairline px-5 py-3 dark:border-gray-800">{children}</div>;
+const BTN = 'inline-flex min-h-[36px] items-center justify-center rounded-lg border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink hover:border-axal-violet/40 disabled:opacity-50 max-sm:min-h-11 max-sm:flex-1 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-violet-400/60';
+const PRIMARY = 'inline-flex min-h-[36px] items-center justify-center rounded-lg bg-axal-violet px-3 text-[12.5px] font-semibold text-white hover:bg-axal-violet-deep disabled:opacity-50 max-sm:min-h-11 max-sm:flex-1 dark:hover:bg-violet-500';
+const Foot = ({ children }) => <div className="flex flex-wrap items-center justify-end gap-2 border-t border-axal-hairline px-5 py-3 max-sm:flex-nowrap max-sm:px-[14px] max-sm:py-[10px] dark:border-gray-800">{children}</div>;
+/** D1062: the width at which a `Lightbox` is a full-screen sheet (its `max-sm:`), so the crumb is drawn exactly there. */
+export const SHEET_QUERY = '(max-width: 639px)';
+/** D1062 (RPT21c): a sheet's own head on a phone: "‹ Reports", the title, its pill and its line. */
+function SheetHead({ title, pill, line, onBack }) {
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="company-sheet-head">
+      <button type="button" className="inline-flex min-h-11 w-fit items-center bg-transparent p-0 text-[13px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200" onClick={onBack} data-testid="company-sheet-back">‹ Reports</button>
+      <h2 className="m-0 text-[19px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{title}</h2>
+      {pill ? <Pill pill={pill} testId="company-sheet-pill" /> : null}
+      {line ? <p className={MUTED}>{line}</p> : null}
+    </div>
+  );
+}
 const refusal = (e, fallback) => (typeof e?.message === 'string' && e.message.trim() ? e.message.trim() : fallback);
 
 // ───────────────────────────────────────────────────────────── RPT13: holding notes
@@ -71,7 +90,7 @@ function FigureCard({ s }) {
     <section className={CARD} data-testid={`company-figure-${s.key}`}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">{s.label}</h3>
-        <button type="button" className={LINK} onClick={() => setTable((v) => !v)} data-testid={`company-figure-toggle-${s.key}`}>{table ? 'View as chart' : 'View as table'}</button>
+        <button type="button" className={`${LINK} inline-flex min-h-11 items-center sm:min-h-0`} onClick={() => setTable((v) => !v)} data-testid={`company-figure-toggle-${s.key}`}>{table ? 'View as chart' : 'View as table'}</button>
       </div>
       {table ? (
         <table className="w-full text-left text-[12px]" data-testid={`company-figure-table-${s.key}`}>
@@ -112,7 +131,7 @@ export function FiguresTab({ uid, periods }) {
           <li className="flex items-center gap-1.5"><span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full border-2 border-violet-600 dark:border-violet-400" />Corrected (ring)</li>
         </ul>
       </section>
-      <div className="grid gap-3 md:grid-cols-2">{FIGURE_KEYS.map((k) => <FigureCard key={k} s={seriesOf(state.reports, k)} />)}</div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2" data-testid="company-figure-grid">{FIGURE_KEYS.map((k) => <FigureCard key={k} s={seriesOf(state.reports, k)} />)}</div>
       <section className={CARD} data-testid="company-what-changed">
         <h2 className={H2}>Eadwyn · What changed since the last report</h2>
         <p className={MUTED}>Eadwyn reads the reports this company sent you. It never fills in a figure and never gives advice.</p>
@@ -179,7 +198,8 @@ async function saveDocument(doc) {
 }
 
 /** A sent report, 640 wide: every figure by module with its source, what was left out and why, and the statements. */
-export function ReportReader({ uid, company, onClose }) {
+export function ReportReader({ uid, company, onClose, row = null }) {
+  const narrow = usePhoneWidth(SHEET_QUERY);
   const [state, setState] = useState({ status: 'loading', report: null });
   const [docError, setDocError] = useState('');
   const [tick, setTick] = useState(0);
@@ -191,10 +211,13 @@ export function ReportReader({ uid, company, onClose }) {
   }, [uid, tick]);
   const r = state.report;
   const mods = r ? readerModules(r) : { groups: [], leftOut: [] };
+  const title = r ? (r.title || `${periodWord(r.period?.label)} report`) : 'Report';
+  // RPT21: on a phone the reader is a full-screen sheet with "‹ Reports" in place of the dialog's head.
   return (
-    <Lightbox label="Report" eyebrow={`Report from ${company}`} title={r ? (r.title || `${periodWord(r.period?.label)} report`) : 'Report'} onClose={onClose} width={640} phone="sheet" testId="company-reader"
+    <Lightbox label="Report" eyebrow={narrow ? undefined : `Report from ${company}`} title={narrow ? undefined : title} onClose={onClose} width={640} testId="company-reader"
       footer={<Foot><button type="button" className={BTN} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
+        {narrow ? <SheetHead title={title} pill={row?.pill} line={`${row?.kind || 'Report'} from ${company}`} onBack={onClose} /> : null}
         {state.status === 'loading' ? <div className="h-3 w-48 animate-pulse rounded bg-axal-ground dark:bg-gray-800" aria-busy="true" /> : null}
         {state.status === 'unreadable' ? <Unreadable what="This report" claim="This is not a claim that it was not sent." onRetry={() => setTick((n) => n + 1)} /> : null}
         {r ? (
@@ -241,16 +264,56 @@ export function ReportReader({ uid, company, onClose }) {
   );
 }
 
+// ───────────────────────────────────────────────────────────── RPT21c: a period still owed, on a phone
+
+/** A period not sent, full screen on a phone: its pill, when it was due and what the company said, and Ask pinned at its foot. */
+export function PeriodSheet({ company, row, onClose, onAsk, onWaive }) {
+  return (
+    <Lightbox label={row.title} onClose={onClose} width={560} testId="company-period-sheet"
+      footer={(row.canAsk || row.canWaive) ? (
+        <Foot>
+          {row.canWaive ? <button type="button" className={BTN} onClick={onWaive} aria-haspopup="dialog" data-testid="company-sheet-waive">Waive this period</button> : null}
+          {row.canAsk ? <button type="button" className={PRIMARY} onClick={onAsk} aria-haspopup="dialog" data-testid="company-sheet-ask">Ask for this report</button> : null}
+        </Foot>
+      ) : <Foot><button type="button" className={BTN} onClick={onClose}>Close</button></Foot>}>
+      <div className="flex flex-col gap-3 px-5 py-4">
+        <SheetHead title={`${row.period} update`} pill={row.pill} line={`${row.kind} from ${company}`} onBack={onClose} />
+        <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="company-sheet-due">{row.sub}</p>
+        {row.asked ? <p className={MUTED} data-testid="company-sheet-asked">You asked for this report. The company was told; nobody else sees it.</p> : null}
+        <p className={MUTED}>{row.canAsk ? 'You can ask once per period. The company sees your request; nobody else does.' : 'You can ask for a report once it is late.'}</p>
+      </div>
+    </Lightbox>
+  );
+}
+
 // ───────────────────────────────────────────────────────────── RPT10r: the timeline
 
 export function Timeline({ company, onChanged }) {
   const rows = timelineRows(company);
   const [open, setOpen] = useState(null);
+  const narrow = usePhoneWidth(SHEET_QUERY);
   const name = company?.name || 'This company';
   return (
     <section className={CARD} data-testid="company-timeline">
       <h2 className={H2}>Reports owed to you</h2>
-      {!rows.length ? <p className={MUTED} data-testid="company-timeline-none">No period has opened yet under the documents you signed.</p> : (
+      {!rows.length ? <p className={MUTED} data-testid="company-timeline-none">No period has opened yet under the documents you signed.</p> : narrow ? (
+        // RPT21b: on a phone each period is one 44px row; it opens the reader, or the period's own sheet.
+        <ul className="m-0 list-none p-0" aria-label="Reports owed to you" data-testid="company-timeline-list">
+          {rows.map((r) => (
+            <li key={r.uid} className="border-b border-axal-ground last:border-b-0 dark:border-gray-800">
+              <button type="button" aria-haspopup="dialog" onClick={() => setOpen({ kind: r.reportUid ? 'read' : 'period', row: r })}
+                className="flex min-h-11 w-full items-center justify-between gap-3 bg-transparent py-2 text-left hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-axal-violet dark:hover:bg-gray-800"
+                data-testid={`company-period-${r.uid}`}>
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{r.title}</span>
+                  <span className="text-[12px] text-axal-muted dark:text-gray-400">{r.sub}</span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-1"><Pill pill={r.pill} />{r.asked ? <Pill pill={{ tone: 'neutral', text: 'Asked' }} /> : null}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
         <ul className="m-0 list-none p-0">
           {rows.map((r) => (
             <li key={r.uid} className="flex flex-wrap items-start justify-between gap-3 border-b border-axal-ground py-2 last:border-b-0 dark:border-gray-800" data-testid={`company-period-${r.uid}`}>
@@ -269,7 +332,8 @@ export function Timeline({ company, onChanged }) {
         </ul>
       )}
       <p className={MUTED}>You can ask once per period, once it is late. The company sees your request; nobody else does.</p>
-      {open?.kind === 'read' ? <ReportReader uid={open.row.reportUid} company={name} onClose={() => { setOpen(null); onChanged(); }} /> : null}
+      {open?.kind === 'read' ? <ReportReader uid={open.row.reportUid} company={name} row={open.row} onClose={() => { setOpen(null); onChanged(); }} /> : null}
+      {open?.kind === 'period' ? <PeriodSheet company={name} row={open.row} onClose={() => setOpen(null)} onAsk={() => setOpen({ kind: 'ask', row: open.row })} onWaive={() => setOpen({ kind: 'waive', row: open.row })} /> : null}
       {open?.kind === 'ask' ? <AskDialog company={name} row={open.row} onClose={() => setOpen(null)} onDone={() => { setOpen(null); onChanged(); }} /> : null}
       {open?.kind === 'waive' ? <WaiveDialog company={name} row={open.row} onClose={() => setOpen(null)} onDone={() => { setOpen(null); onChanged(); }} /> : null}
     </section>
