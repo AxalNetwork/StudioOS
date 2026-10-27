@@ -1,5 +1,7 @@
 # Worker route handlers — production source of truth
 
+D851 part 2 (#2474): `admin_integration_keys.ts`'s Super Admin `GET /` also carries `model_providers` (`../services/aiProviders.ts` `modelProviderRows`): each model provider called with the platform's own key (pattern C), its switch's value and whether its key secret is set, never the key, with no write path and no call to the provider.
+
 D1239: `deal_views.ts`, mounted before `deals.ts`, provides Professional investor fit reads and private/accepted-seat firm saved views. Settings confer no deal access; defaults, version checks and identifier-only audit writes are atomic.
 
 
