@@ -31,7 +31,7 @@
  * `narrative_checks` keeps its rows for readiness (`raiseWriters.ts`).
  */
 import type { Env } from '../types';
-import { agrees, fmtFigure, FIGURE_LABEL, FIGURE_UNIT, parseStatedFigures, VERSION_MARKER_KEY, type FigureKey } from './raiseCycle';
+import { agrees, fmtFigure, FIGURE_LABEL, FIGURE_UNIT, narrativeSectionWords, parseStatedFigures, VERSION_MARKER_KEY, type FigureKey } from './raiseCycle';
 import { EVIDENCE_RULES, type EvidenceSourceLabel } from './raiseEvidenceSources';
 import { FUND_SECTIONS, parseUseOfFundsValue } from '../util/useOfFunds';
 
@@ -243,6 +243,8 @@ export const narrative = (env: Env, projectId: number, items: PinnedItem[], kind
   const meta = await env.DB.prepare('SELECT why_now FROM narrative_version_meta WHERE project_id = ? AND version = ?').bind(projectId, latest.v).first<{ why_now: string | null }>();
   const claims = (words.results || []).flatMap((w) => statedClaims('narrative', version, w.field_key, w.value, items, kinds));
   if (meta?.why_now) claims.push(...statedClaims('narrative', version, 'why_now', meta.why_now, items, kinds));
+  // Solution, Business model and Team keep their words in `narrative_sections` (D908); a figure there is a claim too.
+  for (const w of await narrativeSectionWords(env, projectId, latest.v)) claims.push(...statedClaims('narrative', version, w.field_key, w.value, items, kinds));
   return { version, claims };
 });
 

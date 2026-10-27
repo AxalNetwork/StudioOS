@@ -602,6 +602,22 @@ export function consistencyCheck(stated: Stated[], metrics: Partial<Record<Figur
   return out;
 }
 
+/**
+ * The sections whose words live in `narrative_sections.body`, not in the deck
+ * overrides (D908): `narrative/store.ts`'s `store: 'section'` rows, which a
+ * parity test holds to this list. A figure typed there is stated by the
+ * narrative like any other, under the field key `section:<key>`.
+ */
+export const SECTION_STORE_KEYS = Object.freeze(['solution', 'business_model', 'team'] as const);
+
+/** One version's section-store words, as `section:<key>` fields; an empty body states nothing. */
+export async function narrativeSectionWords(env: Env, projectId: number, version: number): Promise<Array<{ field_key: string; value: string }>> {
+  const r = await env.DB.prepare(
+    "SELECT section, body FROM narrative_sections WHERE project_id = ? AND version = ? AND section IN (SELECT value FROM json_each(?)) AND body IS NOT NULL AND body <> '' ORDER BY section",
+  ).bind(projectId, version, JSON.stringify(SECTION_STORE_KEYS)).all<{ section: string; body: string }>();
+  return (r.results || []).map((x) => ({ field_key: `section:${x.section}`, value: x.body }));
+}
+
 /** What this narrative version states and what its metric stores hold. */
 export async function checkInputs(env: Env, projectId: number, version: number) {
   const stated: Stated[] = [];
@@ -614,6 +630,7 @@ export async function checkInputs(env: Env, projectId: number, version: number) 
   const meta = await env.DB.prepare('SELECT why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?')
     .bind(projectId, version).first<{ why_now: string | null; check_against_json: string | null }>();
   if (meta?.why_now) stated.push(...parseStatedFigures('why_now', meta.why_now));
+  for (const w of await narrativeSectionWords(env, projectId, version)) stated.push(...parseStatedFigures(w.field_key, w.value));
 
   const metrics = selectedCheckSources(meta?.check_against_json).includes('metrics') ? await narrativeMetrics(env, projectId) : {};
   const compared = stated.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;

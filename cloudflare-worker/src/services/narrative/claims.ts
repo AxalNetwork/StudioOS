@@ -57,10 +57,12 @@ export function couldBack(figure: FigureKey, item: { kind: string; source_ref?: 
   return ref.slice(ref.lastIndexOf(':') + 1) === FIGURE_METRIC[figure];
 }
 
-/** The section a claim's field belongs to: a deck row's key, or Why now. */
+/** The section a claim's field belongs to: a deck row's key, Why now, or a section-store `section:<key>`. */
 export function sectionOfField(field: string): { key: string; label: string } | null {
   if (field === 'why_now') return { key: 'why_now', label: 'Why now' };
-  const s = NARRATIVE_SECTIONS.find((x) => x.deckKey === field);
+  const s = field.startsWith('section:')
+    ? NARRATIVE_SECTIONS.find((x) => x.store === 'section' && `section:${x.key}` === field)
+    : NARRATIVE_SECTIONS.find((x) => x.deckKey === field);
   return s ? { key: s.key, label: s.label } : null;
 }
 
@@ -194,6 +196,11 @@ export async function sectionWords(env: Env, projectId: number, version: number,
   if (field === 'why_now') {
     const m = await env.DB.prepare('SELECT why_now FROM narrative_version_meta WHERE project_id = ? AND version = ?').bind(projectId, version).first<{ why_now: string | null }>();
     return m?.why_now ?? null;
+  }
+  if (field.startsWith('section:')) {
+    const b = await env.DB.prepare('SELECT body FROM narrative_sections WHERE project_id = ? AND version = ? AND section = ?')
+      .bind(projectId, version, field.slice('section:'.length)).first<{ body: string | null }>();
+    return b?.body ?? null;
   }
   const w = await env.DB.prepare('SELECT value FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND field_key = ?').bind(projectId, version, field).first<{ value: string }>();
   return w?.value ?? null;
