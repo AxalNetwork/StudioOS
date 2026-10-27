@@ -64,6 +64,29 @@ export interface RecordFillInput {
  * MIGRATION, so if the two ever disagree the test fails rather than the product.
  */
 const READY = new WeakMap<object, boolean>();
+/**
+ * D1325 (#3486, migration 643): the provenance source columns, each with its
+ * literal DDL. THE NAMES ARE THE CONTRACT PIPE-BUILD (#2426) and PIPE-RAISE
+ * (#2430) write. Literal statements, not a template, so nothing is spliced
+ * into the SQL.
+ */
+const SOURCE_COLUMNS: Readonly<Record<string, string>> = Object.freeze({
+  source_kind: 'ALTER TABLE fill_provenance ADD COLUMN source_kind TEXT',
+  source_ref: 'ALTER TABLE fill_provenance ADD COLUMN source_ref TEXT',
+  source_label: 'ALTER TABLE fill_provenance ADD COLUMN source_label TEXT',
+  source_as_of: 'ALTER TABLE fill_provenance ADD COLUMN source_as_of TEXT',
+  prior_value: 'ALTER TABLE fill_provenance ADD COLUMN prior_value TEXT',
+  undone_at: 'ALTER TABLE fill_provenance ADD COLUMN undone_at TEXT',
+  undone_by: 'ALTER TABLE fill_provenance ADD COLUMN undone_by INTEGER',
+});
+export const FILL_SOURCE_COLUMNS: readonly string[] = Object.freeze(Object.keys(SOURCE_COLUMNS));
+/** #2431's three on `ai_rail_proposals`, which migration 581 (D1065) added. */
+const RAIL_SOURCE_COLUMNS: Readonly<Record<string, string>> = Object.freeze({
+  source_kind: 'ALTER TABLE ai_rail_proposals ADD COLUMN source_kind TEXT',
+  source_ref: 'ALTER TABLE ai_rail_proposals ADD COLUMN source_ref TEXT',
+  source_label: 'ALTER TABLE ai_rail_proposals ADD COLUMN source_label TEXT',
+});
+export const RAIL_PROPOSAL_SOURCE_COLUMNS: readonly string[] = Object.freeze(Object.keys(RAIL_SOURCE_COLUMNS));
 export async function ensureFillProvenanceSchema(env: Env): Promise<void> {
   if (READY.get(bindingKey(env))) return;
   try {
@@ -100,9 +123,35 @@ export async function ensureFillProvenanceSchema(env: Env): Promise<void> {
     // Migration 518's column (D777 part 3), the same way.
     if (!have.has('ai_proposal_id')) await env.DB.exec('ALTER TABLE fill_provenance ADD COLUMN ai_proposal_id INTEGER');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_fill_provenance_rail_proposal ON fill_provenance (ai_proposal_id)');
+    // Migration 643's columns (D1325): where the value came from, and what it replaced.
+    for (const [name, ddl] of Object.entries(SOURCE_COLUMNS)) {
+      if (!have.has(name)) await env.DB.exec(ddl);
+    }
     READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[fills] ensureFillProvenanceSchema:', (e as Error).message);
+  }
+}
+
+/**
+ * #2431's source columns on `ai_rail_proposals` (migration 581, D1065), on a
+ * table made before it (D235). A database with no `ai_rail_proposals` at all is left alone: its
+ * own migration (506) creates it.
+ */
+const RAIL_READY = new WeakMap<object, boolean>();
+export async function ensureRailProposalSourceColumns(env: Env): Promise<void> {
+  if (RAIL_READY.get(bindingKey(env))) return;
+  try {
+    const cols = await env.DB.prepare('PRAGMA table_info(ai_rail_proposals)').all<{ name: string }>();
+    const have = new Set((cols.results ?? []).map((c) => c.name));
+    if (have.size) {
+      for (const [name, ddl] of Object.entries(RAIL_SOURCE_COLUMNS)) {
+        if (!have.has(name)) await env.DB.exec(ddl);
+      }
+    }
+    RAIL_READY.set(bindingKey(env), true);
+  } catch (e) {
+    console.error('[fills] ensureRailProposalSourceColumns:', (e as Error).message);
   }
 }
 
@@ -456,6 +505,91 @@ export async function claimFills(env: Env, projectId: number, items: any[]): Pro
       edited: r.edited === 1, model: r.model ?? null, fill_class: r.fill_class,
       run: runs.get(Number(r.ai_usage_log_id)) ?? null,
       ai_proposal_id: r.ai_proposal_id ?? null,
+    });
+  }
+  return out;
+}
+
+/** D1325: where a mark's value came from. A row from before migration 643 names no source and is Eadwyn's. */
+export interface FillMark {
+  fill_class: string;
+  source_kind: 'eadwyn' | 'connector' | 'module';
+  source_ref: string | null;
+  /** The Source word: `connector`, `document`, `recorded`, `signed` or `typed`; null for an Eadwyn value. */
+  source_label: string | null;
+  source_as_of: string | null;
+  edited: boolean;
+  /** The run behind an Eadwyn value, as `fillsForRow` answers it; null is "Not recorded". */
+  run: FillRun | null;
+  ai_proposal_id: number | null;
+  /** The provenance row, which part 3's undo names. */
+  provenance_id: number;
+}
+
+const SOURCE_KINDS = new Set(['eadwyn', 'connector', 'module']);
+
+/**
+ * D1325 (#3486): the marks on some rows of one table — which columns STILL hold
+ * the value a fill wrote, and where it came from. `claimFills` (one table, one
+ * column) and the market read (`fillsForRow` plus `filledColumns`, one row)
+ * are its two special cases; part 4 (#3488) moves their pages onto it.
+ *
+ *   marksForRows(env, table, ids, current)  →  Map<row id, Map<column, FillMark>>
+ *
+ * `current` is each row's values now, by id. The rule is `filledColumns'`: the
+ * newest provenance row per column counts only while the row still holds what
+ * it wrote, so a value typed over by hand reads as the member's. A row undone
+ * (`undone_at`, part 3) is never a mark. The model is not part of a mark: no
+ * product copy names one.
+ *
+ * Throws on a failed read, so the caller answers "Unreadable" rather than an
+ * unmarked row, which would claim every value was typed by hand.
+ */
+export async function marksForRows(
+  env: Env, table: string, ids: readonly number[], current: ReadonlyMap<number, Record<string, unknown>>,
+): Promise<Map<number, Map<string, FillMark>>> {
+  const out = new Map<number, Map<string, FillMark>>();
+  const want = [...new Set(ids.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))];
+  if (!table || !want.length) return out;
+  await ensureFillProvenanceSchema(env);
+  const r = await env.DB.prepare(
+    `SELECT id, target_row_id, target_column, fill_class, written_value, edited, ai_usage_log_id, ai_proposal_id,
+            source_kind, source_ref, source_label, source_as_of
+       FROM fill_provenance
+      WHERE target_table = ? AND target_row_id IN (SELECT value FROM json_each(?)) AND undone_at IS NULL
+      ORDER BY id DESC`,
+  ).bind(table, JSON.stringify(want)).all<{
+    id: number; target_row_id: number; target_column: string; fill_class: string; written_value: string | null; edited: number;
+    ai_usage_log_id: number | null; ai_proposal_id: number | null;
+    source_kind: string | null; source_ref: string | null; source_label: string | null; source_as_of: string | null;
+  }>();
+  const seen = new Set<string>();
+  const kept: NonNullable<typeof r.results> = [];
+  for (const row of r.results || []) {
+    const key = `${row.target_row_id}:${row.target_column}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const now = current.get(Number(row.target_row_id))?.[row.target_column];
+    if (now == null) continue;
+    const a = String(row.written_value ?? '').trim();
+    const b = String(now).trim();
+    if (a === b || (a !== '' && b !== '' && Number.isFinite(Number(a)) && Number(a) === Number(b))) kept.push(row);
+  }
+  const runs = await runsByLogId(env, kept.map((row) => Number(row.ai_usage_log_id)).filter((n) => Number.isSafeInteger(n) && n > 0));
+  for (const row of kept) {
+    const kind = SOURCE_KINDS.has(String(row.source_kind)) ? row.source_kind as FillMark['source_kind'] : 'eadwyn';
+    const id = Number(row.target_row_id);
+    if (!out.has(id)) out.set(id, new Map());
+    out.get(id)!.set(row.target_column, {
+      fill_class: row.fill_class,
+      source_kind: kind,
+      source_ref: row.source_ref ?? null,
+      source_label: kind === 'eadwyn' ? null : row.source_label ?? null,
+      source_as_of: row.source_as_of ?? null,
+      edited: row.edited === 1,
+      run: runs.get(Number(row.ai_usage_log_id)) ?? null,
+      ai_proposal_id: row.ai_proposal_id ?? null,
+      provenance_id: Number(row.id),
     });
   }
   return out;

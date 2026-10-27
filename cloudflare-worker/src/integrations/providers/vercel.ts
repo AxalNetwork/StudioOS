@@ -17,10 +17,18 @@
  * `validateConfig` accepts.
  *
  * THE SYNC records the connection's installation (the webhook's lookup) and,
- * per chosen project, its facts in `vercel_projects`. D1098 (part 3) adds each
- * project's newest 200 deployments (`services/vercel/deployments.ts`). It reads
- * no log and no analytics. A 429 stops it
- * "Partly synced"; the next Sync starts over and only updates.
+ * per chosen project, its facts in `vercel_projects`. It reads no log and no
+ * analytics. A 429 stops it "Partly synced"; the next Sync starts over and
+ * only updates.
+ *
+ * D1097 (#2962, part 2): per chosen project it also reads the health evidence
+ * (one page of production deployments, each domain's configuration, and the
+ * account's registered domains once per sync) and opens and closes
+ * `vercel_health_events` through `applyHealth`, marked `sync` or `webhook`. A
+ * read that fails checks nothing, so it closes nothing; a 429 stops the sync
+ * before that project's health is applied.
+ * D1098 (part 3) adds each project's newest 200 deployments
+ * (`services/vercel/deployments.ts`).
  *
  * `clearVercelRows` deletes every `vercel_*` row of a connection; parts 2-4
  * add their tables to it. The rows also cascade with the connection.
@@ -35,6 +43,7 @@ import { decryptCredentials } from '../secrets';
 import { registerProvider, type ConnectInput, type ConnectResult, type IntegrationRow, type SyncResult } from '../registry';
 import { DEPLOYMENT_PAGES, deploymentRow, landDeployments, pruneDeployments, retainDeployments } from '../../services/vercel/deployments';
 import { VercelError, exchangeVercelCode, vercelClient, type Installation, type VercelAuth, type VercelProject, type Deployment, type Domain } from '../../services/vercel/api';
+import { applyHealth, healthFindings } from '../../services/vercel/health';
 
 const PROVIDER_KEY = 'vercel';
 /** The most Vercel projects one connection reads for a venture. */
@@ -128,6 +137,9 @@ export async function recordInstallation(env: Env, integrationId: number, auth: 
 /** Every `vercel_*` row of a connection. Parts 2-4 add the tables they own. */
 export async function clearVercelRows(env: Env, integrationId: number): Promise<void> {
   await env.DB.batch([
+    // D1097 (#2962): the connection's health events, and their ledger rows.
+    env.DB.prepare("DELETE FROM connector_fed_items WHERE integration_id = ? AND local_table = 'vercel_health_events'").bind(integrationId),
+    env.DB.prepare('DELETE FROM vercel_health_events WHERE integration_id = ?').bind(integrationId),
     // D1098 (part 3): deployments.
     env.DB.prepare('DELETE FROM vercel_deployments WHERE integration_id = ?').bind(integrationId),
     env.DB.prepare('DELETE FROM vercel_projects WHERE integration_id = ?').bind(integrationId),
@@ -197,10 +209,62 @@ const UPSERT_PROJECT = `INSERT INTO vercel_projects
 // A project no longer chosen, or a venture the connection no longer feeds, leaves the directory.
 const PRUNE_PROJECTS = `DELETE FROM vercel_projects WHERE integration_id = ?
   AND (project_id <> ? OR vercel_project_id NOT IN (SELECT value FROM json_each(?)))`;
+// D1097: its health events leave with it, and their ledger rows.
+const PRUNE_HEALTH = `DELETE FROM vercel_health_events WHERE integration_id = ?
+  AND (project_id <> ? OR (vercel_project_id IS NOT NULL AND vercel_project_id NOT IN (SELECT value FROM json_each(?))))`;
+const PRUNE_HEALTH_LEDGER = `DELETE FROM connector_fed_items WHERE integration_id = ? AND local_table = 'vercel_health_events'
+  AND local_id NOT IN (SELECT id FROM vercel_health_events WHERE integration_id = ?)`;
 
 const text = (v: unknown, max = 200): string | null => (typeof v === 'string' && v ? v.slice(0, max) : null);
 
-export async function syncVercel(env: Env, row: IntegrationRow): Promise<SyncResult> {
+/** D1097: the most domains whose configuration one project's health reads, and pages of the account's domains. */
+export const MAX_HEALTH_DOMAINS = 20;
+const MAX_ACCOUNT_DOMAIN_PAGES = 3;
+
+/** A health read that failed checks nothing (null). A 429 or a sign-in that expired stops the sync as before. */
+async function soft<T>(read: () => Promise<T>): Promise<T | null> {
+  try { return await read(); }
+  catch (e) {
+    if (e instanceof VercelError && (e.code === 'vercel_rate_limited' || e.code === 'vercel_reconnect_required')) throw e;
+    return null;
+  }
+}
+
+type Client = ReturnType<typeof vercelClient>;
+
+/** The account's registered domains (Vercel knows their expiry), once per sync; null when they could not be read. */
+async function accountDomainsOf(client: Client): Promise<Domain[] | null> {
+  return soft(async () => {
+    const out: Domain[] = [];
+    let until: number | undefined;
+    for (let page = 0; page < MAX_ACCOUNT_DOMAIN_PAGES; page += 1) {
+      const body = await client.domains(until);
+      out.push(...(body.domains ?? []));
+      const next = body.pagination?.next;
+      if (typeof next !== 'number') break;
+      until = next;
+    }
+    return out;
+  });
+}
+
+/** D1097: one project's health evidence, read from the API. Returns the production deployments it read, for the count. */
+async function projectHealth(env: Env, client: Client, ctx: { integrationId: number; projectId: number; source: 'sync' | 'webhook' },
+  p: VercelProject, id: string, domains: Domain[], account: () => Promise<Domain[] | null>): Promise<{ deployments: number; open: number }> {
+  const production = await soft(async () => ((await client.deployments(id)).deployments ?? []).filter((d) => !d.target || d.target === 'production'));
+  const names = domains.map((d) => d?.name).filter((n): n is string => typeof n === 'string' && /^[A-Za-z0-9.-]{1,253}$/.test(n)).slice(0, MAX_HEALTH_DOMAINS);
+  let configs: Record<string, { misconfigured?: boolean } | null> | null = {};
+  for (const name of names) {
+    const cfg = await soft(() => client.domainConfig(name));
+    if (cfg === null) { configs = null; break; }
+    configs[name] = cfg;
+  }
+  const findings = healthFindings({ project: p, production, projectDomains: domains, configs, accountDomains: await account() });
+  const out = await applyHealth(env, { ...ctx, vercelProjectId: id }, findings);
+  return { deployments: production?.length ?? 0, open: out.opened + out.still };
+}
+
+export async function syncVercel(env: Env, row: IntegrationRow, source: 'sync' | 'webhook' = 'sync'): Promise<SyncResult> {
   const cfg = configOf(row);
   const chosen = ids(cfg.projects).slice(0, MAX_PROJECTS);
   const projectId = Number(cfg.project_id);
@@ -213,7 +277,10 @@ export async function syncVercel(env: Env, row: IntegrationRow): Promise<SyncRes
   const client = vercelClient(auth);
   const inst = await client.installation();
   const allowed = inst.projectSelection === 'selected' ? new Set(ids(inst.projects)) : null;
-  const counts: Record<string, number | boolean> = { projects: 0, not_reachable: 0, deployments: 0 };
+  const counts: Record<string, number | boolean> = { projects: 0, not_reachable: 0, deployments: 0, health_events: 0 };
+  // The account's domains are read once, the first time a project's health needs them.
+  let accountRead: Promise<Domain[] | null> | null = null;
+  const account = () => (accountRead ??= accountDomainsOf(client));
   const kept: string[] = [];
   const stmts: D1PreparedStatement[] = [];
   let partial = false;
@@ -230,7 +297,11 @@ export async function syncVercel(env: Env, row: IntegrationRow): Promise<SyncRes
       ));
       kept.push(id);
       counts.projects = Number(counts.projects) + 1;
+      // D1097: what this project's production health is now. A 429 here stops the sync before it is applied.
+      const health = await projectHealth(env, client, { integrationId: row.id, projectId, source }, p, id, domains, account);
+      counts.health_events = Number(counts.health_events) + health.open;
       // D1098 (part 3): the project's newest deployments, kept as `vercel_deployments` and ledger rows.
+      // `counts.deployments` is how many of those rows this sync wrote, not the health page's length.
       let until: number | undefined;
       for (let page = 0; page < DEPLOYMENT_PAGES; page += 1) {
         const body = await client.deployments(id, until);
@@ -249,7 +320,11 @@ export async function syncVercel(env: Env, row: IntegrationRow): Promise<SyncRes
   if (stmts.length) await env.DB.batch(stmts);
   // A partly synced run keeps the rows it did not reach this time.
   if (!partial) {
-    await env.DB.prepare(PRUNE_PROJECTS).bind(row.id, projectId, JSON.stringify(kept)).run();
+    await env.DB.batch([
+      env.DB.prepare(PRUNE_PROJECTS).bind(row.id, projectId, JSON.stringify(kept)),
+      env.DB.prepare(PRUNE_HEALTH).bind(row.id, projectId, JSON.stringify(kept)),
+      env.DB.prepare(PRUNE_HEALTH_LEDGER).bind(row.id, row.id),
+    ]);
     await pruneDeployments(env, row.id, projectId, kept);
   }
   await retainDeployments(env, row.id, projectId);
