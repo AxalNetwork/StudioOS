@@ -95,7 +95,10 @@ import { investorProfile } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
 import aiBudgetRoutes from './routes/ai_budget';
+import railRunRoutes from './routes/rail_run';
 import { developerUsage } from './routes/developer_usage';
+// D1316 (#3474): Builder › MCP and services' overview.
+import { developerAssistants } from './routes/developer_assistants';
 // D791 (#2216): HQ › AI usage, Super Admin with step-up.
 import adminAiUsageRoutes from './routes/admin_ai_usage';
 import aiRailProposalsRoutes from './routes/ai_rail_proposals';
@@ -237,6 +240,8 @@ import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
 import googleWorkspaceRoutes from './routes/google_workspace';
+// D1319 (#3480): founder publishing to an outside service, pressed by the founder only.
+import publishRoutes from './routes/publish';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
@@ -1002,11 +1007,14 @@ app.route('/api/assistant', assistantRoutes);
 // dev-only Anthropic path, and this endpoint reports on the production
 // Workers AI router, which is a different thing that happens to sit nearby.
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
+// D1326 (#3487): D720 §7's run path, with its `form` handler.
+app.route('/api/ai/rail', railRunRoutes);
 app.route('/api/fills', fillsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
 // D845 (#2471): the member's own usage reports over api_usage_events.
 app.route('/api/developer/usage', developerUsage);
+app.route('/api/developer/assistants', developerAssistants);
 app.route('/api/admin/ai-usage', adminAiUsageRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
@@ -1471,6 +1479,7 @@ app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);
 app.route('/api/calendar', calendarRoutes);
 app.route('/api/connectors/google-workspace', googleWorkspaceRoutes);
+app.route('/api/publish', publishRoutes);
 // T11 — Financial Model Builder + Founder Wellbeing (ported from FastAPI).
 app.route('/api/financials', financialsRoutes);
 // Task #1 (AG) — kept alphabetically adjacent to /api/financials.
@@ -2465,6 +2474,17 @@ export default {
               if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
             }
           } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }
+        }
+        // D1319 (#3480) — a founder's publish left `sending` for 10 minutes is
+        // `unknown`: not known whether it arrived. Never re-sent, never
+        // `failed`. Every fifth minute, on every deployment (a founder's
+        // sends are not HQ's); the reads close stranded rows too. Never throws.
+        if (now.getUTCMinutes() % 5 === 0) {
+          try {
+            const { releaseStrandedSends } = await import('./services/publishCore');
+            const n = await releaseStrandedSends(env);
+            if (n) console.info(`[cron] publish stranded=${n}`);
+          } catch (e) { console.error('[cron] publish stranded sweep failed', (e as Error)?.name); }
         }
         // D710 (#1775) — Mercury's read-only sync of each Axal entity's
         // accounts and transactions, then the matchers. Hourly at minute 17, a

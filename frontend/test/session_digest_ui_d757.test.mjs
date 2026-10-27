@@ -90,7 +90,7 @@ test('each engine state reads as a word and the Worker\'s own sentence; a budget
     if (note) assert.ok(out.includes(note), 'the sentence is the Worker\'s, as written');
   }
   assert.equal(engineState({ digest_status: 'refused', digest_note: budget }).addTokens, ADD_TOKENS_PATH);
-  assert.match(html(React.createElement(EngineLine, { session: { digest_status: 'refused', digest_note: budget } })), new RegExp(`href="${ADD_TOKENS_PATH}"[^>]*data-testid="link-engine-add-tokens"`));
+  assert.match(html(React.createElement(EngineLine, { session: { digest_status: 'refused', digest_note: budget } })), new RegExp(`href="${ADD_TOKENS_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*data-testid="link-engine-add-tokens"`));
   for (const note of [cases[4][1], null]) assert.equal(engineState({ digest_status: 'refused', digest_note: note }).addTokens, null, 'only the allowance offers Add tokens');
   assert.equal(engineState({ digest_status: 'done', digest_note: budget }).addTokens, null, 'and only on a refusal');
   for (const s of [null, undefined, 'unknown']) assert.equal(engineState({ digest_status: s }), null);

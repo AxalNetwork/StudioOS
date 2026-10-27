@@ -87,6 +87,10 @@ export function makeCycleWrites(request) {
       market: (projectId, body) => request('/cycles/grow/markets', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       obligation: (projectId, body) => request('/cycles/grow/obligations', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       checklist: (projectId, key, done) => request(`/cycles/grow/checklist/${seg(key)}`, { method: 'PUT', body: JSON.stringify({ project: projectId, done: done === true }) }),
+      // D1090 (#2955): Distribution's content calendar, typed by hand. A piece from Notion is edited in Notion.
+      content: (projectId, body) => request('/cycles/grow/channels/content', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      contentUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
+      contentDelete: (projectId, uid) => request(`/cycles/grow/channels/content/${seg(uid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
       // Edits: a PATCH changes only the fields it is sent.
       feedbackUpdate: (projectId, uid, body) => request(`/cycles/grow/feedback/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       channelUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
