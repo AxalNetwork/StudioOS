@@ -221,9 +221,9 @@ test('D1096: the sync records each chosen project\'s facts, prunes what is no lo
     ['prj_web', 100, 'acme-web', 'nextjs', '20.x', 'main', 'acme/web', 'app.acme.example', 'hobby', 'live', new Date(1792886400000).toISOString()],
   ]);
   assert.ok(f.calls.every((x) => x.method === 'GET' || x.path === '/v2/oauth/access_token'), 'the sync only reads');
-  assert.ok(!f.calls.some((x) => /runtime-logs|web-analytics|\/events$/.test(x.path)), 'the sync reads no log, event stream or analytics');
+  assert.ok(!f.calls.some((x) => /runtime-logs/.test(x.path) || /web-analytics/.test(x.path) || /\/events$/.test(x.path)), 'the sync reads no log, event stream or analytics');
   // D1097 (part 2): the health evidence is one deployment list per project, each domain's configuration, and the account's domains.
-  assert.deepEqual([...new Set(f.calls.filter((x) => /deployments|\/config$|^\/v5\/domains$/.test(x.path)).map((x) => x.path.replace(/\/v6\/domains\/[^/]+/, '/v6/domains/:name')))].sort(),
+  assert.deepEqual([...new Set(f.calls.filter((x) => /deployments/.test(x.path) || /\/config$/.test(x.path) || /^\/v5\/domains$/.test(x.path)).map((x) => x.path.replace(/\/v6\/domains\/[^/]+/, '/v6/domains/:name')))].sort(),
     ['/v5/domains', '/v6/domains/:name/config', '/v7/deployments']);
   await call(env, 'PATCH', `/api/connectors/${uid}/config`, FOUNDER, { projects: ['prj_web'] });
   await call(env, 'POST', `/api/connectors/${uid}/sync`);
