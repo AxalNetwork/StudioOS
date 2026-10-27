@@ -27,6 +27,7 @@ import { PromoCodesPanel } from './consoles/PromoCodesConsole';
 import { PromoUsage } from './promos/PromoParts';
 import { PAGE_LINE as PROMO_LINE, viewOf as promoViewOf } from './promos/promoModel';
 import { KycTabBody } from './kyc/KycTabs';
+import KycBusinesses from './kyc/KycBusinesses';
 import { PAGE_LINE as KYC_LINE, viewOf as kycViewOf } from './kyc/kycModel';
 import { BillingPanel } from './consoles/BillingConsole';
 
@@ -133,7 +134,7 @@ export function KycPage() {
   );
   return (
     <ConsolePage crumb={{ ...APPROVALS, current: 'KYC & KYB' }} title="KYC & KYB" line={KYC_LINE} tabs={tabs} testId="admin-kyc">
-      <KycTabBody view={kycViewOf(pathname)} people={<KycConsole />} />
+      <KycTabBody view={kycViewOf(pathname)} people={<KycConsole />} businesses={<KycBusinesses />} />
     </ConsolePage>
   );
 }

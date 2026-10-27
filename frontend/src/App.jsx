@@ -2824,6 +2824,7 @@ function AppInner() {
       {/* D1228 (#2384) — KYC & KYB's other tabs and one person's case. */}
       <Route path="/admin/kyc/:tab" element={guard(['admin'], <KycPage />)} />
       <Route path="/admin/kyc/people/:id" element={guard(['admin'], <KycPage />)} />
+      <Route path="/admin/kyc/businesses/:id" element={guard(['admin'], <KycPage />)} />
       <Route path="/admin/directory" element={guard(['admin'], <DirectoryPage />)} />
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />
       {/* Platform and Revenue pages are the Super Admin's, like every other (#2375). */}
@@ -3121,6 +3122,8 @@ function AppInner() {
       <Route path="/articles/mine" element={<Navigate to="/articles/draft" replace />} />
       <Route path="/authors/:userId" element={<AuthorProfilePage />} />
       <Route path="/admin/articles" element={guard(['admin'], <ArticlesQueuePage />)} />
+      {/* D1290 (#2383): Calendar, Authors and Performance, and one address per article (contentQueueModel.js). */}
+      <Route path="/admin/articles/:view" element={guard(['admin'], <ArticlesQueuePage />)} />
       <Route path="/articles/:slug" element={<ArticleReaderPage />} />
       <Route path="/admin/events" element={guard(['admin'], <AdminEventsPage />)} />
       {/* D915 (#2368): the Events desk's tabs and one page per event, behind the same guard; the static paths sit before `:id`. */}
