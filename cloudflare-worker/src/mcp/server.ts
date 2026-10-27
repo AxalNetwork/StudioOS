@@ -46,7 +46,7 @@ import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { noteKeyFailures } from '../services/apiKeyLimits';
 import { METERING_POLICY, MeteringRefused, listed, meteredCall, quoteFor, toolOperation, type MeteringPolicy } from '../services/metering';
 import {
-  ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, withinUserLimit, type GrantProps, type ToolOutcome,
+  ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, withinUserLimit, type GrantProps, type RefusalReason, type ToolOutcome,
 } from './grants';
 import { newExecutionId, recordUsage, type UsageErrorCategory } from '../services/apiUsage';
 import { budgetRefusalMessage } from '../services/aiRouter';
@@ -260,12 +260,12 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
   const apiKeyUid = props.keyUid ?? (props as GrantProps & { apiKeyUid?: string | null }).apiKeyUid ?? null;
   // The usage row first, so a failing activity line cannot skip it; its UNIQUE
   // execution_id keeps a second write for the same call out.
-  const log = async (outcome: ToolOutcome, errorCategory: UsageErrorCategory | null = null) => {
+  const log = async (outcome: ToolOutcome, errorCategory: UsageErrorCategory | null = null, reason: RefusalReason | null = null) => {
     await recordUsage(env, {
       executionId, userId: user?.id ?? Number(props.userId), surface: 'mcp', operation: recorded, outcome: outcome === 'timeout' ? 'error' : outcome,
       errorCategory, durationMs: Date.now() - started, apiKeyUid, grantId, client: props.clientName ?? null, companyId,
     });
-    if (user) await logToolCall(env, user, { tool: recorded, company: companyId, client: props.clientName, outcome, keyUid: apiKeyUid });
+    if (user) await logToolCall(env, user, { tool: recorded, company: companyId, client: props.clientName, outcome, keyUid: apiKeyUid, grant: grantId, reason });
     // D849: a failing key may be failing for many calls; the member hears once an hour.
     if (apiKeyUid && user && (outcome === 'error' || outcome === 'timeout')) {
       try { await noteKeyFailures(env, user.id, apiKeyUid); }
@@ -278,7 +278,7 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     if (!scope.includes(tool.requiredScope)) {
       throw new ToolRefused(props.keyUid
         ? `This key needs ${tool.requiredScope} for ${tool.name}. Create a key with that permission.`
-        : `This token needs ${tool.requiredScope} for ${tool.name}. Reconnect with that permission.`, 'insufficient_scope');
+        : `This token needs ${tool.requiredScope} for ${tool.name}. Reconnect with that permission.`, 'insufficient_scope', 'scope');
     }
     if (!(await toolEntitled(env, user, tool.entitlement))) throw new ToolRefused(NOT_AVAILABLE);
     if (grantId && !(await withinGrantLimit(env, grantId))) {
@@ -336,12 +336,12 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     }
     if (e instanceof ToolRefused) {
       // A refusal inside a tool is about its access to the company.
-      await log('refused', stage === 'run' ? 'company' : stage);
+      await log('refused', stage === 'run' ? 'company' : stage, e.reason);
       return errorResult(e.sentence, e.code, executionId);
     }
     if (e instanceof ToolError) {
       const code = mcpCode(e.code);
-      await log('refused', code === 'insufficient_tokens' ? 'insufficient_tokens' : toolErrorCategory(e.status));
+      await log('refused', code === 'insufficient_tokens' ? 'insufficient_tokens' : toolErrorCategory(e.status), e.code === 'daily_limit' ? 'daily_limit' : null);
       const sentence = code !== e.code ? budgetRefusalMessage(e.code) : e.sentence;
       return errorResult(sentence, code, executionId, { status: e.status });
     }

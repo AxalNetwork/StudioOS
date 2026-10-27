@@ -2083,49 +2083,9 @@ settings.post('/connected-accounts/google/unlink', async (c) => {
   }
 });
 
-// --- Developer sub-route (admin only): feature flag toggles + raw user object
-settings.get('/developer', async (c) => {
-  await ensureUserSettingsTable(c.env);
-  const user = await requireAuth(c);
-  if ((user.role || '').toLowerCase() !== 'admin') return c.json({ error: 'Admin role required' }, 403);
-  const row = await getUserSettings(c.env, user.id);
-  const sql = getSQL(c.env);
-  const userRow = await sql`SELECT id, uid, email, name, role, email_verified, kyc_status, created_at, last_active_at FROM users WHERE id = ${user.id}`;
-  await sql.end();
-  return c.json({
-    feature_flags: pickFeatureFlags(row),
-    raw_user: userRow[0] || null,
-  });
-});
-settings.put('/developer', async (c) => {
-  await ensureUserSettingsTable(c.env);
-  const user = await requireAuth(c);
-  if ((user.role || '').toLowerCase() !== 'admin') return c.json({ error: 'Admin role required' }, 403);
-  const body = await c.req.json().catch(() => ({} as any));
-  const patch: UserSettingsPatch = {};
-  if ('feature_flags' in body && body.feature_flags && typeof body.feature_flags === 'object') {
-    const safe: Record<string, boolean> = {};
-    for (const [k, v] of Object.entries(body.feature_flags)) {
-      if (typeof k === 'string' && k.length <= 64) safe[k] = !!v;
-    }
-    patch.feature_flags = safe;
-  }
-  try {
-    const row = await upsertUserSettings(c.env, user.id, patch);
-    return c.json({ feature_flags: pickFeatureFlags(row) });
-  } catch (e) { return handleSettingsError(c, e); }
-});
-settings.post('/developer/resync-indices', async (c) => {
-  const user = await requireAuth(c);
-  if ((user.role || '').toLowerCase() !== 'admin') return c.json({ error: 'Admin role required' }, 403);
-  // Best-effort kick of the search backfill cron — defers to existing route
-  // if available, otherwise just logs an admin activity row.
-  const sql = getSQL(c.env);
-  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
-            VALUES ('developer_resync_indices', 'Admin requested search index re-sync from /account/developer',
-                    ${user.email}, ${user.id})`;
-  await sql.end();
-  return c.json({ ok: true, queued: true, message: 'Re-sync request logged. The next scheduled cron will pick this up.' });
-});
+// D1316 (#3474): the old admin-only Developer panel's three routes (GET/PUT
+// /developer and POST /developer/resync-indices) are retired with the panel and
+// its three clients. `user_settings.feature_flags` stays; the
+// `developer_resync_indices` lines already written stay as they are.
 
 export default settings;
