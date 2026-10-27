@@ -57,7 +57,7 @@ test('Deals: the five boards draw exactly one rail, the routes\' shell\'s', () =
 
 test('Deals: every option of the section names itself on its band', () => {
   const rows = rowsOf('Deals');
-  assert.deepEqual(rows.map((o) => o.key), ['draft:stale-deal-notes', 'draft:screening-memo', 'draft:ic-memo', 'draft:closing-cover-note']);
+  assert.deepEqual(rows.map((o) => o.key), ['draft:stale-deal-notes', 'draft:ic-memo', 'draft:closing-cover-note'] /* D1260: Screening's memo is retired */);
   assertBandsNamed(rows);
 });
 
@@ -226,13 +226,14 @@ test('a band names its railOption while a draft runs or is shown, and the regist
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const button = (text) => walk(container).find((n) => n.tagName?.toLowerCase() === 'button' && (n.textContent || '').includes(text));
-  const tree = (railOption) => h(MemoryRouter, { initialEntries: ['/deals/screening'] },
-    h(RailPageProvider, { role: 'investor' }, h(ZoneDraft, { surface: 'deals/screening', label: 'Draft · screening memo', run: 'Draft the memo', railOption }), h(Probe, { seen })));
-  const named = { key: 'draft:screening-memo', label: 'Draft · screening memo' };
+  // D1260 retired Screening's memo; Pipeline's band carries the same naming rule.
+  const tree = (railOption) => h(MemoryRouter, { initialEntries: ['/deals/pipeline'] },
+    h(RailPageProvider, { role: 'investor' }, h(ZoneDraft, { surface: 'deals/pipeline', label: 'Draft · stale deal notes', run: 'Draft the memo', railOption }), h(Probe, { seen })));
+  const named = { key: 'draft:stale-deal-notes', label: 'Draft · stale deal notes' };
   try {
-    await act(async () => { root.render(tree('draft:screening-memo')); });
+    await act(async () => { root.render(tree('draft:stale-deal-notes')); });
     await settle();
-    assert.equal(seen.at(-1).page, 'Investor · Deals · Screening');
+    assert.equal(seen.at(-1).page, 'Investor · Deals · Pipeline');
     assert.equal(seen.at(-1).option, null, 'a closed band names nothing');
     await act(async () => { props(button('Draft the memo')).onClick(); });
     await settle();
@@ -243,7 +244,7 @@ test('a band names its railOption while a draft runs or is shown, and the regist
     // Without railOption, the same band names the registry's key (D770).
     await act(async () => { root.render(tree(null)); });
     await settle();
-    assert.deepEqual(seen.at(-1).option, { key: 'draft:deals/screening', label: 'Draft · screening memo' });
+    assert.deepEqual(seen.at(-1).option, { key: 'draft:deals/pipeline', label: 'Draft · stale deal notes' });
   } finally {
     await act(async () => root.unmount());
     restore();

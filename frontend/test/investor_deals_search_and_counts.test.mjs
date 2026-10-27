@@ -78,7 +78,7 @@ test('a count is only ever claimed where the page supplies one', () => {
   // otherwise the chip silently loses its figure and nobody notices.
   const supplied = {
     'deals/pipeline': ['all', 'unassigned', 'stale', 'passed'],
-    'deals/screening': ['scored', 'flags'],
+    'deals/screening': ['scorecards'], // D1260
     'deals/closing': ['close', 'documents', 'blocking', 'wires'],
   };
   for (const [zone, keys] of Object.entries(supplied)) {
@@ -100,7 +100,7 @@ test('a count is only ever claimed where the page supplies one', () => {
 test('each page passes the counts its labels promise', () => {
   const pages = {
     PipelineZone: ['all:', 'unassigned:', 'stale:', 'passed:'],
-    ScreeningZone: ['scored:', 'flags:'],
+    ScreeningZone: ['scorecards:'], // D1260
     ClosingZone: ['close:', 'documents:', 'blocking:', 'wires:'],
   };
   for (const [file, keys] of Object.entries(pages)) {

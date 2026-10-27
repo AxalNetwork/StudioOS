@@ -260,10 +260,13 @@ export const INVESTOR_ZONE_FILTERS = {
   // `score_snapshots` (six dimensions, `admin_review_status`, `anomaly_flags`),
   // `rubric` shows the six dimensions the scorer writes, and `passes` is the
   // CHECKed pass taxonomy `GET /api/deals/pass-analytics` already served.
+  // D1260 (#3283): Screening reads the venture scorecard. The canvas's Scored,
+  // Rubric and Red flags were the Lab scorer's (a total, six dimensions, its
+  // anomaly flags), which investors no longer see; Scorecards is the eleven scopes.
   'deals/screening': [
-    { canvas: 'Scored', key: 'scored', label: 'Scored {n}' },
-    { canvas: 'Rubric', key: 'rubric' },
-    { canvas: 'Red flags', key: 'flags', label: 'Red flags {n}' },
+    { canvas: 'Scored', key: 'scorecards', label: 'Scorecards {n}' },
+    { canvas: 'Rubric', unbuilt: 'the six-dimension rubric was the Lab scorer’s, which is practice and not shown to investors; the scorecard has eleven scopes and no rubric to filter by', hover: 'The scorecard has eleven scopes and no rubric.' },
+    { canvas: 'Red flags', unbuilt: 'red flags were the Lab scorer’s own anomaly checks, which are practice and not shown to investors; the scorecard keeps no flag to filter by', hover: 'The scorecard keeps no red flags.' },
     { canvas: 'Pass reasons', key: 'passes' },
   ],
 
