@@ -216,6 +216,62 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
   return { cards, saving: yearlySaving(sold), sells: sold.length > 0 };
 }
 
+// ─────────────────────────────── D1172 (#3085): Storage on Pricing ──
+const GIB = 1024 ** 3;
+const MIB = 1024 ** 2;
+const short = (x) => String(Number(x.toFixed(1)));
+
+/** An allowance in binary units, as the catalogue counts it: 1 GB = 1,024 MB. */
+export function allowanceText(bytes) {
+  if (!Number.isSafeInteger(bytes) || bytes < 0) return null;
+  if (bytes >= GIB) return `${short(bytes / GIB)} GB`;
+  return `${short(bytes / MIB)} MB`;
+}
+
+/**
+ * One storage plan's figures from the public read: its plans row (each carries
+ * `storage_plan_key`, `storage_bytes`, `storage_reason`, `best_suited`,
+ * `best_suited_reason`), else its catalogue entry (`storage`, `best_suited_for`).
+ * Null when the read holds neither.
+ */
+export function storageFigures(read, key) {
+  if (!key) return null;
+  const row = (Array.isArray(read?.plans) ? read.plans : []).find((p) => p && p.storage_plan_key === key);
+  if (row) return { bytes: row.storage_bytes ?? null, reason: row.storage_reason ?? null, best: row.best_suited ?? null, bestReason: row.best_suited_reason ?? null };
+  const entry = (Array.isArray(read?.catalogue) ? read.catalogue : []).find((e) => e && e.key === key);
+  if (entry) return { bytes: entry.storage?.bytes ?? null, reason: entry.storage?.reason ?? null, best: entry.best_suited_for ?? null, bestReason: entry.best_suited_for_reason ?? null };
+  return null;
+}
+
+/** A storage cell's words: the allowance, the catalogue's reason, "Negotiated" for a firm, else "Not recorded". */
+function storageCell(read, spec, words) {
+  if (!spec.storage) return spec.custom ? words.negotiated : NOT_RECORDED_CELL;
+  const f = storageFigures(read, spec.storage);
+  return (f && allowanceText(f.bytes)) || f?.reason || NOT_RECORDED_CELL;
+}
+function bestCell(read, spec, words) {
+  if (!spec.storage) return spec.custom ? words.negotiated : NOT_RECORDED_CELL;
+  const f = storageFigures(read, spec.storage);
+  return f?.best || f?.bestReason || NOT_RECORDED_CELL;
+}
+const NOT_RECORDED_CELL = 'Not recorded';
+
+/**
+ * The Storage group for a tab's Compare plans, one cell per card in `specs`
+ * order: `[group, rows, { fresh: true }]`, the shape of `COMPARE`'s groups.
+ */
+export function storageGroup(read, specs, tab, words) {
+  const rows = [[words.row, ...(specs || []).map((s) => storageCell(read, s, words))]];
+  if (words.bestTabs.includes(tab)) rows.push([words.best, ...(specs || []).map((s) => bestCell(read, s, words))]);
+  return [words.group, rows, { fresh: true }];
+}
+
+/** The LP band's storage line: `{ text }` from `lp_access`'s row, or null when the read has no figure. */
+export function lpStorageLine(read, words) {
+  const size = allowanceText(storageFigures(read, 'lp_access')?.bytes ?? null);
+  return size ? { text: words.lpLine(size), note: words.lpExcluded } : null;
+}
+
 /** A comparison cell: 1 a tick, 0 a dash, words as they are. */
 export const compareCell = (v) => ({ tick: v === 1, dash: v === 0, text: typeof v === 'string' ? v : '' });
 

@@ -195,6 +195,11 @@
 }
 .axp-row { display: grid; gap: 14px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--p-line-2); font-size: 14px; line-height: 1.45; }
 .axp-row-l { color: var(--p-ink-2); }
+/* D1172 (#3085): the Storage group's New pill, "Best suited for" in words, and the LP band's storage line. */
+.axp-group-pill { margin-left: 8px; vertical-align: middle; letter-spacing: normal; text-transform: none; }
+.axp-cell-words { font-family: inherit; font-weight: 400; font-size: 13px; line-height: 1.45; color: var(--p-muted); text-align: center; }
+.axp-lp-storage { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+.axp-lp-storage-t { font-weight: 700; font-size: 14px; color: var(--p-ink); }
 .axp-cell { display: flex; justify-content: center; font: 500 13px var(--font-mono); color: var(--p-ink); }
 .axp-row-phone { display: flex; justify-content: space-between; min-height: 46px; padding: 10px 16px; }
 .axp-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin-bottom: 12px; }

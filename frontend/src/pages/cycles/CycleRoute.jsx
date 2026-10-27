@@ -39,6 +39,8 @@ import GrowFromMercury from './GrowFromMercury';
 import MercuryRaiseFeed from './MercuryRaiseFeed';
 import FromLovable from './FromLovable';
 import ValidateFromGoogle from './ValidateFromGoogle';
+import FromNotion from './FromNotion';
+import NotionInterviewImport from './NotionInterviewImport';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -132,8 +134,12 @@ const CYCLE_DEFS = {
             onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
             onExport={() => api.exportValidateInterviews(ctx.projectId)} />
           <ValidateFromGoogle part={data?.parts?.from_google} module="customer_research" projectId={ctx.projectId} reload={ctx.reload} />
+          {/* D1087 (#2952): interview pages from Notion, imported only with the interviewee's consent. */}
+          <FromNotion section="validate" projectId={ctx.projectId} module="customer_research" acceptDialog={NotionInterviewImport} />
         </>
       ),
+      // D1087 (#2952): research pages from Notion, as sources (title and link).
+      'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
       'demand-signals': (data, ctx) => <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />,
       'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
         onExport={() => api.exportValidatePainMap(ctx.projectId)}

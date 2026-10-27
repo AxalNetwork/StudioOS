@@ -10,14 +10,15 @@
  * Part 1 writes no module's rows: it records the connection's installation and
  * the projects it reads (`vercel_installations`, `vercel_projects`). Each
  * landing below names the part that builds it, and stays `store: null` until
- * that part lands.
+ * that part lands. D1098 (part 3) lands deployments: a production deploy's
+ * ledger row is Product roadmap's, a preview's Prototype / MVP's.
  *
  * No side effects: Build's routes import this without registering the provider.
  */
 export const VERCEL_LANDINGS = [
   // Part 3 (#2963): deployments, matched to must-haves and releases by evidence only.
-  { kind: 'deployment', what: 'Deployments and what is live', module: 'prototype_mvp', store: null, part: 3 },
-  { kind: 'deployment', what: 'Production deploys', module: 'product_roadmap', store: null, part: 3 },
+  { kind: 'deployment', what: 'Deployments and what is live', module: 'prototype_mvp', store: 'vercel_deployments', part: 3 },
+  { kind: 'deployment', what: 'Production deploys', module: 'product_roadmap', store: 'vercel_deployments', part: 3 },
   // Part 2 (#2962): production health events, and what the product runs on.
   { kind: 'health_event', what: 'Production health', module: 'operating_systems', store: null, part: 2 },
   { kind: 'runtime', what: 'Framework, Node version and repository', module: 'solution_design', store: null, part: 2 },

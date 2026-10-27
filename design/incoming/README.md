@@ -111,6 +111,18 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-27 — Validate › Record a session › the ring visualiser (D1330)
+
+The owner's artifact `3xHppg2QRN4HD78fR2VmW1` ("Recording View Canvas"):
+- `Recording View Canvas · Boards.dc.html`, RV1 to RV13, which imports the page by name;
+- `Recording View.dc.html`, the page;
+- `ring-viz.js`, the reference visualiser the page draws with.
+
+Decoded by `scripts/read-canvas.mjs`. **One edit, named.** The grid's `x-import` of the
+visualiser points at `ring-viz.js` instead of its asset id. No other value was edited. The bundle also carried AI Rail, Cycle Action and Cycle Overview pages that
+the grid does not draw; they are not landed here.
+
+**Grade: UPGRADE.** D1330 ports `ring-viz.js`'s maths into `frontend/src/lib/ringViz.js`.
 ## Landed 2026-10-27 — Grow › Publish to… and sent history (#2400)
 
 The owner's artifacts came from the prompt on #2400:

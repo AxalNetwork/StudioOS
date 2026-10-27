@@ -76,11 +76,21 @@ export type LovableSlot = { record_id: number; label: string; link: LinkView | n
 export type LovablePart = { state: 'ok'; slots: LovableSlot[] } | { state: 'unreadable' };
 
 /**
- * The Vercel production domains that own a Live line on this project. Vercel
- * part 3 (D1098, #2963) fills this; until then there are none.
+ * The Vercel production domains that own a Live line on this project: each
+ * chosen Vercel project's (D1098, #2963, `vercel_projects`). A store that
+ * cannot be read gives none, and every line stays Lovable's.
  */
-export async function vercelProductionDomains(_env: Env, _projectId: number): Promise<string[]> {
-  return [];
+export async function vercelProductionDomains(env: Env, projectId: number): Promise<string[]> {
+  try {
+    const rows = (await env.DB.prepare(
+      `SELECT DISTINCT vp.production_domain AS domain FROM vercel_projects vp
+         JOIN integrations i ON i.id = vp.integration_id AND i.provider_key = 'vercel'
+        WHERE vp.project_id = ? AND vp.production_domain IS NOT NULL`,
+    ).bind(projectId).all<{ domain: string }>()).results || [];
+    return rows.map((r) => r.domain);
+  } catch {
+    return [];
+  }
 }
 
 /** One slot per record, each with its link or none. */

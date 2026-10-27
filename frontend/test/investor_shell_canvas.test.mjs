@@ -28,10 +28,9 @@ test('investor bucket taglines match the Investor LP Canvas headings', () => {
   }
 });
 
-test('investor Deals zones match Pages · Investor Deals (ID1–ID4)', () => {
+test('investor Deals zones match Pages · Investor Deals (ID2–ID4; ID1 Pipeline retired into Deal flow, D1243)', () => {
   const deals = investor.rows.find((r) => r.label === 'Deals');
   assert.deepEqual(deals.zones.map((z) => [z.slug, archetypeLabel(z)]), [
-    ['pipeline', 'WORK BOARD'],
     ['screening', 'ANALYTICS'],
     ['commit', 'LEDGER'],
     ['closing', 'COLLECTION'],

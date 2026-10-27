@@ -15,6 +15,8 @@ export const HQ_EYEBROW = 'HQ only';
 
 /** Payments and its sub-addresses (D1008, D1012). */
 const PAYMENTS_PATH = /^\/admin\/platform\/payments(\/|$)/;
+/** Platform storage (D1172, STG14a). */
+const STORAGE_PATH = /^\/admin\/platform\/storage(\/|$)/;
 /** Product testing and its tabs (D1195, D1204). */
 const TESTING_PATH = /^\/admin\/platform\/product-testing(\/|$)/;
 /** HQ › Content's overview (D1295, ART17a): an Admin still reviews in the Content queue. */
@@ -29,6 +31,8 @@ const SUBJECTS = [
   [PAYMENTS_PATH, 'HQ sets what members pay.'],
   // D1204 (#3154): TST15a, Product testing's closed card.
   [TESTING_PATH, 'HQ runs product testing. You can approve and manage testers on Accounts, and decide tester applications in Approvals.'],
+  // D1172 (#3085): STG14a, Platform storage's closed card.
+  [STORAGE_PATH, 'Platform storage is for HQ. Studio admins see their own storage in Account.'],
   // D1295 (#3391): ART17a, the Content overview's closed card.
   [CONTENT_PATH, 'HQ runs the Content overview. You can still review articles in the Content queue.'],
 ];
@@ -55,16 +59,23 @@ export const TESTING_LINKS = [
   { label: 'Go to Approvals', href: '/admin/approvals', primary: false },
 ];
 
+/** D1172 (#3085): STG14a sends a studio admin on Platform storage to their own storage. */
+export const STORAGE_LINKS = [
+  { label: 'Your own storage', href: '/account/usage/storage', primary: true },
+  { label: 'Go to Studio', href: '/studio', primary: false },
+];
+
 /** D1295 (#3391): ART17a sends a studio admin on the Content overview back to the Content queue. */
 export const CONTENT_LINKS = [
   { label: 'Back to the Content queue', href: '/admin/articles', primary: false },
 ];
 
-/** The card's links for a path: Payments', Product testing's or the Content overview's own, else Studio and My licence. */
+/** The card's links for a path: Payments', Product testing's, Platform storage's or the Content overview's own, else Studio and My licence. */
 export const hqLinks = (pathname = '') => {
   const p = String(pathname);
   if (PAYMENTS_PATH.test(p)) return PAYMENTS_LINKS;
   if (TESTING_PATH.test(p)) return TESTING_LINKS;
+  if (STORAGE_PATH.test(p)) return STORAGE_LINKS;
   if (CONTENT_PATH.test(p)) return CONTENT_LINKS;
   return HQ_LINKS;
 };

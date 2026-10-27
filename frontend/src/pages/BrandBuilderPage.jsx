@@ -16,6 +16,7 @@ import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateIni
 import { AssistLayout } from '../ui';
 import { useRailOption } from '../ui/railCrumbs';
 import BrandPagesSection from './founder/BrandPagesSection.jsx';
+import { keptProposals, proposalsFrom } from '../lib/brand/proposals.js';
 
 // Task #24 — Brand & landing page generator.
 // Task #2 — Reworked into the audience-first flow:
@@ -61,6 +62,11 @@ export default function BrandBuilderPage() {
   const [description, setDescription] = useState('');
   const [sector, setSector] = useState('');
   const [autofillBusy, setAutofillBusy] = useState(false);
+  // D1324 (#3485): what the last "Auto-fill with AI" proposed, until a Save records it.
+  const [aiProposed, setAiProposed] = useState({});
+  const aiModel = useRef(null);
+  // A proposal belongs to the venture it was drafted for: another venture's Save never files it.
+  useEffect(() => { setAiProposed({}); aiModel.current = null; }, [projectId]);
   const [busy, setBusy] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [error, setError] = useState('');
@@ -309,6 +315,8 @@ export default function BrandBuilderPage() {
       }, fillHeaders('form:landing'));
       if (activeForm.current !== form) return;
       const merged = { ...defaultsForKey(key), ...((r && r.content) || {}) };
+      setAiProposed(proposalsFrom(r));
+      aiModel.current = r?.ai_generated === true && r?.model ? String(r.model) : null;
       setDraft((d) => ({
         ...d,
         name: r?.name || d.name,
@@ -337,8 +345,11 @@ export default function BrandBuilderPage() {
     if (!draft.name.trim()) { setError('Name is required.'); return; }
     setBusy(true); setError('');
     try {
-      const lp = await api.brandSaveLanding(projectId, draft);
+      // What Eadwyn proposed and the founder kept as it was: the Worker records each as Eadwyn's.
+      const kept = keptProposals(draft, aiProposed);
+      const lp = await api.brandSaveLanding(projectId, Object.keys(kept).length ? { ...draft, ai_proposals: kept, ai_model: aiModel.current } : draft);
       setLanding(lp);
+      setAiProposed({});
       // Spin-Out Lab — Week 2 brand basics: name + tagline + primary colour.
       if (draft.name.trim() && (draft.tagline || '').trim() && draft.theme_color) {
         await markMilestone(user, 'brand_basics_filled');
