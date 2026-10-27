@@ -24,11 +24,11 @@ addresses here with DR24's notice.
 | `filesModel.js` | Pure (D1106): who can open a file (the investor rule, then each grant's folders), the tree and table, every dialog's words with who gains or loses, the upload queue, storage, and Home's blocks. |
 | `DataRoomHome.jsx` | DR1, Home's blocks: the counts, Needs you (with the open access requests from D1104's queue, D1284), who has access, what was added; the last ninety days say what they wait for. |
 | `DataRoomFiles.jsx` | DR2, Files: the folder tree, search, the table and the bulk bar (Move, Set gate, Set end date, Match to checklist, Remove, Clear). |
-| `DataRoomFile.jsx` | DR3 and DR15, one file's lightbox at `/raise/data-room/file/<id>`: who can open it now and why, its gate, what it answers, its versions with Make current, and the links issued and refusals. |
-| `DataRoomFolders.jsx` | DR5: a folder's lightbox (its NDA switch, Rename, Delete folder) and New folder. |
+| `DataRoomFile.jsx` | DR3 and DR15, one file's sheet (the shared `Sheet`, D1317) at `/raise/data-room/file/<id>`: who can open it now and why, its gate, what it answers, its versions with Make current, and the links issued and refusals. |
+| `DataRoomFolders.jsx` | DR5: a folder's sheet (`Sheet`, D1317; its NDA switch, Rename, Delete folder) and New folder. |
 | `DataRoomUpload.jsx` | DR4 and DR4s: Upload, the sheet at `/raise/data-room/new`, with its queue in states. |
 | `accessModel.js` | Pure (D1107): Access's rows and filters, the matrix (every cell through `grantOn`), Share's candidates and what a new grant opens, the NDA's state and what it unlocks, the requests in words, refusals, DR18's words. |
-| `DataRoomAccess.jsx` | DR6, DR6m, DR7, DR7i, DR7r, DR8 and DR16b: Access by investor and as the matrix, Share, one investor's lightbox, Change, Revoke, the NDA and its strip, the advisor grant (owner only) and the report shares. |
+| `DataRoomAccess.jsx` | DR6, DR6m, DR7, DR7i, DR7r, DR8 and DR16b: Access by investor and as the matrix, Share, one investor's sheet (`Sheet`, D1317), Change, Revoke, the NDA and its strip, the advisor grant (owner only) and the report shares. |
 | `ReportShares.jsx` | The scoring report's shares (D663), read-only and in every state, drawn on Access. |
 | `DataRoomSummary.jsx` | D1102's read-only summary an admin's read of a room is: counts only, no names, no owner action. |
 | `DataRoomMoved.jsx` | D1109, DR24: the old addresses' forward (each counts itself once, #2319) and the one-line moved notice under a tab's header. |
@@ -42,7 +42,7 @@ module page (coverage, opens and the Files records), with `DataRoomHomeNav`'s
 tabs and blocks above it. The tab words (`/files`, `/access`, `/requests`,
 `/activity`, `/checklist`, `/preview`) arrive on the module's record route,
 `/raise/:slug/:id`, and CycleRoute draws `DataRoomTabPage` for them instead of
-a record (`isDataRoomTab`). A file's lightbox over Files is
+a record (`isDataRoomTab`). A file's sheet over Files is
 `/raise/data-room/file/<id>`, the one route D1106 adds; a bare file number,
 once its record page, forwards there (D1109), as `?mode=workspace` forwards to
 Files and `?mode=access` to Access.

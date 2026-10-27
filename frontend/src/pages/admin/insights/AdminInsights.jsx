@@ -16,6 +16,7 @@ import {
   filterCountries, filtersFromSearch, groupFromSearch, isEmptyStudio, pageFailed, rangeLabel, rangeLine,
   readParams, scopeChip, scopeLines, scopeParam, scopeState,
 } from './insightsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D893 (#2366) — Admin › Insights at /admin/insights, built to the "Admin
@@ -600,7 +601,7 @@ export default function AdminInsights() {
       {allOpen && !noperm ? <CountriesLightbox insights={reads.insights} filters={filters} onClose={() => setAllOpen(false)} /> : null}
 
       {group && !noperm && (
-        <Lightbox label={`${group.label} group`} eyebrow="Group" width={760}
+        <Sheet label={`${group.label} group`} eyebrow="Group" width={760}
           title={group.count === null || group.count === undefined ? group.label : `${group.label} · ${group.count.toLocaleString('en-US')} accounts`}
           onClose={() => { setCountryQ(''); setParam('group', null); }} testId="insights-group">
           <div className="flex flex-col gap-3.5 px-1 pb-1">
@@ -677,7 +678,7 @@ export default function AdminInsights() {
             </div>
             <span className="text-[11.5px] leading-normal text-axal-muted dark:text-gray-400">Counts only. Names and emails are in Accounts.</span>
           </div>
-        </Lightbox>
+        </Sheet>
       )}
 
       {exporting && (

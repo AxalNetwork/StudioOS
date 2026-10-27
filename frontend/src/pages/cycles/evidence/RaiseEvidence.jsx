@@ -7,12 +7,13 @@
  * Evidence tab.
  */
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { WorkerRail } from '../../../ui';
 import RailFrame from '../../../ui/RailFrame';
 import { CycleHeader } from '../CycleOverview';
 import { MODULES } from '../modules';
 import { AREAS, BASE, NOT_YET, PAGE_LINE, SOURCES, TITLE, WAITS, viewOf } from './evidenceModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 const box = 'flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 
@@ -25,24 +26,27 @@ export function EvidenceWait({ id }) {
   );
 }
 
-/** VR2, VR3: a drawer named by the address. */
+/**
+ * VR2, VR3: a drawer named by the address, drawn as the shared Sheet over the
+ * view (D1317) at the canvas's 480. Closing goes back to the view's address,
+ * keeping the query.
+ */
 export function EvidenceDrawer({ drawer, search = '' }) {
+  const navigate = useNavigate();
   if (!drawer) return null;
+  const title = drawer === 'item' ? 'Evidence item' : 'Claim';
+  const back = `${BASE}${search}`;
   return (
-    <aside role="dialog" aria-label={drawer === 'item' ? 'Evidence item' : 'Claim'} className={box} data-testid={`evidence-drawer-${drawer}`}>
-      <div className="flex items-center justify-between">
-        <h2 className="m-0 text-[15px] font-bold">{drawer === 'item' ? 'Evidence item' : 'Claim'}</h2>
-        <Link to={`${BASE}${search}`} className="text-[13px] font-semibold underline">Close</Link>
-      </div>
-      <EvidenceWait id={drawer} />
-    </aside>
+    <Sheet label={title} eyebrow={TITLE} title={title} width={480} onClose={() => navigate(back)} testId={`evidence-drawer-${drawer}`}
+      footer={<Link to={back} className="text-[13px] font-semibold underline">Back to {TITLE}</Link>}>
+      <div className="px-5 py-4"><EvidenceWait id={drawer} /></div>
+    </Sheet>
   );
 }
 
 export function EvidenceBody({ drawer = null, search = '' }) {
   return (
     <div className="flex flex-col gap-4" data-testid="raise-evidence">
-      <EvidenceDrawer drawer={drawer} search={search} />
       <section className={box}>
         <h2 className="m-0 text-[15px] font-bold">Claims by area</h2>
         <ul className="m-0 flex list-none flex-col divide-y divide-gray-100 p-0 dark:divide-gray-800" data-testid="evidence-areas">
@@ -57,6 +61,7 @@ export function EvidenceBody({ drawer = null, search = '' }) {
         <EvidenceWait id="coverage" />
       </section>
       <section className={box}><h2 className="m-0 text-[15px] font-bold">Investor opens</h2><EvidenceWait id="opens" /></section>
+      <EvidenceDrawer drawer={drawer} search={search} />
     </div>
   );
 }

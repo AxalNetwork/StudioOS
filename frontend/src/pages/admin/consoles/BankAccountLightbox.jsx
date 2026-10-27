@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { bankAccountsApi } from '../../../lib/api/bankAccounts';
 import { adminMercuryApi } from '../../../lib/api/adminMercury';
-import { Lightbox, Pill, Unreadable, usePhoneWidth } from '../../../ui';
+import { Pill, Unreadable, usePhoneWidth } from '../../../ui';
 import {
   BASE, accountHistory, balanceCell, instructionFacts, kindWord, lineState, noticePreview,
   PHONE_BELOW_SM, paymentsLine, seriesOf, shortName, signedAmount, sparkPath, dayOf,
 } from './bankAccountsModel';
 import { amber, btnCls, muted, primaryCls } from './BankAccountDialogs';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1185 (#3114) — one account, the canvas's board BNK2, as a centred
@@ -74,7 +75,7 @@ export function AccountLightbox({ account: a, onClose, revealed, onReveal, onHid
   const phone = usePhoneWidth(PHONE_BELOW_SM);
 
   return (
-    <Lightbox label={`Account ${a.label} ${a.account_masked}`} eyebrow={`Account · ${shortName(a.entity_key)}`} title={`${a.label} ${a.account_masked}`}
+    <Sheet label={`Account ${a.label} ${a.account_masked}`} eyebrow={`Account · ${shortName(a.entity_key)}`} title={`${a.label} ${a.account_masked}`}
       width={640} size="tall" onClose={onClose} testId="bank-account-lightbox"
       footer={phone && active ? (
         // D1187 (BNK12b, BNK12d): on a phone the account is a full-height sheet whose bar holds Reveal, or Hide now while shown.
@@ -193,16 +194,16 @@ export function AccountLightbox({ account: a, onClose, revealed, onReveal, onHid
             })()}
         <Link className="text-[12.5px] font-semibold text-axal-violet hover:underline dark:text-violet-300" to={`${BASE}/history`}>See all in History →</Link>
       </Block>
-    </Lightbox>
+    </Sheet>
   );
 }
 
 /** The lightbox for an address whose account the registry does not hold. */
 export function MissingAccount({ onClose }) {
   return (
-    <Lightbox label="No such account" title="No such account" width={460} onClose={onClose} testId="bank-account-missing"
+    <Sheet label="No such account" title="No such account" width={460} onClose={onClose} testId="bank-account-missing"
       footer={<div className="flex justify-end"><button type="button" className={btnCls} onClick={onClose}>Close</button></div>}>
       <p className={`px-5 py-4 text-[12.5px] ${muted}`}>The registry holds no account at this address. It may have been typed wrong; the list on Accounts is complete.</p>
-    </Lightbox>
+    </Sheet>
   );
 }

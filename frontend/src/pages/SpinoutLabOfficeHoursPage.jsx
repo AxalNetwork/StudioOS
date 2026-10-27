@@ -50,7 +50,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Loader2, Lock, Calendar, CalendarCheck, Copy, Check, X,
+  Loader2, Lock, Calendar, CalendarCheck, Copy, Check,
   AlertTriangle, ExternalLink, Search, ChevronRight, Share2, Download, Eye,
 } from 'lucide-react';
 import { api, spinoutLab } from '../lib/api';
@@ -64,6 +64,7 @@ import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spi
 import LabPageShell from '../components/spinout/LabPageShell';
 import { SessionActionItems, SessionRating } from '../components/officehours/SessionFollowups';
 import { Unrecorded, Unreadable } from '../ui';
+import Sheet from '../ui/Sheet.jsx';
 import { ratingBadge, formatRating, toolLink, sortItems, ownerLabel } from '../lib/sessionFollowups';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
@@ -1103,23 +1104,20 @@ export default function SpinoutLabOfficeHoursPage() {
 
       {/* Booking drawer */}
       {drawerFor && (
-        <div className="fixed inset-0 z-50 flex justify-end" data-testid="booking-drawer">
-          <button type="button" aria-label="Close" className="absolute inset-0 bg-black/40" onClick={() => setDrawerFor(null)} />
-          <div className="relative w-full max-w-[480px] h-full bg-white dark:bg-gray-900 shadow-2xl overflow-y-auto p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className={`w-[46px] h-[46px] rounded-xl ${avatarBgOf(drawerFor.name)} text-white grid place-items-center text-[15px] font-bold shrink-0`} aria-hidden="true">
-                  {initialsOf(drawerFor.name || '?')}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[15px] font-extrabold text-gray-900 dark:text-gray-100">{drawerFor.name}</div>
-                  <div className="text-[12px] text-gray-500">{drawerFor.headline || drawerFor.specialization || drawerFor.company || ''}</div>
-                  <div className="mt-1"><RoleTag role={roleOfPartner(drawerFor)} /></div>
-                </div>
+        <Sheet
+          label={drawerFor.name || 'Partner'}
+          title={drawerFor.name}
+          sub={drawerFor.headline || drawerFor.specialization || drawerFor.company || undefined}
+          onClose={() => setDrawerFor(null)}
+          width={480}
+          testId="booking-drawer"
+        >
+          <div className="p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className={`w-[46px] h-[46px] rounded-xl ${avatarBgOf(drawerFor.name)} text-white grid place-items-center text-[15px] font-bold shrink-0`} aria-hidden="true">
+                {initialsOf(drawerFor.name || '?')}
               </div>
-              <button type="button" onClick={() => setDrawerFor(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" data-testid="button-close-drawer">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
+              <div className="min-w-0 pt-3"><RoleTag role={roleOfPartner(drawerFor)} /></div>
             </div>
             {drawerFor.bio && <p className="text-[12.5px] text-gray-600 dark:text-gray-300 mb-4">{drawerFor.bio}</p>}
 
@@ -1276,7 +1274,7 @@ export default function SpinoutLabOfficeHoursPage() {
               {bookingBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarCheck className="w-4 h-4" />} Request session
             </button>
           </div>
-        </div>
+        </Sheet>
       )}
 
       {toastText(toast) && (

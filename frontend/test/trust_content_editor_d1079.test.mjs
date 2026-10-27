@@ -264,10 +264,18 @@ test('a subprocessor: added through its dialog as a draft; removing a listed one
   try {
     await m.click('trust-content-sub-add');
     assert.match(m.of('trust-content-sub-dialog'), /a draft until you publish/);
+    assert.equal(m.props('trust-content-sub-dialog')['data-width'], undefined, 'D1317: Add is a create form, the centred lightbox');
     assert.equal(m.props('trust-content-sub-save').disabled, true);
     for (const [k, v] of [['name', 'Fixture Search'], ['purpose', 'Search'], ['data', 'Search terms'], ['location', 'Germany']]) await m.type(`trust-content-sub-${k}`, v);
     await m.click('trust-content-sub-save');
     assert.deepEqual(writes(m.seen).at(-1), { method: 'POST', path: `${TC}/subprocessors`, body: { name: 'Fixture Search', purpose: 'Search', data: 'Search terms', location: 'Germany', starts_at: null } });
+    // D1317: editing a subprocessor (the draft's Edit) is a detail panel, the shared Sheet at 560px.
+    await m.click('trust-content-sub-edit-tsp_00000000000000000002');
+    assert.equal(m.props('trust-content-sub-dialog').role, 'dialog');
+    assert.ok(m.props('trust-content-sub-dialog')['aria-labelledby']);
+    assert.equal(m.props('trust-content-sub-dialog')['data-width'], 560);
+    await m.click('trust-content-sub-dialog-close');
+    assert.equal(m.has('trust-content-sub-dialog'), false);
     await m.click('trust-content-sub-remove-tsp_00000000000000000001');
     assert.match(m.of('trust-content-confirm'), /stays listed until you publish/);
     assert.equal(writes(m.seen).length, 1, 'nothing is removed before the confirm');

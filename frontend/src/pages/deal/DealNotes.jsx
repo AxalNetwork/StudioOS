@@ -9,12 +9,13 @@
  * what changes. Nothing is ever a browser pop-up.
  */
 import React, { useEffect, useState } from 'react';
-import { Lightbox, Unreadable, actionPrimary, actionGhost, actionDanger } from '../../ui';
+import { Unreadable, actionPrimary, actionGhost, actionDanger } from '../../ui';
 import { dealContextApi } from '../../lib/api/dealContext';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
 import { EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, noteError } from './dealFrameModel';
+import Sheet from '../../ui/Sheet.jsx';
 
 const FIELD = 'block w-full rounded-axal-xs border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const TAG = (on) => `inline-flex min-h-[28px] items-center rounded-axal-pill border px-3 text-[12px] font-semibold ${on
@@ -49,7 +50,7 @@ function NoteDialog({ mode, note, dealId, onDone, onClose }) {
   };
   const title = del ? 'Delete this note?' : 'Edit your note';
   return (
-    <Lightbox label={title} title={title} onClose={onClose} testId={`deal-note-${mode}-dialog`}
+    <Sheet label={title} title={title} onClose={onClose} testId={`deal-note-${mode}-dialog`}
       sub={del ? 'Your firm will no longer see it. This cannot be undone.' : 'Your firm sees the new text in place of the old.'}
       footer={(
         <div className="flex flex-wrap justify-end gap-2">
@@ -66,7 +67,7 @@ function NoteDialog({ mode, note, dealId, onDone, onClose }) {
           </>)}
         {err && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{err}</p>}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

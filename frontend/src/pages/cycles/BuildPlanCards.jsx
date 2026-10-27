@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../ui';
+import Sheet from '../../ui/Sheet.jsx';
 import {
   DISCARD, EDIT_FIELDS, KEEP, KIND_WORD, STATUS_WORD, WORDING_TAG, becauseChips, decidedLine, editPayload, editStart, landsIn, moduleName, writeRefusal,
 } from './buildPlanModel';
@@ -221,7 +222,7 @@ export function EditDialog({ item, module, onClose, onDone, accept }) {
   };
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   return (
-    <Lightbox label="Edit and accept" title="Edit and accept" onClose={close} width={620} testId="plan-edit"
+    <Sheet label="Edit and accept" title="Edit and accept" onClose={close} width={620} testId="plan-edit"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={actionGhost} onClick={close} disabled={busy}>Cancel</button>
@@ -258,6 +259,6 @@ export function EditDialog({ item, module, onClose, onDone, accept }) {
         <p className={MUTED}>This adds one {String(KIND_WORD[item.kind] || 'item').toLowerCase()} to {name} and links it to its evidence.</p>
         {refusal ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="plan-edit-refused">{refusal}</p> : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }

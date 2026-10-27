@@ -5,7 +5,7 @@ The founder's Evidence view and the investor's evidence block, from the owner's 
 | File | What it is |
 |---|---|
 | `evidenceModel.js` | The address (`/raise/evidence`, `/item/:id`, `/claim/:id`), the five Source labels with SCORING's grade mapping, strengths, claim states, sharing levels, the Raise areas, and the words of every block no read carries yet |
-| `RaiseEvidence.jsx` | The view in the Raise shell (VR1), its drawers (VR2, VR3), and `EvidenceSummary`, the investor block the deal page's Evidence tab places (VR8, VR9) |
+| `RaiseEvidence.jsx` | The view in the Raise shell (VR1), its drawers (VR2, VR3) as the shared `Sheet` over the view at 480 (D1317), and `EvidenceSummary`, the investor block the deal page's Evidence tab places (VR8, VR9) |
 
 `../cycleModel.js` lights Evidence after Overview in Raise's tab rail; `../../DealRoomPage.jsx` mounts `EvidenceSummary`.
 

@@ -56,6 +56,7 @@ import CompanyEinCard, { EinPreviewValue } from '../components/spinout/CompanyEi
 import { companyEinApi } from '../lib/api/companyEin.js';
 import { reportError } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
+import Sheet from '../ui/Sheet.jsx';
 import { PACKET_NOT_BUILT, PACKET_NOT_BUILT_STATUSES, PAID_STATUSES, charterName, entityLabel, fmtCents, formationJurisdiction } from '../lib/incorporationPricing';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
@@ -890,21 +891,16 @@ export default function SpinoutLabIncorporatePage() {
         </div>
       )}
 
-      {/* Document preview modal */}
+      {/* Document preview — the shared right-side Sheet (D1317) */}
       {docModal && (
-        <div className="fixed inset-0 z-[70] bg-gray-900/50 backdrop-blur-sm flex items-start justify-center overflow-y-auto p-6" onClick={() => setDocModal(null)} data-testid="doc-modal">
-          <div className="w-full max-w-xl bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-              <div className="text-[14px] font-bold text-gray-900 dark:text-gray-50">{docs.find((d) => d.key === docModal)?.name}</div>
-              <button type="button" onClick={() => setDocModal(null)} data-testid="doc-modal-close" className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-700 inline-flex items-center justify-center text-gray-500"><X size={14} /></button>
-            </div>
-            <div className="p-5 text-[12.5px] text-gray-600 dark:text-gray-300 leading-relaxed space-y-3">
-              <p><b>{legalName}</b> · {entityLabel(selected, juris.state)} · State of {juris.state}.</p>
-              <p>Prefilled from your Spin-Out data: {rec.founders === null ? 'team size unreadable' : `${rec.founders} founder${rec.founders === 1 ? '' : 's'}`}, sector {project.sector || '—'}{project.funding_needed ? `, raising ${fmt(project.funding_needed)}` : ''}. The executed version is assembled into your filing packet after state submission.</p>
-              <p className="text-[11px] text-gray-400">Source: {docs.find((d) => d.key === docModal)?.source}. Not legal advice.</p>
-            </div>
+        <Sheet label={docs.find((d) => d.key === docModal)?.name || 'Document'} title={docs.find((d) => d.key === docModal)?.name}
+          onClose={() => setDocModal(null)} width={560} testId="doc-modal">
+          <div className="p-5 text-[12.5px] text-gray-600 dark:text-gray-300 leading-relaxed space-y-3">
+            <p><b>{legalName}</b> · {entityLabel(selected, juris.state)} · State of {juris.state}.</p>
+            <p>Prefilled from your Spin-Out data: {rec.founders === null ? 'team size unreadable' : `${rec.founders} founder${rec.founders === 1 ? '' : 's'}`}, sector {project.sector || '—'}{project.funding_needed ? `, raising ${fmt(project.funding_needed)}` : ''}. The executed version is assembled into your filing packet after state submission.</p>
+            <p className="text-[11px] text-gray-400">Source: {docs.find((d) => d.key === docModal)?.source}. Not legal advice.</p>
           </div>
-        </div>
+        </Sheet>
       )}
 
       {/* Investor preview modal */}

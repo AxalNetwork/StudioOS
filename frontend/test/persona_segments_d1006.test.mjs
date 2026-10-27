@@ -209,9 +209,14 @@ test('SEG6 mounted: a Super Admin edits in a lightbox, confirms what changes, an
   try {
     await v.click('seg-page-edit');
     assert.ok(v.has('seg-edit'));
+    // D1317: a segment's editor is the shared Sheet (620 → 640px); its confirmation stays centred.
+    assert.equal(v.props('seg-edit').role, 'dialog');
+    assert.ok(v.props('seg-edit')['aria-labelledby']);
+    assert.equal(v.props('seg-edit')['data-width'], 640);
     assert.equal(v.props('seg-edit-next').disabled, true, 'nothing changed, nothing to save');
     await v.change('seg-edit-status-draft', 'draft', true);
     await v.click('seg-edit-next');
+    assert.equal(v.props('seg-edit-confirm')['data-width'], undefined, 'the confirmation is the centred lightbox');
     // Mutation checked: save on the form's button → a write with no confirm.
     assert.ok(!s.calls.some((c) => c.method === 'PATCH'));
     assert.match(v.of('seg-edit-changes'), /Status goes from Active to Draft\./);

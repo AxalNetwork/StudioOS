@@ -9,9 +9,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import React from 'react';
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { installDocument } from './_contracts_dom.mjs';
 import { EvidenceBody, EvidenceSummary } from '../src/pages/cycles/evidence/RaiseEvidence.jsx';
 import {
   AREAS, BASE, CLAIM_STATE, NOT_YET, SHARING, SOURCES, WAITS, claimHref, claimWord, gradeOf, itemHref, strengthWord, viewOf,
@@ -64,7 +66,36 @@ test('the view: every area unread, each block waits, and a drawer from the addre
   assert.ok(!out.includes('evidence-drawer-'));
   const item = html(h(EvidenceBody, { drawer: 'item', search: '?project=3' }));
   assert.ok(item.includes('data-testid="evidence-drawer-item"') && item.includes('href="/raise/evidence?project=3"'));
+  assert.match(item, /role="dialog" aria-modal="true" aria-labelledby="[^"]+" tabindex="-1" data-testid="evidence-drawer-item" data-width="480"/, 'D1317: the drawer is the shared Sheet at the canvas’s 480');
+  assert.ok(item.indexOf('data-testid="evidence-areas"') < item.indexOf('data-testid="evidence-drawer-item-layer"'), 'over the full-width view, not in its flow');
   assert.ok(html(h(EvidenceBody, { drawer: 'claim' })).includes('data-testid="evidence-wait-claim"'));
+});
+
+test('D1317: a drawer’s address opens the Sheet over the view, and closing returns to /raise/evidence with the query', async () => {
+  const restore = installDocument();
+  const make = document.createElement.bind(document);
+  document.createElement = (tag) => { const n = make(tag); n.querySelector = () => null; n.focus = () => {}; return n; };
+  document.querySelectorAll = () => [];
+  document.body.style = { overflow: 'auto', paddingRight: '' };
+  let at = null;
+  function Probe() {
+    const loc = useLocation();
+    at = `${loc.pathname}${loc.search}`;
+    return h(EvidenceBody, { drawer: viewOf(loc.pathname).drawer, search: loc.search });
+  }
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => { root.render(h(MemoryRouter, { initialEntries: ['/raise/evidence/claim/c9?project=3'] }, h(Routes, null, h(Route, { path: '*', element: h(Probe) })))); });
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const byTestId = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
+  try {
+    assert.equal(props(byTestId('evidence-drawer-claim')).role, 'dialog');
+    assert.ok(byTestId('evidence-areas'), 'over its view');
+    await act(async () => { props(byTestId('evidence-drawer-claim-close')).onClick(); });
+    assert.equal(at, '/raise/evidence?project=3', 'closing went back to the view, keeping the query');
+    assert.equal(byTestId('evidence-drawer-claim'), undefined);
+  } finally { await act(async () => root.unmount()); restore(); }
 });
 
 test('the investor block says what shows before and after the NDA, and waits', () => {
