@@ -292,6 +292,11 @@ test('From Notion: partly synced names the rows not read and offers Sync again; 
   assert.ok(u.by('notion-fact-31'), 'the rows already read are kept');
   await u.unmount();
 
+  const skippedOnly = await mount(h(FromNotion, props(fakeApi({ fromNotion: async () => READ, sync: async () => ({ ok: true, partial: true, more: false, sources: [] }) }).api)));
+  await skippedOnly.click('notion-sync');
+  assert.equal(skippedOnly.by('notion-more'), undefined, 'skipped rows are not more to read');
+  await skippedOnly.unmount();
+
   const more = await mount(h(FromNotion, props(fakeApi({ fromNotion: async () => READ, sync: async () => ({ ok: true, partial: true, more: true, sources: [] }) }).api)));
   await more.click('notion-sync');
   assert.match(more.text(more.by('notion-more')), /Notion has more to read than one sync takes\..*Sync again/);
@@ -320,6 +325,11 @@ test('From Notion: proposals with Accept, Dismiss and Changed in Notion; only th
   assert.equal(viewer.by('notion-accept-7'), undefined);
   assert.equal(viewer.by('notion-sync'), undefined);
   await viewer.unmount();
+
+  const support = await mount(h(FromNotion, { ...props(fakeApi({ fromNotion: async () => ({ ...read, can_sync: false }) }).api), module: 'solution_design' }));
+  assert.equal(support.by('notion-accept-7'), undefined, 'a support session sees the owner’s items, and never acts');
+  assert.equal(support.by('notion-dismiss-7'), undefined);
+  await support.unmount();
 
   const ro = await mount(h(FromNotion, props(fakeApi({ fromNotion: async () => ({ ...READ, can_sync: false }) }).api)));
   assert.equal(ro.by('notion-fact-delete-31'), undefined, 'someone else reads, never deletes');

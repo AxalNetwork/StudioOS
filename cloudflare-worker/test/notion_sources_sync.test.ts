@@ -137,6 +137,8 @@ const roadmap = (db: any) => db.prepare('SELECT objective, kanban_status, quarte
 
 test('the field map: known fields, a property each, values onto the store’s list, every required field; a page is never mapped', () => {
   assert.deepEqual(cleanFieldMap('product_roadmap', 'database', ROADMAP_MAP), ROADMAP_MAP);
+  assert.deepEqual(mapRow('product_improvement', { fields: { body: { property: 'Feedback' } }, default_source: 'team' }, { Feedback: 'Faster export' }),
+    { values: { body: 'Faster export', source: 'team' }, skip: null }, 'the default source fills an unmapped source');
   const code = (fn: () => unknown) => { try { fn(); return null; } catch (e) { return e instanceof FieldMapError ? `${e.code}:${e.field}` : String(e); } };
   assert.equal(code(() => cleanFieldMap('product_roadmap', 'database', { fields: { budget: { property: 'Budget' }, objective: { property: 'Objective' } } })), 'unknown_field:budget');
   assert.equal(code(() => cleanFieldMap('product_roadmap', 'database', { fields: { quarter: { property: 'Quarter' } } })), 'required_field:objective');
@@ -321,6 +323,7 @@ test('proposals: changed text re-proposes as Changed in Notion; a dismissed one 
   const ok = await t.call(11, 'POST', `/api/cycles/build/notion/proposals/${offline.id}/accept`, { project: 701 });
   assert.deepEqual([ok.status, ok.body.local_table], [200, 'solution_design_notes']);
   assert.equal((await t.call(11, 'POST', `/api/cycles/build/notion/proposals/${offline.id}/accept`, { project: 701 })).body.error, 'proposal_decided');
+  assert.equal((await t.call(11, 'POST', `/api/cycles/build/notion/proposals/${offline.id}/dismiss`, { project: 701 })).body.error, 'proposal_decided', 'an accepted one is not dismissed');
   assert.equal((t.db.prepare("SELECT COUNT(*) AS n FROM connector_fed_items WHERE integration_id = 5 AND local_table = 'solution_design_notes'").get() as any).n, 1);
   assert.equal((await t.call(22, 'POST', `/api/cycles/build/notion/proposals/${booking.id}/dismiss`, { project: 701 })).status, 403, 'another founder');
   // A kind no part has built yet is not accepted: nothing is written.
@@ -330,6 +333,56 @@ test('proposals: changed text re-proposes as Changed in Notion; a dismissed one 
   // Stop using drops what was never decided, and keeps what was.
   await t.call(11, 'DELETE', `/api/connectors/notion/sources/${added.body.source.uid}`);
   assert.deepEqual(t.db.prepare("SELECT status FROM notion_proposals WHERE module = 'solution_design' ORDER BY id").all().map((r: any) => r.status), ['accepted']);
+});
+
+test('the ledger’s edges: a row deleted elsewhere stays deleted, Delete unlinks at once, an unmapped database is named, a finished source is not re-read on resume, a support session cannot sync', async () => {
+  const t = fixture();
+  await addRoadmap(t);
+  t.notion.pageSize = 10;
+  t.notion.rows = [
+    { id: rowId(1), properties: { Objective: 'First goal', Status: 'Up next' } },
+    { id: rowId(2), properties: { Objective: 'Second goal', Status: 'Up next' } },
+  ];
+  await t.call(11, 'POST', '/api/cycles/build/notion/sync', { project: 701 });
+  // Deleted in the roadmap itself, not through Notion's Delete: the next sync leaves it deleted and unlinks it.
+  const gone = t.db.prepare("SELECT local_id FROM connector_fed_items WHERE integration_id = 5 ORDER BY id").get() as any;
+  t.db.prepare('DELETE FROM roadmap_okrs WHERE id = ?').run(gone.local_id);
+  const after = await t.call(11, 'POST', '/api/cycles/build/notion/sync', { project: 701 });
+  assert.deepEqual([after.body.sources[0].counts.kept_deleted, after.body.sources[0].counts.updated, after.body.sources[0].counts.written], [1, 1, 0]);
+  assert.deepEqual(roadmap(t.db).map((r: any) => r.objective), ['Second goal']);
+  assert.equal((t.db.prepare("SELECT local_id FROM connector_fed_items WHERE integration_id = 5 ORDER BY id").get() as any).local_id, null);
+  // Delete unlinks at once: the read drops the row before any sync.
+  const read = await t.call(11, 'GET', '/api/cycles/build/notion?project=701&module=product_roadmap');
+  assert.equal(read.body.facts.length, 1);
+  await t.call(11, 'DELETE', `/api/cycles/build/notion/facts/${read.body.facts[0].ledger_id}?project=701`);
+  const now = await t.call(11, 'GET', '/api/cycles/build/notion?project=701&module=product_roadmap');
+  assert.deepEqual([now.body.facts.length, now.body.kept_deleted], [0, 2]);
+  // A support session reads, and is never offered Sync.
+  assert.equal(now.body.can_sync, true);
+  const support = await t.call(11, 'GET', '/api/cycles/build/notion?project=701&module=product_roadmap', undefined, true);
+  assert.deepEqual([support.status, support.body.can_sync], [200, false]);
+});
+
+test('sync: a database with no mapping is named, and a source finished before the budget ran out is not read again on resume', async () => {
+  const t = fixture();
+  const unmapped = await t.call(11, 'POST', '/api/connectors/notion/sources', { project: 701, module: 'prototype_mvp', kind: 'database', notion_id: TREE_ID });
+  assert.equal(unmapped.status, 201, JSON.stringify(unmapped.body));
+  const r = await t.call(11, 'POST', '/api/cycles/build/notion/sync', { project: 701 });
+  assert.deepEqual(r.body.sources[0].counts.skipped, [{ reason: 'not_mapped', field: null, rows: 1 }]);
+  assert.equal(r.body.sources[0].result, 'partial');
+  await t.call(11, 'DELETE', `/api/connectors/notion/sources/${unmapped.body.source.uid}`);
+  // Two sources; the first finishes, the second spends the budget.
+  const a = await addRoadmap(t);
+  const b = await t.call(11, 'POST', '/api/connectors/notion/sources', { project: 701, module: 'product_roadmap', kind: 'database', notion_id: '99999999888847778666555555555555', field_map: ROADMAP_MAP });
+  t.notion.pageSize = 2;
+  const pages = Math.floor(REQUEST_BUDGET / 2) + 2;
+  t.notion.rows = Array.from({ length: pages * 2 }, (_, i) => ({ id: rowId(i + 1), properties: { Objective: `Goal ${i + 1}` } }));
+  const one = await t.call(11, 'POST', '/api/cycles/build/notion/sync', { project: 701 });
+  assert.deepEqual(one.body.sources.map((s: any) => [s.uid, s.result]), [[a, 'ok'], [b.body.source.uid, 'partial']]);
+  assert.equal(one.body.more, true);
+  const two = await t.call(11, 'POST', '/api/cycles/build/notion/sync', { project: 701 });
+  assert.deepEqual(two.body.sources.map((s: any) => s.uid), [b.body.source.uid], 'the finished source is not read again');
+  assert.equal(two.body.more, false);
 });
 
 test('an unreadable source is said, its rows are kept, and the other sources still sync; nothing private reaches a log or an error', async () => {
