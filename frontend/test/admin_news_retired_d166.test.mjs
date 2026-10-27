@@ -128,8 +128,15 @@ test('the two dependencies the delete strands go with it', () => {
   }
   const ARTICLE_NOTIFY = raw('cloudflare-worker/src/services/articleNotify.ts');
   const surviving = [...ARTICLE_NOTIFY.matchAll(/^ {2}\| '([a-z_]+)'/gm)].map((m) => m[1]);
-  assert.equal(surviving.length, 7,
-    'articleNotify no longer carries the seven transitions — the narrowing above lost real behaviour');
+  for (const k of ['author_submitted', 'admin_submitted', 'author_in_review', 'author_changes_requested',
+                   'author_approved', 'author_published', 'author_rejected']) {
+    assert.ok(surviving.includes(k),
+      `articleNotify no longer carries ${k} — the narrowing above lost real behaviour`);
+  }
+  // D1293 (#3389) adds one of its own: unpublish's notice, which had borrowed
+  // "Changes requested".
+  assert.deepEqual(surviving.filter((k) => !kinds.includes(k) && !['author_in_review', 'author_changes_requested',
+    'author_approved', 'author_published', 'author_rejected'].includes(k)), ['author_unpublished']);
 
   // And every kind the narrowed union still declares must have a caller,
   // which is the rule the five broke.

@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 180 canonical canvases at `design/canvases/`, listed
-278 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 181 canonical canvases at `design/canvases/`, listed
+279 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -208,10 +208,11 @@ it, where in their nav, and how do they get there.*
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Subsidiary Admin — 40 canvases
+## Subsidiary Admin — 41 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| Accounts | `/admin/accounts` · `/admin/accounts/all` · `/admin/accounts/all/:id` | Admin | Full page (proposed) | Sidebar → Admin → Accounts | UPGRADE | Low |
 | Admin · Programs | `/admin/programs` · `/admin/programs/mentor-cohorts` · `/admin/programs/refer-and-earn` · `/admin/programs/perks` · `/admin/programs/learning` · `/admin/programs/referral-partners` · `/admin/programs/investor-cohorts` · `/admin/programs/ai-native-venture` · `/admin/programs/propose` · `/admin/programs/proposals` | Admin | Full page | Sidebar → Admin → Programs | UPGRADE | High |
 | Admin · Subsidiary | `/admin/subsidiary` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Admin Community | `/admin/held/community` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -361,7 +362,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 116 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 77 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 85 | Not routed. Proposed route only. |
+| Low | 86 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

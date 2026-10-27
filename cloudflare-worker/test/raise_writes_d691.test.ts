@@ -1175,7 +1175,7 @@ test('12: Add investor stores Identified as to_contact, a fund by its name, answ
   assert.deepEqual(logs(db, "entity_type = 'raise.capital-relationships'").map((x) => [x.entity_id, x.action, x.details]), [
     [String(a.body.id), 'prospect_created', 'Investor added at Identified'],
     [String(fund.body.id), 'prospect_created', 'Investor added at Contacted'],
-    [String(a.body.id), 'prospect_updated', 'Investor edited: next step, stage, notes'],
+    [String(a.body.id), 'prospect_updated', 'Investor edited: next step, stage Identified → Passed, notes'], // D1193: the move's two stages
   ]);
 });
 
@@ -1329,7 +1329,7 @@ test('12 (log, add feedback, mark passed): each writes its row and logs one; a v
     ['7', 'prospect_event_logged', 'Meeting logged for 2026-10-01'],
     ['7', 'prospect_event_logged', 'Call logged for 2999-01-05'],
     ['7', 'prospect_feedback_added', 'Feedback added'],
-    ['7', 'prospect_updated', 'Investor edited: stage'],
+    ['7', 'prospect_updated', 'Investor edited: stage Meeting → Passed'],
   ]);
   for (const [run, status] of [
     [() => logProspectEvent(env, { projectId: C_P, userId: C_FOUNDER, prospectId: 7, body: { kind: 'lunch' } }), 400],
@@ -1477,7 +1477,7 @@ test('D1192: a committed investor takes Soft, Signed or Wired, none on another s
   assert.deepEqual(st(), { stage: 'passed', commit_status: null }, 'a status never outlives Committed');
   assert.equal((await cyc(db, C_OTHER, 'PATCH', q('/prospects/7'), { stage: 'committed', commit_status: 'wired' })).status, 403);
   const details = logs(db, "entity_type = 'raise.capital-relationships'").map((x) => x.details);
-  assert.deepEqual(details, ['Investor edited: stage, status', 'Investor edited: status', 'Investor edited: status', 'Investor edited: status', 'Investor edited: stage']);
+  assert.deepEqual(details, ['Investor edited: stage Meeting → Committed, status', 'Investor edited: status', 'Investor edited: status', 'Investor edited: status', 'Investor edited: stage Committed → Passed']);
 });
 
 test('D1192: Import adds at most 50 rows a request through createProspect, logs each, and reports every skipped row with its number', async () => {

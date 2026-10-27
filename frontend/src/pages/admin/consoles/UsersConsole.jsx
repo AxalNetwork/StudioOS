@@ -406,7 +406,11 @@ const KYC_LABELS = {
   not_started: 'Not started',
 };
 
-export default function UsersConsole({ onImpersonate }) {
+/**
+ * D1299 (#2377): with `onOpenChange`, the page owns which record is open, as
+ * `/admin/accounts/all/<id>` (`openId`); without it, the console keeps it.
+ */
+export default function UsersConsole({ onImpersonate, openId = null, onOpenChange = null }) {
   const [users, setUsers] = useState([]);
   const [spinoutAdmit, setSpinoutAdmit] = useState(null);
   // Task #40 — batched trust-score map keyed by user_id, populated by a
@@ -427,6 +431,15 @@ export default function UsersConsole({ onImpersonate }) {
   const [totals, setTotals] = useState(null);
   const [userPage, setUserPage] = useState({ showing: 0, limit: 0, searched: false });
   const [openUser, setOpenUser] = useState(null);
+  // D1299: the address's record, as its loaded row once the list has it, else by id alone.
+  useEffect(() => {
+    if (!onOpenChange) return;
+    if (!openId) { setOpenUser(null); return; }
+    setOpenUser((cur) => (cur && Number(cur.id) === openId && cur.role !== undefined ? cur
+      : users.find((u) => Number(u.id) === openId) || { id: openId }));
+  }, [openId, users, onOpenChange]);
+  const openRecord = (u) => (onOpenChange ? onOpenChange(u.id) : setOpenUser(u));
+  const closeRecord = () => (onOpenChange ? onOpenChange(null) : setOpenUser(null));
 
   useEffect(() => { loadAll(); }, []);
   // THE BOX IS GATED AT TWO CHARACTERS, matching the route's own refusal
@@ -707,7 +720,7 @@ export default function UsersConsole({ onImpersonate }) {
                   </thead>
                   <tbody>
                     {filtered.map(u => (
-                      <tr key={u.id} onClick={() => setOpenUser(u)}
+                      <tr key={u.id} onClick={() => openRecord(u)}
                         className="border-b border-gray-100 hover:bg-violet-50/40 cursor-pointer">
                         <td className="px-4 py-3 text-gray-900 font-medium dark:text-gray-100">{u.name}</td>
                         <td className="px-4 py-3 text-gray-600">{u.email}</td>
@@ -855,11 +868,11 @@ export default function UsersConsole({ onImpersonate }) {
       {openUser && (
         <UserDetailModal
           userRow={openUser}
-          onClose={() => setOpenUser(null)}
+          onClose={closeRecord}
           // D221 — the drawer follows the row's rule: where the server can
           // only refuse, it is handed no handler and draws no button.
-          onImpersonate={drawsAccountControls(openUser, viewer) ? () => { handleImpersonate(openUser); setOpenUser(null); } : null}
-          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser); setOpenUser(null); } : null}
+          onImpersonate={drawsAccountControls(openUser, viewer) ? () => { handleImpersonate(openUser); closeRecord(); } : null}
+          onToggleActive={drawsAccountControls(openUser, viewer) ? () => { handleToggleActive(openUser); closeRecord(); } : null}
           // D633 (#1391, Q2) — the member's credits are the Super Admin's.
           showCredits={isSuperAdminUser(viewer)}
         />
