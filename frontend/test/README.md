@@ -21,9 +21,9 @@ that a method exists on both sides, that a component is mounted and not merely
 defined, that a page reads the shape the worker actually returns, and that a
 number on screen traces back to a column.
 
-`use_of_funds_fixes_d1174.test.mjs` mounts Financials with real router and API
-effects: both venture aliases, invalid/missing selection, Back and score
-removal. Only chart drawing is stubbed for the minimal DOM. The cap-table suite
+D1180 retired the old Financials page and the suite that mounted it (D1174's);
+`capital_model_retired_d1180.test.mjs` pins the retirement, and Forecast's own
+suite (`use_of_funds_d1178.test.mjs`) holds the model. The cap-table suite
 also exercises a `project_id` deep link.
 
 | File | Guarantee |

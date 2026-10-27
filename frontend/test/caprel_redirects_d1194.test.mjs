@@ -140,8 +140,7 @@ test('App.jsx mounts exactly these three, unguarded (the tool\'s own route guard
   assert.match(APP, /<Route path="\/raise\/:slug\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="raise" record \/>\)\} \/>/, 'the tool\'s tabs keep their guard');
   assert.doesNotMatch(codeOnly(APP), /RaisePipelinePage|FounderGrowCapitalMatch/);
   for (const gone of ['frontend/src/pages/RaisePipelinePage.jsx', 'frontend/src/pages/founder/FounderGrowCapitalMatch.jsx']) assert.equal(existsSync(resolve(root, gone)), false, gone);
-  const ws = codeOnly(read('frontend/src/pages/CapitalWorkspacePage.jsx'));
-  assert.doesNotMatch(ws, /RaisePipelinePage|'pipeline'/, 'Capital has no Pipeline tab');
+  assert.equal(existsSync(resolve(root, 'frontend/src/pages/CapitalWorkspacePage.jsx')), false, 'D1180 deletes the workspace once Pipeline has forwarded');
   // A non-landing founder's bare /raise opens the tool, not the old page.
   assert.match(APP, /: <Navigate to="\/raise\/capital-relationships\/pipeline" replace \/>\} \/>/);
 });
