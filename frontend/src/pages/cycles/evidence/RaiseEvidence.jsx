@@ -2,13 +2,15 @@
  * D1261 (#2430) — the founder's Evidence view at `/raise/evidence` (VR1), in the
  * Raise shell with Evidence lit after Overview, and the item and claim drawers
  * at `/raise/evidence/item/:id` and `/raise/evidence/claim/:id` (VR2, VR3) as
- * addresses. `EvidenceSummary` is the investor block (VR8, VR9), placed by the
- * deal page's Evidence tab; it waits for part 7.
+ * addresses.
  *
  * D1266 (#3289): the view reads `GET /api/cycles/raise/evidence` (parts 2 and 3)
  * and draws it through `EvidenceView.jsx`; Waiting for review (VR4) is
  * `/raise/evidence/review` and See as an investor (VR11) `/raise/evidence/preview`.
  * Look again is the Worker's refresh. A change reads the page again.
+ *
+ * The investor block (VR8–VR10) is `InvestorEvidence.jsx` (D1268), placed by
+ * the deal page's Evidence tab, an investor's round call and the diligence room.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -18,25 +20,15 @@ import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence';
 import { CycleHeader } from '../CycleOverview';
 import { useProject } from '../CycleRoute';
 import { MODULES } from '../modules';
-import { NOT_YET, PAGE_LINE, TITLE, WAITS, viewOf } from './evidenceModel';
+import { PAGE_LINE, TITLE, viewOf } from './evidenceModel';
 import { viewModel } from './evidenceView';
 import { BTN_S } from './EvidenceParts';
 import { EvidenceError, EvidenceForbidden, EvidenceLoading, EvidenceMain } from './EvidenceView';
 import { ClaimDrawer, ItemDrawer } from './EvidenceDrawers';
 import { InvestorPreview, ReviewQueue } from './EvidenceReview';
 
-const box = 'flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 /** The read's page: the first 100 of each list. */
 export const PAGE = Object.freeze({ limit: 100 });
-
-export function EvidenceWait({ id }) {
-  return (
-    <div className="flex flex-col gap-1" data-testid={`evidence-wait-${id}`}>
-      <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
-      <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400">{WAITS[id]}</p>
-    </div>
-  );
-}
 
 /**
  * The whole page from one read's state: loading, refused, failed, or the read
@@ -98,13 +90,5 @@ export default function RaiseEvidence() {
     </RailFrame>
   );
 }
-/** VR8, VR9: what an investor sees on the deal page's Evidence tab. */
-export function EvidenceSummary() {
-  return (
-    <section className={box} data-testid="evidence-summary">
-      <h2 className="m-0 text-[15px] font-bold">Evidence</h2>
-      <p className="m-0 text-[13px]">Before an NDA you see coverage only: each kind of evidence, how many, its source and its newest date. After it, the items the founder shared, each with its source, strength and date.</p>
-      <EvidenceWait id="investor" />
-    </section>
-  );
-}
+/** VR8–VR10: the investor's block lives in `InvestorEvidence.jsx` (D1268), which imports no `ui` index. */
+export { EvidenceSummary } from './InvestorEvidence';
