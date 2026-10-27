@@ -1385,6 +1385,7 @@ brand.post('/landing/by-project/:pid/publish', async (c) => {
   return c.json({ ok: true, published: !!flag });
 });
 
+// D1312: a Lovable sign-up is a count, not a contact (no email is kept), so the owner's list leaves it out.
 brand.get('/landing/by-project/:pid/waitlist', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
@@ -1397,8 +1398,8 @@ brand.get('/landing/by-project/:pid/waitlist', async (c) => {
   // trying to match on `source` — a column the capture route always writes as
   // the constant 'landing', so every per-page count rendered 0.
   const sql = audienceFilter
-    ? `SELECT id, landing_page_id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? AND audience = ? ORDER BY created_at DESC LIMIT 500`
-    : `SELECT id, landing_page_id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? ORDER BY created_at DESC LIMIT 500`;
+    ? `SELECT id, landing_page_id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? AND audience = ? AND COALESCE(source, '') <> 'lovable' ORDER BY created_at DESC LIMIT 500`
+    : `SELECT id, landing_page_id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? AND COALESCE(source, '') <> 'lovable' ORDER BY created_at DESC LIMIT 500`;
   const stmt = c.env.DB.prepare(sql);
   const rows = audienceFilter
     ? stmt.bind(pid, audienceFilter).all<any>()

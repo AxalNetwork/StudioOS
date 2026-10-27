@@ -7,6 +7,7 @@ import { Unreadable } from '../../ui';
 import { CycleHeader } from './CycleOverview';
 import { CycleBar } from './PhoneModulePage';
 import UpdatesHistory from './UpdatesHistory';
+import PublishedOutside from './publish/PublishedOutside.jsx';
 import { DESK_TABS, DUTIES_LINE, LINE, TITLE, deskHref, deskSearch } from './reportingModel';
 import { EMPTY, NOT_SHARED, dueNext, prepareLabel, readOnlyLine } from './reporting/deskModel.js';
 import { reportHref } from './reporting/builderModel.js';
@@ -220,6 +221,8 @@ export default function ReportingDesk({ tab = 'desk', projectId, projectStatus =
             </>
           )}
           <History projectId={projectId} onShare={readOnly ? undefined : action?.onOpen || action?.onClick} />
+          {/* D1321 (#3482, PUB9): the second list, what the founder published outside Axal VC; the venture's team reads it. */}
+          <PublishedOutside projectId={projectId} />
         </div>
       );
     }

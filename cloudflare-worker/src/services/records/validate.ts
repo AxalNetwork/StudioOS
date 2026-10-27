@@ -1294,7 +1294,7 @@ async function lovableExperiments(ctx: RecordContext, id: string): Promise<Lovab
   try {
     const rows = (await ctx.env.DB.prepare('SELECT id, title FROM hypothesis_experiments WHERE hypothesis_id = ? AND project_id = ? ORDER BY id')
       .bind(Number(id), ctx.projectId).all<{ id: number; title: string }>()).results || [];
-    return await lovablePart(ctx.env, ctx.projectId, 'validate', rows.map((r) => ({ id: Number(r.id), label: String(r.title) })));
+    return await lovablePart(ctx.env, ctx.projectId, 'validate', rows.map((r) => ({ id: Number(r.id), label: String(r.title) })), { writer: isWriter(ctx) });
   } catch {
     return { state: 'unreadable' };
   }

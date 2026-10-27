@@ -13,6 +13,7 @@
  * Worker never calls Lovable, and nothing comes back here (part 3, #2948,
  * reads the app's address). Logs keep counts and outcomes, never the prompt.
  */
+import { liveAddress } from './signups';
 import type { Env, User } from '../../types';
 import { requireAuth, selectJwt } from '../../auth';
 import { logCycleWriteStatement } from '../cycleActivity';
@@ -69,7 +70,8 @@ async function drafted(env: Env, cycle: LovableCycle, projectId: number, ref: Re
       WHERE e.id = ? AND e.project_id = ?`).bind(Number(ref.id), projectId)
       .first<{ title: string; method: string | null; target: string | null; hypothesis_id: number; code: string | null; claim: string }>();
     if (!e) throw new LovableError('not_found', 404, 'This experiment is not on this venture.');
-    const { prompt, dropped } = landingTestPrompt({ venture: venture.name, description: venture.description, code: e.code, claim: e.claim, title: e.title, method: e.method, target: e.target });
+    const signupUrl = await liveAddress(env, projectId, Number(ref.id)).catch(() => null);
+    const { prompt, dropped } = landingTestPrompt({ venture: venture.name, description: venture.description, code: e.code, claim: e.claim, title: e.title, method: e.method, target: e.target, signupUrl });
     return { prompt, dropped, hypothesisId: Number(e.hypothesis_id), tests: { code: e.code ?? null, claim: e.claim ?? null, title: e.title ?? null, target: e.target ?? null } };
   }
   const p = await env.DB.prepare('SELECT mvp_target_date FROM projects WHERE id = ?').bind(projectId).first<{ mvp_target_date: string | null }>();

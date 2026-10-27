@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 182 canonical canvases at `design/canvases/`, listed
-282 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 183 canonical canvases at `design/canvases/`, listed
+284 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 81 canvases
+## Founder — 82 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -58,6 +58,7 @@ it, where in their nav, and how do they get there.*
 | Founder Workspaces Canvas | `/validate` · `/build` · `/raise` · `/grow` · `/network` · `/research` | Headerless | Full page | Sidebar → Headerless → Validate | UPGRADE | High |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
 | Graduation Certificate | `/spinout-lab/certificate` · `/verify/:token` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
+| Grow · Publish to… and Published outside | `/grow/reporting?sent=<uid>#published-outside` · `/grow/reporting#published-outside` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | UPGRADE | Low |
 | Grow · Share an update | `/grow/update` · `/updates/:uid` · `/grow/updates` · `/grow/reporting` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | NEW | Low |
 | Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Raise | OUT OF SCOPE | High |
 | Investor narrative | `/raise/investor-narrative` · `/raise/investor-narrative/story` · `/positioning` · `/claims` · `/check` · `/versions` · `/raise/investor-narrative/:version` · `/new` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
@@ -210,7 +211,7 @@ it, where in their nav, and how do they get there.*
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Subsidiary Admin — 41 canvases
+## Subsidiary Admin — 42 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -231,6 +232,7 @@ it, where in their nav, and how do they get there.*
 | Due diligence desk | `/admin/due-diligence` · `/my-reviews` · `/templates` · `/:uid` · `/:uid/:tab` · `/due-diligence` | Admin | Full page (proposed) | Sidebar → Admin → Approvals | UPGRADE | Low |
 | Events Console | `/admin/events` · `/admin/events/review` · `/admin/events/all` · `/admin/events/:id` · `/admin/events/calendar` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
 | GP Application Review | `/admin/lp-applications` | Admin | Full page + review drawer | Sidebar → Admin → Approvals | UPGRADE | High |
+| Grow · Publish to… and Published outside | `/grow/reporting?sent=<uid>#published-outside` · `/grow/reporting#published-outside` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Investor narrative | `/raise/investor-narrative` · `/raise/investor-narrative/story` · `/positioning` · `/claims` · `/check` · `/versions` · `/raise/investor-narrative/:version` · `/new` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | KYC & KYB | `/admin/kyc` · `/admin/kyc/businesses` · `/admin/kyc/renewals` · `/admin/kyc/audit` · `/admin/kyc/people/:id` · `/admin/kyc/businesses/:id` | Admin | Full page (proposed) | Sidebar → Admin → Approvals | UPGRADE | Low |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | REMOVED | Medium |
@@ -365,7 +367,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 117 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 81 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 84 | Not routed. Proposed route only. |
+| Low | 86 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s
