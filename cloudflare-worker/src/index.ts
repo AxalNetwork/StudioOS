@@ -17,6 +17,7 @@
  * the legacy in-worker routes mounted here as the source of truth.
  */
 
+import { LEGACY_BUILDER_PATHS, builderRedirectTarget } from './services/builderRedirect';
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
 import { developerKeys } from './routes/developer_keys';
@@ -598,6 +599,14 @@ app.use('*', async (c, next) => {
   url.host = 'axal.vc';
   return c.redirect(url.toString(), 301);
 });
+
+// D1315 (#2418): /account/developer… moved to /account/builder…, permanently, the sub-path and query kept.
+for (const path of LEGACY_BUILDER_PATHS) {
+  app.on(['GET', 'HEAD'], path, (c) => {
+    const url = new URL(c.req.url);
+    return c.redirect(builderRedirectTarget(url.pathname, url.search) ?? '/account/builder', 308);
+  });
+}
 
 /**
  * D751 T9 (#1921): each OAuth connector the catalogue offers (oauth2, an

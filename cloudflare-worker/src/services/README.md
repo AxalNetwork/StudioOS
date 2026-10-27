@@ -418,7 +418,7 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
 `roundCalls.ts` orchestrates private founder calls, counsel fingerprints, idempotent counsel requests and the independent HQ queue, structured term seeds, recipient entitlements, notification outcomes and atomic Raise pipeline responses. Unchanged drafts and computed audience sets preserve approval (D686 #1594, migration 456). `roundCallPolicy.ts` contains flag, verification, readiness, matching and identity policies. The GP capital-call domain is separate. See [D653](../../../documentation/architecture/decisions/D653.md).
 
 D667 (#1497): `assistantInterviews.ts` holds `submit_interview`,
-`propose_placements` and `structure_with_studioos` for #1496's MCP server.
+`propose_placements` and `structure_with_axalvc` (listed; `structure_with_studioos` until D1315, kept as an alias and as the stored name) for #1496's MCP server.
 Each takes the grant, re-checks the company and the founder's right to write,
 and throws a `ToolError` with the issue's status. Consent `given` comes first,
 and a placement's quote must be verbatim in the stored transcript. Nothing is

@@ -60,6 +60,7 @@ const checks:any = {
     let proposed:any=null,structured:any=null,pending:any=[];
     if(session){
       proposed=await invoke('propose_placements',{session_id:session.id,placements:[{module:'ideal_customer_profile',kind:'segment',payload:{name:'Finance'},quote:'every Friday.'}]});
+      // D1315: the old name still calls structure_with_axalvc, unlisted.
       structured=await invoke('structure_with_studioos',{session_id:session.id});
       const jwt=await new SignJWT({user_id:10}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
       const review=await structureRoute.default.request('/sessions/'+session.id+'/placements',{headers:{Authorization:'Bearer '+jwt}},env);
@@ -73,7 +74,7 @@ const checks:any = {
     assert.deepEqual(m.server.registeredTools().map((t:any)=>[t.name,t.requiredScope]).sort(),[
       ['assign_chat_to_interview','validate:write'],['extract_action_items','validate:write'],['get_build_progress','build:read'],['get_interview_guide','validate:read'],['get_meeting_transcript','validate:read'],
       ['get_session_insights','validate:read'],['get_validate_context','validate:read'],['list_channel_chats','validate:read'],['list_companies','validate:read'],
-      ['list_connections','connectors:read'],['list_meetings','validate:read'],['propose_placements','validate:write'],['structure_with_studioos','validate:write'],
+      ['list_connections','connectors:read'],['list_meetings','validate:read'],['propose_placements','validate:write'],['structure_with_axalvc','validate:write'],
       ['submit_interview','validate:write'],['summarize_meeting','validate:write']]);
   },
   async scope(m:any) {
@@ -83,7 +84,7 @@ const checks:any = {
   },
   async writes(m:any) {
     const {env}=fixture();const results=[];
-    for(const name of ['submit_interview','propose_placements','structure_with_studioos']) {
+    for(const name of ['submit_interview','propose_placements','structure_with_axalvc']) {
       const tool=m.server.registeredTools().find((t:any)=>t.name===name);
       const r=await m.server.callTool(env,props,null,tool,{},['validate:read']);results.push(r.isError===true && readJson(r).error.includes('validate:write'));
     }
