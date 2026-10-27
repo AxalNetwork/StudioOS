@@ -852,41 +852,61 @@ r.post('/:projectUid/files', async (c) => {
       folderId = await topFolder(c.env, project.id, body.folder_name.trim().slice(0, NAME_MAX));
     }
 
-    // The key is derived, never taken from the request: a caller-supplied key
-    // is a path-traversal write into another project's prefix.
-    // D1170 — a data room file counts to the venture's owner (D1169 §1).
-    const storage = await assertStorageRoom(c.env, { projectId: project.id }, bytes.byteLength, user);
-    const uid = newUid();
-    const key = `data-room/${project.uid}/${uid}`;
-    await c.env.FILES.put(key, bytes, {
-      httpMetadata: { contentType: declaredMime },
-      customMetadata: { project_uid: project.uid, uploaded_by: String(user.id) },
+    const { uid } = await storeDataRoomFile(c.env, {
+      project, user, folderId, name, bytes, contentType: declaredMime,
+      visibility: body.visibility ? String(body.visibility) : room.role === 'owner' ? 'nda' : folderVisibility,
+      access: access.values,
     });
-
-    const ins = await c.env.DB.prepare(
-      `INSERT INTO data_room_files
-         (uid, project_id, folder_id, name, r2_key, content_type, size_bytes,
-          visibility, uploaded_by_user_id, created_at, updated_at,
-          access_tier, access_expires_at, dd_request_id, checklist_item)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(uid, project.id, folderId, name.slice(0, NAME_MAX), key, declaredMime,
-           bytes.byteLength, body.visibility ? String(body.visibility) : room.role === 'owner' ? 'nda' : folderVisibility,
-           user.id, nowIso(), nowIso(),
-           access.values.access_tier ?? 'invited', access.values.access_expires_at ?? null,
-           access.values.dd_request_id ?? null, access.values.checklist_item ?? null).run();
-    // D691 decision 12 — the file's record logs its upload. No file name: a
-    // filename is itself information.
-    const fileId = Number((ins as any)?.meta?.last_row_id) || null;
-    if (fileId != null) {
-      await logCycleWrite(c.env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
-        entityId: fileId, action: 'file_uploaded', summary: `File uploaded; access ${access.values.access_tier ?? 'invited'}` });
-    }
-    // D1248 — a file uploaded as a request's answer answers it.
-    if (access.values.dd_request_id != null) await markRequestAnsweredByFile(c.env, Number(access.values.dd_request_id), Number(user.id));
-    await noteStorageLanded(c.env, storage);
     return c.json({ uid, size_bytes: bytes.byteLength }, 201);
   } catch (e) { return mapError(c, e); }
 });
+
+/**
+ * The upload's storage step: the storage guard, the object under a key the
+ * Worker derives (`data-room/<project uid>/<uid>`, never taken from the
+ * request), the `data_room_files` row, its log line and the storage notice.
+ * The upload route calls it, and so does a Notion snapshot (D1089), so a file
+ * reaches the room one way only. The caller has checked who may write and what
+ * the gate is.
+ */
+export async function storeDataRoomFile(env: Env, a: {
+  project: { id: number; uid: string }; user: { id: number; role: string }; folderId: number | null; name: string;
+  bytes: Uint8Array; contentType: string; visibility: string;
+  access: Partial<Record<'access_tier' | 'access_expires_at' | 'dd_request_id' | 'checklist_item', string | number | null>>;
+}): Promise<{ id: number | null; uid: string }> {
+  const { project, user, bytes } = a;
+  if (!env.FILES) throw new WriterError(503, 'storage_not_configured');
+  if (bytes.byteLength > MAX_FILE_BYTES) throw new WriterError(413, 'too_large');
+  // D1170 — a data room file counts to the venture's owner (D1169 §1).
+  const storage = await assertStorageRoom(env, { projectId: project.id }, bytes.byteLength, user);
+  const uid = newUid();
+  const key = `data-room/${project.uid}/${uid}`;
+  await env.FILES.put(key, bytes, {
+    httpMetadata: { contentType: a.contentType },
+    customMetadata: { project_uid: project.uid, uploaded_by: String(user.id) },
+  });
+  const ins = await env.DB.prepare(
+    `INSERT INTO data_room_files
+       (uid, project_id, folder_id, name, r2_key, content_type, size_bytes,
+        visibility, uploaded_by_user_id, created_at, updated_at,
+        access_tier, access_expires_at, dd_request_id, checklist_item)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(uid, project.id, a.folderId, a.name.slice(0, NAME_MAX), key, a.contentType,
+         bytes.byteLength, a.visibility, user.id, nowIso(), nowIso(),
+         a.access.access_tier ?? 'invited', a.access.access_expires_at ?? null,
+         a.access.dd_request_id ?? null, a.access.checklist_item ?? null).run();
+  // D691 decision 12 — the file's record logs its upload. No file name: a
+  // filename is itself information.
+  const fileId = Number((ins as any)?.meta?.last_row_id) || null;
+  if (fileId != null) {
+    await logCycleWrite(env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
+      entityId: fileId, action: 'file_uploaded', summary: `File uploaded; access ${a.access.access_tier ?? 'invited'}` });
+  }
+  // D1248 — a file uploaded as a request's answer answers it.
+  if (a.access.dd_request_id != null) await markRequestAnsweredByFile(env, Number(a.access.dd_request_id), Number(user.id));
+  await noteStorageLanded(env, storage);
+  return { id: fileId, uid };
+}
 
 /**
  * D691 (#1700) — Replace: the Raise file record's `replace` action. The

@@ -6,6 +6,7 @@ import {
   Heart, TrendingDown, TrendingUp, Filter,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import Sheet from '../ui/Sheet.jsx';
 
 const BADGE_STYLES = {
   green:  { bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500', text: 'text-emerald-700', label: 'Healthy' },
@@ -65,15 +66,8 @@ function DetailDrawer({ projectUid, onClose }) {
 
   if (!projectUid) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-stretch justify-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-xl h-full overflow-y-auto shadow-xl dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between dark:bg-gray-900">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{data?.project?.name || 'Startup health'}</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{data?.project?.sector || ''} · {data?.project?.stage || ''}</p>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-400 text-2xl leading-none">×</button>
-        </div>
+    <Sheet label={data?.project?.name || "Startup health"} title={data?.project?.name || "Startup health"} sub={`${data?.project?.sector || ""} · ${data?.project?.stage || ""}`} width={560} testId="portfolio-health-sheet" onClose={onClose}>
+      <div className="">
         {err && <div className="m-6 p-4 bg-rose-50 border border-rose-200 rounded text-rose-700 text-sm">{err}</div>}
         {!data && !err && <div className="p-6 text-slate-500 dark:text-slate-400 text-sm">Loading…</div>}
         {data && data.latest && (
@@ -141,7 +135,7 @@ function DetailDrawer({ projectUid, onClose }) {
           <div className="p-6 text-slate-500 dark:text-slate-400 text-sm">No health snapshot for this startup yet. Run a recompute to generate one.</div>
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 

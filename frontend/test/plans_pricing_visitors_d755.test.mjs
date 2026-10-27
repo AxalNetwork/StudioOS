@@ -65,17 +65,19 @@ test('Sign in round-trips: Subscribe returns to the plans, Buy returns to the To
   const back = (href) => sameOriginNextPath(new URLSearchParams(href.split('?')[1]).get('next'), 'https://axal.vc');
   assert.equal(back(VISITOR_SIGN_IN), '/pricing/products');
   const buy = `/login?next=${encodeURIComponent(TOKEN_PACKS_PATH)}`;
-  assert.equal(buy, '/login?next=%2Fpricing%2Fproducts%23token-packs');
-  assert.equal(back(buy), '/pricing/products#token-packs', 'the hash survives the sign-in');
+  // D1288: Buy comes back to Add tokens on Models, which opens the sheet.
+  assert.equal(buy, '/login?next=%2Fpricing%3Ffor%3Dmodels%23add-tokens');
+  assert.equal(back(buy), '/pricing?for=models#add-tokens', 'the query and the hash survive the sign-in');
   assert.ok(read('frontend/src/components/products/TokenPacksSection.jsx').includes("'/login?next=' + encodeURIComponent(TOKEN_PACKS_PATH)"), 'CR7\'s Sign in to buy is that link');
   assert.ok(read('frontend/src/pages/LoginPage.jsx').includes("sameOriginNextPath(new URLSearchParams(window.location.search).get('next'), window.location.origin)"));
 });
 
 test('the page opens without sign-in; a product\'s page and the checkout still need it', async () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/pricing\/products" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
+  assert.match(app, /* D1288: wrapped in the old token addresses' redirect. */ /<Route path="\/pricing\/products" element=\{<TokensRedirect>\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\}<\/TokensRedirect>\} \/>/);
   for (const path of ['/pricing/products/:productId', '/checkout', '/checkout/confirmation']) {
-    assert.match(app, new RegExp(`<Route path="${path.replace(/[/:]/g, (c) => `\\${c}`)}" element=\\{guard\\(\\[`), `${path} stays guarded`);
+    // D1288: /checkout's old token queries redirect first (TokensRedirect); the page itself stays guarded.
+    assert.match(app, new RegExp(`<Route path="${path.replace(/[/:]/g, (c) => `\\${c}`)}" element=\\{(<TokensRedirect>\\{)?guard\\(\\[`), `${path} stays guarded`);
   }
   const { isPublicPath } = await import('../src/lib/api.js');
   // D786: the catalogue is /pricing/products, under the one /pricing page.
@@ -90,7 +92,7 @@ test('each reader keeps a frame: a member the app\'s header, sidebar and footer,
   const app = read('frontend/src/App.jsx');
   // `guard` wraps RequireAuth, which draws ProtectedLayout: the member's branch must go through it.
   assert.match(app, /const guard = \(roles, component\) => \(\s*<RequireAuth /);
-  assert.match(app, /path="\/pricing\/products" element=\{user \? guard\(/, 'a signed-in reader gets the app frame');
+  assert.match(app, /path="\/pricing\/products" element=\{<TokensRedirect>\{user \? guard\(/, 'a signed-in reader gets the app frame');
   const page = read('frontend/src/pages/ProductsPage.jsx');
   assert.match(page, /import SitePage from '\.\.\/components\/site\/SitePage';/);
   assert.match(page, /if \(!member\) return <SitePage title="Plans and pricing">\{page\}<\/SitePage>;/, 'a visitor gets the site nav and footer');
@@ -120,6 +122,17 @@ test('a visitor gets none of the member-only parts, and none of their reads', ()
   assert.match(page, /onSubscribe=\{member \? handleSubscribeBundle : visitorSignIn\}/);
   assert.match(page, /\(member \? \(products \|\| \[\]\)\.filter\(isBundleProduct\) : visitorPlanProducts\(pricing\)\)/);
   assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /useAccountRead\(\(\) => aiBudgetApi\.mine\(\), \{ enabled: member \}\)/);
+});
+
+test('D1317: the product opens as the shared right-side Sheet at 760px, and closes back to /pricing/products', () => {
+  // Read, not rendered: the sheet's checkout (AxalCheckout → lib/stripe.js) reads import.meta.env, which Node has not.
+  const src = read('frontend/src/components/products/ProductSlideOver.jsx');
+  assert.match(src, /^import Sheet from '\.\.\/\.\.\/ui\/Sheet\.jsx';$/m);
+  assert.match(src, /<Sheet label=\{product\.name\} title=\{product\.name\} onClose=\{onClose\} width=\{760\} testId="product-sheet" footer=\{footer\}>/, 'titled by the product, at its own 760px, Confirm Purchase in the fixed footer');
+  assert.doesNotMatch(src, /fixed inset-0|addEventListener\('keydown'/, 'no own overlay and no own Escape: the Sheet owns both');
+  const page = read('frontend/src/pages/ProductsPage.jsx');
+  assert.match(page, /const handleCloseProduct = useCallback\(\(\) => \{\s*setModalIntent\(null\);\s*navigate\('\/pricing\/products'\);/);
+  assert.match(page, /<ProductSlideOver\s+product=\{openProduct\}[\s\S]*?onClose=\{handleCloseProduct\}/);
 });
 
 test('the public /pricing page takes its prices from the read, never the typed figures', () => {

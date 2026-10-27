@@ -164,6 +164,11 @@ test('the partner zone lists its own read, makes a draft, and Submit moves it to
     assert.ok(!v.by('testing-submit-p1'));
     // New programme: the form refuses an empty name, then creates a draft.
     await v.click('testing-new-programme');
+    // D1317: the panel is the shared right-side Sheet, named by its title, at 520px.
+    assert.equal(v.prop('slide-over', 'role'), 'dialog');
+    assert.ok(v.prop('slide-over', 'aria-labelledby'), 'named by its title');
+    assert.equal(v.prop('slide-over', 'data-width'), 520);
+    assert.ok(v.by('slide-over-scrim'));
     await v.submitForm('programme-form');
     assert.match(v.textIn('programme-form-error') || '', /Name the product/);
     await v.type('programme-product_name', 'Invoice tool');
@@ -194,8 +199,9 @@ test('the partner zone: Unreadable with Try again, the empty state, and the phon
   try {
     assert.ok(phone.by('testing-programme-p1') && phone.by('testing-submit-p1'), 'the list and its actions draw at 390px');
   } finally { await phone.unmount(); }
-  // The SlideOver is full width below its max, so the form fits a phone.
-  assert.match(readFileSync('frontend/src/pages/advisor/network/kit.jsx', 'utf8'), /relative w-full max-w-lg h-full/);
+  // D1317: the SlideOver is the shared right-side Sheet at its own 520px (was max-w-lg);
+  // below 640px the Sheet is full width, so the form fits a phone.
+  assert.match(readFileSync('frontend/src/pages/advisor/network/kit.jsx', 'utf8'), /export function SlideOver\(\{ open, onClose, title, subtitle, children, footer = null, width = 520, testId = 'slide-over' \}\) \{\s*if \(!open\) return null;\s*return \(\s*<Sheet /);
 });
 
 test('applicants: the counter, the Mail note, no email, and a pick past the places in the Worker\'s words', async () => {
@@ -290,6 +296,7 @@ test('HQ approves, sends back only with a reason, and makes its own programme', 
   const own = await mount(h(ProductTestingConsole, { api, view: 'programs' }), { url: '/admin/platform/product-testing/programs?new=1' });
   try {
     assert.ok(own.by('testing-form-dialog'));
+    assert.equal(own.prop('testing-form-dialog', 'data-width'), undefined, 'D1317: New program is a create form, the centred lightbox');
     await own.type('programme-product_name', 'Axal Mail beta');
     await own.type('programme-places', '10');
     await own.type('programme-role-investor', true);
@@ -299,6 +306,11 @@ test('HQ approves, sends back only with a reason, and makes its own programme', 
     await own.click('testing-menu-hq1');
     assert.ok(own.by('testing-menu-hq1-edit') && own.by('testing-menu-hq1-open'), "HQ's own draft opens without review");
     assert.ok(!own.by('testing-menu-hq1-approve'), "HQ's own never waits for approval");
+    // D1317: editing an existing program is a detail panel, the shared Sheet at 640px.
+    await own.click('testing-menu-hq1-edit');
+    assert.equal(own.prop('testing-form-dialog', 'role'), 'dialog');
+    assert.ok(own.prop('testing-form-dialog', 'aria-labelledby'));
+    assert.equal(own.prop('testing-form-dialog', 'data-width'), 640);
   } finally { await own.unmount(); }
   const review = await mount(h(ProductTestingConsole, { api, view: 'review' }));
   // Mutation checked: let the waiting list take HQ's own drafts → Axal Mail beta waits for approval.

@@ -21,6 +21,8 @@ const qs = (params = {}) => {
 export const connectorsApi = {
   available: () => request('/connectors/available'),
   list: () => request('/connectors'),
+  // D848 (#2469): each connection's health and its last ten checks; #2479's Builder page reads it.
+  health: () => request('/connectors/health'),
   waitlist: () => request('/connectors/waitlist'),
   notifyMe: (providerKey) => request('/connectors/notify-me', { method: 'POST', body: JSON.stringify({ provider_key: providerKey }) }),
   stopNotify: (providerKey) => request(`/connectors/notify-me/${enc(providerKey)}`, { method: 'DELETE' }),

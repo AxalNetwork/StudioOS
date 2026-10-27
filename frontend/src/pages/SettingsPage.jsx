@@ -53,6 +53,7 @@ import ColleagueSeatsPanel from './ColleagueSeatsPanel';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import { TIER_PLANS } from '../components/PaywallModal';
+import { openCheckout } from '../components/checkout/checkoutEntry';
 import { FREE, priceText, usePlansRead } from '../lib/planPrices';
 import BillingDashboard from '../components/BillingDashboard';
 import AuthorCard from '../components/AuthorCard';
@@ -4723,8 +4724,7 @@ function PersonaBillingPanel({ flash, billing }) {
   const status = billing.status === 'ready' ? billing.data : null;
   const loading = billing.status === 'loading';
   const refresh = billing.reload;
-  const [checkout, setCheckout] = useState(null); // { clientSecret } once checkout starts
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const prices = usePlansRead();
 
   // Flash on return from a (dev-upgrade) redirect, mirroring the other panels.
@@ -4755,18 +4755,8 @@ function PersonaBillingPanel({ flash, billing }) {
   const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86_400_000)) : null;
   const hasCustomer = !!status?.has_customer;
 
-  const startCheckout = async () => {
-    setBusy(true);
-    try {
-      const res = await api.planCheckout('month');
-      if (res?.url) { window.location.href = res.url; return; }      // keyless dev-upgrade
-      if (res?.free) { flash?.('Your plan is now active.'); refresh(); return; }
-      if (res?.client_secret) { setCheckout({ clientSecret: res.client_secret }); return; }
-      flash?.('Could not start checkout. Please try again.', 'error');
-    } catch (e) {
-      flash?.(e?.message || 'Online signup for this plan isn’t available yet — contact billing@axal.vc.', 'error');
-    } finally { setBusy(false); }
-  };
+  // D1054 (#2905, PAYX14): Subscribe opens the checkout sheet over Billing, on D1051's routes.
+  const startCheckout = () => openCheckout({ plan_key: `${group}:pro`, from: { label: 'Billing', href: '/account/billing' } });
 
   return (
     <>
@@ -4842,21 +4832,6 @@ function PersonaBillingPanel({ flash, billing }) {
             })}
           </div>
 
-          {/* Inline (no-redirect) checkout once the user starts subscribing. */}
-          {checkout?.clientSecret && (
-            <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{defs.pro.name} — {priceText(prices, group)}</div>
-                <button type="button" onClick={() => setCheckout(null)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">Cancel</button>
-              </div>
-              <AxalCheckout
-                clientSecret={checkout.clientSecret}
-                submitLabel="Subscribe"
-                onSuccess={() => { flash?.('Payment successful — activating your plan.'); setCheckout(null); refresh(); }}
-                onError={(e) => flash?.(e?.message || 'Payment failed', 'error')}
-              />
-            </div>
-          )}
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
             Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
           </div>
@@ -4874,7 +4849,7 @@ function FounderBillingPanel({ flash, billing }) {
   // were true. Now a failed read draws nothing here; the plan line above says
   // it could not be read and offers a retry.
   const status = billing.status === 'ready' ? billing.data : null;
-  const [busy, setBusy] = useState(null);
+  const busy = null;
   const prices = usePlansRead();
 
   // Auto-flash when the URL carries an upgrade-completion param.
@@ -4904,14 +4879,8 @@ function FounderBillingPanel({ flash, billing }) {
   const daysUntil = (d) => (d ? Math.max(0, Math.ceil((d.getTime() - Date.now()) / 86_400_000)) : null);
   const trialDaysLeft = daysUntil(trialEnds);
 
-  const upgrade = async (target) => {
-    setBusy(target);
-    try {
-      const res = await api.tierCheckout(target);
-      if (res?.url) window.location.href = res.url;
-    } catch (e) { flash?.(e.message || 'Checkout failed', 'error'); }
-    finally { setBusy(null); }
-  };
+  // D1054 (#2905): Upgrade opens the checkout sheet over Billing; it no longer leaves for Stripe.
+  const upgrade = (target) => openCheckout({ plan_key: `founder:${target}`, from: { label: 'Billing', href: '/account/billing' } });
 
   const refreshStatus = billing.reload;
 
@@ -5150,7 +5119,7 @@ function InvestorBillingPanel({ flash, billing }) {
   const status = billing.status === 'ready' ? billing.data : null;
   const refresh = billing.reload;
   const [billingCycle, setBillingCycle] = useState('monthly');
-  const [busy, setBusy] = useState(null);
+  const busy = null;
   const prices = usePlansRead();
 
   // Stripe-redirect flash banners (mirrors FounderBillingPanel).
@@ -5173,15 +5142,9 @@ function InvestorBillingPanel({ flash, billing }) {
   const hasCustomer = !!status.has_customer;
   const quotas = status.quotas || {};
 
-  const upgrade = async (target) => {
-    const plan = `investor_${target === 'professional' ? 'pro' : 'inst'}_${billingCycle === 'yearly' ? 'yearly' : 'monthly'}`;
-    setBusy(target);
-    try {
-      const res = await api.investorCheckout(plan);
-      if (res?.url) window.location.href = res.url;
-    } catch (e) { flash?.(e.message || 'Checkout failed', 'error'); }
-    finally { setBusy(null); }
-  };
+  // D1054 (#2905): Upgrade opens the checkout sheet over Billing, in the cycle shown; Institutional
+  // opens it on the sales line (PAYX13), since the catalogue does not sell it here.
+  const upgrade = (target) => openCheckout({ plan_key: `investor:${target}`, interval: billingCycle === 'yearly' ? 'yearly' : 'monthly', from: { label: 'Billing', href: '/account/billing' } });
 
   const TIER_LABEL = {
     free: 'Free',

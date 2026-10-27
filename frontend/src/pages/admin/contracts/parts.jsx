@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useEscapeClose } from '../../../components/useEscapeClose';
+import Sheet from '../../../ui/Sheet.jsx';
 import { reportError } from '../../../lib/log';
 
 export const card = 'rounded-xl border border-axal-hairline bg-white dark:bg-gray-900';
@@ -45,14 +45,15 @@ export function Pagination({ data, offset, onPage }) {
       <button type="button" className={button} disabled={offset + data.items.length >= data.total} onClick={() => onPage(offset + 25)}>Next</button></div>
   </div>;
 }
-export function SidePanel({ title, onClose, children }) {
-  useEscapeClose(onClose);
-  return <div className="fixed inset-0 z-50 bg-black/30" onClick={onClose}>
-    <section role="dialog" aria-modal="true" aria-label={title} className="absolute right-0 top-0 flex h-full w-full max-w-[640px] flex-col bg-white dark:bg-gray-900 shadow-xl" onClick={e => e.stopPropagation()}>
-      <header className="flex items-center justify-between gap-3 border-b border-axal-hairline p-4"><h2 className="text-lg font-bold">{title}</h2><button type="button" className={button} onClick={onClose}>Close</button></header>
-      <div className="overflow-y-auto p-4 space-y-4">{children}</div>
-    </section>
-  </div>;
+/**
+ * D1317: an agreement, a deal's settlements and a new envelope open as the
+ * shared Sheet (640px, the panel's own width), docked beside the Eadwyn rail;
+ * its ×, Escape and the scrim close it.
+ */
+export function SidePanel({ title, onClose, children, testId = 'contracts-side-panel' }) {
+  return <Sheet label={title} title={title} width={640} onClose={onClose} testId={testId}>
+    <div className="p-4 space-y-4">{children}</div>
+  </Sheet>;
 }
 export function pdfBlob(base64) {
   const bytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));

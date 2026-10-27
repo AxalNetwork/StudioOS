@@ -403,7 +403,7 @@ export async function checkNarrativeVersion(env: Env, projectId: number, version
   return writeSurfaces(env, projectId, [await narrative(env, projectId, items, kinds, version)], now);
 }
 
-/** Writes what changed for the surfaces given; the one writer both checks share. */
+/** Writes what changed for the surfaces given; the one writer the checks share. */
 export async function writeSurfaces(env: Env, projectId: number, surfaces: Surface[], now = new Date().toISOString()): Promise<ClaimCheck> {
   const read = surfaces.filter((s) => s.state === 'recorded');
   const computed = read.flatMap((s) => s.claims).slice(0, MAX_WRITES);

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { safeExternalUrl } from '../../../lib/url';
-import { AdminPageHeader, HeaderTab, Lightbox, Skeleton } from '../../../ui';
+import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
 import { BandPill } from './AdminApprovals';
 import {
   BOARDS, PITCH_TABS, assetWord, dayText, decisionCopy, doneLine, hoursSince, ageText, pitchRows, publishUrlOk, reasonReady, tabPath,
@@ -11,6 +11,7 @@ import {
   BTN, BTN_PRIMARY, CARD, DecisionDialog, FOOT, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
   TD, TH, Tile, nf, useLoad,
 } from './boardParts';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1046 (#2894) — Co-marketing pitches (APR6, APR7), on part 5's paged queue
@@ -84,7 +85,7 @@ function PitchDrawer({ uid, onClose, onDecided }) {
   const decidedWord = p?.decided ? `${p.decided.status === 'rejected' ? 'Declined' : STATE_WORD[p.decided.status] || 'Decided'} by ${p.decided.by?.name || 'an admin'}` : null;
   return (
     <>
-      <Lightbox label={ready ? `${p.title}, co-marketing pitch` : 'Co-marketing pitch'} eyebrow={ready ? `Co-marketing pitch · ${STATE_WORD[p.status] || p.status}` : 'Co-marketing pitch'}
+      <Sheet label={ready ? `${p.title}, co-marketing pitch` : 'Co-marketing pitch'} eyebrow={ready ? `Co-marketing pitch · ${STATE_WORD[p.status] || p.status}` : 'Co-marketing pitch'}
         title={ready ? (p.title || 'Untitled pitch') : 'Co-marketing pitch'} sub={ready ? 'Esc to close' : null} onClose={onClose} testId="pitch-drawer" width={600}
         footer={ready && (p.status === 'proposed' || p.status === 'approved') ? (
           <div className={`${FOOT} flex-wrap items-center`}>
@@ -133,7 +134,7 @@ function PitchDrawer({ uid, onClose, onDecided }) {
             </>
           ) : null}
         </div>
-      </Lightbox>
+      </Sheet>
       {dialog && ready ? <PitchDialog kind={dialog} pitch={p} onClose={() => setDialog(null)} onDone={done} /> : null}
     </>
   );

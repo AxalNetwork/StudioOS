@@ -10,7 +10,7 @@
 // summary is a live preview only.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { TOKEN_PACKS_PATH, TOPUP_UNAVAILABLE, aiTokenState, packLabel, packOfferLines, sellableLine } from '../lib/aiTokens';
+import { MODELS_PATH, TOKEN_PACKS_PATH, TOPUP_UNAVAILABLE, aiTokenState, packLabel, packOfferLines, sellableLine } from '../lib/aiTokens';
 import { aiBudgetApi } from '../lib/api/aiBudget';
 import { Elements, PaymentElement, AddressElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Loader2, Lock, AlertTriangle, ArrowLeft, ShoppingCart, CheckCircle2 } from 'lucide-react';
@@ -247,7 +247,7 @@ export function TokenPackCheckout({ uid }) {
   if (state !== 'ready' || !cart) return <div className="max-w-lg mx-auto py-16 text-center text-gray-700 dark:text-gray-300" aria-busy={state === 'loading'}>
     <h1 className="text-lg font-bold">{state === 'loading' ? 'Loading token pack…' : state === 'unreadable' ? 'Unreadable' : TOPUP_UNAVAILABLE}</h1>
     {state === 'unreadable' && <p>The token pack could not be read. Refresh to retry.</p>}
-    <a href="/pricing/products" className="mt-4 inline-flex text-violet-600 dark:text-violet-400">Back to Plans &amp; Pricing</a>
+    <a href={MODELS_PATH} className="mt-4 inline-flex text-violet-600 dark:text-violet-400">Back to Models</a>
   </div>;
   return <Checkout cart={cart} pack={pack} />;
 }
@@ -387,8 +387,8 @@ export function Checkout({ cart, pack = null }) {
         </span>
         <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">Your order is empty</h1>
         <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">Add one-time items from the catalog to check out.</p>
-        <button onClick={() => navigate('/pricing/products')} className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
-          <ArrowLeft size={15} /> Back to Plans &amp; Pricing
+        <button onClick={() => navigate(MODELS_PATH)} className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
+          <ArrowLeft size={15} /> Back to Models
         </button>
       </div>
     );
@@ -397,8 +397,8 @@ export function Checkout({ cart, pack = null }) {
   return (
     <div className="max-w-5xl space-y-6">
       <div>
-        <button onClick={() => navigate('/pricing/products')} className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 mb-2">
-          <ArrowLeft size={15} /> Back to Plans &amp; Pricing
+        <button onClick={() => navigate(MODELS_PATH)} className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 mb-2">
+          <ArrowLeft size={15} /> Back to Models
         </button>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Checkout</h1>
       </div>

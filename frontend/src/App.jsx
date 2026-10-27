@@ -54,6 +54,10 @@ import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
 import BranchNotDeployedBar from './components/BranchNotDeployedBar';
+import CheckoutHost from './components/checkout/CheckoutHost';
+// D1288 (#3371): the one Add tokens host, and the old token addresses' redirect.
+import AddTokensHost, { TokensRedirect } from './components/checkout/AddTokensHost';
+import RenewalBanner from './components/checkout/RenewalBanner';
 // D504 — the phone's tab bar (D425), mounted by the shell beside the drawer's
 // backdrop. It takes the shell role AS RESOLVED, never the sidebar's
 // `|| 'founder'` default: a viewer with no role gets no bar.
@@ -612,6 +616,7 @@ function ProductsRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/pricing/products', search: loc.search, hash: loc.hash }} replace />;
 }
+
 
 
 function DashboardRedirect() {
@@ -1319,6 +1324,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             cannot be dismissed and stores nothing; it draws nothing for
             everyone else, and nothing once the branch is live. */}
         <SafeMount name="BranchNotDeployedBar"><BranchNotDeployedBar strip={notDeployed} /></SafeMount>
+
+        {/* D1054 (#2905) — the renewal banner (PAYX10): a failed renewal, a
+            payment the bank asks to confirm, or a plan that ended. It draws
+            nothing without an open alert, and Dismiss hides it for the day.
+            The checkout sheet it opens is the global CheckoutHost's. */}
+        <SafeMount name="RenewalBanner"><RenewalBanner user={user} /></SafeMount>
 
         {/* D699 — below 1024px a founder gets the phone band instead
             (ui/phone/PhoneHeader.jsx); everyone else, and a founder at 1024px
@@ -3424,7 +3435,7 @@ function AppInner() {
           (ProductsPage draws `SitePage` for them). */}
       {/* D786 (#2211): the catalogue, add-ons, licences and cart moved to
           /pricing/products, unchanged; /plans-and-pricing redirects to /pricing. */}
-      <Route path="/pricing/products" element={user ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />) : <ProductsPage />} />
+      <Route path="/pricing/products" element={<TokensRedirect>{user ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />) : <ProductsPage />}</TokensRedirect>} />
       {/* Product slide-over deep link — same page, pre-opens the detail panel. */}
       <Route path="/pricing/products/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
       <Route path="/plans-and-pricing" element={<PlansAndPricingRedirect />} />
@@ -3433,7 +3444,7 @@ function AppInner() {
       <Route path="/products" element={<ProductsRedirect />} />
       <Route path="/products/:productId" element={<ParamRedirect to="/pricing/products/:productId" />} />
       {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
-      <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
+      <Route path="/checkout" element={<TokensRedirect>{guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)}</TokensRedirect>} />
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
       {/* THE BUCKET ROOT GOES TO THE BUCKET ROUTER, which is what its four zone
           routes below already do. It used to go to `InvestorWorkspacePage`,
@@ -3887,6 +3898,8 @@ function AppInner() {
       <Route path="/raise/scorecard/trajectory" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage tab="trajectory" />)} />
       {/* D1261 (#2430): Evidence (VR1) and its item and claim drawers (VR2, VR3) as addresses, before /raise/:slug. */}
       <Route path="/raise/evidence" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/review" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/preview" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/item/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/claim/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/use-of-funds/runway/forecast" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="use-of-funds" uofSub="forecast" />)} />
@@ -4104,6 +4117,17 @@ function GlobalPaywallMount() {
   return <PaywallModal user={user} />;
 }
 
+// D1054 (#2905) — the one host of the checkout sheet outside Pricing, mounted
+// beside the paywall for the paywall's reason: `openCheckout` is called from
+// the paywall, Billing, Usage and every Upgrade, so the sheet cannot live on
+// one page. It renders nothing for a visitor, or until a plan is asked for.
+function GlobalCheckoutMount() {
+  const { user } = useAuth();
+  if (!user) return null;
+  // D1288: Add tokens' sheet is the same kind of host, beside it.
+  return <><CheckoutHost user={user} /><AddTokensHost user={user} /></>;
+}
+
 // Founder-only global listener — lazy + gated on auth so a logged-out visitor
 // (e.g. the landing page) never downloads its chunk. The `spinout-lab:advanced`
 // events it reacts to are only ever dispatched by authenticated founder actions.
@@ -4209,6 +4233,7 @@ export default function App() {
             whole app is gone". */}
         <SafeMount name="SpinoutLabListener"><GlobalSpinoutLabListenerMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
+        <SafeMount name="GlobalCheckoutMount"><GlobalCheckoutMount /></SafeMount>
         {/* D136 — mounted here for the same reason the paywall is: the
             compliance freeze refuses writes on every admin surface, so the
             thing that explains the refusal cannot live on one page. It renders

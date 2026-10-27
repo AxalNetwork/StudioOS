@@ -4,8 +4,8 @@ import { Check, Lock, X } from 'lucide-react';
 import { checkoutApi } from '../../lib/api/billingCheckout';
 import {
   FREE_FIRST, NOT_YET, POLL_MS, RENEWS, SECURE_LINE, SELLER_LINE, SLOW_MS, TITLE,
-  cardWords, declineFamily, familyOf, includedLines, intervalsOf, newNonce, planKeyOf, promoState, quoteView,
-  refusalView, savedCardsApply, sheetMode, signinHref, statusView, whatYouGet,
+  cardWords, declineFamily, familyOf, includedLines, intervalsOf, newNonce, notSoldView, payTotal, planKeyOf, promoState, quoteView,
+  refusalView, savedCardsApply, sheetMode, signinHref, statusView, summaryRow, whatYouGet,
 } from './checkoutModel';
 
 /**
@@ -33,6 +33,15 @@ import {
  *   - A decline is one of five families of words (`declineFamily`); a raw code
  *     is never shown, and every failure says whether money moved.
  *
+ * D1054 (#2905, part 6): the sheet opens from anywhere in the app through
+ * `openCheckout` (`checkoutEntry.js`) and the one `CheckoutHost`:
+ *   - `from` is the page it opened over; Accepted offers "Back to [label]" (PAYX7b);
+ *   - `unlocks` names the feature a paywall or Usage asked for (PAYX12);
+ *   - a plan the catalogue does not sell says why, with Contact sales for a
+ *     plan priced by sales (PAYX13);
+ *   - `testMode` is a Super Admin's: Stripe is in test mode, so the header
+ *     says no real money moves and links HQ's Payments and Promo codes (PAYX16).
+ *
  * `bridge` is the Stripe side, so a test can stand in for it: the card form,
  * and confirming a saved card or an existing intent.
  */
@@ -48,9 +57,10 @@ const EYE = 'font-mono text-[10.5px] font-bold uppercase tracking-[.07em] text-a
 const SUB = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const BTN = 'inline-flex min-h-[44px] w-full items-center justify-center rounded-[9px] px-4 text-[14px] font-bold';
 const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-60`;
-const LINK = 'text-[13px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
+// D1055 (PAYX20): every target is 44px tall below sm; the desktop keeps its size.
+const LINK = 'inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 sm:min-h-0';
 const MONO = 'font-mono tabular-nums';
-const INPUT = 'min-h-[40px] flex-1 rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+const INPUT = 'min-h-[44px] sm:min-h-[40px] flex-1 rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const ALERT = 'flex flex-col gap-1 rounded-[10px] border border-red-200 bg-red-50 px-3.5 py-3 text-[13px] text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200';
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -134,31 +144,35 @@ function Totals({ view, read, fallback }) {
   );
 }
 
-function Summary({ plan, spec, interval, setInterval, intervals, view, read, locked }) {
+function Summary({ plan, spec, interval, setInterval, intervals, view, read, locked, unlocks }) {
   const fam = familyOf(plan);
   const price = intervals[interval] || intervals.monthly || intervals.yearly;
+  const tag = spec?.tag || plan?.catalogue?.tagline;
   return (
     <div className="flex flex-col gap-3.5" data-testid="checkout-summary">
       <span className={EYE}>Your plan</span>
       <div className="flex flex-wrap items-center gap-2">
         <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL[fam.tone]}`}>{fam.label}</span>
       </div>
-      <h3 className="m-0 text-[20px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{plan.plan_name || spec?.name || 'Plan'}</h3>
-      {spec?.tag ? <p className={`m-0 ${SUB}`}>{spec.tag}</p> : null}
+      <h3 className="m-0 text-[20px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{plan.plan_name || spec?.name || plan?.catalogue?.label || 'Plan'}</h3>
+      {tag ? <p className={`m-0 ${SUB}`}>{tag}</p> : null}
+      {unlocks ? <p className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="checkout-unlocks">Unlocks: {unlocks}</p> : null}
       {intervals.monthly && intervals.yearly ? (
         <div className="flex gap-[3px] self-start rounded-[9px] bg-axal-ground p-[3px] dark:bg-gray-800" role="group" aria-label="Billing">
           {[['monthly', 'Monthly'], ['yearly', 'Yearly']].map(([k, t]) => (
             <button key={k} type="button" aria-pressed={interval === k} disabled={locked} onClick={() => setInterval(k)} data-testid={`checkout-interval-${k}`}
-              className={`min-h-[36px] rounded-[7px] px-3 text-[12.5px] font-bold ${interval === k ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>
+              className={`min-h-[44px] sm:min-h-[36px] rounded-[7px] px-3 text-[12.5px] font-bold ${interval === k ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>
               {t}{k === 'yearly' && intervals.saving ? ` · ${intervals.saving}` : ''}
             </button>
           ))}
         </div>
       ) : null}
-      <div>
-        <div className={`${MONO} text-[22px] font-extrabold text-axal-ink dark:text-gray-100`} data-testid="checkout-price">{price.line}</div>
-        <p className={`m-0 mt-1 ${SUB}`}>{RENEWS}</p>
-      </div>
+      {price ? (
+        <div>
+          <div className={`${MONO} text-[22px] font-extrabold text-axal-ink dark:text-gray-100`} data-testid="checkout-price">{price.line}</div>
+          <p className={`m-0 mt-1 ${SUB}`}>{RENEWS}</p>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-1.5">
         <span className={EYE}>Included</span>
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="checkout-included">
@@ -170,18 +184,20 @@ function Summary({ plan, spec, interval, setInterval, intervals, view, read, loc
           ))}
         </ul>
       </div>
-      <Totals view={view} read={read} fallback={price.subtotal} />
+      {price ? <Totals view={view} read={read} fallback={price.subtotal} /> : null}
     </div>
   );
 }
 
 /** The payment column for a mode that does not pay here (D1048 §3, D1053 PAYX19a). */
 function NotHere({ mode, plan, interval, onClose, onRetryPlan }) {
+  const ns = mode === 'notsold' ? notSoldView(plan) : null;
   const body = {
+    notsold: ns && [ns.title, ns.line, ns.contact ? <Link key="c" to="/contact" className={LINK} onClick={onClose} data-testid="checkout-contact-sales">Contact sales</Link> : null],
     signin: ['Sign in to continue.', `After you sign in, Checkout opens on ${plan?.plan_name || 'this plan'}.`, <Link key="s" to={signinHref(plan, interval)} className={LINK} data-testid="checkout-signin">Sign in</Link>],
     reading: ['Reading your current plan…', 'Payment waits until your current plan is read.', null],
     unreadable: ['Your current plan could not be read.', 'Your current plan is Unreadable. Try again before starting a payment.', null],
-    staff: ['Staff account · no plan needed', 'Admin and Super Admin accounts hold no plan.', null],
+    staff: ['Staff account · no plan needed', 'Admin, licence administrator and Super Admin accounts hold no plan.', null],
     explorer: ['Choose your profile first.', 'Plans belong to a profile: Founder, Investor, Advisor or Operating Partner. You can still buy AI tokens without a plan.', <Link key="p" to="/onboarding" className={LINK} onClick={onClose}>Choose a profile</Link>],
     other: ['This plan is for another profile.', 'Plans are sold to the profile they belong to.', null],
     unsellable: ['This plan’s price couldn’t be read just now.', 'That doesn’t mean it’s free. No payment can start until a price is on sale.', null],
@@ -229,7 +245,7 @@ function Promo({ promo, state, onApply, onRemove, locked }) {
       <label className={EYE} htmlFor="checkout-promo-code">Promo code</label>
       <div className="flex gap-2">
         <input id="checkout-promo-code" className={INPUT} value={text} onChange={(e) => setText(e.target.value)} disabled={locked || state.state === 'applying'} maxLength={64} data-testid="checkout-promo-input" />
-        <button type="submit" className="min-h-[40px] rounded-[9px] border border-axal-hairline px-3 text-[13px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100" disabled={locked || state.state === 'applying' || !text.trim()} data-testid="checkout-promo-apply">
+        <button type="submit" className="min-h-[44px] sm:min-h-[40px] rounded-[9px] border border-axal-hairline px-3 text-[13px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100" disabled={locked || state.state === 'applying' || !text.trim()} data-testid="checkout-promo-apply">
           {state.state === 'applying' ? 'Applying…' : 'Apply'}
         </button>
       </div>
@@ -239,7 +255,7 @@ function Promo({ promo, state, onApply, onRemove, locked }) {
 }
 
 /** PAYX7, PAYX8: after Pay, the status route's answer. */
-function After({ status, slow, unreadable, free, onClose, onRetry }) {
+function After({ status, slow, unreadable, free, from, onClose, onRetry }) {
   const view = statusView(status, { slow });
   const changes = status?.changes?.before ? status.changes : null;
   return (
@@ -263,16 +279,17 @@ function After({ status, slow, unreadable, free, onClose, onRetry }) {
           <p className={`m-0 ${SUB}`}>The receipt, with its invoice number, arrives by email and appears in Billing.</p>
         </>
       )}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex w-full flex-col gap-1 sm:w-auto sm:flex-row sm:flex-wrap sm:gap-3" data-testid="checkout-after-actions">
         {view.key === 'failed' && <button type="button" className={LINK} onClick={onRetry} data-testid="checkout-after-retry">Try again</button>}
-        <Link to="/account/billing" className={LINK} onClick={onClose}>Open Billing</Link>
         <button type="button" className={LINK} onClick={onClose}>Close</button>
+        <Link to="/account/billing" className={LINK} onClick={onClose}>Open Billing</Link>
+        {from && view.key !== 'failed' && <Link to={from.href} className={LINK} onClick={onClose} data-testid="checkout-back-to">Back to {from.label}</Link>}
       </div>
     </div>
   );
 }
 
-export default function CheckoutSheet({ plan, spec, user, role, held, planRead, onRetryPlan, interval: start = 'monthly', onClose, bridge = STRIPE_BRIDGE, pollMs = POLL_MS }) {
+export default function CheckoutSheet({ plan, spec, user, role, held, planRead, onRetryPlan, interval: start = 'monthly', onClose, from = null, unlocks = null, testMode = false, bridge = STRIPE_BRIDGE, pollMs = POLL_MS }) {
   const intervals = intervalsOf(plan);
   const [interval, setInterval] = useState(intervals[start] ? start : intervals.monthly ? 'monthly' : 'yearly');
   const mode = planRead && planRead.status !== 'ready' ? (planRead.status === 'loading' ? 'reading' : 'unreadable') : sheetMode({ user, role, plan, held });
@@ -280,6 +297,8 @@ export default function CheckoutSheet({ plan, spec, user, role, held, planRead, 
   const pays = (mode === 'pay' || mode === 'change') && !!planKey;
   const close = () => onClose?.();
   const box = useDialog(close);
+  // PAYX20: the phone's summary row, closed until Details is pressed.
+  const [details, setDetails] = useState(false);
 
   // The quote: read on open, and again for a new interval or code.
   const [promo, setPromo] = useState('');
@@ -389,14 +408,38 @@ export default function CheckoutSheet({ plan, spec, user, role, held, planRead, 
         className="relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px]"
         data-testid="checkout-sheet">
         <div className="flex items-center justify-between border-b border-axal-hairline px-5 py-3 dark:border-gray-700">
-          <h2 id="checkout-title" className="m-0 text-[16px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{TITLE}</h2>
-          <button type="button" aria-label="Close" onClick={close} className="grid h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"><X size={18} aria-hidden="true" /></button>
+          {/* PAYX20: the phone's top bar is "‹ Back" and the title; the desktop keeps its ×. */}
+          <button type="button" onClick={close} className={`${LINK} mr-2 sm:hidden`} data-testid="checkout-back">‹ Back</button>
+          <div className="flex flex-1 flex-wrap items-center gap-2">
+            <h2 id="checkout-title" className="m-0 text-[16px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{TITLE}</h2>
+            {testMode && (
+              <span className="flex flex-wrap items-center gap-2" data-testid="checkout-test-mode">
+                <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL.amber}`}>Test mode</span>
+                <span className={SUB}>No real money moves.</span>
+                <Link to="/admin/platform/payments" className={LINK} onClick={close}>Payments ›</Link>
+                <Link to="/admin/platform/promo-codes" className={LINK} onClick={close}>Promo codes ›</Link>
+              </span>
+            )}
+          </div>
+          <button type="button" aria-label="Close" onClick={close} className="hidden h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800 sm:grid" data-testid="checkout-close"><X size={18} aria-hidden="true" /></button>
         </div>
         {phase === 'status' ? (
-          <After status={status} slow={slow} unreadable={unreadable} free={!!started?.free} onClose={close} onRetry={again} />
+          <After status={status} slow={slow} unreadable={unreadable} free={!!started?.free} from={from} onClose={close} onRetry={again} />
         ) : (
           <div className="grid gap-6 px-5 py-5 sm:grid-cols-[360px_1fr]">
-            {mode === 'unsellable' ? <p className={SUB}>{NOT_YET}</p> : <Summary plan={plan} spec={spec} interval={interval} setInterval={setInterval} intervals={intervals} view={view} read={read} locked={locked} />}
+            {mode === 'unsellable' ? <p className={SUB}>{NOT_YET}</p> : (
+              <div className="flex flex-col gap-3">
+                {/* PAYX20: on the phone the summary is one row, and Details opens it. */}
+                <button type="button" aria-expanded={details} aria-controls="checkout-summary-panel" onClick={() => setDetails((d) => !d)}
+                  className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-[10px] border border-axal-hairline px-3 text-left text-[13px] text-axal-ink dark:border-gray-700 dark:text-gray-100 sm:hidden" data-testid="checkout-summary-row">
+                  <span className="min-w-0 truncate font-bold">{summaryRow(plan, spec, intervals[interval] || intervals.monthly || intervals.yearly)}</span>
+                  <span className="shrink-0 font-bold text-axal-violet dark:text-violet-300">Details {details ? '⌃' : '⌄'}</span>
+                </button>
+                <div id="checkout-summary-panel" className={details ? 'block' : 'hidden sm:block'} data-testid="checkout-summary-panel">
+                  <Summary plan={plan} spec={spec} interval={interval} setInterval={setInterval} intervals={intervals} view={view} read={read} locked={locked} unlocks={unlocks} />
+                </div>
+              </div>
+            )}
             <div className="flex flex-col gap-3.5" data-testid="checkout-payment">
               <span className={EYE}>Payment</span>
               {!pays ? (
@@ -420,11 +463,11 @@ export default function CheckoutSheet({ plan, spec, user, role, held, planRead, 
                         <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Pay with" data-testid="checkout-pay-with">
                           <span className={EYE}>Pay with</span>
                           {methods.list.map((m) => (
-                            <label key={m.id} className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
+                            <label key={m.id} className="flex min-h-[44px] items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100 sm:min-h-0">
                               <input type="radio" name="pay-with" checked={using === m.id} disabled={locked} onChange={() => setUsing(m.id)} data-testid={`checkout-card-${m.id}`} />{cardWords(m)}
                             </label>
                           ))}
-                          <label className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
+                          <label className="flex min-h-[44px] items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100 sm:min-h-0">
                             <input type="radio" name="pay-with" checked={using === 'new'} disabled={locked} onChange={() => setUsing('new')} data-testid="checkout-card-new" />A new card
                           </label>
                           {using !== 'new' && <p className={`m-0 ${SUB}`}>A saved card asks for your authenticator code first.</p>}
@@ -450,9 +493,13 @@ export default function CheckoutSheet({ plan, spec, user, role, held, planRead, 
                         <button type="button" className={LINK} onClick={() => { setFailure(null); setUsing('new'); }} data-testid="checkout-decline-other">Use another method</button></span>}
                     </div>
                   )}
-                  <button type="button" className={PRIMARY} onClick={pay} disabled={locked || refreshing || !quote || (using === 'new' && isNew && !view?.free && !card)} data-testid="checkout-pay">
-                    {locked ? 'Processing…' : view?.button || 'Pay'}
-                  </button>
+                  {/* PAYX20: on the phone Pay stays at the bottom of the screen, with the total. */}
+                  <div className="sticky bottom-0 -mx-5 flex flex-col gap-1.5 border-t border-axal-hairline bg-white px-5 py-3 dark:border-gray-700 dark:bg-gray-900 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:dark:bg-transparent" data-testid="checkout-pay-bar">
+                    {payTotal(view) && <span className="flex justify-between text-[13px] font-bold text-axal-ink dark:text-gray-100 sm:hidden" data-testid="checkout-pay-total"><span>{payTotal(view).label}</span><span className={MONO}>{payTotal(view).value}</span></span>}
+                    <button type="button" className={PRIMARY} onClick={pay} disabled={locked || refreshing || !quote || (using === 'new' && isNew && !view?.free && !card)} data-testid="checkout-pay">
+                      {locked ? 'Processing…' : view?.button || 'Pay'}
+                    </button>
+                  </div>
                   {locked && <p className="m-0 text-[12.5px] font-bold text-axal-ink dark:text-gray-100" data-testid="checkout-processing">Don’t close this window.</p>}
                   {view && !view.due && view.rows.find((r) => r.key === 'due')?.reason && <p className={`m-0 ${SUB}`}>{view.rows.find((r) => r.key === 'due').reason}</p>}
                 </>

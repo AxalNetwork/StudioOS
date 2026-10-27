@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Inbox, Plus, RefreshCw, X, Send } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import Sheet from '../ui/Sheet.jsx';
 
 const KPI_KEYS = [
   ['arr', 'ARR'], ['mrr', 'MRR'], ['burn', 'Burn'],
@@ -147,13 +148,8 @@ export default function PortfolioUpdatesPage({ embedded = false }) {
       )}
 
       {open && (
-        <div className="fixed inset-0 bg-black/40 flex justify-end z-50" onClick={() => setOpen(null)}>
-          <div className="w-full max-w-md bg-white dark:bg-gray-900 h-full p-6 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{open.title}</h2>
-              <button onClick={() => setOpen(null)} className="text-gray-500 hover:text-gray-800"><X size={18} /></button>
-            </div>
-            <div className="text-sm text-gray-500 mb-4">{open.project?.name || `Startup ${open.project_id}`}{open.period ? ` · ${open.period}` : ''}</div>
+        <Sheet label={open.title || "Update"} title={open.title} sub={`${open.project?.name || `Startup ${open.project_id}`}${open.period ? ` · ${open.period}` : ""}`} width={480} testId="portfolio-update-sheet" onClose={() => setOpen(null)}>
+          <div className="p-6">
             <div className="grid grid-cols-3 gap-3 mb-4">
               {KPI_KEYS.map(([k, label]) => (
                 <div key={k}>
@@ -164,7 +160,7 @@ export default function PortfolioUpdatesPage({ embedded = false }) {
             </div>
             {open.body && <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{open.body}</p>}
           </div>
-        </div>
+        </Sheet>
       )}
     </div>
   );

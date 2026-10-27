@@ -10,6 +10,7 @@ import {
   DECIDED, NOT_RECORDED, REASON_MAX, UNREADABLE, agoWord, cell, controlsOf, dayWord, deckDraftOf, deckWord, dialogCopy,
   directoryWord, effectsLine, historyLine, kindWord, laneWord, refusalWord, stageWord, standingCell, take, usd,
 } from './peopleModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D978 (#2764) — one person (AP4): profile, standing, work, terms, deck and
@@ -209,7 +210,7 @@ export default function PersonDrawer({ personRef, onClose, onChanged, now }) {
 
   return (
     <>
-      <Lightbox label={title} eyebrow="Person" title={title} sub={p ? cell(p.headline).state === 'ready' ? cell(p.headline).text : null : null}
+      <Sheet label={title} eyebrow="Person" title={title} sub={p ? cell(p.headline).state === 'ready' ? cell(p.headline).text : null : null}
         onClose={onClose} width={760} size="tall" pageBelow="lg" testId="person-drawer" footer={footer}>
         <div className="flex flex-col gap-3.5" data-testid="person-body">
           {main.status === 'loading' ? <p className={SUB}>Reading…</p> : null}
@@ -340,7 +341,7 @@ export default function PersonDrawer({ personRef, onClose, onChanged, now }) {
             </>
           ) : null}
         </div>
-      </Lightbox>
+      </Sheet>
       {asking && p ? <ActDialog act={asking} person={p} onClose={() => setAsking(null)} onDone={after} /> : null}
       {adding && p ? (
         <CardDialog row={deckDraftOf(p)} onClose={() => setAdding(false)} save={saveCard}

@@ -3,6 +3,7 @@ import { api } from '../../../lib/api';
 import { Lightbox, actionDanger, actionGhost } from '../../../ui';
 import DataRoomDialog, { roomRefusal } from './DataRoomDialog.jsx';
 import { deleteFolderCopy, folderChoices, folderNdaCopy, folderPath, renameCopy } from './filesModel.js';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1106 (#2986) — DR5: a folder's lightbox (what is inside, its NDA switch,
@@ -72,7 +73,7 @@ export default function FolderLightbox({ room, uid, projectUid, owner, onClose, 
   }
 
   return (
-    <Lightbox label={folder.name} eyebrow="Folder" title={folder.name} onClose={onClose} testId="dataroom-folder"
+    <Sheet label={folder.name} eyebrow="Folder" title={folder.name} onClose={onClose} testId="dataroom-folder"
       footer={(
         <div className="flex flex-wrap justify-between gap-2">
           <button type="button" className={actionDanger} onClick={() => setAsk({ kind: 'delete' })} data-testid="dataroom-folder-delete-open">Delete folder</button>
@@ -93,6 +94,6 @@ export default function FolderLightbox({ room, uid, projectUid, owner, onClose, 
         <p className={`m-0 text-[12px] ${MUTED}`}>Each file’s own gate is what the download checks.</p>
       </div>
       {dialog}
-    </Lightbox>
+    </Sheet>
   );
 }

@@ -7,6 +7,7 @@ import TemplateCatalog from './contracts/TemplateCatalog';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import PaperPreview from '../../components/PaperPreview';
+import Sheet from '../../ui/Sheet.jsx';
 import TemplateEditor from './contracts/TemplateEditor';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser } from '../../lib/shellRole';
@@ -332,7 +333,7 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
   const [cover, setCover] = useState('dark');
   const [exporting, setExporting] = useState(false);
 
-  useEscapeClose(onClose);
+  useEscapeClose(onClose, { active: isNew }); // the Sheet answers Escape for an existing template
 
   useEffect(() => {
     if (isNew) return;
@@ -448,6 +449,197 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
   const previewBody = viewVersion ? viewVersion.body_md : body;
   const paperSelect = 'px-1.5 py-0.5 text-[10px] normal-case font-normal border border-gray-200 rounded bg-white dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100';
 
+  const heading = isNew ? 'New template' : (title || slug);
+  const history = !isNew && (
+    <button
+      type="button"
+      onClick={() => setShowVersions(s => !s)}
+      className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${showVersions ? 'bg-violet-50 border-violet-300 text-violet-700' : 'border-gray-200 text-gray-600 hover:border-violet-300'}`}>
+      <History size={12} /> History{versions.length ? ` (${versions.length})` : ''}
+    </button>
+  );
+  const content = (
+    <>
+      {/* Meta row */}
+      <div className="px-5 py-3 border-b border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-3 dark:border-gray-800">
+        <label className="block">
+          <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">Title</span>
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Operating Agreement"
+            className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100" />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">Category</span>
+          <select value={category} onChange={e => setCategory(e.target.value)}
+            className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
+            {CATEGORY_ORDER.map(c => <option key={c} value={c}>{CATEGORY_META[c].label}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">Slug (doc_type)</span>
+          <input value={isNew ? slugInput : slug} onChange={e => setSlugInput(e.target.value)} readOnly={!isNew}
+            placeholder="operating_agreement"
+            className={`mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg font-mono dark:border-gray-800 dark:text-gray-100 ${isNew ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 text-gray-500 dark:bg-gray-800'}`} />
+        </label>
+      </div>
+
+      {err && <div className="mx-5 mt-3 bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded">{err}</div>}
+
+      {/* Body / preview */}
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center text-gray-500 text-sm py-16"><Loader2 size={16} className="animate-spin mr-2" /> Loading…</div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row">
+          {/* Left: editor + version panel */}
+          <div className="md:w-1/2 flex flex-col border-r border-gray-200 dark:border-gray-800 min-h-0">
+            {showVersions && (
+              <div className="border-b border-gray-200 dark:border-gray-800 max-h-48 overflow-y-auto bg-gray-50 dark:bg-gray-800/40">
+                <div className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Version history (read-only)</div>
+                {versions.length === 0 ? (
+                  <div className="px-4 pb-3 text-xs text-gray-400">No prior versions yet. The first edit creates v1 history.</div>
+                ) : (
+                  <ul className="pb-2">
+                    {versions.map(v => (
+                      <li key={v.version} className="px-4 py-1.5 flex items-center justify-between gap-2 text-xs">
+                        <span className="text-gray-600 dark:text-gray-300">v{v.version} · {fmtDate(v.created_at) || '—'}</span>
+                        <span className="flex items-center gap-2">
+                          <button type="button" onClick={() => setViewVersion(v)} className="text-violet-700 hover:text-violet-900 flex items-center gap-1"><Eye size={11} /> View</button>
+                          <button type="button" onClick={() => { setBody(v.body_md); setViewVersion(null); }} className="text-gray-500 hover:text-gray-800">Restore</button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 flex items-center justify-between">
+              <span>Plain text</span>
+              {viewVersion && <span className="text-violet-600 normal-case font-normal">Previewing v{viewVersion.version} →</span>}
+            </div>
+            <textarea
+              value={body}
+              onChange={e => { setBody(e.target.value); setViewVersion(null); }}
+              spellCheck={false}
+              data-testid="template-body"
+              placeholder="SECTION TITLE&#10;&#10;1.1  Clause text with {{merge_field}} tokens…&#10;&#10;Signed: ______________________"
+              className="flex-1 min-h-[280px] w-full px-4 py-3 text-[13px] font-mono leading-relaxed resize-none focus:outline-none bg-white dark:bg-gray-900 dark:text-gray-100" />
+            {/* Merge fields (auto-detected from body) */}
+            <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+                Merge fields · auto-detected from {'{{tokens}}'}
+              </div>
+              {mergeFields.length === 0 ? (
+                <div className="text-[11px] text-gray-400">None — add <code className="font-mono">{'{{field_name}}'}</code> tokens to the body.</div>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {mergeFields.map(f => (
+                    <span key={f} className="text-[10px] font-mono bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded dark:bg-gray-800 dark:text-gray-300">{f}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Right: live preview */}
+          <div className="md:w-1/2 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-900/40">
+            <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 sticky top-0 bg-gray-50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
+              <span>{viewVersion ? `Preview · v${viewVersion.version} (read-only)` : 'Live preview'}</span>
+              <span className="flex items-center gap-1.5">
+                <select aria-label="Page size" value={pageSize} onChange={e => setPageSize(e.target.value)} data-testid="template-page-size" className={paperSelect}>
+                  <option value="letter">Letter</option>
+                  <option value="a4">A4</option>
+                </select>
+                <select aria-label="Cover" value={cover} onChange={e => setCover(e.target.value)} data-testid="template-cover" className={paperSelect}>
+                  <option value="dark">Dark cover</option>
+                  <option value="light">Light cover</option>
+                </select>
+              </span>
+              <label className="flex items-center gap-1.5 normal-case font-normal text-[10px] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={resolveTokens}
+                  onChange={e => setResolveTokens(e.target.checked)}
+                  className="w-3 h-3 accent-violet-600"
+                />
+                Resolve merge fields
+              </label>
+            </div>
+            <PaperPreview
+              title={viewVersion ? viewVersion.title : title}
+              body={previewBody}
+              resolveTokens={resolveTokens}
+              version={viewVersion ? viewVersion.version : version}
+              docType={slugInput || slug}
+              category={category}
+              pageSize={pageSize}
+              cover={cover}
+            />
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && <section role="alertdialog" aria-label="Delete template" className="border-t border-rose-200 p-4 dark:border-rose-900">
+        <p>Delete “{title || slug}”? It will be hidden from the catalogue and New envelope. Agreements already sent keep their copy.</p>
+        <button type="button" onClick={remove} disabled={deleting || saving}>Confirm delete</button>{' '}<button type="button" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
+      </section>}
+    </>
+  );
+  const footer = (
+    <div className="flex items-center justify-between gap-2">
+      <div>
+        {!isNew && (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            disabled={deleting || saving}
+            data-testid="template-delete"
+            className="text-xs px-3 py-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-50 flex items-center gap-1">
+            {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Delete
+          </button>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {!isNew && (
+          <button
+            type="button"
+            onClick={downloadPdf}
+            disabled={downloading || saving || loading}
+            data-testid="template-download-pdf"
+            className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 disabled:opacity-50 flex items-center gap-1">
+            {downloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Download PDF
+          </button>
+        )}
+        {!isNew && (
+          <button
+            type="button"
+            onClick={downloadDocx}
+            disabled={exporting || saving || loading}
+            data-testid="template-download-docx"
+            className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 disabled:opacity-50 flex items-center gap-1">
+            {exporting ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />} Download Word
+          </button>
+        )}
+        <button type="button" onClick={onClose} className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300">Cancel</button>
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving || loading}
+          data-testid="template-save"
+          className="text-xs px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-medium flex items-center gap-1">
+          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} {isNew ? 'Create' : 'Save new version'}
+        </button>
+      </div>
+    </div>
+  );
+
+  // D1317: an existing template opens as the shared Sheet (760px, its 6xl
+  // modal snapped); New template, a create form, stays the centred modal.
+  if (!isNew) {
+    return (
+      <Sheet label={`Template · ${heading}`} eyebrow="Template" title={heading} width={760} onClose={onClose}
+        testId="template-editor" headerActions={history} footer={footer}>
+        <div className="flex flex-col">{content}</div>
+      </Sheet>
+    );
+  }
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div onClick={e => e.stopPropagation()} className="relative bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col dark:bg-gray-900">
@@ -455,189 +647,15 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
         <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3 dark:border-gray-800">
           <div className="flex items-center gap-2 min-w-0">
             <FileText size={16} className="text-violet-600 flex-shrink-0" />
-            <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">
-              {isNew ? 'New template' : (title || slug)}
-            </h3>
+            <h3 className="font-semibold text-gray-900 truncate dark:text-gray-100">{heading}</h3>
           </div>
           <div className="flex items-center gap-2">
-            {!isNew && (
-              <button
-                type="button"
-                onClick={() => setShowVersions(s => !s)}
-                className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1 ${showVersions ? 'bg-violet-50 border-violet-300 text-violet-700' : 'border-gray-200 text-gray-600 hover:border-violet-300'}`}>
-                <History size={12} /> History{versions.length ? ` (${versions.length})` : ''}
-              </button>
-            )}
+            {history}
             <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
           </div>
         </div>
-
-        {/* Meta row */}
-        <div className="px-5 py-3 border-b border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-3 dark:border-gray-800">
-          <label className="block">
-            <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">Title</span>
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Operating Agreement"
-              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100" />
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">Category</span>
-            <select value={category} onChange={e => setCategory(e.target.value)}
-              className="mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100">
-              {CATEGORY_ORDER.map(c => <option key={c} value={c}>{CATEGORY_META[c].label}</option>)}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">Slug (doc_type)</span>
-            <input value={isNew ? slugInput : slug} onChange={e => setSlugInput(e.target.value)} readOnly={!isNew}
-              placeholder="operating_agreement"
-              className={`mt-1 w-full px-3 py-2 text-sm border border-gray-200 rounded-lg font-mono dark:border-gray-800 dark:text-gray-100 ${isNew ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 text-gray-500 dark:bg-gray-800'}`} />
-          </label>
-        </div>
-
-        {err && <div className="mx-5 mt-3 bg-red-50 border border-red-200 text-red-700 text-xs p-2 rounded">{err}</div>}
-
-        {/* Body / preview */}
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center text-gray-500 text-sm py-16"><Loader2 size={16} className="animate-spin mr-2" /> Loading…</div>
-        ) : (
-          <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-            {/* Left: editor + version panel */}
-            <div className="md:w-1/2 flex flex-col border-r border-gray-200 dark:border-gray-800 min-h-0">
-              {showVersions && (
-                <div className="border-b border-gray-200 dark:border-gray-800 max-h-48 overflow-y-auto bg-gray-50 dark:bg-gray-800/40">
-                  <div className="px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">Version history (read-only)</div>
-                  {versions.length === 0 ? (
-                    <div className="px-4 pb-3 text-xs text-gray-400">No prior versions yet. The first edit creates v1 history.</div>
-                  ) : (
-                    <ul className="pb-2">
-                      {versions.map(v => (
-                        <li key={v.version} className="px-4 py-1.5 flex items-center justify-between gap-2 text-xs">
-                          <span className="text-gray-600 dark:text-gray-300">v{v.version} · {fmtDate(v.created_at) || '—'}</span>
-                          <span className="flex items-center gap-2">
-                            <button type="button" onClick={() => setViewVersion(v)} className="text-violet-700 hover:text-violet-900 flex items-center gap-1"><Eye size={11} /> View</button>
-                            <button type="button" onClick={() => { setBody(v.body_md); setViewVersion(null); }} className="text-gray-500 hover:text-gray-800">Restore</button>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-              <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 flex items-center justify-between">
-                <span>Plain text</span>
-                {viewVersion && <span className="text-violet-600 normal-case font-normal">Previewing v{viewVersion.version} →</span>}
-              </div>
-              <textarea
-                value={body}
-                onChange={e => { setBody(e.target.value); setViewVersion(null); }}
-                spellCheck={false}
-                data-testid="template-body"
-                placeholder="SECTION TITLE&#10;&#10;1.1  Clause text with {{merge_field}} tokens…&#10;&#10;Signed: ______________________"
-                className="flex-1 min-h-[280px] w-full px-4 py-3 text-[13px] font-mono leading-relaxed resize-none focus:outline-none bg-white dark:bg-gray-900 dark:text-gray-100" />
-              {/* Merge fields (auto-detected from body) */}
-              <div className="border-t border-gray-200 dark:border-gray-800 px-4 py-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
-                  Merge fields · auto-detected from {'{{tokens}}'}
-                </div>
-                {mergeFields.length === 0 ? (
-                  <div className="text-[11px] text-gray-400">None — add <code className="font-mono">{'{{field_name}}'}</code> tokens to the body.</div>
-                ) : (
-                  <div className="flex flex-wrap gap-1">
-                    {mergeFields.map(f => (
-                      <span key={f} className="text-[10px] font-mono bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded dark:bg-gray-800 dark:text-gray-300">{f}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Right: live preview */}
-            <div className="md:w-1/2 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-900/40">
-              <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 sticky top-0 bg-gray-50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
-                <span>{viewVersion ? `Preview · v${viewVersion.version} (read-only)` : 'Live preview'}</span>
-                <span className="flex items-center gap-1.5">
-                  <select aria-label="Page size" value={pageSize} onChange={e => setPageSize(e.target.value)} data-testid="template-page-size" className={paperSelect}>
-                    <option value="letter">Letter</option>
-                    <option value="a4">A4</option>
-                  </select>
-                  <select aria-label="Cover" value={cover} onChange={e => setCover(e.target.value)} data-testid="template-cover" className={paperSelect}>
-                    <option value="dark">Dark cover</option>
-                    <option value="light">Light cover</option>
-                  </select>
-                </span>
-                <label className="flex items-center gap-1.5 normal-case font-normal text-[10px] cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={resolveTokens}
-                    onChange={e => setResolveTokens(e.target.checked)}
-                    className="w-3 h-3 accent-violet-600"
-                  />
-                  Resolve merge fields
-                </label>
-              </div>
-              <PaperPreview
-                title={viewVersion ? viewVersion.title : title}
-                body={previewBody}
-                resolveTokens={resolveTokens}
-                version={viewVersion ? viewVersion.version : version}
-                docType={slugInput || slug}
-                category={category}
-                pageSize={pageSize}
-                cover={cover}
-              />
-            </div>
-          </div>
-        )}
-
-        {confirmDelete && <section role="alertdialog" aria-label="Delete template" className="border-t border-rose-200 p-4 dark:border-rose-900">
-          <p>Delete “{title || slug}”? It will be hidden from the catalogue and New envelope. Agreements already sent keep their copy.</p>
-          <button type="button" onClick={remove} disabled={deleting || saving}>Confirm delete</button>{' '}<button type="button" onClick={() => setConfirmDelete(false)} disabled={deleting}>Cancel</button>
-        </section>}
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between gap-2 dark:border-gray-800">
-          <div>
-            {!isNew && (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                disabled={deleting || saving}
-                data-testid="template-delete"
-                className="text-xs px-3 py-2 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-50 flex items-center gap-1">
-                {deleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Delete
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {!isNew && (
-              <button
-                type="button"
-                onClick={downloadPdf}
-                disabled={downloading || saving || loading}
-                data-testid="template-download-pdf"
-                className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 disabled:opacity-50 flex items-center gap-1">
-                {downloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Download PDF
-              </button>
-            )}
-            {!isNew && (
-              <button
-                type="button"
-                onClick={downloadDocx}
-                disabled={exporting || saving || loading}
-                data-testid="template-download-docx"
-                className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 disabled:opacity-50 flex items-center gap-1">
-                {exporting ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />} Download Word
-              </button>
-            )}
-            <button type="button" onClick={onClose} className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300">Cancel</button>
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving || loading}
-              data-testid="template-save"
-              className="text-xs px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-medium flex items-center gap-1">
-              {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} {isNew ? 'Create' : 'Save new version'}
-            </button>
-          </div>
-        </div>
+        {content}
+        <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-800">{footer}</div>
       </div>
     </div>
   );

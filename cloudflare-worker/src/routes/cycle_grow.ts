@@ -17,6 +17,11 @@
  * the row and logs it as `grow.<module>` with its record id (D690).
  *   POST  /feedback                PATCH /feedback/:uid
  *   POST  /channels                PATCH /channels/:uid      PUT /channels/:uid/spend/:month
+ *   POST  /channels/content        PATCH /channels/content/:uid   DELETE /channels/content/:uid
+ *     D1090 (#2955): Distribution's content calendar, typed by hand. A piece
+ *     from Notion is edited in Notion (409 here) and may be deleted (it stays
+ *     deleted). Distribution's read carries it as `parts.content_calendar`;
+ *     an unreadable calendar says so there and never blanks the channels.
  *   POST  /kpis                    (Enter a KPI, decision 4)
  *   POST  /roles                   PATCH /roles/:id          PATCH /applications/:id/stage
  *   POST  /partners                PATCH /partners/:uid      PUT /partners/:uid/revenue/:month
@@ -47,7 +52,7 @@ import { ensureProjectMetricsSchema } from './progress';
 import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
 import {
   CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
-  REPEATS_OF, Refused, addChannel, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
+  REPEATS_OF, Refused, addChannel, addContentItem, contentCalendar, removeContentItem, updateContentItem, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
   logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation,
   updatePartner, updateRole,
 } from '../services/growWriters';
@@ -191,7 +196,7 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
         return { id: ch.uid, ...ch, kind: more.kind ?? null, cac_bar_cents: more.cac_bar_cents ?? null, bar_currency: more.bar_currency ?? null,
           spend_source: ch.spend_cents == null ? null : 'manual' };
       }),
-      parts: { from_update_asks: await updateAskReplies(env, projectId, 'customer') },
+      parts: { from_update_asks: await updateAskReplies(env, projectId, 'customer'), content_calendar: await calendarPart(env, projectId) },
       filters: [{ key: 'state', label: 'State', options: fixed(CHANNEL_STATES) }],
       sorts: [{ key: 'cac_cents', label: 'CAC' }, { key: '-cac_cents', label: 'Highest CAC' }, { key: 'name', label: 'Name' }] };
   }
@@ -254,6 +259,14 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean)
     parts: { checklist: await checklist(env, projectId), ...(await updatesHistory(x, viewer)) },
     filters: [{ key: 'kind', label: 'Kind', options: fixed(OBLIGATION_KINDS) }, { key: 'due_window', label: 'Due', options: fixed(DUE_WINDOWS) }],
     sorts: [{ key: 'due_at', label: 'Due' }, { key: '-due_at', label: 'Due latest' }] };
+}
+
+/** D1090: the content calendar beside the channels; a failed read says so on its own and never blanks them. */
+async function calendarPart(env: Env, projectId: number): Promise<Row> {
+  try { return { state: 'ready', items: await contentCalendar(env, projectId) }; } catch (e) {
+    console.error('[cycle_grow] content calendar unreadable:', (e as Error).name);
+    return { state: 'unreadable', reason: 'Unreadable: the content calendar could not be read' };
+  }
 }
 
 /** Customer and partner asks have no linked record; expose their replies beside the module's rows. */
@@ -415,6 +428,9 @@ r.post('/feedback', write((c, u, pid, b) => addFeedback(c.env, pid, u, b), true)
 r.patch('/feedback/:uid', write((c, u, pid, b) => updateFeedback(c.env, pid, u, param(c, 'uid'), b)));
 r.post('/channels', write((c, u, pid, b) => addChannel(c.env, pid, u, b), true));
 r.patch('/channels/:uid', write((c, u, pid, b) => updateChannel(c.env, pid, u, param(c, 'uid'), b)));
+r.post('/channels/content', write((c, u, pid, b) => addContentItem(c.env, pid, u, b), true));
+r.patch('/channels/content/:uid', write((c, u, pid, b) => updateContentItem(c.env, pid, u, param(c, 'uid'), b)));
+r.delete('/channels/content/:uid', write((c, u, pid) => removeContentItem(c.env, pid, u, param(c, 'uid'))));
 r.put('/channels/:uid/spend/:month', write((c, u, pid, b) => setChannelSpend(c.env, pid, u, param(c, 'uid'), param(c, 'month'), b)));
 r.post('/kpis', write(async (c, u, pid, b) => {
   await ensureProjectMetricsSchema(c.env);

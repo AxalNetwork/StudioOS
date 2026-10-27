@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Lightbox, Pill, Unrecorded, Unreadable } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { COMM_KIND_LABELS } from '../../investor/fundLpCommsModel';
@@ -14,7 +15,7 @@ import { ContactDialog } from './LpDialogs';
 
 /**
  * D1162 (#3069) — FND6, one LP's drawer at `/admin/fund-admin/lps/:id`, over
- * the roster. The LP's row is the roster's own (`?lp=<id>`, audited as the
+ * the roster: the shared Sheet (D1317, 680 → 720px). The LP's row is the roster's own (`?lp=<id>`, audited as the
  * roster is); each tab reads its own store only when it is opened, so a
  * failed tab never blanks the drawer:
  *
@@ -38,7 +39,7 @@ export function LpDrawer({ apis, access, lpId, onClose, onChanged }) {
   const who = lp ? lp.name || lp.email || `LP ${lp.limited_partner_id}` : 'LP';
   const reload = () => { row.reload(); onChanged?.(); };
   return (
-    <Lightbox label={`LP · ${who}`} eyebrow="LP" title={who} sub={lp?.email || null} testId="lp-drawer" onClose={onClose} width={680}>
+    <Sheet label={`LP · ${who}`} eyebrow="LP" title={who} sub={lp?.email || null} testId="lp-drawer" onClose={onClose} width={680}>
       <div className="flex flex-col gap-3 px-5 py-4" data-testid={`lp-drawer-${lpId}`}>
         {(row.status === 'loading' || row.status === 'idle') && <LoadingRows lines={4} />}
         {row.status === 'unreadable' && <Unreadable what="This LP" claim="This is not a claim that the LP does not exist." onRetry={row.reload} />}
@@ -69,7 +70,7 @@ export function LpDrawer({ apis, access, lpId, onClose, onChanged }) {
         )}
         <div className="flex justify-end"><button type="button" className={BTN.ghost} onClick={onClose} data-testid="lp-drawer-close">Close</button></div>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

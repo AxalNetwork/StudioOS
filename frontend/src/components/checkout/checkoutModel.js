@@ -69,6 +69,8 @@ export function intervalsOf(plan) {
  *   - `staff`     an admin account holds no plan (PAYX16);
  *   - `explorer`  no profile yet: choose one first (PAYX15);
  *   - `other`     a plan for another profile (PAYX19);
+ *   - `notsold`   the catalogue does not sell this plan: Investor Plus is not
+ *                 offered yet, Institutional is priced by sales (D1054, PAYX13);
  *   - `unsellable` no monthly or yearly price is on sale (PAYX18);
  *   - `change`    the member already pays for a plan in this family: since
  *                 D1053 the change is quoted and made here, through D1051's
@@ -80,9 +82,11 @@ export function sheetMode({ user, role, plan, held }) {
   // D1053 (PAYX19a): a visitor signs in first, and lands back on the plan they chose.
   if (!user && !role) return 'signin';
   const r = String(role || user?.role || '').toLowerCase();
-  if (r === 'admin' || r === 'super_admin') return 'staff';
+  // D1054 (PAYX16): a licence administrator holds no plan either.
+  if (r === 'admin' || r === 'super_admin' || r === 'branch_admin') return 'staff';
   if (r === 'exploring') return 'explorer';
   if (ROLE_FAMILY[r] && plan?.family && ROLE_FAMILY[r] !== plan.family) return 'other';
+  if (plan?.catalogue?.sellable === false) return 'notsold';
   const { monthly, yearly } = intervalsOf(plan);
   if (!monthly && !yearly) return 'unsellable';
   if (held && held !== 'free') return 'change';
@@ -185,6 +189,41 @@ export function quoteView(quote) {
     rows, due, change: null, line: null, storage: null, stepUp: null, free,
     button: free ? 'Start my plan' : due ? `Pay ${due}` : 'Pay',
   };
+}
+
+/**
+ * D1055 (PAYX20): the phone's one-row summary, "[Plan] · [$20]/month", from the
+ * interval's own price line. Null without a price: the row then names the plan.
+ */
+export function summaryRow(plan, spec, price) {
+  const name = plan?.plan_name || spec?.name || plan?.catalogue?.label || 'Plan';
+  const line = typeof price?.line === 'string' ? price.line.split(',')[0].replace(' / ', '/').trim() : '';
+  return line ? `${name} · ${line}` : name;
+}
+
+/** D1055 (PAYX20): the total beside the phone's Pay, only when the Worker sent it. */
+export function payTotal(view) {
+  return view?.due ? { label: 'Due today', value: view.due } : null;
+}
+
+/**
+ * D1055 (PAYX21): the Payment Element's dark style on the sheet. The shared
+ * appearance (`lib/stripe.js`, used by six forms) is left as it is. In dark it
+ * draws a selected tab's label and icon in the deep brand violet, which does
+ * not read on the dark card, so the sheet gives them their dark pair
+ * (violet-300), and gives the tabs a hairline and a violet-400 edge that read
+ * on its gray-900 ground. Light is unchanged.
+ */
+export const SHEET_DARK_RULES = Object.freeze({
+  '.Tab': { backgroundColor: '#111827', border: '1px solid #374151', boxShadow: 'none' },
+  '.Tab:hover': { border: '1px solid #4b5563' },
+  '.Tab--selected': { border: '1px solid #a78bfa', boxShadow: '0 0 0 1px #a78bfa' },
+  '.TabLabel, .TabIcon': { color: '#e5e7eb' },
+  '.TabLabel--selected, .TabIcon--selected': { color: '#c4b5fd' },
+});
+export function sheetAppearance(base, isDark) {
+  if (!isDark || !base) return base;
+  return { ...base, rules: { ...(base.rules || {}), ...SHEET_DARK_RULES } };
 }
 
 export const STEP_UP_LINE = 'Plan changes need a fresh code from your authenticator app.';
@@ -306,6 +345,18 @@ export function whatYouGet(result) {
 /** "Pay with": a saved card's words. The investor plan is paid on its own customer (D892 §6), so it takes none. */
 export const cardWords = (m) => `${m?.brand ? m.brand.charAt(0).toUpperCase() + m.brand.slice(1) : 'Card'} ending ${m?.last4 || '••••'}${m?.exp_month && m?.exp_year ? ` · expires ${String(m.exp_month).padStart(2, '0')}/${String(m.exp_year).slice(-2)}` : ''}`;
 export const savedCardsApply = (plan) => plan?.family !== 'investor';
+
+/**
+ * D1054 (PAYX13): a plan the catalogue does not sell, in the canvas's words,
+ * with the catalogue's own reason. A plan priced by sales offers Contact sales.
+ */
+export function notSoldView(plan) {
+  const key = planKeyOf(plan);
+  const reason = typeof plan?.catalogue?.sellable_reason === 'string' ? plan.catalogue.sellable_reason : null;
+  if (key === 'investor:plus') return { title: 'Not offered yet', line: reason || 'This plan is not sold yet.', contact: false };
+  if (reason && /sales team/i.test(reason)) return { title: 'Contact sales', line: 'This plan is priced by our sales team for each firm. Nothing is bought here.', contact: true };
+  return { title: 'Not sold here', line: reason || 'This plan is not sold here.', contact: false };
+}
 
 /** PAYX19a: the sign-in address that brings the member back to this plan. */
 export function signinHref(plan, interval) {

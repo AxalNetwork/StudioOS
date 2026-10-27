@@ -31,7 +31,7 @@ and hash and adding `?moved=`:
 - `LabApplications.jsx` — Applications (SL2) and one application (SL3, D948):
   the cohort switch, the status chips with the Worker's totals, the capacity
   bar and the below-the-minimum callout, search, filters, sort, the bulk bar
-  and pages asked of D944's read, the table (cards on a phone), the drawer at
+  and pages asked of D944's read, the table (cards on a phone), the drawer (the shared Sheet, D1317) at
   `/applications/:id` from D948's read, and SL4 A–G's dialogs (Approve,
   Waitlist, Decline, Move, Schedule an interview, Run below the minimum, Admit
   without an application). `AdmitDialog` is exported for the Users console.
@@ -40,7 +40,7 @@ and hash and adding `?moved=`:
   ET-to-UTC for an interview time.
 - `LabParticipants.jsx` — Participants (SL7) and one founder (SL8, D949): the
   segments and "Where [cohort] stands" from D946's read, its filters, sort and
-  pages asked of the Worker, the table (cards on a phone), the drawer at
+  pages asked of the Worker, the table (cards on a phone), the drawer (the shared Sheet, D1317) at
   `/participants/:uid`, and the Give grace, Change this week and Open
   workspace dialogs (SL8a–c).
 - `participantsModel.js` — pure. Participants' words, rows, standing bar,

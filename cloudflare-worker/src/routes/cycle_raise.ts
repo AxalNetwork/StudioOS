@@ -178,7 +178,7 @@ import {
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
-import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, type RaiseEvidenceContext } from '../services/raiseEvidence';
+import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 cycleRaise.route('/use-of-funds', useOfFunds);
@@ -1400,6 +1400,13 @@ const evidencePage = (c: any) => {
 };
 cycleRaise.get('/evidence', async c => {
   try { const ctx = await evidenceScope(c, false); if (ctx instanceof Response) return ctx; return c.json(await readRaiseEvidence(ctx, evidencePage(c))); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+// D1266 (#3289): See as an investor (VR11). The founder's own preview of the investor's projection, never logged as an open.
+cycleRaise.get('/evidence/preview', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx;
+    const nda = c.req.query('nda') ?? '0'; if (nda !== '0' && nda !== '1') throw new RaiseEvidenceError('invalid', 400);
+    return c.json(await previewEvidence(ctx, nda === '1')); }
   catch (error) { return evidenceFailure(c, error); }
 });
 cycleRaise.post('/evidence/refresh', async c => {
