@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { notionApi } from '../../lib/api/notion';
 import Lightbox from '../../ui/Lightbox';
 import { cellText, day, errorSentence, skippedSentence, syncSummary } from '../account/notionModel';
+import NotionLinks from './NotionLinks';
 
 /**
  * D1086 (#2951, #2405 part 2) — a module's "From Notion" part, shared by every
@@ -147,6 +148,7 @@ export default function FromNotion({ section, projectId, module, api = notionApi
         <Facts facts={facts} fields={fields} canAct={canAct} onDelete={setDeleting} phone={phone} />
       )}
       {d?.lands === 'fact' && <FactsFooter facts={facts} fields={fields} keptDeleted={Number(d?.kept_deleted) || 0} />}
+      {d?.lands === 'fact' && <NotionLinks proposals={proposals} label={d?.label} canAct={canAct} busy={busy} onDecide={decide} />}
       {d?.lands === 'proposal' && <Proposals proposals={proposals} canAct={canAct} busy={busy} onDecide={decide} />}
       {phone && <button type="button" className={`${LINK} self-start`} onClick={() => setOpen(false)} aria-expanded="true">Show less</button>}
       {deleting && (

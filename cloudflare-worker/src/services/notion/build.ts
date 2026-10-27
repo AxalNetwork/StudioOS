@@ -24,6 +24,7 @@
  * logged. Activity rows say what happened, never the title.
  */
 import { logCycleWriteStatement } from '../cycleActivity';
+import { canLink, type FedOwnedTable } from '../../integrations/fedOwnership';
 import { registerAcceptor, registerFactWriter, type Acceptor, type FactItem, type FactWriter } from './sync';
 
 const TITLE_MAX = 300;
@@ -38,9 +39,34 @@ const str = (v: unknown, max: number): string | null => {
 };
 const oneOf = (v: unknown, allowed: Set<string>): string | null => (typeof v === 'string' && allowed.has(v) ? v : null);
 const pct = (v: unknown): number | null => {
-  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v.replace('%', '')) : NaN;
+  // Progress is a number field (`modules.ts`): `mapRow` hands over a number, or skips the row.
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
   return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : null;
 };
+
+/** A title as a look-alike compares it: case and outer and repeated spaces aside. */
+export const sameTitle = (v: unknown): string | null => str(v, TITLE_MAX)?.toLowerCase() ?? null;
+
+/**
+ * D1088 (#2405 § Module map, rule 4): the venture's item with the same title,
+ * which no ledger row of this connection already links. A row another
+ * connection feeds is still found, so the proposal can say whose it is.
+ */
+async function lookAlikeIn(env: Parameters<FactWriter['write']>[0], projectId: number, integrationId: number, table: FedOwnedTable, title: string | null) {
+  if (!title) return null;
+  const row = table === 'roadmap_okrs'
+    ? await env.DB.prepare(
+      `SELECT o.id, o.objective AS label FROM roadmap_okrs o WHERE o.project_id = ? AND lower(trim(o.objective)) = ?
+         AND NOT EXISTS (SELECT 1 FROM connector_fed_items f WHERE f.integration_id = ? AND f.local_table = 'roadmap_okrs' AND f.local_id = o.id)
+       ORDER BY o.id LIMIT 1`,
+    ).bind(projectId, title, integrationId).first<{ id: number; label: string }>()
+    : await env.DB.prepare(
+      `SELECT m.id, m.title AS label FROM mvp_features m WHERE m.project_id = ? AND m.is_must_have = 1 AND lower(trim(m.title)) = ?
+         AND NOT EXISTS (SELECT 1 FROM connector_fed_items f WHERE f.integration_id = ? AND f.local_table = 'mvp_features' AND f.local_id = m.id)
+       ORDER BY m.id LIMIT 1`,
+    ).bind(projectId, title, integrationId).first<{ id: number; label: string }>();
+  return row ? { id: Number(row.id), label: String(row.label) } : null;
+}
 
 /** Product roadmap's one key result, as it stores it; `null` when the row maps neither. */
 export function keyResultsOf(values: FactItem['values']): string | null {
@@ -78,6 +104,7 @@ export const roadmapWriter: FactWriter = {
   async alive(env, projectId, id) {
     return !!(await env.DB.prepare('SELECT 1 AS x FROM roadmap_okrs WHERE id = ? AND project_id = ?').bind(id, projectId).first());
   },
+  lookAlike: (env, ctx, item) => lookAlikeIn(env, ctx.projectId, ctx.integrationId, 'roadmap_okrs', sameTitle(item.values.objective ?? item.title)),
   async remove(env, projectId, id) {
     const res = await env.DB.prepare('DELETE FROM roadmap_okrs WHERE id = ? AND project_id = ?').bind(id, projectId).run();
     return !!res?.meta?.changes;
@@ -123,6 +150,7 @@ export const mustHaveWriter: FactWriter = {
   async alive(env, projectId, id) {
     return !!(await env.DB.prepare('SELECT 1 AS x FROM mvp_features WHERE id = ? AND project_id = ?').bind(id, projectId).first());
   },
+  lookAlike: (env, ctx, item) => lookAlikeIn(env, ctx.projectId, ctx.integrationId, 'mvp_features', sameTitle(item.values.feature ?? item.title)),
   async remove(env, projectId, id) {
     const res = await env.DB.prepare('DELETE FROM mvp_features WHERE id = ? AND project_id = ?').bind(id, projectId).run();
     return !!res?.meta?.changes;
@@ -157,6 +185,39 @@ export const designNoteAcceptor: Acceptor = {
   },
 };
 
+/**
+ * Accept on "Link to [existing]?": the matched row gains this connection's
+ * ledger link, as a `notion_fact`, so the next sync updates it as Notion's and
+ * From Notion lists and deletes it like any fact. Nothing new is written. A row
+ * another connection feeds, or one gone since, is refused and nothing changes.
+ */
+export const factLinkAcceptor: Acceptor = {
+  kind: 'fact_link',
+  async accept(env, ctx, proposal) {
+    let payload: any = {};
+    try { payload = JSON.parse(proposal.payload_json || '{}'); } catch { payload = {}; }
+    const table = payload.local_table === 'roadmap_okrs' || payload.local_table === 'mvp_features' ? payload.local_table as FedOwnedTable : null;
+    const id = Number(payload.local_id);
+    if (!table || !Number.isSafeInteger(id) || id < 1) throw new Error('Forbidden');
+    const writer = table === 'roadmap_okrs' ? roadmapWriter : mustHaveWriter;
+    if (!(await writer.alive(env, ctx.projectId, id)) || !(await canLink(env, ctx.integrationId, table, id))) throw new Error('Forbidden');
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
+         VALUES (?, ?, ?, 'notion_fact', ?, ?, ?)
+         ON CONFLICT(integration_id, external_id) DO UPDATE SET local_table = excluded.local_table, local_id = excluded.local_id, last_seen_at = CURRENT_TIMESTAMP`,
+      ).bind(ctx.integrationId, ctx.projectId, proposal.module, `notion:${ctx.projectId}:${proposal.module}:${proposal.source_key}`, table, id),
+      table === 'roadmap_okrs'
+        ? logCycleWriteStatement(env, { projectId: ctx.projectId, userId: ctx.userId, cycle: 'build', module: 'product-roadmap', entityId: id,
+          action: 'notion_linked', summary: 'Linked to Notion' })
+        : logCycleWriteStatement(env, { projectId: ctx.projectId, userId: ctx.userId, cycle: 'build', module: 'prototype-mvp', entityId: id,
+          action: 'notion_linked', summary: 'Linked to Notion' }),
+    ]);
+    return { localTable: table, localId: id };
+  },
+};
+
 registerFactWriter(roadmapWriter);
 registerFactWriter(mustHaveWriter);
 registerAcceptor(designNoteAcceptor);
+registerAcceptor(factLinkAcceptor);

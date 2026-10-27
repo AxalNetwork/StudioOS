@@ -257,3 +257,95 @@ test('the key result: one, with its progress clamped to 0–100, only when the r
   assert.deepEqual(JSON.parse(keyResultsOf({ key_result: 'NPS 50' })!), [{ text: 'NPS 50', current: null, target: null, unit: null }]);
   assert.equal(JSON.parse(keyResultsOf({ progress: 'n/a', key_result: 'X' })!)[0].current, null);
 });
+
+// ---------------------------------------------------------------- look-alikes (migration 644)
+
+const linkProposals = (db: any) => db.prepare("SELECT id, source_key, title, payload_json, status FROM notion_proposals WHERE kind = 'fact_link' ORDER BY id").all().map((r: any) => ({ ...r, payload: JSON.parse(r.payload_json) }));
+
+test('a look-alike of a hand-entered item waits as "Link to [existing]?"; Accept links it, and the next sync updates it as Notion\'s', async () => {
+  const t = fixture();
+  t.db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective, kanban_status) VALUES (901, 701, 'Checkout v2', 'later')`);
+  await addSource(t, 'product_roadmap', 'database', ROADMAP_DB, ROADMAP_MAP);
+  t.notion.rows.set(ROADMAP_DB, [{ id: rowId(1), properties: { Objective: '  checkout   V2 ', Status: 'In progress', Quarter: '2027 Q1' } }]);
+  const first = await t.sync();
+  assert.equal(first.sources[0].counts.written, 0, 'a look-alike is never imported as a second row');
+  assert.equal(roadmap(t.db).length, 1);
+  const [p] = linkProposals(t.db);
+  assert.equal(p.source_key, rowId(1));
+  assert.deepEqual(p.payload, { local_table: 'roadmap_okrs', local_id: 901, existing: 'Checkout v2', fed_by: null });
+
+  const read = await t.call('GET', '/api/cycles/build/notion?project=701&module=product_roadmap');
+  const shown = read.body.proposals.find((x: any) => x.kind === 'fact_link');
+  assert.deepEqual(shown.link, { existing: 'Checkout v2', fed_by: null });
+
+  const acc = await t.call('POST', `/api/cycles/build/notion/proposals/${p.id}/accept`, { project: 701 });
+  assert.equal(acc.status, 200, JSON.stringify(acc.body));
+  assert.equal(roadmap(t.db).length, 1, 'Accept writes no new row');
+  const ledger = t.db.prepare("SELECT kind, local_table, local_id FROM connector_fed_items WHERE integration_id = 5 AND external_id = ?").get(`notion:701:product_roadmap:${rowId(1)}`) as any;
+  assert.deepEqual({ ...ledger }, { kind: 'notion_fact', local_table: 'roadmap_okrs', local_id: 901 }, 'linked as a fact, so From Notion lists and deletes it');
+
+  const second = await t.sync();
+  assert.equal(second.sources[0].counts.updated, 1);
+  assert.deepEqual([roadmap(t.db)[0].kanban_status, roadmap(t.db)[0].quarter], ['now', '2027 Q1'], 'Notion\'s changes now update the linked item');
+  const after = await t.call('GET', '/api/cycles/build/notion?project=701&module=product_roadmap');
+  assert.equal(after.body.facts.length, 1);
+});
+
+test('a look-alike of a row GitHub feeds reads "Already fed by GitHub": it is never linked and never imported', async () => {
+  const t = fixture();
+  t.db.exec(`
+    INSERT INTO mvp_features (id, project_id, title, is_must_have, added_value, delivery_status) VALUES (950, 701, 'Sign-in', 1, 'High', 'Review');
+    INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id) VALUES (7, 701, 'prototype_mvp', 'github_pr', 'gh:pr:1', 'mvp_features', 950);
+  `);
+  const before = musts(t.db);
+  await addSource(t, 'prototype_mvp', 'database', MUST_DB, MUST_MAP);
+  t.notion.rows.set(MUST_DB, [{ id: rowId(11), properties: { Feature: 'Sign-in', Value: 'Nice', Stage: 'Shipped' } }]);
+  await t.sync();
+  const [p] = linkProposals(t.db);
+  assert.deepEqual(p.payload, { local_table: 'mvp_features', local_id: 950, existing: 'Sign-in', fed_by: 'github' });
+  const read = await t.call('GET', '/api/cycles/build/notion?project=701&module=prototype_mvp');
+  assert.deepEqual(read.body.proposals.find((x: any) => x.kind === 'fact_link').link, { existing: 'Sign-in', fed_by: 'github' }, 'the page can say whose it is');
+  const acc = await t.call('POST', `/api/cycles/build/notion/proposals/${p.id}/accept`, { project: 701 });
+  assert.equal(acc.status, 403);
+  assert.equal((t.db.prepare("SELECT status FROM notion_proposals WHERE id = ?").get(p.id) as any).status, 'pending', 'nothing was decided');
+  assert.equal((t.db.prepare("SELECT COUNT(*) AS n FROM connector_fed_items WHERE local_table = 'mvp_features' AND local_id = 950").get() as any).n, 1, 'GitHub\'s link stays the only one');
+  await t.sync();
+  assert.deepEqual(musts(t.db), before, 'byte for byte, and no second row');
+});
+
+test('a dismissed look-alike stays out; a feature that is not a must-have is no look-alike; Notion\'s own items never look alike', async () => {
+  const t = fixture();
+  t.db.exec(`INSERT INTO mvp_features (id, project_id, title, is_must_have) VALUES (960, 701, 'Export', 0), (961, 701, 'Search', 1)`);
+  await addSource(t, 'prototype_mvp', 'database', MUST_DB, MUST_MAP);
+  t.notion.rows.set(MUST_DB, [
+    { id: rowId(11), properties: { Feature: 'Search' } },
+    { id: rowId(12), properties: { Feature: 'Export' } },
+    { id: rowId(13), properties: { Feature: 'Export' } },
+  ]);
+  const r = await t.sync();
+  assert.equal(r.sources[0].counts.written, 2, 'both Export rows land: a feature that is not a must-have is no look-alike, and Notion\'s own Export is not one either');
+  const [p] = linkProposals(t.db);
+  assert.equal(p.source_key, rowId(11));
+  assert.equal(linkProposals(t.db).length, 1, 'only Search, a must-have, is a look-alike');
+  assert.equal((await t.call('POST', `/api/cycles/build/notion/proposals/${p.id}/dismiss`, { project: 701 })).status, 200);
+  const again = await t.sync();
+  assert.equal(again.sources[0].counts.kept_dismissed, 1);
+  assert.equal(musts(t.db).filter((m: any) => m.title === 'Search').length, 1, 'still one Search');
+});
+
+test('migration 644 keeps every proposal as it was and takes fact_link', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { readFileSync } = await import('node:fs');
+  const db = new DatabaseSync(':memory:');
+  db.exec(readFileSync(new URL('../sql/migrations/640_notion_sources.sql', import.meta.url), 'utf8'));
+  db.exec(`INSERT INTO notion_proposals (integration_id, project_id, module, kind, source_key, fingerprint, title, status, changed)
+           VALUES (5, 701, 'solution_design', 'design_note', 'a', 'f1', 'Spec', 'dismissed', 0), (5, 701, 'capital_relationships', 'prospect', 'b', 'f2', 'Firm', 'pending', 1)`);
+  assert.throws(() => db.exec(`INSERT INTO notion_proposals (integration_id, project_id, module, kind, source_key, fingerprint, title) VALUES (5, 701, 'product_roadmap', 'fact_link', 'c', 'f3', 'X')`));
+  const before = db.prepare('SELECT * FROM notion_proposals ORDER BY id').all().map((r: any) => ({ ...r }));
+  db.exec(readFileSync(new URL('../sql/migrations/644_notion_fact_link_proposals.sql', import.meta.url), 'utf8'));
+  assert.deepEqual(db.prepare('SELECT * FROM notion_proposals ORDER BY id').all().map((r: any) => ({ ...r })), before);
+  db.exec(`INSERT INTO notion_proposals (integration_id, project_id, module, kind, source_key, fingerprint, title) VALUES (5, 701, 'product_roadmap', 'fact_link', 'c', 'f3', 'X')`);
+  assert.throws(() => db.exec(`INSERT INTO notion_proposals (integration_id, project_id, module, kind, source_key, fingerprint, title) VALUES (5, 701, 'product_roadmap', 'nonsense', 'd', 'f4', 'Y')`));
+  assert.throws(() => db.exec(`INSERT INTO notion_proposals (integration_id, project_id, module, kind, source_key, fingerprint, title) VALUES (5, 701, 'product_roadmap', 'fact_link', 'c', 'f5', 'dup')`), 'the unique key survives');
+  assert.ok((db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_notion_proposals_project'").get() as any), 'the index survives');
+});
