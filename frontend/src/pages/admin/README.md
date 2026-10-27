@@ -24,6 +24,10 @@ glance that is already in hand is not passed through the legacy props.
 `ConsolePages.jsx`'s `AllAccountsPage` is All accounts at `/admin/accounts/all`,
 with one account's record at `/admin/accounts/all/:id` (D1299, #2377). The
 addresses and the profile widgets are `accountsAddress.js`'s.
+`ArticlesQueuePage.jsx` is HQ › Content › Content queue (D1290, #2383): four
+tabs at their own addresses and one address per article, all named in
+`contentQueueModel.js`. Pipeline is the review queue; Calendar, Authors and
+Performance say what they wait on until D1291–D1298 build them.
 
 Roughly grouped by what they administer: accounts and roles, the Spin-Out Lab
 cohort (applications, timing, journey preview, and `SpinoutModerationPage.jsx`

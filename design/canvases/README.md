@@ -5,8 +5,8 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 102 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
-| `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
+| `integrated/` | 104 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `backlog/` | 27 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
 | `assets/`, `scraps/`, `uploads/` | — | Images and stale duplicates from the export. Not part of the 107. |
@@ -440,3 +440,12 @@ Terms from the ledger, History, the states, phone and the row's count, at
 D797's terms rows (#2242) and HQ's editor (board L9, D801) build to the same
 two files here. **`integrated/` went 98 → 100.** The departures are in
 `documentation/architecture/decisions/D800.md`.
+
+**2026-10-26 (D1109, #2989), two graduated and one retired.** `Data Room · Boards`
+and `Raise Data Room Page` (D1101, #2456) moved from `design/incoming/` to
+`integrated/`, unedited, with the Data room tool's part 8: the old files tool
+and access view are deleted and their addresses forward to the tool's tabs with
+DR24's notice. `Data Room` (D374) moved from `backlog/` to `scraps/`: its page
+is gone and DR1–DR24 supersede it. **`integrated/` went 102 → 104; `backlog/`
+went 28 → 27.** The departures are in
+`documentation/architecture/decisions/D1109.md`.

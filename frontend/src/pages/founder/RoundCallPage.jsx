@@ -78,7 +78,7 @@ export function RoundCallPageView({state:s,on}) {
       </section>
       {founder&&['sent','awaiting_counsel'].includes(c.state)&&<section className="space-y-2">{c.state==='sent'&&<><label className="block">Extend the date<input type="date" className={callInput} value={s.target} onChange={e=>on.target(e.target.value)}/></label><button type="button" className={callButton} disabled={s.busy||!s.target} onClick={on.extend}>Extend the date</button></>}<button type="button" className={callButton} disabled={s.busy} onClick={on.close}>Close the call</button></section>}
       {founder&&d.read_only&&c.state!=='awaiting_counsel'&&<button type="button" className={callButton} onClick={on.edit}>Open a new call</button>}
-      {founder&&c.data_room_project_uid&&<Link className="underline" to={'/raise/data-room?project_id='+c.project_id}>Review data-room grants and NDA access</Link>}
+      {founder&&c.data_room_project_uid&&<Link className="underline" to={'/raise/data-room/access?project_id='+c.project_id}>Review data-room grants and NDA access</Link>}
     </>}
     <section className="space-y-3"><h2 className="font-semibold">Questions</h2>{d.questions.length?d.questions.map(q=><article key={q.uid} className="rounded-xl border border-axal-hairline p-3"><p>{q.question}</p>{q.name&&<p className="text-xs text-axal-muted">{q.name} · {callDate(q.asked_at)}</p>}{q.answer?<p>Answered: {q.answer}</p>:<p>Unanswered</p>}
       {q.update_uid&&<Link className="underline" to={'/updates/'+q.update_uid}>Reply on the source update</Link>}

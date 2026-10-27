@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { AdminRoomSummary } from '../DataRoomPage';
+import { AdminRoomSummary } from './DataRoomSummary.jsx';
+import { DataRoomMovedNotice } from './DataRoomMoved.jsx';
 import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
@@ -16,7 +17,7 @@ import DataRoomPreview from './DataRoomPreview.jsx';
 import { noPermission } from './accessModel';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  HOME_PATH, LINE, TABS, TITLE, WORKSPACE_LINE, projectUidOf, tabHref, tabSearch, workspaceHref,
+  HOME_PATH, LINE, TABS, TITLE, projectUidOf, tabHref, tabSearch,
 } from './dataRoomModel';
 
 /**
@@ -31,7 +32,6 @@ import {
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
-const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
 
 /** The tool's own tabs, a second level under the Raise modules: text with an underline. */
 export function DataRoomTabBar({ active, search = '' }) {
@@ -55,16 +55,13 @@ export function DataRoomTabBar({ active, search = '' }) {
 /** The venture in the query, as CycleRoute passes it (`?project_id=N`). */
 const projectOf = (search) => { const m = /[?&]project_id=([1-9]\d*)/.exec(String(search || '')); return m ? m[1] : null; };
 
-/** Home's tab bar, its own blocks (D1106, DR1), and where today's access tool still is. */
+/** Home's tab bar and its own blocks (D1106, DR1). D1109: the old files tool is retired, so Home links to no other page. */
 export function DataRoomHomeNav({ search = '' }) {
   const [reload, setReload] = useState(0);
   const read = useRoom(projectOf(search), reload);
   return (
     <div className="flex flex-col gap-3">
       <DataRoomTabBar active="home" search={search} />
-      <p className={`m-0 text-[12px] ${MUTED}`} data-testid="dataroom-home-note">
-        {WORKSPACE_LINE} <Link className={LINK} to={workspaceHref(search)}>Open the files tool</Link>
-      </p>
       {projectOf(search) ? <DataRoomHome read={read} retry={() => setReload((n) => n + 1)} search={search} /> : null}
     </div>
   );
@@ -191,6 +188,8 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active="data-room" action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
+      {/* D1109 (#2989, DR24): an old address lands here with `?moved=`, and says so once under the header. */}
+      <DataRoomMovedNotice />
       <DataRoomTabBar active={tab} search={search} />
       {body}
       {/* D1106 (#2986): DR3, a file's lightbox over Files at /raise/data-room/file/<id>. */}

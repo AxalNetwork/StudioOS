@@ -23,7 +23,8 @@ export function redirectPatternFor(pathname, search = '') {
   }
   // The list names each exact pattern before its splat (`/notifications`, then `/notifications/*`).
   // D1160: a role's forward (`role`) counts itself; the same address is another role's page.
-  const hit = REDIRECT_ROUTES.find((r) => !r.path.includes('?') && !r.role && matchPath({ path: r.path, end: true }, pathname));
+  // D1109: so does a `forward` (the Data room's old addresses share their shape with its tabs).
+  const hit = REDIRECT_ROUTES.find((r) => !r.path.includes('?') && !r.role && !r.forward && matchPath({ path: r.path, end: true }, pathname));
   return hit ? hit.path : null;
 }
 
