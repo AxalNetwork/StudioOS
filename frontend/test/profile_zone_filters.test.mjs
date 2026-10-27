@@ -137,8 +137,9 @@ const PROFILES = {
     // 26 → 25: the owner removed `raise/liquidity` (2026-10-20), page and all.
     // 25 → 24 (D894): `raise/pitch` is the Pitch deck studio, excluded below.
     // 24 → 23 (D1109): `raise/data-room`'s access view is retired; excluded below.
-    zones: 23,
-    mounted: 23,
+    // 23 → 22 (D1194): `raise/capital-match` retired into Capital relationships › Match; excluded below.
+    zones: 22,
+    mounted: 22,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
     // EMPTY, AND THIS TIME THE COUNT PROVES IT RATHER THAN AGREEING WITH IT.
     // The four `validate/*` zones sat here for one release, and the note that
@@ -170,7 +171,7 @@ const PROFILES = {
     // canvas still draws them, and no table may declare them. `raise/pitch`
     // joined them with D894: its own canvas draws the studio's tabs instead,
     // and `raise/data-room` with D1109: the Data room tool draws DR1–DR24's.
-    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity', 'raise/pitch', 'raise/data-room'],
+    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity', 'raise/pitch', 'raise/data-room', 'raise/capital-match'],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.

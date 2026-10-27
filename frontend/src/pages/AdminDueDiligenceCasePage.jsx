@@ -1,47 +1,105 @@
+/**
+ * One Due diligence case (DDL3–DDL11, D1251 #3266), mounted at both
+ * `/admin/due-diligence/:uid/:tab?` and `/due-diligence/:uid/:tab?`. Each tab
+ * is its own address (D1244); the bare case address, which emails and
+ * notices carry, opens Overview. A section reviewer's read (`case.scoped`)
+ * draws RT's four tabs. Every control is one the case read's `allowed`
+ * returns; every change is an in-page dialog, and what changed is said on the
+ * page when it closes — no browser pop-up and no toast.
+ */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Play, FileDown, Send, RefreshCw, Shield, AlertTriangle, CheckCircle2, ClipboardList, Mail, Upload, ListChecks, Inbox, ChevronDown, ChevronRight } from 'lucide-react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { dd } from '../lib/api';
+import { ddDeskApi } from '../lib/api/ddDesk.js';
+import { ddLifecycleApi } from '../lib/api/ddLifecycle.js';
 import { reportError } from '../lib/log';
-import { useToast } from '../components/useToast';
-import ToastMessage from '../components/ToastMessage';
-import { useEscapeClose } from '../components/useEscapeClose';
+import { useAuth } from '../hooks/useAuthSync';
 import AdminBoardFrame from './admin/AdminBoardFrame';
-import { DdCaseTabBody, DdCaseTabs } from './duediligence/DdTabs';
-import { bandWord, viewOf } from './duediligence/ddModel';
+import { DdCaseTabs } from './duediligence/DdTabs';
+import { viewOf } from './duediligence/ddModel';
+import { ITEM_STATUS_WORD, WHO, caseRefusal, headerFacts, may, tabOpen, tabsFor } from './duediligence/ddCaseModel.js';
 import DdReviewerPanel from './duediligence/DdReviewer';
+import { ActivityTab, ChecklistTab, FlagsTab, OverviewTab, Who } from './duediligence/DdCaseWork.jsx';
+import { CrossChecksTab, DocumentsTab, RequestsTab, SignOffTab, TeamTab } from './duediligence/DdCaseDeal.jsx';
+import {
+  AssignDialog, BulkDialog, ComposeDialog, ConfirmDialog, DecisionDialog, FlagDialog, NotifyFounderDialog, RaiseFlagDialog,
+  ReportDialog, RequestDueDialog, VerdictDialog, WidenDialog, WithdrawDialog,
+} from './duediligence/DdCaseDialogs.jsx';
+import { ArchiveDialog, ChangeLeadDialog, TargetDateDialog } from './duediligence/DdListDialogs.jsx';
+import { Note, Refusal, btnCls, muted, primaryCls } from './duediligence/DdUi.jsx';
 
-const SEV_STYLES = {
-  critical: 'bg-red-600 text-white',
-  high: 'bg-orange-500 text-white',
-  medium: 'bg-amber-400 text-amber-900',
-  low: 'bg-blue-400 text-white',
-  info: 'bg-gray-300 text-gray-700',
-};
-const VERDICT_STYLES = {
-  pass: 'bg-emerald-100 text-emerald-700',
-  warn: 'bg-amber-100 text-amber-700',
-  fail: 'bg-red-100 text-red-700',
-  n_a: 'bg-gray-100 text-gray-600',
-};
-const BAND_STYLES = {
-  green: 'bg-emerald-500',
-  yellow: 'bg-amber-400',
-  amber: 'bg-orange-500',
-  red: 'bg-red-600',
-};
-const SOURCE_STATUS = {
-  queued: 'bg-gray-100 text-gray-600',
-  running: 'bg-sky-100 text-sky-700 animate-pulse',
-  ok: 'bg-emerald-100 text-emerald-700',
-  error: 'bg-red-100 text-red-700',
-  disabled: 'bg-gray-100 text-gray-500',
-};
+/** The open dialog, by name; `props` are what the tab handed it. */
+function CaseDialog({ uid, data, me, dialog, close, done }) {
+  const { name, props = {} } = dialog;
+  const cs = data.case;
+  const row = { uid, subject_label: cs.subject_label, lead_name: cs.lead_name, target_ic_date: cs.target_ic_date, decision: cs.decision };
+  const common = { uid, onClose: close, onDone: (line) => { props.after?.(); done(line); } };
+  switch (name) {
+    case 'verdict': {
+      const s = props.section;
+      const ndaOnFile = (data.attachments || []).some((a) => Number(a.section_id) === Number(s.id)) || Boolean(s.reviewer_signed_nda_at);
+      return <VerdictDialog {...common} section={s} ndaOnFile={ndaOnFile} />;
+    }
+    case 'raise': return <RaiseFlagDialog {...common} data={data} sectionId={props.sectionId} itemId={props.itemId} />;
+    case 'flag': return <FlagDialog {...common} data={data} flag={props.flag} />;
+    case 'decide': return <DecisionDialog {...common} data={data} />;
+    case 'archive': return <ArchiveDialog row={row} onClose={close} onDone={done} />;
+    case 'lead': return <ChangeLeadDialog row={row} me={me} onClose={close} onDone={done} />;
+    case 'target': return <TargetDateDialog row={row} onClose={close} onDone={done} />;
+    case 'notify': return <NotifyFounderDialog {...common} subject={cs.subject_label} />;
+    case 'report':
+      // Generate report: the Worker assembles it from the recorded sections and findings; no model writes it.
+      return <ReportDialog {...common} generate={async () => { const r = await dd.generateReport(uid); return r; }} />;
+    case 'widen': return <WidenDialog {...common} depth={cs.template_depth} />;
+    case 'compose': return <ComposeDialog {...common} data={data} />;
+    case 'assign': return <AssignDialog {...common} data={data} sectionId={props.sectionId} />;
+    case 'bulk': return <BulkDialog {...common} data={data} kind={props.kind} itemIds={props.itemIds} />;
+    case 'req-due': return <RequestDueDialog {...common} req={props.req} />;
+    case 'req-withdraw': return <WithdrawDialog {...common} req={props.req} />;
+    case 'req-review':
+      return <ConfirmDialog {...common} title={`Mark “${props.req.title}” reviewed`} testId="dd-req-review" action="Mark reviewed"
+        lines={['The request is closed out. The subject sees it as reviewed.']} run={() => dd.reviewRequest(uid, props.req.id)}
+        fallback="The request could not be marked reviewed." done={`“${props.req.title}” is reviewed.`} />;
+    case 'req-remind':
+      return <ConfirmDialog {...common} title={`Remind the subject · ${props.req.title}`} testId="dd-req-remind" action="Send reminder"
+        lines={['The subject is reminded in the bell and by email. One reminder a day at most.']} run={() => dd.remindRequest(uid, props.req.id)}
+        fallback="The reminder could not be sent." done="The reminder is sent." />;
+    case 'resend':
+      return <ConfirmDialog {...common} title={`Resend the invitation to ${props.row.name}`} testId="dd-resend" action="Resend invitation"
+        lines={[`${props.row.name} is sent a new link to ${props.row.section}, in the bell and by email. It works for 14 days.`]}
+        run={() => ddDeskApi.assign(uid, props.row.sectionId, props.row.userId, props.row.role === 'Observer' ? 'observer' : 'reviewer')}
+        fallback="The invitation could not be sent." done={`A new invitation is sent to ${props.row.name}.`} />;
+    case 'remove':
+      return <ConfirmDialog {...common} title={`Remove ${props.row.name} from ${props.row.section}`} testId="dd-remove" action="Remove" danger
+        lines={[`${props.row.name} can no longer open this section. What they recorded stays on the case.`]}
+        run={() => ddDeskApi.removeReviewer(uid, props.row.sectionId, props.row.userId)}
+        fallback="They could not be removed." done={`${props.row.name} is removed from ${props.row.section}.`} />;
+    case 'item':
+      return <ConfirmDialog {...common} title={`Mark “${props.item.title}” ${ITEM_STATUS_WORD[props.status]}`} testId="dd-item-status" action={`Mark ${ITEM_STATUS_WORD[props.status]}`}
+        lines={[props.status === 'pending' ? 'The item goes back to Pending and counts as not worked.' : 'The section’s progress and the case’s score are worked out again.', 'The change is recorded in the case’s activity.']}
+        run={() => dd.updateItem(uid, props.item.id, { status: props.status })} fallback="The item could not be changed." done={`“${props.item.title}” is ${ITEM_STATUS_WORD[props.status]}.`} />;
+    case 'memo':
+      return <ConfirmDialog {...common} title="Save the memo" testId="dd-memo-confirm" action="Save memo"
+        lines={['The four parts replace the memo saved on the case. It is kept encrypted, and the deal team reads it; section reviewers never do.']}
+        run={() => ddLifecycleApi.saveMemo(uid, props.draft)} fallback="The memo could not be saved." done="The memo is saved." />;
+    case 'ic':
+      return <ConfirmDialog {...common} title="Send the case to IC" testId="dd-ic" action="Send to IC"
+        lines={['A new IC record is opened with this case, its decision and its memo attached.', 'The case can be sent once.']}
+        run={() => ddLifecycleApi.sendToIc(uid)} fallback="The case could not be sent to IC." done="The case is with IC." />;
+    case 'scan':
+      return <ConfirmDialog {...common} title="Run the external scan" testId="dd-scan" action="Run scan"
+        lines={['Each connector is queried for the subject. What it finds is raised as a flag on its section.', 'High and Critical findings are sent to the case owner.']}
+        run={() => dd.scan(uid)} fallback="The scan could not be queued." done="The scan is queued; its results appear here as each source answers." />;
+    default: return null;
+  }
+}
 
 function AdminDueDiligenceCasePageBody() {
   const { uid } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const auth = useAuth();
   // Task #83 — mounted at both /admin/due-diligence/:uid and /due-diligence/:uid.
   const base = location.pathname.startsWith('/admin') ? '/admin/due-diligence' : '/due-diligence';
   // D1244 (#2385): each tab is its own address; the bare case address is Overview.
@@ -49,864 +107,129 @@ function AdminDueDiligenceCasePageBody() {
   const inv = searchParams.get('inv');
   const focusSection = searchParams.get('section');
   const [data, setData] = useState(null);
+  const [failed, setFailed] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [verdictModal, setVerdictModal] = useState(null);
-  const [assignModal, setAssignModal] = useState(null);
-  const [auditOpen, setAuditOpen] = useState(false);
-  const [composeOpen, setComposeOpen] = useState(false);
-  const [inviteBanner, setInviteBanner] = useState(null);
+  const [dialog, setDialog] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [inviteState, setInviteState] = useState(null);
+  const [version, setVersion] = useState(0);
   const sectionRefs = useRef({});
   const inviteConsumedRef = useRef(false);
-  const { toast, success, error, dismissToast } = useToast();
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
       const r = await dd.getCase(uid);
       setData(r);
+      setFailed(null);
     } catch (e) {
       reportError('AdminDueDiligenceCasePage:get', e);
-      error(e.message || 'Failed to load case');
+      setFailed(e?.status === 404 ? 'missing' : caseRefusal(e, 'The case could not be read.'));
     } finally { setLoading(false); }
-  }, [uid, error]);
-  useEffect(() => { load(); }, [load]);
+  }, [uid]);
+  useEffect(() => { setLoading(true); load(); }, [load]);
 
-  // Consume the magic-link invite jti once on first load. The backend
-  // validates the jti against dd_reviewers and (a) records acceptance for
-  // audit + (b) returns the section_id this reviewer was invited to.
+  // Consume the magic-link invite jti once: the Worker records the acceptance
+  // and answers the section this reviewer was invited to.
   useEffect(() => {
     if (!inv || inviteConsumedRef.current) return;
     inviteConsumedRef.current = true;
     (async () => {
       try {
         const r = await dd.acceptInvite(uid, inv);
-        setInviteBanner({ sectionId: r.section_id });
-        // Strip ?inv= from URL so a refresh doesn't re-consume.
+        setInviteState({ ok: true, sectionId: r.section_id });
         const next = new URLSearchParams(searchParams);
         next.delete('inv');
+        if (r.section_id) next.set('section', String(r.section_id));
         setSearchParams(next, { replace: true });
+        load();
       } catch (e) {
-        error(`Invitation invalid: ${e.message || 'expired or revoked'}`);
+        setInviteState({ ok: false, text: caseRefusal(e, 'This invitation has expired or was withdrawn. Ask the case lead for a new one.') });
       }
     })();
-  }, [inv, uid, searchParams, setSearchParams, error]);
+  }, [inv, uid, searchParams, setSearchParams, load]);
 
-  // Scroll & highlight the focused section once data is loaded.
+  // Bring the focused section into view once the case is read.
   useEffect(() => {
-    if (!focusSection || !data) return;
-    const el = sectionRefs.current[focusSection];
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('ring-2', 'ring-violet-400');
-      setTimeout(() => el.classList.remove('ring-2', 'ring-violet-400'), 3000);
-    }
-  }, [focusSection, data]);
+    if (!focusSection || !data || caseTab !== 'overview') return;
+    sectionRefs.current[focusSection]?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [focusSection, data, caseTab]);
 
-  // Poll for scan status while any source row is queued/running.
+  // Read again while a source is queued or running.
+  const scanning = Boolean(data && (data.sources || []).some((s) => s.status === 'queued' || s.status === 'running'));
   useEffect(() => {
-    if (!data) return;
-    const inFlight = (data.sources || []).some(s => s.status === 'queued' || s.status === 'running');
-    if (!inFlight) return;
-    const t = setInterval(() => { load(); }, 2500);
+    if (!scanning) return undefined;
+    const t = setInterval(load, 2500);
     return () => clearInterval(t);
-  }, [data, load]);
+  }, [scanning, load]);
 
-  const runScan = async () => {
-    setBusy(true);
-    try { await dd.scan(uid); success('Scan queued — results will appear shortly'); await load(); }
-    catch (e) { error(e.message || 'Scan failed'); }
-    finally { setBusy(false); }
-  };
+  const open = (name, props) => { setNotice(null); setDialog({ name, props }); };
+  const done = (line) => { setDialog(null); setNotice(line); setVersion((v) => v + 1); load(); };
 
-  const generateReport = async () => {
-    setBusy(true);
-    try {
-      const r = await dd.generateReport(uid);
-      if (r.download_url) {
-        // Open the report in a new tab. Same-origin worker route streams
-        // the file with Content-Disposition: attachment.
-        window.open(r.download_url, '_blank', 'noopener,noreferrer');
-        success(`Report generated (${r.format.toUpperCase()})`);
-      }
-      await load();
-    } catch (e) { error(e.message || 'Report failed'); }
-    finally { setBusy(false); }
-  };
-
-  const shareWithFounder = async () => {
-    if (!window.confirm('Notify the founder that the report is ready? They will not see the report contents — only that it exists.')) return;
-    setBusy(true);
-    try { await dd.shareReport(uid); success('Founder notified'); }
-    catch (e) { error(e.message || 'Share failed'); }
-    finally { setBusy(false); }
-  };
-
-  if (loading) return <div className="text-gray-500 text-center py-20">Loading…</div>;
-  if (!data) return <div className="text-gray-500 text-center py-20">Case not found.</div>;
+  if (loading) return <p className={`py-20 text-center text-[13px] ${muted}`}>Reading the case…</p>;
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-20" data-testid="dd-case-unreadable">
+        <p className="m-0 text-[13px]">{failed === 'missing' ? 'This case does not exist, or you are not on it.' : failed}</p>
+        {failed !== 'missing' ? <button type="button" className={btnCls} onClick={() => { setLoading(true); load(); }}>Try again</button> : null}
+        <Link to={base} className="text-[13px] font-semibold text-violet-700 underline dark:text-violet-300">All cases</Link>
+      </div>
+    );
+  }
 
   const cs = data.case;
-  const score = cs.risk_score != null ? Math.round(cs.risk_score * 100) : null;
-  // D1244: a case with no band says "Not scored yet", never a default colour.
-  const band = cs.risk_band || null;
-  const scanInFlight = (data.sources || []).some(s => s.status === 'queued' || s.status === 'running');
+  const facts = headerFacts(cs);
+  const tabs = tabsFor(data);
+  const tabProps = { uid, data, open, onChanged: load, onRetry: load, version };
+  const body = !tabOpen(data, caseTab) ? (
+    <Note testId="dd-tab-deal-team">This tab is the deal team’s. <Link to={`${base}/${uid}`} className="font-semibold underline">Open Overview</Link></Note>
+  ) : {
+    overview: <OverviewTab {...tabProps} focusSection={focusSection || inviteState?.sectionId} sectionRefs={sectionRefs} />,
+    checklist: <ChecklistTab {...tabProps} />,
+    flags: <FlagsTab {...tabProps} />,
+    requests: <RequestsTab {...tabProps} />,
+    documents: <DocumentsTab {...tabProps} />,
+    'cross-checks': <CrossChecksTab {...tabProps} scanning={scanning} />,
+    team: <TeamTab {...tabProps} />,
+    'sign-off': <SignOffTab {...tabProps} />,
+    activity: <ActivityTab {...tabProps} />,
+  }[caseTab];
 
   return (
     <div>
-      <Link to={base} className="inline-flex items-center gap-1 text-sm text-violet-600 hover:underline mb-3">
-        <ArrowLeft size={14} /> All cases
+      <Link to={base} className="mb-3 inline-flex items-center gap-1 text-[13px] font-semibold text-violet-700 hover:underline dark:text-violet-300">
+        <ArrowLeft size={14} aria-hidden="true" /> All cases
       </Link>
 
-      {inviteBanner && (
-        <div className="mb-4 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 text-sm text-violet-900 dark:text-violet-200 flex items-center gap-2">
-          <Mail size={16} /> You're reviewing this case as an invited expert. Your assigned section is highlighted below.
-        </div>
-      )}
+      {inviteState && !inviteState.ok ? <div className="mb-4"><Refusal text={inviteState.text} testId="dd-invite-refused" /></div> : null}
 
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <Shield size={22} className="text-violet-600" />
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{cs.subject_label}</h1>
-          </div>
-          <div className="text-sm text-gray-500 mt-1">
-            <span className="capitalize">{cs.subject_type}</span> · case <span className="font-mono">{cs.uid}</span>
-            {cs.template_depth && (
-              <> · <span className="capitalize inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 font-medium align-middle">{cs.template_depth} template</span></>
-            )}
-          </div>
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-4" data-testid="dd-case-header">
+        <div className="min-w-0">
+          <h1 className="m-0 text-[24px] font-bold text-gray-900 dark:text-gray-100">{cs.subject_label}</h1>
+          <p className={`m-0 mt-1 text-[13px] ${muted}`} data-testid="dd-case-facts">
+            {facts.type} · {facts.template} · {facts.stage} · <span className="font-mono">{cs.uid}</span>
+          </p>
+          <p className={`m-0 mt-0.5 text-[13px] ${muted}`}>
+            Lead {facts.lead} · Opened {facts.opened} · Target IC <span className={facts.targetPast ? 'font-semibold text-amber-800 dark:text-amber-200' : ''}>{facts.target}{facts.targetSub ? ` (${facts.targetSub})` : ''}</span>
+            {may(data, 'update') ? <> · <button type="button" className="font-semibold text-violet-700 underline dark:text-violet-300" onClick={() => open('target')} data-testid="dd-target-open">Change date</button></> : null}
+          </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={runScan} disabled={busy || scanInFlight}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-60">
-            <Play size={14} /> {scanInFlight ? 'Scan running…' : 'Run external scan'}
-          </button>
-          <button onClick={generateReport} disabled={busy}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-700 text-white rounded-lg font-medium hover:bg-black dark:hover:bg-gray-600 disabled:opacity-60">
-            <FileDown size={14} /> Generate report
-          </button>
-          {(cs.subject_type === 'project' || cs.subject_type === 'founder') && (
-            <button onClick={shareWithFounder} disabled={busy}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60">
-              <Send size={14} /> Notify founder
-            </button>
-          )}
-          <button onClick={() => setAuditOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
-            <ClipboardList size={14} /> Audit log
-          </button>
-          <button onClick={load} className="p-2 text-gray-600 hover:text-violet-600" title="Refresh"><RefreshCw size={16} /></button>
+        <div className="flex flex-wrap items-center gap-2">
+          {may(data, 'decide') && !cs.decision ? <button type="button" className={primaryCls} onClick={() => open('decide')} data-testid="dd-header-decide">Record decision</button> : null}
+          {cs.status === 'archived' ? <Who text={WHO.archived} testId="dd-who-archived" /> : null}
+          <button type="button" className={btnCls} onClick={load} aria-label="Read the case again"><RefreshCw size={14} aria-hidden="true" /></button>
         </div>
-      </div>
+      </header>
+
+      {notice ? <div className="mb-4" role="status"><Note testId="dd-case-notice">{notice}</Note></div> : null}
 
       {/* D1252 (#3267, DDL12b): a section reviewer's banner and steps; nothing for the deal team. */}
       <DdReviewerPanel data={data} uid={uid} base={base} onChanged={load} />
 
-      <DdCaseTabs uid={uid} active={caseTab} />
+      <DdCaseTabs uid={uid} active={caseTab} tabs={tabs} />
 
-      {caseTab !== 'overview' ? <DdCaseTabBody uid={uid} tab={caseTab} /> : (<>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className={`md:col-span-1 p-5 rounded-xl text-white ${BAND_STYLES[band] || 'bg-slate-600 dark:bg-slate-700'}`}>
-          <div className="text-xs uppercase tracking-wider opacity-80">Risk band</div>
-          <div className="text-3xl font-bold mt-1">{band ? bandWord(band).toUpperCase() : bandWord(band)}</div>
-          <div className="text-sm opacity-90 mt-1">Score {score ?? '—'}/100</div>
-        </div>
-        <div className="md:col-span-2 grid grid-cols-3 gap-3">
-          <Stat label="Sections" value={data.sections.length} />
-          <Stat label="Findings" value={data.findings.length} highlight={data.findings.some(f => f.severity === 'critical' || f.severity === 'high')} />
-          <Stat label="Reviewers" value={data.reviewers.length} />
-        </div>
-      </div>
+      {body}
 
-      {(cs.subject_email || cs.subject_legal_name) && (
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 mb-6 text-sm">
-          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-medium mb-1">
-            <AlertTriangle size={14} /> Encrypted PII
-          </div>
-          {cs.subject_legal_name && <div><span className="text-gray-600 dark:text-gray-400">Legal name:</span> {cs.subject_legal_name}</div>}
-          {cs.subject_email && <div><span className="text-gray-600 dark:text-gray-400">Email:</span> {cs.subject_email}</div>}
-        </div>
-      )}
-
-      <ChecklistProgress checklist={data.checklist || []} />
-      <FindingHeatmap sections={data.sections} findings={data.findings} />
-      <ReviewerQueue reviewers={data.reviewers} sections={data.sections} />
-
-      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Sections</h2>
-      <div className="space-y-3 mb-6">
-        {data.sections.map(s => {
-          const sectionFindings = data.findings.filter(f => f.section_id === s.id);
-          const hasNda = data.attachments.some(a => a.section_id === s.id);
-          return (
-            <div key={s.id} ref={(el) => { if (el) sectionRefs.current[String(s.id)] = el; }}
-              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 transition-shadow">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                  <div>
-                  <div className="font-semibold text-gray-900 dark:text-gray-100">{s.title}</div>
-                  <div className="text-xs text-gray-500">weight {Number(s.weight).toFixed(2)} · {s.status}{hasNda ? ' · NDA on file' : ''}</div>
-                  {/* D466 — the Sign-off column the canvas's report draws:
-                      who returned the verdict, recorded at write (migration
-                      339). A section completed before the column existed
-                      renders unrecorded rather than a guessed signer. */}
-                  {s.status === 'completed' && (
-                    <div className="text-xs text-gray-500 mt-0.5" data-testid={`signoff-${s.id}`}>
-                      {s.signed_off_by_name
-                        ? `Signed off by ${s.signed_off_by_name}${s.completed_at ? ` · ${String(s.completed_at).slice(0, 10)}` : ''}`
-                        : 'Sign-off not recorded'}
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {s.verdict && (
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${VERDICT_STYLES[s.verdict]}`}>
-                      {s.verdict.toUpperCase()}
-                    </span>
-                  )}
-                  <button onClick={() => setAssignModal(s)}
-                    className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded">Assign</button>
-                  <button onClick={() => setVerdictModal(s)}
-                    className="text-xs px-2 py-1 bg-violet-600 text-white hover:bg-violet-700 rounded">Verdict</button>
-                </div>
-              </div>
-              {s.reviewer_notes && (
-                <div className="text-xs bg-gray-50 dark:bg-gray-900/40 p-2 rounded mb-2 text-gray-700 dark:text-gray-300">
-                  <span className="font-medium">Reviewer:</span> {s.reviewer_notes}
-                </div>
-              )}
-              <SectionChecklist
-                items={(data.checklist || []).filter(i => i.section_id === s.id)}
-                onUpdate={async (itemId, patch) => {
-                  try { await dd.updateItem(uid, itemId, patch); await load(); }
-                  catch (e) { error(e.message || 'Checklist update failed'); throw e; }
-                }} />
-              {sectionFindings.length > 0 ? (
-                <ul className="space-y-1.5 mt-2">
-                  {sectionFindings.map(f => (
-                    <li key={f.id} className="flex items-start gap-2 text-sm">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${SEV_STYLES[f.severity]}`}>{f.severity.toUpperCase()}</span>
-                      <div className="flex-1">
-                        <div className="text-gray-900 dark:text-gray-100">{f.title}</div>
-                        {f.detail && <div className="text-xs text-gray-600 dark:text-gray-400">{f.detail}</div>}
-                        {f.evidence_url && <a href={f.evidence_url} target="_blank" rel="noopener noreferrer" className="text-xs text-violet-600 hover:underline">{f.evidence_url}</a>}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-xs text-gray-400 italic">No findings yet.</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">External sources</h2>
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden mb-6">
-        {data.sources.length === 0 ? (
-          <div className="p-6 text-sm text-gray-500 text-center">No scans run yet. Click "Run external scan" to query connectors.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead><tr className="bg-gray-50 dark:bg-gray-900/40 text-xs text-gray-600 dark:text-gray-400">
-              <th className="text-left px-3 py-2">Connector</th><th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Records</th><th className="px-3 py-2">Findings</th>
-              <th className="text-left px-3 py-2">Completed</th>
-            </tr></thead>
-            <tbody>{data.sources.map(s => (
-              <tr key={s.id} className="border-t border-gray-100 dark:border-gray-700/40">
-                <td className="px-3 py-2 font-mono text-xs">{s.connector}</td>
-                <td className="px-3 py-2 text-center">
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${SOURCE_STATUS[s.status] || SOURCE_STATUS.queued}`}>{s.status}</span>
-                </td>
-                <td className="px-3 py-2 text-center text-xs">{s.records_count}</td>
-                <td className="px-3 py-2 text-center text-xs">{s.findings_emitted}</td>
-                <td className="px-3 py-2 text-xs text-gray-500">{s.completed_at ? new Date(s.completed_at).toLocaleString() : '—'}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        )}
-      </div>
-
-      {!cs.scoped && (
-        <RequestsPanel requests={data.requests || []} sections={data.sections}
-          onCompose={() => setComposeOpen(true)}
-          onReview={async (id) => {
-            try { await dd.reviewRequest(uid, id); success('Request marked reviewed'); load(); }
-            catch (e) { error(e.message || 'Failed'); }
-          }} />
-      )}
-      </>)}
-
-      {composeOpen && (
-        <ComposeRequestModal sections={data.sections} onClose={() => setComposeOpen(false)}
-          onSave={async (payload) => {
-            try { await dd.createRequest(uid, payload); success('Request sent to the subject'); setComposeOpen(false); load(); }
-            catch (e) { error(e.message || 'Failed'); }
-          }} />
-      )}
-
-      {verdictModal && (
-        <VerdictModal section={verdictModal} caseUid={uid}
-          attachments={data.attachments.filter(a => a.section_id === verdictModal.id)}
-          onClose={() => setVerdictModal(null)}
-          onSave={async (verdict, notes) => {
-            try { await dd.setVerdict(uid, verdictModal.id, verdict, notes); success('Verdict recorded'); setVerdictModal(null); load(); }
-            catch (e) { error(e.message || 'Failed'); }
-          }}
-          onUploadNda={async (file) => {
-            try { await dd.uploadNda(uid, verdictModal.id, file); success('NDA uploaded'); load(); }
-            catch (e) { error(e.message || 'NDA upload failed'); throw e; }
-          }} />
-      )}
-      {assignModal && (
-        <AssignModal section={assignModal} onClose={() => setAssignModal(null)}
-          onSave={async (userId) => {
-            try { await dd.assignSection(uid, assignModal.id, userId); success('Reviewer assigned'); setAssignModal(null); load(); }
-            catch (e) { error(e.message || 'Failed'); }
-          }} />
-      )}
-      {auditOpen && <AuditDrawer uid={uid} onClose={() => setAuditOpen(false)} />}
-      <ToastMessage toast={toast} onDismiss={dismissToast} />
-    </div>
-  );
-}
-
-function Stat({ label, value, highlight }) {
-  return (
-    <div className={`p-4 rounded-xl border ${highlight ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
-      <div className="text-xs text-gray-500 uppercase tracking-wider">{label}</div>
-      <div className={`text-2xl font-bold ${highlight ? 'text-red-600' : 'text-gray-900 dark:text-gray-100'}`}>{value}</div>
-    </div>
-  );
-}
-
-function VerdictModal({ section, attachments, onClose, onSave, onUploadNda }) {
-  useEscapeClose(onClose);
-  const [verdict, setVerdict] = useState(section.verdict || 'pass');
-  const [notes, setNotes] = useState(section.reviewer_notes || '');
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef(null);
-  const ndaOnFile = attachments.length > 0 || Boolean(section.reviewer_signed_nda_at);
-
-  const upload = async () => {
-    const f = fileRef.current?.files?.[0];
-    if (!f) return;
-    setUploading(true);
-    try { await onUploadNda(f); fileRef.current.value = ''; }
-    catch { /* toast handled by caller */ }
-    finally { setUploading(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Record verdict — {section.title}</h3>
-        <label className="block text-sm mb-3">
-          <div className="text-xs font-medium text-gray-600 mb-1">Verdict</div>
-          <select value={verdict} onChange={(e) => setVerdict(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
-            <option value="pass">Pass</option><option value="warn">Warn</option>
-            <option value="fail">Fail</option><option value="n_a">Not applicable</option>
-          </select>
-        </label>
-        <label className="block text-sm mb-3">
-          <div className="text-xs font-medium text-gray-600 mb-1">Reviewer notes</div>
-          <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900" />
-        </label>
-        <div className="mb-4 p-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/40">
-          <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
-            <Upload size={12} /> Reviewer NDA
-          </div>
-          {ndaOnFile ? (
-            <div className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-              <CheckCircle2 size={12} /> Signed NDA on file ({attachments.length || 1} document{attachments.length === 1 ? '' : 's'}).
-            </div>
-          ) : (
-            <>
-              <input ref={fileRef} type="file" accept="application/pdf,image/*"
-                className="block text-xs text-gray-700 dark:text-gray-300 file:mr-2 file:px-2 file:py-1 file:rounded file:border-0 file:bg-violet-600 file:text-white file:text-xs" />
-              <button type="button" onClick={upload} disabled={uploading}
-                className="mt-2 px-3 py-1 text-xs bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-60">
-                {uploading ? 'Uploading…' : 'Upload signed NDA'}
-              </button>
-              <p className="text-[10px] text-gray-500 mt-1">PDF preferred, max 10MB. Required before submitting any verdict other than "n/a".</p>
-            </>
-          )}
-        </div>
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
-          <button onClick={() => onSave(verdict, notes)}
-            disabled={verdict !== 'n_a' && !ndaOnFile}
-            title={verdict !== 'n_a' && !ndaOnFile ? 'Upload the signed NDA before submitting a verdict.' : ''}
-            className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-60">
-            <CheckCircle2 size={14} className="inline mr-1" /> Save verdict
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Expertise-driven reviewer picker. Backend /dd/experts returns
-// `suggestions` (users who have completed prior verdicts on this same
-// section_key, ranked by review count) and `eligible` (all admin/
-// partner/advisor/investor users) as a fallback. Admins can still type
-// any user id manually if the dropdown doesn't surface the right
-// person.
-function AssignModal({ section, onClose, onSave }) {
-  useEscapeClose(onClose);
-  const [userId, setUserId] = useState(section.assignee_user_id ? String(section.assignee_user_id) : '');
-  const [suggestions, setSuggestions] = useState([]);
-  const [eligible, setEligible] = useState([]);
-  const [loadingExperts, setLoadingExperts] = useState(true);
-
-  useEffect(() => {
-    let alive = true;
-    dd.experts(section.section_key).then(r => {
-      if (!alive) return;
-      setSuggestions(r.suggestions || []);
-      setEligible(r.eligible || []);
-    }).catch(() => null).finally(() => { if (alive) setLoadingExperts(false); });
-    return () => { alive = false; };
-  }, [section.section_key]);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">Assign reviewer — {section.title}</h3>
-        <p className="text-xs text-gray-500 mb-3">Pick a reviewer for this section. They'll be notified by email and in-app with a magic link scoped to this section.</p>
-        {loadingExperts && <div className="text-xs text-gray-500 mb-2">Loading suggested experts…</div>}
-        {!loadingExperts && suggestions.length > 0 && (
-          <div className="mb-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Suggested (prior reviews on this section type)</div>
-            <ul className="space-y-1">
-              {suggestions.map(u => (
-                <li key={u.id}>
-                  <button type="button" onClick={() => setUserId(String(u.id))}
-                    className={`w-full text-left px-3 py-2 rounded-lg border text-xs flex items-center justify-between ${
-                      String(userId) === String(u.id)
-                        ? 'border-violet-400 bg-violet-50 dark:bg-violet-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40'
-                    }`}>
-                    <span>
-                      <span className="font-medium text-gray-900 dark:text-gray-100">{u.name || u.email}</span>
-                      <span className="text-gray-500 ml-1.5">({u.role})</span>
-                    </span>
-                    <span className="text-gray-500">{u.prior_reviews} prior</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {!loadingExperts && eligible.length > 0 && (
-          <label className="block mb-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1">Or pick from all eligible reviewers</div>
-            <select value={userId} onChange={(e) => setUserId(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
-              <option value="">— choose —</option>
-              {eligible.map(u => (
-                <option key={u.id} value={u.id}>{u.name || u.email} · {u.role}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label className="block text-xs mb-4">
-          <span className="text-gray-500">Or enter a user ID directly</span>
-          <input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="User ID"
-            className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900" />
-        </label>
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
-          <button onClick={() => onSave(Number(userId))} disabled={!userId}
-            className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-60">Assign</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Compact 5×N grid: one row per section, one column per severity. Cell
-// shade encodes the count of unresolved findings at that severity.
-// Surfaces hot zones at a glance without forcing reviewers to scan the
-// section list one by one.
-function FindingHeatmap({ sections, findings }) {
-  const SEV_COLS = ['critical', 'high', 'medium', 'low', 'info'];
-  const counts = sections.map(s => {
-    const row = { section: s };
-    for (const sev of SEV_COLS) row[sev] = 0;
-    for (const f of findings) {
-      if (f.section_id === s.id && !f.resolved_at && row[f.severity] !== undefined) row[f.severity]++;
-    }
-    return row;
-  });
-  const totalFindings = findings.length;
-  if (totalFindings === 0) return null;
-  const shadeFor = (sev, n) => {
-    if (n === 0) return 'bg-gray-50 dark:bg-gray-900/30 text-gray-300 dark:text-gray-600';
-    const base = SEV_STYLES[sev];
-    return base + ' font-bold';
-  };
-  return (
-    <div className="mb-6">
-      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Finding heatmap</h2>
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 overflow-x-auto">
-        <table className="w-full text-xs min-w-[480px]">
-          <thead><tr className="text-[10px] uppercase tracking-wider text-gray-500">
-            <th className="text-left px-2 py-1">Section</th>
-            {SEV_COLS.map(s => <th key={s} className="px-2 py-1 text-center w-14">{s}</th>)}
-          </tr></thead>
-          <tbody>{counts.map(({ section, ...row }) => (
-            <tr key={section.id} className="border-t border-gray-100 dark:border-gray-700/40">
-              <td className="px-2 py-1.5 text-gray-800 dark:text-gray-200">{section.title}</td>
-              {SEV_COLS.map(sev => (
-                <td key={sev} className="px-1 py-1 text-center">
-                  <span className={`inline-block w-9 h-6 leading-6 rounded ${shadeFor(sev, row[sev])}`}>{row[sev] || ''}</span>
-                </td>
-              ))}
-            </tr>
-          ))}</tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// Reviewer queue: who's been invited, what their NDA + response state
-// is, and which section they own. Helps the case lead chase outstanding
-// reviews without scrolling the section list.
-function ReviewerQueue({ reviewers, sections }) {
-  if (!reviewers || reviewers.length === 0) return null;
-  const sectionTitle = (id) => sections.find(s => s.id === id)?.title || `Section #${id}`;
-  return (
-    <div className="mb-6">
-      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Reviewer queue</h2>
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-        <table className="w-full text-xs">
-          <thead><tr className="bg-gray-50 dark:bg-gray-900/40 text-[10px] uppercase tracking-wider text-gray-500">
-            <th className="text-left px-3 py-2">Reviewer</th>
-            <th className="text-left px-3 py-2">Section</th>
-            <th className="px-3 py-2">Invited</th>
-            <th className="px-3 py-2">Accepted</th>
-            <th className="px-3 py-2">NDA</th>
-            <th className="px-3 py-2">Verdict</th>
-          </tr></thead>
-          <tbody>{reviewers.map(r => {
-            const section = sections.find(s => s.id === r.section_id);
-            const verdict = section?.verdict;
-            return (
-              <tr key={r.id} className="border-t border-gray-100 dark:border-gray-700/40">
-                <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{r.user_name || r.user_email}</td>
-                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{sectionTitle(r.section_id)}</td>
-                <td className="px-3 py-2 text-center text-gray-500">{r.invited_at ? new Date(r.invited_at).toLocaleDateString() : '—'}</td>
-                <td className="px-3 py-2 text-center">{r.responded_at ? <CheckCircle2 size={12} className="inline text-emerald-600" /> : <span className="text-gray-300">—</span>}</td>
-                <td className="px-3 py-2 text-center">{r.nda_signed_at ? <CheckCircle2 size={12} className="inline text-emerald-600" /> : <span className="text-gray-300">—</span>}</td>
-                <td className="px-3 py-2 text-center">
-                  {verdict
-                    ? <span className={`text-[10px] px-1.5 py-0.5 rounded ${VERDICT_STYLES[verdict]}`}>{verdict.toUpperCase()}</span>
-                    : <span className="text-gray-300">pending</span>}
-                </td>
-              </tr>
-            );
-          })}</tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function AuditDrawer({ uid, onClose }) {
-  useEscapeClose(onClose);
-  const [items, setItems] = useState(null);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    let alive = true;
-    dd.audit(uid).then(r => { if (alive) setItems(r.items || []); })
-      .catch(e => { if (alive) setError(e.message || 'Failed to load audit log'); });
-    return () => { alive = false; };
-  }, [uid]);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex justify-end" onClick={onClose}>
-      <aside className="w-full max-w-md h-full bg-white dark:bg-gray-800 shadow-xl border-l border-gray-200 dark:border-gray-700 flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <header className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ClipboardList size={16} className="text-violet-600" />
-            <h3 className="font-bold text-gray-900 dark:text-gray-100">Case audit log</h3>
-          </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-900 text-xl leading-none">×</button>
-        </header>
-        <div className="flex-1 overflow-y-auto px-5 py-4 text-sm">
-          {error && <div className="text-red-600 text-xs">{error}</div>}
-          {!error && items === null && <div className="text-gray-500 text-xs">Loading…</div>}
-          {!error && items && items.length === 0 && <div className="text-gray-500 text-xs">No audit entries yet.</div>}
-          {items && items.length > 0 && (
-            <ol className="space-y-3 border-l-2 border-violet-100 dark:border-gray-700 pl-4">
-              {items.map(it => (
-                <li key={it.id} className="relative">
-                  <span className="absolute -left-[22px] top-1 w-3 h-3 rounded-full bg-violet-500 border-2 border-white dark:border-gray-800" />
-                  <div className="text-xs font-medium text-gray-900 dark:text-gray-100">{it.action.replace(/_/g, ' ')}</div>
-                  <div className="text-[11px] text-gray-500">
-                    {it.actor_name || it.actor_email || (it.actor_email_hash ? `actor#${it.actor_email_hash.slice(0, 8)}` : 'system')} · {new Date(it.created_at).toLocaleString()}
-                  </div>
-                  {it.target_type && (
-                    <div className="text-[11px] text-gray-500 font-mono">{it.target_type}#{it.target_id}</div>
-                  )}
-                  {it.details && (
-                    <pre className="mt-1 text-[10px] bg-gray-50 dark:bg-gray-900/40 text-gray-600 dark:text-gray-400 p-1.5 rounded overflow-x-auto">{it.details}</pre>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-// ---------- Build queue #128 — checklists + information requests ----------
-
-const ITEM_STATUS_META = {
-  pending: { label: 'Pending', cls: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' },
-  pass: { label: 'Pass', cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
-  flag: { label: 'Flag', cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' },
-  fail: { label: 'Fail', cls: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' },
-  n_a: { label: 'N/A', cls: 'bg-gray-100 dark:bg-gray-700 text-gray-400' },
-};
-
-// Case-level completion strip: one segmented bar over every checklist
-// item, mirroring the design's "Case completion" block. Severity lives
-// on the sections/flags below — this only answers "how far along".
-function ChecklistProgress({ checklist }) {
-  if (!checklist || checklist.length === 0) return null;
-  const total = checklist.length;
-  const by = (st) => checklist.filter(i => i.status === st).length;
-  const done = by('pass') + by('fail') + by('n_a') + by('flag');
-  const segs = [
-    ['pass', by('pass'), 'bg-emerald-500'],
-    ['flag', by('flag'), 'bg-amber-400'],
-    ['fail', by('fail'), 'bg-red-500'],
-    ['n_a', by('n_a'), 'bg-gray-300 dark:bg-gray-600'],
-  ].filter(([, n]) => n > 0);
-  return (
-    <div className="mb-6">
-      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Case completion</h2>
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
-        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-          <span>{done} of {total} items worked</span>
-          <span>{by('flag') + by('fail') > 0 ? `${by('flag') + by('fail')} flagged/failed` : 'no open flags'}</span>
-        </div>
-        <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden flex">
-          {segs.map(([k, n, cls]) => (
-            <div key={k} className={cls} style={{ width: `${(n / total) * 100}%` }} title={`${ITEM_STATUS_META[k].label}: ${n}`} />
-          ))}
-        </div>
-        <div className="flex gap-4 flex-wrap mt-2">
-          {[['pass', 'bg-emerald-500'], ['flag', 'bg-amber-400'], ['fail', 'bg-red-500'], ['n_a', 'bg-gray-300 dark:bg-gray-600'], ['pending', 'bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600']].map(([k, cls]) => (
-            <span key={k} className="inline-flex items-center gap-1.5 text-[10px] text-gray-500">
-              <span className={`w-2.5 h-2.5 rounded-sm ${cls}`} /> {ITEM_STATUS_META[k].label} ({by(k)})
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Per-section working checklist. Collapsed by default unless something
-// is flagged/failed — the section card stays scannable while flags stay
-// impossible to miss. Every control PATCHes immediately; the score
-// recompute happens server-side on each write.
-function SectionChecklist({ items, onUpdate }) {
-  const hasHot = items.some(i => i.status === 'flag' || i.status === 'fail');
-  const [open, setOpen] = useState(hasHot);
-  if (!items || items.length === 0) return null;
-  const done = items.filter(i => i.status !== 'pending').length;
-  return (
-    <div className="mb-2 border border-gray-100 dark:border-gray-700/60 rounded-lg overflow-hidden">
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-900/40 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-900/70">
-        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-        <ListChecks size={13} className="text-violet-600" />
-        <span className="font-medium">Checklist</span>
-        <span className="text-gray-400">{done}/{items.length} worked</span>
-        {hasHot && <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold">needs attention</span>}
-      </button>
-      {open && (
-        <ul className="divide-y divide-gray-100 dark:divide-gray-700/40">
-          {items.map(it => <ChecklistItemRow key={it.id} item={it} onUpdate={onUpdate} />)}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function ChecklistItemRow({ item, onUpdate }) {
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [note, setNote] = useState(item.note || '');
-  const [saving, setSaving] = useState(false);
-  const patch = async (p) => {
-    setSaving(true);
-    try { await onUpdate(item.id, p); } catch { /* toast handled by caller */ }
-    finally { setSaving(false); }
-  };
-  const showSeverity = item.status === 'flag' || item.status === 'fail';
-  return (
-    <li className={`px-3 py-2 text-xs ${item.status === 'n_a' ? 'opacity-60' : ''}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <select value={item.status} disabled={saving} onChange={(e) => patch({ status: e.target.value })}
-          className={`text-[11px] font-semibold px-1.5 py-1 rounded border-0 ${ITEM_STATUS_META[item.status]?.cls || ITEM_STATUS_META.pending.cls}`}>
-          {Object.entries(ITEM_STATUS_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
-        </select>
-        <span className="flex-1 min-w-[180px] text-gray-800 dark:text-gray-200">{item.title}</span>
-        <span className="text-[9px] uppercase tracking-wider text-gray-400">{item.depth}</span>
-        {showSeverity && (
-          <select value={item.severity || ''} disabled={saving} onChange={(e) => patch({ severity: e.target.value || null })}
-            className={`text-[10px] font-bold px-1.5 py-1 rounded ${item.severity ? SEV_STYLES[item.severity] : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
-            <option value="">severity…</option>
-            {['info', 'low', 'medium', 'high', 'critical'].map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        )}
-        <input type="date" value={item.due_date || ''} disabled={saving}
-          onChange={(e) => patch({ due_date: e.target.value || null })}
-          className="text-[10px] px-1.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300" />
-        <button type="button" onClick={() => setNoteOpen(o => !o)}
-          className={`text-[10px] px-1.5 py-1 rounded ${item.note ? 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300' : 'text-gray-400 hover:text-violet-600'}`}>
-          {item.note ? 'note ●' : 'note'}
-        </button>
-      </div>
-      {noteOpen && (
-        <div className="mt-2 flex gap-2">
-          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Evidence note (encrypted at rest)…"
-            className="flex-1 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900" />
-          <button type="button" disabled={saving} onClick={async () => { await patch({ note }); setNoteOpen(false); }}
-            className="self-end px-2.5 py-1.5 text-[11px] bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-60">Save</button>
-        </div>
-      )}
-    </li>
-  );
-}
-
-const REQ_STATE_META = {
-  requested: { label: 'Requested', cls: 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300' },
-  received: { label: 'Received', cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' },
-  reviewed: { label: 'Reviewed', cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
-};
-
-// Case-wide correspondence with the subject. INVARIANT (mirrors the
-// worker): a request never carries diligence content — it only says
-// "please provide X". Hidden entirely from scoped reviewers.
-function RequestsPanel({ requests, sections, onCompose, onReview }) {
-  const sectionTitle = (id) => sections.find(s => s.id === id)?.title || null;
-  return (
-    <div className="mb-6">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 inline-flex items-center gap-1.5">
-          <Inbox size={14} className="text-violet-600" /> Information requests
-        </h2>
-        <button onClick={onCompose}
-          className="text-xs px-2.5 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 font-semibold hover:bg-violet-100 dark:hover:bg-violet-900/40">
-          + Compose request
-        </button>
-      </div>
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-        {requests.length === 0 ? (
-          <div className="p-6 text-sm text-gray-500 text-center">
-            Nothing requested yet. Everything the team is waiting on from the subject lives here — one list, no attachments over email.
-          </div>
-        ) : (
-          <ul className="divide-y divide-gray-100 dark:divide-gray-700/40">
-            {requests.map(r => (
-              <li key={r.id} className="px-4 py-3 text-sm">
-                <div className="flex flex-wrap items-start gap-2">
-                  <div className="flex-1 min-w-[220px]">
-                    <div className="font-medium text-gray-900 dark:text-gray-100">{r.title}</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">
-                      asked {r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}
-                      {sectionTitle(r.section_id) && <> · {sectionTitle(r.section_id)}</>}
-                    </div>
-                    {r.details && <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{r.details}</div>}
-                    {(r.response_note || r.response_url) && (
-                      <div className="mt-2 text-xs bg-gray-50 dark:bg-gray-900/40 rounded p-2">
-                        <span className="font-medium text-gray-700 dark:text-gray-300">Response:</span>{' '}
-                        {r.response_note && <span className="text-gray-600 dark:text-gray-400">{r.response_note}</span>}
-                        {r.response_url && (
-                          <a href={r.response_url} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline ml-1 break-all">{r.response_url}</a>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${REQ_STATE_META[r.state]?.cls || REQ_STATE_META.requested.cls}`}>
-                      {REQ_STATE_META[r.state]?.label || r.state}
-                    </span>
-                    {r.state !== 'reviewed' && (
-                      <button onClick={() => onReview(r.id)}
-                        className="text-[11px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
-                        Mark reviewed
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ComposeRequestModal({ sections, onClose, onSave }) {
-  useEscapeClose(onClose);
-  const [title, setTitle] = useState('');
-  const [details, setDetails] = useState('');
-  const [sectionId, setSectionId] = useState('');
-  const [busy, setBusy] = useState(false);
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    setBusy(true);
-    try { await onSave({ title: title.trim(), details: details.trim() || undefined, section_id: sectionId ? Number(sectionId) : undefined }); }
-    finally { setBusy(false); }
-  };
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <form onSubmit={submit} onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
-        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Request information</h3>
-        <p className="text-xs text-gray-500 mb-4">
-          The subject sees exactly this text and responds with a note or a link. Requests never expose the case, its score, or its findings.
-        </p>
-        <label className="block text-sm mb-3">
-          <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">What do you need?</div>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} autoFocus
-            placeholder="e.g. Trailing-12-month P&L and balance sheet"
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900" />
-        </label>
-        <label className="block text-sm mb-3">
-          <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Details (optional)</div>
-          <textarea rows={3} value={details} onChange={(e) => setDetails(e.target.value)} maxLength={4000}
-            placeholder="Format, period, and any specifics…"
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900" />
-        </label>
-        <label className="block text-sm mb-4">
-          <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Section (optional)</div>
-          <select value={sectionId} onChange={(e) => setSectionId(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
-            <option value="">Case-wide</option>
-            {sections.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
-          </select>
-        </label>
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
-          <button type="submit" disabled={busy || !title.trim()}
-            className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-60">
-            {busy ? 'Sending…' : 'Send request'}
-          </button>
-        </div>
-      </form>
+      {dialog ? <CaseDialog uid={uid} data={data} me={auth?.user} dialog={dialog} close={() => setDialog(null)} done={done} /> : null}
     </div>
   );
 }

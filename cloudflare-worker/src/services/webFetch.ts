@@ -263,6 +263,12 @@ export interface FetchPageOptions {
   userId: number;
   /** Skip the D1 cache and force a fresh fetch. */
   refresh?: boolean;
+  /**
+   * D1083: neither read nor write `competitor_cached_fetches`, and ask the
+   * edge for a fresh copy. A live check of the founder's own app must answer
+   * for now, and its page text belongs to no competitor.
+   */
+  noCache?: boolean;
 }
 
 /**
@@ -289,7 +295,7 @@ export async function fetchPage(env: Env, rawUrl: string, opts: FetchPageOptions
   }
 
   const urlHash = await sha256Hex(url);
-  if (!opts.refresh) {
+  if (!opts.refresh && !opts.noCache) {
     const cached = await readCache(env, urlHash);
     if (cached) return cached;
   }
@@ -321,7 +327,7 @@ export async function fetchPage(env: Env, rawUrl: string, opts: FetchPageOptions
         'User-Agent': 'StudioOS-CompetitorBot/1.0 (+https://axal.vc; respectful public-page reader)',
         Accept: 'text/html,application/xhtml+xml',
       },
-      cf: { cacheTtl: 3600, cacheEverything: true },
+      cf: opts.noCache ? { cacheTtl: 0 } : { cacheTtl: 3600, cacheEverything: true },
     } as RequestInit);
 
     const contentType = res.headers.get('content-type') || '';
@@ -391,7 +397,7 @@ export async function fetchPage(env: Env, rawUrl: string, opts: FetchPageOptions
       fetched_at: nowIso,
       cached: false,
     };
-    if (res.ok && text) await writeCache(env, urlHash, page);
+    if (res.ok && text && !opts.noCache) await writeCache(env, urlHash, page);
     return page;
   } catch (e) {
     const err = (e as Error).name === 'AbortError' ? 'timeout' : (e as Error).message || 'fetch_failed';
