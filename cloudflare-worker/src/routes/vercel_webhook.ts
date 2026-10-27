@@ -107,7 +107,8 @@ vercelWebhook.post('/', async (c) => {
 
   const run = async () => {
     try {
-      const out = await syncVercel(c.env, row);
+      // D1097: the health events this re-read opens or closes are marked as the webhook's.
+      const out = await syncVercel(c.env, row, 'webhook');
       await c.env.DB.prepare('UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, last_error_at = NULL WHERE id = ?').bind(row.id).run();
       await logEvent(c.env, {
         integration_id: row.id, user_id: row.user_id, provider_key: 'vercel',
