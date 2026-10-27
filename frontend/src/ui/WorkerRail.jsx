@@ -25,6 +25,7 @@ import { useViewMode } from '../contexts/ViewModeContext';
 import { budgetReadable } from '../pages/account/usageModel';
 import './workerRail.css';
 import { clearRailPage, setRailPage } from '../lib/railPage.js';
+import { closeSheets, useSheetOpen } from './sheetStore.js';
 
 /**
  * The Eadwyn AI rail. One component, every licence.
@@ -92,6 +93,9 @@ import { clearRailPage, setRailPage } from '../lib/railPage.js';
 const RAIL_COLLAPSED_KEY = 'worker_rail_collapsed';
 /** What the host stylesheets key their collapsed track off. */
 const RAIL_COLLAPSED_ATTR = 'data-worker-rail';
+/** D1317: what a detail sheet docks against (`sheet.css`). */
+const RAIL_DOCK_ATTR = 'data-eadwyn-rail';
+let docked = 0;
 
 /**
  * The current pathname, without requiring a router (D402).
@@ -466,7 +470,20 @@ export default function WorkerRail({
   const crumbs = useRailCrumbs();
 
   // One preference for the whole product, not one per page.
-  const [collapsed, setCollapsed] = useState(() => safeReadJSON(RAIL_COLLAPSED_KEY, false) === true);
+  const [stored, setCollapsed] = useState(() => safeReadJSON(RAIL_COLLAPSED_KEY, false) === true);
+  // D1317: while a detail sheet is open the rail draws its spine beside it,
+  // without changing the member's stored choice; it comes back on close.
+  const sheetOpen = useSheetOpen();
+  const collapsed = stored || sheetOpen;
+
+  // D1317: a mounted rail is where a detail sheet docks (`sheet.css`). Counted,
+  // so a second rail unmounting does not undock the first.
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    docked += 1;
+    document.documentElement.setAttribute(RAIL_DOCK_ATTR, 'docked');
+    return () => { docked -= 1; if (docked === 0) document.documentElement.removeAttribute(RAIL_DOCK_ATTR); };
+  }, []);
 
   // The HOSTS need to know, not just this element: the width that has to
   // change is a grid track on an ancestor this component does not own.
@@ -481,12 +498,19 @@ export default function WorkerRail({
   }, [collapsed]);
 
   const toggle = useCallback(() => {
+    // D1317: opening the rail from the spine beside a sheet closes the sheet first.
+    if (sheetOpen) {
+      closeSheets();
+      setCollapsed(false);
+      safeWriteJSON(RAIL_COLLAPSED_KEY, false);
+      return;
+    }
     setCollapsed((prev) => {
       const next = !prev;
       safeWriteJSON(RAIL_COLLAPSED_KEY, next);
       return next;
     });
-  }, []);
+  }, [sheetOpen]);
 
   // WHERE: the provider's section and module, or this rail's workspace.
   const section = crumbs?.section || workspace;
@@ -789,6 +813,7 @@ export default function WorkerRail({
       className={`fwr ${className}`.trim()}
       aria-label={`Eadwyn AI · ${workspace}`}
       data-collapsed={collapsed ? 'true' : 'false'}
+      data-sheet-keep=""
       {...(railPage?.page ? { 'data-page-key': railPage.page } : {})}
       data-testid={testId}
       style={accentStyle}
