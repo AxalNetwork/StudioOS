@@ -113,7 +113,7 @@ export function useConnectors({ companyId = null } = {}) {
  * eyebrow, mark, title, sub and action go in that Sheet's fixed header, its
  * footer in the fixed footer, and only its body scrolls. This file's pane is
  * `ConnectorPane`, still exported as `Sheet` for its users (GitHub's sync
- * sheet, fund admin's `MercuryEntitySheet`).
+ * sheet, and the Mercury sheet HQ's Bank accounts console opens).
  *
  * D753 — `layout: 'page'` is a connector's own page (`ConnectorPage.jsx`): the
  * sheet sits in the page's flow, with no overlay, no dialog role, no × and no
