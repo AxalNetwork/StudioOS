@@ -211,7 +211,8 @@ const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
 // D569 — the commissions-and-payouts console (canvas pea-commissions).
 const AdminCommissions = lazy(() => import('./pages/admin/AdminCommissions'));
 const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
-const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
+// D1140 (#3020): the full company settings live under Companies and projects; /company-settings forwards.
+const CompanySettingsAt = lazy(() => import('./pages/account/companies/CompanySettingsAt'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
 const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
@@ -311,6 +312,8 @@ const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
 // D1253 (#2428): the venture scorecard's method, the founder's page and HQ › Platform › Scoring.
 const ScoringMethodPage = lazy(() => import('./pages/scoring/ScoringMethodPage'));
 const FounderScorecardPage = lazy(() => import('./pages/scoring/FounderScorecardPage'));
+// D1258 (#3281): SC21, an advisor's read-only scorecard, when the founder has shared it.
+const AdvisorScorecardPage = lazy(() => import('./pages/scoring/AdvisorScorecardPage'));
 const HqScoringPage = lazy(() => import('./pages/scoring/HqScoringPage'));
 // D1261 (#2430): the founder's Evidence view and its drawers.
 const RaiseEvidence = lazy(() => import('./pages/cycles/evidence/RaiseEvidence'));
@@ -480,7 +483,6 @@ const FounderGrowFocus = lazy(() => import('./pages/founder/FounderGrowFocus'));
 const FounderGrowTalent = lazy(() => import('./pages/founder/FounderGrowTalent'));
 const FounderGrowCustomers = lazy(() => import('./pages/founder/FounderGrowCustomers'));
 const FounderGrowPartnerships = lazy(() => import('./pages/founder/FounderGrowPartnerships'));
-const FounderGrowCapitalMatch = lazy(() => import('./pages/founder/FounderGrowCapitalMatch'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
@@ -528,8 +530,10 @@ import { signInPath as assistantSignInPath } from './pages/connect/assistantCons
 import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
+import CapRelMovedRedirect from './pages/raise/caprel/CapRelMovedRedirect';
 import UseOfFundsMovedRedirect from './pages/raise/useoffunds/UseOfFundsMovedRedirect';
 import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
+import { CompanySettingsRedirect } from './pages/account/companies/CompaniesMoved';
 import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
@@ -2607,6 +2611,9 @@ function AppInner() {
           `:section` above matches one segment only, so without this every
           Usage sub-page answered 404; SettingsPage reads the page from the path. */}
       <Route path="/account/usage/:page" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      {/* D1140: the full company settings (what /company-settings drew), the active company's, before :tab. */}
+      <Route path="/account/companies/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
+      <Route path="/account/companies/:uid/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
       <Route path="/account/companies/:tab" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
@@ -2675,6 +2682,9 @@ function AppInner() {
       {/* D1309 (#2507, #2515, #2525): Record a session's channels, each at its own address (recordChannels.js).
           Static, so /validate/:slug/:id never reads them as a record. */}
       <Route path="/validate/record/whatsapp" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      {/* D862 (#2507): WhatsApp's tabs are paths under its address. */}
+      <Route path="/validate/record/whatsapp/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/whatsapp/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/telegram" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/calls" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
@@ -3085,6 +3095,9 @@ function AppInner() {
       <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/persona-segments/new" element={guard(['admin'], <NewPersonaSegment />)} />
       <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
+      {/* D1006 (#2821): Activity and Suggestions are the page's tabs, so a segment key can never be "activity". */}
+      <Route path="/admin/persona-segments/activity" element={guard(['admin'], <PersonaSegments />)} />
+      <Route path="/admin/persona-segments/suggestions" element={guard(['admin'], <PersonaSegments />)} />
       {/* D1005 (#2820): one segment, its three tabs as sub-paths. */}
       <Route path="/admin/persona-segments/:key" element={guard(['admin'], <PersonaSegmentPage />)} />
       <Route path="/admin/persona-segments/:key/members" element={guard(['admin'], <PersonaSegmentPage />)} />
@@ -3285,7 +3298,8 @@ function AppInner() {
           and admin Review queue tabs. The partner-side Submit and Performance
           surface lives separately at /offers/perk-deals. */}
       <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'partner' ? <Navigate replace to="/offers/perk-deals" /> : <PerksPage user={user} />)} />
-      <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />)))} />
+      {/* D1194 (#3128): the old investor pipeline is Capital relationships › Pipeline; the venture, query and hash travel, with ?moved=pipeline. */}
+      <Route path="/raise/capital/pipeline" element={<CapRelMovedRedirect tab="pipeline" moved="pipeline" />} />
        <Route path="/raise/legal" element={guard(['admin', 'founder'], <FounderRaiseLegal />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], founderWorkspace('raise', founderEditor(<LegalEnginePage />)))} />
       <Route path="/raise/legal-engine/incorporation" element={guard(['admin', 'founder', 'partner'], founderWorkspace('raise', founderEditor(<LegalEnginePage />)))} />
@@ -3483,8 +3497,9 @@ function AppInner() {
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />
       <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <FounderGrowPartnerships />)} />
-      <Route path="/raise/capital-match" element={guard(['admin', 'founder'], <FounderGrowCapitalMatch user={user} />)} />
-      <Route path="/grow/capital-match" element={guard(['admin', 'founder'], <Navigate replace to={{ pathname: '/raise/capital-match', search: location.search, hash: location.hash }} />)} />
+      {/* D1194 (#3128): Investor match is Capital relationships › Match; /grow/capital-match goes straight there too. */}
+      <Route path="/raise/capital-match" element={<CapRelMovedRedirect tab="match" moved="match" />} />
+      <Route path="/grow/capital-match" element={<CapRelMovedRedirect tab="match" moved="match" />} />
       {/* #2343: one brand page. Grow's read of pages and leads moved into the
           builder (`BrandPagesSection`); the old address forwards there. */}
       <Route path="/grow/brand" element={<Navigate replace to={{ pathname: '/build/brand', search: location.search, hash: location.hash }} />} />
@@ -3639,6 +3654,8 @@ function AppInner() {
       <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/sessions" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/earnings" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      {/* D1258 (#3281): SC21, a venture scorecard a founder shared with this advisor, read only. */}
+      <Route path="/practice/scorecards/:projectId" element={guard(['admin', 'advisor'], <AdvisorScorecardPage />)} />
       {/* D571 — the Ops canvas's four practice addresses. Each is a SECTION of
           the zone that already reads its store, so each lands there rather than
           on a second page answering the same question: deliverables are the
@@ -3772,14 +3789,14 @@ function AppInner() {
           destination guards itself, so an unentitled visitor is refused there
           rather than at a URL that no longer has a page (the D118 shape).
           None of the retired pages read a query string, so none is carried.
-            root, overview → /company-settings (the firm profile card, D390)
+            root, overview → /account/companies/settings (the firm profile card, D390; D1140 moved it from /company-settings)
             capabilities   → /offers/catalog (the service catalogue writes)
             portfolio      → /delivery/health (founder reviews, D390)
             engagements    → /pipeline/proposals (withdraw; the lifecycle and
                               invoice ledger are on /delivery/board)
             performance    → /pipeline/analytics (the same quotesAnalytics read) */}
-      <Route path="/partner/operations" element={<Navigate to="/company-settings" replace />} />
-      <Route path="/partner/operations/overview" element={<Navigate to="/company-settings" replace />} />
+      <Route path="/partner/operations" element={<Navigate to="/account/companies/settings" replace />} />
+      <Route path="/partner/operations/overview" element={<Navigate to="/account/companies/settings" replace />} />
       <Route path="/partner/operations/capabilities" element={<Navigate to="/offers/catalog" replace />} />
       <Route path="/partner/operations/portfolio" element={<Navigate to="/delivery/health" replace />} />
       <Route path="/partner/operations/engagements" element={<Navigate to="/pipeline/proposals" replace />} />
@@ -3831,7 +3848,7 @@ function AppInner() {
           room tool's Home itself (D696, D1109). */}
       <Route path="/raise" element={founderRaiseLanding
         ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)
-        : <Navigate to="/raise/capital/pipeline" replace />} />
+        : <Navigate to="/raise/capital-relationships/pipeline" replace />} />
       {/* D1227 (#3226): the old address of one call forwards, keeping its query, and is counted (REDIRECT_ROUTES) until #2319. */}
       <Route path="/raise/calls/:uid" element={guard(labRoles(['admin', 'founder']), <ParamRedirect to="/raise/capital-relationships/calls/:uid" />)} />
       {/* D1221 (#2458): one call at its address under Capital relationships › Calls (CLS8), inside the Raise shell (D686 §3.1 item 14); investors and counsel stay on /round-calls/:uid. */}
@@ -3847,6 +3864,8 @@ function AppInner() {
       <Route path="/raise/cap-table/scenarios/:scenario" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableScenario />)} />
       {/* D1253 (#2428): the founder's own scorecard (SC8); a static path ranks above /raise/:slug. */}
       <Route path="/raise/scorecard" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage />)} />
+      {/* D1258 (#3281): the founder's trajectory across model versions (SC12). */}
+      <Route path="/raise/scorecard/trajectory" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage tab="trajectory" />)} />
       {/* D1261 (#2430): Evidence (VR1) and its item and claim drawers (VR2, VR3) as addresses, before /raise/:slug. */}
       <Route path="/raise/evidence" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/item/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
@@ -3882,7 +3901,10 @@ function AppInner() {
           page /referrals would have shown them. */}
       <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferralsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferRedirect />)} />
-      <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
+      {/* D1140 (#3020, CMP19b, owner question 2, A): one place for companies. /company-settings forwards to the
+          active company's page under Companies and projects with the moved notice, the query and hash kept; it is
+          counted for #2319. The full settings are at /account/companies/<uid>/settings. */}
+      <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CompanySettingsRedirect />)} />
       {/* D651 — Integrations are Connectors now; both old addresses redirect
           to /account/connectors, keeping ?query= so OAuth returns still land.
           Available to every authenticated profile, as the Account center is. */}

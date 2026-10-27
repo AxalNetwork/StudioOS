@@ -6,7 +6,7 @@ This folder contains the founder-specific workspace shell and the dedicated canv
 
 - `FounderWorkspacePage.jsx` provides the shared founder workspace frame used by routes that have not graduated to a dedicated canvas landing.
 - `FounderModuleBackLink.jsx` gives older editor pages one quiet return to their cycle module. `../cycles/founderToolNavigation.js` is the shared map for module doors and editor returns (#1539). The old sibling-tool tab sets and wrapper are removed.
-- `FounderGrowCapitalMatch.jsx` retains its historical file name and styles, but Investor match is under Raise at `/raise/capital-match`, returning to Capital relationships; `/grow/capital-match` redirects with its query and hash preserved.
+- Investor match is Capital relationships › Match (D1194, #3128): the old Investor match page is deleted, and `/raise/capital-match` and `/grow/capital-match` forward to `/raise/capital-relationships/match` with the venture, the hash and the moved notice.
 - The Validate, Build, Raise and Grow landings are the cycle pages in `../cycles/` (D661, #1474); the four desks that held them here are retired, with their own stylesheets. A founder's bare `/build/discovery` still redirects to `/validate` and bare `/execution` to `/build`, and `?mode=workspace` mounts the Discovery and Execution editors at those routes (D422). `founderGrowDesk.css` stays: the six `/grow/*` zone pages draw their header from it, and `BrandPagesSection` (Grow's Brand read, on the builder at `/build/brand` since #2343) its cards.
 - `ShareUpdateSheet.jsx` is Grow's "Share an update" sheet (D654), drawn as an `ActionSheet` in the tall cycle lightbox by `ShareUpdateLightbox.jsx` (D686 §5.8, #1599), opened from the Grow cycle overview's primary action: Period, Metrics, Highlights, Asks, Audience and Preview, plus the `nometrics` and `nothing` states of `Cycle Action.dc.html` (`action=update`). It writes the founder's `portfolio_updates` row through `../../lib/api/shareUpdate.js`. D686 §5.8 (#1599): the period is This month, Last month or Custom (dates in UTC, a reversed range refused), `periodTitle` names the update ("October 2026 update"), a removed metric can be restored, lines have Edit and Done with Add a highlight and Add a lowlight always offered, the audiences show On/Off pills and Send says why it is off, and `sendShareUpdate` creates the draft once so a retry never leaves an orphan.
 - `SentUpdatePage.jsx` is `/updates/:uid` (D654): the author sees replies to each ask and the module each became an item in (Team expansion, Distribution, Partner network, Capital relationships, Market expansion), who opened it, and "Ask again" after 14 days with no reply; D686 §5.8 (#1599) titles it by its period and adds search, All / Replies / Opened, latest first, 1–25 of N paging and reply pills; a recipient sees what their audience may read and replies in place.
@@ -75,3 +75,10 @@ remain B8/B9's gates. S1 authorized the existing screen look without a new canva
 `RecordChannelPage.jsx` is Record a session › WhatsApp, Telegram and Calls at
 `/validate/record/<channel>` (D1309); the channels and addresses are
 `recordChannels.js`'s.
+
+WhatsApp's boards (WA1–WA13, D862, #2507) are built. `RecordWhatsAppTool.jsx`
+draws its tabs as paths under `/validate/record/whatsapp` (Inbox, Sessions,
+Analytics, Proposals, Connection). `ChannelSessionParts.jsx` holds the parts
+Telegram (#2515) and Calls (#2525) reuse: the inbox, the transcript, the
+analytics, the proposals, the guided connect and the four states.
+`channelSessionModel.js` holds their rules, which are pure.

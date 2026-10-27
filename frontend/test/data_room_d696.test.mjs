@@ -117,7 +117,7 @@ test('11. D1109: the files door is gone for everyone; other doors are unchanged'
     assert.deepEqual(moduleToolLinks('raise', 'data-room', user, '?project_id=3'), [], JSON.stringify(user));
   }
   assert.deepEqual(moduleToolLinks('raise', 'capital-relationships', { role: 'founder' }, '?project_id=3'),
-    [{ label: 'Open investor match', href: '/raise/capital-match?project_id=3' }]);
+    [{ label: 'Open investor match', href: '/raise/capital-relationships/match?project_id=3' }]);
 });
 
 test('11. the four cycle files still never spell mode=workspace', () => {

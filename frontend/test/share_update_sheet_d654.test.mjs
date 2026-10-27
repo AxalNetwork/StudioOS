@@ -13,7 +13,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { ShareUpdateView, STEPS, metricText, networkLine, periodChoices, periodRange, periodTitle, periodError, audienceRefusal, sendShareUpdate, shiftEditing } from '../src/pages/founder/ShareUpdateSheet.jsx';
-import { UpdatesPanel } from '../src/pages/RaisePipelinePage.jsx';
 import { SentUpdateView } from '../src/pages/founder/SentUpdatePage.jsx';
 
 const MRR = { key: 'mrr', label: 'MRR', unit: 'usd', value: 38400, source: 'stripe', as_of: '2026-10-12', reason: null };
@@ -257,18 +256,8 @@ test('sendShareUpdate creates once and retries on the same uid; a 409 on save re
   assert.deepEqual(sent, { uid: 'u9', sent: null, alreadySent: true });
 });
 
-test('Raise lists updates shared from Grow beside the ones posted there', () => {
-  const html = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(UpdatesPanel, {
-    projectId: 1, updates: [], onPosted: () => {},
-    shared: [{ uid: 'u1', title: 'October 2026 update', period: '2026-10', sent_at: '2026-11-01T09:00:00Z', investors: 3, delivered: 2, link: '/updates/u1' }],
-  })));
-  const text = renderedText(html);
-  assert.match(html, /<a [^>]*href="\/updates\/u1"[^>]*>October 2026 update<\/a>/);
-  assert.match(text, /Sent to 3 investors · 2 delivered · Shared from Grow/);
-  assert.doesNotMatch(text, /No updates yet/);
-  assert.doesNotMatch(text, /Updates are recorded here and on each investor's contact timeline — they are not emailed/);
-  assert.match(renderedText(renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(UpdatesPanel, { projectId: 1, updates: [], shared: [], onPosted: () => {} })))), /No updates yet/);
-});
+// D1194 (#3128): Raise's old Updates panel left with RaisePipelinePage; Grow's Updates history and
+// the Reporting desk list shared updates (UpdatesHistory).
 
 // ── D686 §5.8 (#1599): the sent page's author view ───────────────────────────
 import { sentTitle, sentSub, sentRows, recipientState, moduleHref, REPLY_PILL, PAGE_SIZE } from '../src/pages/founder/SentUpdatePage.jsx';

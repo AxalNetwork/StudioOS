@@ -49,7 +49,8 @@ async function mount(path) {
   return { container, async done() { await act(async () => root.unmount()); restore(); } };
 }
 
-for (const c of RECORD_CHANNELS) {
+// D862 (#2507) builds WhatsApp's boards, so its page draws the tool; record_whatsapp_d862.test.mjs mounts it.
+for (const c of RECORD_CHANNELS.filter((x) => x.key !== 'whatsapp')) {
   test(`${c.label}: its tabs, where today's version is, and the task that builds the rest`, async () => {
     const w = await mount(c.to);
     try {

@@ -4,6 +4,10 @@
  * twelve-month calendar (arrow keys move between cells; View as table lists
  * the same periods), and Duties with its drawer. They read nothing
  * themselves: `ReportingDesk.jsx` hands each the desk and the writes.
+ *
+ * D1062 (#2932) — at phone width (RPT20a) the calendar is a vertical list of
+ * periods with their state pills, each row a 44px button, and the page's
+ * primary moves to a bar pinned above the tab bar (`PinnedBar`).
  */
 import React, { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -19,15 +23,31 @@ export const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-i
 export const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const CHIP = 'inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[11px] font-bold';
-const BTN = 'inline-flex w-fit items-center rounded-[9px] bg-axal-violet px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-60 dark:hover:bg-violet-500';
-const GHOST = 'inline-flex w-fit items-center rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
-const LINK = 'w-fit bg-transparent p-0 text-[12.5px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
+const BTN = 'inline-flex min-h-11 w-fit items-center lg:min-h-0 rounded-[9px] bg-axal-violet px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-60 dark:hover:bg-violet-500';
+const GHOST = 'inline-flex min-h-11 w-fit items-center lg:min-h-0 rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+const LINK = 'inline-flex min-h-11 w-fit items-center bg-transparent p-0 lg:min-h-0 text-[12.5px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
 const SELECT = 'rounded-[9px] border border-axal-hairline bg-white px-2 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+
+/**
+ * D1062: the phone's pinned bottom bar (the canvas's `pbar`): above the
+ * phone tab bar while one is drawn (`--mobile-tabbar-h`), never under it.
+ */
+export function PinnedBar({ children, testId }) {
+  return (
+    <div className="sticky bottom-[var(--mobile-tabbar-h,0px)] z-10 flex gap-2 border-t border-axal-hairline bg-white px-[14px] py-[10px] dark:border-gray-800 dark:bg-gray-950" data-testid={testId}>
+      {children}
+    </div>
+  );
+}
+
+/** D1062: a phone bar's buttons share its width, each at least 44px tall. */
+export const BAR_PRIMARY = 'inline-flex min-h-11 flex-1 items-center justify-center rounded-[9px] bg-axal-violet px-3 text-[13px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-60 dark:hover:bg-violet-500';
+export const BAR_GHOST = 'inline-flex min-h-11 flex-1 items-center justify-center rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] font-bold text-axal-ink hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 
 export const StateChip = ({ period, testId }) => <span className={`${CHIP} ${toneOf(period)}`} data-testid={testId}>{stateWord(period)}</span>;
 
 /** RPT1 Due next: the next window, what it meets for whom, and readiness, which only the report's own read can give. */
-export function DueNext({ desk, canWrite, onPrepare, busy }) {
+export function DueNext({ desk, canWrite, onPrepare, busy, phone = false }) {
   const next = dueNext(desk);
   if (!next) {
     return (
@@ -49,7 +69,7 @@ export function DueNext({ desk, canWrite, onPrepare, busy }) {
         {next.groups.map((g) => <li key={g.title} className="text-[13px] text-axal-ink dark:text-gray-100"><b>{g.title}</b> · {g.holders}</li>)}
       </ul>
       <p className={MUTED} data-testid="reporting-readiness">Readiness is read when the report is prepared: Prepare reads each figure from your Grow modules with its source, and says which required figures are not recorded. Nothing is sent until you press Send.</p>
-      {canWrite && <button type="button" className={BTN} onClick={() => onPrepare(next.period)} disabled={busy} data-testid="reporting-due-next-prepare">{busy ? 'Preparing…' : `Prepare ${next.label} report`}</button>}
+      {canWrite && !phone && <button type="button" className={BTN} onClick={() => onPrepare(next.period)} disabled={busy} data-testid="reporting-due-next-prepare">{busy ? 'Preparing…' : `Prepare ${next.label} report`}</button>}
     </section>
   );
 }
@@ -85,7 +105,7 @@ export function NeedsYou({ desk, onPrepare, onExpect, busy }) {
  * one tab stop; arrow keys, Home and End move it, and Enter or a press
  * selects a period. View as table lists every period by due date.
  */
-export function Calendar({ desk, canWrite, onPrepare, onExpect, busy }) {
+export function Calendar({ desk, canWrite, onPrepare, onExpect, busy, phone = false }) {
   const { months, rows } = useMemo(() => calendarRows(desk), [desk]);
   const [at, setAt] = useState([0, 5]);
   const [selected, setSelected] = useState(null);
@@ -97,6 +117,47 @@ export function Calendar({ desk, canWrite, onPrepare, onExpect, busy }) {
     if (next) { e.preventDefault(); focus(next); }
   };
   const panel = selectedPanel(selected, canWrite);
+  const panelBlock = panel && (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-axal-hairline p-3 dark:border-gray-800" data-testid="reporting-selected">
+      <span className={EYE}>Selected period</span>
+      <p className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">{panel.title}</p>
+      <StateChip period={selected} />
+      {panel.lines.map((l) => <p key={l} className={MUTED}>{l}</p>)}
+      {(panel.prepare || panel.expect) && (
+        <div className="flex flex-wrap gap-2">
+          {panel.prepare && <button type="button" className={BTN} onClick={() => onPrepare(selected)} disabled={busy} data-testid="reporting-selected-prepare">Prepare it</button>}
+          {panel.expect && <button type="button" className={GHOST} onClick={() => onExpect(selected)} aria-haspopup="dialog" data-testid="reporting-selected-expect">Give an expected date</button>}
+        </div>
+      )}
+    </div>
+  );
+  // RPT20a: on a phone the twelve columns do not fit; the periods are a list, latest due first, each a button.
+  if (phone) {
+    const list = calendarTable(desk);
+    return (
+      <section className={CARD} data-testid="reporting-periods">
+        <h2 className={H2}>Periods</h2>
+        {list.length ? (
+          <ul className="m-0 flex list-none flex-col p-0" aria-label="Periods">
+            {list.map((r) => (
+              <li key={r.key} className="border-t border-axal-hairline first:border-t-0 dark:border-gray-800">
+                <button type="button" onClick={() => setSelected(r.period)} aria-pressed={selected?.uid === r.period.uid}
+                  className="flex min-h-11 w-full items-center justify-between gap-3 bg-transparent py-2 text-left hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-axal-violet dark:hover:bg-gray-800"
+                  data-testid={`reporting-period-${r.key}`}>
+                  <span className="flex min-w-0 flex-col">
+                    <b className="text-[13px] text-axal-ink dark:text-gray-100">{r.label} · {r.title}</b>
+                    <span className="text-[12px] text-axal-muted dark:text-gray-400">{r.holder} · due {r.due || 'not recorded'}</span>
+                  </span>
+                  <span className={`${CHIP} shrink-0 ${toneOf(r.period)}`}>{r.word}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className={MUTED}>No period has opened yet.</p>}
+        {panelBlock}
+      </section>
+    );
+  }
   return (
     <section className={CARD} data-testid="reporting-calendar">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -155,20 +216,7 @@ export function Calendar({ desk, canWrite, onPrepare, onExpect, busy }) {
         </div>
       )}
       <p className={MUTED} data-testid="reporting-calendar-line">{CALENDAR_LINE(desk?.today)} Arrow keys move between months and duties.</p>
-      {panel && (
-        <div className="flex flex-col gap-1.5 rounded-lg border border-axal-hairline p-3 dark:border-gray-800" data-testid="reporting-selected">
-          <span className={EYE}>Selected period</span>
-          <p className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">{panel.title}</p>
-          <StateChip period={selected} />
-          {panel.lines.map((l) => <p key={l} className={MUTED}>{l}</p>)}
-          {(panel.prepare || panel.expect) && (
-            <div className="flex flex-wrap gap-2">
-              {panel.prepare && <button type="button" className={BTN} onClick={() => onPrepare(selected)} disabled={busy} data-testid="reporting-selected-prepare">Prepare it</button>}
-              {panel.expect && <button type="button" className={GHOST} onClick={() => onExpect(selected)} aria-haspopup="dialog" data-testid="reporting-selected-expect">Give an expected date</button>}
-            </div>
-          )}
-        </div>
-      )}
+      {panelBlock}
     </section>
   );
 }
