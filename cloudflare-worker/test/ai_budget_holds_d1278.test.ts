@@ -75,7 +75,8 @@ test('the price list is the policy itself, in its order, with every free operati
 
 test('every priced operation has its label and source, and every registered tool is priced', () => {
   assert.deepEqual(Object.keys(OPERATION_INFO).sort(), Object.keys(METERING_POLICY.operations).sort());
-  for (const t of registeredTools()) assert.ok(OPERATION_INFO[toolOperation(t.name)], `${t.name} has a label`);
+  // D1315: a renamed tool is priced and labelled under the name it is stored as (`storedAs`).
+  for (const t of registeredTools()) assert.ok(OPERATION_INFO[toolOperation((t as { storedAs?: string }).storedAs ?? t.name)], `${t.name} has a label`);
   const paid = priceList({ version: 'v-test', operations: { 'mcp.tool.paid': { price_microusd: 1500, unit: 'call' } } });
   assert.deepEqual(paid.operations[0], { operation: 'mcp.tool.paid', label: 'mcp.tool.paid', source: 'axal', price_microusd: 1500, unit: 'call', ai: false });
   assert.equal(priceList({ version: 'v', operations: { x: { price_microusd: -1 as any, unit: 'call' } } }).operations[0].price_microusd, null, 'an unreadable price is null, never a 0');

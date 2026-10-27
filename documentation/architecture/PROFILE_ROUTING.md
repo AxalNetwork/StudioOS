@@ -363,11 +363,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 116 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 80 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 86 | Not routed. Proposed route only. |
 | High | 117 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 80 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Medium | 81 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 84 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
