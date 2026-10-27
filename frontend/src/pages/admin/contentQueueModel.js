@@ -43,16 +43,9 @@ export const articleHref = (id) => `${QUEUE_BASE}/${id}`;
 export const PAGE_LINE = 'Articles members propose, from submission to publish. Each decision is an admin’s, and the author is told.';
 
 /**
- * What each tab waits on, until its slot task lands (D1290 §4). Authors and
- * Performance are D1297's, in `contentQueue/`. Each says
- * where today's version of the block is, never an empty board or a zero.
+ * What a tab waits on, until its slot task lands (D1290 §4). Calendar is
+ * D1296's and Authors and Performance are D1297's, all in `contentQueue/`,
+ * so none of the four tabs waits. A later tab says where today's version of
+ * the block is, never an empty board or a zero.
  */
-export const WAITS = Object.freeze({
-  calendar: {
-    title: 'The calendar is not built yet',
-    lines: [
-      'It shows every scheduled and published article by day, with Move… on each one. It needs the queue to answer by date range (D1291) and is built by D1296.',
-      'Until then, an approved article’s time to go out is set in its review panel on Pipeline, in your zone and in UTC.',
-    ],
-  },
-});
+export const WAITS = Object.freeze({});

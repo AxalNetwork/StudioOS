@@ -7,6 +7,7 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import { AdminPageHeader, HeaderTab, actionGhost } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import MoveDialog from './MoveDialog';
+import { EditSegmentDialog, SuggestChangeDialog, useSegmentProfiles } from './SegmentWork';
 import { ADMIN_RAIL_NOTE, BLOCK_FAILED, PROFILES, RAIL_NOTE, SEG_PATH, SEG_TITLE } from './segModel';
 import {
   ACTIVE, ACTIVITY_KINDS, CONF_BANDS, HOW_SET, MEMBER_SORTS, activityRow, answersView, archetypesView, memberRow, membersParams,
@@ -300,10 +301,10 @@ function MembersTab({ segKey, superAdmin, onMoved }) {
  * Activity (SEG8, this segment's)
  * ------------------------------------------------------------------ */
 
-function ActivityTab({ segKey }) {
+export function ActivityTab({ segKey }) {
   const [kind, setKind] = useState(null);
   const [page, setPage] = useState(1);
-  const act = useRead(() => personaSegmentsApi.activity({ segment: segKey, kind: kind || undefined, page: page > 1 ? page : undefined }), [segKey, kind, page]);
+  const act = useRead(() => personaSegmentsApi.activity({ segment: segKey || undefined, kind: kind || undefined, page: page > 1 ? page : undefined }), [segKey, kind, page]);
   const rows = act.status === 'ready' && Array.isArray(act.data?.rows) ? act.data.rows : null;
   const pages = act.data ? Math.max(1, Math.ceil((Number(act.data.total) || 0) / (Number(act.data.page_size) || 25))) : 1;
   const gone = act.data?.sources ? ACTIVITY_KINDS.filter((k) => act.data.sources[k.key]?.available === false) : [];
@@ -333,7 +334,7 @@ function ActivityTab({ segKey }) {
             );
           })}
         </ul>
-      ) : <p className={`m-0 ${SUB}`} data-testid="seg-page-activity-none">Nothing has happened in this segment yet.</p>) : null}
+      ) : <p className={`m-0 ${SUB}`} data-testid="seg-page-activity-none">{segKey ? 'Nothing has happened in this segment yet.' : 'Nothing has happened in any segment yet.'}</p>) : null}
       {rows ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className={`${MONO} text-[12px] text-axal-muted dark:text-gray-400`}>{rangeText(act.data)}</span>
@@ -359,6 +360,12 @@ export function SegmentPage({ superAdmin }) {
   const tone = profileTone(profile?.profile);
   const crumb = { label: SEG_TITLE, to: SEG_PATH, current: profile?.name || 'Segment' };
   const onMoved = useCallback((line) => setDone(line), []);
+  const [editing, setEditing] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const segments = useSegmentProfiles();
+  const actions = profile ? (superAdmin
+    ? <button type="button" className={PRIMARY} onClick={() => setEditing(true)} data-testid="seg-page-edit">Edit segment</button>
+    : <button type="button" className={actionGhost} onClick={() => setSuggesting(true)} data-testid="seg-page-suggest">Suggest a change</button>) : null;
   // Literal doors, one per tab (D936), so the reachability walk finds each.
   const tabs = segKey ? (
     <>
@@ -388,7 +395,7 @@ export function SegmentPage({ superAdmin }) {
 
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="seg-page">
-      <AdminPageHeader crumb={crumb} title={profile?.name || 'Segment'} pills={pills} line={profile?.who || undefined} scope={!superAdmin} tabs={tabs} data-testid="seg-page-header" />
+      <AdminPageHeader crumb={crumb} title={profile?.name || 'Segment'} pills={pills} line={profile?.who || undefined} scope={!superAdmin} tabs={tabs} actions={actions} data-testid="seg-page-header" />
       {done ? (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[13px] font-semibold text-axal-ink dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-gray-100" data-testid="seg-page-moved">
           <span><span aria-hidden="true" className="mr-1.5 text-emerald-700 dark:text-emerald-400">✓</span>{done.text}</span>
@@ -396,6 +403,8 @@ export function SegmentPage({ superAdmin }) {
         </div>
       ) : null}
       {body}
+      {editing && profile ? <EditSegmentDialog segment={profile} onClose={() => setEditing(false)} onSaved={() => { setDone({ text: 'Saved. The segment profile is changed for every studio.' }); read.retry(); }} /> : null}
+      {suggesting ? <SuggestChangeDialog segments={segments} segmentKey={segKey} onClose={() => setSuggesting(false)} onSent={(text) => setDone({ text })} /> : null}
     </div>
   );
 }

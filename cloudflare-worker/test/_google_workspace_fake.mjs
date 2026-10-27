@@ -11,10 +11,16 @@ export function googleWorkspaceFake(files = {}) {
     const m = /^\/drive\/v3\/files\/([A-Za-z0-9_-]+)$/.exec(url.pathname);
     if (url.hostname === 'www.googleapis.com' && /\/export$/.test(url.pathname)) return new Response('%PDF synthetic');
     if (url.searchParams.get('alt') === 'media' && m) return new Response('synthetic file');
+    // D1093: a test may give a Doc's body (`files.docs[id]`) or a Sheet's values (`files.sheets[id]`); otherwise the synthetic defaults.
+    const docId = /^\/v1\/documents\/([A-Za-z0-9_-]+)$/.exec(url.pathname)?.[1];
+    if (url.hostname === 'docs.googleapis.com' && docId && files.docs?.[docId] === 'unshared') return Response.json({ error: 'raw-private-provider-body' }, { status: 404 });
+    if (url.hostname === 'docs.googleapis.com' && docId && files.docs?.[docId]) return Response.json(files.docs[docId]);
     if (url.hostname === 'docs.googleapis.com' && /^\/v1\/documents\/[A-Za-z0-9_-]+$/.test(url.pathname)) return Response.json({ body: { content: [] } });
     if (url.hostname === 'slides.googleapis.com' && /^\/v1\/presentations\/[A-Za-z0-9_-]+$/.test(url.pathname)) return Response.json({ slides: [] });
     if (url.hostname === 'forms.googleapis.com' && /\/responses$/.test(url.pathname)) return Response.json({ responses: [] });
     if (url.hostname === 'www.googleapis.com' && m) return files[m[1]] ? Response.json({ id: m[1], ...files[m[1]] }) : Response.json({ error: 'raw-private-provider-body' }, { status: 403 });
+    const sheetId = /^\/v4\/spreadsheets\/([A-Za-z0-9_-]+)\/values\//.exec(url.pathname)?.[1];
+    if (url.hostname === 'sheets.googleapis.com' && sheetId && files.sheets?.[sheetId]) return Response.json({ values: files.sheets[sheetId] });
     if (url.hostname === 'sheets.googleapis.com' && /^\/v4\/spreadsheets\/[A-Za-z0-9_-]+\/values\//.test(url.pathname)) return Response.json({ values: [['Date','Count'], ['2026-10-25',12], ['2026-10-26',13], ['4'], ['5'], ['6']] });
     if (url.hostname === 'forms.googleapis.com' && /^\/v1\/forms\/[A-Za-z0-9_-]+$/.test(url.pathname)) return Response.json({ items: [{ title: 'Would you pay?', questionItem: { question: { questionId: 'q1' } } }] });
     throw new Error('unexpected_provider_read');

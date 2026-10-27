@@ -1,10 +1,21 @@
 # Content queue tabs
 
-D1297 (#3393, part 7 of #2383): the Content queue's Authors and Performance
-tabs, built to the owner's canvas (ART9–ART12, the phone in ART18,
-`design/incoming/Content Queue Page.dc.html`). `../ArticlesQueuePage.jsx` is
-the routed page and mounts them at `/admin/articles/authors` and
-`/admin/articles/performance`; the addresses are `../contentQueueModel.js`'s.
+Tabs built apart from `../ArticlesQueuePage.jsx`, which mounts them at the
+addresses named in `../contentQueueModel.js` (D1290).
+
+D1296 (#3392): Calendar at `/admin/articles/calendar`.
+
+- `Calendar.jsx` — Calendar (ART7, ART8, ART13c): month and week, Move… on
+  every scheduled chip, the Ready to publish list with Schedule…, and the
+  schedule dialog. It reads D1291's queue by date range and writes through
+  D484's schedule call.
+- `calendarModel.js` — its rules, which are pure: the grid, the reader's
+  zone and UTC, the chips per day, the read range and what a time may be.
+
+D1297 (#3393, part 7 of #2383): Authors and Performance, built to the owner's
+canvas (ART9–ART12, the phone in ART18,
+`design/incoming/Content Queue Page.dc.html`), at `/admin/articles/authors`
+and `/admin/articles/performance`.
 
 - `statsModel.js` — pure. Each author's row, the tiles, search, filters, sort
   and pages; the periods and the range each asks for; the performance read as
@@ -17,6 +28,7 @@ the routed page and mounts them at `/admin/articles/authors` and
   charts each with View as table, views by sector, the top articles and what
   is not recorded yet.
 
-Rule for adding here: a tab of the Content queue that is its own slot task
-goes in this folder, takes its read as a `load` prop so a test can answer it,
-and keeps its rules in a pure model that a test in `frontend/test/` holds.
+A tab of the Content queue that is its own slot task goes in this folder,
+takes its read as a `load` prop so a test can answer it, and keeps its rules
+in a pure model that a test in `frontend/test/` holds. Drop its entry from
+`WAITS` in `../contentQueueModel.js` in the same change.

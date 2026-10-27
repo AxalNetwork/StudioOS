@@ -12,9 +12,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { DdCaseTabBody, DdCaseTabs, DdListTabBody, DdListTabs } from '../src/pages/duediligence/DdTabs.jsx';
+import { DdCaseTabs, DdListTabBody, DdListTabs } from '../src/pages/duediligence/DdTabs.jsx';
 import {
-  ADMIN_BASE, CASE_TABS, LIST_TABS, MEMBER_BASE, ON_OVERVIEW, PAGE_LINE, TITLE, WAITS,
+  ADMIN_BASE, CASE_TABS, LIST_TABS, MEMBER_BASE, PAGE_LINE, TITLE, WAITS,
   bandWord, baseOf, caseHref, decisionWord, listHref, viewOf,
 } from '../src/pages/duediligence/ddModel.js';
 
@@ -53,7 +53,8 @@ test('a case with no band is Not scored yet, never Green; decisions have their w
   assert.deepEqual(['green', 'yellow', 'amber', 'red', null, undefined, 'odd'].map(bandWord), ['Green', 'Yellow', 'Amber', 'Red', 'Not scored yet', 'Not scored yet', 'Not scored yet']);
   assert.deepEqual(['proceed', 'proceed_with_conditions', 'do_not_proceed', 'withdrawn', null].map(decisionWord), ['Proceed', 'Proceed with conditions', 'Do not proceed', 'Withdrawn', 'Not recorded']);
   for (const [k, w] of Object.entries(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), k);
-  for (const t of CASE_TABS.filter((x) => x.key !== 'overview')) assert.ok(ON_OVERVIEW[t.key], `${t.key} says where its blocks are today`);
+  // D1251 (#3266) draws every case tab: none says its blocks are elsewhere, none waits.
+  for (const t of CASE_TABS) assert.equal(WAITS[t.key], undefined, `${t.key} is drawn`);
   assert.equal(TITLE, 'Due diligence');
   assert.match(PAGE_LINE, /what the team decided\.$/);
 });
@@ -78,17 +79,12 @@ test('My reviews is drawn (D1252) and Templates is drawn (D1250); neither waits'
   assert.equal(WAITS.templates, undefined, 'D1250 reads the template store');
 });
 
-test('the case tabs: nine links on the caller’s base; a tab says where its blocks are today and what waits', () => {
+test('the case tabs: nine links on the caller’s base, the open one marked; a reviewer\'s read passes its four', () => {
   const tabs = html('/due-diligence/abc123/flags', h(DdCaseTabs, { uid: 'abc123', active: 'flags' }));
   for (const t of CASE_TABS) assert.ok(tabs.includes(`href="/due-diligence/abc123/${t.key}"`), t.key);
   assert.match(tabs, /aria-current="page"[^>]*data-testid="dd-case-tab-flags"/);
-  const flags = html('/admin/due-diligence/abc123/flags', h(DdCaseTabBody, { uid: 'abc123', tab: 'flags' }));
-  assert.ok(flags.includes('href="/admin/due-diligence/abc123"'), 'back to Overview on the same base');
-  assert.ok(flags.includes(ON_OVERVIEW.flags));
-  assert.ok(flags.includes('data-testid="dd-wait-flags"'));
-  const sign = html('/due-diligence/abc123/sign-off', h(DdCaseTabBody, { uid: 'abc123', tab: 'sign-off' }));
-  assert.ok(sign.includes('href="/due-diligence/abc123"') && !sign.includes('/admin/'), 'a member’s way back stays on /due-diligence');
-  assert.ok(sign.includes('data-testid="dd-wait-decision"'), 'Sign-off says the decision waits');
+  const four = html('/admin/due-diligence/abc123', h(DdCaseTabs, { uid: 'abc123', active: 'overview', tabs: CASE_TABS.filter((t) => ['overview', 'activity'].includes(t.key)) }));
+  assert.ok(four.includes('href="/admin/due-diligence/abc123/activity"') && !four.includes('/team"'), 'only the tabs passed');
 });
 
 /* ------------------------------------------------------------------ *
@@ -114,10 +110,11 @@ test('the wiring: the routes under both bases, the pages mounting the tabs, the 
   assert.match(list, /<AdminBoardFrame [^>]*>\s*<DdListPage \/>\s*<\/AdminBoardFrame>/);
   assert.ok(!list.includes('>Due Diligence</h1>'), 'the title is the canvas’s');
   const cs = read('frontend/src/pages/AdminDueDiligenceCasePage.jsx');
-  assert.ok(cs.includes('<DdCaseTabs uid={uid} active={caseTab} />'));
-  assert.ok(cs.includes("{caseTab !== 'overview' ? <DdCaseTabBody uid={uid} tab={caseTab} /> : (<>"));
-  assert.ok(cs.indexOf('{auditOpen && <AuditDrawer') > cs.indexOf('</>)}'), 'the audit drawer opens on every tab');
-  assert.ok(!cs.includes("cs.risk_band || 'Not recorded'") && cs.includes('bandWord(band)'), 'no band says Not scored yet');
+  assert.ok(cs.includes('<DdCaseTabs uid={uid} active={caseTab} tabs={tabs} />'));
+  // D1251 (#3266): each tab draws its own body; Activity is a tab, no longer a drawer.
+  for (const t of CASE_TABS) assert.ok(cs.includes(`${/-/.test(t.key) ? `'${t.key}'` : t.key}: <`), `${t.key} has a body`);
+  const work = read('frontend/src/pages/duediligence/DdCaseWork.jsx');
+  assert.ok(!work.includes("cs.risk_band || 'Not recorded'") && work.includes('bandWord(cs.risk_band || null)'), 'no band says Not scored yet');
   for (const f of ['Due Diligence Desk Page.dc.html', 'Due diligence · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Due diligence · Boards.dc.html').includes('name="Due Diligence Desk Page"'));
   assert.ok(existsSync('documentation/architecture/decisions/D1244.md'));

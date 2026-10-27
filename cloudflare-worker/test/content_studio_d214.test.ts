@@ -124,6 +124,9 @@ const M296_HQ = splitStatements(read('cloudflare-worker/sql/migrations/296_escal
 
 const M551 = read('cloudflare-worker/sql/migrations/551_network_profiles_roster.sql');
 
+/** D484 — migration 346 adds `publish_at` to `articles`; D1298 splits approved by it. */
+const M346 = read('cloudflare-worker/sql/migrations/346_article_publish_at.sql');
+
 /** The tables the three panels read. The board reads the pipeline's and 259's. */
 const PANEL_TABLES = [
   'assessment_games', 'assessment_chapters', 'assessment_archetypes', 'assessment_items',
@@ -143,6 +146,7 @@ function freshDb(opts: { without?: string[] } = {}) {
   // Migration 551 (D974): the roster's link and archive columns, which the panel reads (D1125).
   if (!without.has('network_profiles')) db.exec(M551);
   if (!without.has('admin_publications')) db.exec(publicationsDdl());
+  if (!without.has('articles')) db.exec(M346);
   if (!without.has('hq_escalations')) { db.exec(M259); db.exec(M267); db.exec(M296_HQ); }
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)')
     .run(SUPER, 'admin', 'The Holder', 'holder@example.test');
@@ -334,15 +338,15 @@ function seedBoard(db: any) {
 
 const laneOf = (body: any, key: string) => body.board.lanes.find((l: any) => l.key === key);
 
-test('the board draws six lanes in H19\'s order, from the two stores and the escalations', async () => {
+test('the board draws seven lanes in H19\'s order, from the two stores and the escalations', async () => {
   const db = freshDb();
   seedBoard(db);
   const { status, body } = await summary(db);
   assert.equal(status, 200);
   assert.deepEqual(body.board.lanes.map((l: any) => l.key),
-    ['draft', 'review', 'localisation', 'brand_approval', 'scheduled', 'published']);
+    ['draft', 'review', 'localisation', 'brand_approval', 'ready_to_publish', 'scheduled', 'published']);
   assert.deepEqual(body.board.lanes.map((l: any) => l.label),
-    ['Draft', 'Review', 'Localisation', 'Brand approval', 'Scheduled', 'Published']);
+    ['Draft', 'Review', 'Localisation', 'Brand approval', 'Ready to publish', 'Scheduled', 'Published']);
 
   const totals = Object.fromEntries(body.board.lanes.map((l: any) => [l.key, l.total]));
   // RE-AIMED IN D275, NOT RELAXED. Localisation was refused with no source
@@ -350,8 +354,10 @@ test('the board draws six lanes in H19\'s order, from the two stores and the esc
   // (migration 296). It is measured now, from the same one read as Brand
   // approval, and the seed's two open content rows record no relation — so
   // they are Brand approval's, and Localisation counts a real zero.
+  // D1298 splits approved articles by publish_at: one approved row has no time,
+  // so it lands in Ready to publish; none has a time, so Scheduled is zero.
   assert.deepEqual(totals, {
-    draft: 3, review: 3, localisation: 0, brand_approval: 2, scheduled: 1, published: 3,
+    draft: 3, review: 3, localisation: 0, brand_approval: 2, ready_to_publish: 1, scheduled: 0, published: 3,
   });
   const loc = laneOf(body, 'localisation');
   assert.deepEqual(loc.parts.map((p: any) => [p.store, p.n]), [['escalations', 0]]);
@@ -373,10 +379,12 @@ test('each lane names its store, and the two meanings of published stay two part
   assert.deepEqual(stores('draft'), ['articles', 'publications']);
   assert.deepEqual(stores('review'), ['articles']);
   assert.deepEqual(stores('brand_approval'), ['escalations']);
+  assert.deepEqual(stores('ready_to_publish'), ['articles']);
   assert.deepEqual(stores('scheduled'), ['articles']);
   assert.deepEqual(stores('published'), ['articles', 'publications']);
   assert.deepEqual(laneOf(body, 'review').parts[0].statuses,
     ['submitted', 'in_review', 'changes_requested']);
+  assert.deepEqual(laneOf(body, 'ready_to_publish').parts[0].statuses, ['approved']);
   assert.deepEqual(laneOf(body, 'scheduled').parts[0].statuses, ['approved']);
   assert.match(laneOf(body, 'published').note, /Two meanings of "published"/);
   assert.match(laneOf(body, 'scheduled').note, /goes out at that time/);
@@ -405,7 +413,7 @@ test('a lane cannot disagree with the pipeline block beside it: one read, not tw
     'a store\'s count never ran, so nothing moved between reads and this test proved nothing');
   const pipe = Object.fromEntries(body.pipeline.lanes.map((l: any) => [l.key, l.n]));
   const articlesIn = (key: string) => laneOf(body, key).parts.find((p: any) => p.store === 'articles').n;
-  for (const key of ['draft', 'review', 'scheduled', 'published']) {
+  for (const key of ['draft', 'review', 'ready_to_publish', 'scheduled', 'published']) {
     assert.equal(articlesIn(key), pipe[key], `the ${key} lane counts articles differently from the pipeline`);
   }
   const pubs = body.publications.by_status;
@@ -525,10 +533,8 @@ test('a publication status outside the two is reported, never placed in a lane',
   const { body } = await summary(db);
   assert.deepEqual(body.board.other_publication_statuses, [{ status: 'queued_for_print', n: 1 }]);
   assert.deepEqual(body.pipeline.unmapped_statuses, [{ status: 'weird_status', n: 1 }]);
-  // This fixture's `articles` predates migration 346 (D484), so the times are
-  // unreadable here, and say so; article_publish_at_d484.test.ts reads them.
-  assert.equal(body.board.publish_time.recorded, false);
-  assert.match(body.board.publish_time.reason, /migration 346/);
+  // Migration 346 is applied in this fixture; the publish-time split is readable.
+  assert.equal(body.board.publish_time.recorded, true);
   assert.equal(body.board.origin.recorded, false);
   assert.match(body.board.origin.reason, /only a content escalation carries a branch code/);
 });
