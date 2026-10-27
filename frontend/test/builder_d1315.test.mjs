@@ -138,9 +138,12 @@ test('the pane: the eyebrow trail, one h2 "Builder", the page line, and honest w
   assert.match(services, /data-testid="builder-wait-tools"/);
   for (const id of ['mcp-endpoint', 'mcp-callers', 'mcp-services', 'mcp-limits']) assert.match(services, new RegExp(`data-testid="${id}"`), id);
   assert.match(t, new RegExp(NOT_YET));
-  const keys = text(html(h(BuilderSection, { view: builderViewFor('/account/builder/keys'), storage }), '/account/builder/keys'));
+  const keysHtml = html(h(BuilderSection, { view: builderViewFor('/account/builder/keys'), storage }), '/account/builder/keys');
+  const keys = text(keysHtml);
   assert.match(keys, /^Builder › API keys Builder Keys your own scripts use to call StudioOS\./);
-  assert.match(keys, /#2480/);
+  // #2480: API keys is live, so its page draws instead of a wait.
+  assert.match(keysHtml, /data-testid="apik-page"/);
+  assert.doesNotMatch(keysHtml, /builder-wait-keys/);
   const drawer = html(h(BuilderSection, { view: builderViewFor('/account/builder/assistants/g1'), storage }), '/account/builder/assistants/g1');
   assert.match(text(drawer), /^Builder › AI assistants Builder/);
   assert.match(drawer, /data-testid="builder-drawer-assistant"/);

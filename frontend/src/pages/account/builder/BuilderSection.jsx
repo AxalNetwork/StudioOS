@@ -13,6 +13,8 @@ import { useViewMode } from '../../../contexts/ViewModeContext';
 // D1331 (#2479): MCP and services' cards and its two drawers.
 import McpServicesPage from './McpServicesPage';
 import { BUILDER_LINES, BUILDER_PAGES, BUILDER_WORDS, builderPathFor, builderTrailFor } from './builderModel';
+import ApiKeysPage from './ApiKeysPage';
+import { activeSupportSession } from '../../../lib/supportSession';
 // D1320 (#2481): API usage, and Activity's request history with its drawer.
 import ApiUsagePage from './ApiUsagePage';
 import ActivityPage from './ActivityPage';
@@ -27,8 +29,6 @@ export const MOVED_KEY = 'axal.builder.assistantsMoved.dismissed';
 /** Each waiting block: what it will draw, and the task that builds it. */
 export const WAITS = Object.freeze({
   tools: 'Every tool on axal.vc/mcp, its source, the permission it needs, whether you can call it now, and whether it spends AI tokens. It is drawn from the tool read (D846), which is being built.',
-  keys: 'Your API keys: create, reveal once, rotate and revoke. #2480 draws them from GET /api/developer/keys.',
-  key: 'One key: its scopes, companies, limit and last use. #2480 draws it (APIK5).',
 });
 
 export function Wait({ id, title, bare = false }) {
@@ -90,6 +90,15 @@ function ServicesPage({ view, role, user, api }) {
   return <McpServicesPage view={view} role={role} user={user} api={api} tools={<Wait id="tools" title="Tools on axal.vc/mcp" />} />;
 }
 
+/** API keys (#2480) with who is reading: a support or view-as session reads only, and the profile picks APIK9's card. */
+function KeysPage({ drawerUid }) {
+  const { user } = useAuth() || {};
+  const view = useViewMode();
+  const support = !!activeSupportSession() || !!view?.isImpersonating;
+  const role = user?.role === 'exploring' ? 'explorer' : Number(user?.is_super_admin) === 1 ? 'super_admin' : user?.role ?? null;
+  return <ApiKeysPage drawerUid={drawerUid} support={support} who={user?.name || null} role={role} />;
+}
+
 /**
  * The pane for one view (`builderViewFor`). `storage` holds the notice's
  * dismissal; the tests pass a fake, the page passes `window.localStorage`.
@@ -119,15 +128,16 @@ export default function BuilderSection({ view = { page: 'services', drawer: null
       </nav>
       {page === 'services' && !drawer && <MovedNotice storage={storage} />}
       {page === 'services' && <ServicesPage view={view} role={role} user={user} api={api} />}
-      {page === 'keys' && <Wait id="keys" title="API keys" />}
+      {page === 'keys' && <KeysPage drawerUid={drawer?.kind === 'key' ? drawer.id : null} />}
       {page === 'usage' && <ApiUsagePage />}
       {/* One mount for the log and its drawer, so opening and closing a request keeps the log as read. */}
       {page === 'activity' && <ActivityPage drawerId={drawer?.kind === 'request' ? drawer.id : null} />}
-      {/* D1317: a drawer's address opens it as the shared Sheet over its page
-          (560px, the canvases' width); closing returns to the page's address.
-          Builder has no Eadwyn rail, so the sheet meets the window's edge.
-          A request is Activity's own drawer (D1320), already over that log. */}
-      {drawer && drawer.kind !== 'request' && !ownDrawer && (
+      {/* D1317: a waiting drawer's address opens the shared Sheet over its page
+          (560px). API keys is the keys page's own Sheet, a request is
+          Activity's own drawer (D1320), and a service or an assistant is MCP
+          and services' own (D1331). Closing returns to the page's address.
+          Builder has no Eadwyn rail, so the sheet meets the window's edge. */}
+      {drawer && drawer.kind !== 'key' && drawer.kind !== 'request' && !ownDrawer && (
         <Sheet eyebrow={builderTrailFor(view)} title={DRAWER_TITLES[drawer.kind]} width={560}
           testId={`builder-drawer-${drawer.kind}`} onClose={() => navigate(builderPathFor({ page }))}>
           <Wait id={drawer.kind} bare />
