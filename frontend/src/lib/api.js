@@ -145,6 +145,7 @@ export * from './api/tokenPacks.js';
 export * from './api/trustContent.js';
 export * from './api/usage.js';
 export * from './api/useOfFunds.js';
+export * from './api/ventureScoreModels.js';
 export * from './api/ventureScores.js';
 export * from './api/verdict.js';
 // api-modules:end
