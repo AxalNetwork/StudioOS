@@ -415,6 +415,8 @@ import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 // D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
 import notionRoutes, { notionCycleRoutes } from './routes/notion';
+// D1325 (#3486): the Fill with Eadwyn sheet's read.
+import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
@@ -988,6 +990,7 @@ app.route('/api/assistant', assistantRoutes);
 // dev-only Anthropic path, and this endpoint reports on the production
 // Workers AI router, which is a different thing that happens to sit nearby.
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
+app.route('/api/fills', fillsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
 // D845 (#2471): the member's own usage reports over api_usage_events.
