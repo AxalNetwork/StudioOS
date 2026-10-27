@@ -308,6 +308,8 @@ const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPag
 // D642 (#1435) — U7, each plan's AI allowance and the runs held for a check.
 const HqPlatformAllowancesPage = lazy(() => import('./pages/hq/PlatformAllowancesPage'));
 const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
+// D1172 (#3085, STG20): what members store, totals only.
+const HqPlatformStoragePage = lazy(() => import('./pages/hq/PlatformStoragePage'));
 // D1253 (#2428): the venture scorecard's method, the founder's page and HQ › Platform › Scoring.
 const ScoringMethodPage = lazy(() => import('./pages/scoring/ScoringMethodPage'));
 const FounderScorecardPage = lazy(() => import('./pages/scoring/FounderScorecardPage'));
@@ -1175,6 +1177,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/topology">Topology</StripLink>
           <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
           <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
+          <StripLink to="/admin/platform/storage">Storage</StripLink>
           <StripLink to="/admin/platform/payments">Payments</StripLink>
           <StripLink to="/admin/platform/bank-accounts">Bank accounts</StripLink>
           <StripLink to="/admin/platform/product-testing">Product testing</StripLink>
@@ -3065,6 +3068,7 @@ function AppInner() {
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
       <Route path="/admin/platform/ai-usage" element={guard(['admin'], hqOnly(<HqAiUsagePage />))} />
+      <Route path="/admin/platform/storage" element={guard(['admin'], hqOnly(<HqPlatformStoragePage />))} />
       <Route path="/admin/platform/scoring" element={guard(['admin'], hqOnly(<HqScoringPage />))} />
       <Route path="/scoring/method" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ScoringMethodPage />)} />
       {/* The owner's ruling (2026-10-20) — Integration keys, with GitHub Sync as
