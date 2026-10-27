@@ -6,6 +6,7 @@ import { logCycleWriteStatement, type CycleModules } from './cycleActivity';
 import { collectEvidenceSources, candidateKey, EVIDENCE_AREAS, EVIDENCE_RULES, type EvidenceCandidate, type EvidenceArea, type CollectedEvidence } from './raiseEvidenceSources';
 export { EVIDENCE_RULES, EVIDENCE_AREAS, collectEvidenceSources, evidenceDate, evidenceStale, evidenceHash, candidateKey } from './raiseEvidenceSources';
 import { grantFolderScope, tierAdmits } from './dataRoomAccess';
+import { checkClaims, claimRecord, type ClaimCheck } from './raiseClaims';
 
 /** Count a file only if a currently granted, active account can download it. D1103 — inside that grant's folders. */
 export async function readableRoomFiles(env: Env, projectId: number): Promise<any[]> {
@@ -347,6 +348,11 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
   const limit=query.limit??50,offset=query.offset??0;if(!Number.isSafeInteger(limit)||limit<1||limit>100||!Number.isSafeInteger(offset)||offset<0||offset>1000000)throw new RaiseEvidenceError('invalid',400);
   let sources:CollectedEvidence|null=null,refresh:any={refreshed:false,outcome:'founder_only'};
   if(ctx.founder){try{refresh=await buildCandidates(ctx,{force:query.refresh});}catch{refresh={refreshed:false,outcome:'unreadable',reason:'Candidates could not be prepared. Try again.'};}}
+  // D1264 (#3287): each claim's state from the pinned evidence, checked on the founder's read; an admin reads the last check.
+  let check:ClaimCheck|null=null,claimCheck:any=null;
+  if(ctx.founder){try{check=await checkClaims(ctx.env,ctx.projectId);claimCheck={outcome:check.outcome,surfaces:check.surfaces};}
+    catch{claimCheck={outcome:'unreadable',surfaces:null,reason:'Claims could not be checked. Try again.'};}}
+  const records=new Map(check?.claims.map(c=>[JSON.stringify([c.surface,c.surface_version,c.field_key]),claimRecord(c)])??[]);
   const rawItems=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT * FROM raise_evidence_items WHERE project_id=? AND (?=1 OR private_reason IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?`)
     .bind(ctx.projectId,ctx.founder?1:0,limit+1,offset).all<RaiseEvidenceItem>());
   const rawProposals=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT id,uid,source_ref,source_kind,source_label,payload_json,status,usage_log_id,model FROM ai_rail_proposals
@@ -388,12 +394,12 @@ export async function readRaiseEvidence(ctx:RaiseEvidenceContext,query:{limit?:n
       .bind(ctx.projectId,limit+1,offset).all<{id:number;uid:string;surface:string;surface_version:string;field_key:string;claim_kind:string;stated_value:string|null;state:string;checked_at:string|null}>();
     const links=await ctx.env.DB.prepare(`SELECT c.uid AS claim_uid,i.uid AS item_uid,i.version AS item_version,l.how FROM raise_claim_evidence l JOIN raise_claims c ON c.id=l.claim_id AND c.project_id=l.project_id
       JOIN raise_evidence_items i ON i.id=l.item_id AND i.project_id=l.project_id WHERE l.project_id=? AND (?=1 OR i.private_reason IS NULL) AND c.uid IN (SELECT value FROM json_each(?))`).bind(ctx.projectId,ctx.founder?1:0,JSON.stringify(rows.results.slice(0,limit).map(r=>r.uid))).all<{claim_uid:string;item_uid:string;item_version:number;how:string}>();
-    return {state:'recorded',rows:rows.results.slice(0,limit).map(row=>ctx.founder?{...row,links:links.results.filter(l=>l.claim_uid===row.uid)}:
+    return {state:'recorded',rows:rows.results.slice(0,limit).map(row=>ctx.founder?{...row,record:records.get(JSON.stringify([row.surface,row.surface_version,row.field_key]))??null,links:links.results.filter(l=>l.claim_uid===row.uid)}:
       {uid:row.uid,surface:row.surface,claim_kind:row.claim_kind,state:row.state,checked_at:row.checked_at}),has_more:rows.results.length>limit};
   }catch{return unreadableBlock;}})();
   const coverage=await(async()=>{try{const result=await ctx.env.DB.prepare(`SELECT area,source_label,state,visibility,COUNT(*) AS count FROM raise_evidence_items
     WHERE project_id=? AND (?=1 OR private_reason IS NULL) GROUP BY area,source_label,state,visibility`).bind(ctx.projectId,ctx.founder?1:0)
       .all<{area:string;source_label:string;state:string;visibility:string;count:number}>();return {state:'recorded',groups:result.results};}
     catch{return {state:'unreadable',groups:null,reason:'Coverage could not be read. Try again.'};}})();
-  return {items,proposals,claims,coverage,sources:ctx.founder?parseSourceBlocks(sourceCoverage?.blocks_json):null,source_coverage_at:ctx.founder?sourceCoverage?.last_attempt_at??null:null,live_sources:ctx.founder?sources?.blocks??null:null,refresh,permissions:{can_decide:ctx.founder,can_share:ctx.founder},limit,offset};
+  return {items,proposals,claims,coverage,sources:ctx.founder?parseSourceBlocks(sourceCoverage?.blocks_json):null,source_coverage_at:ctx.founder?sourceCoverage?.last_attempt_at??null:null,live_sources:ctx.founder?sources?.blocks??null:null,refresh,claim_check:claimCheck,permissions:{can_decide:ctx.founder,can_share:ctx.founder},limit,offset};
 }
