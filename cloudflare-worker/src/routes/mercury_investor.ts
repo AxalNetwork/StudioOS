@@ -4,7 +4,6 @@
  *
  *   GET    /                         what Mercury feeds in each investor section (`mercuryFeeds.ts`)
  *   GET    /accounts                 their checking and savings accounts: id, name, kind, last four; no balance
- *   GET    /pipeline                 their capacity fact beside the cheques they intend on live deals (Deals · Pipeline, D884)
  *   GET    /commit                   their capacity fact (Deals · Commit), for their own page
  *   POST   /commit                   { account_ids } reads the picked accounts and writes the fact
  *   DELETE /commit                   deletes it; a sync does not bring it back
@@ -40,7 +39,7 @@ import { MERCURY_AUTH_TYPE, mercuryAccessFor } from '../services/mercury/oauth';
 import { openMercuryReads, scopePermission, type MercuryReads } from '../services/mercury/reads';
 import {
   acceptProposal, adminFunds, callProposalsFor, capacityOf, categoryMap, closingDrafts, deleteCapacity, deleteMonthEndCash,
-  dismissProposal, gpFunds, ledgerDrafts, listProposals, monthEndCash, ownCommitments, ownProposal, pipelineFigures, readCapacity, readLines,
+  dismissProposal, gpFunds, ledgerDrafts, listProposals, monthEndCash, ownCommitments, ownProposal, readCapacity, readLines,
   readMonthEndCash, readStatements, statementDrafts, statementKeyOf, writeCapacity, writeMonthEndCash, writeProposals,
   type InvestorReader, type ProposalKind,
 } from '../services/mercury/investorFeeds';
@@ -190,14 +189,6 @@ export function createMercuryInvestor(opts: MercuryInvestorOptions = {}) {
       await logRead(c.env, conn.integrationId, user, 'accounts', { accounts: accounts.length });
       return c.json({ accounts: accounts.map((a) => ({ id: a.mercury_account_id, name: a.nickname, kind: a.kind, last_four: a.last_four })) });
     });
-  });
-
-  // D884: Deals › Pipeline reads no Mercury: the Commit capacity fact, beside the cheques the investor intends.
-  app.get('/pipeline', async (c) => {
-    const user = await requireAuth(c);
-    const p = await policy(c, user);
-    if (p) return p;
-    return c.json(await pipelineFigures(c.env, user));
   });
 
   app.get('/commit', async (c) => {

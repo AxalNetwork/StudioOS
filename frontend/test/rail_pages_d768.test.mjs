@@ -122,7 +122,8 @@ test('a route answers its module and every page below it; the section answers th
   assert.equal(pageKeyFor('/network/introductions', 'advisor'), 'Advisor · Network · Introductions');
   assert.equal(pageKeyFor('/network/introductions', 'investor'), 'Investor · Network · Introductions');
   assert.equal(pageKeyFor('/pipeline/leads', 'partner'), 'Operating Partner · Pipeline · Leads');
-  assert.equal(pageKeyFor('/pipeline', 'investor'), 'Investor · Deals · Pipeline');
+  // D1243 (#3256): an investor's /pipeline forwards to Deal flow; the key is the Deals page's.
+  assert.equal(pageKeyFor('/pipeline', 'investor'), 'Investor · Deals');
   // D720 §11's table.
   assert.equal(pageKeyFor('/funds/ledger', 'investor'), 'Investor · Fund · Distributions');
   // D938: the Admin Console's tools left /admin for their own addresses; the keys kept their names.
