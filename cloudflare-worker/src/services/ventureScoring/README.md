@@ -1,8 +1,8 @@
 # Venture scorecard engine
 
 D1255 (#3278, part 2 of #2428). The engine behind the eleven-scope venture
-scorecard that D1253's panel and strip draw. No route reads it yet:
-`/api/venture-scores` is part 3 (#3279).
+scorecard that D1253's panel and strip draw. D1256 (#3279, part 3) reads it
+through `/api/venture-scores` (`../../routes/venture_scores.ts`).
 
 | File | What it holds |
 |---|---|
@@ -12,6 +12,9 @@ scorecard that D1253's panel and strip draw. No route reads it yet:
 | `store.ts` | `scoreVenture` recomputes on read and keeps a signed row per scope only when its input hash changed, in migration 598's shared store (`state` from 625), with the live model (`liveModel`: the latest publication, else v1). PMF is recomputed by `../scoring/pmfStore.ts`, its one writer. `storedScorecard` reads without recomputing. |
 | `countryIndex.ts` | D1259: the country index sources with their recorded licences (`INDEX_SOURCES`), the WGI fetch and list import into migration 627's editions and values, and HQ's source read. A source without a recorded licence is neither imported nor read. |
 | `publish.ts` | D1259: `publishModel` makes a newer version live; `continuePublication` rescores every venture in claimed batches from the every-minute job; `modelVersions` and `modelChanges` feed HQ › Scoring. |
+| `access.ts` | D1256: who reads a scorecard and what they see (founder, staff, shared advisor; an investor through a deal, masked before the NDA, never when the founder's switch is off), the logged reads, reviews, corrections, weighting and sharing (migration 626). |
+| `jobs.ts` | D1256: the nightly recompute, the recompute after a connector sync, and the quarterly fairness aggregate (cells under five ventures suppressed). |
+| `store.ts` | `scoreVenture` recomputes on read and keeps a signed row per scope only when its input hash changed, in migration 598's shared store (`state` from 625). PMF is recomputed by `../scoring/pmfStore.ts`, its one writer. `storedScorecard` reads without recomputing. |
 
 Rules for adding to it:
 

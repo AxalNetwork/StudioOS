@@ -14,8 +14,8 @@ exists for each — not by how far each has been built. Counts as of 2026-10-20:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 102 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
-| `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
+| `canvases/integrated/` | 104 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/backlog/` | 27 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
 (`canvases/uploads/` holds 3 more that were never part of the triage split, and
@@ -55,7 +55,9 @@ action pages built on a phone (D703), and 97 / 28 / 26 until
 `Legal Documents · Templates` moved there on 2026-10-19, with D717's screens
 built (#1782), and 100 / 28 / 26 until `Admin Insights Page` and
 `Admin Insights · Boards` arrived on 2026-10-24 with their page built (D893,
-#2366).
+#2366), and 102 / 28 / 26 until `Data Room · Boards` and
+`Raise Data Room Page` moved there on 2026-10-26 with the Data room tool's
+eight parts built and `Data Room` left `backlog/` for `scraps/` (D1109).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
@@ -108,6 +110,45 @@ strength of a live route would empty the queue of the work it exists to track.
    unbuilt canvas, both clauses firing at once — and on 2026-09-07 it sent
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
+
+## Landed 2026-10-26 — HQ › Content › Content queue (#2383)
+
+The owner's artifacts `TLvMuife2sYnh4BtEpo39B` (the board grid) and
+`XBryVcPJkeVM6D3SQKeR4b` (the page) came from S21's prompt on #2383. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Content queue · Boards.dc.html` is the board grid (ART1 to ART18); it
+  imports the page by name;
+- `Content Queue Page.dc.html` is the page.
+
+**Two edits, named.** The reader left two image asset uuids in the page. The
+Axal VC mark now points at `/axal-mark.png` and the Eadwyn mark at
+`/eadwyn-ai.png`, both served from `frontend/public/`. No other value was
+edited.
+
+**Grade: UPGRADE.** S21's integration (D1290) gives the queue four tabs at
+their own addresses and one address per article, under the shared header, and
+the review notices open the article. The boards themselves wait for
+D1291–D1298, so this canvas stays in the queue until they land.
+## Landed 2026-10-26 — Pricing › Models › Add tokens (#2452)
+
+The owner's artifacts `Tq2eoropBxcFAJm2tHMVhH` (the board grid) and
+`X8w6p3Kkb3jTD2goTvFWXj` (the page) came from S21's prompt on #2452. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `Add tokens · Boards.dc.html` is the board grid (CRP1 to CRP18); it imports
+  the page by name;
+- `Add Tokens Page.dc.html` is the page.
+
+**Two edits, named.** The reader left two image asset uuids in the page. The
+Axal VC mark (`alt="Axal VC"`) now points at `/axal-mark.png`, and the Eadwyn
+mark beside CRP9's refused run at `/eadwyn-ai.png`, both served from
+`frontend/public/`. No other value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1285) opens `/pricing`'s Models tab
+with a member's token balance and Token packs above the tables, one Buy per
+pack straight to its checkout, and a failed read that says so. The band's
+allowance and storage, the sheet's pack mode, one Add tokens everywhere and the
+Worker's refusal words wait for D1286–D1289, so this canvas stays in the queue
+until they land.
 
 ## Landed 2026-10-26 — Deals › Deal flow (#2423)
 
@@ -447,9 +488,10 @@ No value was edited.
 
 **Grade: UPGRADE.** The tool is the Data room module at `/raise/data-room`,
 with six tab words under it. S21's integration (D1101) draws Files, Access and
-Activity from the founder's room read; writes stay in the files tool until
-D1101's parts land, so this canvas stays in the queue until then. It replaces
-`design/canvases/backlog/Data Room.dc.html` once part 8 lands.
+Activity from the founder's room read; writes stayed in the files tool until
+D1101's parts landed. **Graduated 2026-10-26 (D1109, #2989, part 8):** both
+files moved to `design/canvases/integrated/`, unedited, and
+`design/canvases/backlog/Data Room.dc.html` moved to `scraps/`, superseded.
 
 ## Landed 2026-10-25 — Account · Trust center (#2425)
 

@@ -217,6 +217,18 @@
 .axp-pack-n { font-weight: 800; font-size: 30px; line-height: 1; letter-spacing: -.03em; }
 .axp .axp-pack .axp-btn { margin-top: 6px; padding: 10px 14px; }
 
+/* ── D1285 (#2452): the "Your AI tokens" band and the pack title ── */
+.axp-pack-t { font-weight: 700; font-size: 14px; }
+.axp-tokband { padding-bottom: 0; }
+.axp-tokband-row {
+  background: var(--p-card); border: 1px solid var(--p-line); border-radius: 15px; padding: 22px 26px;
+  display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.axp-tokband-n { font-weight: 800; font-size: 34px; line-height: 1.1; letter-spacing: -.02em; margin: 6px 0 4px; }
+.axp-tokband-bad { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 14px; color: var(--p-err); }
+.axp-tokband-note { margin: 0 0 10px; padding: 10px 14px; border-radius: 10px; font-size: 13.5px; color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; }
+.axp .axp-tokband-add { flex: none; width: auto; margin: 0; padding: 11px 18px; min-height: 44px; }
+
 /* ── FAQ ── */
 .axp-faq { margin-top: 34px; }
 .axp-faq-list { border-top: 1px solid var(--p-line); }

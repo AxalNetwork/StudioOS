@@ -2,11 +2,11 @@
  * D696 (#1658) PR 3: the data room by mode, its two tool doors, and the
  * record crumb.
  *
- *  11. `/raise/data-room` answers by mode, investor first; for a founder the
- *      bare address is the Data room module page, which links the read's own
- *      Add, the read-only access view and "Open the files tool"; the files
- *      door is an admin's and a founder's on every tier, and nobody else's;
- *      `?mode=access` draws the access view with its return to the module.
+ *  11. `/raise/data-room` answers investor first; for a founder the bare
+ *      address is the Data room module page, the tool's Home, which links the
+ *      read's own Add. D1109 (#2989) retired the files tool and the access
+ *      view: `?mode=workspace` and `?mode=access` forward to the tool's Files
+ *      and Access tabs, and the module page has no door to either.
  *  12. In record mode the rail's crumbs read section › module › record, and
  *      leaving the record drops it.
  *
@@ -17,7 +17,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { fixture } from './_record_d696.mjs';
@@ -25,14 +24,12 @@ import { routeBlock } from './_routes.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
-import FounderModuleBackLink from '../src/pages/founder/FounderModuleBackLink.jsx';
 import { moduleToolLinks } from '../src/pages/cycles/founderToolNavigation.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
 const APP = codeOnly(read('frontend/src/App.jsx'));
 const FOUNDER = { id: 9, role: 'founder', name: 'Example Founder', email: 'founder@example.test', subscription_tier: 'free' };
-const ACCESS = 'Open the access view: grants, NDA state and recent access';
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
 const moduleRead = (add) => ({
   module: { name: 'Data room' },
@@ -77,16 +74,17 @@ async function mounted(url, reads) {
 
 // --- 11. The route ---------------------------------------------------------------
 
-test('11. /raise/data-room has its four arms, investor first, then the files tool, the access view and the module page', () => {
+test('11. /raise/data-room answers investor first, then the retired modes forward, then the module page', () => {
   const block = routeBlock(APP, '/raise/data-room');
   assert.match(block, /guard\(\['admin', 'founder', 'investor'\],/);
   const at = (re) => { const m = block.match(re); assert.ok(m, String(re)); return m.index; };
   const investor = at(/effectiveRole === 'investor'\s*\?\s*<Navigate to="\/research\/diligence" replace \/>/);
-  const workspace = at(/get\('mode'\) === 'workspace'\s*\?\s*founderWorkspace\('raise', founderEditor\(<DataRoomPage user=\{user\} \/>\)\)/);
-  const access = at(/get\('mode'\) === 'access'\s*\?\s*founderEditor\(<FounderRaiseDataRoom \/>\)/);
+  // D1109 (#2989): ?mode=workspace and ?mode=access forward to the tool's Files and Access, counted.
+  const moved = at(/movedKind\(location\.search\)\s*\?\s*<DataRoomMovedRedirect kind=\{movedKind\(location\.search\)\} \/>/);
   const module = at(/:\s*<CycleRoute cycle="raise" slug="data-room" \/>\)\}/);
-  assert.ok(investor < workspace && workspace < access && access < module, 'the arms run in decision 12\'s order');
+  assert.ok(investor < moved && moved < module, 'the arms run investor, forwards, module');
   assert.equal((block.match(/<CycleRoute\b/g) || []).length, 1);
+  assert.doesNotMatch(APP, /DataRoomPage|FounderRaiseDataRoom/, 'a retired page is still mounted');
 });
 
 // --- 11. The module page -----------------------------------------------------------
@@ -95,7 +93,7 @@ for (const [what, add] of [
   ["#1699's Add, the files tool", '/raise/data-room?mode=workspace'],
   ["#1657's Upload form", '/raise/data-room/new?project=3'],
 ]) {
-  test(`11. for a founder the bare address is the module page, with the access view and the files tool (${what})`, async () => {
+  test(`11. for a founder the bare address is the module page, the tool's Home, with no door to a retired page (${what})`, async () => {
     const view = await mounted('/raise/data-room?project_id=3', (u) => (u.includes('/auth/me') ? FOUNDER
       : u.includes('/cycles/raise/modules/data-room') ? moduleRead(add) : {}));
     try {
@@ -104,10 +102,8 @@ for (const [what, add] of [
       // #1657's Upload form is registered (D695), so the Add is the form's own address,
       // whatever the read's `records.add` points at.
       assert.deepEqual(view.links('records-add').map((l) => l.href), ['/raise/data-room/new?project_id=3'], 'the Add opens the Upload form');
-      assert.deepEqual(view.links('cycle-module-tool'), [
-        { href: '/raise/data-room?mode=access&project_id=3', text: ACCESS },
-        { href: '/raise/data-room?mode=workspace&project_id=3', text: 'Open the files tool' },
-      ]);
+      // D1109: the module page is the tool, so it has no door to the retired files tool or access view.
+      assert.deepEqual(view.links('cycle-module-tool'), []);
       // No add or tool on the page points back at the bare room.
       for (const l of [...view.links('records-add'), ...view.links('cycle-module-tool')]) {
         assert.doesNotMatch(l.href, /^\/raise\/data-room(\?project_id=3)?$/, l.href);
@@ -116,27 +112,12 @@ for (const [what, add] of [
   });
 }
 
-test('11. the files door is an admin\'s and a founder\'s on every tier, and nobody else\'s; other doors are unchanged', () => {
-  const files = (user, search = '?project_id=3') => moduleToolLinks('raise', 'data-room', user, search);
-  const door = [{ label: 'Open the files tool', href: '/raise/data-room?mode=workspace&project_id=3' }];
-  for (const user of [{ role: 'admin' }, { role: 'founder', subscription_tier: 'free' }, { role: 'founder', subscription_tier: 'growth' },
-    { role: 'founder', subscription_tier: 'studio' }, { role: 'founder', spinout_lab_active: 1 }]) {
-    assert.deepEqual(files(user), door, JSON.stringify(user));
+test('11. D1109: the files door is gone for everyone; other doors are unchanged', () => {
+  for (const user of [{ role: 'admin' }, { role: 'founder', subscription_tier: 'free' }, { role: 'founder', spinout_lab_active: 1 }, { role: 'partner' }, null]) {
+    assert.deepEqual(moduleToolLinks('raise', 'data-room', user, '?project_id=3'), [], JSON.stringify(user));
   }
-  for (const user of [{ role: 'partner' }, { role: 'investor' }, null]) assert.deepEqual(files(user), [], JSON.stringify(user));
-  assert.deepEqual(files({ role: 'founder' }, ''), [{ label: 'Open the files tool', href: '/raise/data-room?mode=workspace' }], 'no venture: the door alone');
-  assert.deepEqual(files({ role: 'founder' }, '?project_id=evil%23x&mode=access'), [{ label: 'Open the files tool', href: '/raise/data-room?mode=workspace' }]);
-  // A door with no query keeps today's href.
   assert.deepEqual(moduleToolLinks('raise', 'capital-relationships', { role: 'founder' }, '?project_id=3'),
     [{ label: 'Open investor match', href: '/raise/capital-match?project_id=3' }]);
-});
-
-test('11. ?mode=access is the access view with its return to the module page, and its Open workspace links the files tool', () => {
-  const back = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/raise/data-room?mode=access&project_id=3'] },
-    h(FounderModuleBackLink, { user: FOUNDER })));
-  assert.match(back, /href="\/raise\/data-room\?project_id=3"[^>]*>← Raise › Data room</);
-  assert.match(read('frontend/src/pages/founder/FounderRaiseDataRoom.jsx'),
-    /<Link to=\{`\/raise\/data-room\?mode=workspace\$\{project\.id \? `&project_id=\$\{project\.id\}` : ''\}`\} data-testid="link-open-data-room-workspace">/);
 });
 
 test('11. the four cycle files still never spell mode=workspace', () => {

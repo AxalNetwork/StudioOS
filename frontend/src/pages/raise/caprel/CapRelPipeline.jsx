@@ -10,6 +10,7 @@ import {
   IMPORT_CHUNK, NO_STATUS, PASSED, SLUG, STAGES, STAGE_LABEL, STATUS_OPTIONS, amountText, asksStatus, boardColumns, chunks,
   importRows, mergeImport, moveBody, moveSentence, moveTargets, stageLabel, statusCounts, statusLabel, tabSearch,
 } from './capRelModel';
+import CapRelProposals from './CapRelProposals';
 
 /**
  * D1192 (#3126) — Capital relationships' Pipeline (CRL2 the board, CRL3 the
@@ -37,8 +38,8 @@ const FIELD = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 
 const LABEL = 'flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200';
 const NR = 'rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400';
 
-const errText = (e, fallback) => (e?.status === 409 ? 'Already in the pipeline: this venture tracks an investor with that email.' : (e?.message || fallback));
-const nameOf = (p) => [p?.name, p?.firm && p.firm !== p.name ? p.firm : null].filter(Boolean).join(' · ') || 'Investor';
+export const errText = (e, fallback) => (e?.status === 409 ? 'Already in the pipeline: this venture tracks an investor with that email.' : (e?.message || fallback));
+export const nameOf = (p) => [p?.name, p?.firm && p.firm !== p.name ? p.firm : null].filter(Boolean).join(' · ') || 'Investor';
 
 /** The prospects read, with a reload. */
 export function useProspects(projectId) {
@@ -59,14 +60,14 @@ export function useProspects(projectId) {
  * Dialogs (CRL6, CRL5)
  * ------------------------------------------------------------------ */
 
-function Dialog({ label, title, sub, onClose, children, footer, testId, width = 520 }) {
+export function Dialog({ label, title, sub, onClose, children, footer, testId, width = 520 }) {
   return (
     <Lightbox label={label} title={title} sub={sub} onClose={onClose} testId={testId} width={width}
       footer={footer}>{children}</Lightbox>
   );
 }
 
-function Footer({ busy, error, onClose, cta, onGo, disabled, testId }) {
+export function Footer({ busy, error, onClose, cta, onGo, disabled, testId }) {
   return (
     <div className="flex flex-col gap-2">
       {error ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid={`${testId}-error`}>{error}</p> : null}
@@ -79,7 +80,7 @@ function Footer({ busy, error, onClose, cta, onGo, disabled, testId }) {
 }
 
 /** Run a write; close on success, keep the dialog open with the reason on failure. */
-function useWrite(onDone) {
+export function useWrite(onDone) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const run = async (fn, fallback) => {
@@ -164,7 +165,7 @@ export function NextStepDialog({ projectId, prospect, onClose, onDone }) {
     <Dialog label="Next step" testId="caprel-next-dialog" onClose={onClose} title={`Next step with ${nameOf(prospect)}`}
       sub={step ? `The next step becomes “${step}”${due ? `, due ${due}` : ', with no date'}.` : 'An empty step clears it.'}
       footer={<Footer testId="caprel-next" busy={w.busy} error={w.error} onClose={onClose} cta="Save next step"
-        onGo={() => w.run(() => cyclesWrite.raise.prospectNextStep(projectId, prospect.id, { next_step: step || null, next_step_due: due || null }), 'The next step could not be saved')} />}>
+        onGo={() => w.run(() => cyclesWrite.raise.prospectNextStep(projectId, prospect.id, { next_step: step || null, next_step_due: due || null, warm_path: prospect.warm_path ?? null }), 'The next step could not be saved')} />}>
       <div className="flex flex-col gap-3">
         <label className={LABEL}>Next step<input className={FIELD} value={step} maxLength={300} onChange={(e) => setStep(e.target.value)} data-testid="caprel-next-step" /></label>
         <label className={LABEL}>Due<input className={FIELD} type="date" value={due} onChange={(e) => setDue(e.target.value)} data-testid="caprel-next-due" /></label>
@@ -218,15 +219,18 @@ export function FeedbackDialog({ projectId, prospect, onClose, onDone }) {
 }
 
 /** Add investor (CRL5): a duplicate email is answered inline, and the dialog stays open. */
-export function AddDialog({ projectId, onClose, onDone }) {
-  const [f, setF] = useState({ name: '', firm: '', email: '', stage: 'to_contact' });
+export function AddDialog({ projectId, onClose, onDone, fund = null }) {
+  // D1193 (CRL7): Add to pipeline from Match opens this with the fund filled in, tracked by its directory id.
+  const [f, setF] = useState({ name: fund?.name || '', firm: fund?.name || '', email: '', stage: 'to_contact' });
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
   const w = useWrite(() => { onDone?.(); onClose(); });
   return (
     <Dialog label="Add investor" testId="caprel-add-dialog" onClose={onClose} title="Add investor"
       sub={f.name.trim() ? `${f.name.trim()} is added at ${STAGE_LABEL[f.stage]}.` : 'Name the investor, or give an email.'}
       footer={<Footer testId="caprel-add" busy={w.busy} error={w.error} onClose={onClose} cta="Add investor" disabled={!f.name.trim() && !f.email.trim()}
-        onGo={() => w.run(() => cyclesWrite.raise.prospect(projectId, { name: f.name.trim() || undefined, firm: f.firm.trim() || undefined, email: f.email.trim() || undefined, stage: f.stage }), 'The investor could not be added')} />}>
+        onGo={() => w.run(() => cyclesWrite.raise.prospect(projectId, fund?.uid
+          ? { research_fund_uid: fund.uid, email: f.email.trim() || undefined, stage: f.stage }
+          : { name: f.name.trim() || undefined, firm: f.firm.trim() || undefined, email: f.email.trim() || undefined, stage: f.stage }), 'The investor could not be added')} />}>
       <div className="flex flex-col gap-3">
         <label className={LABEL}>Investor<input className={FIELD} value={f.name} onChange={set('name')} data-testid="caprel-add-name" /></label>
         <label className={LABEL}>Firm<input className={FIELD} value={f.firm} onChange={set('firm')} /></label>
@@ -323,6 +327,8 @@ export function InvestorLightbox({ projectId, prospect, search = '', onClose, on
             <button type="button" className={BTN_S} onClick={() => setDialog('move')} data-testid="caprel-investor-move">Move to…</button>
             {committed ? <button type="button" className={BTN_S} onClick={() => setDialog('status')} data-testid="caprel-investor-status">Status</button> : null}
             <button type="button" className={BTN_S} onClick={() => setDialog('feedback')} data-testid="caprel-investor-feedback">Add feedback</button>
+            {/* D1193 (CRL11): Eadwyn proposes next steps and moves from this investor's newest note. */}
+            <button type="button" className={BTN_S} onClick={() => setDialog('eadwyn')} data-testid="caprel-investor-eadwyn">Ask Eadwyn</button>
             <Link className={`${BTN_S} no-underline`} to={recordHref('raise', SLUG, prospect.id, tabSearch(search))} data-testid="caprel-investor-open">Open the full record</Link>
           </div>
           {read.status === 'loading' ? <div className="h-32 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="caprel-investor-loading" /> : null}
@@ -338,6 +344,7 @@ export function InvestorLightbox({ projectId, prospect, search = '', onClose, on
       {dialog === 'step' ? <StepDialog {...props} /> : null}
       {dialog === 'next' ? <NextStepDialog {...props} /> : null}
       {dialog === 'feedback' ? <FeedbackDialog {...props} /> : null}
+      {dialog === 'eadwyn' ? <CapRelProposals projectId={projectId} prospect={{ id: prospect.id, name: nameOf(prospect) }} onClose={() => setDialog(null)} onChanged={done} /> : null}
       {dialog === 'status' ? <StatusDialog {...props} /> : null}
       {dialog === 'move' ? <MoveDialog projectId={projectId} prospects={[prospect]} onClose={() => setDialog(null)} onDone={done} /> : null}
     </>
@@ -473,6 +480,7 @@ export default function CapRelPipeline({ projectId, search = '' }) {
           ))}
         </div>
         <div className="flex gap-2">
+          <button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'proposals' })} data-testid="caprel-proposals-open">Eadwyn’s proposals</button>
           <button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'import' })} data-testid="caprel-import">Import</button>
           <button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'add' })} data-testid="caprel-add">Add investor</button>
         </div>
@@ -497,6 +505,7 @@ export default function CapRelPipeline({ projectId, search = '' }) {
       {dialog?.kind === 'move' ? <MoveDialog projectId={projectId} prospects={dialog.prospects} to={dialog.to} onClose={() => setDialog(null)} onDone={reload} /> : null}
       {dialog?.kind === 'add' ? <AddDialog projectId={projectId} onClose={() => setDialog(null)} onDone={reload} /> : null}
       {dialog?.kind === 'import' ? <ImportDialog projectId={projectId} onClose={() => setDialog(null)} onDone={reload} /> : null}
+      {dialog?.kind === 'proposals' ? <CapRelProposals projectId={projectId} onClose={() => setDialog(null)} onChanged={reload} /> : null}
     </div>
   );
 }

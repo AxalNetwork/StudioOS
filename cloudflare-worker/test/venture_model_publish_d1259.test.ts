@@ -184,6 +184,8 @@ test('v1 never reads an index; v1.1 reads only editions under a recorded licence
   db.exec(`INSERT INTO venture_model_publications(version,published_by,published_at,ventures_total) VALUES ('1.1',901,'2026-10-26T10:00:00Z',2)`);
   const v11 = await scoreVenture(env, 10, { actorId: 1, trigger: 'read', today: TODAY });
   assert.equal(v11.model, '1.1');
+  // D1256's system path (the nightly job, no person) scores and reports the live model too.
+  assert.equal((await scoreVenture(env, 10, { actorId: null, trigger: 'nightly', today: TODAY })).model, '1.1');
   const input = (scope: string, key: string) => (v11.scopes.find((s: any) => s.scope === scope) as any).inputs.find((i: any) => i.key === key);
   const env1 = input('geographic', 'country_environment');
   assert.equal(env1.state, 'recorded');

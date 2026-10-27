@@ -37,6 +37,7 @@ function freshDb(opts: { m346?: boolean } = {}) {
   exec(db, migration('092_article_editor_fields.sql'));
   exec(db, migration('093_article_views.sql'));
   if (opts.m346 !== false) exec(db, migration('346_article_publish_at.sql'));
+  exec(db, migration('636_article_featured_and_comment_threads.sql')); // D1293: unpublish clears featured_at
   db.exec(`CREATE TABLE activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER,
                                        created_at TEXT DEFAULT (datetime('now')))`);
   return db;
@@ -200,7 +201,7 @@ test('unpublishing clears the time, so the next tick does not publish it again',
   const id = article(db, 'approved', inHours(-1));
   await publishDueArticles(env(db), new Date());
   assert.equal(rowOf(db, id).status, 'published');
-  const r = await call(db, `/${id}/unpublish`, {});
+  const r = await call(db, `/${id}/unpublish`, { reason: 'Pulled for a correction.' });
   assert.equal(r.status, 200);
   assert.equal(rowOf(db, id).status, 'approved');
   assert.equal(rowOf(db, id).publish_at, null);
@@ -213,7 +214,7 @@ test('a database without migration 346 publishes nothing on the cron, and still 
   const db = freshDb({ m346: false });
   const id = article(db, 'published');
   assert.deepEqual(await publishDueArticles(env(db), new Date()), { readable: false, due: 0, published: 0 });
-  assert.equal((await call(db, `/${id}/unpublish`, {})).status, 200);
+  assert.equal((await call(db, `/${id}/unpublish`, { reason: 'Pulled for a correction.' })).status, 200);
   assert.equal((db.prepare('SELECT status FROM articles WHERE id = ?').get(id) as any).status, 'approved');
 });
 

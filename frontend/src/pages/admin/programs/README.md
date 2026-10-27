@@ -29,8 +29,11 @@ page in a child component inside it:
 - `ProgramPage.jsx` — workspace "Programs": Perks (`/admin/programs/perks`,
   `/how-it-runs`, `/queue`, `/activity`), Learning (`/admin/programs/learning`,
   `/how-it-runs`, `/people`, `/activity`), Referral partners
-  (`/admin/programs/referral-partners`, `/how-it-runs`), and the one-page
-  `/admin/programs/investor-cohorts` and `/admin/programs/ai-native-venture`.
+  (`/admin/programs/referral-partners`, `/how-it-runs`, `/queue`, `/activity`),
+  Investor cohort access (`/admin/programs/investor-cohorts`, `/activity`) and
+  the one-page `/admin/programs/ai-native-venture`. D963 (#2796) completes the
+  last three on parts 1, 5 and 6's reads; each header's status pill is part
+  1's registry's.
 
 - `ProposePage.jsx` — D964 (#2797), workspace "Programs":
   `/admin/programs/propose`, Propose a program (PG14) on part 2's proposal
@@ -52,8 +55,18 @@ The pieces they draw with:
 - `LearningPages.jsx` — Learning's Overview (tiles, Completion by program,
   Enrolments per week, the programs table with assigned admins), People and
   the learner's record (D962).
-- `ReferralPartners.jsx` — Referral partners' Overview links and its header
-  action.
+- `ReferralPartners.jsx` — Referral partners (PG7, D963): Overview's segment
+  chips, four tiles, Introductions by outcome, Commission by month, Standard
+  rules, D923's links and the partners table with its row menu; the Queue of
+  terms sent to HQ; and the header action, on part 5's reads
+  (`../../../lib/api/referralPartners.js`).
+- `ReferralTermsDialogs.jsx` — D963: Custom terms (PG8), Approve (the Super
+  Admin's, behind the step-up bar), Send contract (the preview, then the
+  send), End terms and a standard rule's edit (Commissions' `RuleEditor`).
+- `InvestorCohorts.jsx` — D963: Investor cohort access (PG11) Overview, with
+  the NDA template's state, four tiles, How it runs and the Investors table;
+  Give an investor access (PG11d) and End access, on part 6's reads
+  (`../../../lib/api/investorCohorts.js`).
 - `ReferRewards.jsx` — D965 (#2798): Refer & Earn Overview's Rewards issued
   tile and Rewards card, each on its own read (part 4's paged total and
   `GET /api/refer-earn/admin/rewards`), with the words from
@@ -65,7 +78,8 @@ The pieces they draw with:
 - `ActivityTab.jsx` — a program's Activity tab, and Mentor's Recent
   activity, on part 1's activity read (D962).
 - `PlaybookEditor.jsx` — How it runs from part 1's playbook store, with the
-  Super Admin's Edit and Publish dialogs (D962). Part 10 reuses it.
+  Super Admin's Edit and Publish dialogs (D962). D963 reuses it for Referral
+  partners, Investor cohort access and AI-native Venture (PG13s).
 - `MentorDialogs.jsx` — Mentor cohort access's Assign a mentor and End access
   dialogs, opened from Overview, People and the header (D962).
 - `useProgramReads.js` — the reads, each made alone. The catalogue reads
@@ -83,6 +97,13 @@ The pieces they draw with:
 - `NewProgramDialog.jsx` — D964: New program (PG2's header), for a Super Admin.
 - `proposalsModel.js` — D964, pure: the proposal's statuses, PG14's steps and
   lists, the Review lines, PG15a's choices, PG19b, the list parameters and the
+  refusals.
+- `referralPartnersModel.js` — D963, pure: the segments and terms words, the
+  tiles, the two charts (one currency per chart), the rules' lines, the
+  table's query and row menu, PG8's form, body and live sentence, the
+  triggers that fire today, and part 5's refusals.
+- `investorCohortsModel.js` — D963, pure: the access and NDA words, the
+  tiles, the grants' query, PG11d's cohorts, body and lines, and part 6's
   refusals.
 - `programPagesModel.js` — pure. D962's rules on parts 1, 4 and 7's reads:
   activity sentences, the playbook, the mentor figures and People's columns,
@@ -124,6 +145,8 @@ The redirects, each the route's whole element:
   `<svg>` of their own. A program page has no period control (S-PER), so every
   figure there states its window; the catalogue's period control is D961's.
 - Still not drawn: no Pause, no CSV, no Terms tab (part 1's store holds no
-  program's terms). D964 drew the proposal flow (Propose, the two lists,
+  program's terms). D963 leaves out Offer to studios (#2376), sending the
+  cohort NDA (part 6 refuses it until HQ publishes the template), the cohort's
+  founder count (O-FND), and PG8's Studio and Payout method. D964 drew the proposal flow (Propose, the two lists,
   Decide, New program, PG19b) on part 2's routes, through
   `../../../lib/api/programProposals.js`.

@@ -6,7 +6,7 @@
  * What this file holds the Worker to:
  *   · the list: each state in `promoState`'s order with paused and ended first,
  *     every filter, four sorts that end on the id, a total and per-state counts
- *     that do not move with the page, `applies=plans` refused until part 3, and
+ *     that do not move with the page, `applies=plans` (refused until part 3; D1275 lifts it), and
  *     a D1 error a 503, never an empty list;
  *   · PATCH: pause and end take a reason and record who and when; resume clears
  *     the pause; an ended code never resumes; today's `active` toggle still
@@ -158,9 +158,16 @@ test('the list: filters, sorts, a stable total across pages, and counts per stat
     assert.equal(r.status, 400, q);
     assert.equal(r.body.code, code);
   }
+  // D1275: plan scope is recorded since part 3, so `plans` filters. A code HQ chose plans for leaves
+  // `products`, though its plans resolved to products; `all` keeps only a code that names neither.
+  d.prepare(`UPDATE promo_codes SET plan_keys_json = '["tier:growth"]' WHERE id = 'p2'`).run();
   const plans = await call(d, 'GET', '/?applies=plans');
-  assert.equal(plans.status, 400);
-  assert.equal(plans.body.code, 'applies_not_recorded', 'plan scope is part 3\'s: refused, never an empty list');
+  assert.equal(plans.status, 200);
+  // Mutation checked: keep refusing plans → 400.
+  assert.deepEqual(plans.body.promos.map((p: any) => p.code), ['FOUNDERS']);
+  // Mutation checked: let a plan code stay in `products` → ['ENDED', 'FOUNDERS'].
+  assert.deepEqual((await call(d, 'GET', '/?applies=products')).body.promos.map((p: any) => p.code), ['ENDED']);
+  assert.ok(!(await call(d, 'GET', '/?applies=all')).body.promos.some((p: any) => p.code === 'FOUNDERS'));
 });
 
 test('the state in SQL: ended over paused, expiry as a time not as text, and the service never resumes an ended code', async () => {
@@ -368,4 +375,16 @@ test('when Stripe will not end the old code, the new one stands and the answer s
     assert.deepEqual([row(d, 'p1').ended_at, row(d, 'p1').active], [null, 1], 'the old one is still on, and says so');
     assert.deepEqual(audits(d).map((x) => x.action), ['promo_create'], 'only what happened is audited');
   } finally { s.restore(); }
+});
+
+test('D1275: one code by its id, for its drawer at its own address; an unknown id is 404', async () => {
+  const d = database();
+  seed(d);
+  const one = await call(d, 'GET', '/p1');
+  assert.equal(one.status, 200);
+  assert.deepEqual([one.body.promo.id, one.body.promo.code, one.body.promo.name, one.body.promo.state], ['p1', 'SPRING10', 'Spring launch', 'active']);
+  const ended = await call(d, 'GET', '/p5');
+  assert.equal(ended.body.promo.state, 'ended');
+  const none = await call(d, 'GET', '/nope');
+  assert.deepEqual([none.status, none.body.code], [404, 'not_found']);
 });

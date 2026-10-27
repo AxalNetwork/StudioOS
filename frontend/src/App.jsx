@@ -436,7 +436,6 @@ const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage')
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
-const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 // D702 (#1664) — the founder's profile pages (Studio · Mobile S6m, S7m, S9m, S10m).
 const YouPage = lazy(() => import('./pages/profile/YouPage'));
@@ -471,7 +470,6 @@ const FUND_ADMIN_BOUNDARY_ROLES = new Set(['founder', 'partner', 'investor', 'ad
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
-const FounderRaiseDataRoom = lazy(() => import('./pages/founder/FounderRaiseDataRoom'));
 const SentUpdatePage = lazy(() => import('./pages/founder/SentUpdatePage'));
 // D668 (#1498): an AI assistant's consent page (D665, D666).
 const ConnectAssistantPage = lazy(() => import('./pages/connect/ConnectAssistantPage'));
@@ -529,6 +527,8 @@ import { signInPath as assistantSignInPath } from './pages/connect/assistantCons
 import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
+import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
+import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
@@ -2818,6 +2818,7 @@ function AppInner() {
       {/* D1228 (#2384) — KYC & KYB's other tabs and one person's case. */}
       <Route path="/admin/kyc/:tab" element={guard(['admin'], <KycPage />)} />
       <Route path="/admin/kyc/people/:id" element={guard(['admin'], <KycPage />)} />
+      <Route path="/admin/kyc/businesses/:id" element={guard(['admin'], <KycPage />)} />
       <Route path="/admin/directory" element={guard(['admin'], <DirectoryPage />)} />
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />
       {/* Platform and Revenue pages are the Super Admin's, like every other (#2375). */}
@@ -2918,7 +2919,11 @@ function AppInner() {
       <Route path="/admin/programs/learning/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
+      {/* D963 (#2796): Referral partners' Queue and Activity, and Investor cohort access's Activity. */}
+      <Route path="/admin/programs/referral-partners/queue" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/referral-partners/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/investor-cohorts" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/investor-cohorts/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/ai-native-venture" element={guard(['admin'], <AdminProgramPage />)} />
       {/* D1038 (#2390) — Approvals left /admin/held/ when it was rebuilt to its
           canvas, as Insights and Community did: Inbox, Lanes and Decided, and
@@ -3115,6 +3120,8 @@ function AppInner() {
       <Route path="/articles/mine" element={<Navigate to="/articles/draft" replace />} />
       <Route path="/authors/:userId" element={<AuthorProfilePage />} />
       <Route path="/admin/articles" element={guard(['admin'], <ArticlesQueuePage />)} />
+      {/* D1290 (#2383): Calendar, Authors and Performance, and one address per article (contentQueueModel.js). */}
+      <Route path="/admin/articles/:view" element={guard(['admin'], <ArticlesQueuePage />)} />
       <Route path="/articles/:slug" element={<ArticleReaderPage />} />
       <Route path="/admin/events" element={guard(['admin'], <AdminEventsPage />)} />
       {/* D915 (#2368): the Events desk's tabs and one page per event, behind the same guard; the static paths sit before `:id`. */}
@@ -3245,20 +3252,17 @@ function AppInner() {
       <Route path="/raise/capital/cap-table" element={<CapTableMovedRedirect to="/raise/cap-table" moved="cap-table" />} />
       <Route path="/raise/cap-table/variants" element={<CapTableMovedRedirect to="/raise/cap-table/scenarios" moved="variants" />} />
       <Route path="/raise/cap-table/variants/:variant" element={<CapTableMovedRedirect to="/raise/cap-table/scenarios" />} />
-      {/* D696 decision 12: /raise/data-room answers by mode, in this order. An investor's rooms are
-          read by grant under Research · Diligence (D311): the investor branch is a redirect there, so a
-          bookmark still lands, and the guard keeps admitting investor so the redirect can run. A founder's
-          ?mode=workspace is the files tool (uploads, Share and Revoke, the NDA switches, advisor grants);
-          ?mode=access is the read-only access view; the bare address is the Data room module page,
-          whose records open at /raise/data-room/:id. Both tools return to the module page. */}
+      {/* D696 decision 12, D1109 (#2989): /raise/data-room is the Data room tool's Home. An investor's
+          rooms are read by grant under Research · Diligence (D311): the investor branch is a redirect
+          there, so a bookmark still lands, and the guard keeps admitting investor so the redirect can run.
+          The retired files tool (?mode=workspace) and access view (?mode=access) forward to the tool's
+          Files and Access tabs with a moved notice, the query and hash kept, each forward counted (#2319). */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'],
         effectiveRole === 'investor'
           ? <Navigate to="/research/diligence" replace />
-          : new URLSearchParams(location.search).get('mode') === 'workspace'
-            ? founderWorkspace('raise', founderEditor(<DataRoomPage user={user} />))
-            : new URLSearchParams(location.search).get('mode') === 'access'
-              ? founderEditor(<FounderRaiseDataRoom />)
-              : <CycleRoute cycle="raise" slug="data-room" />)} />
+          : movedKind(location.search)
+            ? <DataRoomMovedRedirect kind={movedKind(location.search)} />
+            : <CycleRoute cycle="raise" slug="data-room" />)} />
       {/* Every persona, listed explicitly. `guard([])` would deny everyone —
           RoleGuard tests `allowedRoles.includes(effectiveRole)`, which is
           always false on an empty array, so the route would exist and be
@@ -3810,7 +3814,7 @@ function AppInner() {
       {/* D661 (#1474): a founder's /raise is the cycle overview from #1501's
           read, and /raise/<module> its module pages. Every Raise tool route
           above is static and wins; /raise/data-room's own route draws the Data
-          room module page itself when no mode is asked for (D696). */}
+          room tool's Home itself (D696, D1109). */}
       <Route path="/raise" element={founderRaiseLanding
         ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)
         : <Navigate to="/raise/capital/pipeline" replace />} />

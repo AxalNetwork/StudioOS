@@ -658,7 +658,12 @@ export async function updateProspect(env: Env, a: { projectId: number; userId: n
   // Committed: a stage moved away clears it, and a status is refused on any
   // other stage. No status is "Status not recorded", never counted.
   const nextStage = has(b, 'stage') ? stageIn(b.stage) : null;
-  if (nextStage) { sets.push('stage = ?'); params.push(nextStage); changed.push('stage'); }
+  if (nextStage) {
+    // D1193 (#3127): the move's two stages, so Activity says what moved (CRL12).
+    const from = (await env.DB.prepare('SELECT stage FROM raise_prospects WHERE id = ? AND project_id = ?').bind(id, a.projectId).first<{ stage: string }>())?.stage;
+    sets.push('stage = ?'); params.push(nextStage);
+    changed.push(from && from !== nextStage && STAGE_TEXT[from] ? `stage ${STAGE_TEXT[from]} → ${STAGE_TEXT[nextStage]}` : 'stage');
+  }
   if (has(b, 'commit_status')) {
     const status = b.commit_status == null || b.commit_status === '' ? null : word(b.commit_status);
     if (status != null && !PROSPECT_COMMIT_STATUSES.includes(status)) throw new WriterError(400, 'status is Soft, Signed or Wired');
