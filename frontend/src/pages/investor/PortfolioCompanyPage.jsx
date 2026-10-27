@@ -141,7 +141,7 @@ export default function PortfolioCompanyPage() {
           <nav aria-label={name} className="-mb-px flex gap-1 overflow-x-auto">
             {COMPANY_TABS.map((t) => (
               <Link key={t.id} to={companyHref(uid, t.id)} aria-current={t.id === tab ? 'page' : undefined}
-                className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.id === tab
+                className={`inline-flex min-h-11 items-center whitespace-nowrap border-b-2 px-3 py-2.5 text-[12.5px] ${t.id === tab
                   ? 'border-axal-violet font-extrabold text-axal-ink dark:border-violet-400 dark:text-gray-100'
                   : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
                 data-testid={`company-tab-${t.id}`}>

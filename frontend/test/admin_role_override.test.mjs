@@ -85,9 +85,12 @@ test('leaving Exploring asks for a reason instead of a yes/no confirm', () => {
   assert.ok(h.length > 0, 'handleRoleChange or confirmRoleOverride is gone');
   assert.match(h, /if \(String\(user\.role\)\.toLowerCase\(\) === 'exploring' && newRole !== 'exploring'\) \{[\s\S]*?setRoleOverride\(\{ user, nextRole: newRole \}\);[\s\S]*?return;/,
     'a change out of exploring does not open the reason dialog');
-  assert.ok(h.indexOf('setRoleOverride(') < h.indexOf('window.confirm'),
-    'the plain confirm runs before the exploring branch, so the override never '
+  // D1306 (#3403): every other change opens ACC7 A's in-page dialog; the
+  // exploring branch still has to be taken before it.
+  assert.ok(h.indexOf("ask('role'") > 0 && h.indexOf('setRoleOverride(') < h.indexOf("ask('role'"),
+    'the plain change runs before the exploring branch, so the override never '
     + 'collects a reason and the request is refused');
+  assert.doesNotMatch(h, /window\.confirm/, 'a browser confirm is back in the role change');
   // And the dialog has to be mounted, or the state is set and nothing appears.
   assert.match(src, /\{roleOverride && \(\s*<RoleOverrideDialog/,
     'RoleOverrideDialog is never rendered, so choosing a role does nothing visible');

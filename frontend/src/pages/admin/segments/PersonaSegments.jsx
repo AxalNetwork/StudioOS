@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { api } from '../../../lib/api';
 import { personaSegmentsApi } from '../../../lib/api/personaSegments';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
@@ -9,11 +8,13 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import { Chart, ChartTable } from '../../../ui/Charts';
 import AdminBoardFrame from '../AdminBoardFrame';
+import { ActivityTab } from './SegmentPage';
+import { AcceptedEdit, SuggestChangeDialog, SuggestionsList, UnclassifiedTab, useSegmentProfiles } from './SegmentWork';
 import {
-  ACCOUNTS_PATH, ADMIN_RAIL_NOTE, ALL_FAILED, ALL_FAILED_LINE, BLOCK_FAILED, CONTENT_PATH, LIST_FAILED, NOT_PER_PROFILE, NOT_YET, OFFER_KINDS,
+  ACCOUNTS_PATH, ADMIN_RAIL_NOTE, ALL_FAILED, ALL_FAILED_LINE, BLOCK_FAILED, CONTENT_PATH, NOT_PER_PROFILE, NOT_YET, OFFER_KINDS,
   PAGE_LINE, PROFILE_FILTERS, RAIL_NOTE, SCOPE_LINE, SEG_TITLE, STATUS_WORD,
-  advisorsWithout, confidenceRead, failed, howSetRead, movedNotices, needsTable, overviewTiles, profileLabel, profileLine, scopeLine,
-  searchMembers, segmentCardsRead, segmentsByProfileRead, subAccountChips, tabOf, unclassified, weeklyRead,
+  advisorsWithout, confidenceRead, failed, howSetRead, movedNotices, needsTable, overviewTiles, profileLine,
+  segmentCardsRead, segmentsByProfileRead, subAccountChips, tabOf, weeklyRead,
 } from './segModel';
 
 /**
@@ -25,16 +26,17 @@ import {
  * OVERVIEW (D1004, part 7) draws from the reads parts 2 and 3 added: D999's
  * segment counts over every account but admins (no Guard L), D1000's segment
  * profiles and its needs read. Each block answers alone: one that could not
- * be read says so with its own Try again, never as zeros. Unclassified still
- * reads the persona list under Guard L until part 9. Each card's name opens
+ * be read says so with its own Try again, never as zeros. D1006 (part 9):
+ * Unclassified reads D1002's members with no segment, with why and ask to
+ * finish (`SegmentWork.jsx`); Activity is the page-wide read, with an
+ * Admin's own suggestions; Suggestions is HQ's (Super Admin) to decide. Each card's name opens
  * that segment's own page (D1005, `SegmentPage.jsx`), where its members move
  * by SEG4's Move dialog; D1005 retired the re-tag table that stood at the
- * foot of Overview. Suggestions wait for D997's parts.
+ * foot of Overview.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
 const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
-const DANGER = `${BTN} self-start border border-axal-destructive-edge bg-white text-axal-destructive dark:border-red-900 dark:bg-gray-900 dark:text-red-400`;
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
@@ -55,35 +57,9 @@ const STATUS_PILL = {
   draft: `${PILL} border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300`,
   retired: `${PILL} border-dashed border-axal-muted text-axal-muted dark:text-gray-400`,
 };
-const PAGE = 25;
-
-/** The persona list, for Unclassified only (D1004: Overview reads the segment counts), once per visit and on Refresh. */
-function usePersonaList(tick, wanted) {
-  const [read, setRead] = useState({ status: 'loading', users: null });
-  useEffect(() => {
-    if (!wanted) return undefined;
-    let live = true;
-    setRead({ status: 'loading', users: null });
-    api.listPersonasAdmin().then(
-      (data) => { if (live) setRead({ status: 'ready', users: Array.isArray(data?.users) ? data.users : [] }); },
-      (e) => { reportError('persona-segments:list', e); if (live) setRead({ status: 'error', users: null }); },
-    );
-    return () => { live = false; };
-  }, [tick, wanted]);
-  return read;
-}
 
 function Skeleton() {
   return <span className="block h-2.5 w-[70%] rounded-full bg-axal-hairline dark:bg-gray-700" />;
-}
-
-function Failed({ onRetry }) {
-  return (
-    <div role="alert" className={`${CARD} flex flex-col gap-2.5 px-[18px] py-4 text-[13px] text-axal-destructive dark:text-red-300`} data-testid="seg-list-failed">
-      <span>{LIST_FAILED}</span>
-      <button type="button" className={DANGER} onClick={onRetry}>Try again</button>
-    </div>
-  );
 }
 
 function Tile({ id, label, children }) {
@@ -464,81 +440,16 @@ function Overview({ superAdmin, tick }) {
   );
 }
 
-function Unclassified({ read, reload }) {
-  const [profile, setProfile] = useState('all');
-  const [q, setQ] = useState('');
-  const [page, setPage] = useState(1);
-  const u = useMemo(() => unclassified(read.users), [read.users]);
-  const shown = useMemo(() => searchMembers(profile === 'all' ? u.rows : u.rows.filter((r) => r.role === profile), q), [u.rows, profile, q]);
-  const pages = Math.max(1, Math.ceil(shown.length / PAGE));
-  const p = Math.min(page, pages);
-  const slice = shown.slice((p - 1) * PAGE, p * PAGE);
-  const label = shown.length ? `${(p - 1) * PAGE + 1}–${Math.min(shown.length, p * PAGE)} of ${shown.length.toLocaleString('en-US')}` : '0 of 0';
-
-  if (read.status === 'loading') return <div className={`${CARD} px-[18px] py-4`}><span className="font-mono text-[13px] text-axal-muted">Reading…</span><Skeleton /></div>;
-  if (read.status === 'error') return <Failed onRetry={reload} />;
-  const scope = scopeLine(read.users);
-  return (
-    <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} aria-labelledby="seg-h-unclassified" data-testid="seg-unclassified">
-      <h2 id="seg-h-unclassified" className={H2}>Members with no segment</h2>
-      <span className={SUB}>Ask them to finish their profile, or place them yourself. Asking, placing and why each has none arrive with D997 part 5.</span>
-      {scope && <span className={SUB} data-testid="seg-scope-capped">{scope}</span>}
-      <div className="flex flex-wrap gap-[7px]" role="radiogroup" aria-label="Profile" data-testid="seg-profile-chips">
-        {[{ role: 'all', label: 'All', count: u.rows.length }, ...u.byProfile].map((c) => (
-          <button key={c.role} type="button" role="radio" aria-checked={profile === c.role} onClick={() => { setProfile(c.role); setPage(1); }}
-            className={`inline-flex min-h-[32px] items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold ${profile === c.role ? 'border-axal-lavender-edge bg-axal-lavender text-axal-ink dark:border-violet-700 dark:bg-violet-900/40 dark:text-gray-100' : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}`}>
-            {c.label} <span className={MONO}>{c.count.toLocaleString('en-US')}</span>
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex-1">
-          <span className="sr-only">Search name or email</span>
-          <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search name or email"
-            className="h-9 w-full max-w-[360px] rounded-[7px] border border-axal-hairline px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="seg-search" />
-        </label>
-        <span className={`${MONO} text-[12px] text-axal-muted dark:text-gray-400`} data-testid="seg-count">{label}</span>
-        <button type="button" className={GHOST} disabled={p <= 1} onClick={() => setPage(p - 1)}>Previous</button>
-        <button type="button" className={GHOST} disabled={p >= pages} onClick={() => setPage(p + 1)}>Next</button>
-      </div>
-      {slice.length === 0 ? (
-        <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="seg-unclassified-none">{u.rows.length ? 'No member matches. Clear the search or pick All.' : 'Every member has a segment.'}</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse text-left text-[12.5px]">
-            <thead>
-              <tr className={EYE}>
-                <th scope="col" className="py-1.5 pr-3 font-bold">Member</th>
-                <th scope="col" className="py-1.5 pr-3 font-bold">Profile</th>
-              </tr>
-            </thead>
-            <tbody>
-              {slice.map((r) => (
-                <tr key={r.user_id} className="border-t border-axal-hairline align-top dark:border-gray-700" data-testid="seg-unclassified-row">
-                  <td className="py-2 pr-3">
-                    <span className="block font-bold text-axal-ink dark:text-gray-100">{r.name || r.email}</span>
-                    {r.name ? <span className={`block ${SUB}`}>{r.email}</span> : null}
-                  </td>
-                  <td className="py-2 pr-3 text-axal-ink dark:text-gray-100">{profileLabel(r.role)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {u.other > 0 && <span className={SUB}>{u.other} with no profile this page knows are under All.</span>}
-      <span className={SUB}>Newest accounts first. Joined, last active and the sign-up chat&apos;s state arrive with D997 part 5.</span>
-    </section>
-  );
-}
-
 export function PersonaSegmentsPage({ superAdmin }) {
   const loc = useLocation();
   const tab = tabOf(loc.pathname) || 'overview';
   const [tick, setTick] = useState(0);
   const [asOf, setAsOf] = useState(null);
   const reload = useCallback(() => setTick((t) => t + 1), []);
-  const read = usePersonaList(tick, tab === 'unclassified');
+  const [edit, setEdit] = useState(null);
+  const [sent, setSent] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
+  const segments = useSegmentProfiles();
   const [noSegment, setNoSegment] = useState({ status: 'loading', value: null });
   useEffect(() => {
     // The Unclassified tab's count is D999's exact one, over every account but admins.
@@ -560,11 +471,15 @@ export function PersonaSegmentsPage({ superAdmin }) {
     <>
       <HeaderTab to="/admin/persona-segments" data-testid="seg-tab-overview">Overview</HeaderTab>
       <HeaderTab to="/admin/persona-segments/unclassified" count={count} data-testid="seg-tab-unclassified">Unclassified</HeaderTab>
+      <HeaderTab to="/admin/persona-segments/activity" data-testid="seg-tab-activity">Activity</HeaderTab>
+      {superAdmin && <HeaderTab to="/admin/persona-segments/suggestions" data-testid="seg-tab-suggestions">Suggestions</HeaderTab>}
     </>
   );
   const actions = (
     <>
-      {superAdmin && <Link to="/admin/persona-segments/new" className={`${BTN} min-h-[44px] bg-axal-violet text-white`}>New segment</Link>}
+      {superAdmin
+        ? <Link to="/admin/persona-segments/new" className={`${BTN} min-h-[44px] bg-axal-violet text-white`}>New segment</Link>
+        : <button type="button" className={`${GHOST} min-h-[44px]`} onClick={() => setSuggesting(true)} data-testid="seg-suggest-open">Suggest a change</button>}
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="seg-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
       </span>
@@ -588,7 +503,24 @@ export function PersonaSegmentsPage({ superAdmin }) {
         data-testid="seg-header"
       />
       {tab === 'overview' && <Overview superAdmin={superAdmin} tick={tick} />}
-      {tab === 'unclassified' && <Unclassified read={read} reload={reload} />}
+      {sent ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-800 dark:text-emerald-300" data-testid="seg-page-note">{sent}</p> : null}
+      {tab === 'unclassified' && <UnclassifiedTab superAdmin={superAdmin} />}
+      {tab === 'activity' && (
+        <>
+          <ActivityTab segKey={null} />
+          {!superAdmin && <SuggestionsList superAdmin={false} segments={segments} testId="seg-activity-suggestions" />}
+        </>
+      )}
+      {tab === 'suggestions' && superAdmin && <SuggestionsList superAdmin segments={segments} onAcceptEdit={setEdit} />}
+      {tab === 'suggestions' && !superAdmin && (
+        <section className={`${CARD} flex flex-col items-start gap-2 border-dashed p-5`} data-testid="seg-suggestions-refused">
+          <h2 className={H2}>Only HQ decides on suggestions</h2>
+          <p className={`m-0 ${SUB}`}>Your own suggestions, and HQ&apos;s answers, are on the Activity tab.</p>
+          <Link to="/admin/persona-segments/activity" className={GHOST}>Open Activity</Link>
+        </section>
+      )}
+      {edit ? <AcceptedEdit edit={edit} onClose={() => setEdit(null)} onSaved={() => setSent('Saved. The segment profile is changed for every studio.')} /> : null}
+      {suggesting ? <SuggestChangeDialog segments={segments} onClose={() => setSuggesting(false)} onSent={setSent} /> : null}
     </div>
   );
 }

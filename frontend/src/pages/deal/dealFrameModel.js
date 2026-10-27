@@ -178,11 +178,6 @@ export const EMPTY = {
 export const EADWYN_DRAFT_WAITS = 'Eadwyn’s draft summary of this deal is not read here yet. It arrives with AUTOFILL (#2431) as a proposal: nothing lands until you save it as your note.';
 
 /** DL24a: the scorecard strip's slot until SCORING's per-deal read exists (#2428). */
-export const SCORE_SLOT = {
-  eye: 'Scope strip · Venture scorecard canvas',
-  title: 'Scorecard',
-  line: 'The eleven scopes, in the scorecard’s order, show here once the per-deal score read lands (SCORING, #2428). This is not a score of zero.',
-};
 export const DECK_SLOT = {
   eye: 'Pitch deck studio canvas',
   title: 'Deck',

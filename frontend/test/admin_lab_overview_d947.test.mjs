@@ -125,7 +125,8 @@ test('Weeks passed: four started cohorts and the next, each cell passed, now wit
   const b = buildHeat(READ, NOW);
   assert.deepEqual(b.rows.map((r) => r.key), ['2026-08', '2026-09', '2026-10', '2026-11']);
   assert.deepEqual(b.rows[2].cells.map((c) => c.text), ['20 passed', '18 passed', '17 passed', 'Now · 29 Oct']);
-  assert.deepEqual(b.rows[2].cells[1], { n: 2, kind: 'counts', passed: 18, failed: 1, grace: 1, pending: 0, text: '18 passed' });
+  // D1123: a week decided before the reached-week ledger keeps its count and says why it has no share.
+  assert.deepEqual(b.rows[2].cells[1], { n: 2, kind: 'counts', passed: 18, failed: 1, grace: 1, pending: 0, reached: null, reachedReason: 'Week unlock does not persist a per-founder reached-week ledger.', text: '18 passed' });
   assert.equal(b.rows[2].cells[3].deadline, '29 Oct 00:00 ET');
   assert.deepEqual(b.rows[3].cells.map((c) => c.kind), ['not_recorded', 'not_recorded', 'not_recorded', 'not_recorded'], 'November has no windows yet');
   assert.match(b.note, /no cell is a share/);
