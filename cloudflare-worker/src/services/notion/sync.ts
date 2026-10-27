@@ -205,7 +205,7 @@ async function landLinked(env: Env, ctx: SyncContext, module: string, rowId: str
   const l = await env.DB.prepare('SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ?')
     .bind(ctx.integrationId, externalId).first<{ local_id: number | null }>();
   if (!l) return false;
-  if (l.local_id == null) { counts.kept_deleted += 1; return true; }
+  // Accept always records its row; a row deleted since is found absent by the updater, which then writes nothing.
   if (await LINKED.get(module)!(env, ctx, Number(l.local_id), values)) counts.updated += 1;
   await env.DB.prepare('UPDATE connector_fed_items SET last_seen_at = CURRENT_TIMESTAMP WHERE integration_id = ? AND external_id = ?')
     .bind(ctx.integrationId, externalId).run();

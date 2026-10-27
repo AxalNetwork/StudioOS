@@ -158,6 +158,12 @@ test('once linked, a stage changed in Notion is a fact through the stage writer,
   t.notion.rows[0].properties.Notes = 'changed only the notes';
   await t.sync();
   assert.equal(t.all('SELECT notes FROM raise_prospects WHERE id = ?', id)[0].notes, null, 'only the stage follows Notion');
+  t.db.exec(`DELETE FROM raise_prospects WHERE id = ${Number(id)}`);
+  t.notion.rows[0].properties.Stage = 'Meeting booked';
+  const gone = await t.sync();
+  assert.deepEqual([gone.body.sources[0].counts.updated, gone.body.sources[0].counts.proposed], [0, 0], 'an investor deleted in Raise is not brought back, nor proposed again');
+  assert.equal(t.all('SELECT id FROM raise_prospects WHERE id = ?', id).length, 0);
+
 });
 
 async function memo(t: ReturnType<typeof fixture>, md = '# Memo\n\nWhy now.') {
