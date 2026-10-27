@@ -211,7 +211,7 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Share war-room', unbuilt: 'no share link is issued for this view' },
   ],
   'raise/capital': [
-    { label: 'Model a round', to: '/raise/capital/model' },
+    { label: 'Model a round', to: '/raise/use-of-funds/runway/forecast' },
     { label: 'Export to Carta', to: '/raise/cap-table/import-export', linkNote: 'the cap table exports CSV; there is no Carta connection' },
     { label: 'Add instrument', to: '/raise/cap-table/instruments' },
   ],
@@ -224,11 +224,6 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Send for signature', to: '/legal/send' },
     { label: 'Add document', to: '/legal' },
     { label: 'Calendar', to: '/raise/legal-engine/compliance' },
-  ],
-  'raise/data-room': [
-    { label: 'Grant access', to: '/raise/data-room?mode=workspace' },
-    { label: 'Revoke', to: '/raise/data-room?mode=workspace' },
-    { label: 'Export log', kind: 'export' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────

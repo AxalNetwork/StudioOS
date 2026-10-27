@@ -2,8 +2,9 @@
  * D1294 (#3390, part 4 of #2383) — the authors read, daily views with no
  * personal data, follower reach (migration 637), and the performance read.
  *
- * Real SQLite: `articles` from migrations 068, 092, 093 and 346, the news
+ * Real SQLite: `articles` from migrations 068, 092, 093, 346 and 636, the news
  * tables from `ensureNewsSchema`, migration 637, and the routes themselves.
+ * 636 is what the article read selects (comment threads and featured).
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/article_metrics_d1294.test.ts
  */
@@ -46,6 +47,7 @@ function freshDb() {
   exec(db, migration('092_article_editor_fields.sql'));
   exec(db, migration('093_article_views.sql'));
   exec(db, migration('346_article_publish_at.sql'));
+  exec(db, migration('636_article_featured_and_comment_threads.sql'));
   exec(db, migration('637_article_daily_views.sql'));
   db.exec(`CREATE TABLE IF NOT EXISTS article_submission_log (id INTEGER PRIMARY KEY AUTOINCREMENT, author_id INTEGER NOT NULL, article_id INTEGER NOT NULL,
                                                             submitted_at TEXT NOT NULL DEFAULT (datetime('now')))`);

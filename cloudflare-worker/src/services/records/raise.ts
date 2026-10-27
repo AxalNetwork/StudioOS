@@ -29,7 +29,7 @@ import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
 import { deckReaders, readBySentence } from '../narrative/readers';
 import { RAISE_STAGES } from '../../routes/contacts';
 import {
-  type Ctx, type ProspectRow, READINESS_ITEMS, TOOL_HREF, DILIGENCE_CHECKLIST, EVIDENCE, FIGURES, FIGURE_LABEL, INVESTOR_TYPES,
+  type Ctx, type ProspectRow, READINESS_ITEMS, TOOL_HREF, DATA_ROOM_ACCESS, DILIGENCE_CHECKLIST, EVIDENCE, FIGURES, FIGURE_LABEL, INVESTOR_TYPES,
   INVESTOR_TYPE_LABEL, FUND_SECTIONS, FIT_LABEL, LIST_STAGE_LABEL, NEVER_EXPIRES, accessText, capIdOf, capEntryOf, checkInputs, consistencyCheck,
   basedOnLabel, checklistLabel, computeReadiness, fmtFigure, fundCells, groupOf, instrumentOf, loadCap, loadFunds, loadProspects, loadReadiness,
   loadVersions, prospectFunds, requestTitles, timeOnDeck,
@@ -142,7 +142,7 @@ function spec(
 const OPENS: Record<string, { a: string; href: (rc: RecordContext) => string }> = {
   narrative: { a: 'Investor narrative', href: (rc) => raiseHref(rc, 'investor-narrative') },
   deck: { a: 'Pitch deck', href: () => TOOL_HREF.pitch },
-  data_room: { a: 'Data room', href: () => TOOL_HREF.dataRoom },
+  data_room: { a: 'Data room', href: (rc) => raiseHref(rc, 'data-room') },
   cap_table: { a: 'Cap table', href: () => TOOL_HREF.capTable },
   use_of_funds: { a: 'Use of funds', href: (rc) => raiseHref(rc, 'use-of-funds') },
   traction: { a: 'Metrics', href: () => TOOL_HREF.metrics },
@@ -571,8 +571,8 @@ const dataRoom: ModuleSpec = { ...spec('data_room_files', 'data-room', async (rc
     return label ? { rows: [{ a: 'Checklist item', b: label }] } : { rows: [], empty: 'Not matched to a diligence request.' };
   }, { side: true }),
 ], async (rc): Promise<RecordAction[]> => [
-  // Decision 6: grants and the NDA switches live in the file tool.
-  { key: 'manage-access', label: 'Manage access', kind: 'link', tone: 'primary', href: `/raise/data-room?mode=workspace&project_id=${rc.projectId}` },
+  // Decision 6, D1109 (#2989): grants and the NDA live in the Data room tool's Access tab.
+  { key: 'manage-access', label: 'Manage access', kind: 'link', tone: 'primary', href: `${DATA_ROOM_ACCESS}?project_id=${rc.projectId}` },
   // The current object becomes a version; the new one takes its place.
   {
     key: 'replace', label: 'Replace', kind: 'form', multipart: true,

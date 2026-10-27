@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html>
-<head>
+<html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
@@ -8,7 +7,7 @@
 <body>
 <x-dc>
 <helmet>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>body{margin:0}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
 </helmet>
 <div style="{{ L.root }}">
@@ -83,7 +82,7 @@
         <sc-if value="{{ showBlocks }}" hint-placeholder-val="{{ true }}">
           <div style="{{ L.grid }}">
             <sc-for list="{{ blocks }}" as="b" hint-placeholder-count="10">
-              <section style="{{ b.st }}">
+              <section style="{{ b.st }}"><sc-if value="{{ b.head }}" hint-placeholder-val="{{ false }}"><h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.02em">{{ b.head }}</h2></sc-if><sc-if value="{{ b.card }}" hint-placeholder-val="{{ true }}">
                 <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><h2 style="{{ L.h3 }}">{{ b.title }}</h2><span style="display:flex;gap:12px"><a href="#count" style="{{ L.link }}">How is this counted?</a><sc-if value="{{ b.chart }}" hint-placeholder-val="{{ true }}"><a href="#table" style="{{ L.link }}">View as table</a></sc-if></span></div>
                 <sc-if value="{{ b.load }}" hint-placeholder-val="{{ false }}"><span style="{{ L.mono }};font-size:12px;color:{{ T.mu }}">Reading…</span><div style="{{ L.skelBox }}"></div></sc-if>
                 <sc-if value="{{ b.err }}" hint-placeholder-val="{{ false }}"><div style="{{ L.errBox }}"><span>{{ b.errT }}</span><span style="{{ L.btnDanger }}">Try again</span></div></sc-if>
@@ -100,7 +99,7 @@
                   <sc-if value="{{ b.foot }}" hint-placeholder-val="{{ false }}"><div style="{{ L.foot }}">{{ b.foot }}</div></sc-if>
                   <sc-if value="{{ b.link }}" hint-placeholder-val="{{ false }}"><a href="{{ b.href }}" style="{{ L.link }};align-self:flex-start">{{ b.link }}</a></sc-if>
                 </sc-if>
-              </section>
+              </sc-if></section>
             </sc-for>
           </div>
         </sc-if>
@@ -173,7 +172,7 @@
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;empty&quot;,&quot;loading&quot;,&quot;error&quot;,&quot;noperm&quot;]},&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;admin&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;admin&quot;,&quot;super&quot;]},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;phone&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;compare&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;drawer&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;dialog&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;none&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;none&quot;,&quot;count&quot;,&quot;export&quot;]},&quot;toast&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;scopeOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;scopePicked&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;sheet&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;notice&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;board&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;overview&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;overview&quot;,&quot;empty&quot;,&quot;loading&quot;,&quot;error&quot;,&quot;noperm&quot;]},&quot;role&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;admin&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;admin&quot;,&quot;super&quot;]},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;phone&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;compare&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;drawer&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;dialog&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;none&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;none&quot;,&quot;count&quot;,&quot;export&quot;]},&quot;toast&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;scopeOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;scopePicked&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;sheet&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;notice&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
 class Component extends DCLogic {
   renderVals() {
     const P = this.props;
@@ -255,7 +254,8 @@ class Component extends DCLogic {
     const sp = (n) => card + ';padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0;grid-column:span ' + (phone ? 12 : n);
     const D = (t, pos) => 'font-family:Roboto Mono,monospace;font-size:12px;font-weight:500;color:' + (pos ? T.pos : T.neg);
 
-    const B = (o) => Object.assign({ chart: true, take: '', select: '', big: '', bigSub: '', delta: '', ds: '', svg: null, alt: '', note: '', svg2: null, alt2: '', legend: [], badges: [], foot: '', link: '', href: '#', ok: true, load: false, err: false, nr: false, errT: '', nrT: '' }, o, { st: sp(o.span || 12), hasLeg: !!(o.legend && o.legend.length), hasBadges: !!(o.badges && o.badges.length) });
+    const B = (o) => Object.assign({ head: '', card: true, chart: true, take: '', select: '', big: '', bigSub: '', delta: '', ds: '', svg: null, alt: '', note: '', svg2: null, alt2: '', legend: [], badges: [], foot: '', link: '', href: '#', ok: true, load: false, err: false, nr: false, errT: '', nrT: '' }, o, { st: sp(o.span || 12), hasLeg: !!(o.legend && o.legend.length), hasBadges: !!(o.badges && o.badges.length) });
+    const H = (t) => Object.assign(B({ title: t, span: 12, chart: false }), { head: t, card: false, st: 'grid-column:1 / -1;display:flex;align-items:flex-end;padding:10px 2px 0' });
     let blocks = [
       B({ title: 'Who your accounts are', span: 8, take: 'Founders are the largest group, 40% of accounts.', svg: hbar([{ l: 'Founders', v: 512 }, { l: 'Explorers', v: 371 }, { l: 'Investors', v: 229 }, { l: 'Advisors', v: 96 }, { l: 'Operating Partners', v: 63 }, { l: 'Admins', v: 13 }], 520, 'active accounts'), alt: 'Active accounts by profile: Founders 512, Explorers 371, Investors 229, Advisors 96, Operating Partners 63, Admins 13. Total 1,284.', badges: [{ k: 'LPs', t: '41, investors with an approved LP application' }, { k: 'Product testers', t: '57, any profile, by application' }], foot: 'LPs and Product testers sit inside a profile, so they are not added to the total. Total 1,284.' }),
       B({ title: 'Plan', span: 4, take: '143 accounts are on a paid plan.', svg: donut([{ v: 1141, c: PAL[0] }, { v: 104, c: PAL[1] }, { v: 39, c: PAL[2] }], '143 paid', '11.1%'), alt: 'Plan: Free 1,141, Pro 104, Studio 39. 143 paid, 11.1%.', legend: [G('Free 1,141', PAL[0]), G('[Pro] 104', PAL[1]), G('[Studio] 39', PAL[2])] }),
@@ -264,10 +264,10 @@ class Component extends DCLogic {
       B({ title: 'Activation', span: 6, select: 'Accounts created in the week of 8 Sep 2026', take: '56% of that week\u2019s accounts were active in their second week.', svg: hbar([{ l: 'Created', v: 52 }, { l: 'Signed in', v: 47, t: '47 · 90%' }, { l: 'Accepted the terms', v: 45, t: '45 · 87%' }, { l: 'Active in week two', v: 29, t: '29 · 56%' }], 380, ''), alt: 'Activation funnel for the week of 8 Sep 2026: created 52, signed in 47, accepted the terms 45, active in week two 29.', note: '12 of them came from an invitation.', svg2: cols([58, 54, 56, 61, 52, 57, 0, 0].map((v, i) => ({ l: WK[i], parts: [{ v: v, c: T.v }], grey: i > 5, t: i > 5 ? 'open' : v + '%' })), 380, 150, { max: 80, pct: 1, bw: 22 }), alt2: 'Share active in week two per sign-up week. The last two weeks have not finished their second week.', legend: [G('Active in week two', T.v), G('Week two not finished', null, true)] }),
       B({ title: 'Still active after sign-up', span: 6, take: 'Seven in ten of the oldest week are still active; newer weeks are lower.', svg: cols([71, 66, 64, 58, 55, 49, 44, 38].map((v, i) => ({ l: WK[i], parts: [{ v: v, c: T.v }], t: v + '%' })), 380, 220, { max: 80, pct: 1, bw: 24 }), alt: 'Share of each sign-up week active in the last 30 days: 71, 66, 64, 58, 55, 49, 44, 38 percent.', foot: 'Y axis: share of that week\u2019s sign-ups active in the last 30 days.' }),
       B({ title: 'Where they are', take: 'France and the United States hold 31% of accounts.', svg: hbar([{ l: 'France', v: 214 }, { l: 'United States', v: 188 }, { l: 'United Kingdom', v: 141 }, { l: 'Germany', v: 97 }, { l: 'Canada', v: 66 }, { l: 'Spain', v: 58 }, { l: 'Other', v: 361, c: PAL[4] }, { l: 'Not stated', v: 159, dash: true }], 760, 'accounts'), alt: 'Accounts by country: France 214, United States 188, United Kingdom 141, Germany 97, Canada 66, Spain 58, Other 361, Not stated 159.', link: 'See all countries', href: '#group' }),
-      B({ title: 'Identity checks', span: 4, take: '402 accounts have an approved identity check.', svg: bar100([{ v: 402, c: PAL[0] }, { v: 14, c: PAL[1] }, { v: 18, c: PAL[2] }, { v: 850, c: PAL[4] }], 240), alt: 'Identity checks: approved 402, waiting 14, rejected 18, not started 850.', legend: [G('Approved 402', PAL[0]), G('Waiting 14', PAL[1]), G('Rejected 18', PAL[2]), G('Not started 850', PAL[4])], link: 'Open KYC & KYB', href: '/admin/approvals?lane=kyc' }),
+      H('Account health'), B({ title: 'Identity checks', span: 4, take: '402 accounts have an approved identity check.', svg: bar100([{ v: 402, c: PAL[0] }, { v: 14, c: PAL[1] }, { v: 18, c: PAL[2] }, { v: 850, c: PAL[4] }], 240), alt: 'Identity checks: approved 402, waiting 14, rejected 18, not started 850.', legend: [G('Approved 402', PAL[0]), G('Waiting 14', PAL[1]), G('Rejected 18', PAL[2]), G('Not started 850', PAL[4])], link: 'Open KYC & KYB', href: '/admin/approvals?lane=kyc' }),
       B({ title: 'Profile completeness', span: 4, take: 'Most profiles are between half and three quarters complete.', svg: cols([['0–25%', 301], ['26–50%', 344], ['51–75%', 389], ['76–100%', 250]].map(x => ({ l: x[0], parts: [{ v: x[1], c: T.v }] })), 240, 170, { max: 400, bw: 30 }), alt: 'Profile completeness: 0 to 25 percent 301, 26 to 50 percent 344, 51 to 75 percent 389, 76 to 100 percent 250.' }),
       B({ title: 'Dormant', span: 4, chart: false, take: 'Fewer accounts went quiet than last month.', big: '388', bigSub: 'accounts with no activity in 30 days', delta: '−12 on last month', ds: D('', true) }),
-      B({ title: 'Open support tickets', span: 6, take: 'Nine tickets are waiting for a first answer.', big: '17', bigSub: 'open now', svg: bar100([{ v: 9, c: PAL[0] }, { v: 8, c: PAL[1] }], 380), alt: 'Open support tickets: open 9, in progress 8.', legend: [G('Open 9', PAL[0]), G('In progress 8', PAL[1])] }),
+      H('Support and AI use'), B({ title: 'Open support tickets', span: 6, take: 'Nine tickets are waiting for a first answer.', big: '17', bigSub: 'open now', svg: bar100([{ v: 9, c: PAL[0] }, { v: 8, c: PAL[1] }], 380), alt: 'Open support tickets: open 9, in progress 8.', legend: [G('Open 9', PAL[0]), G('In progress 8', PAL[1])] }),
       B({ title: 'AI spend this month', span: 6, take: 'Founders account for 65% of AI spend.', big: '$412.37', bigSub: 'over 9,318 calls', svg: hbar([{ l: 'Founders', v: 268.10, t: '$268.10', c: PC.Founders }, { l: 'Investors', v: 71.40, t: '$71.40', c: PC.Investors }, { l: 'Advisors', v: 29.85, t: '$29.85', c: PC.Advisors }, { l: 'Other', v: 25.00, t: '$25.00', c: PC.Other }, { l: 'Operating Partners', v: 18.02, t: '$18.02', c: PC['Operating Partners'] }], 380, ''), alt: 'AI spend by profile: Founders 268.10, Investors 71.40, Advisors 29.85, Other 25.00, Operating Partners 18.02 dollars.', foot: 'Other: Explorers $21.30 and Admins $3.70.' }),
     ];
     const byT = (t) => blocks.find(b => b.title === t);
@@ -386,5 +386,4 @@ class Component extends DCLogic {
   }
 }
 </script>
-</body>
-</html>
+</body></html>

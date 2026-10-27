@@ -38,7 +38,8 @@ test('the list is closed and well formed', () => {
   const paths = REDIRECT_ROUTES.map((r) => r.path);
   assert.equal(new Set(paths).size, paths.length, 'no pattern twice');
   for (const p of paths) {
-    assert.match(p, /^\/[a-z0-9\-/:*]+(?:\?tab=[a-z-]+)?$/i, p);
+    // `?tab=` is D939's admin tabs; `?mode=` is D1109's two Data room modes.
+    assert.match(p, /^\/[a-z0-9\-/:*]+(?:\?(?:tab|mode)=[a-z-]+)?$/i, p);
     assert.equal(isRedirectKey(redirectKey(p)), true);
   }
   assert.equal(isRedirectKey('/dashboard'), false, 'a bare path is not a redirect key');
@@ -48,6 +49,18 @@ test('the list is closed and well formed', () => {
   assert.deepEqual(keep, ['/admin', '/admin/spinout-lab', '/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
 });
 
+
+test('D1109: the Data room\'s old modes count under their exact keys, and nothing else rides one', async () => {
+  const env = makeD1(SCHEMA);
+  for (const key of ['redirect:/raise/data-room?mode=workspace', 'redirect:/raise/data-room?mode=access', 'redirect:/raise/data-room/:id']) {
+    assert.equal(isRedirectKey(key), true, key);
+    assert.equal((await beacon(env, key)).status, 204);
+  }
+  assert.equal(rows(env).length, 3);
+  // A venture, another mode or a hash on the key is not the key; stripped, the bare tool is no redirect.
+  for (const path of ['redirect:/raise/data-room?mode=workspace&project_id=3', 'redirect:/raise/data-room?mode=other', 'redirect:/raise/data-room?mode=access#x', 'redirect:/raise/data-room']) await beacon(env, path);
+  assert.equal(rows(env).length, 3);
+});
 
 test('each fixed admin tab has its own persisted counter; unknown or extra query/hash data is rejected', async () => {
   const env = makeD1(SCHEMA);

@@ -30,6 +30,7 @@ import {
   computeRoundProgress, rollUpTranches, computeProRata, postRoundStake,
 } from '../services/roundMath';
 import { bindingKey } from '../util/schemaBootstrap';
+import { logCycleWrite } from '../services/cycleActivity';
 import { CapitalAccessError, capitalInvestor, capitalMemberProjectIds, capitalOwner, capitalPage, capitalRequestPath, capitalStaff, capitalStudioSummary } from '../services/capRelAccess';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -882,28 +883,38 @@ r.put('/raise-round', async (c) => {
       ? (body.close_date && /^\d{4}-\d{2}-\d{2}$/.test(String(body.close_date)) ? String(body.close_date) : null)
       : undefined;
     const notes = body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : undefined;
+    // D1193 (#3127, CRL10): one currency per venture, the round's (#2457 owner question 5).
+    if (body.currency !== undefined && !/^[A-Z]{3}$/.test(String(body.currency ?? ''))) return c.json({ detail: 'currency is three capital letters, such as USD' }, 400);
+    const currency = body.currency !== undefined ? String(body.currency) : undefined;
+    // D1193: the round's changes show in Capital relationships › Activity, by field name, never a figure.
+    const changed = [name !== undefined && 'name', target !== undefined && 'target', currency !== undefined && 'currency',
+      close !== undefined && 'close date', notes !== undefined && 'notes'].filter(Boolean).join(', ');
+    const logRound = (summary: string) => logCycleWrite(c.env, { projectId: pid, userId: Number(user.id), cycle: 'raise', module: 'capital-relationships', entityId: null, action: 'round_updated', summary });
 
     const existing = await c.env.DB.prepare(
       `SELECT * FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
     ).bind(pid).first<any>();
     if (existing) {
       await c.env.DB.prepare(
-        `UPDATE raise_rounds SET name=?, target_amount=?, close_date=?, notes=?, updated_at=? WHERE id=?`,
+        `UPDATE raise_rounds SET name=?, target_amount=?, close_date=?, notes=?, currency=?, updated_at=? WHERE id=?`,
       ).bind(
         name !== undefined ? name : existing.name,
         target !== undefined ? target : existing.target_amount,
         close !== undefined ? close : existing.close_date,
         notes !== undefined ? notes : existing.notes,
+        currency !== undefined ? currency : (existing.currency ?? 'USD'),
         nowIso(), existing.id,
       ).run();
+      if (changed) await logRound(`Round settings changed: ${changed}`);
       const fresh = await c.env.DB.prepare('SELECT * FROM raise_rounds WHERE id = ?').bind(existing.id).first<any>();
       return c.json(fresh);
     }
     try {
       const res = await c.env.DB.prepare(
-        `INSERT INTO raise_rounds (uid, project_id, name, target_amount, close_date, status, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
-      ).bind(newUid(), pid, name ?? null, target ?? null, close ?? null, notes ?? null, nowIso(), nowIso()).run();
+        `INSERT INTO raise_rounds (uid, project_id, name, target_amount, close_date, status, notes, currency, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
+      ).bind(newUid(), pid, name ?? null, target ?? null, close ?? null, notes ?? null, currency ?? 'USD', nowIso(), nowIso()).run();
+      await logRound('Round set up');
       const fresh = await c.env.DB.prepare('SELECT * FROM raise_rounds WHERE id = ?').bind(lastInsertId(res)).first<any>();
       return c.json(fresh, 201);
     } catch {
@@ -1023,6 +1034,8 @@ r.post('/raise-closes', async (c) => {
       state, ymd(body.target_date), ymd(body.closed_date),
       body.notes ? String(body.notes).slice(0, 4000) : null, nowIso(), nowIso(),
     ).run();
+    // D1193 (CRL10): a new close shows in Capital relationships › Activity.
+    await logCycleWrite(c.env, { projectId: pid, userId: Number(user.id), cycle: 'raise', module: 'capital-relationships', entityId: null, action: 'close_added', summary: `Close added: ${name}` });
     const fresh = await c.env.DB.prepare('SELECT * FROM raise_closes WHERE id = ?').bind(lastInsertId(res)).first<any>();
     return c.json(fresh, 201);
   } catch (e) { return mapError(c, e); }
@@ -1061,6 +1074,7 @@ r.put('/raise-closes/:id', async (c) => {
       body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : row.notes,
       nowIso(), row.id,
     ).run();
+    await logCycleWrite(c.env, { projectId: Number(row.project_id), userId: Number(user.id), cycle: 'raise', module: 'capital-relationships', entityId: null, action: 'close_updated', summary: `Close changed: ${row.name}` });
     const fresh = await c.env.DB.prepare('SELECT * FROM raise_closes WHERE id = ?').bind(row.id).first<any>();
     return c.json(fresh);
   } catch (e) { return mapError(c, e); }

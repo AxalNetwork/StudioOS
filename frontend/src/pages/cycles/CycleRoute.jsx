@@ -10,6 +10,7 @@ import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import PmfExplain from '../../workspaces/PmfExplain';
+import UseOfFundsEadwyn, { UseOfFundsMilestoneWording } from '../../workspaces/UseOfFundsEadwyn.jsx';
 import AlsoIn from '../../workspaces/AlsoIn';
 import useAssistMode from '../../hooks/useAssistMode';
 import useAiSpend from '../../hooks/useAiSpend';
@@ -68,7 +69,8 @@ import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
 import { DataRoomHomeNav, DataRoomTabPage } from '../raise/dataroom/DataRoomTool';
 import DataRoomUpload from '../raise/dataroom/DataRoomUpload.jsx';
-import { isDataRoomTab, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
+import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
+import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
 import { UseOfFundsHomeNav, UseOfFundsTabPage } from '../raise/useoffunds/UseOfFundsTool';
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import { CapRelHomeNav, CapRelTabPage } from '../raise/caprel/CapRelTool';
@@ -164,11 +166,11 @@ const CYCLE_DEFS = {
    * adapter. Its modules are in `modules.js`, held to `services/raiseCycle.ts`'s
    * list by `cycle_adapters_d661.test.ts`.
    *
-   * Data room's module page is `/raise/data-room` with no mode: that static
-   * route draws this page with `slug="data-room"` (D696 decision 12), so all
-   * seven Raise modules have module pages. Its two tools are reached from it:
-   * the read-only access view through the tool link below, and the files tool
-   * through `founderToolNavigation.js`'s door.
+   * Data room's module page is `/raise/data-room`: that static route draws
+   * this page with `slug="data-room"` (D696 decision 12), so all seven Raise
+   * modules have module pages. It is the Data room tool's Home (D1101); the
+   * old files tool and access view are retired and their addresses forward to
+   * the tool's tabs (D1109).
    */
   raise: {
     modules: MODULES.raise,
@@ -211,10 +213,9 @@ const CYCLE_DEFS = {
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
       // D1029: the Cap table module page is the tool, so it has no door to itself.
       // D1173 (#2455): the venture travels with the link (broken item 8).
-      'use-of-funds': (q) => ({ label: 'Open the financial model', href: forecastHref(q) }),
+      'use-of-funds': (q) => ({ label: 'Open the forecast', href: forecastHref(q) }),
       'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
-      // D696 decision 12: the access view manages nothing, so the label says what it shows.
-      'data-room': (q) => ({ label: 'Open the access view: grants, NDA state and recent access', href: `/raise/data-room?mode=access${q ? `&${q.slice(1)}` : ''}` }),
+      // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
     }),
     add: toFnMap({}),
     fills: {},
@@ -691,7 +692,10 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false }) {
+/** D1178: a Use of funds page under a tab, and the tab it sits under. */
+const UOF_SUB_TAB = { forecast: 'runway', compare: 'scenarios' };
+
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null }) {
   const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
@@ -794,11 +798,15 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D1101 (#2456): the Data room tool's tabs are words under its module, never file records.
   // D1106 (#2986): `/raise/data-room/file/<id>` is a file's lightbox over Files.
   const dataRoomTab = record && cycle === 'raise' && (dataRoomFile ? 'files' : isDataRoomTab(slug, recordId) ? recordId : null);
+  // D1109 (#2989): a file's number was its record page; it forwards to its window over Files, counted.
+  const dataRoomOldFile = record && cycle === 'raise' && !dataRoomFile && isOldFileAddress(slug, recordId) ? recordId : null;
   // D1173 (#2455): the Use of funds tool's tabs are words under its module, never section records.
-  const uofTab = record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
+  // D1178 (#3105): `/runway/forecast` and `/scenarios/compare` are pages under a tab, given as `uofSub`.
+  const uofTab = uofSub && cycle === 'raise' ? UOF_SUB_TAB[uofSub] || null
+    : record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
   // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
   const capRelTab = record && cycle === 'raise' && isCapRelTab(slug, recordId) ? recordId : null;
-  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !uofTab && !capRelTab && !!projectId && !!def,
+  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def,
     cycle, projectId, slug, id: recordId, reload, edit, navigate, back: `/${cycle}/${slug}${q}` });
   useScrollToHash(record ? recordState.status !== 'ready' : moduleStatus !== 'ready');
   // The page re-reads once the lightbox is gone, however it went: ×, Escape and
@@ -907,6 +915,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // The one open form, Add or Edit. Below 1024px it is the page, drawn in the
   // body's gutter; at 1024px and up it is the dialog at the mount below.
   const saved = () => { dirty.current = true; };
+  const uofAssistant = cycle === 'raise' && slug === USE_OF_FUNDS && user?.role === 'founder'
+    ? props => <UseOfFundsMilestoneWording key={projectId} projectId={projectId} {...props} /> : undefined;
   const openForm = record ? recordState.form
     : !projectId ? null
     // D1106 (#2986): DR4, Data room's Upload is its own sheet, the queue in states.
@@ -914,6 +924,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       <DataRoomUpload key="dataroom-upload" projectId={projectId} onSaved={saved} onClose={closeAdd} />
     ) : formOpen ? (
       <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
+        renderAssistant={uofAssistant}
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
         loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(formWrites, projectId) : null}
         onSearch={formOpen.search ? (_field, q) => formOpen.search(formWrites, projectId, q) : null}
@@ -924,6 +935,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       // Drawn once the record answers: its values, or the refusal in the dialog.
       rowEdit?.spec ? (
         <FormLightbox key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} cycle={cycle} slug={slug}
+          renderAssistant={uofAssistant}
           loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
           onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
           onSaved={saved}
@@ -934,6 +946,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       ) : null
     ) : editing && edit.idOf(editing) != null ? (
       <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} cycle={cycle} slug={slug}
+        renderAssistant={uofAssistant}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
         onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
         onSaved={saved}
@@ -1007,6 +1020,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       <CapTableTabPage tab={capTableTab} proposal={proposalId} instrument={instrumentId} scenario={scenarioId} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
     );
+  } else if (dataRoomOldFile) {
+    body = <DataRoomMovedRedirect kind="file" id={dataRoomOldFile} />;
   } else if (dataRoomTab) {
     body = (
       <DataRoomTabPage tab={dataRoomTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
@@ -1014,8 +1029,11 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else if (uofTab) {
     body = (
-      <UseOfFundsTabPage tab={uofTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+      <div className="space-y-4">
+      <UseOfFundsTabPage tab={uofTab} sub={uofSub} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
+      {uofTab === 'runway' && !uofSub && user?.role === 'founder' && projectStatus === 'ready' && projectId && <UseOfFundsEadwyn key={projectId} projectId={projectId} ai={ai} />}
+      </div>
     );
   } else if (capRelTab) {
     body = (
@@ -1124,6 +1142,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         )}
         {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
         {moduleStatus === 'ready' && cycle === 'raise' && slug === 'fundraising-readiness' && module?.parts?.pmf?.inputs_hash && user?.role === 'founder' && projectId && <PmfExplain key={projectId} projectId={projectId} inputsHash={module.parts.pmf.inputs_hash} ai={ai} />}
+        {moduleStatus === 'ready' && cycle === 'raise' && slug === USE_OF_FUNDS && user?.role === 'founder' && projectId && <UseOfFundsEadwyn key={projectId} projectId={projectId} ai={ai} />}
       </ModulePage>
     );
   }

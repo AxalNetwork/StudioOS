@@ -1,5 +1,7 @@
 # frontend/src/lib/api — one file per new API domain
 
+D1256: `ventureScores.js` is the venture scorecard's client (`/api/venture-scores`): the reads, the deal list's strip, reviews, corrections, weighting and sharing. It sends no computed field.
+
 D1239: `dealViews.js` reads personal thesis fit and saves, edits or removes private/firm view settings. The server rechecks deal and accepted-seat access.
 
 
@@ -285,6 +287,10 @@ D755 (#1919, read by #1915): `publicPricing.js` reads `GET /api/public/plans-and
 D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
 notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
 one: accept, edit or discard. Deciding writes no record; the page's own Save does.
+
+D1301 (#3397): `adminAccounts.js` reads Admin › Accounts' overview
+(`GET /admin/accounts/overview`), counted as Insights counts through the
+Worker's shared `cloudflare-worker/src/services/accountCounts.ts`.
 
 D893 (#2660): `insights.js` reads Admin › Insights' one read,
 `insightsApi.adminInsights(params)` (`GET /api/admin/insights`, any admin): every

@@ -12,8 +12,8 @@
  * draws Overview as today, Pipeline's investors (as a list; the board is
  * part 4's) and Calls' history. Commitments draws today's closes and pro-rata
  * (`/api/contacts/raise-closes`, `/raise-pro-rata`), the panels the old
- * pipeline page draws. Match, Outreach and Activity have no read of their own
- * on `main`, so each says "Not read here yet" with its reason (D1188 §2).
+ * pipeline page draws. D1193 (#3127): Match, Outreach, Commitments and
+ * Activity each draw their own read, whose rules are `capRelTabsModel.js`.
  */
 
 export const SLUG = 'capital-relationships';
@@ -52,14 +52,8 @@ export function tabSearch(search = '') {
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
 
+/** A block with no read yet (Overview's, D1192 §5). */
 export const NOT_YET = 'Not read here yet';
-
-/** Why a tab draws no blocks today. Never a zero, never "none". */
-export const WAITS = {
-  match: 'Matching funds to this venture is not read here yet. Each investor’s fit is on Pipeline, from the fund’s focus against your sector.',
-  outreach: 'Outreach, follow-ups due and investor updates in one place are not read here yet. Each investor’s next step is on Pipeline.',
-  activity: 'One timeline across every investor is not read here yet. Each investor’s record keeps its own.',
-};
 
 /* ------------------------------------------------------------------ *
  * D1192 (#3126) — Overview, the Pipeline board and list, the dialogs.

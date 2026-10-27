@@ -32,6 +32,9 @@
  */
 export function drawsAccountControls(row, viewer) {
   if (!row) return false;
+  // D1299 (#2377): a record opened by its address before its row is read has
+  // no role yet; until it does, nothing says it is not an administrator's.
+  if (row.role === undefined || row.role === null) return false;
   const self = viewer?.id != null && Number(row.id) === Number(viewer.id);
   if (self) return false;
   const adminTarget = String(row.role || '').toLowerCase() === 'admin';

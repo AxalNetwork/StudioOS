@@ -35,8 +35,8 @@ import {
   NOT_RECORDED, PRODUCT_TESTING_FOOT, READING, TITLE, asOfState, clockLabel, movedNotice, plural, scopeChip, withoutMoved,
 } from './programsModel';
 import {
-  PERIODS, catalogueCards, catalogueTiles, creditsChart, figureOf, joinsChart, labApplications, labCohortLine,
-  learningJoinOf, learningLine, mentorLine, needsOf, referLine, scopeLinesOf, studioChip, testingLine, waitingChart,
+  PERIODS, catalogueCards, catalogueTiles, creditsChart, figureOf, investorsFigure, joinsChart, labApplications, labCohortLine,
+  learningJoinOf, learningLine, mentorLine, needsOf, partnersFigure, referLine, scopeLinesOf, studioChip, testingLine, waitingChart,
   weeksFrom, withWeeks,
 } from './catalogueModel';
 
@@ -210,18 +210,34 @@ function CatalogueBody() {
             door={<Link to="/admin/programs/mentor-cohorts" className={OPEN} aria-label="Open Mentor cohort access">Open</Link>} />
         );
       }
-      case 'investor-cohorts':
+      case 'investor-cohorts': {
+        // D963: "Not running" until the registry says the program runs; then part 6's summary.
+        const f = investorsFigure(reads.investors, p, { perStudio });
         return (
           <ProgramCard key={p.key} p={p} superAdmin={superAdmin}
-            figures={<span className="font-mono text-[12.5px] font-semibold text-axal-muted dark:text-gray-400" data-testid="programs-card-investor-cohorts-figure">Not running</span>}
+            figures={f.state === 'not_running'
+              ? <span className="font-mono text-[12.5px] font-semibold text-axal-muted dark:text-gray-400" data-testid="programs-card-investor-cohorts-figure">Not running</span>
+              : (
+                <CardFigure s={f} what="Investor cohort access" onRetry={retry} testId="programs-card-investor-cohorts-figure">
+                  {f.state === 'ready' ? <span className={FIGURE}>{f.text}</span> : null}
+                </CardFigure>
+              )}
             door={<Link to="/admin/programs/investor-cohorts" className={OPEN} aria-label="Open Investor cohort access">Open</Link>} />
         );
-      case 'referral-partners':
+      }
+      case 'referral-partners': {
+        // D963: "[n] partners · [m] with signed terms", from part 5's summary.
+        const f = partnersFigure(reads.partners, { perStudio });
         return (
           <ProgramCard key={p.key} p={p} superAdmin={superAdmin}
-            figures={<Unread word={NOT_RECORDED} reason={p.whoReason} testId="programs-card-referral-partners-figure" />}
+            figures={(
+              <CardFigure s={f} what="The referral partners" onRetry={retry} testId="programs-card-referral-partners-figure">
+                {f.state === 'ready' ? <span className={FIGURE}>{f.text}</span> : null}
+              </CardFigure>
+            )}
             door={<Link to="/admin/programs/referral-partners" className={OPEN} aria-label="Open Referral partners">Open</Link>} />
         );
+      }
       case 'refer-and-earn': {
         const f = figureOf(p, 'open_referrals');
         const strategic = p.row?.needs_you?.strategic_requests;
