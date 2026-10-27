@@ -480,7 +480,7 @@ r.post('/applications/:applicant_id/interview', async (c) => {
   const [, ins] = await c.env.DB.batch([
     c.env.DB.prepare(
       `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
-        WHERE application_id = ? AND status = 'scheduled'`,
+        WHERE application_id = ? AND status = 'scheduled' AND outcome IS NULL`,
     ).bind(applicant.application_id),
     c.env.DB.prepare(
       `INSERT INTO spinout_application_interviews
@@ -502,12 +502,48 @@ r.post('/applications/:applicant_id/interview/cancel', async (c) => {
   if (!applicant) return refusal(c, 404, 'applicant_not_found', 'That applicant does not exist.');
   const upd = await c.env.DB.prepare(
     `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
-      WHERE application_id = ? AND status = 'scheduled'`,
+      WHERE application_id = ? AND status = 'scheduled' AND outcome IS NULL`,
   ).bind(applicant.application_id).run();
   if ((upd.meta?.changes ?? 0) === 0) return refusal(c, 409, 'no_scheduled_interview', 'There is no scheduled interview to cancel.');
   await logActivity(c.env, adminUser.email, adminUser.id, 'cohort_interview_cancelled',
     `Admin ${adminUser.name} cancelled the interview for applicant #${applicantId}`);
   return c.json({ ok: true });
+});
+
+/**
+ * D1123 (#3003, migration 602): what happened at the application's interview —
+ * `held` or `missed` — recorded once its time has passed. It is what SL1's
+ * "Interviewed" counts; a scheduled time alone never is. Recorded once: a
+ * second answer is 409, and a recorded interview is never cancelled or moved.
+ */
+r.post('/applications/:applicant_id/interview/outcome', async (c) => {
+  const adminUser = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
+  const notGranted = await programRefusal(c.env, 'spinout-lab');
+  if (notGranted) return c.json(notGranted.body, notGranted.status);
+  const applicantId = parseInt(c.req.param('applicant_id'));
+  if (!Number.isFinite(applicantId)) return refusal(c, 400, 'invalid_applicant', 'That applicant id is not valid.');
+  const body = (await c.req.json().catch(() => ({}))) as { outcome?: unknown };
+  const outcome = body.outcome === 'held' || body.outcome === 'missed' ? body.outcome : null;
+  if (!outcome) return refusal(c, 400, 'invalid_outcome', 'Say whether the interview was held or missed.');
+  const applicant = await applicantForInterview(c.env, applicantId);
+  if (!applicant) return refusal(c, 404, 'applicant_not_found', 'That applicant does not exist.');
+  const iv = await c.env.DB.prepare(
+    `SELECT id, scheduled_at, outcome FROM spinout_application_interviews
+      WHERE application_id = ? AND status = 'scheduled' ORDER BY id DESC LIMIT 1`,
+  ).bind(applicant.application_id).first<{ id: number; scheduled_at: string; outcome: string | null }>();
+  if (!iv) return refusal(c, 409, 'no_scheduled_interview', 'There is no interview to record.');
+  if (iv.outcome) return refusal(c, 409, 'outcome_recorded', 'This interview’s outcome is already recorded.');
+  const at = sqliteUtcToMs(iv.scheduled_at);
+  if (at === null || at > Date.now()) return refusal(c, 409, 'interview_not_yet', 'This interview’s time has not come yet.');
+  const upd = await c.env.DB.prepare(
+    `UPDATE spinout_application_interviews SET outcome = ?, outcome_at = datetime('now'), outcome_by = ?, updated_at = datetime('now')
+      WHERE id = ? AND status = 'scheduled' AND outcome IS NULL`,
+  ).bind(outcome, adminUser.id, iv.id).run();
+  if ((upd.meta?.changes ?? 0) === 0) return refusal(c, 409, 'outcome_recorded', 'This interview’s outcome is already recorded.');
+  await logActivity(c.env, adminUser.email, adminUser.id, 'cohort_interview_outcome',
+    `Admin ${adminUser.name} recorded applicant #${applicantId}'s interview as ${outcome}`);
+  return c.json({ ok: true, interview_id: iv.id, outcome });
 });
 
 r.post('/applications/cycles/:cycle_id/force-proceed', async (c) => {

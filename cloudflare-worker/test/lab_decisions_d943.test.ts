@@ -18,6 +18,7 @@ function world() {
   db.exec(baseline);
   db.exec(readFileSync(new URL('../sql/migrations/313_lab_host_applications.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../sql/migrations/316_spinout_application_interviews.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../sql/migrations/602_lab_interview_outcome_and_reached_weeks.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../sql/migrations/256_branch_local_copies.sql', import.meta.url), 'utf8'));
   for (const [id, role] of [[1, 'admin'], [2, 'founder'], [3, 'founder']] as const) {
     db.prepare('INSERT INTO users(id,role,name,email,is_active) VALUES(?,?,?,?,1)').run(id, role, 'Synthetic', `synthetic${id}@example.test`);
