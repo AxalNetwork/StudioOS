@@ -23,6 +23,7 @@ import { MERCURY_FEEDS, mercuryFedModules } from './mercuryFeeds';
 import { NOTION_FEEDS } from './notionFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
+import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
@@ -544,7 +545,14 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   // D1096: what lands is `vercelFeeds.ts`'s: each landing is claimed once its part sets a store (D1098: deployments).
   vercel: { category: 'Hosting', verified: false, pulls: vercelPulls(), sends: [], feeds: vercelFedModules(), permissions: ['Read your Vercel projects, their settings and their linked repository.', 'Read your deployments, their state, promotions and rollbacks.', 'Read your domains, their configuration and expiry. Axal VC cannot deploy, cancel, roll back or change anything.'] },
   zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], used_by: [{ label: 'Validate › Record a session', href: '/validate/record' }], suggests: ['problem_discovery', 'customer_research', 'ideal_customer_profile', 'market_intelligence', 'demand_signals', 'experiments'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.', 'Read a recording’s details, which Zoom grants with transcript notifications; Axal VC uses only the recording files above.', 'Open inside a Zoom meeting, which Zoom grants to every app of this kind; Axal VC does not use it.', 'Let Axal’s notetaker join a call on your behalf, only while you are in it.'] },
-  google_workspace: { category: 'Docs', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read only the Google files you choose. The file permission also permits writes at Google; Axal VC uses only read methods.'] },
+  // D1092 and D1093: what lands is `googleWorkspaceFeeds.ts`'s, one entry per feed a part built.
+  google_workspace: {
+    category: 'Docs', verified: false,
+    pulls: GOOGLE_WORKSPACE_FEEDS.map((f) => ({ what: f.what, module: f.module })),
+    sends: [],
+    feeds: [...new Set(GOOGLE_WORKSPACE_FEEDS.map((f) => f.module))],
+    permissions: ['Read only the Google files you choose. The file permission also permits writes at Google; Axal VC uses only read methods.'],
+  },
   google_calendar: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
   // D879: the founder's Grow and Raise modules, read from `mercuryFeeds.ts` (D840 parts 2 and 3).
   mercury: {

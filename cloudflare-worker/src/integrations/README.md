@@ -92,7 +92,7 @@ not one provider's goes in this folder; anything with HTTP belongs in
 
 A KV TTL is at least 60 seconds, KV's minimum: a shorter `expirationTtl` makes the `put` throw in production. `cloudflare-worker/test/kv_refresh_lease.test.ts` fails on a literal under 60 anywhere in `cloudflare-worker/src`, and `cloudflare-worker/test/_mem_kv.mjs` refuses one as KV does.
 
-D1091 (#2956): `fedOwnership.ts` checks the one-owner ledger for explicit links to roadmap OKRs and MVP features; `googleWorkspaceFeeds.ts` is empty until the feeds ship. The Google Workspace directory entry remains Coming soon pending its approved screen.
+D1091 (#2956): `fedOwnership.ts` checks the one-owner ledger for explicit links to roadmap OKRs and MVP features; `googleWorkspaceFeeds.ts` lists what each Workspace part feeds (D1093, #2958: spec Docs as Solution design proposals and a mapped roadmap Sheet into Product roadmap, written by `../services/google/buildFeeds.ts`). The Google Workspace directory entry remains Coming soon pending its approved screen.
 
 D1081 (#2946): `lovableFeeds.ts` holds Lovable's four planned launch/app-link
 landings. Only shipped inbound entries become metadata pulls and feeds; none

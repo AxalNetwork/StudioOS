@@ -113,7 +113,8 @@ test('every file that mounts <WorkerRail> puts it in a frame', () => {
   // took Grow · Brand's: its read is a section of the brand builder now.
   // D894 retired the self-framed Raise · Pitch page; the studio uses the frame.
   // D1109 retired the self-framed Raise · Data room access view.
-  assert.ok(by.frame >= 18 && by.shell >= 13 && by.self >= 31 && !by.component, JSON.stringify(by));
+  // D1194 retired the self-framed Investor match page into Capital relationships.
+  assert.ok(by.frame >= 18 && by.shell >= 13 && by.self >= 30 && !by.component, JSON.stringify(by));
 });
 
 test('WorkspaceShell draws no frame of its own; it uses the shared one', () => {

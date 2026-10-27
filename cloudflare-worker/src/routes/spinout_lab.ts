@@ -736,7 +736,7 @@ spinoutLab.post('/apply/withdraw', async (c) => {
   try {
     await c.env.DB.prepare(
       `UPDATE spinout_application_interviews SET status = 'cancelled', updated_at = datetime('now')
-        WHERE application_id = ? AND status = 'scheduled'`,
+        WHERE application_id = ? AND status = 'scheduled' AND outcome IS NULL`,
     ).bind(app.id).run();
   } catch { /* interviews not migrated */ }
   return c.json({ ok: true, applicant: await loadApplicantBlock(c.env, user.id) });
@@ -751,16 +751,17 @@ spinoutLab.post('/apply/interview/reschedule', async (c) => {
   if (!reason) return refusal(c, 400, 'reason_required', 'Say what time would work, or why this one does not.');
   const app = await latestApplication(c.env, user.id);
   if (!app) return refusal(c, 404, 'no_application', 'There is no application with an interview.');
-  let iv: { id: number; status: string } | null = null;
+  let iv: { id: number; status: string; outcome: string | null } | null = null;
   try {
     iv = await c.env.DB.prepare(
-      `SELECT id, status FROM spinout_application_interviews WHERE application_id = ? ORDER BY id DESC LIMIT 1`,
+      `SELECT id, status, outcome FROM spinout_application_interviews WHERE application_id = ? ORDER BY id DESC LIMIT 1`,
     ).bind(app.id).first();
   } catch (e) {
     console.error('[spinout-lab/reschedule] read failed', (e as Error)?.message);
     return refusal(c, 503, 'interview_unreadable', 'Your interview could not be read. Try again.');
   }
-  if (!iv || iv.status !== 'scheduled') return refusal(c, 409, 'no_scheduled_interview', 'There is no scheduled interview to move.');
+  // D1123: an interview whose outcome is recorded has happened (or was missed); it is not moved.
+  if (!iv || iv.status !== 'scheduled' || iv.outcome) return refusal(c, 409, 'no_scheduled_interview', 'There is no scheduled interview to move.');
   await c.env.DB.prepare(
     `UPDATE spinout_application_interviews
         SET reschedule_requested_at = datetime('now'), reschedule_reason = ?, updated_at = datetime('now')

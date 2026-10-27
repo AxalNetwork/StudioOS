@@ -35,17 +35,18 @@ export function movedNotices(superAdmin) {
   return { personas: superAdmin ? 'Personas is now Persona segments, under Content.' : 'Personas is now Persona segments, under Accounts.' };
 }
 
-/** The tabs this integration draws (D997 §1). Activity, Suggestions and one segment's page wait for their parts. */
+/** The page's tabs (D997 §1; D1006 adds Activity and, for HQ's Super Admin, Suggestions). */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: '' },
   { key: 'unclassified', label: 'Unclassified', path: '/unclassified' },
+  { key: 'activity', label: 'Activity', path: '/activity' },
+  { key: 'suggestions', label: 'Suggestions', path: '/suggestions', superAdmin: true },
 ];
 
 export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === SEG_PATH) return 'overview';
-  if (p === SEG_UNCLASSIFIED_PATH) return 'unclassified';
-  return null;
+  return TABS.find((t) => t.path && p === `${SEG_PATH}${t.path}`)?.key ?? null;
 }
 
 /** The profiles, in the canvas's order and colours. `exploring` is Explorers; an unknown role is Other. */

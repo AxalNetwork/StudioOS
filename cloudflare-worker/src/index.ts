@@ -236,6 +236,7 @@ import googleWorkspaceRoutes from './routes/google_workspace';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
+import buildGoogleRoutes from './routes/build_google';
 import buildPlanRoutes, { buildEvidenceRoutes } from './routes/build_plan';
 import buildPlanStateRoutes from './routes/build_plan_state';
 import metricsRoutes from './routes/metrics';
@@ -1457,6 +1458,8 @@ app.route('/api/progress', progressRoutes);
 app.route('/api/cycles/build/plan', buildPlanStateRoutes);
 app.route('/api/cycles/build/plan', buildPlanRoutes);
 app.route('/api/cycles/build/evidence', buildEvidenceRoutes);
+// D1093 (#2958): Google Workspace on Build — sync, From Google and the spec Doc decisions.
+app.route('/api/cycles/build/google', buildGoogleRoutes);
 app.route('/api/cycles/build', cycleBuildRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);

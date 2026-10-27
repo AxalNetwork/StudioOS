@@ -99,6 +99,7 @@ export function sessionBadge(session) {
 
 /** The channel badge's tooltip: how the words reached the session. */
 export function channelBadgeTitle(provider) {
+  if (provider === 'google_docs') return 'Imported from the Google Doc you chose for this interview';
   const name = CHANNEL_SOURCES[provider] || 'a channel';
   return MEETING_SOURCES.has(provider)
     ? `Imported from the ${name} call’s transcript`

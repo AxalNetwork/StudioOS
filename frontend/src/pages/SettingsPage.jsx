@@ -32,6 +32,8 @@ import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard,
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/UsageOverview';
 import CompaniesProjects from './account/companies/CompaniesProjects';
+import { ProfileMovedNotice } from './account/companies/CompaniesMoved';
+import { companyPathFor } from './account/companies/companiesModel';
 import { companiesTabFor, companyUidFor } from './account/companies/companiesModel';
 import CostPage from './account/CostPage';
 // D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
@@ -482,7 +484,8 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
           <SectionLabel as="h2" className="pt-2">Full profile and account</SectionLabel>
           <ProfileTabs key={profileRev} data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
           <EmailSection data={data} flash={flash} reload={reloadAccount} />
-          <YourCompaniesSection flash={flash} />
+          {/* D1140 (#3020, CMP19b): Your companies moved to Companies and projects; this line says so once. */}
+          <ProfileMovedNotice />
           <RolesAccessCard data={data} onJump={() => onSelect('billing')} />
           <DocumentsAgreementsSection />
           <AccountDeletionCard data={data} flash={flash} reload={reloadAccount} />
@@ -512,7 +515,8 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
           <DigestQuietHoursCard flash={flash} />
         </>
       )}
-      {safeActive === 'companies' && <CompaniesProjects role={role} />}
+      {/* D1140: the companies, each with its entity record, live on Companies and projects' Companies tab. */}
+      {safeActive === 'companies' && <CompaniesProjects role={role} entityRecords={<YourCompaniesSection flash={flash} />} />}
       {safeActive === 'following' && <FollowingSection />}
       {safeActive === 'usage' && (usagePage === 'storage' ? <StoragePage role={role} /> : usagePage === 'ai-tokens' ? <AiTokensPage /> : usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
@@ -1773,8 +1777,7 @@ function YourCompaniesSection({ flash }) {
       {!err && rows === null && <p className="text-sm text-gray-500">Loading…</p>}
       {!err && rows && rows.length === 0 && (
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          You are not a member of any company yet. Create one from{' '}
-          <Link to="/company-settings" className="text-violet-600 hover:underline">Company Settings</Link>,
+          You are not a member of any company yet. Create one with New company on this page,
           or ask an owner to add you by this account&apos;s email.
         </p>
       )}
@@ -1823,9 +1826,11 @@ function YourCompaniesSection({ flash }) {
                       data-testid={`company-entity-toggle-${id}`}>
                       {open ? 'Close' : 'Entity'}
                     </button>
+                    {/* D1140: Manage opens this row's company, not the one active on this device (#2422 item 3). */}
                     <Link
-                      to="/company-settings"
+                      to={c.uid ? companyPathFor(c.uid) : '/account/companies'}
                       className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap"
+                      data-testid={`company-manage-${id}`}
                     >
                       Manage
                     </Link>

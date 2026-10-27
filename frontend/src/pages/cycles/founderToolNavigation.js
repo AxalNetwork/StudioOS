@@ -8,14 +8,14 @@ export const FOUNDER_TOOLS = [
   { path: '/grow/launch', cycle: 'grow', module: 'distribution', label: 'Open launch calendar', door: true, roles: ['admin', 'founder'] },
   { path: '/legal', cycle: 'build', module: 'company-creation', label: 'Open legal documents', door: true, roles: ['admin', 'founder'] },
   { path: '/legal/send', cycle: 'build', module: 'company-creation', label: 'Open e-signature', door: true, roles: ['admin', 'founder', 'partner', 'investor', 'advisor'] },
-  { path: '/raise/capital-match', aliases: ['/grow/capital-match'], cycle: 'raise', module: 'capital-relationships', label: 'Open investor match', door: true, roles: ['admin', 'founder'] },
+  // D1194 (#3128): Investor match is Capital relationships › Match; the old addresses only forward.
+  { path: '/raise/capital-relationships/match', cycle: 'raise', module: 'capital-relationships', label: 'Open investor match', door: true, roles: ['admin', 'founder'] },
   { path: '/build/marketplace', cycle: 'validate', module: 'customer-research' },
   { path: '/execution', cycle: 'build', module: 'product-roadmap' },
   { path: '/build/team', cycle: 'grow', module: 'team-expansion' },
   { path: '/comarketing', cycle: 'grow', module: 'distribution' },
   { path: '/raise/pitch', cycle: 'raise', module: 'pitch-deck' },
   { path: '/raise/capital', cycle: 'raise', module: 'use-of-funds' },
-  { path: '/raise/capital/pipeline', cycle: 'raise', module: 'capital-relationships' },
   { path: '/raise/legal-engine', cycle: 'build', module: 'company-creation' },
 ];
 
