@@ -182,7 +182,7 @@ function statedClaims(surface: ClaimSurface, version: string, field: string, tex
 }
 
 /** Every string inside a slide, in order; a slide that is not an object or a string states nothing. */
-function slideText(v: unknown, depth = 0): string[] {
+export function slideText(v: unknown, depth = 0): string[] {
   if (depth > 6) return [];
   if (typeof v === 'string') return [v];
   if (Array.isArray(v)) return v.flatMap((x) => slideText(x, depth + 1));
@@ -190,9 +190,9 @@ function slideText(v: unknown, depth = 0): string[] {
   return [];
 }
 
-type Surface = { surface: ClaimSurface; version: string | null; state: 'recorded' | 'unreadable'; claims: ComputedClaim[] };
+export type Surface = { surface: ClaimSurface; version: string | null; state: 'recorded' | 'unreadable'; claims: ComputedClaim[] };
 
-async function pinnedItems(env: Env, projectId: number): Promise<PinnedItem[]> {
+export async function pinnedItems(env: Env, projectId: number): Promise<PinnedItem[]> {
   const r = await env.DB.prepare(
     `SELECT id, uid, kind, source_table, source_ref, source_label, provider, observed_on, value_num, value_unit, currency, private_reason
        FROM raise_evidence_items WHERE project_id = ? AND state = 'pinned' ORDER BY id`,
@@ -216,7 +216,7 @@ async function manualLinks(env: Env, projectId: number): Promise<Map<string, num
 }
 
 /** The kind of each pinned demand signal, read from its own row (bound, by id). */
-async function signalKinds(env: Env, projectId: number, items: PinnedItem[]): Promise<Map<string, string>> {
+export async function signalKinds(env: Env, projectId: number, items: PinnedItem[]): Promise<Map<string, string>> {
   const ids = [...new Set(items.filter((i) => i.source_table === 'demand_signals').map((i) => Number(prefix(i.source_ref))).filter(Number.isSafeInteger))];
   if (!ids.length) return new Map();
   const r = await env.DB.prepare('SELECT id, kind FROM demand_signals WHERE project_id = ? AND id IN (SELECT value FROM json_each(?))')
@@ -243,16 +243,25 @@ const narrative = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<
   return { version, claims };
 });
 
-/** The current deck's figures, slide by slide. A deck whose slides cannot be read is unreadable, not empty. */
-const deck = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<string, string>) => surface('deck', async () => {
-  const d = await env.DB.prepare('SELECT id, version, slides FROM pitch_decks WHERE project_id = ? ORDER BY COALESCE(is_current, 0) DESC, version DESC, id DESC LIMIT 1')
-    .bind(projectId).first<{ id: number; version: number; slides: string }>();
+/** A deck version as `pitch_decks` holds it. */
+export type DeckRow = { id: number; version: number; slides: string | null };
+
+/**
+ * One deck version's figures, slide by slide (D1264). With no row, the
+ * current deck; D900's check passes the version it was asked about. A deck
+ * whose slides cannot be read is unreadable, not empty.
+ */
+export const deck = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<string, string>, row?: DeckRow | null) => surface('deck', async () => {
+  const d = row ?? await env.DB.prepare('SELECT id, version, slides FROM pitch_decks WHERE project_id = ? ORDER BY COALESCE(is_current, 0) DESC, version DESC, id DESC LIMIT 1')
+    .bind(projectId).first<DeckRow>();
   if (!d) return { version: null, claims: [] };
-  const slides: unknown = JSON.parse(d.slides);
+  const slides: unknown = JSON.parse(String(d.slides));
   if (!Array.isArray(slides)) throw new Error('deck_unreadable');
-  const version = `v${Number(d.version) || 1}`;
+  const version = deckVersion(d);
   return { version, claims: slides.flatMap((s, i) => statedClaims('deck', version, `slide:${i + 1}`, slideText(s).join('\n'), items, kinds)) };
 });
+/** A deck version's `surface_version`: `v<n>`. */
+export const deckVersion = (d: { version: number | null }) => `v${Number(d.version) || 1}`;
 
 /** Traction proof, Team and Product-market fit, where the venture's readiness list holds them. */
 const readiness = (env: Env, projectId: number, items: PinnedItem[], links: Map<string, number[]>) => surface('readiness', async () => {
@@ -368,6 +377,21 @@ const claimKey = (c: { surface: string; surface_version: string; field_key: stri
  */
 export async function checkClaims(env: Env, projectId: number, now = new Date().toISOString()): Promise<ClaimCheck> {
   const { surfaces } = await computeClaims(env, projectId);
+  return writeSurfaces(env, projectId, surfaces, now);
+}
+
+/**
+ * D900 (#2679): one deck version, checked and written as the Evidence read
+ * checks the current one. Other surfaces and other versions are untouched.
+ */
+export async function checkDeckVersion(env: Env, projectId: number, row: DeckRow, now = new Date().toISOString()): Promise<ClaimCheck> {
+  const items = await pinnedItems(env, projectId);
+  const kinds = await signalKinds(env, projectId, items);
+  return writeSurfaces(env, projectId, [await deck(env, projectId, items, kinds, row)], now);
+}
+
+/** Writes what changed for the surfaces given; the one writer both checks share. */
+export async function writeSurfaces(env: Env, projectId: number, surfaces: Surface[], now = new Date().toISOString()): Promise<ClaimCheck> {
   const read = surfaces.filter((s) => s.state === 'recorded');
   const computed = read.flatMap((s) => s.claims).slice(0, MAX_WRITES);
   const existing = (await env.DB.prepare(

@@ -122,6 +122,7 @@
  * company, outside a support session, from their own connection. Anyone
  * else's module read has no `parts.mercury`, and the routes answer 403.
  */
+import { ClaimNoteError, noteText, setClaimNote } from '../services/raiseClaimNotes';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
@@ -1314,6 +1315,17 @@ cycleRaise.patch('/evidence/items/:id', async c => {
 cycleRaise.post('/evidence/claims/:id/link', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c))); }
   catch (error) { return evidenceFailure(c, error); }
+});
+// D900 (#2679): "Keep mine, with a note" on a Mismatch, shared by the deck's and the narrative's checks.
+cycleRaise.post('/evidence/claims/:id/note', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; const body = await evidenceBody(c);
+    return c.json(await setClaimNote(ctx.env, ctx.projectId, Number(ctx.user.id), c.req.param('id'), noteText(body.note))); }
+  catch (error) { return error instanceof ClaimNoteError ? c.json({ error: error.code, message: error.sentence }, error.status) : evidenceFailure(c, error); }
+});
+cycleRaise.delete('/evidence/claims/:id/note', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx;
+    return c.json(await setClaimNote(ctx.env, ctx.projectId, Number(ctx.user.id), c.req.param('id'), null)); }
+  catch (error) { return error instanceof ClaimNoteError ? c.json({ error: error.code, message: error.sentence }, error.status) : evidenceFailure(c, error); }
 });
 cycleRaise.delete('/evidence/claims/:id/link', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await linkEvidenceClaim(ctx, c.req.param('id'), await evidenceBody(c), true)); }

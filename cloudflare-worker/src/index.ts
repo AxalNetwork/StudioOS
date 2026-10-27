@@ -230,6 +230,7 @@ import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
+import deckCheck from './routes/deck_check';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import notificationsRoutes from './routes/notifications';
@@ -1331,6 +1332,8 @@ app.route('/api/decks', deckExports);
 app.route('/api/decks', deckNotes);
 // D900 (#2679): a version's review and the venture's review history; two-segment paths, before `decks`.
 app.route('/api/decks', deckReview);
+// D900 (#2679): `/checks`, `/:id/check` and `/:id/claims/:uid/use-record`, before `decks` so `GET /:id` cannot answer `/checks`.
+app.route('/api/decks', deckCheck);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.

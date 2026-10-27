@@ -8,6 +8,7 @@ import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, usePhoneWidth } from '../../../ui';
 import { SourcesPanel, useDeckSources } from './SourcesBoards';
+import CheckPanel from './CheckPanel';
 import AddMenu from './AddMenu';
 import CardAssistBar from './CardAssistBar';
 import { BlockGrid } from './BlockGrid';
@@ -52,7 +53,9 @@ import {
  * Eadwyn's bar for the chart toolbar (PD9c) with the Data popover (PD9); the
  * chart library (PD9b) inserts or edits one.
  *
- * The Check tab (part 6) is not drawn here: it waits for its own store.
+ * D900 (#2679, part 6): the panel's Check tab (`CheckPanel.jsx`, PD13) checks
+ * this version against the founder's pinned evidence. "Use [X]'s figure"
+ * saves a new version, which the editor then opens as it opens a Save.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -297,6 +300,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
           </div>
           <RightPanel panel={panel} setPanel={setPanel} project={project} sources={sources} refresh={refresh} kit={kit}
             model={model} card={card} theme={theme} audience={audience} readOnly={readOnly}
+            deck={base.deck} dirty={dirty} onReplaced={saved}
             onLayout={(layout) => setDialog({ kind: 'layout', layout })}
             onBackground={(bg) => setCard(sel, { ...card, background: bg })}
             onTheme={setTheme} onAudience={setAudience}
@@ -452,9 +456,9 @@ function FieldedCard({ card, index, colours }) {
 // The right panel (PD1, PD8)
 // ---------------------------------------------------------------------------
 
-const PANELS = [['sources', 'Sources'], ['design', 'Design'], ['notes', 'Notes']];
+const PANELS = [['sources', 'Sources'], ['design', 'Design'], ['check', 'Check'], ['notes', 'Notes']];
 
-function RightPanel({ panel, setPanel, project, sources, refresh, kit, model, card, theme, audience, readOnly, onLayout, onBackground, onTheme, onAudience, onApplyAll }) {
+function RightPanel({ panel, setPanel, project, sources, refresh, kit, model, card, theme, audience, readOnly, deck, dirty, onReplaced, onLayout, onBackground, onTheme, onAudience, onApplyAll }) {
   const staleMap = useMemo(() => {
     const m = new Map();
     for (const r of Array.isArray(refresh.data?.rows) ? refresh.data.rows : []) if (r.state === 'stale') m.set(r.source_key, r.bound?.as_of || null);
@@ -479,6 +483,9 @@ function RightPanel({ panel, setPanel, project, sources, refresh, kit, model, ca
         {panel === 'design' ? (
           <DesignTab model={model} card={card} theme={theme} audience={audience} kit={kit} readOnly={readOnly}
             onLayout={onLayout} onBackground={onBackground} onTheme={onTheme} onAudience={onAudience} onApplyAll={onApplyAll} />
+        ) : null}
+        {panel === 'check' && deck?.id ? (
+          <CheckPanel key={deck.id} deck={deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={onReplaced} />
         ) : null}
         {panel === 'notes' ? (
           <div className="flex flex-col gap-2">
