@@ -168,6 +168,27 @@ export async function packsOnHold(env: Env, userId: number): Promise<boolean> {
 
 export type TokenPackRefusal = 'token_pack_alone' | 'promo_not_for_token_packs' | 'token_pack_not_on_sale'
   | 'token_pack_daily_limit' | 'token_balance_ceiling' | 'token_packs_on_hold' | 'token_pack_first_purchase_only';
+
+const dollars = (micro: number) => `$${(micro / AI_USD_SCALE).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+
+/**
+ * D1289 (#3372, CRP5): what each pack refusal answers, in the "Add tokens"
+ * canvas's words, beside its code and its status. The checkout sheet shows
+ * `message` as it is; the code stays for the page's logic and the logs. The
+ * figures are `TOKEN_PACK_LIMITS`', never typed twice. A refusal added to
+ * `TokenPackRefusal` without a sentence here fails to type-check, and
+ * `ai_credits_d755` pins every one through the orders router.
+ */
+export const TOKEN_PACK_REFUSALS: Readonly<Record<TokenPackRefusal, { status: 400 | 409; message: string }>> = Object.freeze({
+  token_pack_alone: { status: 400, message: 'A token pack is bought on its own, one at a time. Take the other items out of this order and try again.' },
+  promo_not_for_token_packs: { status: 400, message: 'Promo codes don’t apply to token packs. Offers show on the pack.' },
+  token_pack_not_on_sale: { status: 400, message: 'This pack isn’t on sale now. Choose another pack.' },
+  token_pack_first_purchase_only: { status: 409, message: 'This pack is for your first token purchase, and you have bought tokens before. Choose another pack.' },
+  token_pack_daily_limit: { status: 400, message: `You’ve reached today’s limit of ${TOKEN_PACK_LIMITS.ordersPerDay} pack orders. Try again tomorrow.` },
+  token_balance_ceiling: { status: 400, message: `This pack would take your balance over ${dollars(TOKEN_PACK_LIMITS.balanceCeilingMicrousd)}.` },
+  token_packs_on_hold: { status: 400, message: 'Buying tokens is paused on this account while a payment is reviewed. Contact support.' },
+});
+
 export type TokenPackQuote = { priceId: string; packUid: string | null; creditMicrousd: number; bonusMicrousd: number; firstPurchaseOnly: boolean };
 
 /**

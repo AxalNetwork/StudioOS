@@ -173,6 +173,26 @@ async function moneySettingsUser(c:any) {
   await requireStepUp(c);
   return requireAuth(c);
 }
+/**
+ * D1289 (#3372, CRP9): an Add tokens was opened. HQ › AI usage (D791) reads
+ * where members reach for tokens. The row holds `from` only, which entry point
+ * it was, never a prompt, a page's text or a figure; one per member, per entry
+ * point, per ten minutes, so a sheet opened again and again is one row.
+ */
+export const ADD_TOKENS_FROM=['models','rail','assist','billing','usage','ai_tokens','refused_run','build','narrative','pitch_deck','session_digest','phone'] as const;
+r.post('/add-tokens-opened',async c=>{
+  const user=await requireAuth(c);
+  const body=await c.req.json().catch(()=>({})) as {from?:unknown};
+  const from=typeof body.from==='string'?body.from:'';
+  if (!(ADD_TOKENS_FROM as readonly string[]).includes(from)) return c.json({error:'invalid_from',message:'That is not an Add tokens entry point.'},400);
+  const res=await c.env.DB.prepare(`INSERT INTO activity_logs (user_id,action,details,actor)
+    SELECT ?,'add_tokens_opened',json_object('from',?),'member'
+     WHERE NOT EXISTS (SELECT 1 FROM activity_logs WHERE user_id=? AND action='add_tokens_opened'
+       AND json_extract(details,'$.from')=? AND created_at>datetime('now','-10 minutes'))`)
+    .bind(user.id,from,user.id,from).run();
+  return c.json({recorded:(res.meta?.changes??0)===1});
+});
+
 r.get('/auto-reload',async c=>{
   const user=await moneySettingsUser(c);
   try {

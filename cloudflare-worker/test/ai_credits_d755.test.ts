@@ -10,7 +10,7 @@ import { makeD1 } from './_d1_sqlite.mjs';
 import { aiBudgetFixture, AI_USERS_SCHEMA, AI_LOG_SCHEMA, AI_BUDGET_REVIEW_MIGRATION, AI_CREDITS_MIGRATION, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { reserveAiBudget, settleAiReservation, settleAiBudgetReview } from '../src/services/aiBudget.ts';
 import { recordAiTopupPurchase, creditAiTopupFromPayment } from '../src/services/aiTopups.ts';
-import { ledgerBalance, TOKEN_PACK_LIMITS } from '../src/services/aiCredits.ts';
+import { ledgerBalance, TOKEN_PACK_LIMITS, TOKEN_PACK_REFUSALS } from '../src/services/aiCredits.ts';
 import { classifyIdempotency } from '../../scripts/lib/migrationPlan.mjs';
 
 const now = new Date('2026-10-18T12:00:00Z');
@@ -343,7 +343,8 @@ test('each pack rule answers its code and creates no PaymentIntent', async () =>
     try {
       seed(f);
       const r = await intent(f, items, extra);
-      assert.deepEqual([r.status, r.body], [400, { error: code }], `${code} ${JSON.stringify([items, extra, opts])}`);
+      // D1289: each code answers with its sentence and its status, through the router.
+      assert.deepEqual([r.status, r.body], [TOKEN_PACK_REFUSALS[code].status, { error: code, message: TOKEN_PACK_REFUSALS[code].message }], `${code} ${JSON.stringify([items, extra, opts])}`);
       assert.deepEqual(s.calls, [], `${code}: no Stripe call`);
       assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM orders').get().n, 0, `${code}: no order, so no free path`);
       await assertInvariant(f);
@@ -480,8 +481,8 @@ test('with only STRIPE_PRICE_AI_TOPUP set, a member buys it alone, at face value
   const f = await shop({ pack: false, env: { STRIPE_PRICE_AI_TOPUP: FALLBACK } }); const s = stripeStub();
   try {
     assert.deepEqual(await tokenPackForPrice(f.env, FALLBACK), { origin: 'environment', packUid: null, priceId: FALLBACK, productId: null, faceCents: null, bonusMicrousd: 0, onSale: true, offerStartsAt: null, offerEndsAt: null, firstPurchaseOnly: false });
-    assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 2 }]).then((r) => r.body), { error: 'token_pack_alone' });
-    assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 1 }], { promo_code: 'FREE100' }).then((r) => r.body), { error: 'promo_not_for_token_packs' });
+    assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 2 }]).then((r) => r.body), { error: 'token_pack_alone', message: TOKEN_PACK_REFUSALS.token_pack_alone.message });
+    assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 1 }], { promo_code: 'FREE100' }).then((r) => r.body), { error: 'promo_not_for_token_packs', message: TOKEN_PACK_REFUSALS.promo_not_for_token_packs.message });
     const r = await intent(f, [{ price_id: FALLBACK, quantity: 1 }]);
     assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.total, 1500);
     const pi = { id: r.body.payment_intent_id, status: 'succeeded', currency: 'usd', amount_received: 1500, metadata: { kind: 'cart_order', order_ref: r.body.order_ref, user_id: '2' } };
