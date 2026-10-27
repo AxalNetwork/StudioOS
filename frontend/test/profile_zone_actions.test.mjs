@@ -98,7 +98,8 @@ const PROFILES = {
     // the same `kind: 'export'` every other zone uses. 21 → 20: `raise/liquidity`'s
     // `Export` went with that zone (owner, 2026-10-20). 20 → 19 (D1109):
     // `raise/data-room`'s `Export log`; Activity's Export (CSV) is the tool's.
-    exports: 19,
+    // 19 → 18 (D1194): `raise/capital-match`'s `Export shortlist` went with that zone.
+    exports: 18,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
     // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
