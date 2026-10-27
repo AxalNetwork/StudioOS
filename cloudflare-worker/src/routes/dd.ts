@@ -62,6 +62,12 @@ function genUid(): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** D1251: a person's name for the case read, or null when the account is gone or the read fails. */
+async function nameOf(env: Env, userId: number): Promise<string | null> {
+  if (!Number.isSafeInteger(userId) || userId <= 0) return null;
+  try { return (await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first<{ name: string | null }>())?.name ?? null; } catch { return null; }
+}
+
 async function getCaseByUid(env: Env, uid: string): Promise<Record<string, unknown> | null> {
   const sql = getSQL(env);
   try {
@@ -95,6 +101,19 @@ const leadsOrOpened = (user: AppUser, cs: Record<string, unknown>) => isLead(use
  *   notify_founder         an Admin, on a project or founder case
  *                          (`POST /report/share`);
  *   audit                  an Admin, the lead or opener, or any reviewer.
+ * D1251 (#3266) adds the writes the case's tabs draw:
+ *   decide, update         an Admin or the lead, on a case that is not archived
+ *                          (`POST /decision`, `PATCH /cases/:uid` and its
+ *                          archive, `PUT /memo`, `POST /ic`: `deciderRefusal`);
+ *   memo_read              an Admin, the lead or opener (`GET /memo`);
+ *   widen                  an Admin or the lead, on an open or in-review case;
+ *   team                   an Admin, the lead or opener, on a case that is not
+ *                          archived (`DELETE …/reviewers/:userId`);
+ *   work                   per section id: an Admin, the lead or opener on
+ *                          every section; otherwise that section's reviewer,
+ *                          never an observer (the checklist's items, their
+ *                          evidence, and raising or working a flag there);
+ *   work_case_wide         an Admin, the lead or opener: a flag with no section.
  * A flag says who may ask, not that the call succeeds: `report` still asks for
  * a recent TOTP step-up, and a reviewer's verdict still needs their signed NDA.
  * Pure, so the tests hold it against each route's gate.
@@ -111,7 +130,13 @@ export function caseAllowed(
   const lead = isLead(user as AppUser, cs);
   const works = new Set(mine.filter((r) => String(r.role ?? 'reviewer') !== 'observer').map((r) => Number(r.section_id)));
   const verdict: Record<string, boolean> = {};
-  for (const id of sectionIds) verdict[String(id)] = admin || lead || works.has(Number(id));
+  const work: Record<string, boolean> = {};
+  for (const id of sectionIds) {
+    verdict[String(id)] = admin || lead || works.has(Number(id));
+    work[String(id)] = admin || runsIt || works.has(Number(id));
+  }
+  const archived = cs.status === 'archived';
+  const decides = (admin || lead) && !archived;
   return {
     scan: writerStaff,
     assign: writerStaff,
@@ -120,6 +145,13 @@ export function caseAllowed(
     report: writerStaff,
     notify_founder: admin && (cs.subject_type === 'project' || cs.subject_type === 'founder'),
     audit: admin || runsIt || reviewer,
+    decide: decides,
+    update: decides,
+    memo_read: admin || runsIt,
+    widen: (admin || lead) && (cs.status === 'open' || cs.status === 'in_review'),
+    team: (admin || runsIt) && !archived,
+    work,
+    work_case_wide: admin || runsIt,
   };
 }
 
@@ -536,6 +568,9 @@ dd.get('/cases/:uid', async (c) => {
       // D1246: the lead, the decision and the archive. A section reviewer is
       // told the decision, never its reason, the cheque or the linked deal.
       lead_user_id: leadOf(cs),
+      // D1251 (#3266): the header and Sign-off name the lead and who recorded the decision; a name only, never an email.
+      lead_name: await nameOf(c.env, leadOf(cs)),
+      decided_by_name: cs.decided_by == null ? null : await nameOf(c.env, Number(cs.decided_by)),
       decision_reason: isScoped ? null : await decField(c.env, 'dd_cases', 'decision_reason', caseId, cs.decision_reason_enc as string | null),
       archived_reason: isScoped ? null : await decField(c.env, 'dd_cases', 'archived_reason', caseId, cs.archived_reason_enc as string | null),
       decision_reason_enc: undefined, archived_reason_enc: undefined,
