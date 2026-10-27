@@ -332,7 +332,7 @@ const usage = (product, productError = false) => renderToStaticMarkup(h(RailUsag
 
 test('Add tokens is drawn in all three top-up states, enabled only when a pack is on sale', () => {
   const ready = usage(TOPUP);
-  assert.match(ready, /<a href="\/pricing\/products#token-packs" class="fwr-add-tokens"[^>]*>Add tokens<\/a>/);
+  assert.match(ready, /<a href="\/pricing\?for=models#add-tokens" class="fwr-add-tokens"[^>]*>Add tokens<\/a>/);
   assert.doesNotMatch(ready, /disabled/);
   const none = usage({ configured: true, state: 'not_ready' });
   assert.match(none, /<button type="button" class="fwr-add-tokens" disabled=""[^>]*>Add tokens<\/button>/);
