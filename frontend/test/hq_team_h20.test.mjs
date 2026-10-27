@@ -50,6 +50,7 @@ import HqTeamActions, { HQ_ONLY_ACTIONS, ADMIN_ACTIONS, SUPPORT_SESSION_CEILING_
 import { drawsAccountControls } from '../src/lib/accountControls.js';
 import { UserDetailModal } from '../src/pages/admin/consoles/UsersConsole.jsx';
 import { adminConsoleSource } from './_adminConsoles.mjs';
+import { accountDialog } from '../src/pages/admin/accounts/accountDrawerModel.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
@@ -381,10 +382,12 @@ test('D247: deactivating an administrator takes demote\'s bar, and the card says
     'the bar is no longer scoped to an administrator target');
 
   // The page asks for the reason on an administrator's row, and forwards what
-  // was typed.
-  assert.match(ADMIN, /if \(user\.role === 'admin'\) \{\s*reason = window\.prompt\(/,
-    'the directory no longer asks for a reason before toggling an administrator');
-  assert.match(ADMIN, /await api\.adminToggleActive\(user\.id, reason\)/, 'the typed reason is not sent');
+  // was typed. D1306 (#3403): in ACC7 I's in-page dialog, not a window.prompt.
+  const admin = accountDialog('deactivate', { role: 'admin', name: 'A. Admin' });
+  assert.equal(admin.reason?.required, true, 'the directory no longer asks for a reason before deactivating an administrator');
+  assert.equal(admin.reason?.min, 10, 'the reason floor is not the route\'s ten characters');
+  assert.equal(accountDialog('deactivate', { role: 'founder' }).reason?.required, false, 'a member\'s deactivation now demands a reason');
+  assert.match(ADMIN, /deactivate: \(c, reason\) => api\.adminToggleActive\(c\.user\.id, reason \|\| undefined\)/, 'the typed reason is not sent');
   const method = API.slice(API.indexOf('adminToggleActive:'), API.indexOf('adminSetAccessLevel:'));
   assert.match(method, /adminToggleActive: \(userId, reason\) =>/, 'adminToggleActive takes no reason');
   assert.match(method, /\.\.\.\(reason \? \{ body: JSON\.stringify\(\{ reason \}\) \} : \{\}\)/,

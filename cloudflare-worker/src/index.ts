@@ -119,6 +119,7 @@ import adminMercury from './routes/admin_mercury';
 import adminMercurySafeBasis from './routes/admin_mercury_safe_basis';
 import adminGithub from './routes/admin_github';
 import githubWebhook from './routes/github';
+import vercelWebhook from './routes/vercel_webhook';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
 import adminCohort from './routes/admin_cohort';
@@ -178,6 +179,8 @@ void _registerCrunchbase;
 import './integrations/providers/stripe';
 // D655 (#1467) — GitHub: read-only issues, pull requests and releases from chosen repositories.
 import './integrations/providers/github';
+// D1096: the read-only Vercel Integration.
+import './integrations/providers/vercel';
 // D713 (#1778) — a founder's or partner's own Mercury, read-only: `connect` only.
 import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
@@ -233,6 +236,8 @@ import googleWorkspaceRoutes from './routes/google_workspace';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
+import lovableAppLinks from './routes/lovable_app_links';
+import buildGoogleRoutes from './routes/build_google';
 import buildPlanRoutes, { buildEvidenceRoutes } from './routes/build_plan';
 import buildPlanStateRoutes from './routes/build_plan_state';
 import metricsRoutes from './routes/metrics';
@@ -1424,6 +1429,8 @@ app.route('/api/developer/limits', developerLimits);
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
 // D1080 (#2945): Sign in with <Provider> for every other MCP record, and its client ID metadata documents.
 app.route('/api/integrations/mcp', connectorMcpOauthRoutes);
+// D1096 (#2961): Vercel signs every installation's events to one URL; ahead of the per-connection receiver.
+app.route('/api/connectors/webhook/vercel', vercelWebhook);
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
@@ -1448,10 +1455,15 @@ app.route('/api/founder-risk', founderRiskRoutes);
 // Task #9 — Venture Risk (internal deal-team 10-layer rating).
 app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
+// D1083 (#2948): the Lovable app link on an experiment or on Prototype / MVP,
+// at /api/cycles/{validate,build}/lovable/app-link, before either cycle's router.
+app.route('/api/cycles', lovableAppLinks);
 // D1067: pause, resume and "new evidence since" before D1065's plan router.
 app.route('/api/cycles/build/plan', buildPlanStateRoutes);
 app.route('/api/cycles/build/plan', buildPlanRoutes);
 app.route('/api/cycles/build/evidence', buildEvidenceRoutes);
+// D1093 (#2958): Google Workspace on Build — sync, From Google and the spec Doc decisions.
+app.route('/api/cycles/build/google', buildGoogleRoutes);
 app.route('/api/cycles/build', cycleBuildRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);

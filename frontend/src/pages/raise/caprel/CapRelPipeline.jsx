@@ -5,10 +5,9 @@ import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { Lightbox, Unreadable } from '../../../ui';
 import { RecordFacts, RecordSection } from '../../cycles/RecordView';
 import { recordHref } from '../../cycles/recordModel';
-import { parseCsv } from '../../RaisePipelinePage';
 import {
   IMPORT_CHUNK, NO_STATUS, PASSED, SLUG, STAGES, STAGE_LABEL, STATUS_OPTIONS, amountText, asksStatus, boardColumns, chunks,
-  importRows, mergeImport, moveBody, moveSentence, moveTargets, stageLabel, statusCounts, statusLabel, tabSearch,
+  importRows, mergeImport, moveBody, moveSentence, moveTargets, parseCsv, stageLabel, statusCounts, statusLabel, tabSearch,
 } from './capRelModel';
 import CapRelProposals from './CapRelProposals';
 

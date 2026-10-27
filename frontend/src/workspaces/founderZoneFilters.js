@@ -312,19 +312,9 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Signed', key: 'signed' },
     { canvas: 'Dormant', key: 'dormant' },
   ],
-  // Prospects carry a stage, and the stored stages become the chips. Warm paths
-  // are the Network relationship book's, and nothing joins the two records.
-  'raise/capital-match': [
-    { canvas: 'Best fit', key: 'all', label: 'All prospects' },
-    // "NOTHING JOINS A PROSPECT TO A RELATIONSHIP" WAS FALSE, and the join even has
-    // its own migration: 128_contact_promotion.sql adds `raise_prospects.contact_id`
-    // and indexes it as `idx_raise_prospects_contact`. `contacts` IS the network
-    // book. A prospect carrying a contact id is one reached through somebody the
-    // founder already knows — which is exactly what this chip asks for.
-    { canvas: 'Warm path only', key: 'warm' },
-    { canvas: 'Right stage', dynamic: 'stages', label: 'One chip per stage', unbuilt: 'no prospect records a stage yet' },
-    { canvas: 'Passed', key: 'passed' },
-  ],
+  // D1194 (#3128): `raise/capital-match` is retired. Investor match is Capital
+  // relationships › Match, which draws its own filters; the zone is excluded in
+  // the tests.
   'grow/brand': [
     { canvas: 'All pages', key: 'all' },
     { canvas: 'Live', key: 'live' },
@@ -428,8 +418,8 @@ export const FOUNDER_ZONE_FILTERS = {
   // three controls, so the predicates that were always right have something to
   // be right about.
   //
-  // `Best fit` IS `all`, RELABELLED, exactly as `grow/capital-match` above
-  // resolves the same canvas word. No fit score is stored, and the zone's own
+  // `Best fit` IS `all`, RELABELLED, exactly as `grow/capital-match` resolved
+  // the same canvas word until D1194 retired it. No fit score is stored, and the zone's own
   // StatedLimit already refuses to invent one — "nothing here scores a fund for
   // you, ranks your list, or drafts an approach". So the canvas's first slot
   // becomes the unfiltered view rather than a ranking that would be a number

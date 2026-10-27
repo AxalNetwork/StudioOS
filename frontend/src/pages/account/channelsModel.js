@@ -27,7 +27,8 @@ export const CHANNEL_PROVIDERS = ['telegram', 'whatsapp', 'zoom', 'google_meet']
 export const MESSAGING_PROVIDERS = ['telegram', 'whatsapp'];
 export const MEETING_PROVIDERS = ['zoom', 'google_meet'];
 
-export const PROVIDER_LABEL = { telegram: 'Telegram', whatsapp: 'WhatsApp', zoom: 'Zoom', google_meet: 'Google Meet' };
+// D1092: `google_docs` labels a session imported from a chosen Doc; it is no channel card (CHANNEL_PROVIDERS).
+export const PROVIDER_LABEL = { telegram: 'Telegram', whatsapp: 'WhatsApp', zoom: 'Zoom', google_meet: 'Google Meet', google_docs: 'Google Docs' };
 
 /** The card titles: what the member connects, in their words. */
 export const CARD_TITLE = { telegram: 'Telegram Business', whatsapp: 'WhatsApp Business', zoom: 'Zoom', google_meet: 'Google Meet' };

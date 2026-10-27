@@ -129,6 +129,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/carta/investor → carta_investor.ts (#2634: the caller's own active investor grant; live read-only firms, funds, investments, certificates, convertible notes, warrants and capitalization tables; no support/admin bypass, founder imports or personal-data logs)
 /api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650; connector pages (`GET /directory/:key`, D753))
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
+/api/connectors/webhook/vercel → vercel_webhook.ts (D1096: Vercel's signed deliveries for every installation, mounted ahead of integrations.ts)
                                          (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
@@ -146,7 +147,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/pipeline      → pipeline.ts
 /api/search        → search.ts
 /api/kyc           → kyc_governance.ts, kyc.ts  (D1232: renewals, renewal periods, the audit read and its export, mounted first so `/admin/:userId` does not read them as ids)
-/api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*; D1216: a closing line's paper under /staged — preview, start, read, the line's envelopes and the Super Admin's step-up countersign, `closing.countersign`)
+/api/legal/esign   → esign.ts            (frontend calls /api/legal/esign/*; D1216: a closing line's paper under /staged — preview, start, read, the line's envelopes, signed in order (company, investor, then Axal), and the Super Admin's step-up countersign, `closing.countersign`)
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts
 /api/profiling     → profiling.ts
@@ -408,6 +409,7 @@ a non-owner's overview card is `data_room.ts`'s `roomSummary`. `projects.ts`
 only) store the founder's NDA choice, migration 608.
 
 D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: scoped chosen files, draft mapping, Stop using and ephemeral five-row preview. Calendar adds `/google/workspace-files/connect`; Google tokens stay in its one store. Support sessions are refused. See `../services/google/README.md`.
+D1093 (#2958): `build_google.ts` mounts `/api/cycles/build/google` before the Build cycle's routes: From Google on Solution design and Product roadmap, the sync, and a spec Doc's Accept and Dismiss, on `google_workspace.ts`'s scope check. See `../services/google/README.md`.
 
 D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 

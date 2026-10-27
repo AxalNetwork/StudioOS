@@ -148,13 +148,13 @@ export const READINESS = Object.freeze(['Round target', 'Round terms', 'Pitch de
 
 /** The tool each readiness item is set in, by the Worker's key (D1222 `ventureReadiness`). */
 export const READINESS_TOOL = Object.freeze({
-  round: { tool: 'Round settings', path: '/raise/capital/pipeline' },
+  round: { tool: 'Round settings', path: '/raise/capital-relationships/commitments' },
   terms: { tool: 'Cap table', path: '/raise/cap-table' },
   deck: { tool: 'Pitch deck', path: '/raise/pitch-deck' },
   data_room: { tool: 'Data room', path: '/raise/data-room' },
   use_of_funds: { tool: 'Use of funds', path: '/raise/use-of-funds' },
   traction: { tool: 'Fundraising readiness', path: '/raise/fundraising-readiness' },
-  close: { tool: 'Round settings', path: '/raise/capital/pipeline' },
+  close: { tool: 'Round settings', path: '/raise/capital-relationships/commitments' },
 });
 
 const PROJECT = /^[1-9]\d*$/;
