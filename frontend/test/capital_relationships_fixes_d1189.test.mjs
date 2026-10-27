@@ -48,6 +48,12 @@ test('Contacts hub: ?contact= opens that contact\'s drawer', async () => {
       await view.flush(); await view.flush();
       assert.deepEqual(asked, ['c100']);
       assert.match(view.text(), /northwind@example\.test/);
+      // D1317: the contact opens as the shared right-side Sheet, at its own 480px, named by its title.
+      const sheet = view.nodes().find((n) => view.props(n)?.['data-testid'] === 'contact-drawer');
+      assert.equal(view.props(sheet).role, 'dialog');
+      assert.ok(view.props(sheet)['aria-labelledby']);
+      assert.equal(view.props(sheet)['data-width'], 480);
+      assert.ok(view.nodes().some((n) => view.props(n)?.['data-testid'] === 'contact-drawer-scrim'));
     } finally { await view.unmount(); }
     const plain = await mountContracts(h(ContactsPanel), '/network?tab=contacts');
     try { await plain.flush(); await plain.flush(); assert.deepEqual(asked, ['c100'], 'no contact named, no drawer read'); } finally { await plain.unmount(); }

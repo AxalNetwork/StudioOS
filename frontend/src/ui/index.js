@@ -33,6 +33,8 @@ export { default as Pill, PILL_TONES } from './Pill';
 export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 // D685 — the one lightbox shell: a centred dialog, a full-screen sheet on a phone. See Lightbox.jsx.
 export { default as Lightbox, LightboxBarProvider, LightboxPhoneProvider, useLightboxPage } from './Lightbox';
+// D1317 — the one detail sheet: right side, docked beside the Eadwyn rail's spine. See Sheet.jsx.
+export { default as Sheet, SHEET_WIDTHS } from './Sheet';
 // D686 — Cycle Action's lightbox body: header, step pills, banner, scrolling body, footer; shared button classes. See ActionSheet.jsx.
 // D687 — every service's mark, coded once (Simple Icons 16.35.0, CC0), with initials where no mark is cleared. See BrandIcon.jsx.
 export { default as BrandIcon, BRAND_MARKS, BRAND_GENERIC, BRAND_MONOGRAM, BRAND_ALIAS, resolveBrand, TILE_HEX } from './BrandIcon';

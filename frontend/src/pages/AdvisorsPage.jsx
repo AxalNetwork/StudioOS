@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Search, Star, Calendar, Clock, Video, X, MessageCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
+import Sheet from '../ui/Sheet.jsx';
 import { useAuth } from '../hooks/useAuthSync';
 import UserTrustBadge from '../components/UserTrustBadge';
 import PageExplainer from '../components/PageExplainer';
@@ -187,21 +188,15 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
   // advisor looked fully booked and native booking was unreachable.
   const bookable = (slots || []).filter(isBookableSlot).map(slotView).filter(s => sessionType?.duration_minutes == null || slotMinutes(s) === sessionType.duration_minutes);
   return (
-    <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto dark:bg-gray-900">
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{advisor.display_name}</div>
-            {advisor.headline && <div className="text-sm text-gray-600">{advisor.headline}</div>}
-            {advisor.rating_avg && (
-              <div className="flex items-center gap-2 mt-2">
-                <StarRow rating={Math.round(advisor.rating_avg)} />
-                <span className="text-sm text-gray-600">{advisor.rating_avg.toFixed(1)} ({advisor.rating_count} reviews)</span>
-              </div>
-            )}
+    <Sheet label={advisor.display_name || 'Advisor'} title={advisor.display_name} sub={advisor.headline || undefined}
+      onClose={onClose} width={640} testId="advisor-detail">
+      <div className="p-6">
+        {advisor.rating_avg && (
+          <div className="flex items-center gap-2 mb-3">
+            <StarRow rating={Math.round(advisor.rating_avg)} />
+            <span className="text-sm text-gray-600">{advisor.rating_avg.toFixed(1)} ({advisor.rating_count} reviews)</span>
           </div>
-          <button onClick={onClose}><X size={18} className="text-gray-500" /></button>
-        </div>
+        )}
         {advisor.bio && <p className="text-sm text-gray-700 mb-4 dark:text-gray-300">{advisor.bio}</p>}
         <div className="grid grid-cols-2 gap-3 text-sm mb-4">
           <div><span className="text-gray-500">Rate:</span> {advisor.hourly_rate_usd == null ? 'Not recorded — no rate set' : advisor.hourly_rate_usd > 0 ? `$${advisor.hourly_rate_usd}/hr` : 'Free'}</div>
@@ -266,7 +261,7 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
             onBooked={(b) => { setBookSlot(null); onBooked?.(b); onClose(); }} />
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 

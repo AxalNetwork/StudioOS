@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { Lightbox, actionDanger, actionGhost } from '../../../ui';
+import { actionDanger, actionGhost } from '../../../ui';
 import useRecordCrumb from '../useRecordCrumb';
 import {
   AGREEMENT_NOT_READY, ANSWERS_LOGGED, LINK_LAPSED, NOT_OFFERED, READING, agreementLine, agreementReady, answersOf, dayOr,
@@ -14,6 +14,7 @@ import { itemsOf, useRead } from './usePartnerDesk';
 import {
   AMBER, CopyButton, EYE, Fact, LINK, ReadState, SUB, StageCell,
 } from './parts';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D950 (#2726) — one invitation (PI3; PI11c on a phone), at
@@ -73,7 +74,7 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
     const state = isRecordId(id) ? detailState(detail) : 'missing';
     const gone = state === 'missing' || Number(detail.error?.status) === 404;
     return (
-      <Lightbox label="Invitation" title="Invitation" eyebrow="Invitations" onClose={onClose} width={560} pageBelow="lg" testId="partners-invitation">
+      <Sheet label="Invitation" title="Invitation" eyebrow="Invitations" onClose={onClose} width={560} pageBelow="lg" testId="partners-invitation">
         <div className="flex flex-col gap-2 px-5 py-4" data-testid="partners-invitation-absent">
           {state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{READING}</span> : null}
           {gone ? (
@@ -84,7 +85,7 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
           ) : null}
           {!gone && (state === 'unreadable' || state === 'paused') ? <ReadState read={{ ...detail, data: null }} what="This invitation" claim="That is not a claim that it does not exist." onRetry={() => setRetry((n) => n + 1)} testId="partners-invitation-read" /> : null}
         </div>
-      </Lightbox>
+      </Sheet>
     );
   }
 
@@ -121,7 +122,7 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
   );
 
   return (
-    <Lightbox label={`Invitation for ${name}`} title={row.name} sub={`${row.email} · ${sentBy}`} eyebrow="Invitations" onClose={onClose}
+    <Sheet label={`Invitation for ${name}`} title={row.name} sub={`${row.email} · ${sentBy}`} eyebrow="Invitations" onClose={onClose}
       width={940} pageBelow="lg" testId="partners-invitation" footer={footer}>
       <div className="flex flex-col gap-4 px-5 py-4" data-testid="partners-invitation-body">
         {/* A refresh that failed keeps the record from the last read, under the line (D923 §2). */}
@@ -265,6 +266,6 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
           </div>
         </div>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }

@@ -63,6 +63,8 @@ included there; no logo host request is made.
 
 D1081: Lovable uses the existing initials tile, explicitly classified in `BRAND_MONOGRAM`; no vendor artwork or remote logo is added.
 
+`Sheet.jsx` (D1317) is the one detail sheet: every record's detail panel opens there, on the right, full height, docked beside the Eadwyn rail. While a sheet is open the rail draws its 44px spine (`sheetStore.js`), undimmed and clickable, and the spine's button closes the sheet before it opens the rail. With no rail the sheet meets the window's edge. It keeps the panel's own width (480 to 760px, capped at `calc(100vw - 108px)`), fixes its header and footer and scrolls its body, and keeps `Lightbox`'s modal contract (focus trap, Escape on the shared stack, focus returned, inert background except `[data-sheet-keep]`). `sheet.css` holds the dock, the 200ms slide and the phone forms. Confirmations, step-up dialogs and lightbox pickers stay `Lightbox`.
+
 D1165: `LightboxPhoneProvider` scopes the phone form to a page. Fund admin
 uses `phone="sheet"` for its nested drawers, including reused connection
 sheets. An explicit `phone` on a Lightbox wins; other pages keep `full`.

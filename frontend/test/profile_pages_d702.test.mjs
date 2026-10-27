@@ -313,6 +313,12 @@ test('11. Your venture draws its card, facts and module rows, and Edit saves onl
   globalThis.matchMedia = mediaAt(1440);
   const view = await mountContracts(h(VentureForm, { venture: VENTURE, onClose: noop, onSaved: (v) => saved.push(v), save: async (c) => { saved.push(c); return VENTURE; } }), '/profile/venture');
   try {
+    // D1317: at 1440px the form is the shared right-side Sheet, at 560px, named by its title.
+    const sheet = view.nodes().find((n) => view.props(n)?.['data-testid'] === 'venture-form');
+    assert.equal(view.props(sheet).role, 'dialog');
+    assert.ok(view.props(sheet)['aria-labelledby']);
+    assert.equal(view.props(sheet)['data-width'], 560);
+    assert.ok(view.nodes().some((n) => view.props(n)?.['data-testid'] === 'venture-form-scrim'));
     const input = view.nodes().find((n) => n.tagName === 'INPUT' && view.props(n)?.value === 'Sampleton');
     await act(async () => { view.props(input).onChange({ target: { value: 'Exampletown' } }); });
     const form = view.nodes().find((n) => n.tagName === 'FORM');

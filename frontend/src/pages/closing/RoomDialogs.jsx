@@ -15,6 +15,7 @@ import { BTN } from '../account/AccountCenter';
 import { Err } from './ClosingDialogs';
 import { closingHrefFor, moneyCents } from './deskModel';
 import { ROOM_WAITS, evidenceRows, signingRows } from './roomModel';
+import Sheet from '../../ui/Sheet.jsx';
 
 const mutedText = 'm-0 text-[12.5px] text-gray-600 dark:text-gray-400';
 const NOT_YET_PILL = 'w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400';
@@ -43,7 +44,7 @@ export function SignDrawer({ row, envelope, failed, viewer, company, onClose }) 
   const rows = signingRows(envelope, viewer);
   const mine = rows.find((r) => r.yourTurn);
   return (
-    <Lightbox label="Review and sign" eyebrow="Step 2 · Sign" title={envelope?.title || 'Review and sign'} sub={`${company} and ${viewer === 'investor' ? 'you' : row.investor}`} onClose={onClose} width={560} phone="sheet" testId="closing-sign"
+    <Sheet label="Review and sign" eyebrow="Step 2 · Sign" title={envelope?.title || 'Review and sign'} sub={`${company} and ${viewer === 'investor' ? 'you' : row.investor}`} onClose={onClose} width={560} phone="sheet" testId="closing-sign"
       footer={<Foot><button type="button" className={BTN.ghost} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
         {failed ? <p className={mutedText} data-testid="closing-sign-failed">This line’s paper could not be read. Close and try again from the room.</p>
@@ -70,7 +71,7 @@ export function SignDrawer({ row, envelope, failed, viewer, company, onClose }) 
             </>
           )}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 
@@ -78,7 +79,7 @@ export function SignDrawer({ row, envelope, failed, viewer, company, onClose }) 
 export function ReceiptDrawer({ row, viewer, dealId, onClose }) {
   const items = evidenceRows(row.evidence);
   return (
-    <Lightbox label="Receipt" eyebrow="Step 5 · Receipt" title={row.investor} sub={row.amount || undefined} onClose={onClose} width={560} phone="sheet" testId="closing-receipt"
+    <Sheet label="Receipt" eyebrow="Step 5 · Receipt" title={row.investor} sub={row.amount || undefined} onClose={onClose} width={560} phone="sheet" testId="closing-receipt"
       footer={<Foot>{viewer === 'admin' ? <Link className={BTN.ghost} to={closingHrefFor(dealId)}>Record evidence on Contracts › Closings</Link> : null}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
         <p className="m-0 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[12.5px] dark:border-violet-800 dark:bg-violet-950/40">Received needs the receiving side’s evidence: the company’s Mercury, an Axal entity’s Mercury, a phone-verified record or a bank confirmation. The investor’s own Mercury alone reads Sent, not yet confirmed.</p>
@@ -96,14 +97,14 @@ export function ReceiptDrawer({ row, viewer, dealId, onClose }) {
         ))}
         <p className={mutedText}>The evidence names a stored record, never a bank memo or an account number. Its amount is the line’s.</p>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 
 /** CP9: the warning first, then the instructions, which no mounted route serves yet (D1217, #3214). */
 export function PaymentDrawer({ company, amount, onClose }) {
   return (
-    <Lightbox label="Payment instructions" eyebrow="Pay" title="Payment instructions" sub={amount ? `For your ${amount} line in ${company}` : undefined} onClose={onClose} width={520} phone="sheet" testId="closing-pay"
+    <Sheet label="Payment instructions" eyebrow="Pay" title="Payment instructions" sub={amount ? `For your ${amount} line in ${company}` : undefined} onClose={onClose} width={520} phone="sheet" testId="closing-pay"
       footer={<Foot><button type="button" className={BTN.ghost} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
         <Warning testId="closing-pay-warning">{PAY_WARNING(company)}</Warning>
@@ -111,7 +112,7 @@ export function PaymentDrawer({ company, amount, onClose }) {
         <p className={mutedText} data-testid="closing-pay-wait">{ROOM_WAITS.instructions}</p>
         <p className={mutedText}>When the account is read here, revealing its full number is recorded and shows for 30 seconds. A change to the account is announced to every investor with an unpaid line.</p>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 
@@ -121,7 +122,7 @@ export function CaptableDialog({ closing, view, rows, instrument, onClose, onDon
   const received = rows.filter((r) => r.status === 'Received');
   const decide = (accept) => act.run(() => (accept ? closingsApi.acceptCaptable(closing.uid) : closingsApi.dismissCaptable(closing.uid)), 'The decision could not be recorded. Try again.').then((ok) => ok && onDone());
   return (
-    <Lightbox label="Cap table change" title={received.length === 1 ? `Add ${received[0].investor} to the cap table?` : 'Add the received lines to the cap table?'} onClose={onClose} width={620} phone="sheet" testId="closing-captable-dialog"
+    <Sheet label="Cap table change" title={received.length === 1 ? `Add ${received[0].investor} to the cap table?` : 'Add the received lines to the cap table?'} onClose={onClose} width={620} phone="sheet" testId="closing-captable-dialog"
       footer={(
         <Foot>
           <button type="button" className={BTN.ghost} onClick={onClose} disabled={act.busy}>Not now</button>
@@ -139,7 +140,7 @@ export function CaptableDialog({ closing, view, rows, instrument, onClose, onDon
         {!view.canDecide ? <p className={mutedText}>{view.text}</p> : null}
         <Err text={act.error} testId="closing-captable-error" />
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

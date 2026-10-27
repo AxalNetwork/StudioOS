@@ -291,3 +291,12 @@ test('the paperwork strip names the person and the document, and the roster CSV 
   assert.equal(initialsOf('Novacraft Labs, Inc.'), 'NL');
   assert.equal(initialsOf(''), '?');
 });
+
+test('D1317: the person and invite drawers are the shared right-side Sheet at 520px, with no hand-rolled overlay left', () => {
+  const d = slice(CODE, 'function PersonDrawer(', 'function toForm(');
+  assert.match(d, /<Sheet title=\{p\.name\} sub=\{[^}]+\}[^>]*onClose=\{onClose\} width=\{520\} testId="person-drawer">/);
+  const inv = slice(CODE, 'function InviteDrawer(', 'export const OPEN_DECISIONS');
+  assert.match(inv, /<Sheet title="Invite teammate"[^>]*onClose=\{onClose\} width=\{520\} testId="invite-drawer">/);
+  assert.match(CODE, /import Sheet from '\.\.\/\.\.\/ui\/Sheet\.jsx';/);
+  assert.doesNotMatch(`${d}${inv}`, /fixed inset-0|justify-end bg-black/, 'the overlay, frame and × are the Sheet’s');
+});

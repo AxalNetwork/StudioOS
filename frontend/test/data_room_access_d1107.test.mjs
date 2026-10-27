@@ -220,6 +220,9 @@ test('Access mounted: the list (Active), the matrix, one investor, the NDA strip
     assert.match(v.textOf('matrix-cell-a1-g1'), /Can open/);
     await v.click('access-view-list');
     await v.click('grant-open-g2');
+    assert.equal(v.props('investor-lightbox').role, 'dialog', 'D1317: the grant opens as the shared Sheet');
+    assert.ok(v.props('investor-lightbox')['aria-labelledby']);
+    assert.equal(v.props('investor-lightbox')['data-width'], 640, 'its own 600, on the Sheet’s list');
     assert.match(v.textOf('investor-lightbox'), /Juniper Angels.*Legal.*Waiting for signatures.*0 of 5 files.*Refused for Model\.xlsx/s);
     assert.equal(writes(v).length, 0);
   } finally { await v.close(); }
