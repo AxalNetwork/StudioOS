@@ -60,10 +60,25 @@ export interface FactWriter {
   lookAlike?(env: Env, ctx: SyncContext, item: FactItem): Promise<{ id: number; label: string } | null>;
 }
 
+/**
+ * What an Accept may need beyond the proposal: the founder's own Notion, opened
+ * only when asked (D1087: an interview reads its page whole, as of now).
+ */
+export interface AcceptDeps { reads: () => Promise<NotionReads> }
+
+/**
+ * An acceptor's refusal: a status, a code and the sentence the page prints.
+ * Nothing is written. Never carries a page's text or a property's value.
+ */
+export class AcceptRefused extends Error {
+  status: number; code: string; detail: string;
+  constructor(status: number, code: string, detail: string) { super(code); this.status = status; this.code = code; this.detail = detail; }
+}
+
 /** A proposal kind's Accept: writes through the module's writer and returns the row it became. */
 export interface Acceptor {
   kind: ProposalKind;
-  accept(env: Env, ctx: SyncContext, proposal: ProposalRow, body: Record<string, unknown>): Promise<{ localTable: string; localId: number }>;
+  accept(env: Env, ctx: SyncContext, proposal: ProposalRow, body: Record<string, unknown>, deps: AcceptDeps): Promise<{ localTable: string; localId: number }>;
 }
 
 const WRITERS = new Map<string, FactWriter>();
@@ -330,7 +345,9 @@ export async function dismissProposal(env: Env, ctx: SyncContext, id: number): P
 }
 
 /** A pending proposal's Accept, through its kind's acceptor; the row it became joins the ledger. */
-export async function acceptProposal(env: Env, ctx: SyncContext, id: number, body: Record<string, unknown>):
+const NO_READS: AcceptDeps = { reads: async () => { throw new NotionReadError('not_connected'); } };
+
+export async function acceptProposal(env: Env, ctx: SyncContext, id: number, body: Record<string, unknown>, deps: AcceptDeps = NO_READS):
   Promise<'not_found' | 'decided' | 'not_ready' | { localTable: string; localId: number }> {
   const row = await env.DB.prepare('SELECT * FROM notion_proposals WHERE id = ? AND project_id = ? AND integration_id = ?')
     .bind(id, ctx.projectId, ctx.integrationId).first<ProposalRow>();
@@ -338,7 +355,7 @@ export async function acceptProposal(env: Env, ctx: SyncContext, id: number, bod
   if (row.status !== 'pending') return 'decided';
   const acceptor = acceptorFor(row.kind);
   if (!acceptor) return 'not_ready';
-  const landed = await acceptor.accept(env, ctx, row, body);
+  const landed = await acceptor.accept(env, ctx, row, body, deps);
   await env.DB.batch([
     env.DB.prepare(`UPDATE notion_proposals SET status = 'accepted', changed = 0, local_table = ?, local_id = ?, decided_by = ?, decided_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'`).bind(landed.localTable, landed.localId, ctx.userId, id),

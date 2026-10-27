@@ -51,7 +51,8 @@ const text = (label: string, required = false): FieldDef => ({ label, type: 'tex
 export const NOTION_MODULES: Readonly<Record<string, NotionModule>> = Object.freeze({
   customer_research: { key: 'customer_research', section: 'validate', label: 'Customer research', kinds: ['page', 'page_tree', 'database'], lands: 'proposal', proposal: 'interview',
     fields: { date: { label: 'Date', type: 'date' }, interviewee: text('Interviewee'), role: text('Role'), company: text('Company') } },
-  market_intelligence: { key: 'market_intelligence', section: 'validate', label: 'Market intelligence', kinds: ['page_tree'], lands: 'fact', fields: {} },
+  // D1087: a tree's page is never mapped; these name what From Notion draws for it (its title and link).
+  market_intelligence: { key: 'market_intelligence', section: 'validate', label: 'Market intelligence', kinds: ['page_tree'], lands: 'fact', fields: { title: text('Title'), url: text('Link') } },
   product_roadmap: { key: 'product_roadmap', section: 'build', label: 'Product roadmap', kinds: ['database'], lands: 'fact',
     fields: { objective: text('Objective', true), key_result: text('Key result'), status: { label: 'Status', type: 'choice', values: ['now', 'next', 'later', 'done'] }, quarter: text('Quarter'), progress: { label: 'Progress', type: 'number' } } },
   prototype_mvp: { key: 'prototype_mvp', section: 'build', label: 'Prototype / MVP', kinds: ['database'], lands: 'fact',

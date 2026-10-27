@@ -25,7 +25,7 @@
  */
 import { logCycleWriteStatement } from '../cycleActivity';
 import { canLink, type FedOwnedTable } from '../../integrations/fedOwnership';
-import { registerAcceptor, registerFactWriter, type Acceptor, type FactItem, type FactWriter } from './sync';
+import { AcceptRefused, registerAcceptor, registerFactWriter, type Acceptor, type FactItem, type FactWriter } from './sync';
 
 const TITLE_MAX = 300;
 const QUARTER_MAX = 20;
@@ -189,7 +189,8 @@ export const designNoteAcceptor: Acceptor = {
  * Accept on "Link to [existing]?": the matched row gains this connection's
  * ledger link, as a `notion_fact`, so the next sync updates it as Notion's and
  * From Notion lists and deletes it like any fact. Nothing new is written. A row
- * another connection feeds, or one gone since, is refused and nothing changes.
+ * another connection feeds (409 `already_fed`), or one gone since (409
+ * `link_target_gone`), is refused and nothing is decided.
  */
 export const factLinkAcceptor: Acceptor = {
   kind: 'fact_link',
@@ -198,9 +199,13 @@ export const factLinkAcceptor: Acceptor = {
     try { payload = JSON.parse(proposal.payload_json || '{}'); } catch { payload = {}; }
     const table = payload.local_table === 'roadmap_okrs' || payload.local_table === 'mvp_features' ? payload.local_table as FedOwnedTable : null;
     const id = Number(payload.local_id);
-    if (!table || !Number.isSafeInteger(id) || id < 1) throw new Error('Forbidden');
+    const gone = new AcceptRefused(409, 'link_target_gone', 'That item is no longer here. Nothing was linked.');
+    if (!table || !Number.isSafeInteger(id) || id < 1) throw gone;
     const writer = table === 'roadmap_okrs' ? roadmapWriter : mustHaveWriter;
-    if (!(await writer.alive(env, ctx.projectId, id)) || !(await canLink(env, ctx.integrationId, table, id))) throw new Error('Forbidden');
+    if (!(await writer.alive(env, ctx.projectId, id))) throw gone;
+    if (!(await canLink(env, ctx.integrationId, table, id))) {
+      throw new AcceptRefused(409, 'already_fed', 'Another connection feeds that item, so Notion cannot link it. Nothing was linked.');
+    }
     await env.DB.batch([
       env.DB.prepare(
         `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)

@@ -306,7 +306,8 @@ test('a look-alike of a row GitHub feeds reads "Already fed by GitHub": it is ne
   const read = await t.call('GET', '/api/cycles/build/notion?project=701&module=prototype_mvp');
   assert.deepEqual(read.body.proposals.find((x: any) => x.kind === 'fact_link').link, { existing: 'Sign-in', fed_by: 'github' }, 'the page can say whose it is');
   const acc = await t.call('POST', `/api/cycles/build/notion/proposals/${p.id}/accept`, { project: 701 });
-  assert.equal(acc.status, 403);
+  assert.equal(acc.status, 409);
+  assert.equal(acc.body.error, 'already_fed');
   assert.equal((t.db.prepare("SELECT status FROM notion_proposals WHERE id = ?").get(p.id) as any).status, 'pending', 'nothing was decided');
   assert.equal((t.db.prepare("SELECT COUNT(*) AS n FROM connector_fed_items WHERE local_table = 'mvp_features' AND local_id = 950").get() as any).n, 1, 'GitHub\'s link stays the only one');
   await t.sync();
@@ -331,6 +332,20 @@ test('a dismissed look-alike stays out; a feature that is not a must-have is no 
   const again = await t.sync();
   assert.equal(again.sources[0].counts.kept_dismissed, 1);
   assert.equal(musts(t.db).filter((m: any) => m.title === 'Search').length, 1, 'still one Search');
+});
+
+test('a link whose item is gone since is refused, and nothing is decided', async () => {
+  const t = fixture();
+  t.db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective) VALUES (905, 701, 'Pricing')`);
+  await addSource(t, 'product_roadmap', 'database', ROADMAP_DB, ROADMAP_MAP);
+  t.notion.rows.set(ROADMAP_DB, [{ id: rowId(7), properties: { Objective: 'Pricing' } }]);
+  await t.sync();
+  const [p] = linkProposals(t.db);
+  t.db.exec('DELETE FROM roadmap_okrs WHERE id = 905');
+  const acc = await t.call('POST', `/api/cycles/build/notion/proposals/${p.id}/accept`, { project: 701 });
+  assert.deepEqual([acc.status, acc.body.error], [409, 'link_target_gone']);
+  assert.equal((t.db.prepare('SELECT status FROM notion_proposals WHERE id = ?').get(p.id) as any).status, 'pending');
+  assert.equal((t.db.prepare("SELECT COUNT(*) AS n FROM connector_fed_items WHERE integration_id = 5").get() as any).n, 0, 'nothing is linked');
 });
 
 test('migration 644 keeps every proposal as it was and takes fact_link', async () => {

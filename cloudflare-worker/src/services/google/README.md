@@ -9,6 +9,20 @@ Every new read must have a fixed origin/path in the allowlist, a timeout,
 a response limit and a fake. Never add a provider write here. Five-row previews
 are ephemeral. No module importer is built in part 2.
 
+`driveCreate.ts` (D904, #2683) is the one exception the owner allowed
+(2026-10-27): creating the new presentation a founder exports from the Pitch
+deck studio, by one frozen POST to Drive's upload endpoint, with no file id,
+no parents and no sharing. Nothing else may write with this grant; D904's test
+scans the Worker for any other Drive upload.
+
+`raise.ts` (D1094, #2959) is part 5, Raise: a chosen Slides deck becomes a
+deck-version proposal, chosen Drive files are copied into the data room (a
+Google file exported to PDF, replaced only when Google's `modifiedTime`
+changed), and Calendar events whose attendee domain is a prospect's firm
+domain propose "last met <day>". Its one Calendar read is `GOOGLE_CALENDAR_READS`
+(GET, fields limited to the start and attendees); only the day is stored,
+never an address. Each later part adds its own file here and its entries to
+`GOOGLE_WORKSPACE_FEEDS`.
 `growFeeds.ts` (D1095, #2960) is Grow's From Google. It lands a mapped metrics
 Sheet in `project_metrics` with `source = 'google_sheets'`, only in the columns
 no Stripe or Mercury writer owns. It turns `#board` and `#filing` events from

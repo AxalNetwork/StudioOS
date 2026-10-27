@@ -199,10 +199,8 @@ export const EXPORT_TITLE = (v) => `Export ${versionLabel(v)}`;
 export const FORMATS = [
   { id: 'pdf', label: 'PDF', line: 'Every card, as it prints', available: true },
   { id: 'pptx', label: 'PowerPoint', line: 'One picture per card', available: true },
-  {
-    id: 'google_slides', label: 'Google Slides', line: 'Created in your Drive', available: false,
-    reason: 'Not available yet: creating the presentation in your Drive comes with a later part of the studio.',
-  },
+  // D904 (#2683): a new, editable presentation in the member's own Drive.
+  { id: 'google_slides', label: 'Google Slides', line: 'Created in your Drive, editable', available: true },
   { id: 'html', label: 'HTML', line: 'One file, offline', available: true },
 ];
 
@@ -222,18 +220,68 @@ export const OPTIONS_WHERE = {
   pdf: 'In the PDF, the notes are a page after the cards, and the Sources appendix is the last page.',
   pptx: 'In PowerPoint, each card\'s notes are its speaker notes, and the Sources appendix is the last slide.',
   html: 'In the HTML file, the notes sit under each card, and the Sources appendix is the last card.',
+  google_slides: 'In Google Slides, each card\'s notes are its speaker notes, and the Sources appendix is the last slide.',
 };
 
 /** What the write changes, said before it happens. */
-export const whatExportDoes = (v) =>
-  `This makes a file of ${versionLabel(v)} and records the export in this venture's history: the format, the version and the file's fingerprint. Nothing is shared.`;
+export const whatExportDoes = (v, format) => (format === 'google_slides'
+  ? `This creates a new presentation of ${versionLabel(v)} in your Google Drive and records the export in this venture's history. Axal VC creates only this file and changes nothing else in your Drive. Nothing is shared.`
+  : `This makes a file of ${versionLabel(v)} and records the export in this venture's history: the format, the version and the file's fingerprint. Nothing is shared.`);
+
+// ── Google Slides (PD17's Google states, D904) ──
+
+/** Before Google is connected (or its files allowed): what to do, and what Axal VC will and will not touch. */
+export const GOOGLE_CONNECT = 'Connect Google to create this presentation in your Drive. Axal VC creates only the file you export.';
+export const GOOGLE_CONNECT_HREF = '/account/connectors/google_workspace';
+export const GOOGLE_CONNECT_LINK = 'Connect Google ›';
+export const GOOGLE_STATE_UNREADABLE = 'Your Google connection could not be read just now. You can still try; Google answers if it is not connected.';
+/** D1091's connection read (`googleWorkspace.mine()`): ready, not yet, or unreadable. */
+export function googleState(mine) {
+  if (!mine) return 'unreadable';
+  return mine.state === 'ready' ? 'ready' : 'connect';
+}
+export const OPEN_LINK = 'Open ›';
+/** After the export: where the presentation is. A file Google kept as PowerPoint is never called a Slides deck. */
+export const googleCreatedLine = (converted) => (converted === false
+  ? 'Created in your Drive as a PowerPoint file: Google did not turn it into Slides.'
+  : 'Created in Google Slides');
+/** Only Google's own addresses open from the dialog. */
+export function googleOpenHref(url) {
+  try {
+    const u = new URL(String(url));
+    return u.protocol === 'https:' && ['docs.google.com', 'drive.google.com'].includes(u.hostname) ? u.href : null;
+  } catch { return null; }
+}
+/** Charts the print page could not picture went in as text; said, never hidden. */
+export function chartsAsTextLine(charts) {
+  const n = Number(charts?.as_text) || 0;
+  if (!n) return null;
+  return n === 1 ? 'One chart went in as text: its type and series, as the HTML file writes it.' : `${n} charts went in as text: their type and series, as the HTML file writes them.`;
+}
+const GOOGLE_REFUSED = {
+  google_not_connected: GOOGLE_CONNECT,
+  workspace_not_allowed: GOOGLE_CONNECT,
+  company_not_enabled: 'Google files are not switched on for this venture\'s company. Allow them on the Google page, then export again. Nothing was created.',
+  project_not_available: 'You cannot export this venture\'s deck to Google. Nothing was created.',
+  support_session_refused: 'A support session cannot create files in a member\'s Google Drive. Nothing was created.',
+  presentation_too_large: 'The presentation is over 5 MB, the most Google takes in one upload. Download the PowerPoint instead. Nothing was created.',
+  google_rate_limited: 'Google is busy just now. Try again in a minute. Nothing was created.',
+  google_not_created: 'Google did not create the presentation. Try again in a moment. Nothing was shared.',
+};
+/** A refusal that means "connect first": the dialog shows the connect link with it. */
+export const needsConnect = (body) => ['google_not_connected', 'workspace_not_allowed', 'company_not_enabled'].includes(body?.error);
+export const NOT_RECORDED_CREATED = 'The presentation was created in your Drive, but the export could not be recorded here. Nothing was shared.';
 
 export const NOTHING_SHARED = 'Try again in a moment. Nothing was shared.';
-const PRODUCED = { pdf: 'The PDF could not be produced.', pptx: 'The PowerPoint file could not be produced.', html: 'The HTML file could not be produced.' };
+const PRODUCED = { pdf: 'The PDF could not be produced.', pptx: 'The PowerPoint file could not be produced.', html: 'The HTML file could not be produced.', google_slides: 'The presentation could not be created.' };
 
 /** The sentence a failed export shows (PD25); the Worker's own sentence when it could not record the export. */
 export function exportFailure(format, status, body) {
   if (body?.error === 'export_not_recorded' && str(body.message)) return str(body.message);
+  if (format === 'google_slides') {
+    if (body?.error === 'export_not_recorded_created') return NOT_RECORDED_CREATED;
+    if (GOOGLE_REFUSED[body?.error]) return GOOGLE_REFUSED[body.error];
+  }
   return `${PRODUCED[format] || 'The file could not be produced.'} ${NOTHING_SHARED}`;
 }
 

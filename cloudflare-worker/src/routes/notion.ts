@@ -38,7 +38,9 @@ import { NotionReadError, notionId, notionReadsFor, type NotionReads } from '../
 import {
   FieldMapError, NOTION_MODULES, SECTIONS, checkAgainstSchema, cleanFieldMap, mapRow, modulesOf, type FieldMap, type Section, type SourceKind,
 } from '../services/notion/modules';
-import { acceptProposal, deleteFact, dismissProposal, factWriterFor, syncSection, type SourceRow } from '../services/notion/sync';
+import { AcceptRefused, acceptProposal, deleteFact, dismissProposal, factWriterFor, syncSection, type SourceRow } from '../services/notion/sync';
+// D1087–D1090: each section's writers and acceptors register themselves on import.
+import '../services/notion/validate';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -85,6 +87,7 @@ const SENTENCES: Record<string, string> = {
 function fail(c: C, e: unknown) {
   if (e instanceof Error && ['Unauthorized', 'Forbidden'].includes(e.message)) throw e;
   let r: Refused;
+  if (e instanceof AcceptRefused) return c.json({ error: e.code, detail: e.detail }, e.status as any);
   if (e instanceof Refused) r = e;
   else if (e instanceof FieldMapError) r = new Refused(400, e.code, e.field);
   else if (e instanceof NotionReadError) {
@@ -347,7 +350,7 @@ notionCycleRoutes.post('/:section/notion/proposals/:id/accept', route(async (c, 
   sectionOf(c);
   const b = await body(c);
   const { project, row } = await owner(c, user, b.project);
-  const out = await acceptProposal(c.env, ctxOf(row, project.id, user), proposalId(c), b);
+  const out = await acceptProposal(c.env, ctxOf(row, project.id, user), proposalId(c), b, { reads: () => notionDeps.reads(c.env, row) });
   if (out === 'not_found') throw new Refused(404, 'proposal_not_found');
   if (out === 'decided') throw new Refused(409, 'proposal_decided');
   if (out === 'not_ready') throw new Refused(409, 'not_ready');
