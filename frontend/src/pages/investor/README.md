@@ -17,9 +17,16 @@ the generic route wrapper once a canvas has graduated.
 - `PortfolioCompanyPage.jsx` (D1056, #2427) is the investor's page per
   portfolio company at `/portfolio/companies/:uid`, with Figures, Reports
   (`/reports`) and Terms (`/terms`). The header is the caller's own position
-  (`GET /api/positions`); Reports lists the company's readable updates; Figures
-  and Terms say what they wait for. Its rules live in
-  `../cycles/reportingModel.js`, beside the founder's Reporting desk.
+  (`GET /api/positions`), with the holding's route. D1061 (#2931) draws its
+  blocks in `CompanyReports.jsx`: Figures as five small multiples from the
+  frozen figures of the reports received, the Reports timeline with Read, Ask
+  and Waive, Terms read only, the reader (640 wide) and the holding notes. Its
+  address rules live in `../cycles/reportingModel.js`; the reporting words and
+  sums in `portfolioReportsModel.js`, pure.
+- `PortfolioReports.jsx` (D1061, #2931) is RPT9 at the top of Portfolio ›
+  Reports (`InvestorPortfolioUpdates.jsx`): four tiles and one row per company
+  the investor signed into, from `GET /api/reporting/portfolio`, with filters
+  and a sort. Lateness is amber, never red, and nothing ranks a company.
 - `InvestorWorkspacePage.jsx` is the shared investor workspace frame — it
   wraps a page with the investor chrome and, on the Deals route, renders
   `InvestorDealsWorkspace` inline rather than handing off to a separate page.

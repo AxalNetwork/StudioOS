@@ -13,6 +13,8 @@ export const aiBudgetApi = {
   holds: () => request('/ai-budget/holds'),
   // D755 — the packs on sale, the hold and the latest purchase; D750's `configured`/`product` stay until CR4 and CR7.
   topUp: () => request('/ai-budget/top-up'),
+  // D1289 (CRP9): an Add tokens sheet was opened, from one entry point; the row holds `from` only.
+  addTokensOpened: (from) => request('/ai-budget/add-tokens/opened', { method: 'POST', body: body({ from }) }),
   // D755 — the member's own top-up history, newest first; `runs` adds each run's hold, release and spend.
   history: ({ before, limit, runs } = {}) => {
     const q = new URLSearchParams();

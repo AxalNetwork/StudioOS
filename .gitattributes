@@ -158,3 +158,17 @@ design/incoming/**        linguist-generated=true
 # scripts/check-folder-docs.mjs refuses a README where that happened (rule 4,
 # scripts/lib/readmeUnion.mjs): pick one version and delete the other.
 README.md merge=union
+
+# ---- ROUTE_MAP.md and its two projections: union merges (D1310) ---------------
+# Every canvas integration adds a row to ROUTE_MAP's last table, so any two of
+# them conflicted on it, and again on the two documents generated from it. Same
+# remedy as README.md above. Two branches each adding a row keep both. Two
+# branches changing the SAME row keep both versions, and parseRouteMap
+# (scripts/build-profile-routing.mjs) refuses a canvas with two rows, naming
+# the lines: keep one. The projections' union is never trusted:
+# frontend/test/profile_routing_fresh.test.mjs fails a stale one and names the
+# command (`node scripts/build-profile-routing.mjs`), as check-docs-fresh does
+# for the build stamp.
+documentation/architecture/ROUTE_MAP.md merge=union
+documentation/architecture/PROFILE_ROUTING.md merge=union
+documentation/architecture/PAGE_INVENTORY.md merge=union

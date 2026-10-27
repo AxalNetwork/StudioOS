@@ -13,6 +13,9 @@ import { reportError } from '../lib/log';
 import ReactMarkdown from 'react-markdown';
 import { wordsAndMinutes, slugify } from '../lib/articleMarkdown';
 import { appOrigin } from '../lib/branchHost';
+import { isSuperAdminUser } from '../lib/shellRole';
+import Lightbox from '../ui/Lightbox';
+import { ghost as actionGhost, primary as actionPrimary } from '../ui/ActionSheet';
 
 // Task #1 — Article author dashboard, scoped to the /articles surface
 // (role-aware list, dynamic sector taxonomy from `/api/articles/sectors`,
@@ -20,6 +23,51 @@ import { appOrigin } from '../lib/branchHost';
 // redirects here (Task #3 — News & Articles merged).
 
 const MAX_COVER_MB = 5;
+
+/** D1292 — the shortest reason a Super Admin may give to decide their own article (the Worker's `OVERRIDE_REASON_MIN`). */
+export const OVERRIDE_REASON_MIN = 8;
+
+/**
+ * D1292 — what the admin publish chain may do on this article. An admin
+ * deciding their own article is refused by the Worker, so the page never
+ * offers it: an Admin is told to ask another admin, and a Super Admin gives
+ * a reason first, which the Worker records.
+ *   'none'     not an admin, or already published: no chain
+ *   'blocked'  an Admin's own article: no chain, ask another admin
+ *   'override' a Super Admin's own article: the chain, after a reason
+ *   'direct'   someone else's article: the chain as before
+ */
+export function publishChainFor({ user, article }) {
+  if (!article || article.status === 'published' || user?.role !== 'admin') return 'none';
+  const own = article.author_user_id != null && Number(article.author_user_id) === Number(user?.id);
+  if (!own) return 'direct';
+  return isSuperAdminUser(user) ? 'override' : 'blocked';
+}
+
+/** D1292 — the Super Admin's reason, asked in the page before the chain runs. */
+function OverrideDialog({ onCancel, onConfirm }) {
+  const [reason, setReason] = useState('');
+  const short = reason.trim().length < OVERRIDE_REASON_MIN;
+  return (
+    <Lightbox label="Publish your own article" title="Publish your own article?" onClose={onCancel} width={520} testId="article-override"
+      footer={(
+        <div className="flex justify-end gap-2">
+          <button type="button" className={actionGhost} onClick={onCancel}>Cancel</button>
+          <button type="button" className={actionPrimary} disabled={short} onClick={() => onConfirm(reason.trim())} data-testid="article-override-go">Approve and publish</button>
+        </div>
+      )}>
+      <div className="flex flex-col gap-3 text-[13px]">
+        <p className="m-0">You wrote this article. Another admin normally approves and publishes it. As Super Admin you can do it yourself; your reason is recorded with the approval and the publish.</p>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Reason · required</span>
+          <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={2000}
+            className="w-full rounded border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" data-testid="article-override-reason" />
+        </label>
+        {short ? <p className="m-0 text-[12px] text-slate-500 dark:text-slate-400" data-testid="article-override-problem">Give a reason of at least {OVERRIDE_REASON_MIN} characters.</p> : null}
+      </div>
+    </Lightbox>
+  );
+}
 
 function statusBadge(s) {
   const map = {
@@ -365,6 +413,7 @@ export default function ArticleAuthorPage() {
   const [piiFindings, setPiiFindings] = useState(null);
   const [rateLimit, setRateLimit] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [overrideAsk, setOverrideAsk] = useState(false);
   const [imageError, setImageError] = useState(null);
   const [imageUploading, setImageUploading] = useState(false);
   const bodyRef = useRef(null);
@@ -476,6 +525,12 @@ export default function ArticleAuthorPage() {
         slug: editing.slug || null,
       };
       const r = await api.updateDraft(article.id, patch);
+      // D1292 — an edit to a submitted or approved article sends it back to Submitted.
+      if (r.returned_to_queue) {
+        toast.error(r.returned_to_queue.publish_at_cleared
+          ? 'Edited after submission: it is back in the review queue, and its publish time was cleared.'
+          : 'Edited after submission: it is back in the review queue.');
+      }
       setArticle(r.article);
       articleRef.current = r.article;
       setItems((prev) => prev.map((a) => (a.id === r.article.id ? r.article : a)));
@@ -589,8 +644,15 @@ export default function ArticleAuthorPage() {
   // their own drafts all the way to public in one action by chaining the
   // existing (unchanged) transition endpoints: submit → approve → publish.
   // The PII linter + weekly cap on /submit are deliberately left intact.
-  const adminPublish = async () => {
+  //
+  // D1292 — the chain follows the self-approval rule (`publishChainFor`): it
+  // never runs on an Admin's own article, and on a Super Admin's own article
+  // it runs only with the reason the override dialog collected.
+  const chain = publishChainFor({ user, article });
+  const adminPublish = async (overrideReason = null) => {
     if (!article || !isAdmin) return;
+    if (chain === 'none' || chain === 'blocked') return;
+    if (chain === 'override' && !overrideReason) { setOverrideAsk(true); return; }
     if (!editing.title.trim()) { toast.error('Title is required'); return; }
     if ((editing.body_markdown || '').trim().length < 200) { toast.error('Body must be at least 200 characters'); return; }
     setPublishing(true);
@@ -611,11 +673,11 @@ export default function ArticleAuthorPage() {
         status = r.article.status;
       }
       if (['submitted', 'in_review'].includes(status)) {
-        await adminApi.approve(article.id);
+        await adminApi.approve(article.id, overrideReason);
         status = 'approved';
       }
       if (status === 'approved') {
-        await adminApi.publish(article.id);
+        await adminApi.publish(article.id, overrideReason);
       }
       await loadOne(article.id);
       await refresh();
@@ -637,6 +699,8 @@ export default function ArticleAuthorPage() {
         toast.error(`Body must be at least ${e.data?.min_chars || 200} characters.`);
       } else if (code === 'title_required') {
         toast.error('Title is required.');
+      } else if (code === 'self_approval' || code === 'self_approval_reason_required') {
+        toast.error(e.data?.detail || 'Another admin must approve and publish your own article.');
       } else {
         reportError('ArticleAuthor:adminPublish', e);
         toast.error(e?.data?.error || e?.message || 'Publish failed');
@@ -829,6 +893,7 @@ export default function ArticleAuthorPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <ToastMessage toast={current} onDismiss={dismissToast} />
+      {overrideAsk && <OverrideDialog onCancel={() => setOverrideAsk(false)} onConfirm={(r) => { setOverrideAsk(false); adminPublish(r); }} />}
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -882,9 +947,12 @@ export default function ArticleAuthorPage() {
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
                       </button>
                     )}
-                    {isAdmin && article.status !== 'published' && (
+                    {chain === 'blocked' && (
+                      <span className="text-xs text-slate-500 dark:text-slate-400" data-testid="article-self-approval-note">You wrote this. Another admin approves and publishes it.</span>
+                    )}
+                    {(chain === 'direct' || chain === 'override') && (
                       <button
-                        onClick={adminPublish}
+                        onClick={() => adminPublish()}
                         disabled={publishing || submitting}
                         title="Admin: publish this article straight to the public page"
                         className="text-sm px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center gap-1 disabled:opacity-50"
