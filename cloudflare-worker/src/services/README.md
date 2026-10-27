@@ -19,6 +19,15 @@ throw fixed words. `planCatalogue.ts` and the public plans rows project the same
 table. Negotiated and staff values stay null with distinct reasons. Later
 storage readers and guards must consume it rather than copy figures.
 
+`storageRoom.ts` (D1170, #3083) is the storage guard every member upload calls
+before its R2 write, and the 80/95/100% notices sent once the write lands. Its
+refusal is the one exception to "never a Response" here: it throws the 413
+`storage_full` Response, because the same shape must answer from routes,
+record actions and writers alike, and every caller passes a thrown Response
+through. `storageHq.ts` is HQ's totals over every member (by kind, plan and
+state), from `storageUsage.ts`'s per-owner statements and `storagePlans.ts`'s
+`chooseStoragePlanKey`: no second copy of either rule.
+
 `dealAccess.ts` is D1149's shared invited-or-committed investor predicate, used
 by the deal reader and diligence opener. A room request is not a grant.
 
