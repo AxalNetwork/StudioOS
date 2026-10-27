@@ -107,10 +107,10 @@ test('on HQ, /available lists mercury to an admin as a preview of the founder\'s
     // D840: a role's feeds are `MERCURY_FEEDS`' modules for it (D713's revenue, then part 2's Raise modules; part 4's investor sections).
     assert.deepEqual(own.feeds, role === 'founder' || role === 'investor' ? mercuryFedModules(role) : []);
     if (role === 'founder') assert.equal(own.feeds[0], 'revenue_and_traction');
-    if (role === 'investor') assert.deepEqual(own.feeds, ['deals_pipeline', 'deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
+    if (role === 'investor') assert.deepEqual(own.feeds, ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
     if (role === 'investor') {
       // D884: the Deals sections lead; proof of funds is on HQ only.
-      assert.match(own.description, /^Your own Mercury account, read-only: your capacity in Deals › Pipeline and Deals › Commit/);
+      assert.match(own.description, /^Your own Mercury account, read-only: your capacity in Deals › Commit,/);
       // D840 part 4: the investor's capacity is their own balance, shown to them alone; D752's admins still see none.
       assert.match(own.permissions[0], /only you see a balance/);
       assert.match(own.description, /On HQ, also a dated proof of funds for Axal's admins, who never see your balance\./);

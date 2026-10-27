@@ -355,3 +355,28 @@ export function exportProblem(reason, columns) {
   if (!columns?.length) return 'Choose at least one column.';
   return null;
 }
+
+// ── D1307 (#3404, ACC14): the phone ───────────────────────────────────────────
+
+/** A row as ACC14's card: initials, the name and email, the profile and its sub-accounts, and one line. */
+export function cardView(u, env, now = Date.now()) {
+  const r = rowView(u, env, now);
+  const initials = String(r.name).split(/[^\p{L}\p{N}]+/u).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
+  const line = [r.identity, r.active ? null : r.status, r.email_word === 'Verified' ? null : r.email_word, `Joined ${r.joined}`].filter(Boolean).join(' · ');
+  return { ...r, initials, line };
+}
+
+/** The phone's one "Filters and sort" button counts the chips and a sort that is not the default. */
+export const phoneFilterCount = (state) => chipsOf(state).length + (state.sort && state.sort !== 'joined_desc' ? 1 : 0);
+
+/**
+ * "Show 25 more": the list read pages by offset, so the phone grows the page
+ * to the next size the read takes (25, 50, 100) and stays on its first page.
+ * Null when the read has no more, or the page is already the largest; then
+ * Previous and Next page as on the desktop.
+ */
+export function moreOf(state, env) {
+  if (env?.next_offset == null || state.page !== 0) return null;
+  const next = PAGE_SIZES.find((n) => n > state.pageSize);
+  return next ? { pageSize: next, label: `Show ${next - state.pageSize} more` } : null;
+}

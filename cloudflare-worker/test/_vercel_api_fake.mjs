@@ -10,6 +10,8 @@ export function fakeVercel({
   selected = [],
   domains = { default: [{ name: 'fixture.example', verified: true }] },
   rateLimited = () => false,
+  // D1098: each project's deployments, newest first, read 100 at a time with `until`.
+  deployments = { default: [{ uid: 'dpl_fixture', readyState: 'READY', target: 'production', createdAt: 1792886400000 }] },
 } = {}) {
   const calls = [];
   const json = (body, s = 200) => new Response(JSON.stringify(body), { status: s, headers: { 'content-type': 'application/json' } });
@@ -31,7 +33,12 @@ export function fakeVercel({
       return p ? json(p) : json({ error: { code: 'not_found' } }, 404);
     }
     if (/^\/v9\/projects\/[^/]+\/domains$/.test(url.pathname)) return json({ domains: domains[url.pathname.split('/')[3]] ?? domains.default ?? [] });
-    if (url.pathname === '/v7/deployments') return json({ deployments: [{ uid: 'dpl_fixture', readyState: 'READY', target: 'production', createdAt: 1792886400000 }] });
+    if (url.pathname === '/v7/deployments') {
+      const until = Number(url.searchParams.get('until') ?? Infinity);
+      const list = (deployments[url.searchParams.get('projectId')] ?? deployments.default ?? []).filter(d => d.createdAt < until);
+      const page = list.slice(0, 100);
+      return json({ deployments: page, pagination: { next: list.length > 100 ? page.at(-1).createdAt : null } });
+    }
     if (/^\/v13\/deployments\/[^/]+$/.test(url.pathname)) return json({ id: 'dpl_fixture', readyState: 'READY' });
     if (/\/aliases$/.test(url.pathname)) return json({ aliases: [{ alias: 'fixture.example' }] });
     if (/^\/v6\/domains\/[^/]+\/config$/.test(url.pathname)) return json({ misconfigured: false });

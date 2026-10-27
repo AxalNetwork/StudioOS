@@ -191,8 +191,9 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 19,
-    mounted: 19,
+    // 18 since D1243 (#3256): Deals · Pipeline retired into Deal flow's table.
+    zones: 18,
+    mounted: 18,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.investor },
     // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
     // it is not here yet:
@@ -214,7 +215,8 @@ const PROFILES = {
     // "no scoring run is stored", "no vote is opened here", "no closing
     // templates are stored". A deferral that names its reason survives being
     // wrong about the schema; one that says "nothing is stored" does not.
-    excluded: [],
+    // D1243 (#3256): the canvas still draws ID1, and its zone is retired: `/deals/pipeline` forwards to Deal flow's table.
+    excluded: ['deals/pipeline'],
     // `Call 3` names one specific stored record rather than welding a count
     // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`
     // would not even see it. `Aug 2026` recurs on the Portfolio canvas.

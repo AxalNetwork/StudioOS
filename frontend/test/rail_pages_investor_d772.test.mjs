@@ -38,7 +38,8 @@ function assertBandsNamed(rows) {
 
 // ------------------------------------------------------------------ Deals (I1–I5)
 
-const DEALS = [['/deals', 'Investor · Deals'], ['/deals/pipeline', 'Investor · Deals · Pipeline'], ['/deals/screening', 'Investor · Deals · Screening'],
+// D1243 (#3256): /deals/pipeline forwards to Deal flow's table, so it answers the Deals page's key.
+const DEALS = [['/deals', 'Investor · Deals'], ['/deals/pipeline', 'Investor · Deals'], ['/deals/screening', 'Investor · Deals · Screening'],
   ['/deals/commit', 'Investor · Deals · Commit'], ['/deals/closing', 'Investor · Deals · Closing']];
 
 test('Deals: each board\'s route answers its page key for an investor', () => {
@@ -46,18 +47,18 @@ test('Deals: each board\'s route answers its page key for an investor', () => {
   for (const o of rowsOf('Deals')) assert.ok(DEALS.some(([, k]) => k === o.page), `${o.page} is a Deals board`);
 });
 
-test('Deals: the five boards draw exactly one rail, the routes\' shell\'s', () => {
+test('Deals: the four boards draw exactly one rail, the routes\' shell\'s', () => {
   const routes = read('workspaces/investor/InvestorDealsRoutes.jsx');
   assert.equal((routes.match(/<WorkerRail\b/g) || []).length, 1);
   assert.match(routes, /<WorkspaceShell\b[\s\S]*?rail=\{\(\s*<WorkerRail\b/);
-  for (const f of ['PipelineZone', 'ScreeningZone', 'CommitZone', 'ClosingZone']) {
+  for (const f of ['ScreeningZone', 'CommitZone', 'ClosingZone']) {
     assert.doesNotMatch(read(`pages/investor/deals/${f}.jsx`), /<WorkerRail\b|<RailFrame\b/, `${f} draws a second rail`);
   }
 });
 
 test('Deals: every option of the section names itself on its band', () => {
   const rows = rowsOf('Deals');
-  assert.deepEqual(rows.map((o) => o.key), ['draft:stale-deal-notes', 'draft:screening-memo', 'draft:ic-memo', 'draft:closing-cover-note']);
+  assert.deepEqual(rows.map((o) => o.key), ['draft:screening-memo', 'draft:ic-memo', 'draft:closing-cover-note']);
   assertBandsNamed(rows);
 });
 

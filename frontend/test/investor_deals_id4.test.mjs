@@ -340,11 +340,12 @@ test('the AI band is allow-listed and forbidden from inventing the condition', (
 
 test('the zone is mounted, and the workspace now draws no stage section at all', () => {
   assert.match(ROUTES, /closing: lazy\(\(\) => import\('\.\.\/\.\.\/pages\/investor\/deals\/ClosingZone'\)\)/);
-  // ALL FOUR are registered — this is the commit that completes the set, so the
-  // registry is checked whole rather than one row at a time.
-  for (const slug of ['pipeline', 'screening', 'commit', 'closing']) {
+  // The registry is checked whole rather than one row at a time. ID1 Pipeline
+  // retired into Deal flow's table (D1243), so three remain.
+  for (const slug of ['screening', 'commit', 'closing']) {
     assert.match(ROUTES, new RegExp(`${slug}: lazy\\(`), `${slug} is not in the zone registry`);
   }
+  assert.doesNotMatch(ROUTES, /pipeline: lazy\(/, 'the retired Pipeline zone is back in the registry');
   // And the workspace kept none of them.
   for (const slug of ['pipeline', 'screening', 'commit', 'closing']) {
     assert.ok(!WORKSPACE.includes(`investorZoneActions('deals/${slug}'`),

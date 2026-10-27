@@ -243,6 +243,60 @@ export interface SubmitArgs {
 }
 
 /**
+ * The storage step every interview that arrives from outside takes (D667),
+ * factored out for Notion (D1087): the free tier's cap, the interview, its
+ * session with consent `given`, and the final transcript, or nothing at all.
+ * The caller has already parsed consent, the interviewee and the segments, and
+ * owns the venture. A day's submissions through one `via` are capped.
+ */
+export async function storeInterview(env: Env, a: {
+  userId: number; projectId: number; channel: string; occurredIso: string;
+  interviewee: { label: string; role: string | null; company: string | null };
+  consent: { method: string; recordedAt: string }; segments: StoredSegment[]; summary: string | null;
+  via: string; viaName: string;
+}): Promise<{ sessionId: number; interviewId: number; uid: string }> {
+  // D757: the free tier's interview cap holds for every creator.
+  const capped = await interviewCapRefusal(env, a.userId, a.projectId);
+  if (capped) throw new ToolError(402, 'tier_required', capped.message);
+  const iv = await env.DB.prepare(
+    `INSERT INTO discovery_interviews
+       (project_id, interviewee_name, interviewee_role, interviewee_company, interview_date, stage, done_at, channel)
+     VALUES (?, ?, ?, ?, ?, 'done', ?, ?) RETURNING id`,
+  ).bind(a.projectId, a.interviewee.label, a.interviewee.role, a.interviewee.company, a.occurredIso.slice(0, 10), a.occurredIso, a.channel)
+    .first<{ id: number }>();
+  if (!iv) throw new ToolError(500, 'not_stored', 'The interview could not be stored.');
+  const uid = crypto.randomUUID();
+  let sessionId: number | null = null;
+  try {
+    const ins = await env.DB.prepare(
+      `INSERT INTO interview_sessions
+         (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
+          started_at, stopped_at, submitted_via, submitted_via_name, submitted_summary)
+       SELECT ?, ?, ?, ?, ?, 'draft', 'given', ?, ?, ?, ?, ?, ?, ?
+        WHERE (SELECT COUNT(*) FROM interview_sessions
+          WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '-1 day')) < ?
+       RETURNING id`,
+    ).bind(uid, iv.id, a.projectId, a.userId, a.channel, a.consent.method, a.consent.recordedAt,
+      a.occurredIso, a.occurredIso, a.via, a.viaName, a.summary, a.via, a.userId, LIMITS.submissionsPerDay)
+      .first<{ id: number }>();
+    if (!ins) throw new ToolError(429, 'daily_limit', `This connection has submitted ${LIMITS.submissionsPerDay} interviews in the last day. Try again tomorrow.`);
+    sessionId = Number(ins.id);
+    const session = sessionId ? await loadSession(env, sessionId) : null;
+    if (!session) throw new Error('session_not_created');
+    await replaceWithFinal(env, session, a.segments, SUBMISSION_MODEL, null, 'transcribed');
+  } catch (e) {
+    // Leave nothing half-written: no interview without its session.
+    if (sessionId) await env.DB.prepare('DELETE FROM interview_transcript_segments WHERE session_id = ?').bind(sessionId).run().catch(() => {});
+    if (sessionId) await env.DB.prepare('DELETE FROM interview_sessions WHERE id = ?').bind(sessionId).run().catch(() => {});
+    await env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ?').bind(iv.id).run().catch(() => {});
+    if (e instanceof ToolError) throw e;
+    console.error('[assistant] submit failed:', (e as Error)?.message);
+    throw new ToolError(500, 'not_stored', 'The interview could not be stored. Nothing was kept.');
+  }
+  return { sessionId: sessionId!, interviewId: Number(iv.id), uid };
+}
+
+/**
  * `submit_interview`: a session, its interview and its transcript, in the
  * granted company's venture. Every argument is checked before anything is
  * written, consent first.
@@ -266,45 +320,11 @@ export async function submitInterview(env: Env, grant: AssistantGrant, args: Sub
     if (!summary) throw new ToolError(400, 'summary_invalid', 'The summary is empty or longer than 4,000 characters.');
   }
   const { project } = await resolveCompanyProject(env, grant, args?.company, args?.project);
-  // D757: the free tier's interview cap holds for every creator.
-  const capped = await interviewCapRefusal(env, grant.userId, project.id);
-  if (capped) throw new ToolError(402, 'tier_required', capped.message);
-
-  const iv = await env.DB.prepare(
-    `INSERT INTO discovery_interviews
-       (project_id, interviewee_name, interviewee_role, interviewee_company, interview_date, stage, done_at, channel)
-     VALUES (?, ?, ?, ?, ?, 'done', ?, ?) RETURNING id`,
-  ).bind(project.id, interviewee.label, interviewee.role, interviewee.company, occurredIso.slice(0, 10), occurredIso, channel)
-    .first<{ id: number }>();
-  if (!iv) throw new ToolError(500, 'not_stored', 'The interview could not be stored.');
-  const uid = crypto.randomUUID();
-  let sessionId: number | null = null;
-  try {
-    const ins = await env.DB.prepare(
-      `INSERT INTO interview_sessions
-         (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
-          started_at, stopped_at, submitted_via, submitted_via_name, submitted_summary)
-       SELECT ?, ?, ?, ?, ?, 'draft', 'given', ?, ?, ?, ?, ?, ?, ?
-        WHERE (SELECT COUNT(*) FROM interview_sessions
-          WHERE submitted_via = ? AND created_by_user_id = ? AND created_at >= datetime('now', '-1 day')) < ?
-       RETURNING id`,
-    ).bind(uid, iv.id, project.id, grant.userId, channel, consent.method, consent.recordedAt,
-      occurredIso, occurredIso, grant.clientId, str(grant.clientName, 120) ?? 'An AI assistant', summary, grant.clientId, grant.userId, LIMITS.submissionsPerDay)
-      .first<{ id: number }>();
-    if (!ins) throw new ToolError(429, 'daily_limit', `This connection has submitted ${LIMITS.submissionsPerDay} interviews in the last day. Try again tomorrow.`);
-    sessionId = Number(ins.id);
-    const session = sessionId ? await loadSession(env, sessionId) : null;
-    if (!session) throw new Error('session_not_created');
-    await replaceWithFinal(env, session, segments, SUBMISSION_MODEL, null, 'transcribed');
-  } catch (e) {
-    // Leave nothing half-written: no interview without its session.
-    if (sessionId) await env.DB.prepare('DELETE FROM interview_transcript_segments WHERE session_id = ?').bind(sessionId).run().catch(() => {});
-    if (sessionId) await env.DB.prepare('DELETE FROM interview_sessions WHERE id = ?').bind(sessionId).run().catch(() => {});
-    await env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ?').bind(iv.id).run().catch(() => {});
-    if (e instanceof ToolError) throw e;
-    console.error('[assistant] submit failed:', (e as Error)?.message);
-    throw new ToolError(500, 'not_stored', 'The interview could not be stored. Nothing was kept.');
-  }
+  const { sessionId, interviewId: ivId, uid } = await storeInterview(env, {
+    userId: grant.userId, projectId: project.id, channel, occurredIso, interviewee, consent, segments, summary,
+    via: grant.clientId, viaName: str(grant.clientName, 120) ?? 'An AI assistant',
+  });
+  const iv = { id: ivId };
   await audit(env, grant, project.id, 'interview_session_submitted', {
     session_uid: uid, interview_id: iv.id, channel, segments: segments.length, summary: summary != null,
   });
