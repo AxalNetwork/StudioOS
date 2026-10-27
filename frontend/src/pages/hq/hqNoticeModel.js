@@ -19,6 +19,8 @@ const PAYMENTS_PATH = /^\/admin\/platform\/payments(\/|$)/;
 const STORAGE_PATH = /^\/admin\/platform\/storage(\/|$)/;
 /** Product testing and its tabs (D1195, D1204). */
 const TESTING_PATH = /^\/admin\/platform\/product-testing(\/|$)/;
+/** HQ › Content's overview (D1295, ART17a): an Admin still reviews in the Content queue. */
+const CONTENT_PATH = /^\/admin\/content(\/|$)/;
 export const HQ_TITLE = 'This page belongs to the Super Admin';
 export const HQ_REST = 'You are signed in as a studio admin, so this page stays closed rather than opening and refusing each action.';
 
@@ -31,6 +33,8 @@ const SUBJECTS = [
   [TESTING_PATH, 'HQ runs product testing. You can approve and manage testers on Accounts, and decide tester applications in Approvals.'],
   // D1172 (#3085): STG14a, Platform storage's closed card.
   [STORAGE_PATH, 'Platform storage is for HQ. Studio admins see their own storage in Account.'],
+  // D1295 (#3391): ART17a, the Content overview's closed card.
+  [CONTENT_PATH, 'HQ runs the Content overview. You can still review articles in the Content queue.'],
 ];
 
 export function hqLine(pathname = '') {
@@ -61,12 +65,18 @@ export const STORAGE_LINKS = [
   { label: 'Go to Studio', href: '/studio', primary: false },
 ];
 
-/** The card's links for a path: Payments', Product testing's or Platform storage's own, else Studio and My licence. */
+/** D1295 (#3391): ART17a sends a studio admin on the Content overview back to the Content queue. */
+export const CONTENT_LINKS = [
+  { label: 'Back to the Content queue', href: '/admin/articles', primary: false },
+];
+
+/** The card's links for a path: Payments', Product testing's, Platform storage's or the Content overview's own, else Studio and My licence. */
 export const hqLinks = (pathname = '') => {
   const p = String(pathname);
   if (PAYMENTS_PATH.test(p)) return PAYMENTS_LINKS;
   if (TESTING_PATH.test(p)) return TESTING_LINKS;
   if (STORAGE_PATH.test(p)) return STORAGE_LINKS;
+  if (CONTENT_PATH.test(p)) return CONTENT_LINKS;
   return HQ_LINKS;
 };
 
