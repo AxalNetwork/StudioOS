@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS spinout_week_reached (
   user_id INTEGER NOT NULL,
   cohort_cycle_id INTEGER NOT NULL,
   week_number INTEGER NOT NULL CHECK (week_number BETWEEN 1 AND 4),
-  reached_at TEXT NOT NULL DEFAULT (datetime('now')),
+  recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
   source TEXT NOT NULL CHECK (source IN ('deadline', 'scheduler', 'admin')),
   UNIQUE (user_id, cohort_cycle_id, week_number)
 );

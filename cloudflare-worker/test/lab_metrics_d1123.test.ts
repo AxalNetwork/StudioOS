@@ -162,7 +162,7 @@ test('a deadline job resumed from before the ledger covers nothing; an admin dec
   assert.equal(october(r).weeks.items[0].reached.recorded, false);
   // An admin passes founder 2's Week 2 by hand: founder 2 reached Week 2.
   await applyWeekDecision(w.env, { userId: 2, cycleId: 10, week: 2, toStatus: 'passed', reason: 'Synthetic override', triggeredBy: 'admin', adminUserId: 1 });
-  const first = w.db.prepare('SELECT source, reached_at FROM spinout_week_reached WHERE user_id = 2 AND week_number = 2').get() as any;
+  const first = w.db.prepare('SELECT source, recorded_at FROM spinout_week_reached WHERE user_id = 2 AND week_number = 2').get() as any;
   assert.equal(first.source, 'admin');
   await applyWeekDecision(w.env, { userId: 2, cycleId: 10, week: 2, toStatus: 'failed', reason: 'Synthetic override', triggeredBy: 'scheduler' });
   assert.deepEqual(w.db.prepare('SELECT source FROM spinout_week_reached WHERE user_id = 2 AND week_number = 2').all().map((x: any) => x.source), ['admin'], 'the first reach is kept');
