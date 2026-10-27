@@ -116,6 +116,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/market-intel-public → market_intel_public.ts
 /api/advisory      → advisory.ts
 /api/activity      → activity.ts
+/api/admin/accounts → admin_accounts.ts (D1303: All accounts' bulk resend of verification, saved views and the export with its reason; mounted ahead of admin.ts)
 /api/admin         → admin.ts
 /api/private-data  → private-data.ts
 /api/monitoring    → monitoring.ts

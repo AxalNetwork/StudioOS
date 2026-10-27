@@ -38,7 +38,7 @@ import {
 } from '../services/orders';
 import { refuse } from '../util/refusal';
 import { recordAiTopupPurchase } from '../services/aiTopups';
-import { isTokenPackPrice, tokenPackQuote } from '../services/aiCredits';
+import { isTokenPackPrice, packRefusalBody, TOKEN_PACK_REFUSALS, tokenPackQuote } from '../services/aiCredits';
 
 const orders = new Hono<{ Bindings: Env }>();
 
@@ -125,11 +125,8 @@ orders.post('/intent', async (c) => {
   // within the limits. Judged before the promo, so it never takes the free path.
   const aiQuote = await tokenPackQuote(c.env, user.id, cart, promoCode, { excludeOrderRef: priorById?.order_ref ?? null });
   if (aiQuote && 'error' in aiQuote) {
-    // D790: a first-purchase pack is refused to a member who has bought one, with a sentence.
-    if (aiQuote.error === 'token_pack_first_purchase_only') {
-      return c.json({ error: aiQuote.error, message: 'This pack is for your first token purchase, and you have bought tokens before. Choose another pack.' }, 409);
-    }
-    return c.json({ error: aiQuote.error }, 400);
+    // D790, D1289 (CRP5): every pack refusal answers its code with the sentence the sheet shows.
+    return c.json(packRefusalBody(aiQuote.error), TOKEN_PACK_REFUSALS[aiQuote.error].status);
   }
 
   // 3. Promo discount (percent on subtotal; amount_off capped at subtotal).

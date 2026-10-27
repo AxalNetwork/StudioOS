@@ -20,6 +20,18 @@
  *
  * So `requireAdmin` per route is not the inner half of a perimeter — it is
  * the whole gate, which is exactly why (1) mattered.
+ *
+ * D1292 (#3388) — who decided, recorded, and no one approves their own work:
+ *
+ *   · Every transition — start review, approve, request changes, reject,
+ *     publish (manual or scheduled) and unpublish — writes one audit row
+ *     (`logAdminAction`, `article.<transition>`), as schedule already did, and
+ *     only when the conditional update changed the row. Article text and
+ *     reasons stay out of the row; it holds the ids and the two statuses.
+ *   · Approve stores `approved_by` (migration 635) beside `approved_at`.
+ *   · Approve, publish and schedule by the article's own author are refused
+ *     (`self_approval`). A Super Admin may override with `override_reason`,
+ *     which the audit row carries; an Admin is told to ask another admin.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -80,6 +92,55 @@ async function notifyAuthorFollowers(
   } catch (e) {
     console.warn('[admin_articles] author follower fan-out failed', e);
   }
+}
+
+/** The shortest override reason a Super Admin may give for deciding their own article. */
+export const OVERRIDE_REASON_MIN = 8;
+
+/**
+ * D1292 — the self-approval rule for approve, publish and schedule. Returns a
+ * refusal, or `{ override }` with the Super Admin's reason (null when the
+ * decider is not the author). The article's text never enters the answer.
+ */
+export function selfApprovalCheck(
+  admin: { id: number; role?: string; is_super_admin?: unknown },
+  row: { author_user_id?: unknown },
+  body: any,
+): { refused: { status: 403; body: Record<string, string> } } | { override: string | null } {
+  if (Number(row?.author_user_id) !== Number(admin.id)) return { override: null };
+  if (!isSuperAdmin(admin as any)) {
+    return { refused: { status: 403, body: {
+      error: 'self_approval',
+      detail: 'You wrote this article, so another admin must approve and publish it. Ask another admin. Nothing was changed.',
+    } } };
+  }
+  const reason = typeof body?.override_reason === 'string' ? body.override_reason.slice(0, 2000).trim() : '';
+  if (reason.length < OVERRIDE_REASON_MIN) {
+    return { refused: { status: 403, body: {
+      error: 'self_approval_reason_required',
+      detail: `You wrote this article. To decide it yourself, give a reason of at least ${OVERRIDE_REASON_MIN} characters; it is recorded. Nothing was changed.`,
+    } } };
+  }
+  return { override: reason };
+}
+
+/** D1292 — one audit row per transition; ids and statuses only, never the text. */
+async function auditTransition(
+  env: Env,
+  actor: { id: number; email?: string | null },
+  action: string,
+  row: { id: number; author_user_id?: unknown; status?: string },
+  to: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  const author = Number(row.author_user_id);
+  await logAdminAction(env, actor.id, actor.email || '', action, {
+    article_id: row.id,
+    from: row.status ?? null,
+    to,
+    ...(Number.isFinite(author) && author > 0 ? { target_user_id: author } : {}),
+    ...extra,
+  });
 }
 
 async function loadArticle(env: Env, id: number) {
@@ -211,16 +272,35 @@ async function transition(
   patch: Record<string, any>,
   reason: 'submit' | 'request_changes' | 'reject' | 'publish' | 'manual' | null,
   notifyKind: Parameters<typeof notifyArticle>[1] | null,
-  reasonText?: string | null,
+  reasonText: string | null | undefined,
+  audit: { action: string; selfApproval?: boolean },
 ) {
   const admin = await requireAdmin(c);
   await ensureNewsSchema(c.env);
   const row = await loadArticle(c.env, id);
   if (!row) return c.json({ error: 'not_found' }, 404);
   if (!expect.includes(row.status)) return c.json({ error: 'invalid_status', status: row.status }, 409);
+  let override: string | null = null;
+  if (audit.selfApproval) {
+    const body: any = await c.req.json().catch(() => ({}));
+    const check = selfApprovalCheck(admin, row, body);
+    if ('refused' in check) return c.json(check.refused.body, check.refused.status);
+    override = check.override;
+  }
+  // `patch`'s keys are the literals each route below passes; a request field
+  // never becomes a column name. The status guard makes a race lose cleanly:
+  // two admins deciding at once change the row once and audit it once.
   const sets = Object.keys(patch).map((k) => `${k} = ?`).join(', ');
-  const binds = [...Object.values(patch), new Date().toISOString(), id];
-  await c.env.DB.prepare(`UPDATE articles SET ${sets}, updated_at = ? WHERE id = ?`).bind(...binds).run();
+  const binds = [...Object.values(patch), new Date().toISOString(), id, JSON.stringify(expect)];
+  const res = await c.env.DB.prepare(
+    `UPDATE articles SET ${sets}, updated_at = ? WHERE id = ? AND status IN (SELECT value FROM json_each(?))`,
+  ).bind(...binds).run();
+  if (!res?.meta?.changes) {
+    const now = await loadArticle(c.env, id);
+    return c.json({ error: 'invalid_status', status: now?.status ?? null }, 409);
+  }
+  await auditTransition(c.env, admin, audit.action, row, String(patch.status),
+    override ? { self_approval_override: true, override_reason: override } : {});
   if (reason) await snapshotRevision(c.env, id, admin.id, reason);
   if (notifyKind) {
     await notifyArticle(c.env, notifyKind, {
@@ -242,7 +322,7 @@ adminArticles.post('/:id/start-review', async (c) => {
   return transition(
     c, id, ['submitted'],
     { status: 'in_review', reviewer_user_id: admin.id, reviewed_at: new Date().toISOString() },
-    null, 'author_in_review',
+    null, 'author_in_review', null, { action: 'article.start_review' },
   );
 });
 
@@ -254,7 +334,7 @@ adminArticles.post('/:id/request-changes', async (c) => {
   return transition(
     c, id, ['in_review', 'submitted'],
     { status: 'changes_requested', rejection_reason: reason },
-    'request_changes', 'author_changes_requested', reason,
+    'request_changes', 'author_changes_requested', reason, { action: 'article.request_changes' },
   );
 });
 
@@ -266,16 +346,17 @@ adminArticles.post('/:id/reject', async (c) => {
   return transition(
     c, id, ['in_review', 'submitted', 'changes_requested'],
     { status: 'rejected', rejection_reason: reason, rejected_at: new Date().toISOString() },
-    'reject', 'author_rejected', reason,
+    'reject', 'author_rejected', reason, { action: 'article.reject' },
   );
 });
 
 adminArticles.post('/:id/approve', async (c) => {
+  const admin = await requireAdmin(c);
   const id = Number(c.req.param('id'));
   return transition(
     c, id, ['in_review', 'submitted'],
-    { status: 'approved', approved_at: new Date().toISOString() },
-    null, 'author_approved',
+    { status: 'approved', approved_at: new Date().toISOString(), approved_by: admin.id },
+    null, 'author_approved', null, { action: 'article.approve', selfApproval: true },
   );
 });
 
@@ -289,7 +370,12 @@ adminArticles.post('/:id/approve', async (c) => {
  * the loser changes no row and sends no notification. Returns whether this
  * call was the one that published.
  */
-export async function publishApprovedArticle(env: Env, row: any, actorUserId: number): Promise<boolean> {
+export async function publishApprovedArticle(
+  env: Env,
+  row: any,
+  actorUserId: number,
+  audit: { email?: string | null; via?: 'manual' | 'schedule'; override?: string | null } = {},
+): Promise<boolean> {
   const html = renderMarkdown(row.body_markdown || '');
   const now = new Date().toISOString();
   const res = await env.DB.prepare(
@@ -298,6 +384,12 @@ export async function publishApprovedArticle(env: Env, row: any, actorUserId: nu
       WHERE id = ? AND status = 'approved'`,
   ).bind(html, now, now, row.id).run();
   if (!res?.meta?.changes) return false;
+  // D1292 — the publish is recorded as the actor's: the admin who clicked, or
+  // the admin who set the time when the schedule carries it out.
+  await auditTransition(env, { id: actorUserId, email: audit.email ?? '' }, 'article.publish', row, 'published', {
+    via: audit.via ?? 'manual',
+    ...(audit.override ? { self_approval_override: true, override_reason: audit.override } : {}),
+  });
   await snapshotRevision(env, row.id, actorUserId, 'publish');
   await bustArticleEdgeCache(env, row.slug, row.id, row.author_user_id);
   await notifyArticle(env, 'author_published', {
@@ -322,7 +414,9 @@ adminArticles.post('/:id/publish', async (c) => {
   if (row.status !== 'approved') {
     return c.json({ error: 'invalid_status', status: row.status, expected: 'approved' }, 409);
   }
-  if (!(await publishApprovedArticle(c.env, row, admin.id))) {
+  const check = selfApprovalCheck(admin, row, await c.req.json().catch(() => ({})));
+  if ('refused' in check) return c.json(check.refused.body, check.refused.status);
+  if (!(await publishApprovedArticle(c.env, row, admin.id, { email: admin.email, via: 'manual', override: check.override }))) {
     // Published by someone else (or the schedule) between the read and the write.
     const now = await loadArticle(c.env, id);
     return c.json({ error: 'invalid_status', status: now?.status ?? null, expected: 'approved' }, 409);
@@ -374,6 +468,14 @@ adminArticles.post('/:id/schedule', async (c) => {
   if (row.status !== 'approved') {
     return c.json({ error: 'invalid_status', status: row.status, expected: 'approved' }, 409);
   }
+  // D1292 — a time is a publish carried out later, so the author may not set
+  // one on their own article either; clearing a time publishes nothing.
+  let override: string | null = null;
+  if (publishAt) {
+    const check = selfApprovalCheck(admin, row, body);
+    if ('refused' in check) return c.json(check.refused.body, check.refused.status);
+    override = check.override;
+  }
   const res = await c.env.DB.prepare(
     `UPDATE articles SET publish_at = ?, publish_at_set_by = ?, updated_at = ? WHERE id = ? AND status = 'approved'`,
   ).bind(publishAt, publishAt ? admin.id : null, new Date().toISOString(), id).run();
@@ -383,6 +485,7 @@ adminArticles.post('/:id/schedule', async (c) => {
   }
   await logAdminAction(c.env, admin.id, admin.email || '', publishAt ? 'article.schedule' : 'article.unschedule', {
     article_id: id, publish_at: publishAt, previous: row.publish_at ?? null,
+    ...(override ? { self_approval_override: true, override_reason: override } : {}),
   });
   const updated = await loadArticle(c.env, id);
   return c.json({ article: updated });
@@ -418,7 +521,7 @@ export async function publishDueArticles(env: Env, now: Date = new Date()): Prom
     // back to the article's author rather than inventing an admin.
     const actor = Number(row.publish_at_set_by) || Number(row.author_user_id);
     try {
-      if (await publishApprovedArticle(env, row, actor)) published += 1;
+      if (await publishApprovedArticle(env, row, actor, { via: 'schedule' })) published += 1;
     } catch (e) {
       console.warn('[publishDueArticles] publish failed', row.id, (e as Error)?.message);
     }
@@ -452,6 +555,9 @@ adminArticles.post('/:id/unpublish', async (c) => {
     const now = await loadArticle(c.env, id);
     return c.json({ error: 'invalid_status', status: now?.status ?? null }, 409);
   }
+  await auditTransition(c.env, admin, 'article.unpublish', row, 'approved', {
+    was_featured: !!row.featured_at,
+  });
   // D484 — back to approved, so a publish time that already passed must go,
   // or the next cron tick would publish it again. Its own statement: a
   // database without migration 346 still unpublishes.
@@ -466,10 +572,6 @@ adminArticles.post('/:id/unpublish', async (c) => {
     title: row.title,
     authorUserId: row.author_user_id,
     reason,
-  });
-  // The reason is the author's to read; the audit row holds the fact only.
-  await logAdminAction(c.env, admin.id, admin.email || '', 'article.unpublish', {
-    article_id: id, was_featured: !!row.featured_at,
   });
   return c.json({ ok: true });
 });

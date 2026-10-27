@@ -33,6 +33,7 @@ import { insertManualCandidate } from '../routes/_competitor_writes';
 import { ensureCompetitorSchema } from './competitorSchema';
 import type { AnalysisInputs } from './competitorAnalysis';
 import { FINDING_KINDS, isFindingKind } from './interviewFindings';
+import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './storageRoom';
 
 /**
  * A refusal a route can return as-is. `sentence` is always one this file
@@ -1250,6 +1251,7 @@ export async function attachDemandEvidence(
   if (!input.file && interviewId === undefined) throw new WriterError(400, 'Attach a file or an interview');
   let key: string | null = null;
   let fileName: string | null = null;
+  let storage: StorageTicket | null = null;
   if (input.file) {
     const mime = String(input.file.type || '').toLowerCase();
     const ext = EVIDENCE_MIME[mime];
@@ -1259,6 +1261,8 @@ export async function attachDemandEvidence(
     if (!env.FILES) throw new WriterError(503, 'File storage is not configured');
     key = `${EVIDENCE_PREFIX}${input.projectId}/${crypto.randomUUID()}.${ext}`;
     fileName = String(input.file.name || `evidence.${ext}`).replace(/[\r\n"]/g, '').slice(0, 200) || `evidence.${ext}`;
+    // D1170 — Validate evidence counts to the venture's owner (D1169 §1).
+    storage = await assertStorageRoom(env, { projectId: input.projectId }, input.file.size, input.userId == null ? null : { id: input.userId });
     await env.FILES.put(key, await input.file.arrayBuffer(), { httpMetadata: { contentType: mime }, customMetadata: { project_id: String(input.projectId) } });
   }
   const stmts = [];
@@ -1271,6 +1275,7 @@ export async function attachDemandEvidence(
     entityId: `signal-${input.signalId}`, action: 'demand_evidence_attached', summary: key ? 'Evidence file attached' : 'Interview attached',
   }));
   await env.DB.batch(stmts);
+  if (storage) await noteStorageLanded(env, storage);
   if (key && row.evidence_file_key && row.evidence_file_key.startsWith(EVIDENCE_PREFIX)) {
     try { await env.FILES?.delete(row.evidence_file_key); } catch (e) { console.warn('[validateWriters] old evidence not deleted:', (e as Error)?.message); }
   }
