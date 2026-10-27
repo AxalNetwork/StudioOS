@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>/* cyrillic-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("44133977-790c-4c82-b0c6-353cc315a207") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("f75e3c01-ae56-400c-930b-6860bda3e046") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("8c73adea-4e62-43d6-99f8-7de0c7ae9f65") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("7c529774-706f-4c3e-b25f-7fc2f0d21597") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("32d58ec3-d436-4467-865d-ed9d08ad9dd7") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("62bd914f-a50f-4582-a422-5f1405c8ea3e") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("44133977-790c-4c82-b0c6-353cc315a207") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("f75e3c01-ae56-400c-930b-6860bda3e046") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("8c73adea-4e62-43d6-99f8-7de0c7ae9f65") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("7c529774-706f-4c3e-b25f-7fc2f0d21597") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("32d58ec3-d436-4467-865d-ed9d08ad9dd7") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("62bd914f-a50f-4582-a422-5f1405c8ea3e") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("44133977-790c-4c82-b0c6-353cc315a207") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("f75e3c01-ae56-400c-930b-6860bda3e046") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("8c73adea-4e62-43d6-99f8-7de0c7ae9f65") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("7c529774-706f-4c3e-b25f-7fc2f0d21597") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("32d58ec3-d436-4467-865d-ed9d08ad9dd7") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("62bd914f-a50f-4582-a422-5f1405c8ea3e") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("44133977-790c-4c82-b0c6-353cc315a207") format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("f75e3c01-ae56-400c-930b-6860bda3e046") format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* greek */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("8c73adea-4e62-43d6-99f8-7de0c7ae9f65") format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("7c529774-706f-4c3e-b25f-7fc2f0d21597") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("32d58ec3-d436-4467-865d-ed9d08ad9dd7") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("62bd914f-a50f-4582-a422-5f1405c8ea3e") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("c8bc33b8-07b3-4bb7-9490-72106c9e554c") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("cf6e10dc-bf29-4d82-a943-ceb022cb7919") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("30918f36-ce65-4d1b-afb9-9315bdfa3cb5") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("c8bc33b8-07b3-4bb7-9490-72106c9e554c") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("cf6e10dc-bf29-4d82-a943-ceb022cb7919") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("30918f36-ce65-4d1b-afb9-9315bdfa3cb5") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("c8bc33b8-07b3-4bb7-9490-72106c9e554c") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("cf6e10dc-bf29-4d82-a943-ceb022cb7919") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("30918f36-ce65-4d1b-afb9-9315bdfa3cb5") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("c8bc33b8-07b3-4bb7-9490-72106c9e554c") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("cf6e10dc-bf29-4d82-a943-ceb022cb7919") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("30918f36-ce65-4d1b-afb9-9315bdfa3cb5") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+<style>body{margin:0;background:#ebe9f0} a{color:#7c3aed;text-decoration:none} a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="box-sizing:border-box;min-height:100vh;padding:56px 64px 120px;background:#ebe9f0;color:#18181b;font-family:'Space Grotesk',system-ui,sans-serif">
+  <div style="max-width:960px">
+    <div style="font:600 11px/1 'Roboto Mono',ui-monospace,monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · axal.vc · every fillable module, every profile</div>
+    <h1 style="margin:12px 0 0;font:800 40px/1.05 'Space Grotesk',system-ui,sans-serif;letter-spacing:-.02em">Fill with Eadwyn</h1>
+    <p style="margin:14px 0 0;max-width:780px;font:400 15px/1.6 'Space Grotesk',system-ui,sans-serif;color:#4a4553;text-wrap:pretty">One trigger on every blank field a source or Eadwyn can fill, one sheet to choose sources and preview, and one mark on every filled value. Eadwyn proposes and a person accepts. Nothing is saved until Save, and a value a person typed is never replaced.</p>
+  </div>
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+    <section style="margin-top:72px">
+      <div style="display:flex;align-items:baseline;gap:14px;padding-bottom:12px;border-bottom:1px solid #d9d6e0">
+        <h2 style="margin:0;font:800 24px/1.1 'Space Grotesk',system-ui,sans-serif;letter-spacing:-.02em">{{ g.t }}</h2>
+        <span style="font:500 12px/1 'Roboto Mono',ui-monospace,monospace;color:#6b6577">{{ g.n }}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:56px 48px;margin-top:28px;align-items:flex-start">
+        <sc-for list="{{ g.boards }}" as="d" hint-placeholder-count="3">
+          <div id="{{ d.b }}" style="display:grid;gap:12px">
+            <div style="{{ d.head }}">
+              <span style="flex:none;height:24px;padding:0 9px;border-radius:999px;background:#18181b;color:#ffffff;display:inline-flex;align-items:center;font:700 11px/1 'Roboto Mono',ui-monospace,monospace">{{ d.b }}</span>
+              <span style="font:700 15px/1.3 'Space Grotesk',system-ui,sans-serif">{{ d.lab }}</span>
+            </div>
+            <sc-if value="{{ d.note }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ d.noteS }}">{{ d.note }}</div>
+            </sc-if>
+            <div style="{{ d.box }}"><dc-import name="Fill with Eadwyn Page" b="{{ d.b }}" hint-size="100%,100%"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;section&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;All&quot;,&quot;The system&quot;,&quot;The flow&quot;,&quot;States&quot;,&quot;Profiles&quot;,&quot;Phone and dark&quot;],&quot;default&quot;:&quot;All&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const sec = this.props.section ?? 'All';
+    const showN = this.props.showNotes ?? true;
+    const F = (b, lab, w, h, note) => ({
+      b, lab,
+      note: showN && note ? note : false,
+      head: 'display:flex;align-items:center;gap:10px;max-width:' + w + 'px',
+      noteS: "max-width:" + Math.min(w, 760) + "px;font:400 13px/1.55 'Space Grotesk',system-ui,sans-serif;color:#4a4553",
+      box: 'position:relative;width:' + w + 'px;height:' + h + 'px;overflow:hidden;border-radius:14px;border:1px solid #dcd8e4;background:#ffffff;box-shadow:0 1px 2px rgba(24,24,27,.05),0 12px 32px rgba(24,24,27,.07)'
+    });
+    const G = [
+      { t: 'The system', boards: [
+        F('AF1', 'Founder · Build › Solution design', 1440, 960, 'Two cells carry a Validate mark, one an edited Eadwyn value, one a GitHub fact. Typed cells carry none.'),
+        F('AF2', 'The mark · component sheet at 2x', 1440, 2140, 'Every trigger and provenance state, light and dark. The glyph is one colour; the full-colour image starts at 24px.')
+      ] },
+      { t: 'The flow', boards: [
+        F('AF3', 'Founder · Add feature form', 1440, 900, 'Field triggers on the four blank fields. Impact was typed, so it has none. The form-level Fill sits in the header.'),
+        F('AF4', 'Sources step', 1440, 900, "Sources come first and use no AI tokens. Eadwyn is ticked for what's left, with the founder's own average. Notion could feed this form but is not connected."),
+        F('AF5', 'Preview step', 1440, 900, 'One row per field. GitHub and Eadwyn disagree on Feature, so its row offers 2 sources. Impact is yours and kept.'),
+        F('AF6', 'Conflict detail', 1440, 1220, 'The Feature row opened: yours first, then the connector, then Eadwyn. GitHub is picked by that order.'),
+        F('AF7', 'Placed, then saved', 1440, 860, 'Before Save each placed value is dashed and says Not saved. After Save each keeps its mark.'),
+        F('AF8', 'Provenance cards and Undo', 1440, 960, 'Four marks pressed. Each card shows the source, the run and its cost, who accepted it, and Undo. Undo names the value it restores.')
+      ] },
+      { t: 'States', boards: [
+        F('AF9', 'Running', 1440, 900, 'Values from sources arrive first. Eadwyn rows show a ring until every value is checked.'),
+        F('AF10', 'Partial', 1440, 900, 'A thinner run fills 3 of 5 and leaves two blank rather than guess.'),
+        F('AF11', 'Refused', 1440, 1360, 'AI off, held back by the safety check, the safety check unreachable, and a form that changed during the run.'),
+        F('AF12', 'Out of tokens', 1440, 640, "Not enough AI tokens, today's limit, and AI paused for the studio. Sources still fill in all three."),
+        F('AF13', 'Empty', 1440, 860, 'A form with every field filled draws no trigger. A form no source covers offers Eadwyn alone.'),
+        F('AF14', 'Error', 1440, 720, 'A failed read gives a reference. A record whose marks could not be read says Unreadable, never blank.')
+      ] },
+      { t: 'Profiles', boards: [
+        F('AF15', 'No permission and readers', 1440, 900, "An investor reads the founder's marks with no triggers and no Undo. A support session turns Fill off."),
+        F('AF16', 'Waiting from another module', 1440, 960, 'After a Validate session, four row proposals wait. Each is added as it is accepted.'),
+        F('AF17', 'Investor · Deals › Screening', 1440, 900, "A memo fills from the founder's shared Raise records, scoring and Eadwyn. A replaced draft is struck through. Commitment amount is never filled."),
+        F('AF18', 'Advisor · Expertise › Services', 1440, 900, 'Practice outcomes and Eadwyn fill the service. Legal name has no trigger.'),
+        F('AF19', 'Operating Partner · Delivery › Reporting', 1440, 900, 'The engagement record fills Done and Next with no AI tokens; Eadwyn drafts the summary.'),
+        F('AF20', 'Admin · Community › Events', 1440, 900, 'An admin fills content they write. Approvals carry no trigger: decisions are theirs.'),
+        F('AF21', 'Super Admin · Content › Publications', 1440, 900, 'HQ content uses the same drawer: one row, Eadwyn\'s draft, not saved until accepted.'),
+        F('AF22', 'Explorer', 1440, 640, 'No marks and no triggers until the member holds a venture or a profile.')
+      ] },
+      { t: 'Phone and dark', boards: [
+        F('AF23a', 'Phone · the form', 390, 844, 'Each trigger has a 44px hit area.'),
+        F('AF23b', 'Phone · Sources', 390, 844, 'A trigger opens Sources as a bottom sheet.'),
+        F('AF23c', 'Phone · Preview', 390, 844, 'A full-height Preview, one card per field, with a sticky Accept all.'),
+        F('AF24', 'Dark · Preview step', 1440, 900, 'The Preview step in the dark colours.')
+      ] }
+    ];
+    return { groups: G.filter(g => sec === 'All' || g.t === sec).map(g => Object.assign({}, g, { n: g.boards.length + (g.boards.length === 1 ? ' board' : ' boards') })) };
+  }
+}
+</script>
+
+
+<div id="__claude_design_branding"><style>#__claude_design_branding{position:fixed;right:16px;bottom:16px;z-index:2147483646;display:flex;align-items:center;gap:7px;height:30px;padding:0 5px 0 10px;border-radius:999px;font-family:"Anthropic Sans",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-size:12.5px;font-weight:400;line-height:1;letter-spacing:normal;text-transform:none;color:#141413;background:rgba(255,255,255,.86);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 0 0 .5px rgba(31,30,29,.14),0 2px 10px rgba(0,0,0,.09)}
+#__claude_design_branding *{box-sizing:border-box;margin:0}
+#__claude_design_branding a{color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+#__claude_design_branding a:hover span{text-decoration:underline}
+#__claude_design_branding svg{flex:none}
+#__claude_design_branding a svg{color:#D97757}
+#__claude_design_branding button{width:20px;height:20px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:currentColor;opacity:.55;border:0;background:none;cursor:pointer;flex:none;font:inherit;transition:opacity .14s}
+#__claude_design_branding button:hover{opacity:1;background:rgba(127,127,127,.22)}
+@media print{#__claude_design_branding{display:none}}</style><a href="https://claude.com/product/design" target="_blank" rel="noopener noreferrer"><svg width="14" height="14" viewBox="0 0 20 21" fill="none" aria-hidden="true"><path fill="currentColor" d="M9.99902 0C15.5258 0.000170936 19.999 4.50643 19.999 10.0547C19.999 11.7656 19.5863 12.9976 18.7861 13.8203C17.9924 14.6362 16.9465 14.9138 15.9854 15.0078C15.05 15.0993 14.0097 15.0262 13.2549 15.0186C12.8524 15.0145 12.5177 15.0267 12.2441 15.0703C11.9682 15.1144 11.8143 15.1813 11.7305 15.2432C11.4745 15.4322 11.3353 15.7121 11.2656 16.1602C11.2303 16.3875 11.2168 16.6362 11.209 16.9131C11.2017 17.1715 11.1986 17.4893 11.1807 17.7705C11.1469 18.2975 11.0495 19.0865 10.4199 19.5908C9.7846 20.0996 8.88652 20.1057 7.85449 19.877C7.36399 19.7682 6.88652 19.6232 6.42578 19.4453C2.66989 17.9949 0.000187748 14.3414 0 10.0547C0 4.50643 4.47223 0.000171048 9.99902 0ZM9.99902 1.60547C5.36781 1.60564 1.60547 5.38391 1.60547 10.0547C1.60566 13.6582 3.84823 16.7296 7.00391 17.9482C7.39027 18.0974 7.79085 18.2184 8.20215 18.3096C9.1375 18.5169 9.384 18.3633 9.41602 18.3379C9.4524 18.3087 9.54558 18.1915 9.5791 17.668C9.5947 17.4239 9.59473 17.1786 9.60352 16.8672C9.61179 16.5742 9.62831 16.2435 9.67969 15.9131C9.78359 15.2455 10.0474 14.4906 10.7764 13.9521C11.1479 13.6778 11.5842 13.5493 11.9912 13.4844C12.4007 13.4191 12.8434 13.4088 13.2705 13.4131C14.1753 13.4222 15.0071 13.4905 15.8291 13.4102C16.6257 13.3322 17.2249 13.1235 17.6357 12.7012C18.0401 12.2855 18.3935 11.5261 18.3936 10.0547C18.3936 5.38391 14.6302 1.60564 9.99902 1.60547ZM5.11621 9.86719C5.86386 9.91468 6.45486 10.5348 6.45508 11.2939C6.45506 12.0838 5.81519 12.7245 5.02539 12.7246C4.28481 12.7246 3.67573 12.1617 3.60254 11.4404L3.59473 11.2939L3.60156 11.1533C3.66942 10.4596 4.23282 9.91186 4.93359 9.86719H5.11621ZM14.9814 7.19141C15.729 7.23889 16.3199 7.85919 16.3203 8.61816C16.3203 9.40801 15.6804 10.0487 14.8906 10.0488C14.1501 10.0487 13.5409 9.48586 13.4678 8.76465L13.46 8.61816L13.4668 8.47754C13.5348 7.78403 14.0983 7.23618 14.7988 7.19141H14.9814ZM6.4541 4.93457C7.20161 4.9822 7.79275 5.60231 7.79297 6.36133C7.79288 7.151 7.15291 7.7917 6.36328 7.79199C5.62274 7.79199 5.01369 7.22903 4.94043 6.50781L4.93262 6.36133L4.93945 6.2207C5.00731 5.52698 5.5707 4.97922 6.27148 4.93457H6.4541ZM11.3867 3.59668C12.1343 3.64419 12.7253 4.26436 12.7256 5.02344C12.7256 5.81326 12.0857 6.45393 11.2959 6.4541C10.5553 6.4541 9.94622 5.89123 9.87305 5.16992L9.86523 5.02344L9.87207 4.88281C9.93996 4.18912 10.5033 3.64133 11.2041 3.59668H11.3867Z"></path></svg><span>Made with Claude Design</span></a><button type="button" aria-label="Dismiss" onclick="this.parentElement.remove()"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></button></div></body></html>

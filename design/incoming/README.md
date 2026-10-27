@@ -111,6 +111,22 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-27 — Fill with Eadwyn (#2431)
+
+The owner's artifacts came from the prompt on #2431:
+- `Fill with Eadwyn Page.dc.html` (`73TF4Ub69riRDiXitxfndd`) is the page;
+- `Fill with Eadwyn · Boards.dc.html` (`DmT8zgB7VQw7oE4Vys5caW`) is the board
+  grid, AF1 to AF24; it imports the page by name.
+
+**Two edits, named.** In both files the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. No other value was
+edited.
+
+**Grade: NEW.** Nothing is mounted: a trigger with no sheet read behind it would
+be a dead control. S21's decision (D1323) records what the boards settle
+(#2431's questions 1 to 5 and 7) and splits the build into six parts, D1324 to
+D1329. The sheet is D1317's shared `Sheet`, at 520px.
+
 ## Landed 2026-10-27 — Google Workspace and Notion in the four cycles (#2402, #2405)
 
 The owner's four artifacts came from the prompts on #2402 and #2405. Each was
