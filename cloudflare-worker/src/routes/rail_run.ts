@@ -44,7 +44,13 @@ import { runRefusalView } from '../util/railContext';
 import { ROW_READS } from './fills';
 
 /** The form fields an Add form needs before a whole row can be proposed (the writer's own rule). */
-export const ROW_REQUIRED: Readonly<Record<string, readonly string[]>> = Object.freeze({ mvp_features: ['title'] });
+export const ROW_REQUIRED: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  mvp_features: ['title'],
+  // D1328 (#3489), part one: each Add form's own required field.
+  pain_groups: ['title'],
+  customer_segments: ['name'],
+  hypotheses: ['claim'],
+});
 
 const SENTENCES: Record<string, string> = {
   unknown_handler: 'That option has no run here yet.',
