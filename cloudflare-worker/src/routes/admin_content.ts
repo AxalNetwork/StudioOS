@@ -100,15 +100,17 @@ import { readPublishedGameSet, type GameHoldings } from '../services/gameLibrary
 const r = new Hono<{ Bindings: Env }>();
 
 /**
- * The artboard's four lanes, mapped onto the statuses `articles` actually
- * uses. `submitted` and `in_review` are one lane because the queue treats
- * them as one (`admin_articles.ts` selects them together); `approved` is the
- * scheduled lane because approval is what queues a piece to go out.
+ * The board's lanes, mapped onto the statuses `articles` actually uses.
+ * `submitted` and `in_review` are one lane because the queue treats them as
+ * one (`admin_articles.ts` selects them together). `approved` splits in two:
+ * a piece with a `publish_at` time is Scheduled; one without waits for someone
+ * to publish it by hand and is Ready to publish (D1298).
  */
-const LANES: Array<{ key: string; label: string; statuses: string[] }> = [
+const LANES: Array<{ key: string; label: string; statuses: string[]; publishAt?: 'set' | 'null' }> = [
   { key: 'draft', label: 'Draft', statuses: ['draft'] },
   { key: 'review', label: 'Review', statuses: ['submitted', 'in_review', 'changes_requested'] },
-  { key: 'scheduled', label: 'Scheduled', statuses: ['approved'] },
+  { key: 'ready_to_publish', label: 'Ready to publish', statuses: ['approved'], publishAt: 'null' },
+  { key: 'scheduled', label: 'Scheduled', statuses: ['approved'], publishAt: 'set' },
   { key: 'published', label: 'Published', statuses: ['published'] },
 ];
 
@@ -141,19 +143,34 @@ type Card = { store: 'article' | 'publication'; id: number; title: string; statu
  * The newest rows of one store across a set of statuses: one literal,
  * bound statement per status (no IN list built from data), merged here.
  * A status the by-status read found empty is not queried at all.
+ *
+ * D1298 — an optional `publishAt` filter narrows `approved` articles to those
+ * with or without a `publish_at` time. The three statements are static literals
+ * so the SQL-prepare guard sees no data-built SQL.
  */
 async function newestCards(
   env: Env, store: Card['store'], statuses: string[], byStatus: Record<string, number>,
+  publishAt?: 'set' | 'null',
 ): Promise<Card[]> {
   const rows: Card[] = [];
   for (const status of statuses) {
     if (!byStatus[status]) continue;
     const res = store === 'article'
       ? await env.DB.prepare(
-        `SELECT id, title, status, updated_at FROM articles
-          WHERE status = ?
-          ORDER BY datetime(updated_at) DESC, id DESC
-          LIMIT ?`,
+        publishAt === 'set'
+          ? `SELECT id, title, status, updated_at FROM articles
+              WHERE status = ? AND publish_at IS NOT NULL
+              ORDER BY datetime(updated_at) DESC, id DESC
+              LIMIT ?`
+          : publishAt === 'null'
+            ? `SELECT id, title, status, updated_at FROM articles
+                WHERE status = ? AND publish_at IS NULL
+                ORDER BY datetime(updated_at) DESC, id DESC
+                LIMIT ?`
+            : `SELECT id, title, status, updated_at FROM articles
+                WHERE status = ?
+                ORDER BY datetime(updated_at) DESC, id DESC
+                LIMIT ?`,
       ).bind(status, BOARD_CARDS).all<Record<string, unknown>>()
       : await env.DB.prepare(
         `SELECT id, title, status, updated_at FROM admin_publications
@@ -228,12 +245,28 @@ r.get('/summary', async (c) => {
   // rather than counting the same table a second time.
   let pipeline: unknown;
   let articleByStatus: Record<string, number> | null = null;
+  let approvedSplit: { with_time: number; without_time: number } | null = null;
   try {
     const rows = await env.DB.prepare(
       'SELECT status, COUNT(*) AS n FROM articles GROUP BY status',
     ).all<{ status: string; n: number }>();
     const byStatus: Record<string, number> = {};
     for (const row of rows.results || []) byStatus[String(row.status)] = Number(row.n) || 0;
+
+    // D1298 — split `approved` by whether a `publish_at` time is set. The
+    // column comes from migration 346 (D484); a database without it cannot
+    // place approved articles in either lane, so both lanes stay unreadable.
+    try {
+      const split = await env.DB.prepare(
+        `SELECT SUM(CASE WHEN publish_at IS NOT NULL THEN 1 ELSE 0 END) AS with_time,
+                SUM(CASE WHEN publish_at IS NULL THEN 1 ELSE 0 END) AS without_time
+           FROM articles WHERE status = 'approved'`,
+      ).first<{ with_time: number | null; without_time: number | null }>();
+      approvedSplit = {
+        with_time: Number(split?.with_time) || 0,
+        without_time: Number(split?.without_time) || 0,
+      };
+    } catch { approvedSplit = null; }
 
     // Anything the lanes do not name is reported rather than dropped: a
     // status nobody mapped is a lane missing from this page, and a total
@@ -243,18 +276,28 @@ r.get('/summary', async (c) => {
       .filter(([s]) => !mapped.has(s) && s !== 'rejected')
       .map(([status, n]) => ({ status, n }));
 
+    const laneCount = (l: (typeof LANES)[number]): number | null => {
+      if (l.publishAt === 'set') return approvedSplit?.with_time ?? null;
+      if (l.publishAt === 'null') return approvedSplit?.without_time ?? null;
+      return l.statuses.reduce((sum, s) => sum + (byStatus[s] || 0), 0);
+    };
+
     pipeline = {
       available: true,
       lanes: LANES.map((l) => ({
         key: l.key,
         label: l.label,
         statuses: l.statuses,
-        n: l.statuses.reduce((sum, s) => sum + (byStatus[s] || 0), 0),
+        n: laneCount(l),
       })),
       rejected: byStatus.rejected || 0,
       unmapped_statuses: unmapped,
-      in_pipeline: LANES.filter((l) => l.key !== 'published')
-        .reduce((sum, l) => sum + l.statuses.reduce((n, s) => n + (byStatus[s] || 0), 0), 0),
+      // D1298: the pipeline total stops at "published", but it also cannot be
+      // known when the approved split could not be read.
+      in_pipeline: approvedSplit === null
+        ? null
+        : LANES.filter((l) => l.key !== 'published')
+          .reduce((sum, l) => sum + (laneCount(l) ?? 0), 0),
       // No `recent` list since D214: the board's newest rows per lane replace
       // it on the page, and a list nothing renders is a read nothing needs.
     };
@@ -300,7 +343,7 @@ r.get('/summary', async (c) => {
   }
 
   // ── C3 · the board ────────────────────────────────────────────────────
-  const board = await readBoard(env, articleByStatus, publicationByStatus);
+  const board = await readBoard(env, articleByStatus, approvedSplit, publicationByStatus);
 
   // ── C1 · the Assessment Studio ────────────────────────────────────────
   const reach = await readGameReach(env);
@@ -697,7 +740,7 @@ type BoardPart = {
 };
 
 /**
- * C3 — the six lanes, from the two by-status maps the blocks above already
+ * C3 — the seven lanes, from the two by-status maps the blocks above already
  * read and from D204's one statement of what an open escalation is.
  *
  * A LANE'S TOTAL IS THE SUM OF ITS PARTS ONLY WHEN EVERY PART ANSWERED —
@@ -707,17 +750,31 @@ type BoardPart = {
 async function readBoard(
   env: Env,
   articleByStatus: Record<string, number> | null,
+  approvedSplit: { with_time: number; without_time: number } | null,
   publicationByStatus: Record<string, number> | null,
 ) {
-  const lane = (key: string) => LANES.find((l) => l.key === key)!.statuses;
+  const lane = (key: string) => LANES.find((l) => l.key === key)!;
 
-  async function articlesPart(statuses: string[]): Promise<BoardPart> {
+  async function articlesPart(statuses: string[], publishAt?: 'set' | 'null'): Promise<BoardPart> {
     if (!articleByStatus) {
       return { store: 'articles', statuses, n: null, cards: null, reason: 'The articles table could not be read.' };
     }
-    const n = statuses.reduce((s, st) => s + (articleByStatus[st] || 0), 0);
+    let n: number | null;
     let cards: BoardPart['cards'] = null;
-    try { cards = await newestCards(env, 'article', statuses, articleByStatus); } catch { cards = null; }
+    if (publishAt === 'set') {
+      n = approvedSplit?.with_time ?? null;
+    } else if (publishAt === 'null') {
+      n = approvedSplit?.without_time ?? null;
+    } else {
+      n = statuses.reduce((s, st) => s + (articleByStatus[st] || 0), 0);
+    }
+    if (n === null) {
+      return {
+        store: 'articles', statuses, n: null, cards: null,
+        reason: 'The publish times could not be read on this database (migration 346), so this lane cannot be counted.',
+      };
+    }
+    try { cards = await newestCards(env, 'article', statuses, articleByStatus, publishAt); } catch { cards = null; }
     return { store: 'articles', statuses, n, cards };
   }
 
@@ -781,8 +838,8 @@ async function readBoard(
   }
 
   const lanes = [
-    { key: 'draft', label: 'Draft', parts: [await articlesPart(lane('draft')), await publicationsPart('draft')] },
-    { key: 'review', label: 'Review', parts: [await articlesPart(lane('review'))] },
+    { key: 'draft', label: 'Draft', parts: [await articlesPart(lane('draft').statuses), await publicationsPart('draft')] },
+    { key: 'review', label: 'Review', parts: [await articlesPart(lane('review').statuses)] },
     {
       key: 'localisation', label: 'Localisation', parts: [localisation],
       note:
@@ -800,13 +857,17 @@ async function readBoard(
         + 'desk to send it to.',
     },
     {
-      key: 'scheduled', label: 'Scheduled', parts: [await articlesPart(lane('scheduled'))],
+      key: 'ready_to_publish', label: 'Ready to publish', parts: [await articlesPart(lane('ready_to_publish').statuses, lane('ready_to_publish').publishAt)],
       note:
-        'Approved and waiting to go out. An article with a publish time goes out at that time; one '
-        + 'without waits for someone to publish it by hand. Publications have no publish time.',
+        'Approved articles with no publish time: they wait for someone to publish them by hand.',
     },
     {
-      key: 'published', label: 'Published', parts: [await articlesPart(lane('published')), await publicationsPart('published')],
+      key: 'scheduled', label: 'Scheduled', parts: [await articlesPart(lane('scheduled').statuses, lane('scheduled').publishAt)],
+      note:
+        'Approved articles with a publish time: they go out when that time passes. Publications have no publish time.',
+    },
+    {
+      key: 'published', label: 'Published', parts: [await articlesPart(lane('published').statuses), await publicationsPart('published')],
       note:
         'Two meanings of "published": an article on the public site, and a publication issued to its '
         + 'audience. Each row says which store it came from.',
