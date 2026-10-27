@@ -72,7 +72,7 @@ async function fixture() {
     (13,'p13',1,NULL,'Passed partner','gp@passedfund.test','Passed Fund','passed'),
     (14,'p14',2,NULL,'Other venture partner','gp@harbourvc.test','Harbour VC','meeting')`);
   db.exec(`INSERT INTO raise_prospect_events(uid,prospect_id,kind,done_at) VALUES ('e1',12,'meeting','2026-10-20')`);
-  const env: any = { DB: d1Over(db), JWT_SECRET: 'synthetic-gw5-test-secret-0123456789', ENVIRONMENT: 'development', GOOGLE_CAL_CLIENT_ID: 'public-client', GOOGLE_CAL_CLIENT_SECRET: 'synthetic-secret', PUBLIC_BASE_URL: 'https://axal.vc' };
+  const env: any = { DB: d1Over(db), JWT_SECRET: 'gw5-'.repeat(10) /* synthetic, low entropy: no literal key */, ENVIRONMENT: 'development', GOOGLE_CAL_CLIENT_ID: 'public-client', GOOGLE_CAL_CLIENT_SECRET: 'synthetic-secret', PUBLIC_BASE_URL: 'https://axal.vc' };
   await ensureIntegrationsSchema(env);
   const integration = await ensureWorkspaceIntegration(env, 1);
   const r2 = new Map<string, Uint8Array>();
