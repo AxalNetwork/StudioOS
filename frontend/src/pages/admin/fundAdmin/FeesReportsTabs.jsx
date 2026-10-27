@@ -2,6 +2,7 @@ import { ReadFailure as Unreadable } from './parts';
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Lightbox, Pill, Unrecorded } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import { FundActControl } from '../../../lib/fundActs';
 import { bpsPercent } from '../../../lib/bps';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
@@ -154,7 +155,8 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
             onClick={() => run(() => apis.reporting.exportCsv(d.uid), 'The draft could not be exported.')}>Export</button>
       </div>
       {opened && (
-        <Lightbox phone="sheet" width={760} title={d.period_label || 'Report pack'} label="Report pack" testId={`draft-opened-${d.uid}`} onClose={() => { if (!busy) { setOpened(null); setMode(null); } }}>
+        // D1317: one report pack, opened: the shared Sheet at 760px.
+        <Sheet phone="sheet" width={760} title={d.period_label || 'Report pack'} label="Report pack" testId={`draft-opened-${d.uid}`} onClose={() => { if (!busy) { setOpened(null); setMode(null); } }}>
         <div className="px-5 py-4">
           <PackFigures figures={opened.figures} />
           <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Opened, and recorded in the audit log. Figures <span className={NUM}>{String(sha || '').slice(0, 12)}…</span></p>
@@ -190,7 +192,7 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
             </form>
           )}
           <Alert text={error} />
-        </div></Lightbox>
+        </div></Sheet>
       )}
       {!opened && <Alert text={error} />}
     </div>

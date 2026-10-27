@@ -6,6 +6,7 @@ import Lightbox from '../../../ui/Lightbox';
 import {
   AUTHOR_SORTS, DRAWER_WAITS, PAGE_SIZES, authorFacts, authorsView, filterAuthors, pageOf, profilesOf,
 } from './statsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1297 (#3393) — Content queue › Authors at `/admin/articles/authors`
@@ -105,7 +106,7 @@ function RowMenu({ row, onOpen }) {
 /** ART10: one author's facts; what the read does not carry says so. */
 function AuthorDrawer({ row, onClose }) {
   return (
-    <Lightbox label={`${row.name}, author`} title={`${row.name}, author`} sub={row.profile} onClose={onClose} width={640} testId="author-drawer">
+    <Sheet label={`${row.name}, author`} title={`${row.name}, author`} sub={row.profile} onClose={onClose} width={640} testId="author-drawer">
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm" data-testid="author-facts">
         {authorFacts(row).map(([k, v]) => (
           <React.Fragment key={k}>
@@ -119,7 +120,7 @@ function AuthorDrawer({ row, onClose }) {
         <Link className={LINK} to={`/admin/accounts/all/${row.id}`}>Open account (Accounts) ›</Link>
         <Link className={LINK} to={`/authors/${row.id}`}>Open public author page ›</Link>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

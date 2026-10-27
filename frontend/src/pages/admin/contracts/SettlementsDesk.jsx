@@ -98,7 +98,7 @@ export default function SettlementsDesk({ deal, superAdmin, onClose }) {
       'The draft could not be saved.', () => { setForm(EMPTY); setEditing(null); });
   };
 
-  return <SidePanel title={`Settlements · ${deal.partner_name || deal.partner_email || `Deal ${deal.id}`}`} onClose={onClose}>
+  return <SidePanel title={`Settlements · ${deal.partner_name || deal.partner_email || `Deal ${deal.id}`}`} onClose={onClose} testId="settlements-sheet">
     <p className="text-xs text-axal-muted">What Management and the partner owe each other under this signed deal. Recording one moves no money: the partner matches an issued settlement to a line in their own bank.</p>
     {!superAdmin && <p className="text-xs text-axal-muted" data-testid="settlements-super-admin-note">Issuing and voiding are the Super Admin’s. You can draft, edit and delete drafts.</p>}
     {error && (!editing || !active) && <p role="alert" className="text-xs text-red-700" data-testid="settlements-error">{error}</p>}

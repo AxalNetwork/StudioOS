@@ -387,13 +387,15 @@ test('status after an interval change on a persona plan: active only once the ne
   assert.deepEqual([on.body.state, on.body.result.interval, on.body.result.plan_name], ['active', 'month', 'Operating Partner Pro']);
 });
 
-test('wiring: mounted ahead of billing, the client names the three routes, and the old checkouts keep their callers until part 6', () => {
+test('wiring: mounted ahead of billing, the client names the three routes, and since part 6 the paywall opens the sheet', () => {
   const index = read('cloudflare-worker/src/index.ts');
   assert.ok(index.indexOf("app.route('/api/billing', billingCheckout)") < index.indexOf("app.route('/api/billing', billing)"));
   const client = read('frontend/src/lib/api/billingCheckout.js');
   for (const p of ["'/billing/checkout/quote'", "'/billing/checkout/start'", '/billing/checkout/status?ref=']) assert.ok(client.includes(p), p);
   assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/billingCheckout\.js';/);
-  // The hosted checkouts answer 410 only once nothing calls them.
-  assert.match(read('frontend/src/components/PaywallModal.jsx'), /api\.tierCheckout/);
+  // D1054 (#2905) is part 6: the paywall opens the sheet now, never the hosted checkout. The hosted
+  // route stays mounted; answering it 410 is its own change, once nothing else calls it.
+  assert.doesNotMatch(read('frontend/src/components/PaywallModal.jsx'), /api\.(tierCheckout|investorCheckout)/);
+  assert.match(read('frontend/src/components/PaywallModal.jsx'), /openCheckout\(/);
   assert.match(read('cloudflare-worker/src/routes/billing.ts'), /billing\.post\('\/tier\/checkout'/);
 });

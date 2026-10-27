@@ -112,7 +112,10 @@ test('the primary button is the act table\'s: the Super Admin\'s "New capital ca
   assert.equal(headerPrimary('distributions', ACCESS(false), fund).label, 'Preview a distribution');
   assert.deepEqual(headerPrimary('fees', ACCESS(false), fund), { label: 'Preview period', to: '/admin/fund-admin/fees?fund=7#fee-prepare' });
   assert.deepEqual(headerPrimary('lps', ACCESS(false), null), { label: 'Add LP', to: '/admin/fund-admin/lps?add=1' }, 'D1162: Add LP is an Admin\'s act');
-  for (const v of ['funds', 'performance', 'reports', 'banking', 'reconciliation', 'books']) assert.equal(headerPrimary(v, ACCESS(true), fund), null, `${v} has no act page yet`);
+  for (const v of ['performance', 'reports', 'banking', 'reconciliation', 'books']) assert.equal(headerPrimary(v, ACCESS(true), fund), null, `${v} has no act page yet`);
+  // D1161: New fund on the tab, Edit fund facts on one fund's page.
+  assert.deepEqual(headerPrimary('funds', ACCESS(false), null), { label: 'New fund', to: '/admin/fund-admin/funds?new=1' });
+  assert.deepEqual(headerPrimary('funds', ACCESS(true), null, 7), { label: 'Edit fund facts', to: '/admin/fund-admin/funds/7?edit=facts' });
 });
 
 test('the tab counts: a number read, a dash with its reason, the amber flag with what waits — never a zero', () => {

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollText, X } from 'lucide-react';
+import { ScrollText } from 'lucide-react';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
+import Sheet from '../ui/Sheet.jsx';
 
 /**
  * D1160 (#3067): Fund Ops is retired. Its funds view (`AdminFundsView`) and
@@ -49,12 +50,8 @@ export function LPADrawer({ fundId, onClose }) {
     }
   };
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-2xl h-full overflow-y-auto p-6 dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="flex items-start justify-between mb-3">
-          <div className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100"><ScrollText size={16} className="text-violet-600" /> LPA — Fund #{fundId}</div>
-          <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
-        </div>
+    <Sheet label={`LPA, Fund #${fundId}`} title={<span className="flex items-center gap-2"><ScrollText size={16} className="text-violet-600" /> LPA — Fund #{fundId}</span>} width={640} testId="fund-lpa-sheet" onClose={onClose}>
+      <div className="p-6">
         {err && <div className="bg-red-50 text-red-700 text-xs rounded px-2 py-1">{err}</div>}
         {!doc ? <div className="text-xs text-gray-400 py-8 text-center">Loading…</div> : (
           <>
@@ -95,6 +92,6 @@ export function LPADrawer({ fundId, onClose }) {
           </>
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }

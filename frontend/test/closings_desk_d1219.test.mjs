@@ -386,6 +386,10 @@ test('CP8: a third-party fund is recorded by its name only, with the line’s ev
   const v = await at({ ...ONE, 'PUT /closings/c1/lines/l2/route': { ok: true } });
   try {
     await v.click('closing-line-third-btn-l2');
+    // D1317: the shared Sheet, 560px.
+    assert.equal(v.props('closing-third-party').role, 'dialog');
+    assert.ok(v.props('closing-third-party')['aria-labelledby']);
+    assert.equal(v.props('closing-third-party')['data-width'], 560);
     assert.match(v.text('closing-third-party'), /does not run the fund’s calls or hold its money/);
     assert.match(v.text('closing-third-party-evidence'), /Sending side · investor_mercury/);
     await v.change('closing-third-party-name', 'Harbor Ventures III, L.P.');
@@ -408,6 +412,10 @@ test('CP3: a counsel draft is never sent; counsel’s text fills from reads and 
   const v = await at({ ...ONE, 'POST /legal/esign/staged/preview': preview, 'POST /legal/esign/staged': { uid: 'new' } });
   try {
     await v.click('closing-line-paper-btn-l1');
+    // D1317: the shared Sheet, 640px.
+    assert.equal(v.props('closing-paper-drawer').role, 'dialog');
+    assert.ok(v.props('closing-paper-drawer')['aria-labelledby']);
+    assert.equal(v.props('closing-paper-drawer')['data-width'], 640);
     await v.click('closing-paper-preview');
     assert.match(v.text('closing-paper-error'), /counsel draft/);
     assert.equal(v.props('closing-paper-send').disabled, true);
@@ -441,6 +449,10 @@ test('CP15: the activity drawer, newest first and filtered by step', async () =>
   const v = await at(ONE);
   try {
     await v.click('closing-open-activity');
+    // D1317: the shared Sheet, 640px.
+    assert.equal(v.props('closing-activity-drawer').role, 'dialog');
+    assert.ok(v.props('closing-activity-drawer')['aria-labelledby']);
+    assert.equal(v.props('closing-activity-drawer')['data-width'], 640);
     assert.match(v.text('closing-activity-list'), /^Account #1 · Set a line’s route to Syndicate \(SPV\).*Account #1 · Opened the closing/);
     await v.click('closing-activity-step-3');
     assert.doesNotMatch(v.text('closing-activity-list'), /Opened/);

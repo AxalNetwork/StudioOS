@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { cyclesApi } from '../../../lib/api/cycles.js';
-import { Lightbox, actionGhost } from '../../../ui';
+import { actionGhost } from '../../../ui';
 import DataRoomDialog, { roomRefusal } from './DataRoomDialog.jsx';
 import {
   GATES, OWNER_ONLY, answersOf, endCopy, folderChoices, gateCopy, gateWord, linkRows, makeCurrentCopy, moveCopy, removeCopy, renameCopy,
   versionRows, whoCanOpen,
 } from './filesModel.js';
 import { day } from './dataRoomModel.js';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1106 (#2986) — DR3, one file's lightbox at `/raise/data-room/file/<id>`,
@@ -70,10 +71,10 @@ export default function DataRoomFile({ fileId, room, projectUid, projectId, onCl
 
   if (!file) {
     return (
-      <Lightbox label="File" title="This file is not in the room" onClose={onClose} testId="dataroom-file-gone"
+      <Sheet label="File" title="This file is not in the room" onClose={onClose} testId="dataroom-file-gone"
         footer={<div className="flex justify-end"><button type="button" className={actionGhost} onClick={onClose}>Close</button></div>}>
         <p className={`m-0 px-5 py-4 text-[13px] ${INK}`}>It may have been removed, or the address names another venture’s file.</p>
-      </Lightbox>
+      </Sheet>
     );
   }
   const folder = (room?.folders || []).find((f) => Number(f.id) === Number(file.folder_id));
@@ -139,7 +140,7 @@ export default function DataRoomFile({ fileId, room, projectUid, projectId, onCl
   const answers = record.status === 'ready' ? answersOf(record.data) : null;
   const links = record.status === 'ready' ? linkRows(record.data) : [];
   return (
-    <Lightbox label={file.name} eyebrow={`File · ${folder?.name || 'Top level'}`} title={file.name} onClose={onClose} width={720} testId="dataroom-file"
+    <Sheet label={file.name} eyebrow={`File · ${folder?.name || 'Top level'}`} title={file.name} onClose={onClose} width={720} testId="dataroom-file"
       footer={<div className="flex justify-end"><button type="button" className={actionGhost} onClick={onClose}>Close</button></div>}>
       <div className="flex flex-col gap-3.5 px-5 py-4 text-[13px] text-axal-ink dark:text-gray-100">
         <div className="flex flex-wrap gap-1.5" data-testid="dataroom-file-tags">
@@ -218,6 +219,6 @@ export default function DataRoomFile({ fileId, room, projectUid, projectId, onCl
         </section>
       </div>
       {dialog}
-    </Lightbox>
+    </Sheet>
   );
 }

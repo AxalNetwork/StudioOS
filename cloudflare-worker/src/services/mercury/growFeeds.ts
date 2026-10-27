@@ -38,6 +38,7 @@ import { namesAxalEntity, normalizeEntityName } from '../../integrations/provide
 import { addMonths, bucketMonths, cashNow, monthOf, runwayFrom, RUNWAY_FULL_MONTHS, type SpendLine } from '../mercurySpend';
 import { LEDGER_CURRENCY, mercuryCreditToEntry, namesStripe, verificationFor } from '../revenueLedger';
 import { raiseReceiptIds } from '../mercuryPersonal';
+import { isVentureFounder } from '../ventureFounder';
 import { recomputeRevenueMovements } from '../revenueMovements';
 import { MERCURY_INSERT } from '../../routes/revenue';
 import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES } from './parse';
@@ -623,11 +624,7 @@ export async function isTeamViewer(env: Env, viewer: { id: number; founder_id?: 
 }
 
 /** Whether the viewer is the venture's founder, whose Mercury it is: only they decide what it proposes. */
-export async function isVentureFounder(env: Env, viewer: { founder_id?: number | null }, projectId: number): Promise<boolean> {
-  if (viewer.founder_id == null) return false;
-  return !!(await env.DB.prepare('SELECT 1 FROM projects WHERE id = ? AND founder_id IS NOT NULL AND founder_id = ?')
-    .bind(projectId, viewer.founder_id).first());
-}
+export { isVentureFounder };
 
 export const TEAM_ONLY = 'From the founder\'s Mercury: only the venture\'s team sees these figures.';
 export const NOT_SYNCED = 'Not recorded: the founder has not synced their Mercury into Grow yet.';

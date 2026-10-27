@@ -3,6 +3,7 @@ import { Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { trustCenterAdminApi } from '../../lib/api/trustContent.js';
 import { reportError } from '../../lib/log';
 import { AdminPageHeader, Card, Lightbox } from '../../ui';
+import Sheet from '../../ui/Sheet.jsx';
 import {
   NOTICE_DAYS, activeFrom, blankGroup, blankLine, blockRows, certificationProblem, certificationsPayload, confirmedCount,
   REFUSALS, linesPayload, linesProblem, noteState, pendingChanges, publishLine, publishedLine, refusalText, startBody,
@@ -222,8 +223,10 @@ function SubprocessorDialog({ editing, api, onClose, onDone }) {
   const field = (k, label) => (
     <label className="block space-y-1"><span className={LABEL}>{label}</span><input className={FIELD} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} data-testid={`trust-content-sub-${k}`} /></label>
   );
+  // D1317: editing a listed subprocessor is a detail panel, the shared Sheet (560px); Add stays the centred lightbox.
+  const Frame = editing ? Sheet : Lightbox;
   return (
-    <Lightbox label={editing ? 'Edit the subprocessor' : 'Add a subprocessor'} title={editing ? `Edit ${editing.name}` : 'Add a subprocessor'}
+    <Frame label={editing ? 'Edit the subprocessor' : 'Add a subprocessor'} title={editing ? `Edit ${editing.name}` : 'Add a subprocessor'} width={560}
       sub={`It is a draft until you publish. It is listed as active no sooner than ${NOTICE_DAYS} days after you publish, and confirmed subscribers are emailed when you publish.`}
       onClose={onClose} testId="trust-content-sub-dialog"
       footer={(
@@ -244,7 +247,7 @@ function SubprocessorDialog({ editing, api, onClose, onDone }) {
         </label>
         <Refusal text={error} testId="trust-content-sub-error" />
       </div>
-    </Lightbox>
+    </Frame>
   );
 }
 
@@ -398,7 +401,7 @@ export default function TrustContentPage({ api = trustCenterAdminApi }) {
                         <td className="pr-2">{s.location}</td>
                         <td className="pr-2 font-mono text-[11.5px]">{s.since}</td>
                         <td className="space-x-2 whitespace-nowrap">
-                          {s.actions.includes('edit') ? <button type="button" className={LINK} onClick={() => setDialog({ kind: 'sub', editing: s })}>Edit</button> : null}
+                          {s.actions.includes('edit') ? <button type="button" className={LINK} onClick={() => setDialog({ kind: 'sub', editing: s })} data-testid={`trust-content-sub-edit-${s.uid}`}>Edit</button> : null}
                           {s.actions.includes('delete') ? <button type="button" className={LINK} onClick={() => setDialog({ kind: 'confirm', ask: { title: `Delete the draft ${s.name}?`, line: 'It was never listed, so visitors see no change.', verb: 'Delete draft', run: () => api.removeSubprocessor(s.uid) }, done: `${s.name}: the draft is deleted.` })}>Delete</button> : null}
                           {s.actions.includes('remove') ? <button type="button" className={LINK} onClick={() => setDialog({ kind: 'confirm', ask: { title: `Remove ${s.name}?`, line: 'It stays listed until you publish, and the change log records its removal.', verb: 'Mark for removal', run: () => api.removeSubprocessor(s.uid) }, done: `${s.name} is marked for removal. Visitors see it until you publish.` })} data-testid={`trust-content-sub-remove-${s.uid}`}>Remove</button> : null}
                           {s.actions.includes('keep') ? <button type="button" className={LINK} onClick={() => setDialog({ kind: 'confirm', ask: { title: `Keep ${s.name}?`, line: 'The removal is cancelled. It stays listed.', verb: 'Keep it', run: () => api.keepSubprocessor(s.uid) }, done: `${s.name} stays listed.` })}>Keep</button> : null}
