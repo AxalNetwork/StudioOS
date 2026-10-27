@@ -78,7 +78,6 @@ export const NOT_YET = 'Not read here yet';
 
 /** Why a tab draws no blocks today. Never a zero, never "none". */
 export const WAITS = Object.freeze({
-  funds: 'Each administered fund with its facts, its economics and New fund are not drawn here yet. The administered funds are listed on Overview, from the overview read.',
   books: 'The books of each administered fund are not drawn here yet. The fund ledger read exists; this part draws it.',
 });
 
@@ -243,12 +242,14 @@ export function tabCounts(overview) {
  * The header's one primary button (FND1), named by the act table: the
  * Super Admin, whom it allows to issue, sees "New capital call"; an Admin,
  * "Preview a capital call". Each opens where the act is taken today. A tab
- * whose act has no page yet (New fund, Add LP, Record a mark, Sync now) has
- * none until its part draws it.
+ * whose act has no page yet (Record a mark, Sync now) has none until its
+ * part draws it.
  */
-export function headerPrimary(view, access, fund) {
+export function headerPrimary(view, access, fund, fundId = null) {
   const may = (act) => actRow(access, act)?.allowed === true;
   const tab = tabOfView(view);
+  // D1161: New fund on the Funds tab; Edit fund facts on one fund's page. Each opens its dialog in place.
+  if (tab === 'funds') return fundId ? { label: 'Edit fund facts', to: `${BASE}/funds/${fundId}?edit=facts` } : { label: 'New fund', to: `${BASE}/funds?new=1` };
   if (tab === 'overview' || tab === 'calls') {
     return { label: may('capital_call.issue') ? 'New capital call' : 'Preview a capital call', to: fund ? `/funds/calls?fund=${fund.id}` : `${BASE}/calls` };
   }

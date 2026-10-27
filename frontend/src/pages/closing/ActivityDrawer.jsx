@@ -5,9 +5,9 @@
  * account number and a line is "a line".
  */
 import { useState } from 'react';
-import { Lightbox } from '../../ui';
 import { BTN } from '../account/AccountCenter';
 import { DESK_WAITS, STEPS, activityCsv, filterActivity } from './deskModel';
+import Sheet from '../../ui/Sheet.jsx';
 
 const when = (at) => (at ? String(at).replace('T', ' ').slice(0, 16) : 'Time not recorded');
 
@@ -37,7 +37,7 @@ export default function ActivityDrawer({ title, rows, onClose }) {
       className={`rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold ${step === n ? 'border-violet-500 bg-violet-50 text-violet-800 dark:border-violet-400 dark:bg-violet-950/40 dark:text-violet-200' : 'border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>{label}</button>
   );
   return (
-    <Lightbox label="Activity" eyebrow={title} title="Activity" sub={DESK_WAITS.actor} testId="closing-activity-drawer" onClose={onClose} width={600}>
+    <Sheet label="Activity" eyebrow={title} title="Activity" sub={DESK_WAITS.actor} testId="closing-activity-drawer" onClose={onClose} width={600}>
       <div className="flex flex-col gap-3 px-5 py-4">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by step">{pill(0, 'All')}{STEPS.map((s, i) => pill(i + 1, `${i + 1} ${s}`))}</div>
         {shown.length === 0
@@ -48,6 +48,6 @@ export default function ActivityDrawer({ title, rows, onClose }) {
         <span className="mr-auto text-[12px] text-gray-600 dark:text-gray-400">Append-only. Nothing here can be edited or removed.</span>
         <button type="button" className={BTN.ghost} disabled={shown.length === 0} onClick={() => download(activityCsv(shown), 'closing-activity.csv')} data-testid="closing-activity-csv">Export CSV</button>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }

@@ -1,44 +1,39 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { investorZoneActions } from '../../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../../workspaces/investorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
-import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, NothingYet, StatedLimit } from '../../advisor/expertise/kit';
 import { SearchInput } from '../../advisor/network/kit';
 import { PASS_TAXONOMY, passReasonRevisit } from '../../../lib/dealFlow';
+import { DealStrip, StripKey, useScopeStrips } from '../../../components/scoring/scorecard/Scorecard';
+import { SCOPES, stripOf } from '../../../components/scoring/scorecard/scorecardModel';
 
 /**
  * Deals · Screening — canvas **ID2**, `/deals/screening`. ANALYTICS.
  *
- * WHAT WAS HERE: one card reading "No deals are currently in screening or
- * diligence", with a disabled Export beside it. It was accurate about the deal
- * record and wrong about the desk — because the desk's store was never read.
+ * D1260 (#3283, part 7 of #2428; owner question 8 A): SCREENING READS THE
+ * SCORECARD, AND NOTHING ELSE THAT SCORES.
  *
- * THE OPS ROW SAID THERE WAS NOTHING TO READ, AND IT WAS WRONG TWICE.
- * `investorZoneActions` marked `New batch run` unbuilt because "no scoring run
- * is stored" and `Edit rubric` because "no rubric is stored". `score_snapshots`
- * is a stored scoring run carrying SIX dimensions — market, team, product,
- * capital, fit, distribution — each with its sub-scores and a total beside
- * `total_score` and `tier`, which is exactly the artboard's "Rubric · 6 dims".
- * It also carries `anomaly_flags` and `admin_review_status`, which is a
- * red-flag store under another name. Both reasons are corrected in the table.
+ * This desk used to draw the Lab scorer's newest snapshot per deal: a total,
+ * a tier, six dimensions and its anomaly flags (`score_snapshots`). Those
+ * scores come from the founder's own sliders, and the Lab scorer stays for
+ * practice only. An Eadwyn memo cited them too, for every deal, to any reader.
+ * Both are gone from this page.
  *
- * WHAT IS GENUINELY NOT BUILT, and is stated rather than drawn: batching (a
- * run is started against one project), editable WEIGHTS (fixed in
- * `services/scoring.ts`, with no per-firm store), and red-flag RULES a person
- * can write (`detectAnomalies` produces flags from fixed heuristics).
+ * What it draws now:
+ *   · Scorecards: each deal the reader may see (`GET /api/deals/screening`,
+ *     which sends no score), with its eleven-scope strip from
+ *     `POST /api/venture-scores/batch`. The batch applies the deal
+ *     relationship, the founder's switch and the NDA itself. A locked or
+ *     closed scorecard is an outline, never an empty bar.
+ *   · Pass reasons: the fund's own record, which is not a score.
  *
- * THE INSTRUMENT IS THE PASS TAXONOMY, WHICH IS THE ARTBOARD'S OWN CHOICE on
- * an analytics page about scoring — and it earns it: `instTitle:'Pass reasons
- * — the fund's memory'`. A pass is the most queryable thing a fund owns, and
- * the scores are the strip above it rather than the table, because a score
- * without its rubric is a number with an opinion attached.
- *
- * TWO STORES, TWO CALLS. The score history and the pass taxonomy are separate
- * reads, so one failing costs its own zone rather than the page.
+ * TWO STORES, TWO CALLS. The desk and the pass taxonomy are separate reads,
+ * and the strip is a third, so one failing costs its own zone rather than
+ * the page.
  */
 
 const UNAVAILABLE = Symbol('unavailable');
@@ -71,13 +66,11 @@ function OpenDeal({ id, onOpen }) {
   );
 }
 
-const day = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
-
 export default function InvestorScreeningZone() {
   const navigate = useNavigate();
   const [desk, setDesk] = useState(null);
   const [passes, setPasses] = useState(null);
-  const [view, setView] = useState('scored');
+  const [view, setView] = useState('scorecards');
   const [query, setQuery] = useState('');
 
   const load = useCallback(() => {
@@ -90,48 +83,24 @@ export default function InvestorScreeningZone() {
 
   const deskReady = desk && desk !== UNAVAILABLE;
   const passesReady = passes && passes !== UNAVAILABLE;
-  const scored = deskReady ? desk.scored : null;
-  const flags = deskReady ? desk.flags : null;
-  const rubric = deskReady ? desk.rubric : null;
+  const deals = deskReady ? desk.desk : null;
+  const dealRows = useMemo(() => (deals?.available ? deals.rows : []), [deals]);
+  const strips = useScopeStrips(dealRows.map((r) => r.deal_id));
 
-  /** Every deal that carries a score, newest first — the artboard's `Scored`. */
-  const scoredRows = useMemo(
-    () => (scored?.available ? scored.rows.filter((r) => r.total_score !== null) : []),
-    [scored],
-  );
-  const flagRows = useMemo(() => (flags?.available ? flags.rows : []), [flags]);
+  /** How many deals have a scorecard open to this reader with at least one scored scope. */
+  const scoredCount = useMemo(() => {
+    if (strips.status !== 'ready') return null;
+    return dealRows.filter((r) => {
+      const s = stripOf(strips.items.get(Number(r.deal_id)));
+      return s.state === 'open' && s.scopes.some((x) => x.state === 'scored');
+    }).length;
+  }, [strips, dealRows]);
 
-  /**
-   * The pass buckets, and the two that carry a re-entry condition.
-   *
-   * `PASS_TAXONOMY` is the shared vocabulary the worker's CHECK constraint
-   * accepts, and exactly two of its five entries define a `revisit` — too
-   * early and valuation. That is not a coincidence and it is not decoration:
-   * those are the two passes a price or a milestone can reverse, which turns a
-   * no into a maybe with a date on it.
-   */
   const revisitable = useMemo(() => PASS_TAXONOMY.filter((r) => r.revisit), []);
 
-  /** The chip row's narrowing, and it renders. */
-  const rows = useMemo(() => {
-    if (view === 'flags') return flagRows;
-    if (view === 'rubric') return [];
-    if (view === 'passes') return passesReady ? passes.buckets : [];
-    return scoredRows;
-  }, [view, scoredRows, flagRows, passesReady, passes]);
-
-  /**
-   * SEARCH IS OFFERED ON TWO OF THE FOUR VIEWS, AND THAT IS THE POINT.
-   *
-   * `Scored` and `Red flags` are lists of DEALS and each row names a company,
-   * so a company search narrows something a reader can see. `Rubric` is the six
-   * dimensions and `Pass reasons` is the five-entry taxonomy — neither is a
-   * per-deal list, and a search box over them would either match nothing or
-   * filter a vocabulary, which is not what the reader typing a company name is
-   * asking for. A control that cannot act is worse than an absent one: it reads
-   * as a failed search rather than a view without one.
-   */
-  const searchable = view === 'scored' || view === 'flags';
+  /** The chip row's narrowing: Scorecards lists the deals; Pass reasons is a taxonomy, not a deal list. */
+  const rows = useMemo(() => (view === 'scorecards' ? dealRows : []), [view, dealRows]);
+  const searchable = view === 'scorecards';
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!searchable || !q) return rows;
@@ -140,15 +109,9 @@ export default function InvestorScreeningZone() {
 
   const rowActions = investorZoneActions('deals/screening', {
     view: {
-      header: ['Company', 'Tier', 'Score', 'Review', 'Scored'],
-      rows: scoredRows,
-      cells: (r) => [
-        r.company || `Deal #${r.deal_id}`,
-        r.tier || '',
-        r.total_score === null ? '' : String(r.total_score),
-        r.review_status || '',
-        day(r.scored_at) || '',
-      ],
+      header: ['Company', 'Sector', 'Deal status'],
+      rows: dealRows,
+      cells: (r) => [r.company || `Deal #${r.deal_id}`, r.sector || '', r.deal_status || ''],
     },
   });
 
@@ -163,10 +126,7 @@ export default function InvestorScreeningZone() {
         filters={investorZoneFilters('deals/screening', {
           value: view,
           onChange: setView,
-          // Only the two per-deal views carry a figure. `rubric` and `passes`
-          // are a dimension list and a taxonomy, so the builder drops their
-          // `{n}` rather than printing a count of the wrong thing.
-          counts: { scored: scoredRows.length, flags: flagRows.length },
+          counts: { scorecards: dealRows.length },
         })}
         actions={rowActions}
       />
@@ -177,44 +137,34 @@ export default function InvestorScreeningZone() {
       )}
       <ZoneBody
         loading={desk === null && passes === null}
-        error={bothFailed ? 'Neither the score history nor the pass record could be read.' : ''}
+        error={bothFailed ? 'Neither the deals nor the pass record could be read.' : ''}
         onRetry={load}
-        isEmpty={Boolean(anyRead) && scoredRows.length === 0 && (!passesReady || passes.total === 0)}
+        isEmpty={Boolean(anyRead) && dealRows.length === 0 && (!passesReady || passes.total === 0)}
         empty={(
           <NothingYet
-            title="Nothing has been screened yet"
+            title="Nothing to screen yet"
             body={
-              'A deal appears here once it has been scored, and a pass appears once '
-              + 'one has been recorded with its reason. Both stores are readable and '
-              + 'empty, which is a different fact from a desk that could not be read.'
+              'A deal appears here once you can read it, with its venture scorecard, and a pass appears once '
+              + 'one has been recorded with its reason. Both reads are readable and empty, which is a different '
+              + 'fact from a desk that could not be read.'
             }
           />
         )}
       >
         <div className="space-y-6">
           {/* ══ THE ID2 STRIP ═══════════════════════════════════════════════ */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="screening-strip">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3" data-testid="screening-strip">
             <ScreenTile
-              label="Scored"
-              value={scored?.available ? `${scored.scored_deals} of ${scored.total_deals}` : null}
-              note={scored?.available
-                ? `${scored.unscored_deals} not yet screened · sandbox runs excluded`
-                : (scored?.reason || 'the score history could not be read')}
+              label="Deals"
+              value={deals?.available ? String(deals.total_deals) : null}
+              note={deals?.available ? 'the deals you can read' : (deals?.reason || 'the deals could not be read')}
             />
             <ScreenTile
-              label="Rubric"
-              value={rubric?.available ? `${rubric.dimensions.length} dims` : null}
-              note={rubric?.available ? 'fixed in code · no per-firm weighting stored' : 'unreadable'}
-            />
-            <ScreenTile
-              label="Open flags"
-              value={flags?.available ? String(flags.open) : null}
-              note={flags?.available
-                ? (Object.keys(flags.by_severity).length
-                  ? Object.entries(flags.by_severity).map(([sev, n]) => `${n} ${sev}`).join(' · ')
-                  : 'no flag on any scored deal')
-                : (flags?.reason || 'unreadable')}
-              tone={flags?.available && flags.open ? 'text-amber-700 dark:text-amber-300' : ''}
+              label="Scorecards"
+              value={scoredCount === null ? null : `${scoredCount} of ${dealRows.length}`}
+              note={strips.status === 'error'
+                ? 'the scorecards could not be read'
+                : `with a scope scored and open to you · ${SCOPES.length} scopes, never one total`}
             />
             <ScreenTile
               label="Pass taxonomy"
@@ -225,62 +175,40 @@ export default function InvestorScreeningZone() {
             />
           </div>
 
-          {/* ══ THE RUBRIC, when the chip asks for it ═══════════════════════ */}
-          {view === 'rubric' && rubric?.available && (
-            <Instrument
-              testid="screening-rubric"
-              title="The rubric"
-              meta="Six dimensions · weights fixed in code"
-              cols="1fr 2fr"
-              head={['Dimension', 'What it scores']}
-              rows={rubric.dimensions.map((d) => ({
-                key: d.key,
-                cells: [
-                  { text: d.label },
-                  { text: d.parts.join(', ').replaceAll('_', ' ') },
-                ],
-              }))}
-              note={rubric.editable_reason}
-            />
+          {/* ══ THE DEALS AND THEIR SCORECARDS ══════════════════════════════ */}
+          {view === 'scorecards' && (
+            deals && !deals.available ? (
+              <p className="text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400" data-testid="screening-deals-unreadable">
+                <NotRecorded /> — the deals could not be read. That is not a claim that there are none.
+              </p>
+            ) : (
+              <Instrument
+                testid="screening-scorecards"
+                title="Scorecards"
+                meta="Each deal's venture scorecard · eleven scopes, no total"
+                cols="1.3fr .9fr 1fr"
+                head={['Company', 'Deal status', 'Scorecard']}
+                rows={visible.map((r) => ({
+                  key: r.deal_id,
+                  cells: [
+                    {
+                      text: r.company || `Deal #${r.deal_id}`,
+                      sub: r.sector || undefined,
+                      node: <OpenDeal id={r.deal_id} onOpen={navigate} />,
+                    },
+                    r.deal_status ? { text: String(r.deal_status).replaceAll('_', ' ') } : { nr: true },
+                    { text: '', node: <span className="inline-flex items-center gap-2"><DealStrip read={strips} dealId={r.deal_id} /><Link to={`/deals/${r.deal_id}/scorecard`} className="text-[10.5px] font-semibold text-axal-violet-deep underline underline-offset-2 dark:text-violet-300">Scorecard</Link></span> },
+                  ],
+                }))}
+                note="A scorecard closed to you, or one its founder has not shared, is an outline, never a low score. Each scope is computed from the venture's own records; Scorecard opens the deal's panel."
+              />
+            )
           )}
-
-          {/* ══ THE SCORED DEALS ════════════════════════════════════════════ */}
-          {(view === 'scored' || view === 'flags') && (
-            <Instrument
-              testid="screening-scored"
-              title={view === 'flags' ? 'Flagged for review' : 'Scored deals'}
-              meta={view === 'flags'
-                ? 'A flag is the scorer disagreeing with itself, not a verdict'
-                : 'Latest official snapshot per deal · sandbox excluded'}
-              cols="1.2fr .8fr .7fr .9fr 1fr"
-              head={['Company', 'Tier', 'Score', 'Review', 'Scored']}
-              rows={visible.map((r) => ({
-                key: r.deal_id,
-                cells: [
-                  {
-                    text: r.company || `Deal #${r.deal_id}`,
-                    sub: r.sector || undefined,
-                    node: <OpenDeal id={r.deal_id} onOpen={navigate} />,
-                  },
-                  r.tier ? { text: '', pill: r.tier, pillTone: 'info' } : { nr: true },
-                  r.total_score === null ? { nr: true } : { text: String(r.total_score) },
-                  r.review_status === 'flagged'
-                    ? {
-                      text: '',
-                      pill: 'Flagged',
-                      pillTone: 'warn',
-                      sub: r.flags.map((f) => `${f.type} · ${f.severity}`).join(', ') || undefined,
-                    }
-                    : r.review_status
-                      ? { text: String(r.review_status).replaceAll('_', ' ') }
-                      : { nr: true },
-                  day(r.scored_at) ? { text: day(r.scored_at) } : { nr: true },
-                ],
-              }))}
-              note={view === 'flags'
-                ? 'A flag is raised when a score jumps against the same project’s own history, or against its practice runs — the scorer disagreeing with itself. It is a reason to look, never a verdict on the company, and it is shown with its type and severity rather than as a red dot nobody can act on.'
-                : 'One snapshot per deal, the newest official one. A SANDBOX run is a rehearsal and is excluded, because a practice score that moved the desk’s numbers would make the numbers untrustworthy. A deal with no snapshot is not badly scored — it has not been screened, and it renders as unrecorded rather than as a zero.'}
-            />
+          {view === 'scorecards' && dealRows.length > 0 && (
+            <div className="flex flex-col gap-1" data-testid="screening-strip-key">
+              <StripKey />
+              <Link to="/scoring/method" className="w-fit text-[12px] font-semibold text-axal-violet-deep underline underline-offset-2 dark:text-violet-300">How scoring works</Link>
+            </div>
           )}
 
           {/* ══ THE INSTRUMENT THE ARTBOARD NAMES ═══════════════════════════ */}
@@ -327,40 +255,18 @@ export default function InvestorScreeningZone() {
             )
           )}
 
-          <ZoneDraft
-            surface="deals/screening"
-            railOption="draft:screening-memo"
-            label="Draft · screening memo against the rubric"
-            accept="Accept the memo"
-            run="Draft the memo"
-            foot="Every dimension traced to its recorded sub-scores."
-            empty="A memo written against the six dimensions the score actually used, saying where the record is silent rather than scoring that dimension zero."
-            nothingToDraft="No deal has been scored yet, so there is nothing to write a memo against."
-          />
-
-          <StatedLimit title="What this desk cannot do">
+          <StatedLimit title="What this desk does not do">
             <p>
-              <strong>A scoring run is started against one project.</strong>{' '}
-              `POST /api/scoring/score` scores a single project and locks the
-              snapshot for the week. Nothing batches them, so
-              <em> New batch run</em> is not offered — a button that scored one
-              project while calling itself a batch would be the wrong claim
-              about what happened.
+              <strong>It scores nothing itself.</strong> Each deal&rsquo;s scores are its
+              venture scorecard, computed from the venture&rsquo;s own records. There is no
+              total and no tier: each investor sorts by their own weighting on Deal flow.
             </p>
             <p className="mt-2">
-              <strong>The weights are fixed in code.</strong> The six dimensions
-              are real and stored per snapshot; what no store holds is a
-              per-firm weighting, so there is nothing for <em>Edit rubric</em>
-              {' '}to write to. This is narrower than &ldquo;no rubric is
-              stored&rdquo;, which is what this row used to say and was not
-              true.
+              <strong>The Lab scorer is practice.</strong> Its sliders are the founder&rsquo;s
+              own answers, so its snapshots are not shown to investors here (owner question 8).
             </p>
             <p className="mt-2">
-              <strong>No red-flag rule is written by a person.</strong> Flags
-              come from fixed heuristics — a jump in inputs, a jump against the
-              project&rsquo;s own practice runs — and carry a type and a
-              severity. The artboard draws a rules editor; there is no rules
-              table for one to edit.
+              <strong>No score moves a deal.</strong> A person decides; a scorecard informs.
             </p>
           </StatedLimit>
         </div>

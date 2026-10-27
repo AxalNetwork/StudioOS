@@ -29,6 +29,7 @@ import {
   columnSummary, intakeNotice, investorsLine, lensRows, nextStatus, notRaisingLine, rowActions, studioRow, studioViewHref, studioViewOf,
 } from './studioLensModel';
 import { DealTermsEditor, DraftDealModal, PassAnalyticsPanel, PassModal, SlaPicker, StageFunnelPanel } from './StudioParts';
+import Sheet from '../../../ui/Sheet.jsx';
 
 const box = 'flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const pill = (on) => `rounded-full px-3 py-1 text-[13px] font-semibold ${on ? 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`;
@@ -186,11 +187,11 @@ function AdvanceDialog({ row, onClose, onDone }) {
 
 function TermsDialog({ row, onClose, onDone }) {
   return (
-    <Lightbox phone="sheet" label={`Edit the terms of ${row.name}`} title={`Edit the terms of ${row.name}`} onClose={onClose} testId="studio-terms">
+    <Sheet phone="sheet" label={`Edit the terms of ${row.name}`} title={`Edit the terms of ${row.name}`} onClose={onClose} testId="studio-terms">
       <div className="px-5 py-4">
         <DealTermsEditor deal={{ id: row.id, ...row.terms, source: row.source }} onDone={() => onDone(`The terms of ${row.name} were saved.`)} onCancel={onClose} />
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

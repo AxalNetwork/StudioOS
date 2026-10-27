@@ -17,7 +17,7 @@ export default {
         'Integrations — connected accounts (LinkedIn, Google, Microsoft, Slack, HubSpot, Salesforce, DocuSign) with disconnect controls.',
         'Billing — current plan, payment method, and invoices.',
         'Appearance — choose a light or dark theme.',
-        'Developer — feature flags, search index re-sync, raw user object (admins only).',
+        'Builder — the StudioOS MCP server and the assistants you connected, your API keys, API usage and the Activity of every call (every profile).',
       ],
       tips: [
         'Bookmark direct links to specific tabs (e.g. /account/notifications) for fast access.',

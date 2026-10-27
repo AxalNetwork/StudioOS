@@ -5,6 +5,7 @@ import { CARD, H2, LINK, MUTED, Pill } from './PortfolioReports';
 import {
   FIGURE_KEYS, HOLDING_NOTES, dayOf, formatValue, periodWord, readerModules, seriesLine, seriesOf, termsRows, timelineRows, whatChanged,
 } from './portfolioReportsModel';
+import Sheet from '../../ui/Sheet.jsx';
 
 /**
  * D1061 (#2931) — the company page's blocks (RPT10, RPT11, RPT13): Figures as
@@ -214,7 +215,7 @@ export function ReportReader({ uid, company, onClose, row = null }) {
   const title = r ? (r.title || `${periodWord(r.period?.label)} report`) : 'Report';
   // RPT21: on a phone the reader is a full-screen sheet with "‹ Reports" in place of the dialog's head.
   return (
-    <Lightbox label="Report" eyebrow={narrow ? undefined : `Report from ${company}`} title={narrow ? undefined : title} onClose={onClose} width={640} testId="company-reader"
+    <Sheet label="Report" eyebrow={narrow ? undefined : `Report from ${company}`} title={narrow ? undefined : title} onClose={onClose} width={640} testId="company-reader"
       footer={<Foot><button type="button" className={BTN} onClick={onClose}>Close</button></Foot>}>
       <div className="flex flex-col gap-3 px-5 py-4">
         {narrow ? <SheetHead title={title} pill={row?.pill} line={`${row?.kind || 'Report'} from ${company}`} onBack={onClose} /> : null}
@@ -260,7 +261,7 @@ export function ReportReader({ uid, company, onClose, row = null }) {
           </>
         ) : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 
@@ -269,7 +270,7 @@ export function ReportReader({ uid, company, onClose, row = null }) {
 /** A period not sent, full screen on a phone: its pill, when it was due and what the company said, and Ask pinned at its foot. */
 export function PeriodSheet({ company, row, onClose, onAsk, onWaive }) {
   return (
-    <Lightbox label={row.title} onClose={onClose} width={560} testId="company-period-sheet"
+    <Sheet label={row.title} onClose={onClose} width={560} testId="company-period-sheet"
       footer={(row.canAsk || row.canWaive) ? (
         <Foot>
           {row.canWaive ? <button type="button" className={BTN} onClick={onWaive} aria-haspopup="dialog" data-testid="company-sheet-waive">Waive this period</button> : null}
@@ -282,7 +283,7 @@ export function PeriodSheet({ company, row, onClose, onAsk, onWaive }) {
         {row.asked ? <p className={MUTED} data-testid="company-sheet-asked">You asked for this report. The company was told; nobody else sees it.</p> : null}
         <p className={MUTED}>{row.canAsk ? 'You can ask once per period. The company sees your request; nobody else does.' : 'You can ask for a report once it is late.'}</p>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

@@ -4,7 +4,7 @@ The venture scorecard's own pages, from the owner's canvas "Venture scorecard".
 
 | File | Address | Board |
 |---|---|---|
-| `ScoringMethodPage.jsx` | `/scoring/method` (any signed-in member) | SC11 How scoring works |
+| `ScoringMethodPage.jsx` | `/scoring/method` (any signed-in member) | SC11 How scoring works. D1260: names the model in force and cites each scope's inputs from `GET /api/venture-scores/models` |
 | `FounderScorecardPage.jsx` | `/raise/scorecard` and `/raise/scorecard/trajectory` (founder, admin) | SC8 Investor scorecard, SC12 Trajectory (D1258) |
 | `AdvisorScorecardPage.jsx` | `/practice/scorecards/:projectId` (advisor, when shared) | SC21 Advisor · read only (D1258) |
 | `HqScoringPage.jsx` | `/admin/platform/scoring` (HQ only) | SC13 Platform › Scoring |

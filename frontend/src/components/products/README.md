@@ -2,7 +2,7 @@
 
 The pieces of `/plans-and-pricing` (`../../pages/ProductsPage.jsx`; `/products`
 redirects there): the catalogue's cards, the one-time cart and its drawer, the
-product modal with Stripe's embedded checkout, and the Token packs section.
+product sheet with Stripe's embedded checkout, and the Token packs section.
 `../../pages/CheckoutPage.jsx` and `../../pages/CheckoutConfirmationPage.jsx`
 reuse the cart and the shared helpers.
 
@@ -15,7 +15,7 @@ reuse the cart and the shared helpers.
 | `FreePlanCard.jsx` | D755 §11: a plan with no Stripe product (Founder Free, Investor Free, Exploring and other accounts): $0 and its AI allowance. |
 | `PlanAi.jsx` | D755 §11: the AI part of a plan card and "Your plan": the allowance, what it covers, when it resets, and Top up with token packs. Its words are `../../lib/plansPricing.js`'s. |
 | `ProductCard.jsx` | An add-on's card: Add to Order for a one-time price, Subscribe for a recurring one. |
-| `ProductSlideOver.jsx` | The product modal (the file keeps its old name), opened by a card or by `/plans-and-pricing/:productId`. |
+| `ProductSlideOver.jsx` | The product's detail, the shared right-side `Sheet` at 760px (D1317; the file keeps its old name), opened by a card or by `/pricing/products/:productId`; closing returns to `/pricing/products`. |
 | `CartDrawer.jsx` | The cart drawer: lines, quantities, the promo field, and the totals. |
 | `TokenPacksSection.jsx` | D755: the Token packs section at `#token-packs` (`TOKEN_PACKS_PATH` in `../../lib/aiTokens.js`), and `isPackProduct`. Each pack's offer (D790: its bonus, when it ends, first purchase only) is `aiTokens.js`'s `packOfferLines`. |
 

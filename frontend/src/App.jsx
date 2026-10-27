@@ -54,6 +54,8 @@ import BranchSuspendedBar from './components/BranchSuspendedBar';
 import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
 import BranchNotDeployedBar from './components/BranchNotDeployedBar';
+import CheckoutHost from './components/checkout/CheckoutHost';
+import RenewalBanner from './components/checkout/RenewalBanner';
 // D504 — the phone's tab bar (D425), mounted by the shell beside the drawer's
 // backdrop. It takes the shell role AS RESOLVED, never the sidebar's
 // `|| 'founder'` default: a viewer with no role gets no bar.
@@ -78,6 +80,7 @@ import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
 import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
+import { BuilderRedirect } from './pages/account/builder/BuilderRedirect.jsx';
 import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
@@ -1318,6 +1321,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             cannot be dismissed and stores nothing; it draws nothing for
             everyone else, and nothing once the branch is live. */}
         <SafeMount name="BranchNotDeployedBar"><BranchNotDeployedBar strip={notDeployed} /></SafeMount>
+
+        {/* D1054 (#2905) — the renewal banner (PAYX10): a failed renewal, a
+            payment the bank asks to confirm, or a plan that ended. It draws
+            nothing without an open alert, and Dismiss hides it for the day.
+            The checkout sheet it opens is the global CheckoutHost's. */}
+        <SafeMount name="RenewalBanner"><RenewalBanner user={user} /></SafeMount>
 
         {/* D699 — below 1024px a founder gets the phone band instead
             (ui/phone/PhoneHeader.jsx); everyone else, and a founder at 1024px
@@ -2605,11 +2614,14 @@ function AppInner() {
       <Route path="/account/email/revoke" element={<EmailChangeRevokePage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
-      {/* D568 — the Account center's Developer section reads GET
-          /settings/developer, which answers 403 to every role but admin, so
-          its address carries the same gate. The static path outranks
-          `:section` below; the page also lists the section for admins only. */}
-      <Route path="/account/developer" element={guard(['admin'], <SettingsPage />)} />
+      {/* D1315 (#2418) — Account › Builder, which was Developer, for every profile: MCP and services
+          (/account/builder), /keys, /usage, /activity and the drawers under them. The old addresses
+          forward here keeping the sub-path and the query (the Worker answers a page load with a 308)
+          and are counted (REDIRECT_ROUTES) until #2319. */}
+      <Route path="/account/developer" element={<BuilderRedirect />} />
+      <Route path="/account/developer/*" element={<BuilderRedirect />} />
+      <Route path="/account/builder" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      <Route path="/account/builder/*" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       {/* D753 — a connector's own page, inside the Account center. */}
       <Route path="/account/connectors/:key" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/account/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
@@ -3883,6 +3895,8 @@ function AppInner() {
       <Route path="/raise/scorecard/trajectory" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage tab="trajectory" />)} />
       {/* D1261 (#2430): Evidence (VR1) and its item and claim drawers (VR2, VR3) as addresses, before /raise/:slug. */}
       <Route path="/raise/evidence" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/review" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
+      <Route path="/raise/evidence/preview" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/item/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/evidence/claim/:id" element={guard(labRoles(['admin', 'founder']), <RaiseEvidence />)} />
       <Route path="/raise/use-of-funds/runway/forecast" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="use-of-funds" uofSub="forecast" />)} />
@@ -4100,6 +4114,16 @@ function GlobalPaywallMount() {
   return <PaywallModal user={user} />;
 }
 
+// D1054 (#2905) — the one host of the checkout sheet outside Pricing, mounted
+// beside the paywall for the paywall's reason: `openCheckout` is called from
+// the paywall, Billing, Usage and every Upgrade, so the sheet cannot live on
+// one page. It renders nothing for a visitor, or until a plan is asked for.
+function GlobalCheckoutMount() {
+  const { user } = useAuth();
+  if (!user) return null;
+  return <CheckoutHost user={user} />;
+}
+
 // Founder-only global listener — lazy + gated on auth so a logged-out visitor
 // (e.g. the landing page) never downloads its chunk. The `spinout-lab:advanced`
 // events it reacts to are only ever dispatched by authenticated founder actions.
@@ -4205,6 +4229,7 @@ export default function App() {
             whole app is gone". */}
         <SafeMount name="SpinoutLabListener"><GlobalSpinoutLabListenerMount /></SafeMount>
         <SafeMount name="GlobalPaywallMount"><GlobalPaywallMount /></SafeMount>
+        <SafeMount name="GlobalCheckoutMount"><GlobalCheckoutMount /></SafeMount>
         {/* D136 — mounted here for the same reason the paywall is: the
             compliance freeze refuses writes on every admin surface, so the
             thing that explains the refusal cannot live on one page. It renders

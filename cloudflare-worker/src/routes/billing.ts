@@ -958,6 +958,8 @@ function normSub(sub: StripeSubscription) {
     cancel_at_period_end: !!sub.cancel_at_period_end,
     current_period_end: subPeriodEnd(sub),
     cancel_at: sub.cancel_at ? new Date(sub.cancel_at * 1000).toISOString() : null,
+    // D1054 (PAYX11): "Cancelled on [date]" on Billing's cancelled card.
+    canceled_at: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
     items: (sub.items?.data ?? []).map((it) => ({
       id: it.id,
       quantity: it.quantity ?? 1,

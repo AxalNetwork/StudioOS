@@ -19,7 +19,7 @@ import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, usePhoneWidt
 import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
 // D568 — the Account center canvas (`ac-*`): its section list, the five
 // profile cards, the push devices and sessions cards, the plan line and
-// orders, and the two sections the page did not have (Following, Developer).
+// orders, and the two sections the page did not have (Following, Developer, now Builder: D1315).
 import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switch, useAccountRead } from './account/AccountCenter';
 // D700 — the phone's `/account`: A1m's bar copy and the address rules.
 import { accountPathFor, accountViewFor, connectorKeyFor } from './account/accountPhone';
@@ -43,7 +43,9 @@ import AiTokensPage from './account/AiTokensPage';
 import { USAGE_PAGES, usagePageFor } from './account/limitsModel';
 import ConnectorsSection from './account/AccountConnectors';
 import ConnectorPage from './account/ConnectorPage';
-import DeveloperSection from './account/AccountDeveloper';
+// D1315 (#2418): Account › Builder replaced Developer; its pages and drawers are addresses under /account/builder.
+import BuilderSection from './account/builder/BuilderSection';
+import { BUILDER_PAGES, builderViewFor, builderPathFor } from './account/builder/builderModel';
 import { channelOn } from './account/accountCenterModel';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
 import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
@@ -51,6 +53,7 @@ import ColleagueSeatsPanel from './ColleagueSeatsPanel';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import { TIER_PLANS } from '../components/PaywallModal';
+import { openCheckout } from '../components/checkout/checkoutEntry';
 import { FREE, priceText, usePlansRead } from '../lib/planPrices';
 import BillingDashboard from '../components/BillingDashboard';
 import AuthorCard from '../components/AuthorCard';
@@ -232,7 +235,7 @@ const ActivityPage = lazy(() => import('./ActivityPage'));
 // D568 — THE ACCOUNT CENTER'S SECTION LIST, in the canvas's order and with its
 // names (`acNav` in `design/incoming/ops-data.js`): Profile and identity,
 // Notifications, Sign-in and security, Billing and orders, Following, and
-// Developer for the one role its routes answer. The ids did not change, so
+// Developer for the one role its routes answer (Builder for every profile since D1315). The ids did not change, so
 // every deep link that names a section still lands on it. The four sections
 // the canvas does not draw are kept, under "More" (`group: 'more'`), rather
 // than dropped with the screens they hold.
@@ -249,8 +252,8 @@ const SECTIONS = [
   // Connectors canvas draws the list. Integrations left "More" with it.
   { id: 'connectors', label: 'Connectors' },
   { id: 'following', label: 'Following' },
-  // `GET /settings/developer` answers 403 to every role but admin.
-  { id: 'developer', label: 'Developer', roles: ['admin'] },
+  // D1315 (#2418): Builder, for every profile (owner question 2, A): MCP and services, API keys, API usage, Activity.
+  { id: 'builder', label: 'Builder' },
   { id: 'onboarding', label: 'Onboarding', group: 'more' },
   { id: 'appearance', label: 'Appearance', group: 'more' },
   { id: 'activity', label: 'Activity Log', group: 'more' },
@@ -277,6 +280,8 @@ export default function SettingsPage() {
   const connectorKey = active === 'connectors' ? connectorKeyFor(location.pathname) : null;
   // D807 — which Usage page the address opens: the overview, or Limits.
   const usagePage = active === 'usage' ? usagePageFor(location.pathname) : null;
+  // D1315 — Builder's page and drawer, read from the address.
+  const builderView = active === 'builder' ? builderViewFor(location.pathname) : null;
   // D1138 — Companies and projects' tabs are addresses of their own; the canonicalising effect keeps them.
   const companiesTab = active === 'companies' ? companiesTabFor(location.pathname) : null;
   // D1139 — `/account/companies/<uid>` is that company's lightbox, kept by the same effect.
@@ -289,7 +294,7 @@ export default function SettingsPage() {
   // section through its address. On a phone each section is a page of its own,
   // so it is pushed and Back returns to the index; on desktop it replaces, as
   // the column always has.
-  const setActive = (id, page = null) => navigate({ pathname: accountPathFor({ section: id, phone, usagePage: page }) }, { replace: !phone });
+  const setActive = (id, page = null) => navigate({ pathname: id === 'builder' ? builderPathFor({ page: page ?? 'services' }) : accountPathFor({ section: id, phone, usagePage: page }) }, { replace: !phone });
 
   // Keep the URL in lockstep with the open section so deep links work both
   // ways (bell → /account/notifications, sidebar click → URL update).
@@ -310,7 +315,7 @@ export default function SettingsPage() {
   // account recovery. A canonicalising hop must not eat the part of the link
   // that said why it was sent.
   useEffect(() => {
-    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid });
+    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid, builderView });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
       navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true, state: location.state });
     }
@@ -412,13 +417,13 @@ export default function SettingsPage() {
 
   const role = (data.role || '').toLowerCase();
   const sections = SECTIONS.filter(s => !s.roles || s.roles.includes(role));
-  // Render-time gate: a non-admin who deep-links to /account/developer must
-  // not get the Developer UI rendered just because the URL parsed `active`
+  // Render-time gate: a role that deep-links to a section it may not open
+  // must not get that section rendered just because the URL parsed `active`
   // before role was known. Mirror the nav filter on the content side.
   const allowedIds = new Set(sections.map(s => s.id));
   const safeActive = allowedIds.has(active) ? active : 'account';
   const reloadAccount = () => api.getSettings().then(setData);
-  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey, usagePage };
+  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey, usagePage, builderView };
 
   const toastNote = toast && (
     <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -461,7 +466,7 @@ export default function SettingsPage() {
 
       <div className="grid lg:grid-cols-[200px_1fr] gap-6">
         <AccountSectionNav sections={sections} active={safeActive} onSelect={setActive}
-          subpages={{ usage: USAGE_PAGES }} activeSubpage={safeActive === 'usage' ? usagePage : null} />
+          subpages={{ usage: USAGE_PAGES, builder: BUILDER_PAGES }} activeSubpage={safeActive === 'usage' ? usagePage : safeActive === 'builder' ? builderView?.page ?? 'services' : null} />
         <AccountPanes safeActive={safeActive} {...paneProps} />
       </div>
     </div>
@@ -471,7 +476,7 @@ export default function SettingsPage() {
 }
 
 /** One section's pane: the same cards at every width. */
-function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null, usagePage = null }) {
+function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null, usagePage = null, builderView = null }) {
   return (
     <div className="min-w-0 space-y-6">
       {safeActive === 'account' && (
@@ -519,7 +524,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
       {safeActive === 'companies' && <CompaniesProjects role={role} entityRecords={<YourCompaniesSection flash={flash} />} />}
       {safeActive === 'following' && <FollowingSection />}
       {safeActive === 'usage' && (usagePage === 'storage' ? <StoragePage role={role} /> : usagePage === 'ai-tokens' ? <AiTokensPage /> : usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
-      {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
+      {safeActive === 'builder' && <BuilderSection view={builderView ?? undefined} />}
       {safeActive === 'onboarding' && <OnboardingSettingsTab />}
       {safeActive === 'connectors' && <ConnectorsTab connectorKey={connectorKey} />}
       {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
@@ -4719,8 +4724,7 @@ function PersonaBillingPanel({ flash, billing }) {
   const status = billing.status === 'ready' ? billing.data : null;
   const loading = billing.status === 'loading';
   const refresh = billing.reload;
-  const [checkout, setCheckout] = useState(null); // { clientSecret } once checkout starts
-  const [busy, setBusy] = useState(false);
+  const busy = false;
   const prices = usePlansRead();
 
   // Flash on return from a (dev-upgrade) redirect, mirroring the other panels.
@@ -4751,18 +4755,8 @@ function PersonaBillingPanel({ flash, billing }) {
   const trialDaysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86_400_000)) : null;
   const hasCustomer = !!status?.has_customer;
 
-  const startCheckout = async () => {
-    setBusy(true);
-    try {
-      const res = await api.planCheckout('month');
-      if (res?.url) { window.location.href = res.url; return; }      // keyless dev-upgrade
-      if (res?.free) { flash?.('Your plan is now active.'); refresh(); return; }
-      if (res?.client_secret) { setCheckout({ clientSecret: res.client_secret }); return; }
-      flash?.('Could not start checkout. Please try again.', 'error');
-    } catch (e) {
-      flash?.(e?.message || 'Online signup for this plan isn’t available yet — contact billing@axal.vc.', 'error');
-    } finally { setBusy(false); }
-  };
+  // D1054 (#2905, PAYX14): Subscribe opens the checkout sheet over Billing, on D1051's routes.
+  const startCheckout = () => openCheckout({ plan_key: `${group}:pro`, from: { label: 'Billing', href: '/account/billing' } });
 
   return (
     <>
@@ -4838,21 +4832,6 @@ function PersonaBillingPanel({ flash, billing }) {
             })}
           </div>
 
-          {/* Inline (no-redirect) checkout once the user starts subscribing. */}
-          {checkout?.clientSecret && (
-            <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{defs.pro.name} — {priceText(prices, group)}</div>
-                <button type="button" onClick={() => setCheckout(null)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">Cancel</button>
-              </div>
-              <AxalCheckout
-                clientSecret={checkout.clientSecret}
-                submitLabel="Subscribe"
-                onSuccess={() => { flash?.('Payment successful — activating your plan.'); setCheckout(null); refresh(); }}
-                onError={(e) => flash?.(e?.message || 'Payment failed', 'error')}
-              />
-            </div>
-          )}
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
             Questions? Contact <a className="text-violet-700 hover:underline" href="mailto:billing@axal.vc">billing@axal.vc</a>.
           </div>
@@ -4870,7 +4849,7 @@ function FounderBillingPanel({ flash, billing }) {
   // were true. Now a failed read draws nothing here; the plan line above says
   // it could not be read and offers a retry.
   const status = billing.status === 'ready' ? billing.data : null;
-  const [busy, setBusy] = useState(null);
+  const busy = null;
   const prices = usePlansRead();
 
   // Auto-flash when the URL carries an upgrade-completion param.
@@ -4900,14 +4879,8 @@ function FounderBillingPanel({ flash, billing }) {
   const daysUntil = (d) => (d ? Math.max(0, Math.ceil((d.getTime() - Date.now()) / 86_400_000)) : null);
   const trialDaysLeft = daysUntil(trialEnds);
 
-  const upgrade = async (target) => {
-    setBusy(target);
-    try {
-      const res = await api.tierCheckout(target);
-      if (res?.url) window.location.href = res.url;
-    } catch (e) { flash?.(e.message || 'Checkout failed', 'error'); }
-    finally { setBusy(null); }
-  };
+  // D1054 (#2905): Upgrade opens the checkout sheet over Billing; it no longer leaves for Stripe.
+  const upgrade = (target) => openCheckout({ plan_key: `founder:${target}`, from: { label: 'Billing', href: '/account/billing' } });
 
   const refreshStatus = billing.reload;
 
@@ -5146,7 +5119,7 @@ function InvestorBillingPanel({ flash, billing }) {
   const status = billing.status === 'ready' ? billing.data : null;
   const refresh = billing.reload;
   const [billingCycle, setBillingCycle] = useState('monthly');
-  const [busy, setBusy] = useState(null);
+  const busy = null;
   const prices = usePlansRead();
 
   // Stripe-redirect flash banners (mirrors FounderBillingPanel).
@@ -5169,15 +5142,9 @@ function InvestorBillingPanel({ flash, billing }) {
   const hasCustomer = !!status.has_customer;
   const quotas = status.quotas || {};
 
-  const upgrade = async (target) => {
-    const plan = `investor_${target === 'professional' ? 'pro' : 'inst'}_${billingCycle === 'yearly' ? 'yearly' : 'monthly'}`;
-    setBusy(target);
-    try {
-      const res = await api.investorCheckout(plan);
-      if (res?.url) window.location.href = res.url;
-    } catch (e) { flash?.(e.message || 'Checkout failed', 'error'); }
-    finally { setBusy(null); }
-  };
+  // D1054 (#2905): Upgrade opens the checkout sheet over Billing, in the cycle shown; Institutional
+  // opens it on the sales line (PAYX13), since the catalogue does not sell it here.
+  const upgrade = (target) => openCheckout({ plan_key: `investor:${target}`, interval: billingCycle === 'yearly' ? 'yearly' : 'monthly', from: { label: 'Billing', href: '/account/billing' } });
 
   const TIER_LABEL = {
     free: 'Free',

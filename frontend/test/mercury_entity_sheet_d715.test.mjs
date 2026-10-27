@@ -173,6 +173,10 @@ test('the Super Admin: four entities in order, endings, the Fund note, the previ
     assert.ok(t.includes(ENTITY_SHEET_AUDIT_FOOT), 'the sheet says "sheet" (S1 on #1991)');
     assert.ok(!t.includes('Opening this page is recorded'), 'never a page\'s sentence inside a sheet');
     for (const id of ['mercury-sync-holdings', 'mercury-replace-holdings', 'mercury-disconnect-holdings', 'mercury-connect-fund']) assert.ok(m.by(id), id);
+    // D1317: the entity sheet is the shared Sheet, 520px, named by its title.
+    assert.equal(m.pr(m.by('mercury-entity-sheet')).role, 'dialog');
+    assert.ok(m.pr(m.by('mercury-entity-sheet'))['aria-labelledby']);
+    assert.equal(m.pr(m.by('mercury-entity-sheet'))['data-width'], 520);
     assert.equal(m.by('mercury-sync-fund'), undefined, 'no sync for an entity that is not connected');
     assert.equal(m.by('mercury-admin-only'), undefined);
   } finally { await m.unmount(); }

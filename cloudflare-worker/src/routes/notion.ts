@@ -41,6 +41,7 @@ import {
 import { AcceptRefused, acceptProposal, deleteFact, dismissProposal, factWriterFor, syncSection, type SourceRow } from '../services/notion/sync';
 // D1087–D1090: each section's writers and acceptors register themselves on import.
 import '../services/notion/validate';
+import '../services/notion/raise';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -312,7 +313,7 @@ notionCycleRoutes.get('/:section/notion', route(async (c, user) => {
   const live = ledger.filter((l: any) => l.local_id != null);
   const values = writer?.view ? await writer.view(c.env, id, live.map((l: any) => Number(l.local_id))) : new Map();
   const proposals = ((await c.env.DB.prepare(
-    "SELECT id, integration_id, kind, source_key, title, extract, url, status, changed, updated_at FROM notion_proposals WHERE project_id = ? AND module = ? AND status IN ('pending', 'dismissed') ORDER BY id",
+    "SELECT id, integration_id, kind, source_key, title, extract, url, payload_json, status, changed, updated_at FROM notion_proposals WHERE project_id = ? AND module = ? AND status IN ('pending', 'dismissed') ORDER BY id",
   ).bind(id, module).all<any>()).results || []);
   return c.json({
     module, label: NOTION_MODULES[module].label, lands: NOTION_MODULES[module].lands,
@@ -321,10 +322,19 @@ notionCycleRoutes.get('/:section/notion', route(async (c, user) => {
     sources: sources.map((s: any) => ({ ...sourceView(s), mine: Number(s.owner_user_id) === Number(user.id) })),
     facts: live.map((l: any) => ({ ledger_id: Number(l.id), mine: Number(l.integration_id) === Number(mine?.id), as_of: l.last_seen_at, values: values.get(Number(l.local_id)) ?? null })),
     kept_deleted: ledger.length - live.length,
-    proposals: proposals.map((x: any) => ({ id: Number(x.id), mine: Number(x.integration_id) === Number(mine?.id), kind: x.kind, title: x.title, extract: x.extract, url: x.url, status: x.status, changed: !!x.changed, as_of: x.updated_at })),
+    proposals: proposals.map((x: any) => ({ id: Number(x.id), mine: Number(x.integration_id) === Number(mine?.id), kind: x.kind, title: x.title, extract: x.extract, url: x.url, status: x.status, changed: !!x.changed, as_of: x.updated_at,
+      // D1088: "Link to [existing]?" names the row it would link, and whose it is when another connection feeds it.
+      ...(x.kind === 'fact_link' ? { link: linkOf(x.payload_json) } : {}) })),
     writer_ready: !!writer,
   });
 }));
+
+/** A `fact_link` proposal's matched row, as the page draws it: its title and, when fed elsewhere, by whom. */
+function linkOf(raw: string | null): { existing: string | null; fed_by: string | null } {
+  let p: any = {};
+  try { p = JSON.parse(raw || '{}'); } catch { p = {}; }
+  return { existing: typeof p.existing === 'string' ? p.existing : null, fed_by: typeof p.fed_by === 'string' ? p.fed_by : null };
+}
 
 notionCycleRoutes.post('/:section/notion/sync', route(async (c, user) => {
   const section = sectionOf(c);

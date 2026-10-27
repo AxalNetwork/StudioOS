@@ -100,7 +100,7 @@ Verified on `origin/main` at `56c2498983` (2026-10-21) by S21.
   off until the API tier ships").
 - The Super Admin's Integration Keys page holds provider secrets, not member
   keys.
-- DEVELOPER #2418 planned the member-facing page (`/account/developer/keys`).
+- DEVELOPER #2418 planned the member-facing page (`/account/developer/keys`). D1315 renamed the section Builder: the page is `/account/builder/keys`, and the old address forwards there.
 
 ### Runtime
 
@@ -411,6 +411,7 @@ The UI task for AI tokens, added 2026-10-26 (S26):
 | Task | Decision | PR | Where it is |
 |---|---|---|---|
 | #2482 Usage › AI tokens (TOKB), step 1 | D1277 | the step-1 PR | in review; step 2 waits for #3304 (D1278) |
+| #2481 Builder › API usage and Activity (APIU), S17 | D1320 | the APIU PR | in review; built on #3477 (D1315); adds `events/:execution_id`, `grant=`, `outcome=failed` and `group=category` to D845's reads |
 
 ## 8. Progress log
 

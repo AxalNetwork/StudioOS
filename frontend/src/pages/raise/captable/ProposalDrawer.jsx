@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
-import { Lightbox, Unreadable, actionGhost, actionPrimary } from '../../../ui';
+import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import { useWrite } from './CapTableDialog';
 import { MERCURY_ID, closeView, mercuryView, proposalView, toBps } from './historyModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1025 (#2862, CT11a–b) — one proposal, at `/raise/cap-table/proposal/<id>`,
@@ -58,7 +59,7 @@ function Facts({ rows, testId }) {
 
 function Shell({ eyebrow, title, onClose, write, confirm, buttons, children, testId }) {
   return (
-    <Lightbox label={title} eyebrow={eyebrow} title={title} width={600} onClose={() => !write?.busy && onClose()} testId={testId} phone="sheet"
+    <Sheet label={title} eyebrow={eyebrow} title={title} width={600} onClose={() => !write?.busy && onClose()} testId={testId} phone="sheet"
       footer={(
         <div className="flex flex-col gap-2">
           {confirm ? <p className={`m-0 rounded-[10px] border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] font-semibold ${INK} dark:border-gray-700 dark:bg-gray-800`} data-testid={`${testId}-confirm`}>{confirm}</p> : null}
@@ -67,7 +68,7 @@ function Shell({ eyebrow, title, onClose, write, confirm, buttons, children, tes
         </div>
       )}>
       <div className="flex flex-col gap-3 text-[13px]">{children}</div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

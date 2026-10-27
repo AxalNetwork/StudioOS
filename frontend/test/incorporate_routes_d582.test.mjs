@@ -46,6 +46,10 @@ test('the three Lab links go through the helper', () => {
   assert.match(oh, /tool: milestoneTool\(k, user\)/);
   assert.match(oh, /label: 'Incorporate', desc: 'form the entity', to: incorporateRoute\(user\)/);
   const st = codeOnly(read('frontend/src/pages/SpinoutLabStartupPage.jsx'));
+  // D1317: Edit company record is the shared right-side Sheet at 520px; Save submits the form from its footer.
+  assert.match(st, /<Sheet\s+label="Edit company record"\s+title="Edit company record"[\s\S]*?width=\{520\}\s+testId="modal-edit-record"/);
+  assert.match(st, /type="submit"\s+form="edit-record-form"/);
+  assert.match(st, /<form id="edit-record-form" onSubmit=\{saveEdit\}>/);
   assert.match(st, /label: 'Legal entity', note: 'Incorporate in Week 4', to: incorporateRoute\(user\)/);
 });
 

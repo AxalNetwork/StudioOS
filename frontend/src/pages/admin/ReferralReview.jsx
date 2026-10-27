@@ -26,7 +26,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox, PhoneRows, usePhoneWidth } from '../../ui';
+import { PhoneRows, usePhoneWidth } from '../../ui';
 import { api } from '../../lib/api';
 import { rewardSaveLine } from '../../lib/referralRewards';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -39,6 +39,7 @@ import {
   queueParams, queueStatusWord, referrerLine, refusalSentence, reviewPatch, shortDay, statusChoices, statusWord, timelineRow,
 } from './programs/programPagesModel';
 import { HQ_READS_COMMISSIONS, NOTHING_WAITING, NOT_RECORDED, REFERRALS_EMPTY, ageText, hoursSince, isReady } from './programs/programsModel';
+import Sheet from '../../ui/Sheet.jsx';
 
 export const REVIEW_SAVED = SAVED;
 
@@ -222,7 +223,7 @@ export function ReferralDialog({ uid, onClose, onSaved }) {
   const label = row ? referred(row) : 'Referral';
   const sub = row ? `${categoryWord(row.category)} · referred by ${referrerLine(row)}` : null;
   return (
-    <Lightbox label={label} title={label} sub={sub} onClose={onClose} width={640} testId="referral-dialog"
+    <Sheet label={label} title={label} sub={sub} onClose={onClose} width={640} testId="referral-dialog"
       footer={read.status === 'ready' ? <DialogButtons onClose={onClose} action="Save changes" busy={busy} disabled={!patch} onAction={save} refusal={refusal} testId="referral-dialog-save" /> : null}>
       <div className={DIALOG_BODY}>
         {read.status === 'loading' ? <Skeleton lines={4} /> : null}
@@ -267,7 +268,7 @@ export function ReferralDialog({ uid, onClose, onSaved }) {
           </>
         ) : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

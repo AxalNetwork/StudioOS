@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox, actionGhost, actionPrimary } from '../../ui';
+import { actionGhost, actionPrimary } from '../../ui';
+import Sheet from '../../ui/Sheet.jsx';
 import { buildPlanApi } from '../../lib/api/buildPlan';
 import { connectorsApi } from '../../lib/api/connectors';
 import {
@@ -116,7 +117,7 @@ export default function SendSheet({ projectId, scope = 'venture', items, onClose
   );
 
   return (
-    <Lightbox label="Send to…" title="Send to…" sub={`Send · ${picked.length} accepted ${picked.length === 1 ? 'item' : 'items'}`} onClose={close} width={600} testId="plan-send" footer={footer}>
+    <Sheet label="Send to…" title="Send to…" sub={`Send · ${picked.length} accepted ${picked.length === 1 ? 'item' : 'items'}`} onClose={close} width={600} testId="plan-send" footer={footer}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Send to" data-testid="plan-send-tabs">
           {PROVIDERS.map((p) => (
@@ -173,7 +174,7 @@ export default function SendSheet({ projectId, scope = 'venture', items, onClose
           onDownload={(t) => say(download('plan-items.md', t), 'Downloaded plan-items.md.', 'Could not download. Copy it instead.')} /> : null}
         {said ? <p className={MUTED} role="status" data-testid="plan-send-said">{said}</p> : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

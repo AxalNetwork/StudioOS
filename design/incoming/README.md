@@ -123,6 +123,21 @@ visualiser points at `ring-viz.js` instead of its asset id. No other value was e
 the grid does not draw; they are not landed here.
 
 **Grade: UPGRADE.** D1330 ports `ring-viz.js`'s maths into `frontend/src/lib/ringViz.js`.
+## Landed 2026-10-27 — Fill with Eadwyn (#2431)
+
+The owner's artifacts came from the prompt on #2431:
+- `Fill with Eadwyn Page.dc.html` (`73TF4Ub69riRDiXitxfndd`) is the page;
+- `Fill with Eadwyn · Boards.dc.html` (`DmT8zgB7VQw7oE4Vys5caW`) is the board
+  grid, AF1 to AF24; it imports the page by name.
+
+**Two edits, named.** In both files the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. No other value was
+edited.
+
+**Grade: NEW.** Nothing is mounted: a trigger with no sheet read behind it would
+be a dead control. S21's decision (D1323) records what the boards settle
+(#2431's questions 1 to 5 and 7) and splits the build into six parts, D1324 to
+D1329. The sheet is D1317's shared `Sheet`, at 520px.
 
 ## Landed 2026-10-27 — Grow › Publish to… and sent history (#2400)
 

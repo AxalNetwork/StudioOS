@@ -3,6 +3,7 @@ import { Layers, Plus, Loader2, Sparkles, X, TrendingUp, CheckCircle2, RotateCcw
 import { api } from '../lib/api';
 import SpinoutWizard from '../components/SpinoutWizard';
 import { useWebSocket } from '../hooks/useWebSocket';
+import Sheet from '../ui/Sheet.jsx';
 
 const STAGES = [
   { id: 'idea', label: 'Idea', color: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300', border: 'border-gray-300 dark:border-gray-600' },
@@ -485,17 +486,8 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/40 flex justify-end" onClick={onClose}>
-      <div className="bg-white w-full max-w-3xl h-full overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white z-10 dark:border-gray-800 dark:bg-gray-900">
-          <h2 className="text-lg font-semibold truncate">{data?.project?.name || 'Loading…'}</h2>
-          <div className="flex items-center gap-2">
-            {canEdit && <button onClick={triggerReview} disabled={busy} className="flex items-center gap-1 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded">
-              {busy ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} Trigger AI Review
-            </button>}
-            <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100"><X size={18} /></button>
-          </div>
-        </div>
+    <Sheet label={data?.project?.name || "Deal"} title={data?.project?.name || "Loading…"} width={760} testId="pipeline-deal-sheet" onClose={onClose} headerActions={canEdit ? <button onClick={triggerReview} disabled={busy} className="flex items-center gap-1 text-xs bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded">{busy ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} Trigger AI Review</button> : null}>
+      <div className="">
 
         {loading || !data ? <Loading text="" /> : (
           <div className="p-6">
@@ -557,7 +549,7 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
           </div>
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 

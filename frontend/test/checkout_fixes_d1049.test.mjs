@@ -84,7 +84,8 @@ test('checkoutRefusal: every line says no money moved, and none shows a code', (
 test('the paywall has no browser pop-up', () => {
   const src = codeOnly(read('frontend/src/components/PaywallModal.jsx'));
   assert.doesNotMatch(src, /\balert\(|\bconfirm\(|no-alert/);
-  assert.match(src, /role="alert" data-testid="paywall-refusal"/);
+  // D1054 (#2905): the paywall no longer starts a checkout, so it has no refusal of its own: the sheet's are D1053's.
+  assert.doesNotMatch(src, /tierCheckout|investorCheckout|location\.href/);
 });
 
 /* ------------------------------------------------------------------ *
@@ -114,6 +115,8 @@ async function mountedPaywall(handle) {
     text: () => text(container),
     textOf: (id) => text(nodes().find((n) => props(n)['data-testid'] === id)),
     async open(required) { await act(async () => { for (const fn of listeners.get('studioos:tier_required') || []) fn({ detail: { required } }); }); await flush(); },
+    listeners: (type) => listeners.get(type) || [],
+    flush,
     /** The first button whose words start with `label`. */
     async press(label) {
       const node = nodes().find((n) => String(n.tagName).toUpperCase() === 'BUTTON' && text(n).trim().startsWith(label));
@@ -129,30 +132,35 @@ async function mountedPaywall(handle) {
   };
 }
 
-test('mounted: a refused checkout is a line in the paywall, with no pop-up and no code', async () => {
+test('D1054 mounted: Upgrade closes the paywall and opens the checkout sheet over the page, with no request and no redirect', async () => {
   const popped = [];
   const prevAlert = globalThis.alert;
   globalThis.alert = (m) => popped.push(m);
-  const view = await mountedPaywall((url) => (url.includes('/billing/tier/checkout')
-    ? response({ error: 'catalog_price_missing', detail: 'No active Stripe price for tier=growth interval=month' }, 502)
-    : response({})));
-  try {
-    await view.open('growth');
-    assert.match(view.text(), /Upgrade to keep building/);
-    assert.equal(view.textOf('paywall-refusal'), '', 'no line before a checkout is tried');
-    await view.press('Upgrade to ');
-    assert.ok(view.requests.some((r) => r.url.endsWith('/billing/tier/checkout') && r.method === 'POST'));
-    assert.equal(view.textOf('paywall-refusal'), 'Checkout is not open for this plan yet. You were not charged.');
-    assert.deepEqual(popped, [], 'no browser pop-up');
-    assert.doesNotMatch(view.text(), /catalog_price_missing|tier=growth/);
-  } finally { await view.close(); globalThis.alert = prevAlert; }
-});
-
-test('mounted: an answer with no checkout address is a refusal too', async () => {
-  const view = await mountedPaywall((url) => (url.includes('/billing/tier/checkout') ? response({}) : response({})));
+  const view = await mountedPaywall(() => response({}));
+  const opened = [];
+  const prevDispatch = globalThis.dispatchEvent;
+  globalThis.dispatchEvent = (e) => { opened.push([e.type, e.detail]); return true; };
   try {
     await view.open('studio');
-    await view.press('Upgrade to ');
-    assert.equal(view.textOf('paywall-refusal'), 'Checkout could not start. You were not charged. Try again.');
-  } finally { await view.close(); }
+    assert.match(view.text(), /Upgrade to keep building/);
+    await view.press('Upgrade to Raise + Grow');
+    assert.deepEqual(opened, [['studioos:checkout_open', { plan_key: 'founder:studio', interval: 'monthly', from: { label: 'where you were', href: '/' }, unlocks: null }]]);
+    assert.ok(!view.requests.some((r) => /checkout/.test(r.url)), 'no checkout is started from the paywall');
+    assert.doesNotMatch(view.text(), /Upgrade to keep building/, 'the paywall closed');
+    assert.deepEqual(popped, [], 'no browser pop-up');
+  } finally { globalThis.dispatchEvent = prevDispatch; await view.close(); globalThis.alert = prevAlert; }
+});
+
+test('D1054 mounted: a feature named by openPaywall is what the sheet unlocks and where Back to returns', async () => {
+  const view = await mountedPaywall(() => response({}));
+  const opened = [];
+  const prevDispatch = globalThis.dispatchEvent;
+  globalThis.dispatchEvent = (e) => { opened.push(e.detail); return true; };
+  try {
+    await act(async () => { for (const fn of view.listeners('studioos:tier_required')) fn({ detail: { required: 'studio', feature: 'Cap table' } }); });
+    await view.flush();
+    assert.match(view.text(), /Cap table is on Raise \+ Grow\./);
+    await view.press('Upgrade to Raise + Grow');
+    assert.deepEqual(opened[0], { plan_key: 'founder:studio', interval: 'monthly', from: { label: 'Cap table', href: '/' }, unlocks: 'Cap table' });
+  } finally { globalThis.dispatchEvent = prevDispatch; await view.close(); }
 });

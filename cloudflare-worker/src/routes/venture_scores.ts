@@ -29,7 +29,8 @@ import { refuse } from '../util/refusal';
 import { userReadableDealIds } from './deals';
 import { PMF_MODEL_V1 } from '../services/scoring/pmf';
 import { SCOPE_ORDER, VENTURE_MODEL_V1 } from '../services/ventureScoring/model';
-import { scoreVenture, storedScorecard, type StoredScope } from '../services/ventureScoring/store';
+import { liveModel, scoreVenture, storedScorecard, type StoredScope } from '../services/ventureScoring/store';
+import { riskLayers, withRiskLayers } from '../services/ventureScoring/riskLayers';
 import { latestFairness } from '../services/ventureScoring/jobs';
 import {
   BATCH_MAX, ScoreError, askCorrection, dealProject, hasNda, investorOnDeal, investorView, investorsMaySee, isFounderOf, isScope,
@@ -71,20 +72,24 @@ async function fullRead(c: C, user: User, project: { id: number; founder_id: num
     const reviews = await latestReviews(c.env, project.id, stored);
     await logScorecard(c.env, { projectId: project.id, userId: user.id, action: 'venture_score_read',
       details: { viewer, scopes: stored.length, deal_id: dealId, masked: false }, role: 'advisor' });
-    return c.json({ project_id: project.id, viewer, read_only: true, model: VENTURE_MODEL_V1.version, scopes: withReviews(stored, reviews) });
+    // D1260: Risk's sub-rows, the ten layers' analyst reviews, without the analysts' notes.
+    const layers = await riskLayers(c.env, project.id, { notes: false });
+    return c.json({ project_id: project.id, viewer, read_only: true, model: VENTURE_MODEL_V1.version, scopes: withRiskLayers(withReviews(stored, reviews), layers) });
   }
   const result = await scoreVenture(c.env, project.id, { actorId: user.id, trigger: 'read', today: today() });
   const stored = await storedScorecard(c.env, project.id, { inputs: true });
   const reviews = await latestReviews(c.env, project.id, stored);
+  // D1260: Risk's sub-rows; the analysts' notes are studio staff's only.
+  const layers = await riskLayers(c.env, project.id, { notes: viewer === 'staff' });
   const body: Record<string, unknown> = {
     project_id: project.id, viewer, read_only: false, model: result.model, stage: result.stage,
-    scopes: withReviews(result.scopes, reviews),
+    scopes: withRiskLayers(withReviews(result.scopes, reviews), layers),
     corrections: await listCorrections(c.env, project.id),
   };
   if (viewer === 'founder') {
     body.sharing = await readSharing(c.env, project.id);
     // "What investors see": the same masking an investor's read gets, before and after an NDA.
-    body.investor_preview = { before_nda: investorView(stored, reviews, false), after_nda: investorView(stored, reviews, true) };
+    body.investor_preview = { before_nda: investorView(stored, reviews, false), after_nda: withRiskLayers(investorView(stored, reviews, true), layers) };
   } else {
     await logScorecard(c.env, { projectId: project.id, userId: user.id, action: 'venture_score_read',
       details: { viewer, scopes: result.scopes.length, deal_id: dealId, masked: false }, role: roleOf(user) });
@@ -99,8 +104,12 @@ r.get('/models', async (c) => {
   try {
     const stored = await c.env.DB.prepare('SELECT scope, version, published_at FROM scoring_model_versions ORDER BY scope, version')
       .all<{ scope: string; version: string; published_at: string }>();
-    const m = VENTURE_MODEL_V1;
+    // D1260: the method is the model in force, with when it was published. v1.0 scored before any publication was recorded.
+    const m = await liveModel(c.env);
+    const pub = await c.env.DB.prepare('SELECT published_at FROM venture_model_publications WHERE version = ? ORDER BY id DESC LIMIT 1')
+      .bind(m.version).first<{ published_at: string | null }>();
     return c.json({
+      live: { version: m.version, published_at: pub?.published_at ?? null, default_live: !pub },
       version: m.version, floor: m.floor, confidence: m.confidence, bands: m.bands, freshness_days: m.freshness_days,
       order: SCOPE_ORDER,
       scopes: SCOPE_ORDER.map((k) => (k === 'pmf'
@@ -204,7 +213,8 @@ r.get('/deal/:dealId', async (c) => {
     return c.json({
       project_id: projectId, deal_id: dealId, locked: false, nda, model: VENTURE_MODEL_V1.version,
       masked_reason: nda ? null : 'Sign the NDA with this venture to see its inputs.',
-      scopes: investorView(stored, reviews, nda),
+      // D1260: after the NDA, Risk carries the ten layers' analyst reviews, never a note; before it, none.
+      scopes: withRiskLayers(investorView(stored, reviews, nda), nda ? await riskLayers(c.env, projectId, { notes: false }) : null),
     });
   } catch (e) { return fail(c, e); }
 });

@@ -188,6 +188,10 @@ test('Authors: tiles, the table and cards, the row menu and the drawer', async (
     await w.click(w.by('author-open-11'));
     const drawer = w.text('author-drawer');
     assert.ok(drawer.includes('Synthetic Author 11, author'));
+    // D1317: the author drawer is the shared Sheet, 640px.
+    assert.equal(props(w.by('author-drawer')).role, 'dialog');
+    assert.ok(props(w.by('author-drawer'))['aria-labelledby']);
+    assert.equal(props(w.by('author-drawer'))['data-width'], 640);
     assert.ok(w.text('author-facts').includes('Writing since5 Jan 2026'));
     assert.ok(w.text('author-drawer-wait').includes('not read here yet'));
 

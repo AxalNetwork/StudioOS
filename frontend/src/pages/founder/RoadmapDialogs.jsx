@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
+import Sheet from '../../ui/Sheet.jsx';
 
 /**
  * `/build/roadmap`'s two forms — the dependency editor and the scenario editor.
@@ -143,6 +144,10 @@ export function DependenciesDialog({ items, dependencies, onClose, onAdd, onRemo
  * `Export` and `Configure` and no "apply" anywhere, so a scenario is something a
  * founder saves and compares against the live roadmap. Writing it back would be
  * a bulk edit of every quarter on the board from a control nobody drew.
+ *
+ * D1317: a scenario is one record, so its editor is the shared right-side
+ * `Sheet` (its 680px card snaps to 720), the save row in the fixed footer.
+ * The dependency editor works on the whole board's links: it stays in `Shell`.
  */
 export function ScenarioDialog({ items, scenario, onClose, onSave, onDelete }) {
   const [name, setName] = useState(scenario?.name || '');
@@ -181,11 +186,25 @@ export function ScenarioDialog({ items, scenario, onClose, onSave, onDelete }) {
   };
 
   return (
-    <Shell
-      testid="dialog-scenario"
+    <Sheet
+      testId="dialog-scenario"
       title={scenario?.id ? 'Edit scenario' : 'New scenario'}
       sub="Saved beside the roadmap and compared against it. Saving a scenario does not move anything on the live board."
       onClose={onClose}
+      width={720}
+      footer={(
+        <div className="fb-roadmap-sheet-foot">
+          {scenario?.id && (
+            <button type="button" className="is-quiet" data-testid="button-scenario-delete" onClick={() => onDelete(scenario.id)} disabled={busy}>
+              Delete scenario
+            </button>
+          )}
+          <button type="button" onClick={onClose}>Cancel</button>
+          <button type="button" data-testid="button-scenario-save" onClick={save} disabled={busy}>
+            {busy ? 'Saving…' : 'Save scenario'}
+          </button>
+        </div>
+      )}
     >
       <div className="fb-roadmap-form">
         <div className="fb-roadmap-form-row">
@@ -222,20 +241,8 @@ export function ScenarioDialog({ items, scenario, onClose, onSave, onDelete }) {
             : `Moves ${changed.length} objective${changed.length === 1 ? '' : 's'}.`}
         </p>
         {error && <p className="fb-roadmap-form-error" role="alert">{error}</p>}
-
-        <footer>
-          {scenario?.id && (
-            <button type="button" className="is-quiet" data-testid="button-scenario-delete" onClick={() => onDelete(scenario.id)} disabled={busy}>
-              Delete scenario
-            </button>
-          )}
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" data-testid="button-scenario-save" onClick={save} disabled={busy}>
-            {busy ? 'Saving…' : 'Save scenario'}
-          </button>
-        </footer>
       </div>
-    </Shell>
+    </Sheet>
   );
 }
 

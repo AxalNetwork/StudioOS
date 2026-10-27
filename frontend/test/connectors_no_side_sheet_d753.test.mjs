@@ -3,7 +3,8 @@
  *
  *  - Nothing under `pages/account` draws the 480px right-hand side sheet.
  *  - A `Sheet` with no frame (the Bank accounts console's Mercury entity
- *    sheet) opens a centred `Lightbox` around itself.
+ *    sheet) opened a centred `Lightbox` around itself; since D1317 it opens
+ *    the shared detail Sheet (`ui/Sheet.jsx`), its header in the Sheet's.
  *  - A connector's page mounts no `ConnectorPanel`: F1's interim panel is gone.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/connectors_no_side_sheet_d753.test.mjs
@@ -30,14 +31,18 @@ test('nothing under pages/account draws the 480px side sheet', () => {
   for (const f of files) assert.doesNotMatch(readFileSync(f, 'utf8'), /sm:w-\[480px\]/, f);
 });
 
-test('a Sheet with no frame is a centred dialog, not a side sheet', () => {
-  const out = renderToStaticMarkup(h(Sheet, { title: 'Mercury · Axal entities', onClose: () => {}, 'data-testid': 'mercury-entity-sheet' }, h('p', null, 'Rows')));
-  assert.match(out, /role="dialog"/);
-  assert.match(out, /aria-modal="true"/);
-  assert.match(out, /data-testid="sheet-dialog"/, 'the Lightbox frame');
-  assert.match(out, /data-testid="mercury-entity-sheet" data-layout="lightbox"/, 'the sheet inside it, in the lightbox layout');
-  assert.match(out, /aria-label="Close"/, 'its × closes the dialog');
-  assert.doesNotMatch(out, /right-0|inset-y-0/, 'nothing pinned to the right edge');
+test('a Sheet with no frame is the shared detail Sheet (D1317), its head in the Sheet’s fixed header', () => {
+  const out = renderToStaticMarkup(h(Sheet, {
+    eyebrow: 'Bank accounts', title: 'Mercury · Axal entities', sub: 'The four entities.', provider: 'mercury', providerName: 'Mercury', onClose: () => {},
+    action: h('a', { href: '/x', 'data-testid': 'pane-action' }, 'Open page'), footer: h('span', { 'data-testid': 'pane-foot' }, 'Audit'), 'data-testid': 'mercury-entity-sheet',
+  }, h('p', null, 'Rows')));
+  assert.match(out, /role="dialog" aria-modal="true" aria-labelledby="[^"]+"[^>]*data-testid="sheet-dialog" data-width="520"/, 'the shared Sheet, 520px');
+  assert.match(out, /class="axs-sheet absolute inset-y-0 right-0/, 'on the right, docked by sheet.css');
+  assert.match(out, /data-testid="mercury-entity-sheet" data-layout="sheet"><p>Rows<\/p>/, 'the pane’s body inside the Sheet’s scrolling body');
+  const head = out.slice(out.indexOf('data-testid="sheet-dialog-header"'), out.indexOf('data-testid="sheet-dialog-body"'));
+  assert.match(head, /Bank accounts.*data-provider="mercury".*Mercury · Axal entities.*The four entities\..*data-testid="pane-action".*data-testid="sheet-dialog-close"/s, 'eyebrow, mark, title, sub, action, then the ×');
+  assert.match(out.slice(out.indexOf('data-testid="sheet-dialog-footer"')), /data-testid="pane-foot"/, 'the footer in the fixed footer');
+  assert.equal((out.match(/aria-label="Close"/g) || []).length, 1, 'one ×, the Sheet’s');
 });
 
 test('a connector\'s page mounts no ConnectorPanel: F1\'s interim panel is gone', () => {
