@@ -25,7 +25,7 @@ import {
 import { ContractView, downloadContractPdf } from '../src/pages/subsidiary/licence/ContractTab.jsx';
 import { StatementsView } from '../src/pages/subsidiary/licence/StatementsTab.jsx';
 import { REQUEST_BUTTONS, RequestsView, simpleRequest } from '../src/pages/subsidiary/licence/RequestsTab.jsx';
-import RequestChangeSheet, { SHEET_CLASS, requestChangeHref } from '../src/pages/subsidiary/licence/RequestChangeSheet.jsx';
+import RequestChangeSheet, { requestChangeHref } from '../src/pages/subsidiary/licence/RequestChangeSheet.jsx';
 import { pageKeyFor } from '../src/lib/railPages.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -287,12 +287,12 @@ test('a term prefilled from the Terms tab opens the sheet on its chip, with that
   assert.ok(noDeal.includes('data-testid="no-deal-terms"'));
 });
 
-test('the sheet is the whole screen on a phone and a 460px panel from sm up', () => {
-  assert.ok(SHEET_CLASS.split(' ').includes('inset-0'));
-  assert.ok(SHEET_CLASS.split(' ').includes('fixed'));
-  assert.ok(SHEET_CLASS.includes('sm:w-[460px]') && SHEET_CLASS.includes('sm:left-auto'));
+test('the sheet is the shared right-side Sheet at 480px (D1317), the whole screen on a phone', () => {
   const html = render(RequestChangeSheet, { open: true, startChip: 'seats', licence: MINE.licence, responseHours: LIST.response_hours, seatTypes: LIST.seat_types });
-  assert.ok(html.includes(`class="${SHEET_CLASS}"`));
+  const id = html.match(/<h2 id="([^"]+)"[^>]*>Request a change<\/h2>/)?.[1];
+  assert.ok(id, 'named by its title');
+  assert.match(html, new RegExp(`role="dialog" aria-modal="true" aria-labelledby="${id}"[^>]*data-testid="request-change-sheet" data-width="480"`));
+  assert.ok(html.includes('data-testid="request-change-sheet-scrim"'));
   const t = renderedText(html);
   for (const w of ['What to change', 'As it stands · read-only', 'What you are asking for', 'Why', 'Send request', 'Cancel']) assert.ok(t.includes(w), w);
   assert.ok(t.includes('HQ answers seat requests within 72 hours. Nothing changes until HQ does.'));

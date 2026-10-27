@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
 import { railProposalsApi } from '../../../lib/api/railProposals';
-import { Lightbox, Unreadable } from '../../../ui';
+import { Unreadable } from '../../../ui';
 import { ACCEPT_ALL_MAX, PROPOSABLE, proposalGroups, proposalLine } from './capRelTabsModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1193 (#3127, CRL11) — Eadwyn's proposals: next steps and stage moves from
@@ -115,7 +116,7 @@ export default function CapRelProposals({ projectId, prospect = null, onClose, o
   };
   const groups = proposalGroups(read.data?.proposals || []).filter((g) => !prospect || Number(g.prospect_id) === Number(prospect.id));
   return (
-    <Lightbox label="Eadwyn’s proposals" testId="caprel-proposals" onClose={onClose} width={620} eyebrow="Eadwyn · proposals"
+    <Sheet label="Eadwyn’s proposals" testId="caprel-proposals" onClose={onClose} width={620} eyebrow="Eadwyn · proposals"
       title="From your notes and feedback" sub="Eadwyn proposes next steps and stage moves. You accept each one; nothing changes until you do.">
       <div className="flex flex-col gap-4">
         {prospect ? (
@@ -152,6 +153,6 @@ export default function CapRelProposals({ projectId, prospect = null, onClose, o
         </section>
         <p className={`m-0 text-[11.5px] ${MUTED}`}>Eadwyn proposes only. It never sets an amount, a status or a Fit, and never moves anyone to Committed or Passed.</p>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }

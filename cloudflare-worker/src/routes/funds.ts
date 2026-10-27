@@ -744,6 +744,17 @@ function fundPatchAct(fund: any, body: any): FundActKey {
   return 'fund.write';
 }
 
+const FUND_REASON_MIN = 10;
+const FUND_REASON_MAX = 500;
+
+/** A PATCH's `reason`: null when absent, the trimmed text when 10–500 characters, else false. */
+function fundPatchReason(body: any): string | null | false {
+  if (!body || typeof body !== 'object' || !Object.prototype.hasOwnProperty.call(body, 'reason')) return null;
+  if (typeof body.reason !== 'string') return false;
+  const text = body.reason.trim();
+  return text.length >= FUND_REASON_MIN && text.length <= FUND_REASON_MAX ? text : false;
+}
+
 /** The fields that record who controls a fund or what it withholds: their old and new values are kept. */
 const FUND_CONTROL_FIELDS = ['gp_user_id', 'carried_interest', 'management_fee'];
 
@@ -751,6 +762,14 @@ funds.patch('/:id', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const gp = await requireFundGp(c, id);
   const body = await c.req.json();
+  // D1161 (#3068): the console sends why a fund's economics change. Optional,
+  // so a GP's own edit and every earlier caller keep working; when sent it is
+  // checked before the gate, so a bad reason never costs a step-up, and it is
+  // kept on the audit row. `FUND_PATCHABLE` never writes it to the fund.
+  const reason = fundPatchReason(body);
+  if (reason === false) {
+    return refuse(c, 400, { code: 'reason_invalid', message: `A reason is ${FUND_REASON_MIN} to ${FUND_REASON_MAX} characters.` });
+  }
   const act = fundPatchAct(gp.fund, body);
   await assertFundAct(c, gp, act);
   const f = await Funds.update(c.env, id, body);
@@ -761,8 +780,8 @@ funds.patch('/:id', async (c) => {
   const fields = Object.keys(after).filter((k) => k !== 'updated_at' && k in before && before[k] !== after[k]);
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   for (const k of FUND_CONTROL_FIELDS) if (fields.includes(k)) changes[k] = { from: before[k] ?? null, to: after[k] ?? null };
-  await recordFundActivity(c.env, Number(gp.user.id), 'fund_updated', 'fund', id, { fields, changes });
-  await auditFundAct(c.env, gp.user, act, { fund_id: id, fields, changes });
+  await recordFundActivity(c.env, Number(gp.user.id), 'fund_updated', 'fund', id, { fields, changes, ...(reason ? { reason } : {}) });
+  await auditFundAct(c.env, gp.user, act, { fund_id: id, fields, changes, ...(reason ? { reason } : {}) });
   return c.json({ ok: true, fund: f });
 });
 

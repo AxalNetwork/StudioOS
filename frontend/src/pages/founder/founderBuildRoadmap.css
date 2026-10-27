@@ -45,15 +45,17 @@
 .fb-roadmap-form-error {
   margin: 0; font-size: 12.5px; font-weight: 600; color: var(--axal-danger, #b42318);
 }
-.fb-roadmap-form footer { display: flex; gap: 8px; justify-content: flex-end; padding-top: 4px; }
-.fb-roadmap-form footer button {
+/* D1317: the scenario editor's save row sits in the shared Sheet's fixed footer. */
+.fb-roadmap-form footer, .fb-roadmap-sheet-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 4px; }
+.fb-roadmap-sheet-foot { padding-top: 0; }
+.fb-roadmap-form footer button, .fb-roadmap-sheet-foot button {
   border: 1px solid var(--axal-border, #e4e7ec); background: var(--axal-surface, #fff);
   border-radius: 8px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
 }
-.fb-roadmap-form footer button:last-child {
+.fb-roadmap-form footer button:last-child, .fb-roadmap-sheet-foot button:last-child {
   background: var(--axal-accent, #7c3aed); border-color: var(--axal-accent, #7c3aed); color: #fff;
 }
-.fb-roadmap-form footer button.is-quiet { margin-right: auto; color: var(--axal-danger, #b42318); }
+.fb-roadmap-form footer button.is-quiet, .fb-roadmap-sheet-foot button.is-quiet { margin-right: auto; color: var(--axal-danger, #b42318); }
 
 .fb-roadmap-deps, .fb-roadmap-scenarios, .fb-roadmap-scenario-rows {
   list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px;

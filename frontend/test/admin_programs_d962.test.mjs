@@ -568,6 +568,10 @@ test('Refer & Earn · Queue: part 4’s pages with their total, waiting longest 
     assert.ok(!/toast/i.test(codeOnly(read('frontend/src/pages/admin/ReferralReview.jsx'))), 'no corner toast');
     await view.click('referral-review-open-u1');
     assert.match(view.textOf('referral-dialog-timeline'), /Submitted.*Under review/);
+    // D1317: one referral is a detail panel, the shared Sheet at 640px.
+    assert.equal(view.props('referral-dialog').role, 'dialog');
+    assert.ok(view.props('referral-dialog')['aria-labelledby']);
+    assert.equal(view.props('referral-dialog')['data-width'], 640);
     assert.ok(view.requests.some((r) => r.url === '/api/refer-earn/admin/submissions/u1'), 'part 4’s single-referral read');
     assert.equal(view.textOf('referral-dialog-told'), REVIEW_TOLD);
     const options = view.props('referral-dialog-status').children.map((c) => c.props.value);
@@ -641,6 +645,10 @@ test('Learning: Finished by OD9’s rule, enrolments with their window and assig
     assert.match(people.textOf('programs-learner-row-exam-x1'), /Best 60% · 2 attempts.*Not yet/);
     assert.equal(people.textOf('programs-learner-foot'), LEARNER_FOOT);
     assert.ok(!/@/.test(people.textOf('programs-learner-dialog')));
+    // D1317: one learner's record is the shared Sheet at 560px.
+    assert.equal(people.props('programs-learner-dialog').role, 'dialog');
+    assert.ok(people.props('programs-learner-dialog')['aria-labelledby']);
+    assert.equal(people.props('programs-learner-dialog')['data-width'], 560);
   } finally { await people.close(); }
   const refused = await mounted('/admin/programs/learning/people', ProgramPage, worker({ learner: () => refusal(403, 'not_assigned', 'You can follow the learners of programs assigned to you.') }));
   try {
@@ -658,12 +666,12 @@ test('the source: every write is a dialog, no corner toast, part 1’s client in
   assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/programs\.js';$/m);
   assert.match(read('frontend/src/pages/PerksPage.jsx'), /k: 'review', label: 'Review queue', icon: ClipboardCheck, to: PERKS_REVIEW_PATH/);
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/PerksPage.jsx')), /api\.perkReview\(/);
-  // Each write the pages make sits inside a Lightbox component's handler.
+  // Each write the pages make sits inside a Lightbox (or, D1317, a detail Sheet) component's handler.
   for (const call of ['api.adminAssignAdvisorCohort(', 'api.adminEndAdvisorCohortAssignment(', 'api.adminReferralReview(', 'api.adminStrategicAccessDecision(', 'api.perkReview(', 'programsApi.editSection(', 'programsApi.publish(']) {
     const at = src.indexOf(call);
     assert.ok(at > 0, `${call} is not made`);
     const fn = src.lastIndexOf('function ', at);
-    assert.match(src.slice(fn, src.indexOf('\n}\n', at)), /<Lightbox\b/, `${call} is not made from a dialog`);
+    assert.match(src.slice(fn, src.indexOf('\n}\n', at)), /<(Lightbox|Sheet)\b/, `${call} is not made from a dialog`);
   }
 });
 

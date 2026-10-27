@@ -54,4 +54,7 @@ test('the directory is read from the Worker, and its rows are added to the priva
   assert.match(page, /fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null \}\)/);
   // D593: the canvas's F0 names the button "Add to my funds".
   assert.match(directory, /'Add to my funds'/);
+  // D1317: the fund's details open as the shared right-side Sheet; on a phone, a bottom sheet as before.
+  assert.match(directory, /<Sheet label=\{item\.name\} eyebrow="Fund details" title=\{item\.name\} onClose=\{onClose\} width=\{480\} phone="sheet" testId="fd-drawer-sheet">/);
+  assert.doesNotMatch(directory, /<aside id="fd-drawer"/);
 });

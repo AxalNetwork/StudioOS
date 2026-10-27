@@ -78,7 +78,7 @@ export default function EnvelopeWizard({ onClose, onTemplates, onSent }) {
       setPreview(null);
     } finally { setBusy(false); }
   }
-  return <SidePanel title="New envelope" onClose={onClose}>
+  return <SidePanel title="New envelope" onClose={onClose} testId="contract-envelope-sheet">
     <nav aria-label="Envelope steps" className="flex flex-wrap gap-2">{steps.map((label, i) => <button key={label} type="button" className={button} aria-current={step === i ? 'step' : undefined} disabled={busy || !!outcome} onClick={() => setStep(i)}>{i + 1}. {label}</button>)}</nav>
     <ReadState read={templates} what="Published templates">
       {!templates.loading && !templates.error && !templates.data?.items?.length && <div><b>No published template.</b><p>Publish a template under Templates first.</p><button type="button" className={button} onClick={onTemplates}>Open Templates</button></div>}

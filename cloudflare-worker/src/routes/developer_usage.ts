@@ -1,10 +1,12 @@
 /**
  * D845 (#2471) — a member's own usage reports (plan §3):
  *
- *   GET /api/developer/usage          ?from&to&group=day|key|provider|connector|tool|model&by=&key=&cursor=
+ *   GET /api/developer/usage          ?from&to&group=day|key|provider|connector|tool|model|category&by=&key=&cursor=
  *                                      → { recorded, recorded_since, range, group, by, key, totals, groups[], next_cursor }
- *   GET /api/developer/usage/events   ?from&to&key&outcome&surface&operation&provider&connector&company&cursor=
+ *   GET /api/developer/usage/events   ?from&to&key&grant&outcome&surface&operation&provider&connector&company&cursor=
  *                                      → { range, events[], next_cursor }: newest first, 100 a page
+ *   GET /api/developer/usage/events/:execution_id
+ *                                      → { event }: one of the caller's own calls (D1320, #2481)
  *   GET /api/developer/usage/keys     ?month=YYYY-MM
  *                                      → { month, near_limit_percent, keys[] }: each key's cap, this month's
  *                                        charge and the 80% / 100% flag (reads only; #2472 enforces)
@@ -18,7 +20,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { ReportInputError, keyLimits, usageEvents, usageReport } from '../services/apiUsageReport';
+import { ReportInputError, keyLimits, usageEvent, usageEvents, usageReport } from '../services/apiUsageReport';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
@@ -26,7 +28,7 @@ export const developerUsage = new Hono<{ Bindings: Env }>();
 
 developerUsage.onError((error, c) => {
   if (error instanceof ReportInputError) {
-    return c.json({ error: error.code, message: error.sentence }, error.code === 'unknown_key' ? 404 : 400);
+    return c.json({ error: error.code, message: error.sentence }, error.code === 'unknown_key' || error.code === 'unknown_request' ? 404 : 400);
   }
   const status = AUTH_ERROR_STATUSES[error.message];
   if (status) return refuse(c, status, { code: 'usage_access_refused', message: 'This account cannot read that usage report.' });
@@ -46,8 +48,13 @@ developerUsage.get('/events', async (c) => {
   const q = c.req.query();
   return c.json(await usageEvents(c.env, user.id, {
     from: q.from, to: q.to, key: q.key, outcome: q.outcome, surface: q.surface, operation: q.operation,
-    provider: q.provider, connector: q.connector, company: q.company, cursor: q.cursor,
+    provider: q.provider, connector: q.connector, company: q.company, cursor: q.cursor, grant: q.grant,
   }));
+});
+
+developerUsage.get('/events/:execution_id', async (c) => {
+  const user = await requireAuth(c);
+  return c.json({ event: await usageEvent(c.env, user.id, c.req.param('execution_id')) });
 });
 
 developerUsage.get('/keys', async (c) => {

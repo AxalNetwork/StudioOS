@@ -4,6 +4,7 @@ import { adminTestingApi } from '../../../lib/api/productTesting';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { Lightbox, Pill } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import { ConsoleUnreadable, CONSOLE_LOADING } from './shared';
 import ProgrammeForm from '../../testing/ProgrammeForm';
 import { ROLE_OPTIONS, refusalText, statusLabel, statusTone } from '../../testing/programmeModel';
@@ -114,13 +115,18 @@ export function ProductTestingConsole({ api = adminTestingApi, view = 'programs'
       )}
       {review ? <Review items={state.items} api={api} ask={ask} /> : <Programs items={state.items} ask={ask} />}
 
-      {dialog?.kind === 'form' && (
-        <Lightbox label={dialog.programme ? 'Edit program' : 'New program'} onClose={close} testId="testing-form-dialog" width={640}
-          title={dialog.programme ? `Edit ${dialog.programme.product_name}` : 'New program for an Axal VC product'}
-          sub="Saved as a draft. Open it when it should take applications.">
-          <ProgrammeForm programme={dialog.programme} onSave={save} onCancel={close} classes={FORM_CLASSES} logo />
-        </Lightbox>
-      )}
+      {/* D1317: editing a program is a detail panel, so it opens as the shared
+          Sheet; New program is a create form and stays the centred lightbox. */}
+      {dialog?.kind === 'form' && (() => {
+        const Frame = dialog.programme ? Sheet : Lightbox;
+        return (
+          <Frame label={dialog.programme ? 'Edit program' : 'New program'} onClose={close} testId="testing-form-dialog" width={640}
+            title={dialog.programme ? `Edit ${dialog.programme.product_name}` : 'New program for an Axal VC product'}
+            sub="Saved as a draft. Open it when it should take applications.">
+            <ProgrammeForm programme={dialog.programme} onSave={save} onCancel={close} classes={FORM_CLASSES} logo />
+          </Frame>
+        );
+      })()}
       {spec && <TestingDialog key={`${spec.key}-${dialog.programme?.uid}`} spec={spec} api={api} ctx={{ p: dialog.programme }} onClose={() => setDialog(null)} onDone={done} />}
     </div>
   );

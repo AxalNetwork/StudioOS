@@ -10,7 +10,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
+import { Sheet, actionGhost, actionPrimary } from '../../../ui';
 import { adminArticles as api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import useRecordCrumb from '../useRecordCrumb';
@@ -277,7 +277,7 @@ export default function ReviewDrawer({ id, viewer, onClose, onChanged, notify })
 
   const title = article?.title || (read.status === 'failed' ? 'The article could not be read' : STATES.reading);
   return (
-    <Lightbox label={`Review: ${title}`} eyebrow="Review" title={title} onClose={onClose} width={760} phone="sheet" footer={footer} testId="cq-drawer">
+    <Sheet label={`Review: ${title}`} eyebrow="Review" title={title} onClose={onClose} width={760} phone="sheet" footer={footer} testId="cq-drawer">
       {read.status === 'loading' && <p className={`m-0 ${SUB}`} aria-live="polite" data-testid="cq-drawer-loading">{STATES.reading}</p>}
       {read.status === 'failed' && (
         <p className="m-0 text-[13px] text-red-700 dark:text-red-300" role="alert" data-testid="hq-article-unreadable">
@@ -307,6 +307,6 @@ export default function ReviewDrawer({ id, viewer, onClose, onChanged, notify })
         </div>
       )}
       {dialog && <QueueDialog key={dialog.kind} kind={dialog.kind} article={article} busy={busy} error={dialogError} onConfirm={confirm} onClose={() => setDialog(null)} />}
-    </Lightbox>
+    </Sheet>
   );
 }

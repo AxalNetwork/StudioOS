@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
 import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
-import { TemplatePreviewBody } from '../src/pages/LegalPage.jsx';
+import { TemplatePreviewBody, TemplatePreviewModal } from '../src/pages/LegalPage.jsx';
 
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 
@@ -27,6 +27,17 @@ test('LegalPage generates nothing and links Send for signature to /legal/send', 
   assert.doesNotMatch(page, /onGenerate|generateDocument/);
   assert.match(page, /<Link to="\/legal\/send"[^>]*>[\s\S]*?Send for signature\s*<\/Link>/);
   assert.match(page, /The text this document carries in the library\. Fields in double braces are filled when it is sent\./);
+});
+
+test('D1317: the template preview and the document viewer open as the shared right-side Sheet at 640px', () => {
+  const out = renderToStaticMarkup(React.createElement(TemplatePreviewModal, { template: { key: 'nda', title: 'Mutual NDA', layer: 'x', layer_label: 'Contracts' }, onClose() {} }));
+  const id = out.match(/<h2 id="([^"]+)"[^>]*>Mutual NDA<\/h2>/)?.[1];
+  assert.ok(id, 'named by the template');
+  assert.match(out, new RegExp(`role="dialog" aria-modal="true" aria-labelledby="${id}"[^>]*data-testid="legal-template-preview" data-width="640"`));
+  assert.match(out, /data-testid="legal-template-preview-footer"[\s\S]*Close/);
+  const page = read('frontend/src/pages/LegalPage.jsx');
+  assert.match(page, /<Sheet\s+label=\{viewDoc\.title \|\| 'Document'\}\s+title=\{viewDoc\.title\}[\s\S]*?width=\{640\}\s+testId="legal-document-viewer"/);
+  assert.doesNotMatch(page, /fixed inset-0 bg-black\/60/, 'no own overlay left');
 });
 
 test('TemplatePreviewBody draws the stub line for a document with no body, and the body as text otherwise', () => {

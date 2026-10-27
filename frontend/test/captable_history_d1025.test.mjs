@@ -351,6 +351,9 @@ test('CT11c: Eadwyn reads a signed data-room file; every amount stays empty unti
     await v.press(v.by('captable-record-read'));
     assert.deepEqual(v.posted(/document-read$/).at(-1)[1], { document_ref: 'data_room_files:9' });
     assert.ok(v.by('captable-draft-drawer'));
+    assert.equal(v.props(v.by('captable-draft-drawer')).role, 'dialog', 'D1317: the draft opens as the shared Sheet');
+    assert.ok(v.props(v.by('captable-draft-drawer'))['aria-labelledby']);
+    assert.equal(v.props(v.by('captable-draft-drawer'))['data-width'], 640);
     assert.match(v.text(v.by('captable-draft-term-mfn')), /Yes page 3/);
     for (const k of ['amount', 'valuation_cap', 'discount']) assert.equal(v.props(v.by(`captable-draft-${k}`)).value, '', `${k} is never filled`);
     assert.equal(v.props(v.by('captable-draft-amount')).placeholder, 'Enter from page 2');

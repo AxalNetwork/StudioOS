@@ -10,6 +10,7 @@ import { Card, Pill, SectionLabel, Unrecorded, Unreadable, usePhoneWidth } from 
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import { TIER_PLANS } from '../components/PaywallModal';
+import { openCheckout, planKeyOfTier } from '../components/checkout/checkoutEntry';
 import './perksDesk.css';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
@@ -491,7 +492,12 @@ function ClaimModal({ perk, userTier, onClose, onClaimed, onGoMine }) {
             )}
             {err && <p className="mt-3 text-sm text-red-600" role="alert">{err}</p>}
 
-            {tierBlocked ? (
+            {tierBlocked && planKeyOfTier(d.required_tier) ? (
+              // D1054 (#2905): the plan the perk needs, in the checkout sheet over this page.
+              <button type="button" data-testid="perk-upgrade"
+                onClick={() => { onClose?.(); openCheckout({ plan_key: planKeyOfTier(d.required_tier), from: { label: 'Perks', href: '/perks' }, unlocks: d.offer || null }); }}
+                className="mt-4 block w-full rounded-[11px] border border-violet-300 py-3 text-center text-[13px] font-bold text-violet-700 dark:text-violet-300">{label}</button>
+            ) : tierBlocked ? (
               <Link to="/pricing" className="mt-4 block rounded-[11px] border border-violet-300 py-3 text-center text-[13px] font-bold text-violet-700 dark:text-violet-300">{label}</Link>
             ) : (
               <button

@@ -16,6 +16,7 @@ import {
   STAGE_WORD, emptyFilters, filterChips, filterCount, keepsLines, sortLabel, specOf, toggleCard, toggleColumn,
 } from './flowModel';
 import { roundWord } from './dealFlowModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -138,7 +139,7 @@ export function FiltersDrawer({ filters, sectors, onApply, onClose, count }) {
     </fieldset>
   );
   return (
-    <Lightbox label="Filters" title="Filters" sub={`${filterCount(f)} filters on`} onClose={onClose} width={480} testId="dealflow-filters"
+    <Sheet label="Filters" title="Filters" sub={`${filterCount(f)} filters on`} onClose={onClose} width={480} testId="dealflow-filters"
       footer={(
         <div className="flex justify-between gap-2">
           <button type="button" className={actionGhost} onClick={() => setF({ ...emptyFilters(), q: f.q })} data-testid="dealflow-filters-clear">Clear</button>
@@ -174,7 +175,7 @@ export function FiltersDrawer({ filters, sectors, onApply, onClose, count }) {
         </fieldset>
         <p className={MUTED}>Company stage, region, ask range, instrument and flags are not on the deal list’s read yet, so they are not offered here.</p>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

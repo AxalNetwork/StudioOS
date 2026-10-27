@@ -248,7 +248,7 @@ function Body({ product, catalog, onAct, canWrite }) {
 function ProductFrame({ product, title, sub, onClose, onAct, canWrite, children }) {
   const phone = usePayPhone();
   const [choosing, setChoosing] = useState(false);
-  if (!phone) return <PayDialog label={title} title={title} sub={sub} onClose={onClose} testId="pay-product">{children}</PayDialog>;
+  if (!phone) return <PayDialog sheet label={title} title={title} sub={sub} onClose={onClose} testId="pay-product">{children}</PayDialog>;
   const writable = canWrite && product?.active && groupOf(product) !== 'packs';
   const prices = product ? priceRows(product).filter((p) => p.active) : [];
   return <section className="min-w-0 bg-white text-axal-ink dark:bg-gray-950 dark:text-gray-100" data-testid="pay-product-page">

@@ -5,6 +5,7 @@ import { EYE, INPUT, Refusal, SUB } from '../partners/parts';
 import {
   KINDS, MAX_BIO, accountFacts, PHOTO_TYPES, SKILLS, cardErrors, cardOf, confirmCopy, initialsOf, memberOptions, photoError, refusalOf,
 } from './deckRosterModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D980 (#2766) — the Deck roster's dialogs: AP8's one card dialog (one save,
@@ -159,7 +160,7 @@ export function CardDialog({ row, onClose, onSaved, save }) {
   const title = saved ? `Edit deck card · ${saved.name || form.name}` : 'Add a person to the deck roster';
   const sub = form.linked_user ? `Linked to ${form.linked_user.name || 'a member'}’s account.` : 'Shown on the Team & Network slide of the Demo Day deck.';
   return (
-    <Lightbox label={title} title={title} sub={sub} onClose={close} testId="deck-card-dialog" width={620}
+    <Sheet label={title} title={title} sub={sub} onClose={close} testId="deck-card-dialog" width={620}
       footer={<>
         <button type="button" className={actionGhost} disabled={busy} onClick={close}>Cancel</button>
         <button type="button" className={actionPrimary} disabled={busy} onClick={submit} data-testid="deck-card-save">{busy ? 'Saving…' : 'Save'}</button>
@@ -229,7 +230,7 @@ export function CardDialog({ row, onClose, onSaved, save }) {
         </label>
         <Refusal text={refusal} testId="deck-card-refusal" />
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

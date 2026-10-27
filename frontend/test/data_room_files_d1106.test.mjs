@@ -237,6 +237,9 @@ test('New folder is a field in a dialog, and a folder\'s lightbox asks before it
     await v.click('dataroom-newfolder-go');
     assert.deepEqual(v.writes(), [['POST', '/api/data-room/p3uid/folders', { name: 'Board consents', parent_uid: 'f3' }]]);
     await v.click('dataroom-folder-open-f3');
+    assert.equal(v.prop('dataroom-folder', 'role'), 'dialog', 'D1317: the folder opens as the shared Sheet');
+    assert.ok(v.prop('dataroom-folder', 'aria-labelledby'));
+    assert.equal(v.prop('dataroom-folder', 'data-width'), 560);
     await v.click('dataroom-folder-nda-switch');
     assert.match(v.of('dataroom-folder-nda-body'), /Every folder and file inside is set the same/);
     await v.click('dataroom-folder-nda-go');
@@ -253,6 +256,9 @@ test('the file lightbox: who can open it, answers, versions with Make current, l
   const v = await mounted('/raise/data-room/file/11?project_id=3');
   try {
     assert.ok(v.has('dataroom-files-table'), 'over Files');
+    assert.equal(v.prop('dataroom-file', 'role'), 'dialog', 'D1317: the file opens as the shared Sheet over Files');
+    assert.ok(v.prop('dataroom-file', 'aria-labelledby'));
+    assert.equal(v.prop('dataroom-file', 'data-width'), 720);
     assert.match(v.of('dataroom-file-who'), /Bluefern Capital.*Can open.*Juniper Angels.*Its access does not include this folder/s);
     assert.match(v.of('dataroom-file-answers'), /✓ Financial model/);
     assert.match(v.of('dataroom-file-version-3'), /v3.*8 Oct 2026 · Founder B.*2\.4 MB.*Current/s);
@@ -266,6 +272,9 @@ test('the file lightbox: who can open it, answers, versions with Make current, l
     assert.deepEqual(v.writes(), [['POST', '/api/data-room/p3uid/files/a1/versions/2/current', undefined]]);
     await v.click('dataroom-file-download');
     assert.ok(v.writes().some((w) => w[1] === '/api/data-room/p3uid/files/a1/download'));
+    await v.click('dataroom-file-close');
+    assert.equal(v.where(), '/raise/data-room/files?project_id=3', 'closing returns to Files');
+    assert.ok(!v.has('dataroom-file') && v.has('dataroom-files-table'));
   } finally { await v.close(); }
   const half = await mounted('/raise/data-room/file/11?project_id=3', { handle: handlerFor(ROOM, { versions: true, record: true }) });
   try {
