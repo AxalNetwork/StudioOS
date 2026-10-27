@@ -63,6 +63,14 @@ function acceptedKeys() {
 const SERIALIZED = serializedKeys();
 const ACCEPTED = acceptedKeys();
 
+test('D1317: an offering’s detail opens as the shared right-side Sheet at 640px; New and Edit offering stay centred', () => {
+  assert.match(PAGE, /import Sheet from '\.\.\/ui\/Sheet\.jsx';/);
+  const detail = PAGE.slice(PAGE.indexOf('function OfferingDetailModal('), PAGE.indexOf('\n}\n', PAGE.indexOf('function OfferingDetailModal(')));
+  assert.match(detail, /<Sheet label=\{offering\.title \|\| 'Offering'\} title=\{offering\.title\}[\s\S]*?width=\{640\} testId="service-offering-detail">/);
+  assert.doesNotMatch(detail, /<Modal/);
+  assert.match(PAGE, /<Modal title=\{offering \? 'Edit offering' : 'New offering'\}/);
+});
+
 test('the worker still serializes the fields this page is built on', () => {
   // A floor, so the two tests below cannot pass by the contract emptying out.
   for (const key of ['title', 'category', 'summary', 'price_usd', 'is_active']) {

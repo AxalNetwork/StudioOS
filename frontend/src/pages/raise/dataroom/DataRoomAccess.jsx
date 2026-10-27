@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../../lib/api';
 import { dataRoomApi } from '../../../lib/api/dataRoom';
-import { Lightbox, Unreadable } from '../../../ui';
+import { Unreadable } from '../../../ui';
 import DataRoomDialog from './DataRoomDialog.jsx';
 import { ReportShareRows } from './ReportShares.jsx';
 import AdvisorGrantSection from '../AdvisorGrantSection.jsx';
@@ -11,6 +11,7 @@ import {
   accessRefusal, accessRows, candidateRows, canOpen, eventLine, eventsOf, filterRows, foldersWord, grantBody, grantBodyError,
   isOwner, matrix, ndaOf, ndaUnlocks, shareEffect,
 } from './accessModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1107 (#2987) — Access (DR6, DR6m), Share (DR7), one investor (DR7i),
@@ -164,7 +165,7 @@ function InvestorLightbox({ room, grant, owner, onClose, onAct }) {
   const events = eventsOf(room, grant);
   const total = (room?.files || []).length;
   return (
-    <Lightbox label={grant.investor_name || 'Investor'} eyebrow="Investor · grant" title={grant.investor_name || grant.investor_email} onClose={onClose} width={600} testId="investor-lightbox"
+    <Sheet label={grant.investor_name || 'Investor'} eyebrow="Investor · grant" title={grant.investor_name || grant.investor_email} onClose={onClose} width={600} testId="investor-lightbox"
       footer={owner ? (
         <div className="flex flex-wrap justify-between gap-2">
           <button type="button" className={`${BTN} border-red-300 text-red-700 dark:border-red-800 dark:text-red-300`} onClick={() => onAct('revoke', grant)} data-testid="investor-revoke">Revoke access</button>
@@ -196,7 +197,7 @@ function InvestorLightbox({ room, grant, owner, onClose, onAct }) {
           )) : <span className={`text-[12px] ${MUTED}`}>None among the last fifty events. Activity has the full log.</span>}
         </section>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

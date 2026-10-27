@@ -116,14 +116,26 @@ export const scrollLocks = () => locks;
  * the accessibility tree together; `aria-hidden` covers a browser without it.
  * What was already inert or hidden is left alone, and so is not undone on close.
  * Returns the function that puts it back.
+ *
+ * D1317: `keep` names elements that stay live beside the dialog — the
+ * Eadwyn rail's spine beside a detail sheet. Nothing on the path to a kept
+ * element is marked, so the walk descends into the branch that holds it and
+ * marks that branch's other children instead.
  */
-export function inertOutside(dialog, root) {
+export function inertOutside(dialog, root, keep = []) {
   const marked = [];
-  let node = dialog;
-  while (node && node !== root && node.parentNode) {
-    const parent = node.parentNode;
+  const onPath = new Set();
+  for (const start of [dialog, ...(keep || [])]) {
+    const path = [];
+    let n = start;
+    while (n && n !== root && n.parentNode) { path.push(n); n = n.parentNode; }
+    if (start === dialog || n === root) for (const p of path) onPath.add(p);
+  }
+  const parents = new Set();
+  for (const node of onPath) parents.add(node.parentNode);
+  for (const parent of parents) {
     for (const sibling of Array.from(parent.children || [])) {
-      if (sibling === node || sibling.nodeType !== 1) continue;
+      if (onPath.has(sibling) || sibling.nodeType !== 1) continue;
       const tag = String(sibling.tagName || '').toLowerCase();
       if (tag === 'script' || tag === 'style') continue;
       const was = { el: sibling, inert: sibling.hasAttribute('inert'), hidden: sibling.getAttribute('aria-hidden') };
@@ -131,7 +143,6 @@ export function inertOutside(dialog, root) {
       if (was.hidden == null) sibling.setAttribute('aria-hidden', 'true');
       marked.push(was);
     }
-    node = parent;
   }
   return () => {
     for (const was of marked) {

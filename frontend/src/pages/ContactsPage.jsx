@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, RefreshCw, X, Send, ArrowUpRight, CheckSquare, Square } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import Sheet from '../ui/Sheet.jsx';
 
 const AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'mentor', 'cofounder'];
 const STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
@@ -198,17 +199,20 @@ function ContactDrawer({ contact, busy, onClose, onStatus, onPromote, onChanged,
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex justify-end z-50" onClick={onClose}>
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 h-full p-6 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{contact.name || contact.email}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"><X size={18} /></button>
-        </div>
-        <div className="text-sm text-gray-500 mb-4">
+    <Sheet
+      label={contact.name || contact.email}
+      title={contact.name || contact.email}
+      sub={(
+        <>
           {contact.email} · <span className="capitalize">{contact.audience}</span> · → {ROUTED_LABEL[contact.routed_to] || contact.routed_to}
           {contact.promoted_to ? ` · promoted to ${contact.promoted_to}` : ''}
-        </div>
-
+        </>
+      )}
+      onClose={onClose}
+      width={480}
+      testId="contact-drawer"
+    >
+      <div className="px-5 py-5">
         {/* Status */}
         <div className="mb-4">
           <div className="text-xs text-gray-500 mb-1">Status</div>
@@ -276,6 +280,6 @@ function ContactDrawer({ contact, busy, onClose, onStatus, onPromote, onChanged,
           <button onClick={sendReply} className="inline-flex items-center gap-1 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm"><Send size={14} /></button>
         </div>
       </div>
-    </div>
+    </Sheet>
   );
 }

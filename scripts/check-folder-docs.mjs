@@ -83,6 +83,7 @@ const DOCUMENTED = new Map([
   ['documentation/operations',        'runbooks — the steps to ship, check and recover production'],
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
+  ['frontend/src/components/checkout',        'the checkout sheet, its entry and the renewal banner (D1048, D1054)'],
   ['frontend/src/components/cofounder',       'the co-founder agreement builder'],
   ['frontend/src/components/hqReview',        'the HQ review pieces (D634)'],
   ['frontend/src/components/products',        'the Plans and pricing storefront and its Token packs (D755)'],

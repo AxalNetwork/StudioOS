@@ -217,6 +217,10 @@ test('a chosen recipient\'s drawer: delivery, the amount as indicative, the time
   try {
     await v.click('call-open-1');
     assert.match(v.text(), /Recipient · chosen/);
+    const sheet = v.props('call-recipient-drawer');
+    assert.equal(sheet.role, 'dialog', 'D1317: the drawer is the shared Sheet');
+    assert.ok(sheet['aria-labelledby']);
+    assert.equal(sheet['data-width'], 560);
     assert.equal(v.textOf('call-recipient-told'), 'Told on AxalTold on Axal');
     assert.match(v.textOf('call-recipient-amount'), /\$250,000 Recorded.*Indicative\. It is an intention, not a payment and not a signed investment\./s);
     assert.match(v.textOf('call-recipient-timeline'), /Opened the call3 Oct.*Asked for the data room8 Oct.*Indicated an amount\$250,000 · Recorded24 Oct/s);

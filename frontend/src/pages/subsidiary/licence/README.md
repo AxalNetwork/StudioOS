@@ -11,13 +11,14 @@ are `../LicenceFrame.jsx`.
 - `RequestsTab.jsx` — the six requests to HQ, the renewal timeline and "Your
   requests" with HQ's answers (D804; the sixth, Request a program, is D988's).
 - `RequestChangeSheet.jsx` — the "Request a change" sheet for the licence's
-  own terms and seats (D804).
+  own terms and seats (D804), the shared right-side `Sheet` (D1317).
 - `ProgramsTab.jsx` — the programs HQ grants this studio, their terms and the
   partner deal types HQ allows (D981, D988; canvas `Program Grants Page.dc.html`
   GR7–GR15).
-- `ProgramTermsDialog.jsx` — one program's terms, read only (GR8).
+- `ProgramTermsDialog.jsx` — one program's terms, read only (GR8), as the
+  shared right-side `Sheet` (D1317).
 - `ProgramRequestSheet.jsx` — "Request a program" (GR9), D983's three program
-  requests.
+  requests, the shared right-side `Sheet` (D1317).
 - `licenceTabsModel.js` — the Contract, Statements and Requests tabs as pure
   functions. The Programs tab's model is `../../../lib/studioPrograms.js`.
 

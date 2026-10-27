@@ -11,7 +11,7 @@
  */
 import React, { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Lightbox } from '../../../ui';
+import Sheet from '../../../ui/Sheet.jsx';
 import {
   CADENCE_WORDS, CALENDAR_LINE, DUTY_GROUPS, DUTY_STATES, NEEDS_YOU_LINE, calendarRows, calendarTable, cellWords, documentsLine,
   dueNext, dueRuleWords, dutyRows, moveCell, needsYou, recordLine, recordStrip, requiredFigures, requiredFiguresLine, selectedPanel,
@@ -283,13 +283,13 @@ export function DutiesTable({ desk, onOpen }) {
   );
 }
 
-/** RPT8 the duty drawer: its clause, its terms and its record. Terms change only by amending the document in Raise. */
+/** RPT8 the duty drawer (the shared Sheet, D1317): its clause, its terms and its record. Terms change only by amending the document in Raise. */
 export function DutyDrawer({ desk, duty, onClose, raiseHref }) {
   const s = sourceWords(duty);
   const strip = recordStrip(desk, duty.uid);
   const req = requiredFigures(duty);
   return (
-    <Lightbox label="Duty" eyebrow="Duty" title={`${duty.title} to ${duty.holder?.name || 'a holder not named'}`} onClose={onClose} width={640} testId="reporting-duty-drawer"
+    <Sheet label="Duty" eyebrow="Duty" title={`${duty.title} to ${duty.holder?.name || 'a holder not named'}`} onClose={onClose} width={640} testId="reporting-duty-drawer"
       footer={<div className="flex justify-end"><button type="button" className={GHOST} onClick={onClose}>Close</button></div>}>
       <div className="flex flex-col gap-3 text-[13px]">
         <span className={`${CHIP} ${s.signed ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`} data-testid="reporting-duty-source">{s.word}</span>
@@ -318,6 +318,6 @@ export function DutyDrawer({ desk, duty, onClose, raiseHref }) {
         </div>
         <p className={MUTED}>Amend the document in Raise to change these terms.</p>
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
+import Sheet from '../ui/Sheet.jsx';
 import {
   FileText, Send, Building, Eye, Shield, Users,
   Briefcase, Scale, AlertTriangle, BookOpen, Building2,
@@ -325,16 +326,22 @@ export default function LegalPage() {
       </div>
 
       {viewDoc && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setViewDoc(null)}>
-          <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto dark:bg-gray-900 dark:border-gray-800" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">{viewDoc.title}</h3>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                viewDoc.status === 'signed' ? 'bg-emerald-100 text-emerald-700' :
-                viewDoc.status === 'sent' ? 'bg-blue-100 text-blue-700' :
-                'bg-amber-100 text-amber-700'
-              }`}>{viewDoc.status}</span>
-            </div>
+        <Sheet
+          label={viewDoc.title || 'Document'}
+          title={viewDoc.title}
+          headerActions={(
+            <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+              viewDoc.status === 'signed' ? 'bg-emerald-100 text-emerald-700' :
+              viewDoc.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+              'bg-amber-100 text-amber-700'
+            }`}>{viewDoc.status}</span>
+          )}
+          onClose={() => setViewDoc(null)}
+          width={640}
+          testId="legal-document-viewer"
+          footer={<button onClick={() => setViewDoc(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors dark:text-gray-300">Close</button>}
+        >
+          <div className="p-6">
             {/* Security #8: contract bodies are no longer rendered inline.
                 The backend returns a short-lived (~5 min) signed download
                 URL; clicking it streams the file as `attachment` with
@@ -359,9 +366,8 @@ export default function LegalPage() {
                 </div>
               )}
             </div>
-            <button onClick={() => setViewDoc(null)} className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors dark:text-gray-300">Close</button>
           </div>
-        </div>
+        </Sheet>
       )}
 
       {previewTemplate && (
@@ -389,7 +395,7 @@ export function TemplatePreviewBody({ body, hasBody }) {
   );
 }
 
-function TemplatePreviewModal({ template, onClose }) {
+export function TemplatePreviewModal({ template, onClose }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loadingContent, setLoadingContent] = useState(true);
@@ -404,31 +410,30 @@ function TemplatePreviewModal({ template, onClose }) {
   const config = LAYER_CONFIG[template.layer];
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white border border-gray-200 rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col dark:bg-gray-900 dark:border-gray-800" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 dark:border-gray-800">
-          <div>
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100">{template.title}</h3>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full ${config?.badge}`}>
-              {template.layer_label}
-            </span>
-          </div>
-        </div>
-        <div className="p-6 overflow-y-auto flex-1">
-          <p className="text-xs text-gray-500 mb-3">The text this document carries in the library. Fields in double braces are filled when it is sent.</p>
-          {loadingContent ? (
-            <div className="text-center text-gray-500 text-sm py-8">Loading template...</div>
-          ) : error ? (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          ) : (
-            <TemplatePreviewBody body={data?.body} hasBody={!!data?.has_body} />
-          )}
-        </div>
-        <div className="px-6 py-3 border-t border-gray-200 flex justify-end shrink-0 dark:border-gray-800">
+    <Sheet
+      label={template.title || 'Template'}
+      title={template.title}
+      sub={<span className={`text-[10px] px-2 py-0.5 rounded-full ${config?.badge}`}>{template.layer_label}</span>}
+      onClose={onClose}
+      width={640}
+      testId="legal-template-preview"
+      footer={(
+        <div className="flex justify-end">
           <button onClick={onClose} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors dark:text-gray-300">Close</button>
         </div>
+      )}
+    >
+      <div className="p-6">
+        <p className="text-xs text-gray-500 mb-3">The text this document carries in the library. Fields in double braces are filled when it is sent.</p>
+        {loadingContent ? (
+          <div className="text-center text-gray-500 text-sm py-8">Loading template...</div>
+        ) : error ? (
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        ) : (
+          <TemplatePreviewBody body={data?.body} hasBody={!!data?.has_body} />
+        )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 

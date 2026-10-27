@@ -282,7 +282,7 @@ test('RPT21b, RPT21c at 390: Reports as a list; a late period opens full screen 
     assert.match(v.text('company-period-pm9'), /Sep 2026 · Monthly financial statements.*Due 30 Oct 2026 · expected 14 Nov 2026.*Late · 6 days/);
     assert.match(v.props('company-period-pm9').className, /\bmin-h-11\b.*focus-visible:ring-2/);
     await v.click('company-period-pm9');
-    assert.equal(v.props('company-period-sheet-layer')['data-phone'], undefined, 'full screen, not a bottom sheet');
+    assert.notEqual(v.props('company-period-sheet-layer')['data-phone'], 'sheet', 'full screen, not a bottom sheet');
     assert.ok(!v.has('company-period-sheet-close'), 'the crumb is the way back, not the dialog’s ×');
     assert.equal(v.text('company-sheet-back'), '‹ Reports');
     assert.match(v.props('company-sheet-back').className, /\bmin-h-11\b/);
@@ -304,7 +304,7 @@ test('RPT21b, RPT21c at 390: Reports as a list; a late period opens full screen 
     // A sent period opens the reader, full screen, with the same head.
     await v.click('company-period-pq2');
     assert.ok(v.has('company-reader'));
-    assert.equal(v.props('company-reader-layer')['data-phone'], undefined);
+    assert.notEqual(v.props('company-reader-layer')['data-phone'], 'sheet', 'full screen, not a bottom sheet');
     assert.ok(!v.has('company-reader-close'));
     assert.match(v.text('company-sheet-head'), /‹ Reports Q2 2026 report Sent · on time Quarterly KPI report from Acme Robotics/);
     await v.click('company-sheet-back');

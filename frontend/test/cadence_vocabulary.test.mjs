@@ -24,6 +24,9 @@ import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
 import { RITUAL_KINDS, RITUAL_FREQUENCIES, WEEKDAYS, kindLabel, dayLabel, todayIso } from '../src/lib/cadence.js';
 import { CADENCE_VIEWS } from '../src/pages/founder/FounderBuildCadence.jsx';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { RitualDialog, RunDialog, TemplatesDialog } from '../src/pages/founder/CadenceDialogs.jsx';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
@@ -160,4 +163,20 @@ test('an unknown kind reads as itself rather than as nothing', () => {
   assert.equal(kindLabel('sync'), 'sync');
   assert.equal(kindLabel(''), 'Other');
   assert.equal(kindLabel(null), 'Other');
+});
+
+test('D1317: the ritual and review editors are the shared Sheet at 520px; the template list stays centred', () => {
+  const h = React.createElement;
+  for (const [el, id, save] of [
+    [h(RitualDialog, { ritual: { id: 4, name: 'Friday retro' }, templates: [], onClose() {}, onSave() {} }), 'dialog-ritual', 'button-ritual-save'],
+    [h(RunDialog, { run: null, rituals: [{ id: 4, name: 'Friday retro', active: 1 }], onClose() {}, onSave() {} }), 'dialog-run', 'button-run-save'],
+  ]) {
+    const out = renderToStaticMarkup(el);
+    assert.match(out, new RegExp(`role="dialog" aria-modal="true" aria-labelledby="[^"]+"[^>]*data-testid="${id}"[^>]*data-width="520"`), `${id} is the Sheet`);
+    const form = out.match(/<form id="([^"]+)"/)?.[1];
+    assert.ok(form, 'the form carries an id');
+    const foot = out.slice(out.indexOf(`data-testid="${id}-footer"`));
+    assert.match(foot, new RegExp(`type="submit" form="${form}"[^>]*data-testid="${save}"`), 'the save sits in the fixed footer and submits the form');
+  }
+  assert.match(renderToStaticMarkup(h(TemplatesDialog, { templates: [], starters: [], onClose() {} })), /class="fb-cadence-modal"/, 'a list editor stays centred');
 });

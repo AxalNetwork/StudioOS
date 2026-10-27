@@ -41,6 +41,7 @@ import {
 import { AcceptRefused, acceptProposal, deleteFact, dismissProposal, factWriterFor, syncSection, type SourceRow } from '../services/notion/sync';
 // D1087–D1090: each section's writers and acceptors register themselves on import.
 import '../services/notion/validate';
+import '../services/notion/raise';
 
 type C = Context<{ Bindings: Env }>;
 

@@ -25,6 +25,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { TICKET_PRIORITIES, TICKET_TYPES } from '../../lib/ticketScreens';
 import { dayText, sameDay, storedDate } from '../../pages/founder/studioPhoneModel.js';
+import { openCheckout, planKeyOfTier } from '../checkout/checkoutEntry';
 
 /**
  * One breakpoint (D701 decision 2, epic D-l): the shell's `PHONE_QUERY`,
@@ -154,7 +155,10 @@ function PhoneCard({ card }) {
         </div>
       )}
       {card.locked ? (
-        <Link to={card.upgrade || '/billing/upgrade'} className="ml-7 text-[13px] font-semibold text-amber-800 dark:text-amber-300">Upgrade to unlock →</Link>
+        card.upgrade
+          ? <Link to={card.upgrade} className="ml-7 text-[13px] font-semibold text-amber-800 dark:text-amber-300">Upgrade to unlock →</Link>
+          // D1054 (#2905): no upgrade address sent, so the plan opens in the checkout sheet over this page.
+          : <button type="button" onClick={() => openCheckout({ plan_key: planKeyOfTier(card.lockTier) || 'founder:studio', unlocks: card.title || null })} className="ml-7 self-start text-left text-[13px] font-semibold text-amber-800 dark:text-amber-300">Upgrade to unlock →</button>
       ) : (card.learn || card.link) && (
         <div className="flex min-h-[32px] items-center justify-end gap-4">
           {card.learn && (

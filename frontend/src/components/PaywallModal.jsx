@@ -7,12 +7,17 @@
 // 'investor_tier_required', required, message?}`. Also exposes
 // `openPaywall(required, message?)` for imperative triggers (sidebar lock-pill
 // click). `required` is one of: growth, studio, professional, institutional.
+//
+// D1054 (#2905): Upgrade no longer leaves for Stripe's hosted checkout. It
+// closes the paywall and opens D1048's checkout sheet over the same page
+// (`openCheckout`), naming what the plan unlocks; after payment the sheet
+// offers "Back to [feature]". `openPaywall(required, message, feature)` takes
+// the feature's name for that.
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Lock, Check, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { api } from '../lib/api';
-import { checkoutRefusal } from '../lib/pricingModel';
+import { Link, useLocation } from 'react-router-dom';
+import { openCheckout } from './checkout/checkoutEntry';
 import QuotaCard from './QuotaCard';
 import { PRICE_UNREAD, PRICE_UNREAD_LINE, priceOf, usePlansRead } from '../lib/planPrices';
 import { useEscapeClose } from './useEscapeClose';
@@ -61,10 +66,10 @@ const FOUNDER_RANK = { free: 0, growth: 1, studio: 2 };
 const INVESTOR_RANK = { free: 0, professional: 1, institutional: 2 };
 const INVESTOR_TIERS = new Set(['professional', 'institutional']);
 
-export function openPaywall(required = 'growth', message = '') {
+export function openPaywall(required = 'growth', message = '', feature = '') {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent('studioos:tier_required', {
-    detail: { required, message },
+    detail: { required, message, feature },
   }));
 }
 
@@ -94,8 +99,8 @@ export default function PaywallModal({ user }) {
   const [open, setOpen] = useState(false);
   const [required, setRequired] = useState('growth');
   const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(null);
-  const [refusal, setRefusal] = useState(null);
+  const [feature, setFeature] = useState('');
+  const location = useLocation();
   // D1050: the prices, from the plans read the checkout sheet and Pricing read.
   const prices = usePlansRead();
 
@@ -123,7 +128,7 @@ export default function PaywallModal({ user }) {
       }
       setRequired(norm);
       setMessage(typeof detail.message === 'string' ? detail.message : '');
-      setRefusal(null);
+      setFeature(typeof detail.feature === 'string' ? detail.feature.slice(0, 60) : '');
       setOpen(true);
     }
     window.addEventListener('studioos:tier_required', onEvt);
@@ -135,24 +140,17 @@ export default function PaywallModal({ user }) {
 
   const isInvestorMode = INVESTOR_TIERS.has(required);
 
-  const startCheckout = useCallback(async (key) => {
-    setBusy(key);
-    setRefusal(null);
-    try {
-      const plan = TIER_PLANS[key]?.plan;
-      const res = isInvestorMode && plan
-        ? await api.investorCheckout(plan)
-        : await api.tierCheckout(key);
-      // An answer with no checkout address opened nothing, so it is a refusal too.
-      if (res?.url) window.location.href = res.url;
-      else setRefusal(checkoutRefusal(null));
-    } catch (e) {
-      // D1049 (#2900): an in-page line, never a browser pop-up, saying no money moved.
-      setRefusal(checkoutRefusal(e));
-    } finally {
-      setBusy(null);
-    }
-  }, [isInvestorMode]);
+  // D1054: the sheet opens over this page; the paywall closes so one dialog is on top.
+  const startCheckout = useCallback((key) => {
+    const here = `${location.pathname}${location.search || ''}`;
+    setOpen(false);
+    openCheckout({
+      plan_key: TIER_PLANS[key]?.key,
+      interval: 'monthly',
+      from: { label: feature || 'where you were', href: here },
+      unlocks: feature || null,
+    });
+  }, [location.pathname, location.search, feature]);
 
   if (!open) return null;
 
@@ -193,7 +191,7 @@ export default function PaywallModal({ user }) {
                 {isInvestorMode ? 'Upgrade your investor plan' : 'Upgrade to keep building'}
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                {message || `This is a ${titleLabel}-tier feature.`}
+                {message || (feature ? `${feature} is on ${titleLabel}.` : `This is a ${titleLabel}-tier feature.`)}
               </p>
             </div>
           </div>
@@ -212,12 +210,6 @@ export default function PaywallModal({ user }) {
           <div className="px-5 sm:px-6 pt-5">
             <QuotaCard user={{ role: 'investor' }} />
           </div>
-        )}
-        {refusal && (
-          <p role="alert" data-testid="paywall-refusal"
-            className="mx-5 sm:mx-6 mt-5 mb-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-            {refusal}
-          </p>
         )}
         <div className={`grid gap-4 p-5 sm:p-6 ${tiersToShow.length > 1 ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
           {tiersToShow.map((tier) => {
@@ -253,15 +245,15 @@ export default function PaywallModal({ user }) {
                 </ul>
                 <button
                   type="button"
-                  disabled={busy === tier}
                   onClick={() => startCheckout(tier)}
+                  data-testid={`paywall-upgrade-${tier}`}
                   className={`mt-5 w-full py-2.5 rounded-lg font-medium text-sm transition-colors ${
                     featured
                       ? 'bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-50'
                       : 'border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50'
                   }`}
                 >
-                  {busy === tier ? 'Opening checkout…' : `Upgrade to ${plan.label}`}
+                  {`Upgrade to ${plan.label}`}
                 </button>
               </div>
             );

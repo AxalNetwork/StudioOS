@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { capTableHolderApi } from '../../../lib/api/capTableHolder';
 import { cyclesApi } from '../../../lib/api/cycles';
-import { Lightbox, Unreadable } from '../../../ui';
+import { Unreadable } from '../../../ui';
 import { Tag } from './CapTableTag';
 import { filingsOf, holderView } from './overviewModel';
 import { correctable, voidable } from './historyModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1022 (#2859) — the holder drawer (CT2, with CT2p for people) at
@@ -62,7 +63,7 @@ export default function HolderDrawer({ projectId, holderId, record, grants, onCl
   const title = v?.found ? v.name : 'Holder';
   const rawOf = (uid) => (ready ? (record.data?.issuances?.rows || []).find((r) => r.uid === uid) : null) || null;
   return (
-    <Lightbox label={title} eyebrow="Holder" title={title} width={600} onClose={onClose} testId="captable-holder-drawer" pageBelow={page ? 'lg' : undefined}
+    <Sheet label={title} eyebrow="Holder" title={title} width={600} onClose={onClose} testId="captable-holder-drawer" pageBelow={page ? 'lg' : undefined}
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={GHOST} onClick={onClose}>Close</button>
@@ -127,6 +128,6 @@ export default function HolderDrawer({ projectId, holderId, record, grants, onCl
                 </Section>
               </div>
             )}
-    </Lightbox>
+    </Sheet>
   );
 }

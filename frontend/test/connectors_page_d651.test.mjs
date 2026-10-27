@@ -420,7 +420,7 @@ test('the connect flow’s views: pre, signin, key, connected, and each state', 
   assert.match(panel('crunchbase', 'badkey'), /That key is not valid\. Check it at Crunchbase and paste it again\./);
   assert.match(panel('stripe', 'overreach'), /asked for more than StudioOS uses\. .*Report Try again/);
   const pro = panel('carta', 'pro');
-  assert.match(pro, /Carta by Carta · Beta Carta is part of the Raise \+ Grow plan\./);
+  assert.match(pro, /Carta by Carta · Beta × Carta is part of the Raise \+ Grow plan\./, 'D1317: the shared Sheet’s × follows the head');
   assert.match(pro, /Close See plans/);
   assert.match(pro, /Raise \+ Grow plan\. Free keeps every connector you already have\./, 'since #1611 sync has no tier gate, so the canvas’s promise is true and printed');
 });
