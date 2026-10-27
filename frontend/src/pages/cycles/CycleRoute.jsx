@@ -214,7 +214,8 @@ const CYCLE_DEFS = {
       // D1029: the Cap table module page is the tool, so it has no door to itself.
       // D1173 (#2455): the venture travels with the link (broken item 8).
       'use-of-funds': (q) => ({ label: 'Open the financial model', href: forecastHref(q) }),
-      'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
+      // D1194 (#3128): the old pipeline retired into the tool; its door opens the Pipeline tab with the venture.
+      'capital-relationships': (q) => ({ label: 'Open the investor pipeline', href: `/raise/capital-relationships/pipeline${q || ''}` }),
       // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
     }),
     add: toFnMap({}),

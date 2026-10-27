@@ -480,7 +480,6 @@ const FounderGrowFocus = lazy(() => import('./pages/founder/FounderGrowFocus'));
 const FounderGrowTalent = lazy(() => import('./pages/founder/FounderGrowTalent'));
 const FounderGrowCustomers = lazy(() => import('./pages/founder/FounderGrowCustomers'));
 const FounderGrowPartnerships = lazy(() => import('./pages/founder/FounderGrowPartnerships'));
-const FounderGrowCapitalMatch = lazy(() => import('./pages/founder/FounderGrowCapitalMatch'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
@@ -527,6 +526,7 @@ import { signInPath as assistantSignInPath } from './pages/connect/assistantCons
 import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
+import CapRelMovedRedirect from './pages/raise/caprel/CapRelMovedRedirect';
 import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
 import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
@@ -3277,7 +3277,8 @@ function AppInner() {
           and admin Review queue tabs. The partner-side Submit and Performance
           surface lives separately at /offers/perk-deals. */}
       <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], effectiveRole === 'partner' ? <Navigate replace to="/offers/perk-deals" /> : <PerksPage user={user} />)} />
-      <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />)))} />
+      {/* D1194 (#3128): the old investor pipeline is Capital relationships › Pipeline; the venture, query and hash travel, with ?moved=pipeline. */}
+      <Route path="/raise/capital/pipeline" element={<CapRelMovedRedirect tab="pipeline" moved="pipeline" />} />
        <Route path="/raise/legal" element={guard(['admin', 'founder'], <FounderRaiseLegal />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], founderWorkspace('raise', founderEditor(<LegalEnginePage />)))} />
       <Route path="/raise/legal-engine/incorporation" element={guard(['admin', 'founder', 'partner'], founderWorkspace('raise', founderEditor(<LegalEnginePage />)))} />
@@ -3471,8 +3472,9 @@ function AppInner() {
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />
       <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <FounderGrowPartnerships />)} />
-      <Route path="/raise/capital-match" element={guard(['admin', 'founder'], <FounderGrowCapitalMatch user={user} />)} />
-      <Route path="/grow/capital-match" element={guard(['admin', 'founder'], <Navigate replace to={{ pathname: '/raise/capital-match', search: location.search, hash: location.hash }} />)} />
+      {/* D1194 (#3128): Investor match is Capital relationships › Match; /grow/capital-match goes straight there too. */}
+      <Route path="/raise/capital-match" element={<CapRelMovedRedirect tab="match" moved="match" />} />
+      <Route path="/grow/capital-match" element={<CapRelMovedRedirect tab="match" moved="match" />} />
       {/* #2343: one brand page. Grow's read of pages and leads moved into the
           builder (`BrandPagesSection`); the old address forwards there. */}
       <Route path="/grow/brand" element={<Navigate replace to={{ pathname: '/build/brand', search: location.search, hash: location.hash }} />} />
@@ -3819,7 +3821,7 @@ function AppInner() {
           room tool's Home itself (D696, D1109). */}
       <Route path="/raise" element={founderRaiseLanding
         ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)
-        : <Navigate to="/raise/capital/pipeline" replace />} />
+        : <Navigate to="/raise/capital-relationships/pipeline" replace />} />
       {/* D686 §3.1 item 14: a founder's call inside the Raise shell; investors and counsel stay on /round-calls/:uid. */}
       <Route path="/raise/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />
       {/* D1221 (#2458): one call at its address under Capital relationships › Calls (CLS8); /raise/calls/:uid stays until part 6 counts its redirect. */}

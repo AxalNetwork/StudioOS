@@ -159,10 +159,7 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'New proposal', to: '/comarketing' },
     { label: 'Export terms', kind: 'export' },
   ],
-  'raise/capital-match': [
-    { label: 'Draft outreach', unbuilt: 'no outreach drafting runs on this desk' },
-    { label: 'Export shortlist', kind: 'export' },
-  ],
+  // D1194 (#3128): `raise/capital-match` is retired into Capital relationships › Match.
   'grow/brand': [
     { label: 'New page', to: '/build/brand' },
     { label: 'Export leads', kind: 'export' },
