@@ -20,7 +20,7 @@ import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlo
 import {
   CONSENTS, DURATIONS, HOW_OPTIONS, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callChannel, callLabel, chipStatus, consentNote, howOf,
   attachesCall, attachOutcome, defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
-  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine,
+  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref,
 } from './recordSetup.js';
 
 /**
@@ -282,7 +282,7 @@ export default function RecordLightbox({
   const botReady = mode === 'video' && !!botPlatform(link) && bot.canSend;
   const label = botReady ? 'Send Eadwyn AI' : m.start;
   const offer = createMeetingOffer(mode, provider, channels);
-  const openable = meeting && !!link.trim() && !linkProblem;
+  const openHref = meeting && !linkProblem ? meetingHref(provider, link) : null;
   useEffect(() => { setCreating({ busy: false, error: '' }); }, [provider]);
   /** D1346: "Create the meeting for me" — a meeting starting now on the member's own account; its link fills the field. */
   const createMeeting = async () => {
@@ -537,7 +537,7 @@ export default function RecordLightbox({
                 : linkProblem ? <span role="alert" className="font-normal text-red-700 dark:text-red-400">{linkProblem}</span> : null}
             </label>
           )}
-          {meeting && (offer || openable) && (
+          {meeting && (offer || openHref) && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="record-create-meeting">
               {offer?.kind === 'create' && (
                 <button type="button" onClick={createMeeting} disabled={creating.busy || offer.connected === false || !fields.meeting_url}
@@ -546,7 +546,7 @@ export default function RecordLightbox({
                 </button>
               )}
               {offer?.kind === 'create' && offer.connectHref && <Link to={offer.connectHref} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-create-connect">{offer.connectLabel}</Link>}
-              {openable && <a href={link.trim()} target="_blank" rel="noopener noreferrer" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-open-meeting">Open the meeting</a>}
+              {openHref && <a href={openHref} target="_blank" rel="noopener noreferrer" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-open-meeting">Open the meeting</a>}
               {offer && offer.kind !== 'create' && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-note">{offer.sentence}</p>}
               {creating.error && <p role="alert" className="m-0 w-full text-[11.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-create-error">{creating.error}</p>}
             </div>

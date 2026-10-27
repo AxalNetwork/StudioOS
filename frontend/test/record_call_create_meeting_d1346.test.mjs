@@ -7,7 +7,7 @@ import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
 import RecordLightbox from '../src/pages/founder/RecordLightbox.jsx';
 import {
-  BOT_UNAVAILABLE, BOT_UNREADABLE, TEAMS_PASTE, botState, botTranscriptLine, createMeetingOffer, createdLink,
+  BOT_UNAVAILABLE, BOT_UNREADABLE, TEAMS_PASTE, botState, botTranscriptLine, createMeetingOffer, createdLink, meetingHref,
 } from '../src/pages/founder/recordSetup.js';
 import { BOT_ENGINE, RECORD_ENGINE } from '../src/lib/validateSourceWording.js';
 
@@ -52,6 +52,12 @@ test('the rules: what is offered per platform, which link fills, and the bot sta
   assert.equal(createdLink('zoom', { join_url: 'https://evil.example/j/1' }), null, 'a link off the provider host fills nothing');
   assert.equal(createdLink('google_meet', { join_url: 'http://meet.google.com/abc-mnop-xyz' }), null);
   assert.equal(createdLink('zoom', null), null);
+  // Open the meeting's href is a parsed https URL on the provider's own host, never the typed text.
+  assert.equal(meetingHref('zoom', ` ${ZOOM_LINK} `), ZOOM_LINK);
+  assert.equal(meetingHref('teams', 'https://teams.microsoft.com/l/meetup-join/x'), 'https://teams.microsoft.com/l/meetup-join/x');
+  for (const [p, bad] of [['zoom', 'javascript:alert(1)'], ['zoom', 'http://zoom.us/j/1'], ['google_meet', 'https://evil.example/abc'], ['teams', 'https://teams.evil.example/x'], ['teams', 'data:text/html,x'], ['whatsapp', ZOOM_LINK]]) {
+    assert.equal(meetingHref(p, bad), null, `${p} ${bad}`);
+  }
   assert.deepEqual(botState(undefined, 'zoom'), { state: 'loading', canSend: false, sentence: 'Checking whether Eadwyn AI can join…' });
   assert.deepEqual(botState(null, 'zoom'), { state: 'unreadable', canSend: false, sentence: BOT_UNREADABLE });
   assert.deepEqual(botState(BOT_OFF, 'zoom'), { state: 'unavailable', canSend: false, sentence: BOT_UNAVAILABLE });

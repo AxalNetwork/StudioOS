@@ -238,6 +238,20 @@ export function createMeetingOffer(mode, provider, channels) {
   const connected = channels ? isConnected(connectionOf(channels, provider), provider) : null;
   return { kind: 'create', connected, connectHref: connected === false ? '/account/connectors' : null, connectLabel: CREATE_CONNECT[provider] };
 }
+/**
+ * "Open the meeting"'s href: the link re-serialised from a parsed https URL on
+ * the provider's own host (`safeJoinUrl`, plus Teams' three hosts), never the
+ * typed text itself. Null for anything else, so nothing else is ever opened.
+ */
+export function meetingHref(provider, raw) {
+  if (provider === 'zoom' || provider === 'google_meet') return safeJoinUrl(String(raw || '').trim(), provider);
+  if (provider !== 'teams') return null;
+  try {
+    const u = new URL(String(raw || '').trim());
+    const host = u.hostname.toLowerCase();
+    return u.protocol === 'https:' && (host === 'teams.microsoft.com' || host === 'teams.live.com' || host === 'teams.cloud.microsoft') ? u.toString() : null;
+  } catch { return null; }
+}
 /** The link the Worker made, or null: a reply that is not a link on the provider's own host fills nothing. */
 export function createdLink(provider, reply) {
   const url = typeof reply?.join_url === 'string' ? reply.join_url.trim() : '';
