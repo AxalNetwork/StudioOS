@@ -133,10 +133,11 @@ test('the two dependencies the delete strands go with it', () => {
     assert.ok(surviving.includes(k),
       `articleNotify no longer carries ${k} — the narrowing above lost real behaviour`);
   }
-  // D1293 (#3389) adds one of its own: unpublish's notice, which had borrowed
-  // "Changes requested".
+  // D1292 added `author_back_to_submitted` (an edit sent the article back).
+  // D1293 (#3389) adds unpublish's notice, which had borrowed "Changes requested".
   assert.deepEqual(surviving.filter((k) => !kinds.includes(k) && !['author_in_review', 'author_changes_requested',
-    'author_approved', 'author_published', 'author_rejected'].includes(k)), ['author_unpublished']);
+    'author_approved', 'author_published', 'author_rejected'].includes(k)),
+    ['author_unpublished', 'author_back_to_submitted']);
 
   // And every kind the narrowed union still declares must have a caller,
   // which is the rule the five broke.

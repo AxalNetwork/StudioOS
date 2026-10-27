@@ -207,7 +207,7 @@ const FEATURE_CATALOG: FeatureEntry[] = [
   { keywords: ['roadmap', 'okr', 'okrs'],
     url: '/build/roadmap', label: 'Roadmap & OKRs', roles: ['founder', 'admin'] },
   { keywords: ['financial model', 'financials', 'model builder'],
-    url: '/raise/capital/model', label: 'Financial Model Builder', roles: ['founder', 'admin'] },
+    url: '/raise/use-of-funds/runway/forecast', label: 'Forecast · Use of funds › Runway', roles: ['founder', 'admin'] },
   { keywords: ['portfolio', 'portfolio health'],
     url: '/portfolio/health', label: 'Portfolio Health', roles: ['admin', 'investor', 'partner'] },
   { keywords: ['settings', 'preferences', 'account'],

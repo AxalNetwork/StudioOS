@@ -11,6 +11,8 @@ import { railBody } from './railPages.js';
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
 export * from './api/accountCompanies.js';
+export * from './api/adminAccountWrites.js';
+export * from './api/adminAccounts.js';
 export * from './api/adminAiUsage.js';
 export * from './api/adminApprovals.js';
 export * from './api/adminCapitalAttestations.js';
@@ -143,6 +145,7 @@ export * from './api/tokenPacks.js';
 export * from './api/trustContent.js';
 export * from './api/usage.js';
 export * from './api/useOfFunds.js';
+export * from './api/ventureScoreModels.js';
 export * from './api/ventureScores.js';
 export * from './api/verdict.js';
 // api-modules:end
@@ -2524,7 +2527,8 @@ export const api = {
   kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
   // D634 — one masked KYC field in clear; the Worker logs the showing first.
   kycAdminShowField: (userId, field) => request(`/kyc/admin/${userId}/sensitive/${encodeURIComponent(field)}`),
-  kycAdminApprove: (userId) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH' }),
+  // D1303: full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  kycAdminApprove: (userId, body) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH', ...(body ? { body: JSON.stringify(body) } : {}) }),
   kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
   // D634 — a partner profile's masked tax ID in clear; the showing is logged.
@@ -5757,8 +5761,11 @@ export const adminArticles = {
     request(`/admin/articles/${id}/request-changes`, { method: 'POST', body: JSON.stringify({ reason }) }),
   reject: (id, reason) =>
     request(`/admin/articles/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  approve: (id) => request(`/admin/articles/${id}/approve`, { method: 'POST', body: '{}' }),
-  publish: (id) => request(`/admin/articles/${id}/publish`, { method: 'POST', body: '{}' }),
+  // D1292 — an admin deciding their own article is refused; a Super Admin sends `override_reason`.
+  approve: (id, overrideReason) =>
+    request(`/admin/articles/${id}/approve`, { method: 'POST', body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}) }),
+  publish: (id, overrideReason) =>
+    request(`/admin/articles/${id}/publish`, { method: 'POST', body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}) }),
   // D484 — set (an ISO UTC string) or clear (null) the time an approved article goes out.
   schedule: (id, publishAt) =>
     request(`/admin/articles/${id}/schedule`, { method: 'POST', body: JSON.stringify({ publish_at: publishAt }) }),
@@ -5775,6 +5782,15 @@ export const adminArticles = {
   resolveComment: (cid, resolved) =>
     request(`/admin/articles/comments/${cid}`, { method: 'PUT', body: JSON.stringify({ resolved }) }),
   deleteComment: (cid) => request(`/admin/articles/comments/${cid}`, { method: 'DELETE' }),
+  // D1294 — Authors and Performance: per-author counts, and views by week from the daily count (migration 637).
+  authors: () => request('/admin/articles/authors'),
+  performance: ({ from, to } = {}) => {
+    const qs = new URLSearchParams();
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    const q = qs.toString();
+    return request(`/admin/articles/performance${q ? `?${q}` : ''}`);
+  },
 };
 
 // Spin-Out Lab — 4-week guided sprint, gated on evidence. Open to founders

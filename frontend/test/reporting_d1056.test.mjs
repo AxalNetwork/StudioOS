@@ -18,12 +18,13 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  COMPANY_TABS, DESK_TABS, DESK_WAITS, NOT_YET, companyHref, companyOf, companyTabOf, deskHref, deskSearch, holdingLine, reportRows,
+  COMPANY_TABS, DESK_TABS, companyHref, companyOf, companyTabOf, deskHref, deskSearch, holdingLine, reportRows,
 } from '../src/pages/cycles/reportingModel.js';
 import { CYCLES, cycleTabs } from '../src/pages/cycles/cycleModel.js';
 import ReportingDesk from '../src/pages/cycles/ReportingDesk.jsx';
 import PortfolioCompanyPage from '../src/pages/investor/PortfolioCompanyPage.jsx';
 import { cyclesApi } from '../src/lib/api/cycles.js';
+import { reportingApi } from '../src/lib/api/reporting.js';
 import { api } from '../src/lib/api.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -42,7 +43,6 @@ test('the desk\'s addresses keep only the venture; Grow\'s history tab is Report
     ['Overview', '/grow?project_id=7', false], ['Reporting', '/grow/reporting?project_id=7', true], ['Distribution', '/grow/distribution?project_id=7', false],
   ]);
   assert.equal(cycleTabs('grow', [{ slug: 'distribution' }], null)[1].active, false, 'not lit elsewhere');
-  assert.deepEqual(DESK_WAITS.map((w) => w.title), ['Due next', 'Needs you', 'Calendar']);
 });
 
 test('the company page: a safe uid only, its tabs, the holding from the position, reports newest first for this company only', () => {
@@ -82,18 +82,20 @@ function harness() {
   return { root, byId, all, text, props, walk, settle, close, container };
 }
 
-test('mounted desk: History from the Durable company-building read, each duty block "Not read here yet", Duties says where terms change', async () => {
+test('mounted desk: History from the Durable company-building read beside part 2\'s desk (D1060), Duties says where terms change', async () => {
   const t = harness();
   const was = cyclesApi.module;
+  const wasDesk = reportingApi.desk;
   const calls = [];
   cyclesApi.module = async (...a) => { calls.push(a); return { parts: { updates: [{ uid: 'u1', period: 'Sep 2026', sent_at: '2026-10-02 10:00:00', sent_to: { investors: 3 }, href: '/updates/u1' }] } }; };
+  reportingApi.desk = async () => ({ ok: true, today: '2026-11-05', project: { id: 7, uid: 'p', name: 'Acme' }, can_write: true, duties: [], periods: [], asks: [], reminders: {} });
   try {
     await act(async () => t.root.render(h(MemoryRouter, { initialEntries: ['/grow/reporting?project_id=7'] },
       h(ReportingDesk, { tab: 'desk', projectId: 7, search: '?project_id=7', cards: [{ slug: 'distribution', name: 'Distribution' }], action: { label: 'Share an update', href: '/grow/update?project_id=7' } }))));
     await t.settle();
     assert.deepEqual(calls, [['grow', 7, 'durable-company-building', {}]]);
     assert.match(t.text(t.byId('reporting-history')), /Update · Sep 2026.*Sent 2 Oct · 3 investors/s);
-    for (const w of DESK_WAITS) assert.ok(t.text(t.byId(`reporting-wait-${w.key}`)).startsWith(`${w.title}${NOT_YET}`), w.key);
+    assert.ok(t.byId('reporting-empty'), 'no duty yet: the empty state, never "nothing due"');
     assert.ok(!/\b0 (due|late|duties)\b/.test(t.text(t.container)), 'no zero is claimed');
     const tabs = t.walk(t.byId('cycle-tabs')).filter((n) => n.tagName === 'A');
     assert.equal(t.props(tabs.find((n) => t.text(n) === 'Reporting'))['aria-current'], 'page');
@@ -101,20 +103,25 @@ test('mounted desk: History from the Durable company-building read, each duty bl
     await act(async () => t.root.render(h(MemoryRouter, { key: 'duties', initialEntries: ['/grow/reporting/duties'] },
       h(ReportingDesk, { tab: 'duties', projectId: 7, search: '?project_id=7', cards: [] }))));
     await t.settle();
-    assert.match(t.text(t.byId('reporting-duties')), /amend the document in Raise.*Not read here yet.*not the same as owing none/s);
-    // A failed History read says so, and the waiting blocks still draw.
+    assert.match(t.text(t.byId('reporting-duties')), /amend the document in Raise.*No reporting duties yet/s);
+    // A failed History read says so, and the desk still draws.
     cyclesApi.module = async () => { throw new Error('down'); };
     await act(async () => t.root.render(h(MemoryRouter, { key: 'down', initialEntries: ['/grow/reporting'] },
       h(ReportingDesk, { tab: 'desk', projectId: 8, search: '', cards: [] }))));
     await t.settle();
     assert.match(t.text(t.container), /not a claim that nothing was sent/);
-    assert.ok(t.byId('reporting-wait-calendar'));
-  } finally { cyclesApi.module = was; await t.close(); }
+    assert.ok(t.byId('reporting-empty'));
+  } finally { cyclesApi.module = was; reportingApi.desk = wasDesk; await t.close(); }
 });
 
-test('mounted company page: the header from the position, Reports from the company\'s updates, Figures and Terms waiting, a stranger\'s uid refused', async () => {
+// D1061 (#2931) moved Figures and Terms off their waits: with no duty owed (a 404 from part 2's company read)
+// and no report received, each says so, and neither claims a zero.
+test('mounted company page: the header from the position, Reports from the company\'s updates, Figures and Terms with nothing owed, a stranger\'s uid refused', async () => {
   const t = harness();
   const was = { positionsList: api.positionsList, portfolioUpdatesList: api.portfolioUpdatesList };
+  const wasR = { company: reportingApi.company, companyFigures: reportingApi.companyFigures };
+  const none = async () => { throw Object.assign(new Error('No such company.'), { status: 404 }); };
+  reportingApi.company = none; reportingApi.companyFigures = none;
   const asked = [];
   api.positionsList = async () => ({ items: [{ project_id: 4, project: { uid: 'p-abc', name: 'Acme Robotics', stage: 'Seed' }, total_invested: 250000, latest_round: 'Seed', first_date: '2026-03-12' }] });
   api.portfolioUpdatesList = async (o) => { asked.push(o); return { items: [{ uid: 'u2', project_id: 4, title: 'Q3 2026', submitted_at: '2026-10-02 10:00:00' }] }; };
@@ -129,19 +136,19 @@ test('mounted company page: the header from the position, Reports from the compa
   try {
     await at('/portfolio/companies/p-abc');
     assert.match(t.text(t.byId('company-holding')), /Seed · Your holding: Seed · \$250,000 invested · since 12 Mar 2026/);
-    assert.match(t.text(t.byId('company-wait-figures')), /Figures.*Not read here yet.*nothing here is a guessed or zero value/s);
+    assert.match(t.text(t.byId('company-figures-none')), /No report from this company has reached you yet.*Nothing here is estimated/s);
     assert.equal(asked.length, 0, 'Figures reads no update');
     await at('/portfolio/companies/p-abc/reports');
     assert.deepEqual(asked, [{ project_id: 4 }]);
     assert.match(t.text(t.byId('company-reports')), /Q3 2026.*Received 2 Oct 2026/s);
     await at('/portfolio/companies/p-abc/terms');
-    assert.match(t.text(t.byId('company-wait-terms')), /Terms.*Not read here yet/s);
+    assert.match(t.text(t.byId('company-terms-none')), /owes you no report under a document you signed/);
     await at('/portfolio/companies/p-zzz');
     assert.ok(t.byId('company-not-held'), 'a company you hold no position in shows nothing of it');
     api.positionsList = async () => { throw new Error('down'); };
     await at('/portfolio/companies/p-abc');
     assert.match(t.text(t.container), /not a claim that you hold nothing here/);
-  } finally { Object.assign(api, was); await t.close(); }
+  } finally { Object.assign(api, was); Object.assign(reportingApi, wasR); await t.close(); }
 });
 
 // ---------------------------------------------------------------- the wiring

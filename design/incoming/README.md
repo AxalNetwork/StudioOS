@@ -111,6 +111,25 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-26 — Validate › Record a session › WhatsApp, Telegram, Calls (#2507, #2515, #2525)
+
+The owner's four artifacts came from the prompts on #2507, #2515 and #2525.
+Each was decoded by `scripts/read-canvas.mjs`:
+- `Session Channels Page.dc.html` (`4v3ggoUM2D5gY9GbLZJ6fD`) is the page every
+  board imports;
+- `Record a session · WhatsApp Boards.dc.html` (`BkEkumPjoAYAJcjBgPw8Uk`),
+  WA1 to WA13;
+- `Record a session · Telegram Boards.dc.html` (`UBBGXNbpe1szG7Be38UPeo`),
+  TG1 to TG7;
+- `Record a session · Calls Boards.dc.html` (`4SjVojdrMwaPzreH3nq9fC`), MC1 to
+  MC7.
+
+**Two edits, named.** In the page, the Axal VC mark points at `/axal-mark.png`
+and the Eadwyn mark at `/eadwyn-ai.png`. No other value was edited.
+
+**Grade: UPGRADE.** S21's integration (D1309) gives each channel its address
+under `/validate/record/`, pointing at today's connector page, chats inbox and
+session page. The boards are #2507, #2515 and #2525 (S09).
 ## Landed 2026-10-26 — Admin › Accounts (#2377)
 
 The owner's artifacts `7DW4GaGy3yFbJaiVcj6NDm` (the board grid) and
