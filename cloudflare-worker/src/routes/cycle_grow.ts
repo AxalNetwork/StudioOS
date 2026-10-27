@@ -36,6 +36,11 @@
  *   POST   /mercury/partner-proposals/:id/dismiss                          the founder only
  *   DELETE /mercury/facts/:id                      a writer on the founder's company; stays deleted
  *
+ * D1333 (#3481, part 2 of #2400): the overview read carries `publish` and each
+ * module read `parts.publish` — whether Publish to… shows (`can_publish`: the
+ * founder, not in a support session, with a place switched on), PUB8's empty
+ * states, and, for the venture's team, the last three sends from that page.
+ *
  * Every request value is bound. A typed figure is `source: 'manual'`.
  */
 import { Hono } from 'hono';
@@ -61,6 +66,7 @@ import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
 import { hasRecords } from '../services/records';
 import { isSupportSession } from '../integrations/providers/mercury';
+import { publishPart } from '../services/publishSources';
 import {
   GROW_FEED_SLUGS, GrowSyncRefused, acceptPartnerProposal, syncGrowFromMercury, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, isVentureFounder, type GrowFeedSlug,
 } from '../services/mercury/growFeeds';
@@ -113,7 +119,9 @@ r.get('/overview', async (c) => {
     const pid = await project(c, user, c.req.query('project'), false);
     const x = ctxFor(c.env, pid);
     const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => cardFor(x, m.slug)))]);
-    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, ...(await growPhone(x, user, figures, cards)) });
+    // D1333 (#3481): Publish to… from Overview, and what was published from here.
+    const publish = await publishPart(c.env, user as User, await isSupportSession(c), pid, 'overview');
+    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, publish, ...(await growPhone(x, user, figures, cards)) });
   } catch (e) { return fail(c, e); }
 });
 
@@ -393,7 +401,8 @@ r.get('/modules/:slug', async (c) => {
     const sort = String(c.req.query('sort') || '').slice(0, 60) || recs.sorts[0]?.key || '';
     const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
     const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
-    const parts = { ...(recs.parts ?? {}), ...(await mercuryPart(c, user, pid, meta.slug)) };
+    // D1333 (#3481): every Grow module's Publish to… and "Published from here" (`parts.publish`).
+    const parts = { ...(recs.parts ?? {}), ...(await mercuryPart(c, user, pid, meta.slug)), publish: await publishPart(c.env, user as User, await isSupportSession(c), pid, meta.slug) };
     return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow') }, ...(Object.keys(parts).length ? { parts } : {}) });
   } catch (e) { return fail(c, e); }
 });
