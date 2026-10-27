@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { adminArticles } from '../src/lib/api.js';
 import ArticlesQueuePage from '../src/pages/admin/ArticlesQueuePage.jsx';
@@ -55,12 +55,15 @@ async function mount(path) {
   adminArticles.get = async (id) => { calls.get.push(id); return { article: { ...ROW, body_markdown: 'Body.' }, revisions: [], comments: [] }; };
   const container = document.createElement('div');
   const root = createRoot(container);
+  const at = { path };
+  function Probe() { at.path = useLocation().pathname; return null; }
   await act(async () => root.render(React.createElement(MemoryRouter, { initialEntries: [path] },
     React.createElement(Routes, null,
       React.createElement(Route, { path: '/admin/articles/:view', element: React.createElement(ArticlesQueuePage) }),
-      React.createElement(Route, { path: '/admin/articles', element: React.createElement(ArticlesQueuePage) })))));
+      React.createElement(Route, { path: '/admin/articles', element: React.createElement(ArticlesQueuePage) })),
+    React.createElement(Probe))));
   return {
-    container, calls,
+    container, calls, at,
     async click(n) { await act(async () => props(n).onClick({ preventDefault() {} })); },
     async done() { await act(async () => root.unmount()); Object.assign(adminArticles, original); restore(); },
   };
@@ -85,6 +88,17 @@ test('an article address opens that article\'s review', async () => {
   try {
     // Mutation checked: keep selection in state → nothing is read for the address.
     assert.deepEqual(w.calls.get, [42]);
+    // D1317: the article opens as the shared Sheet over the full-width queue, 760px.
+    const sheet = byId(w.container, 'article-review');
+    assert.equal(props(sheet).role, 'dialog');
+    assert.ok(props(sheet)['aria-labelledby']);
+    assert.equal(props(sheet)['data-width'], 760);
+    assert.match(text(sheet), /Pricing before product/);
+    assert.match(text(sheet), /Body\./);
+    assert.ok(text(w.container).split('Pricing before product').length > 2, 'the queue stays drawn under the sheet');
+    await w.click(byId(w.container, 'article-review-close'));
+    assert.equal(w.at.path, '/admin/articles', 'closing returns to the queue');
+    assert.equal(byId(w.container, 'article-review'), undefined);
   } finally { await w.done(); }
 });
 

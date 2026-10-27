@@ -65,6 +65,8 @@ for(const phone of [false,true]) test(`requirement has its own URL, scoped facts
     assert.match(v.by('url').textContent,/requirement=investor_nda_v1/);
     assert.match(v.text(),/What this is/);assert.match(v.text(),/Why you are asked/);assert.match(v.text(),/Where it stands/);
     assert.match(v.text(),/3 Jan 2026/);assert.match(v.text(),/Open to sign/);
+    // D1317: the requirement opens as the shared Sheet over the page, 560px.
+    {const d=v.props(v.by('trust-requirement-dialog'));assert.equal(d.role,'dialog');assert.ok(d['aria-labelledby']);assert.equal(d['data-width'],560);}
     assert.match(textOf(v.by('trust-requirement-dialog')),/Synthetic evidence source/);assert.match(textOf(v.by('trust-requirement-dialog')),/Not recorded/);
     await v.escape();await v.flush();assert.equal(!!v.by('trust-requirement-dialog'),false);assert.doesNotMatch(v.by('url').textContent,/requirement=/);
   }finally{await v.unmount();}

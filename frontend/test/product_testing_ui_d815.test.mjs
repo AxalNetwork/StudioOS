@@ -290,6 +290,7 @@ test('HQ approves, sends back only with a reason, and makes its own programme', 
   const own = await mount(h(ProductTestingConsole, { api, view: 'programs' }), { url: '/admin/platform/product-testing/programs?new=1' });
   try {
     assert.ok(own.by('testing-form-dialog'));
+    assert.equal(own.prop('testing-form-dialog', 'data-width'), undefined, 'D1317: New program is a create form, the centred lightbox');
     await own.type('programme-product_name', 'Axal Mail beta');
     await own.type('programme-places', '10');
     await own.type('programme-role-investor', true);
@@ -299,6 +300,11 @@ test('HQ approves, sends back only with a reason, and makes its own programme', 
     await own.click('testing-menu-hq1');
     assert.ok(own.by('testing-menu-hq1-edit') && own.by('testing-menu-hq1-open'), "HQ's own draft opens without review");
     assert.ok(!own.by('testing-menu-hq1-approve'), "HQ's own never waits for approval");
+    // D1317: editing an existing program is a detail panel, the shared Sheet at 640px.
+    await own.click('testing-menu-hq1-edit');
+    assert.equal(own.prop('testing-form-dialog', 'role'), 'dialog');
+    assert.ok(own.prop('testing-form-dialog', 'aria-labelledby'));
+    assert.equal(own.prop('testing-form-dialog', 'data-width'), 640);
   } finally { await own.unmount(); }
   const review = await mount(h(ProductTestingConsole, { api, view: 'review' }));
   // Mutation checked: let the waiting list take HQ's own drafts → Axal Mail beta waits for approval.

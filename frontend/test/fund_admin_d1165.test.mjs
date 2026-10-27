@@ -96,6 +96,10 @@ test('D1165: pack figures are audited on Open, Admin gets a sentence, Return req
     await m.click(`draft-open-${m.uid}`);
     assert.equal(m.calls.filter(([n]) => n === 'packRead').length, 1);
     assert.equal(m.props(m.by(`draft-opened-${m.uid}-layer`))['data-phone'], 'sheet');
+    // D1317: the opened pack is the shared Sheet, 760px.
+    assert.equal(m.props(m.by(`draft-opened-${m.uid}`)).role, 'dialog');
+    assert.ok(m.props(m.by(`draft-opened-${m.uid}`))['aria-labelledby']);
+    assert.equal(m.props(m.by(`draft-opened-${m.uid}`))['data-width'], 760);
     assert.match(m.text(`draft-opened-${m.uid}`), /Committed \$10,000\.00/);
     assert.ok(!m.by(`draft-issue-${m.uid}`));
     assert.ok(m.by(`draft-issue-refused-${m.uid}`));
