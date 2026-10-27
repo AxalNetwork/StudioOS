@@ -111,6 +111,22 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-27 — Grow › Publish to… and sent history (#2400)
+
+The owner's artifacts came from the prompt on #2400:
+- `Publish Sheet Page.dc.html` (`E1DVsKDVPjraAxCM7NFV4F`) is the page;
+- `Publish · Boards.dc.html` (`RoUFfKU17q28BMT4hPoBTi`) is the board grid, PUB1
+  to PUB12; it imports the page by name.
+
+**Two edits, named.** In both files the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. No other value was
+edited.
+
+**Grade: NEW.** No founder publish exists yet, and nothing is mounted: a
+Publish to… with no Worker behind it would be a dead control. S21's decision
+(D1318) records what the canvas settles (#2400's A, B, E and G) and splits the
+build into four parts, D1319 to D1322. The sheet is D1317's shared `Sheet`.
+
 ## Landed 2026-10-27 — Google Workspace and Notion in the four cycles (#2402, #2405)
 
 The owner's four artifacts came from the prompts on #2402 and #2405. Each was
