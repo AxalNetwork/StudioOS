@@ -5773,6 +5773,15 @@ export const adminArticles = {
   resolveComment: (cid, resolved) =>
     request(`/admin/articles/comments/${cid}`, { method: 'PUT', body: JSON.stringify({ resolved }) }),
   deleteComment: (cid) => request(`/admin/articles/comments/${cid}`, { method: 'DELETE' }),
+  // D1294 — Authors and Performance: per-author counts, and views by week from the daily count (migration 637).
+  authors: () => request('/admin/articles/authors'),
+  performance: ({ from, to } = {}) => {
+    const qs = new URLSearchParams();
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    const q = qs.toString();
+    return request(`/admin/articles/performance${q ? `?${q}` : ''}`);
+  },
 };
 
 // Spin-Out Lab — 4-week guided sprint, gated on evidence. Open to founders
