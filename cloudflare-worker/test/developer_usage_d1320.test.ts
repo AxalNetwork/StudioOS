@@ -32,7 +32,7 @@ const M523 = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/523_me
 
 const A = 10, B = 20;
 const KEY_A = 'key-a-1', KEY_A2 = 'key-a-2', KEY_B = 'key-b-1';
-const DAY1 = '2026-10-01', DAY2 = '2026-10-02';
+const DAY1 = '2026-10-01';
 const RANGE = `from=${DAY1}&to=2026-10-31`;
 
 function fixture() {
