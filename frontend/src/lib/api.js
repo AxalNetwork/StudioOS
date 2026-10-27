@@ -11,6 +11,7 @@ import { railBody } from './railPages.js';
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
 export * from './api/accountCompanies.js';
+export * from './api/adminAccountWrites.js';
 export * from './api/adminAccounts.js';
 export * from './api/adminAiUsage.js';
 export * from './api/adminApprovals.js';
@@ -144,6 +145,7 @@ export * from './api/tokenPacks.js';
 export * from './api/trustContent.js';
 export * from './api/usage.js';
 export * from './api/useOfFunds.js';
+export * from './api/ventureScoreModels.js';
 export * from './api/ventureScores.js';
 export * from './api/verdict.js';
 // api-modules:end
@@ -215,6 +217,8 @@ function getCsrfHeader(method) {
 // done(true) so the original request is retried once. Concurrent 403s share one
 // in-flight prompt. If no modal is mounted (e.g. nothing listening), we fail
 // fast via the synchronous `ack` flag so the request never hangs.
+// D1287: `request(path, { noStepUp: true })` skips the prompt and throws the 403,
+// for a read that is only shown (the checkout sheet's auto-reload line).
 let _stepUpInFlight = null;
 function requestStepUp(ttlMinutes) {
   if (_stepUpInFlight) return _stepUpInFlight;
@@ -832,6 +836,7 @@ export async function request(path, options = {}) {
         res.status === 403 &&
         err && err.code === 'step_up_required' &&
         !options.__steppedUp &&
+        !options.noStepUp &&
         !path.startsWith('/auth/step-up')
       ) {
         try {
@@ -2522,7 +2527,8 @@ export const api = {
   kycAdminGet: (userId) => request(`/kyc/admin/${userId}`),
   // D634 — one masked KYC field in clear; the Worker logs the showing first.
   kycAdminShowField: (userId, field) => request(`/kyc/admin/${userId}/sensitive/${encodeURIComponent(field)}`),
-  kycAdminApprove: (userId) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH' }),
+  // D1303: full access without an identity check needs {reason} (10 to 500 characters); a reviewed submission takes an optional {note}.
+  kycAdminApprove: (userId, body) => request(`/kyc/admin/${userId}/approve`, { method: 'PATCH', ...(body ? { body: JSON.stringify(body) } : {}) }),
   kycAdminReject: (userId, reason) => request(`/kyc/admin/${userId}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
   adminGetProfile: (email) => request(`/profiling/admin/${encodeURIComponent(email)}`),
   // D634 — a partner profile's masked tax ID in clear; the showing is logged.
@@ -3664,6 +3670,9 @@ export const api = {
   // D209 — H14, the topology stated once. Super admin; a branch reads its own
   // half through branchDeployment() below.
   hqPlatformTopology: () => request('/admin/platform/topology'),
+  // D1170 — HQ › Platform › Storage: every member's stored bytes as totals by
+  // kind, plan and state; no name, email, id or file name. Super admin.
+  hqPlatformStorage: () => request('/admin/platform/storage'),
   hqSetPlatformSwitch: (key, action, reason) =>
     request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
       method: 'POST',
@@ -5755,8 +5764,11 @@ export const adminArticles = {
     request(`/admin/articles/${id}/request-changes`, { method: 'POST', body: JSON.stringify({ reason }) }),
   reject: (id, reason) =>
     request(`/admin/articles/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  approve: (id) => request(`/admin/articles/${id}/approve`, { method: 'POST', body: '{}' }),
-  publish: (id) => request(`/admin/articles/${id}/publish`, { method: 'POST', body: '{}' }),
+  // D1292 — an admin deciding their own article is refused; a Super Admin sends `override_reason`.
+  approve: (id, overrideReason) =>
+    request(`/admin/articles/${id}/approve`, { method: 'POST', body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}) }),
+  publish: (id, overrideReason) =>
+    request(`/admin/articles/${id}/publish`, { method: 'POST', body: JSON.stringify(overrideReason ? { override_reason: overrideReason } : {}) }),
   // D484 — set (an ISO UTC string) or clear (null) the time an approved article goes out.
   schedule: (id, publishAt) =>
     request(`/admin/articles/${id}/schedule`, { method: 'POST', body: JSON.stringify({ publish_at: publishAt }) }),

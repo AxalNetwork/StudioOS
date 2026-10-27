@@ -11,6 +11,8 @@ import { lovableRepositories } from '../integrations/providers/github/lovableMar
 import { foundingTeamFromCode, mapLogin, unmapLogin } from '../integrations/providers/github/team';
 import { acceptCompanyProposal, companyFromCode, dismissCompanyProposal } from '../integrations/providers/github/company';
 import { validateConnectorSettings } from '../integrations/connectorRules';
+import { dismissHealthEvent } from '../services/vercel/health';
+import { hostingSystems } from '../services/vercel/hosting';
 import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
@@ -636,6 +638,10 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   });
   const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));
   const code = p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
+  // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
+  let hosting: any;
+  try { hosting = await hostingSystems(env, p, viewer, viewerMember, connectHref('vercel', p.id)); }
+  catch { hosting = { state: 'unreadable', systems: [], reason: 'Unreadable: Vercel could not be read. The rest of this page is current.', syncs: { state: 'unreadable', rows: [], reason: null } }; }
 
   const rituals = rows(await env.DB.prepare(
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?
@@ -667,6 +673,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
       code: code?.code ?? { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.' },
       syncs: code?.syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
+      hosting,
     } } };
 
 }
@@ -1004,6 +1011,23 @@ app.post('/solution-design/proposals/:id/dismiss', async c => {
     projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design', entityId: null,
     action: 'build_design_proposal_dismissed', summary: 'Architecture proposal from GitHub dismissed' })]);
   if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+// D1097 (#2962): the founder dismisses an open Vercel health event. It stays dismissed: the next sync finds it open and opens nothing new.
+const HEALTH_DISMISS = {
+  not_found: [404, 'That health event is not on this venture.'],
+  closed: [409, 'That health event has closed, so there is nothing to dismiss.'],
+  already: [409, 'That health event is already dismissed.'],
+} as const;
+
+app.delete('/vercel/health-events/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: HEALTH_DISMISS.not_found[1] }, 404);
+  const out = await dismissHealthEvent(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'operating-systems', entityId: null,
+    action: 'build_vercel_health_dismissed', summary: 'A Vercel health event dismissed' })]);
+  if (out !== 'ok') return c.json({ detail: HEALTH_DISMISS[out][1] }, HEALTH_DISMISS[out][0]);
   return c.json({ ok: true });
 });
 
