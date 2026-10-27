@@ -2811,6 +2811,8 @@ function AppInner() {
       {/* Each tool at its #2375 address, under AdminPageHeader. All accounts
           is a sub-path of Accounts (/admin/accounts, D941). */}
       <Route path="/admin/accounts/all" element={guard(['admin'], <AllAccountsPage onImpersonate={handleImpersonate} />)} />
+      {/* D1299 (#2377): one account's record, the address #2369 and #2370's "Open member record" target. */}
+      <Route path="/admin/accounts/all/:id" element={guard(['admin'], <AllAccountsPage onImpersonate={handleImpersonate} />)} />
       {/* D1026 (CT17, CT18) — a venture's cap table as an Advisor, an Operating
           Partner, an Admin or the Super Admin reads it. The Worker decides the level. */}
       <Route path="/cap-tables/:projectId" element={guard(['admin', 'advisor', 'partner'], <CapTableReadPage />)} />
