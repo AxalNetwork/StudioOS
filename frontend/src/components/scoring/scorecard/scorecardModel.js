@@ -201,6 +201,29 @@ export function scopeOf(raw, key = raw?.scope ?? raw?.key) {
     coverage: coverageOf(raw, inputs),
     inputs, review: raw.review || null, masked: Boolean(raw.masked), reason: raw.reason || null,
     model: raw.model || null, computed_at: raw.computed_at || null,
+    // D1260: Risk's sub-rows, the ten venture-risk layers' analyst reviews, when the read carries them.
+    layers: key === 'risk' && Array.isArray(raw.layers) ? raw.layers.map(riskLayerOf) : null,
+  };
+}
+
+/* D1260 (#3283, owner question 8 A): the ten venture-risk layers as Risk's sub-rows (SC5). */
+export const NOT_REVIEWED = 'Not reviewed';
+const LAYER_BAND_WORD = Object.freeze({ low: 'Low risk', medium: 'Medium risk', high: 'High risk' });
+/**
+ * One layer as the Worker sends it: an analyst's score with its band and day,
+ * or "Not reviewed", never 0. The note is studio staff's only; a reader the
+ * Worker sent none to gets none.
+ */
+export function riskLayerOf(raw) {
+  const reviewed = raw?.state === 'reviewed' && num(raw?.score) != null;
+  return {
+    key: String(raw?.key ?? ''), label: String(raw?.label ?? 'Layer'),
+    reviewed,
+    score: reviewed ? num(raw.score) : null,
+    band: reviewed ? (LAYER_BAND_WORD[raw.band] || null) : null,
+    reviewed_on: reviewed ? (raw.reviewed_on || null) : null,
+    note: typeof raw?.note === 'string' && raw.note.trim() ? raw.note.trim() : null,
+    text: reviewed ? `${num(raw.score)} · ${LAYER_BAND_WORD[raw.band] || 'band not recorded'}` : NOT_REVIEWED,
   };
 }
 

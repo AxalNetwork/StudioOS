@@ -131,6 +131,8 @@ test('the Record a session lightbox offers "Send it from your AI assistant": the
 test('/connect/assistant is mounted, signed in, with sign-in and back for a visitor', () => {
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   assert.match(app, /<Route path="\/connect\/assistant" element=\{user \? <ConnectAssistantPage \/> : <Navigate to=\{assistantSignInPath\(location\)\} replace \/>\} \/>/);
-  assert.match(readFileSync('frontend/src/pages/account/AccountConnectors.jsx', 'utf8'), /<AssistantsSection \/>/);
+  // D1315: the assistants live in Builder; Connectors keeps one card that opens it.
+  assert.match(readFileSync('frontend/src/pages/account/builder/BuilderSection.jsx', 'utf8'), /<AssistantsSection \/>/);
+  assert.match(readFileSync('frontend/src/pages/account/AccountConnectors.jsx', 'utf8'), /<BuilderHandoff \/>/);
   assert.match(readFileSync('frontend/src/lib/api.js', 'utf8'), /export \* from '\.\/api\/assistants\.js';/);
 });

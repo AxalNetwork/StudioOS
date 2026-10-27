@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&amp;family=Space+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4f3f7}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+</style>
+</helmet>
+<div style="font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased">
+
+<sc-if value="{{ desk }}" hint-placeholder-val="{{ true }}">
+<div style="position:relative;display:flex;align-items:stretch;min-height:100%;background:#f4f3f7">
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ false }}">
+<aside aria-label="Main navigation" style="width:216px;flex:none;box-sizing:border-box;background:#fff;border-right:1px solid #ececf1;display:flex;flex-direction:column;gap:12px;padding:16px 12px">
+<div style="display:flex;align-items:center;gap:9px;padding:0 6px;height:32px"><img src="uploads/axal-logo-200x200.png" alt="Axal VC" style="width:28px;height:28px;display:block;border-radius:7px;object-fit:contain"><span style="font-size:15px;font-weight:800;letter-spacing:-0.02em">Axal VC</span></div>
+<sc-if value="{{ sw }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Switch company" style="display:flex;align-items:center;gap:8px;height:40px;padding:0 10px;border:1px solid #ececf1;border-radius:9px;background:#faf9fc;font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:#18181b;text-align:left;cursor:pointer"><span style="width:22px;height:22px;border-radius:6px;background:#f4f0fe;color:#6d28d9;display:grid;place-items:center;font-size:10px;font-weight:800;flex:none">{{ sw.ini }}</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sw.name }}</span><span aria-hidden="true" style="color:#6b6577">▾</span></button></sc-if>
+<nav aria-label="Workspace" style="display:flex;flex-direction:column;gap:2px">
+<sc-for list="{{ side }}" as="g" hint-placeholder-count="1">
+<sc-if value="{{ g.h }}" hint-placeholder-val="{{ false }}"><div style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding:10px 10px 4px">{{ g.h }}</div></sc-if>
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="8"><div style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;font-size:13px;font-weight:500;color:#3f3a47"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#6b6577" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ r.ic }}"></path></svg>{{ r.t }}</div></sc-for>
+</sc-for>
+</nav>
+</aside>
+</sc-if>
+
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ false }}">
+<header style="height:56px;flex:none;box-sizing:border-box;background:#fff;border-bottom:1px solid #ececf1;display:flex;align-items:center;gap:12px;padding:0 24px">
+<div style="width:320px;height:36px;box-sizing:border-box;border:1px solid #ececf1;border-radius:9px;background:#faf9fc;display:flex;align-items:center;gap:8px;padding:0 12px;color:#6b6577;font-size:12.5px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14"></path></svg><span style="flex:1">Search StudioOS</span><span style="font-family:'Roboto Mono',monospace;font-size:11px">⌘K</span></div>
+<div style="flex:1"></div>
+<sc-if value="{{ hq }}" hint-placeholder-val="{{ false }}"><span style="height:24px;padding:0 9px;border-radius:999px;background:#18181b;color:#fff;font-family:'Roboto Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.07em;display:inline-flex;align-items:center">HQ</span></sc-if>
+<button type="button" aria-label="Notifications" style="width:36px;height:36px;border-radius:9px;border:1px solid #ececf1;background:#fff;display:grid;place-items:center;color:#3f3a47;cursor:pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1.5H3zM6.5 14h3"></path></svg></button>
+<button type="button" aria-label="Account menu" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 10px 0 4px;border-radius:9px;border:1px solid #ddd0fb;background:#f4f0fe;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:#18181b"><span style="width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #ddd0fb;display:grid;place-items:center;font-size:10.5px;font-weight:800;color:#6d28d9">{{ ini }}</span>{{ who }}<span aria-hidden="true" style="color:#6b6577">▾</span></button>
+</header>
+<div style="padding:24px 24px 0"><h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-0.02em">Account</h1><p style="margin:4px 0 0;font-size:13px;color:#6b6577">Your profile, sign-in, billing, usage, connectors and developer access.</p></div>
+</sc-if>
+
+<div style="display:flex;gap:24px;align-items:flex-start;padding:20px 24px 32px">
+<sc-if value="{{ shell }}" hint-placeholder-val="{{ false }}"><nav aria-label="Account sections" style="width:200px;flex:none;display:flex;flex-direction:column;gap:2px"><sc-for list="{{ sec }}" as="s" hint-placeholder-count="14"><div style="{{ s.st }}" aria-current="{{ s.cur }}">{{ s.t }}</div></sc-for></nav></sc-if>
+<main style="flex:1;min-width:0;display:flex;flex-direction:column;gap:14px">
+
+<sc-if value="{{ ph }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:5px;padding-bottom:2px">
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Builder › MCP and services</span>
+<h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Builder</h2>
+<p style="margin:0;font-size:13px;color:#6b6577;max-width:720px;text-wrap:pretty">Where assistants and your API keys connect to StudioOS, what they can call, and how the services behind those tools are doing.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ notice }}" hint-placeholder-val="{{ false }}">
+<div role="status" style="display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;border-radius:10px;background:#f4f0fe;border:1px solid #ddd0fb;font-size:13px;color:#18181b">
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#6d28d9" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12zM8 7.5v3.5M8 5v.01"></path></svg>
+<span style="flex:1">AI assistants moved: they now live in Builder.</span>
+<button type="button" style="height:36px;padding:0 12px;border-radius:9px;border:1px solid #ddd0fb;background:#fff;font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:#6d28d9;cursor:pointer">Dismiss</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ c1 }}" hint-placeholder-val="{{ true }}">
+<section aria-label="MCP server" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">MCP server</span><h3 style="margin:0;font-family:'Roboto Mono',ui-monospace,monospace;font-size:16px;font-weight:600">axal.vc/mcp</h3></div>
+<span style="{{ c1p.st }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ c1p.ic }}"></path></svg>{{ c1p.t }}</span>
+</div>
+<sc-if value="{{ c1on }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;gap:8px;align-items:center">
+<div aria-label="MCP server address, read only" style="flex:1;min-width:0;height:40px;box-sizing:border-box;border:1px solid #e2dfe8;border-radius:7px;background:#faf9fc;display:flex;align-items:center;padding:0 12px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:13px;color:#18181b">https://axal.vc/mcp</div>
+<button type="button" onClick="{{ copy }}" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;height:40px;min-width:96px;padding:0 14px;border-radius:9px;border:1px solid #e2dfe8;background:#fff;color:#18181b;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">{{ copyT }}</button>
+<span aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap">{{ copyLive }}</span>
+</div>
+<div style="display:flex;flex-direction:column;border:1px solid #f0eff3;border-radius:10px">
+<div style="padding:10px 14px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">How a caller signs in</div>
+<div style="display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;padding:12px 14px;border-top:1px solid #f0eff3"><span style="font-weight:700">Assistant sign-in</span><span style="color:#3f3a47">Your assistant opens StudioOS, you approve the companies. Nothing to paste.</span></div>
+<div style="display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px;padding:12px 14px;border-top:1px solid #f0eff3"><span style="font-weight:700">API key</span>
+<sc-if value="{{ keysOn }}" hint-placeholder-val="{{ true }}"><span style="color:#3f3a47">A script sends <code style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;background:#f4f3f7;border-radius:5px;padding:1px 6px;color:#18181b">Authorization: Bearer axk_…</code> with a key you create. <span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:#18181b">[3]</span> active · <a href="#" style="color:#7c3aed;font-weight:600;text-decoration:none">Manage API keys →</a></span></sc-if>
+<sc-if value="{{ keysOff }}" hint-placeholder-val="{{ false }}"><span style="color:#6b6577">API keys are not available yet.</span></sc-if>
+</div>
+</div>
+<p style="margin:0;font-size:12.5px;color:#6b6577">Every call is checked again on the server: your account, the company, the permission and the limit.</p>
+</sc-if>
+<sc-if value="{{ c1off }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:13px;color:#3f3a47">Connecting to StudioOS is switched off for now.</p></sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ coll }}" hint-placeholder-val="{{ false }}">
+<section style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px 22px;display:flex;flex-direction:column;gap:6px">
+<h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Who can call for you · Tools on axal.vc/mcp</h3>
+<p style="margin:0;font-size:13px;color:#3f3a47">Connecting to StudioOS is switched off for now.</p>
+</section>
+</sc-if>
+
+<sc-if value="{{ c2list }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Who can call for you" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Who can call for you</h3><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;color:#6b6577">[2] assistant connections</span></div>
+<div role="table" aria-label="Assistant connections" style="display:flex;flex-direction:column">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 188px 150px 92px 116px 32px;gap:12px;padding-bottom:8px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577"><span role="columnheader">Assistant</span><span role="columnheader">Permissions</span><span role="columnheader">Companies</span><span role="columnheader">Connected</span><span role="columnheader">Last call</span><span role="columnheader" aria-label="Actions"></span></div>
+<sc-for list="{{ asst }}" as="a" hint-placeholder-count="2">
+<div role="row" tabindex="0" style="display:grid;grid-template-columns:minmax(0,1fr) 188px 150px 92px 116px 32px;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #f0eff3;cursor:pointer">
+<div role="cell" style="display:flex;gap:10px;align-items:flex-start;min-width:0"><span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:8px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-size:13px;font-weight:800;color:#3f3a47">{{ a.ini }}</span>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><span style="font-weight:700">{{ a.n }} <span style="font-weight:500;color:#6b6577">{{ a.by }}</span></span><div style="display:flex"><span style="{{ a.rec.st }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ a.rec.ic }}"></path></svg>{{ a.rec.t }}</span></div><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:#6b6577">{{ a.host }}</span></div></div>
+<div role="cell" style="display:flex;flex-wrap:wrap;gap:5px"><sc-for list="{{ a.perms }}" as="p" hint-placeholder-count="2"><span title="{{ p.full }}" style="display:inline-flex;align-items:center;min-height:22px;padding:2px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea;font-size:11.5px;font-weight:600;color:#3f3a47;white-space:nowrap">{{ p.t }}</span></sc-for></div>
+<div role="cell" style="font-size:12.5px;color:#3f3a47">{{ a.co }}</div>
+<div role="cell" style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px">{{ a.since }}</div>
+<div role="cell" style="{{ a.lastSt }}">{{ a.last }}</div>
+<div role="cell"><button type="button" aria-label="{{ a.menuL }}" style="width:32px;height:32px;border-radius:9px;border:1px solid #ececf1;background:#fff;color:#3f3a47;cursor:pointer;font-size:14px;font-weight:800">⋯</button></div>
+</div>
+</sc-for>
+</div>
+<p style="margin:0;font-size:12.5px;color:#6b6577">Read Validate: read your Validate context. Submit interviews: submit interviews for your review. It cannot change a module, delete anything, or see other companies.</p>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:10px;background:#faf9fc;border:1px solid #f0eff3">
+<span><b style="font-weight:700">API keys</b> · <span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px">[3]</span> active · <span style="color:#92400e;font-weight:600"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px">[1]</span> expires in <span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px">[6]</span> days</span></span>
+<a href="#" style="color:#7c3aed;font-weight:600;font-size:12.5px;text-decoration:none">Open API keys →</a>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ c2nothing }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Nothing to approve yet" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:10px">
+<h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Nothing to approve yet</h3>
+<p style="margin:0;font-size:13px;color:#3f3a47;max-width:720px;text-wrap:pretty">StudioOS’s tools today read and write a founder’s Validate work, for companies the founder owns. Your profile owns none, so an assistant or key could connect but reach nothing.</p>
+<div><a href="#" style="color:#7c3aed;font-weight:600;font-size:12.5px;text-decoration:none">See what the tools do ›</a></div>
+<sc-if value="{{ oldConn }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:1px solid #ececf1;margin-top:4px">
+<span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:8px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-size:13px;font-weight:800;color:#3f3a47">B</span>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-weight:700">[Assistant B] <span style="font-weight:500;color:#6b6577">by [Vendor B]</span></span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:#6b6577">tools.example.net · connected 2 Sep 2026 · last call 3 Sep 2026</span></div>
+<span style="font-size:12px;color:#6b6577;max-width:200px">An older connection. It reaches nothing today.</span>
+<button type="button" style="display:inline-flex;align-items:center;height:40px;padding:0 14px;border-radius:9px;border:1px solid #fecaca;background:#fff;color:#b91c1c;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Revoke…</button>
+</div>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ c2empty }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Who can call for you" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+<h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Who can call for you</h3>
+<div style="border:1px dashed #d6d2de;border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+<p style="margin:0;font-size:14px;font-weight:700">No assistant or API key can call StudioOS yet.</p>
+<div style="display:flex;gap:18px;flex-wrap:wrap"><a href="#" style="color:#7c3aed;font-weight:600;font-size:12.5px;text-decoration:none">Copy the address into your assistant</a><a href="#" style="color:#7c3aed;font-weight:600;font-size:12.5px;text-decoration:none">Create an API key ›</a></div>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ c2failed }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Who can call for you" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+<h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Who can call for you</h3>
+<div role="alert" style="display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca"><span style="color:#b91c1c;font-weight:600">Your connections could not be read. That is not the same as having none.</span><button type="button" style="height:40px;padding:0 14px;border-radius:9px;border:1px solid #e2dfe8;background:#fff;color:#18181b;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;flex:none">Try again</button></div>
+</section>
+</sc-if>
+
+<sc-if value="{{ c3 }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Tools on axal.vc/mcp" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+<h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Tools on <span style="font-family:'Roboto Mono',ui-monospace,monospace;font-weight:600;font-size:14px">axal.vc/mcp</span></h3>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+<div role="group" aria-label="Filter tools" style="display:flex;gap:6px"><sc-for list="{{ tchips }}" as="c" hint-placeholder-count="4"><button type="button" aria-pressed="{{ c.on }}" onClick="{{ c.go }}" style="{{ c.st }}">{{ c.t }}</button></sc-for></div>
+<div style="width:190px;height:36px;box-sizing:border-box;border:1px solid #e2dfe8;border-radius:7px;display:flex;align-items:center;gap:7px;padding:0 10px;color:#6b6577;font-size:12.5px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14"></path></svg>Search tools</div>
+</div>
+</div>
+<div role="table" aria-label="Tools" style="display:flex;flex-direction:column">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 172px 124px 56px 112px 170px;gap:12px;padding-bottom:8px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577"><span role="columnheader">Tool</span><span role="columnheader">Source</span><span role="columnheader">Permission</span><span role="columnheader">Access</span><span role="columnheader">Price</span><span role="columnheader">Availability</span></div>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+<div role="row" style="display:flex;align-items:center;gap:8px;padding:12px 0 6px;border-top:1px solid #ececf1"><span style="font-size:12.5px;font-weight:800">{{ g.t }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:#6b6577">{{ g.c }}</span></div>
+<sc-if value="{{ g.empty }}" hint-placeholder-val="{{ false }}"><div role="row" style="padding:4px 0 12px;font-size:12.5px;color:#6b6577">{{ g.empty }}</div></sc-if>
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2">
+<div role="row" tabindex="0" aria-expanded="{{ r.exp }}" onClick="{{ r.toggle }}" style="display:grid;grid-template-columns:minmax(0,1fr) 172px 124px 56px 112px 170px;gap:12px;align-items:start;padding:10px 0;border-top:1px solid #f4f3f7;cursor:pointer">
+<div role="cell" style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px;font-weight:600;overflow-wrap:anywhere">{{ r.n }}</span><span style="font-size:12px;color:#6b6577;line-height:1.4">{{ r.d }}</span></div>
+<div role="cell"><span style="{{ r.src.st }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="{{ r.src.ic }}"></path></svg>{{ r.src.t }}</span></div>
+<div role="cell"><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea;font-size:11.5px;font-weight:600;color:#3f3a47;white-space:nowrap">{{ r.pm }}</span></div>
+<div role="cell" style="font-size:12.5px;color:#3f3a47">{{ r.rw }}</div>
+<div role="cell" style="display:flex;flex-direction:column;gap:2px">
+<sc-if value="{{ r.tok }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:600">Uses AI tokens</span><a href="#" style="color:#7c3aed;font-weight:600;font-size:12px;text-decoration:none">See prices</a></sc-if>
+<sc-if value="{{ r.pr }}" hint-placeholder-val="{{ true }}"><span style="{{ r.prSt }}">{{ r.pr }}</span></sc-if>
+</div>
+<div role="cell" style="display:flex;flex-direction:column;gap:4px;align-items:flex-start"><span style="{{ r.av.st }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ r.av.ic }}"></path></svg>{{ r.av.t }}</span><sc-if value="{{ r.why }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:#6b6577">{{ r.why }}</span></sc-if></div>
+</div>
+<sc-if value="{{ r.det }}" hint-placeholder-val="{{ false }}">
+<div role="row" style="margin:0 0 10px;padding:14px 16px;border-radius:10px;background:#faf9fc;border:1px solid #ececf1;display:flex;flex-direction:column;gap:9px">
+<sc-for list="{{ r.det }}" as="d" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:14px;font-size:12.5px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding-top:2px">{{ d.k }}</span><span style="line-height:1.5">{{ d.v }} <sc-if value="{{ d.l }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:#7c3aed;font-weight:600;text-decoration:none">{{ d.l }}</a></sc-if></span></div></sc-for>
+</div>
+</sc-if>
+</sc-for>
+</sc-for>
+</div>
+<p style="margin:0;font-size:12.5px;color:#6b6577">A tool’s answer is data. It cannot change your permissions, your companies or a price. Every proposal waits for you.</p>
+</section>
+</sc-if>
+
+<sc-if value="{{ c4 }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Services behind your tools" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Services behind your tools</h3><a href="#" style="color:#7c3aed;font-weight:600;font-size:12.5px;text-decoration:none">See all services ›</a></div>
+<sc-if value="{{ hqLine }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:10px 12px;border-radius:10px;background:#faf9fc;border:1px solid #f0eff3;font-size:12.5px;color:#3f3a47">Platform keys for connectors are set in HQ › Integration keys. <a href="#" style="color:#7c3aed;font-weight:600;text-decoration:none">Open Integration keys ›</a></p></sc-if>
+<sc-if value="{{ healthErr }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:10px;background:#fdf3cf;border:1px solid #fcd34d"><span style="font-size:12.5px;color:#92400e;font-weight:600">Health could not be read just now. States still show.</span><button type="button" style="height:36px;padding:0 12px;border-radius:9px;border:1px solid #e2dfe8;background:#fff;font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:#18181b;cursor:pointer">Try again</button></div></sc-if>
+<div role="table" aria-label="Services" style="display:flex;flex-direction:column">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 156px 206px 108px 140px 56px;gap:12px;padding-bottom:8px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577"><span role="columnheader">Service</span><span role="columnheader">State</span><span role="columnheader">Health</span><span role="columnheader">Tools</span><span role="columnheader">Companies</span><span role="columnheader" aria-label="Open"></span></div>
+<sc-for list="{{ svc }}" as="s" hint-placeholder-count="4">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 156px 206px 108px 140px 56px;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #f0eff3">
+<div role="cell" style="display:flex;gap:10px;align-items:center;min-width:0"><span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:8px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-size:13px;font-weight:800;color:#3f3a47">{{ s.t }}</span><span style="font-weight:700">{{ s.n }}</span></div>
+<div role="cell" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start"><span style="{{ s.st.st }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ s.st.ic }}"></path></svg>{{ s.st.t }}</span><sc-if value="{{ s.why }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:#92400e;font-weight:600">{{ s.why }}</span></sc-if></div>
+<div role="cell" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start"><sc-if value="{{ s.h.p }}" hint-placeholder-val="{{ false }}"><span style="{{ s.h.p.st }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ s.h.p.ic }}"></path></svg>{{ s.h.p.t }}</span></sc-if><sc-if value="{{ s.h.d }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:#6b6577"><span aria-hidden="true">— </span>{{ s.h.d }}</span></sc-if><sc-if value="{{ s.h.c }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:#6b6577">{{ s.h.c }}</span></sc-if></div>
+<div role="cell" style="{{ s.toolsSt }}">{{ s.tools }}</div>
+<div role="cell" style="font-size:12.5px;color:#3f3a47">{{ s.co }}</div>
+<div role="cell"><a href="#" style="color:#7c3aed;font-weight:600;font-size:12.5px;text-decoration:none">Open ›</a></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ c4empty }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Services behind your tools" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+<h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Services behind your tools</h3>
+<div style="border:1px dashed #d6d2de;border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:10px;align-items:flex-start"><p style="margin:0;font-size:14px;font-weight:700">No service connected. StudioOS’s own tools still work.</p><a href="#" style="color:#7c3aed;font-weight:600;font-size:12.5px;text-decoration:none">Browse connectors ›</a></div>
+</section>
+</sc-if>
+
+<sc-if value="{{ c4explorer }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Services behind your tools" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+<h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Services behind your tools</h3>
+<div style="border:1px dashed #d6d2de;border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:12px;align-items:flex-start"><p style="margin:0;font-size:14px;font-weight:700">Connectors open once your profile is set.</p><a href="#" style="display:inline-flex;align-items:center;height:40px;padding:0 16px;border-radius:9px;background:#7c3aed;border:1px solid #7c3aed;color:#fff;font-size:13px;font-weight:600;text-decoration:none">Set up your profile</a></div>
+</section>
+</sc-if>
+
+<sc-if value="{{ c5 }}" hint-placeholder-val="{{ true }}">
+<section aria-label="Limits" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:10px">
+<h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">Limits</h3>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-top:1px solid #f0eff3"><span>Calls per assistant connection</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px">[60] a minute</span></div>
+<div style="display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-top:1px solid #f0eff3"><span>Calls per API key</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px">[60] a minute</span></div>
+<div style="display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-top:1px solid #f0eff3"><span>All your callers together</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px">[120] a minute</span></div>
+<div style="display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-top:1px solid #f0eff3"><span>Spend</span><span style="font-size:12.5px;color:#3f3a47">Your AI token limits apply: <a href="#" style="color:#7c3aed;font-weight:600;text-decoration:none">see AI tokens</a></span></div>
+</div>
+<p style="margin:0;font-size:12.5px;color:#6b6577">These are StudioOS’s limits. Your assistant may set its own.</p>
+</section>
+</sc-if>
+
+<sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
+<sc-for list="{{ skel }}" as="k" hint-placeholder-count="4">
+<section aria-busy="true" aria-label="{{ k.t }}" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:4px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:8px"><h3 style="margin:0;font-size:15px;font-weight:800;letter-spacing:-0.02em">{{ k.t }}</h3><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:#6b6577">Reading…</span></div>
+<sc-for list="{{ k.rows }}" as="w" hint-placeholder-count="3"><div style="display:flex;gap:14px;align-items:center;padding:12px 0;border-top:1px solid #f4f3f7"><span style="width:32px;height:32px;border-radius:8px;background:#f0eff3;flex:none"></span><span style="height:10px;border-radius:999px;background:#f0eff3;flex:3"></span><span style="height:10px;border-radius:999px;background:#f0eff3;flex:1.4"></span><span style="height:10px;border-radius:999px;background:#f4f3f7;flex:1"></span></div></sc-for>
+</section>
+</sc-for>
+</sc-if>
+
+<sc-if value="{{ paneSvc }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:5px;padding-bottom:2px">
+<a href="#" style="color:#7c3aed;font-weight:600;font-size:13px;text-decoration:none">‹ MCP and services</a>
+<span style="margin-top:6px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Builder › MCP and services › Services</span>
+<h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Services</h2>
+</div>
+<section aria-label="Services" style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+<div style="width:240px;height:36px;box-sizing:border-box;border:1px solid #e2dfe8;border-radius:7px;display:flex;align-items:center;gap:7px;padding:0 10px;color:#6b6577;font-size:12.5px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14"></path></svg>Search services</div>
+<div role="group" aria-label="Filter services" style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ schips }}" as="c" hint-placeholder-count="5"><button type="button" aria-pressed="{{ c.on }}" onClick="{{ c.go }}" style="{{ c.st }}">{{ c.t }}</button></sc-for></div>
+<div style="flex:1"></div>
+<div role="group" aria-label="Sort" style="display:flex;align-items:center;gap:4px;font-size:12.5px;color:#6b6577">Sort <span style="display:inline-flex;height:32px;align-items:center;padding:0 10px;border-radius:7px;background:#f4f0fe;color:#6d28d9;font-weight:600;border:1px solid #ddd0fb">Name</span><span style="display:inline-flex;height:32px;align-items:center;padding:0 10px;border-radius:7px;color:#3f3a47;font-weight:600">Health</span><span style="display:inline-flex;height:32px;align-items:center;padding:0 10px;border-radius:7px;color:#3f3a47;font-weight:600">Last check</span></div>
+</div>
+<p style="margin:0;padding:10px 12px;border-radius:10px;background:#faf9fc;border:1px solid #f0eff3;font-size:12.5px;color:#3f3a47">Connecting and disconnecting happen on each service’s own page in Connectors.</p>
+<div role="table" aria-label="Services" style="display:flex;flex-direction:column">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 136px 132px 176px 104px 138px;gap:12px;padding-bottom:8px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577"><span role="columnheader">Service</span><span role="columnheader">Signs in</span><span role="columnheader">State</span><span role="columnheader">Health</span><span role="columnheader">Tools</span><span role="columnheader" aria-label="Action"></span></div>
+<sc-if value="{{ catEmpty }}" hint-placeholder-val="{{ false }}"><div role="row" style="padding:14px 0;border-top:1px solid #f0eff3;font-size:12.5px;color:#6b6577">No service in this filter. Planned providers are listed below.</div></sc-if>
+<sc-for list="{{ cat }}" as="s" hint-placeholder-count="8">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 136px 132px 176px 104px 138px;gap:12px;align-items:center;padding:11px 0;border-top:1px solid #f0eff3">
+<div role="cell" style="display:flex;gap:10px;align-items:center;min-width:0"><span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:8px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-size:13px;font-weight:800;color:#3f3a47">{{ s.t }}</span><div style="display:flex;flex-direction:column;min-width:0"><span style="font-weight:700">{{ s.n }}</span><span style="font-size:11.5px;color:#6b6577">{{ s.cat }}</span></div></div>
+<div role="cell" style="font-size:12px;color:#3f3a47;line-height:1.35">{{ s.how }}</div>
+<div role="cell" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start"><span style="{{ s.st.st }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ s.st.ic }}"></path></svg>{{ s.st.t }}</span><sc-if value="{{ s.why }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:#92400e;font-weight:600">{{ s.why }}</span></sc-if></div>
+<div role="cell" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start"><sc-if value="{{ s.h.p }}" hint-placeholder-val="{{ false }}"><span style="{{ s.h.p.st }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ s.h.p.ic }}"></path></svg>{{ s.h.p.t }}</span></sc-if><sc-if value="{{ s.h.d }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:#6b6577"><span aria-hidden="true">— </span>{{ s.h.d }}</span></sc-if><sc-if value="{{ s.h.c }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:#6b6577">{{ s.h.c }}</span></sc-if></div>
+<div role="cell" style="{{ s.toolsSt }}">{{ s.tools }}</div>
+<div role="cell"><sc-if value="{{ s.act }}" hint-placeholder-val="{{ false }}"><a href="#" style="color:#7c3aed;font-weight:600;font-size:12.5px;text-decoration:none">{{ s.act }}</a></sc-if></div>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:#6b6577"><span>{{ catCount }}</span><span>Page 1 of 1</span></div>
+<sc-if value="{{ showPlanned }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid #ececf1;padding-top:14px">
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Planned</span>
+<p style="margin:0;font-size:12.5px;color:#6b6577">Model providers will be connectors. They are planned and not connected through MCP.</p>
+<sc-for list="{{ planned }}" as="p" hint-placeholder-count="4">
+<div role="row" style="display:grid;grid-template-columns:minmax(0,1fr) 132px 130px;gap:12px;align-items:center;padding:9px 0;border-top:1px solid #f4f3f7">
+<div style="display:flex;gap:10px;align-items:center"><span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:8px;background:#fff;border:1px dashed #a1a1aa;display:grid;place-items:center;font-size:13px;font-weight:800;color:#57525e">{{ p.t }}</span><div style="display:flex;flex-direction:column"><span style="font-weight:700">{{ p.n }}</span><span style="font-size:11.5px;color:#6b6577">Model provider</span></div></div>
+<div><span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:#f4f3f7;color:#57525e;border:1px solid #e4e2ea"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5v3.2l2.2 1.4M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0"></path></svg>Planned</span></div>
+<div><button type="button" style="height:36px;padding:0 12px;border-radius:9px;border:1px solid #e2dfe8;background:#fff;font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;color:#18181b;cursor:pointer">Notify me</button></div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ paneConn }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:5px">
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Connectors</span>
+<h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">Connectors</h2>
+<p style="margin:0;font-size:13px;color:#6b6577">Connect the tools you already use. Each connector has its own page.</p>
+</div>
+<span style="margin-top:6px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">AI assistants</span>
+<section style="background:#fff;border:1px solid #ddd0fb;border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:14px">
+<span aria-hidden="true" style="width:40px;height:40px;flex:none;border-radius:10px;background:#f4f0fe;border:1px solid #ddd0fb;display:grid;place-items:center;color:#6d28d9"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 5.5L2.5 8l3 2.5M10.5 5.5l3 2.5-3 2.5M9 3.5l-2 9"></path></svg></span>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-weight:800;font-size:14px">MCP and assistants</span><span style="font-size:12.5px;color:#3f3a47">Connect an assistant or an API key to StudioOS, and see what it can call.</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:#6b6577">[2] assistants · [3] keys</span></div>
+<a href="#" style="display:inline-flex;align-items:center;height:40px;padding:0 14px;border-radius:9px;border:1px solid #e2dfe8;background:#fff;color:#18181b;font-size:13px;font-weight:600;text-decoration:none">Open Builder ›</a>
+</section>
+<span style="margin-top:6px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Finance</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;opacity:.55">
+<div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px;display:flex;gap:10px;align-items:center"><span style="width:32px;height:32px;border-radius:8px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-weight:800;color:#3f3a47">B</span><span style="font-weight:700">[Bank]</span></div>
+<div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:16px;display:flex;gap:10px;align-items:center"><span style="width:32px;height:32px;border-radius:8px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-weight:800;color:#3f3a47">P</span><span style="font-weight:700">[Payments]</span></div>
+</div>
+</sc-if>
+
+</main>
+</div>
+</div>
+
+<sc-if value="{{ drawer }}" hint-placeholder-val="{{ false }}">
+<div aria-hidden="true" style="position:absolute;inset:0;background:rgba(24,24,27,.32)"></div>
+<aside role="dialog" aria-modal="true" aria-label="{{ dwL }}" style="position:absolute;top:0;right:0;width:560px;height:1000px;box-sizing:border-box;background:#fff;border-radius:16px 0 0 16px;box-shadow:-16px 0 48px rgba(24,24,27,.18);display:flex;flex-direction:column;overflow:hidden">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 22px 0"><a href="#" style="display:inline-flex;align-items:center;height:36px;color:#7c3aed;font-weight:600;font-size:13px;text-decoration:none">‹ MCP and services</a><button type="button" aria-label="Close" style="width:36px;height:36px;border-radius:9px;border:1px solid #ececf1;background:#fff;cursor:pointer;font-size:17px;color:#3f3a47">×</button></div>
+
+<sc-if value="{{ dwSvc }}" hint-placeholder-val="{{ false }}">
+<div style="padding:10px 22px 16px;display:flex;gap:12px;align-items:center;border-bottom:1px solid #f0eff3">
+<span aria-hidden="true" style="width:40px;height:40px;flex:none;border-radius:10px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-size:15px;font-weight:800;color:#3f3a47">C</span>
+<div style="flex:1;min-width:0"><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">[CRM]</h2><span style="font-size:12px;color:#6b6577">Sales · Sign-in through its MCP server</span></div>
+<span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:#fdf3cf;color:#92400e;border:1px solid #fcd34d"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v5.5M8 12.2v.1"></path></svg>Needs attention</span>
+</div>
+<div style="flex:1;overflow:auto;padding:18px 22px;display:flex;flex-direction:column;gap:22px">
+<section style="display:flex;flex-direction:column;gap:10px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Health</span>
+<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M5 5l6 6M11 5l-6 6"></path></svg>Failing: sign-in expired</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;color:#6b6577">checked [3 min ago]</span></div>
+<div role="list" aria-label="Last 10 health checks, oldest first" style="display:flex;gap:6px"><sc-for list="{{ checks }}" as="q" hint-placeholder-count="10"><span role="listitem" title="{{ q.l }}" aria-label="{{ q.l }}" style="{{ q.st }}"></span></sc-for></div>
+<p style="margin:0;font-size:12.5px;color:#3f3a47"><span style="font-family:'Roboto Mono',ui-monospace,monospace">[8]</span> of the last <span style="font-family:'Roboto Mono',ui-monospace,monospace">[10]</span> checks passed.</p>
+<div aria-hidden="true" style="display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:#57525e"><span style="display:inline-flex;gap:5px;align-items:center"><span style="width:10px;height:10px;border-radius:3px;background:#047857"></span>Passed</span><span style="display:inline-flex;gap:5px;align-items:center"><span style="width:10px;height:10px;box-sizing:border-box;border-radius:3px;background:#fcd34d;border:1.5px solid #92400e"></span>Slow</span><span style="display:inline-flex;gap:5px;align-items:center"><span style="width:10px;height:10px;border-radius:3px;background:#b91c1c"></span>Failed</span><span style="display:inline-flex;gap:5px;align-items:center"><span style="width:10px;height:10px;box-sizing:border-box;border-radius:3px;border:1.5px dashed #6b6577"></span>Not checked</span></div>
+</section>
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Tools it gives axal.vc/mcp</span>
+<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;border:1px solid #ececf1"><span style="flex:1;font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px;font-weight:600">[list_deals]</span><span style="font-size:12.5px;color:#3f3a47">Read</span><span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:#fdf3cf;color:#92400e;border:1px solid #fcd34d"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M8 3.5v5.5M8 12.2v.1"></path></svg>Service needs attention</span></div>
+</section>
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Permissions it holds at [CRM]</span>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;padding:3px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea">deals.read</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;padding:3px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea">contacts.read</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;padding:3px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea">companies.read</span></div>
+</section>
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Companies it is switched on for</span>
+<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid #ececf1"><span style="font-weight:600">[Northwind Labs]</span><span style="font-size:12.5px;font-weight:600;color:#047857">✓ On</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid #ececf1"><span style="font-weight:600">[Bluefern Health]</span><span style="font-size:12.5px;font-weight:600;color:#6b6577">Off</span></div>
+</section>
+<section style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Last sync</span>
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px">[20 Oct] · 09:12</span>
+<span style="font-size:12.5px;color:#b91c1c;font-weight:600">The last sync failed: [CRM] says your sign-in expired. Sign in again on its page.</span>
+</section>
+</div>
+<div style="padding:14px 22px;border-top:1px solid #ececf1;display:flex;gap:12px;align-items:center"><a href="#" style="display:inline-flex;align-items:center;height:40px;padding:0 16px;border-radius:9px;background:#7c3aed;border:1px solid #7c3aed;color:#fff;font-size:13px;font-weight:600;text-decoration:none;flex:none">Fix on its page ›</a><span style="font-size:12px;color:#6b6577">Opens [CRM] in Connectors, where you sign in again or disconnect.</span></div>
+</sc-if>
+
+<sc-if value="{{ dwAs }}" hint-placeholder-val="{{ false }}">
+<div style="padding:10px 22px 16px;display:flex;gap:12px;align-items:center;border-bottom:1px solid #f0eff3">
+<span aria-hidden="true" style="width:40px;height:40px;flex:none;border-radius:10px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-size:15px;font-weight:800;color:#3f3a47">A</span>
+<div style="flex:1;min-width:0"><h2 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-0.02em">[Assistant A]</h2><span style="font-size:12px;color:#6b6577">by [Vendor A]</span></div>
+<span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;background:rgba(4,120,87,.08);color:#047857;border:1px solid rgba(4,120,87,.32)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"></path></svg>Recognised as [Assistant A]</span>
+</div>
+<div style="flex:1;overflow:auto;padding:18px 22px;display:flex;flex-direction:column;gap:20px">
+<section style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Signs in from</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:13px">assistant-a.example</span><span style="font-size:12.5px;color:#6b6577">Assistant sign-in · connected [9 Oct 2026]</span></section>
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Permissions</span>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea;font-size:11.5px;font-weight:600;color:#3f3a47">Read Validate</span><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea;font-size:11.5px;font-weight:600;color:#3f3a47">Submit interviews</span></div>
+<span style="font-size:12.5px;color:#3f3a47">Read your Validate context. Submit interviews for your review.</span>
+<span style="font-size:12.5px;color:#6b6577">It cannot change a module, delete anything, or see other companies.</span>
+</section>
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Companies</span><div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid #ececf1"><span style="font-weight:600">[Northwind Labs]</span><span style="font-size:12.5px;font-weight:600;color:#047857">Still yours ✓</span></div></section>
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Last 30 days</span>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+<div style="padding:12px;border-radius:10px;border:1px solid #ececf1;display:flex;flex-direction:column;gap:4px"><span style="font-size:11.5px;color:#6b6577">Calls</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:18px;font-weight:600">[214]</span></div>
+<div style="padding:12px;border-radius:10px;border:1px solid #ececf1;display:flex;flex-direction:column;gap:4px"><span style="font-size:11.5px;color:#6b6577">Interviews submitted</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:18px;font-weight:600">[9]</span></div>
+<div style="padding:12px;border-radius:10px;border:1px solid #ececf1;display:flex;flex-direction:column;gap:4px"><span style="font-size:11.5px;color:#6b6577">AI tokens spent</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:18px;font-weight:600">[$0.41]</span></div>
+</div>
+</section>
+<section style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Tools it can call now · [6 of 8]</span>
+<sc-for list="{{ asTools }}" as="t" hint-placeholder-count="8"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid #f4f3f7"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;font-weight:600">{{ t.n }}</span><span style="{{ t.p.st }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ t.p.ic }}"></path></svg>{{ t.p.t }}</span></div></sc-for>
+</section>
+<section style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Recent calls</span>
+<sc-for list="{{ recent }}" as="c" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:112px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid #f4f3f7;font-size:12px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;color:#6b6577">{{ c.t }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-weight:600">{{ c.n }}</span><span style="color:#3f3a47">{{ c.r }}</span></div></sc-for>
+</section>
+</div>
+<div style="padding:14px 22px;border-top:1px solid #ececf1;display:flex;gap:12px;align-items:center"><button type="button" style="height:40px;padding:0 16px;border-radius:9px;border:1px solid #fecaca;background:#fff;color:#b91c1c;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;cursor:pointer;flex:none">Revoke…</button><span style="font-size:12px;color:#6b6577">Revoking stops every call from [Assistant A] at once.</span></div>
+</sc-if>
+</aside>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ only }}" hint-placeholder-val="{{ false }}">
+<aside role="dialog" aria-label="{{ onlyT }}" style="box-sizing:border-box;width:100%;height:600px;background:#fff;border-radius:16px 0 0 16px;display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 22px"><a href="#" style="display:inline-flex;align-items:center;height:36px;color:#7c3aed;font-weight:600;font-size:13px;text-decoration:none">‹ MCP and services</a><button type="button" aria-label="Close" style="width:36px;height:36px;border-radius:9px;border:1px solid #ececf1;background:#fff;cursor:pointer;font-size:17px;color:#3f3a47">×</button></div>
+<div style="flex:1;display:grid;place-items:center;padding:24px 40px 60px">
+<div style="max-width:380px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center">
+<span aria-hidden="true" style="width:48px;height:48px;border-radius:12px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;color:#57525e"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7V5.2a3 3 0 0 1 6 0V7M4 7h8v6.5H4z"></path></svg></span>
+<h2 style="margin:0;font-size:17px;font-weight:800;letter-spacing:-0.02em;text-wrap:pretty">{{ onlyT }}</h2>
+<p style="margin:0;font-size:13px;color:#6b6577;line-height:1.55">{{ onlyD }}</p>
+<a href="#" style="display:inline-flex;align-items:center;height:40px;padding:0 14px;border-radius:9px;border:1px solid #e2dfe8;background:#fff;color:#18181b;font-size:13px;font-weight:600;text-decoration:none;margin-top:4px">Back to MCP and services</a>
+</div>
+</div>
+</aside>
+</sc-if>
+
+<sc-if value="{{ ph1 }}" hint-placeholder-val="{{ false }}">
+<div style="width:390px;height:844px;overflow:hidden;background:#f4f3f7;display:flex;flex-direction:column">
+<div style="height:52px;flex:none;background:#fff;display:flex;align-items:center;padding:0 6px"><a href="#" style="display:inline-flex;align-items:center;height:44px;padding:0 10px;color:#7c3aed;font-weight:600;font-size:14px;text-decoration:none">‹ Account</a></div>
+<div style="background:#fff;padding:2px 16px 10px;display:flex;flex-direction:column;gap:2px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Builder › MCP and services</span><h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">Builder</h1></div>
+<div role="tablist" aria-label="Builder" style="flex:none;background:#fff;display:flex;overflow-x:auto;border-bottom:1px solid #ececf1;padding:0 6px">
+<a role="tab" aria-selected="true" href="#" style="flex:none;display:inline-flex;align-items:center;height:44px;padding:0 12px;font-size:13.5px;font-weight:700;color:#18181b;border-bottom:2px solid #7c3aed;text-decoration:none">MCP and services</a>
+<a role="tab" aria-selected="false" href="#" style="flex:none;display:inline-flex;align-items:center;height:44px;padding:0 12px;font-size:13.5px;font-weight:600;color:#6b6577;border-bottom:2px solid transparent;text-decoration:none">API keys</a>
+<a role="tab" aria-selected="false" href="#" style="flex:none;display:inline-flex;align-items:center;height:44px;padding:0 12px;font-size:13.5px;font-weight:600;color:#6b6577;border-bottom:2px solid transparent;text-decoration:none">API usage</a>
+<a role="tab" aria-selected="false" href="#" style="flex:none;display:inline-flex;align-items:center;height:44px;padding:0 12px;font-size:13.5px;font-weight:600;color:#6b6577;border-bottom:2px solid transparent;text-decoration:none">Activity</a>
+</div>
+<div style="flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+<section style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:15px;font-weight:600">axal.vc/mcp</span><span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:rgba(4,120,87,.08);color:#047857;border:1px solid rgba(4,120,87,.32)">On</span></div>
+<div style="display:flex;gap:8px"><div style="flex:1;min-width:0;height:44px;box-sizing:border-box;border:1px solid #e2dfe8;border-radius:7px;background:#faf9fc;display:flex;align-items:center;padding:0 10px;font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px;white-space:nowrap;overflow:hidden">https://axal.vc/mcp</div><button type="button" onClick="{{ copy }}" style="height:44px;min-width:80px;padding:0 12px;border-radius:9px;border:1px solid #e2dfe8;background:#fff;font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600;color:#18181b;cursor:pointer">{{ copyT }}</button></div>
+</section>
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Who can call for you</span>
+<sc-for list="{{ asst }}" as="a" hint-placeholder-count="2">
+<div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><span style="font-weight:700">{{ a.n }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:#6b6577">{{ a.host }}</span></div>
+<div style="display:flex"><span style="{{ a.rec.st }}">{{ a.rec.t }}</span></div>
+<div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ a.perms }}" as="p" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea;font-size:11.5px;font-weight:600;color:#3f3a47">{{ p.t }}</span></sc-for></div>
+<span style="font-size:12px;color:#6b6577">Last call: {{ a.last }}</span>
+</div>
+</sc-for>
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Tools on axal.vc/mcp</span>
+<section style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:2px 14px 8px">
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+<div style="display:flex;gap:6px;align-items:center;padding:10px 0 4px"><span style="font-size:12.5px;font-weight:800">{{ g.t }}</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:#6b6577">{{ g.c }}</span></div>
+<sc-if value="{{ g.empty }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#6b6577;padding:4px 0 8px">{{ g.empty }}</div></sc-if>
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="2"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;min-height:44px;border-top:1px solid #f4f3f7"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12px;font-weight:600;overflow-wrap:anywhere">{{ r.n }}</span><span style="{{ r.av.st }}">{{ r.av.t }}</span></div></sc-for>
+</sc-for>
+</section>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ ph2 }}" hint-placeholder-val="{{ false }}">
+<div role="dialog" aria-label="[CRM] service" style="width:390px;height:844px;overflow:hidden;background:#fff;display:flex;flex-direction:column">
+<div style="height:52px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 6px;border-bottom:1px solid #f0eff3"><a href="#" style="display:inline-flex;align-items:center;height:44px;padding:0 10px;color:#7c3aed;font-weight:600;font-size:14px;text-decoration:none">‹ MCP and services</a><button type="button" aria-label="Close" style="width:44px;height:44px;border-radius:9px;border:none;background:#fff;font-size:20px;color:#3f3a47">×</button></div>
+<div style="padding:14px 16px;display:flex;gap:12px;align-items:center"><span aria-hidden="true" style="width:40px;height:40px;flex:none;border-radius:10px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-size:15px;font-weight:800;color:#3f3a47">C</span><div style="flex:1"><h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">[CRM]</h1><span style="display:inline-flex;align-items:center;gap:5px;min-height:22px;margin-top:4px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:#fdf3cf;color:#92400e;border:1px solid #fcd34d">Needs attention</span></div></div>
+<div style="flex:1;overflow:hidden;padding:4px 16px 16px;display:flex;flex-direction:column;gap:18px">
+<section style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Health</span><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca">Failing: sign-in expired</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11px;color:#6b6577">checked [3 min ago]</span></div>
+<div role="list" aria-label="Last 10 health checks, oldest first" style="display:flex;gap:6px"><sc-for list="{{ checks }}" as="q" hint-placeholder-count="10"><span role="listitem" aria-label="{{ q.l }}" style="{{ q.st }}"></span></sc-for></div>
+<span style="font-size:12.5px;color:#3f3a47">[8] of the last [10] checks passed.</span></section>
+<section style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Tools it gives axal.vc/mcp</span><div style="display:flex;justify-content:space-between;align-items:center;min-height:44px;border-top:1px solid #f4f3f7"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px;font-weight:600">[list_deals]</span><span style="display:inline-flex;align-items:center;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:#fdf3cf;color:#92400e;border:1px solid #fcd34d">Service needs attention</span></div></section>
+<section style="display:flex;flex-direction:column;gap:6px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Permissions it holds at [CRM]</span><div style="display:flex;gap:6px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;padding:3px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea">deals.read</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;padding:3px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea">contacts.read</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:11.5px;padding:3px 8px;border-radius:999px;background:#f4f3f7;border:1px solid #e4e2ea">companies.read</span></div></section>
+<section style="display:flex;flex-direction:column"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577;padding-bottom:4px">Companies it is switched on for</span><div style="display:flex;justify-content:space-between;align-items:center;min-height:44px;border-top:1px solid #f4f3f7"><span style="font-weight:600">[Northwind Labs]</span><span style="font-size:12.5px;font-weight:600;color:#047857">✓ On</span></div><div style="display:flex;justify-content:space-between;align-items:center;min-height:44px;border-top:1px solid #f4f3f7"><span style="font-weight:600">[Bluefern Health]</span><span style="font-size:12.5px;font-weight:600;color:#6b6577">Off</span></div></section>
+<section style="display:flex;flex-direction:column;gap:4px"><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Last sync</span><span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:12.5px">[20 Oct] · 09:12</span><span style="font-size:12.5px;color:#b91c1c;font-weight:600">The last sync failed: [CRM] says your sign-in expired.</span></section>
+</div>
+<div style="flex:none;padding:12px 16px 24px;border-top:1px solid #ececf1;background:#fff"><a href="#" style="display:flex;align-items:center;justify-content:center;height:48px;border-radius:9px;background:#7c3aed;color:#fff;font-size:14px;font-weight:600;text-decoration:none">Fix on its page ›</a></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ ph3 }}" hint-placeholder-val="{{ false }}">
+<div style="position:relative;width:390px;height:844px;overflow:hidden;background:#f4f3f7;display:flex;flex-direction:column">
+<div style="height:52px;flex:none;background:#fff;display:flex;align-items:center;padding:0 6px"><a href="#" style="display:inline-flex;align-items:center;height:44px;padding:0 10px;color:#7c3aed;font-weight:600;font-size:14px;text-decoration:none">‹ MCP and services</a></div>
+<div style="background:#fff;padding:2px 16px 12px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid #ececf1"><h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">Services</h1>
+<div style="display:flex;gap:8px"><div style="flex:1;height:44px;box-sizing:border-box;border:1px solid #e2dfe8;border-radius:7px;display:flex;align-items:center;padding:0 12px;color:#6b6577;font-size:13px">Search services</div><button type="button" style="height:44px;padding:0 14px;border-radius:9px;border:1px solid #ddd0fb;background:#f4f0fe;color:#6d28d9;font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600">Filters · 1</button></div></div>
+<div style="flex:1;overflow:hidden;padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{ phCat }}" as="s" hint-placeholder-count="5">
+<div style="background:#fff;border:1px solid #ececf1;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;gap:10px;align-items:center"><span aria-hidden="true" style="width:32px;height:32px;flex:none;border-radius:8px;background:#f4f3f7;border:1px solid #e4e2ea;display:grid;place-items:center;font-weight:800;color:#3f3a47">{{ s.t }}</span><div style="flex:1;display:flex;flex-direction:column"><span style="font-weight:700">{{ s.n }}</span><span style="font-size:11.5px;color:#6b6577">{{ s.cat }}</span></div><span style="{{ s.st.st }}">{{ s.st.t }}</span></div>
+<span style="font-size:12px;color:#57525e">{{ s.hl }}</span>
+</div>
+</sc-for>
+</div>
+<div aria-hidden="true" style="position:absolute;inset:0;background:rgba(24,24,27,.32)"></div>
+<div role="dialog" aria-label="Filter services" style="position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:16px 16px 0 0;padding:10px 16px 24px;display:flex;flex-direction:column;gap:14px;box-shadow:0 -12px 40px rgba(24,24,27,.18)">
+<span aria-hidden="true" style="align-self:center;width:40px;height:4px;border-radius:999px;background:#e2dfe8"></span>
+<div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-0.02em">Filter services</h2><button type="button" style="height:44px;padding:0 10px;border:none;background:#fff;color:#7c3aed;font-family:'Space Grotesk',sans-serif;font-size:13.5px;font-weight:600">Reset</button></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ schips }}" as="c" hint-placeholder-count="5"><button type="button" aria-pressed="{{ c.on }}" onClick="{{ c.go }}" style="{{ c.ph }}">{{ c.t }}</button></sc-for></div>
+<span style="font-family:'Roboto Mono',ui-monospace,monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Sort</span>
+<div role="radiogroup" aria-label="Sort" style="display:flex;flex-direction:column">
+<div role="radio" aria-checked="true" style="display:flex;justify-content:space-between;align-items:center;min-height:44px;border-top:1px solid #f4f3f7;font-weight:600">Name<span style="color:#7c3aed">✓</span></div>
+<div role="radio" aria-checked="false" style="display:flex;align-items:center;min-height:44px;border-top:1px solid #f4f3f7">Health</div>
+<div role="radio" aria-checked="false" style="display:flex;align-items:center;min-height:44px;border-top:1px solid #f4f3f7">Last check</div>
+</div>
+<button type="button" style="height:48px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600">{{ phShow }}</button>
+</div>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;v&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;x1&quot;,&quot;x2&quot;,&quot;x3&quot;,&quot;x4a&quot;,&quot;x4b&quot;,&quot;x5&quot;,&quot;x6&quot;,&quot;x7a&quot;,&quot;x7b&quot;,&quot;x8a&quot;,&quot;x8b&quot;,&quot;x8c&quot;,&quot;x9&quot;,&quot;x10a&quot;,&quot;x10b&quot;,&quot;x10c&quot;,&quot;x10d&quot;,&quot;x11a&quot;,&quot;x11b&quot;,&quot;x12a&quot;,&quot;x12b&quot;,&quot;x12c&quot;,&quot;x13a&quot;,&quot;x13b&quot;],&quot;default&quot;:&quot;x1&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { copied: false, tf: 'all', sf: 'all', open: undefined };
+  componentWillUnmount() { clearTimeout(this._t); }
+  copy = () => { clearTimeout(this._t); this.setState({ copied: true }); this._t = setTimeout(() => this.setState({ copied: false }), 2000); };
+
+  renderVals() {
+    const v = this.props.v || 'x1';
+    const CF = {
+      x1: { sh: 'founder', main: 1, ph: 1, c1: 'on', c2: 'list', c3: 'list', c4: 'list', c5: 1 },
+      x2: { sh: 'founder', svc: 1 },
+      x3: { sh: 'founder', main: 1, ph: 1, c1: 'on', c2: 'list', c3: 'list', c4: 'list', c5: 1, dw: 'svc' },
+      x4a: { main: 1, c3: 'list', open: 'structure_with_studioos' },
+      x4b: { main: 1, c3: 'list', open: '[list_deals]', ldConn: 1 },
+      x5: { sh: 'founder', main: 1, ph: 1, c1: 'on', c2: 'list', c3: 'list', c4: 'list', c5: 1, dw: 'as' },
+      x6: { sh: 'investor', main: 1, ph: 1, c1: 'on', c2: 'nothing', old: 1, c3: 'notav', c4: 'own', c5: 1 },
+      x7a: { sh: 'explorer', main: 1, ph: 1, c1: 'on', c2: 'nothing', c4: 'explorer' },
+      x7b: { sh: 'hq', main: 1, ph: 1, c1: 'on', c2: 'nothing', c3: 'notav', c4: 'own', hqLine: 1, c5: 1 },
+      x8a: { main: 1, c2: 'empty' },
+      x8b: { main: 1, c4: 'empty' },
+      x8c: { main: 1, c3: 'nosvc' },
+      x9: { sh: 'founder', main: 1, ph: 1, c1: 'on', load: 1 },
+      x10a: { main: 1, c2: 'failed' },
+      x10b: { main: 1, c4: 'healthless' },
+      x10c: { main: 1, c1: 'off', coll: 1 },
+      x10d: { main: 1, c1: 'nokeys' },
+      x11a: { only: 'svc' },
+      x11b: { only: 'as' },
+      x12a: { phone: 1 }, x12b: { phone: 2 }, x12c: { phone: 3 },
+      x13a: { conn: 1 },
+      x13b: { main: 1, ph: 1, notice: 1, c1: 'on' },
+    };
+    const F = CF[v] || CF.x1;
+
+    const MONO = "font-family:'Roboto Mono',ui-monospace,monospace;";
+    const P = 'display:inline-flex;align-items:center;gap:5px;min-height:22px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;line-height:1.2;white-space:nowrap;box-sizing:border-box;';
+    const PS = {
+      pos: P + 'background:rgba(4,120,87,.08);color:#047857;border:1px solid rgba(4,120,87,.32)',
+      amb: P + 'background:#fdf3cf;color:#92400e;border:1px solid #fcd34d',
+      neg: P + 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca',
+      mut: P + 'background:#f4f3f7;color:#57525e;border:1px solid #e4e2ea',
+      vio: P + 'background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb',
+      ink: P + 'background:#fff;color:#18181b;border:1px solid #e4e2ea',
+    };
+    const IC = {
+      check: 'M3.5 8.5l3 3 6-7', alert: 'M8 3.5v5.5M8 12.2v.1', lock: 'M5 7V5.2a3 3 0 0 1 6 0V7M4 7h8v6.5H4z',
+      plug: 'M6 2v3M10 2v3M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11v3', pause: 'M6 4v8M10 4v8', off: 'M4 8h8',
+      clock: 'M8 5v3.2l2.2 1.4M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0', sync: 'M13 6.5A5 5 0 0 0 4 5M3 9.5A5 5 0 0 0 12 11M4 2v3h3M12 14v-3H9',
+      x: 'M5 5l6 6M11 5l-6 6', dash: 'M5 8h6', dot: 'M8 8h.01', star: 'M8 2.8l1.5 3.3 3.6.4-2.7 2.4.8 3.6L8 10.7l-3.2 1.8.8-3.6-2.7-2.4 3.6-.4z',
+    };
+    const pill = (k, t, i) => ({ st: PS[k], t, ic: IC[i] });
+    const ST = {
+      conn: pill('pos', 'Connected', 'check'), attn: pill('amb', 'Needs attention', 'alert'), paused: pill('mut', 'Paused', 'pause'),
+      sync: pill('vio', 'Syncing', 'sync'), beta: pill('vio', 'Beta', 'star'), not: pill('mut', 'Not connected', 'plug'),
+      soon: pill('mut', 'Coming soon', 'clock'), nsu: pill('mut', 'Not set up here', 'off'), paid: pill('vio', 'On a paid plan', 'lock'),
+    };
+    const ok = (c) => ({ p: pill('pos', 'Healthy', 'check'), c });
+    const fail = (r, c) => ({ p: pill('neg', 'Failing: ' + r, 'x'), c });
+    const dsh = (d) => ({ d });
+    const TXT12 = 'font-size:12.5px;color:#3f3a47';
+    const MONO12 = MONO + 'font-size:12px;color:#18181b';
+    const tl = (s) => ({ ...s, toolsSt: s.tools && s.tools.charAt(0) === '[' ? MONO12 : TXT12, hl: s.h.p ? s.h.p.t + (s.h.c ? ' · ' + s.h.c : '') : s.h.d });
+
+    const SI = {
+      'Studio': 'M2.5 7.5L8 3l5.5 4.5V13h-11z', 'Home': 'M2.5 7.5L8 3l5.5 4.5V13h-11z',
+      'Spin-Out Lab': 'M6 2.5h4M6.5 2.5v4L3 12.5h10L9.5 6.5v-4', 'Validate': 'M3 8.5l3 3 7-7',
+      'Build': 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z', 'Raise': 'M2.5 12.5l4-4 3 3 4-6M10 5.5h3.5V9',
+      'Grow': 'M8 13.5V7M8 7c0-2.5 2-4 4.5-4 0 2.5-2 4-4.5 4zM8 9c0-2-1.5-3.5-4.5-3.5 0 2.5 2 3.5 4.5 3.5z',
+      'Network': 'M5.5 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM2 13c0-2 1.6-3.5 3.5-3.5S9 11 9 13M11 7.5a1.6 1.6 0 1 0 0-3.2M10.5 9.6c1.9 0 3.5 1.4 3.5 3.4',
+      'Research': 'M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM10.5 10.5L14 14', 'Deals': 'M2.5 5h11v8h-11zM6 5V3h4v2',
+      'Portfolio': 'M8 2.5v5.5h5.5A5.5 5.5 0 1 1 8 2.5z', 'Axal VC Fund': 'M2.5 6L8 3l5.5 3M3.5 6.5v5M8 6.5v5M12.5 6.5v5M2.5 13h11',
+      'Fund': 'M8 2.5l5.5 3-5.5 3-5.5-3zM2.5 8.5l5.5 3 5.5-3M2.5 11.5l5.5 3 5.5-3', 'Trust': 'M5 8l2 2 4-4M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12z',
+      'Messages': 'M2.5 3.5h11v7.5H6l-3.5 3z', 'My Profile': 'M8 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM3 14c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5',
+    };
+    const SH = {
+      founder: { side: [{ rows: ['Studio', 'Spin-Out Lab', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'] }], sw: { ini: 'NL', name: '[Northwind Labs]' }, who: '[Name A]', ini: 'NA' },
+      investor: { side: [{ rows: ['Studio', 'Spin-Out Lab', 'Deals', 'Portfolio', 'Axal VC Fund', 'Fund', 'Network', 'Research', 'Trust'] }], sw: { ini: 'HS', name: '[Harbor Street Capital]' }, who: '[Name B]', ini: 'NB' },
+      explorer: { side: [{ h: 'Home', rows: ['Studio', 'Spin-Out Lab', 'Messages'] }, { h: 'Account', rows: ['My Profile'] }], sw: null, who: '[Name C]', ini: 'NC' },
+      hq: { side: [{ h: 'HQ', rows: ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings'] }], sw: null, who: '[Name D]', ini: 'ND' },
+    };
+    const S = SH[F.sh] || SH.founder;
+    const side = S.side.map(g => ({ h: g.h || '', rows: g.rows.map(t => ({ t, ic: SI[t] || 'M3.5 3.5h9v9h-9z' })) }));
+
+    const SB = 'display:flex;align-items:center;box-sizing:border-box;min-height:32px;border-radius:9px;';
+    const SK = {
+      n: 'padding:0 10px;font-size:13px;font-weight:500;color:#3f3a47',
+      sec: 'padding:0 10px;font-size:13px;font-weight:700;color:#18181b',
+      sub: 'padding:0 10px 0 24px;font-size:12.5px;font-weight:500;color:#4a4553',
+      lit: 'padding:0 10px 0 24px;font-size:12.5px;font-weight:700;color:#6d28d9;background:#f4f0fe;border:1px solid #ddd0fb',
+      head: MONO + 'padding:12px 10px 4px;min-height:0;font-size:10.5px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:#6b6577',
+    };
+    const sec = [['Profile and identity'], ['Companies and Projects'], ['Notifications'], ['Sign-in and security'], ['Billing and orders'], ['Usage', 'sec'], ['Overview', 'sub'], ['Cost', 'sub'], ['AI tokens', 'sub'], ['Limits', 'sub'], ['Storage', 'sub'], ['Connectors'], ['Following'], ['Builder', 'sec'], ['MCP and services', 'lit'], ['API keys', 'sub'], ['API usage', 'sub'], ['Activity', 'sub'], ['More', 'head'], ['Onboarding', 'sub'], ['Appearance', 'sub'], ['Activity Log', 'sub']]
+      .map(([t, k]) => ({ t, st: SB + SK[k || 'n'], cur: k === 'lit' ? 'page' : undefined }));
+
+    const T0 = [
+      ['list_companies', 'Lists the companies you own and the cycle each one is in.', 'Read Validate', 'Read', 'Free'],
+      ['get_validate_context', 'Reads a company’s Validate context: segments, pains and claims.', 'Read Validate', 'Read', 'Free'],
+      ['get_interview_guide', 'Gets the interview guide for a segment.', 'Read Validate', 'Read', 'Free'],
+      ['submit_interview', 'Submits an interview for your review.', 'Submit interviews', 'Write', 'Free'],
+      ['propose_placements', 'Proposes where an interview’s findings go. Nothing lands until you accept.', 'Submit interviews', 'Write', 'Free'],
+      ['structure_with_studioos', 'Structures an interview into findings with Eadwyn, for your review.', 'Submit interviews', 'Write', null],
+    ].map(([n, d, pm, rw, pr]) => ({ n, d, pm, rw, pr, s: 'StudioOS', tok: pr === null }));
+    const T1 = [
+      { n: '[search_docs]', d: 'Searches pages in your [Docs workspace].', pm: 'Read services', rw: 'Read', pr: 'Free', s: 'From [Docs workspace]', svc: 1 },
+      { n: '[list_deals]', d: 'Lists deals in your [CRM].', pm: 'Read services', rw: 'Read', pr: '[$0.002] a call', s: 'From [CRM]', svc: 1 },
+    ];
+    const DET = {
+      structure_with_studioos: [
+        ['What it does', 'Turns an interview transcript into findings with Eadwyn, and proposes where each one goes. Nothing lands until you accept it.'],
+        ['Permission', 'Needs permission: Submit interviews'],
+        ['Access', 'Write'],
+        ['Price', 'Uses AI tokens: a hold is placed before the run and settled after it. Unused tokens return.', 'See prices ›'],
+        ['Calls in 30 days', '[12]', 'See in API usage ›'],
+      ],
+      '[list_deals]': [
+        ['Source', 'From [CRM]'],
+        ['Access', 'Read'],
+        ['Price', '[$0.002] a call'],
+        ['Availability', 'Connect [CRM] first', 'Open [CRM] ›'],
+      ],
+    };
+    const mode3 = F.phone === 1 ? 'list' : F.c3;
+    const openKey = this.state.open !== undefined ? this.state.open : F.open;
+    const tf = this.state.tf;
+    const mk = (r) => {
+      let av = pill('pos', 'Available', 'check'), k = 'ok', why = '';
+      if (mode3 === 'notav') { av = pill('mut', 'Not available', 'dash'); k = 'no'; why = 'Works on companies you own'; }
+      else if (r.n === '[list_deals]') { av = F.ldConn ? pill('mut', 'Connect [CRM] first', 'plug') : pill('amb', 'Service needs attention', 'alert'); k = 'no'; }
+      const det = DET[r.n];
+      const isOpen = !!det && openKey === r.n;
+      return {
+        n: r.n, d: r.d, pm: r.pm, rw: r.rw, tok: !!r.tok, pr: r.tok ? '' : r.pr,
+        prSt: (r.pr || '').indexOf('$') >= 0 ? MONO12 : TXT12,
+        src: r.svc ? pill('ink', r.s, 'dot') : pill('vio', r.s, 'dot'),
+        av, why, k,
+        det: isOpen ? det.map(([dk, dv, dl]) => ({ k: dk, v: dv, l: dl || '' })) : null,
+        exp: det ? String(isOpen) : undefined,
+        toggle: det ? () => this.setState({ open: isOpen ? null : r.n }) : undefined,
+      };
+    };
+    const keep = (x) => tf === 'all' || (tf === 'ok' && x.k === 'ok') || (tf === 'no' && x.k !== 'ok') || (tf === 'tok' && x.tok);
+    const g0 = T0.map(mk).filter(keep);
+    const g1 = mode3 === 'nosvc' ? [] : T1.map(mk).filter(keep);
+    const groups = mode3 ? [
+      { t: 'StudioOS', c: '[6]', rows: g0, empty: g0.length ? '' : 'No StudioOS tool matches this filter.' },
+      { t: 'From your services', c: mode3 === 'nosvc' ? '[0]' : '[2]', rows: g1, empty: mode3 === 'nosvc' ? 'None yet. Tools from connected services are being built.' : (g1.length ? '' : 'No tool from your services matches this filter.') },
+      { t: 'Remote MCP', c: '[0]', rows: [], empty: 'None yet. Remote MCP servers are being built.' },
+    ] : [];
+
+    const CH = (on) => "display:inline-flex;align-items:center;height:36px;padding:0 12px;border-radius:999px;font-family:'Space Grotesk',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;" + (on ? 'background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb' : 'background:#fff;color:#3f3a47;border:1px solid #e2dfe8');
+    const tchips = [['all', 'All'], ['ok', 'Available'], ['no', 'Not available'], ['tok', 'Uses AI tokens']].map(([k, t]) => ({ t, on: String(tf === k), st: CH(tf === k), go: () => this.setState({ tf: k }) }));
+    const sf = this.state.sf;
+    const schips = [['all', 'All'], ['conn', 'Connected'], ['attn', 'Needs attention'], ['not', 'Not connected'], ['planned', 'Planned']].map(([k, t]) => ({ t, on: String(sf === k), st: CH(sf === k), ph: CH(sf === k).replace('height:36px', 'height:44px'), go: () => this.setState({ sf: k }) }));
+
+    const CAT = [
+      { t: 'A', n: '[Analytics]', cat: 'Product analytics', how: 'Sign-in', st: ST.conn, k: 'conn', h: dsh('Not checked yet'), tools: 'None: data only', act: 'Open ›' },
+      { t: 'B', n: '[Bank]', cat: 'Finance', how: 'Key', st: ST.conn, k: 'conn', h: ok('checked 20 min ago'), tools: 'None: data only', act: 'Open ›' },
+      { t: 'L', n: '[Calendar]', cat: 'Productivity', how: 'Sign-in', st: ST.not, k: 'not', h: dsh('Not connected'), tools: 'None: data only', act: 'Connect on its page ›' },
+      { t: 'G', n: '[Code host]', cat: 'Engineering', how: 'Sign-in through its MCP server', st: ST.paused, k: 'conn', h: dsh('Not checked while paused'), tools: 'None: data only', act: 'Open ›' },
+      { t: 'C', n: '[CRM]', cat: 'Sales', how: 'Sign-in through its MCP server', st: ST.attn, why: 'Sign-in expired', k: 'attn', h: fail('sign-in expired', 'checked 3 min ago'), tools: '[1]', act: 'Open ›' },
+      { t: 'W', n: '[Data warehouse]', cat: 'Data', how: 'Key', st: ST.nsu, k: 'not', h: dsh('Not set up on Axal VC'), tools: 'None: data only', act: '' },
+      { t: 'S', n: '[Design tool]', cat: 'Design', how: 'Sign-in', st: ST.beta, k: 'not', h: dsh('Not connected'), tools: 'None: data only', act: 'Connect on its page ›' },
+      { t: 'D', n: '[Docs workspace]', cat: 'Docs', how: 'Sign-in through its MCP server', st: ST.conn, k: 'conn', h: ok('checked 12 min ago'), tools: '[1]', act: 'Open ›' },
+      { t: 'E', n: '[Email marketing]', cat: 'Marketing', how: 'Key', st: ST.paid, k: 'not', h: dsh('Not connected'), tools: 'None: data only', act: 'See plans ›' },
+      { t: 'M', n: '[Messaging]', cat: 'Communication', how: 'Sign-in', st: ST.soon, k: 'not', h: dsh('Not available yet'), tools: 'None: data only', act: '' },
+      { t: 'P', n: '[Payments]', cat: 'Finance', how: 'Key', st: ST.sync, k: 'conn', h: ok('checked 4 min ago'), tools: 'None: data only', act: 'Open ›' },
+    ];
+    const cat = (sf === 'all' ? CAT : CAT.filter(r => r.k === sf)).map(tl);
+    const planned = ['Anthropic', 'OpenAI', 'xAI', 'Google'].map(n => ({ t: n.charAt(0).toUpperCase(), n }));
+
+    const SV = [
+      { t: 'D', n: '[Docs workspace]', st: ST.conn, h: ok('checked 12 min ago'), tools: '[1]', co: 'All' },
+      { t: 'C', n: '[CRM]', st: ST.attn, why: 'Sign-in expired', h: fail('sign-in expired', 'checked 3 min ago'), tools: '[1]', co: '[Northwind Labs]' },
+      { t: 'A', n: '[Analytics]', st: ST.conn, h: dsh('Not checked yet'), tools: 'None: data only', co: '[Northwind Labs]' },
+      { t: 'G', n: '[Code host]', st: ST.paused, h: dsh('Not checked while paused'), tools: 'None: data only', co: '[Northwind Labs]' },
+    ];
+    const SVI = [
+      { t: 'C', n: '[CRM]', st: ST.conn, h: ok('checked 6 min ago'), tools: '[1]', co: 'All' },
+      { t: 'D', n: '[Docs workspace]', st: ST.conn, h: ok('checked 12 min ago'), tools: '[1]', co: 'All' },
+    ];
+    let svc = [];
+    if (F.c4 === 'list') svc = SV;
+    if (F.c4 === 'healthless') svc = SV.map(s => ({ ...s, h: dsh('Health unreadable') }));
+    if (F.c4 === 'own') svc = SVI;
+    svc = svc.map(tl);
+
+    const PM = { 'Read Validate': 'Read your Validate context', 'Submit interviews': 'Submit interviews for your review', 'Read services': 'Read your connected services' };
+    const asst = [
+      { ini: 'A', n: '[Assistant A]', by: 'by [Vendor A]', rec: pill('pos', 'Recognised as [Assistant A]', 'check'), host: 'assistant-a.example', perms: ['Read Validate', 'Submit interviews'], co: '[Northwind Labs]', since: '9 Oct 2026', last: '[21 Oct] · 14:32', none: false },
+      { ini: 'B', n: '[Assistant B]', by: 'by [Vendor B]', rec: pill('amb', 'Unrecognised assistant', 'alert'), host: 'tools.example.net', perms: ['Read Validate'], co: '[Northwind Labs], [Bluefern Health]', since: '14 Oct 2026', last: 'No call recorded', none: true },
+    ].map(a => ({ ...a, perms: a.perms.map(t => ({ t, full: PM[t] })), lastSt: a.none ? 'font-size:12.5px;color:#6b6577' : MONO12, menuL: 'Actions for ' + a.n }));
+
+    const SQ = 'display:block;width:18px;height:18px;border-radius:4px;box-sizing:border-box;';
+    const QS = { p: SQ + 'background:#047857', s: SQ + 'background:#fcd34d;border:1.5px solid #92400e', f: SQ + 'background:#b91c1c' };
+    const QL = { p: 'Passed', s: 'Slow, passed', f: 'Failed' };
+    const times = ['20 Oct 09:00', '20 Oct 12:00', '20 Oct 15:00', '20 Oct 18:00', '20 Oct 21:00', '21 Oct 00:00', '21 Oct 03:00', '21 Oct 06:00', '21 Oct 09:00', '21 Oct 12:00'];
+    const checks = 'ppsfpppppf'.split('').map((c, i) => ({ st: QS[c], l: times[i] + ' · ' + QL[c] }));
+
+    const asTools = [...T0.map(r => ({ n: r.n, p: pill('pos', 'Available', 'check') })), { n: '[search_docs]', p: pill('amb', 'Needs permission: Read services', 'lock') }, { n: '[list_deals]', p: pill('amb', 'Service needs attention', 'alert') }];
+    const recent = [
+      { t: '21 Oct · 14:32', n: 'get_validate_context', r: 'Answered' },
+      { t: '21 Oct · 14:30', n: 'submit_interview', r: 'Waiting for your review' },
+      { t: '20 Oct · 09:02', n: '[list_deals]', r: 'Refused: service needs attention' },
+      { t: '19 Oct · 16:40', n: 'structure_with_studioos', r: '[$0.06] of AI tokens' },
+    ];
+    const skel = [
+      { t: 'Who can call for you', rows: [1, 2] },
+      { t: 'Tools on axal.vc/mcp', rows: [1, 2, 3, 4] },
+      { t: 'Services behind your tools', rows: [1, 2, 3] },
+      { t: 'Limits', rows: [1, 2] },
+    ];
+    const ONLY = {
+      svc: { t: 'This service is not connected on your account.', d: 'Its own page in Connectors says what it does. Connect it there if you use it.' },
+      as: { t: 'This connection is not on your account.', d: 'Only the member who approved a connection can open or revoke it.' },
+    };
+    const O = ONLY[F.only] || ONLY.svc;
+
+    return {
+      desk: !F.only && !F.phone, shell: !!F.sh, side, sw: S.sw, who: S.who, ini: S.ini, hq: F.sh === 'hq', sec,
+      ph: !!F.ph, notice: !!F.notice,
+      c1: !!F.c1, c1on: F.c1 === 'on' || F.c1 === 'nokeys', c1off: F.c1 === 'off',
+      c1p: F.c1 === 'off' ? pill('mut', 'Switched off', 'off') : pill('pos', 'On', 'check'),
+      keysOn: F.c1 !== 'nokeys', keysOff: F.c1 === 'nokeys', coll: !!F.coll,
+      copy: this.copy, copyT: this.state.copied ? 'Copied' : 'Copy', copyLive: this.state.copied ? 'Copied the MCP server address' : '',
+      c2list: F.c2 === 'list', c2nothing: F.c2 === 'nothing', c2empty: F.c2 === 'empty', c2failed: F.c2 === 'failed', oldConn: !!F.old, asst,
+      c3: !!F.c3, tchips, groups,
+      c4: svc.length > 0, svc, healthErr: F.c4 === 'healthless', hqLine: !!F.hqLine, c4empty: F.c4 === 'empty', c4explorer: F.c4 === 'explorer',
+      c5: !!F.c5, loading: !!F.load, skel,
+      paneSvc: !!F.svc, schips, cat, catEmpty: cat.length === 0, catCount: cat.length ? '1–' + cat.length + ' of [' + cat.length + ']' : '0 of [11]', showPlanned: sf === 'all' || sf === 'planned', planned,
+      paneConn: !!F.conn,
+      drawer: !!F.dw, dwSvc: F.dw === 'svc', dwAs: F.dw === 'as', dwL: F.dw === 'as' ? '[Assistant A] connection' : '[CRM] service',
+      checks, asTools, recent,
+      only: !!F.only, onlyT: O.t, onlyD: O.d,
+      ph1: F.phone === 1, ph2: F.phone === 2, ph3: F.phone === 3,
+      phCat: CAT.slice(0, 6).map(tl), phShow: 'Show [' + cat.length + '] services',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -17,6 +17,7 @@
  * the legacy in-worker routes mounted here as the source of truth.
  */
 
+import { LEGACY_BUILDER_PATHS, builderRedirectTarget } from './services/builderRedirect';
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
 import { developerKeys } from './routes/developer_keys';
@@ -417,6 +418,8 @@ import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 // D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
 import notionRoutes, { notionCycleRoutes } from './routes/notion';
+// D1325 (#3486): the Fill with Eadwyn sheet's read.
+import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
@@ -598,6 +601,14 @@ app.use('*', async (c, next) => {
   url.host = 'axal.vc';
   return c.redirect(url.toString(), 301);
 });
+
+// D1315 (#2418): /account/developer… moved to /account/builder…, permanently, the sub-path and query kept.
+for (const path of LEGACY_BUILDER_PATHS) {
+  app.on(['GET', 'HEAD'], path, (c) => {
+    const url = new URL(c.req.url);
+    return c.redirect(builderRedirectTarget(url.pathname, url.search) ?? '/account/builder', 308);
+  });
+}
 
 /**
  * D751 T9 (#1921): each OAuth connector the catalogue offers (oauth2, an
@@ -990,6 +1001,7 @@ app.route('/api/assistant', assistantRoutes);
 // dev-only Anthropic path, and this endpoint reports on the production
 // Workers AI router, which is a different thing that happens to sit nearby.
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
+app.route('/api/fills', fillsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
 // D845 (#2471): the member's own usage reports over api_usage_events.

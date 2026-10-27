@@ -100,7 +100,7 @@ Verified on `origin/main` at `56c2498983` (2026-10-21) by S21.
   off until the API tier ships").
 - The Super Admin's Integration Keys page holds provider secrets, not member
   keys.
-- DEVELOPER #2418 planned the member-facing page (`/account/developer/keys`).
+- DEVELOPER #2418 planned the member-facing page (`/account/developer/keys`). D1315 renamed the section Builder: the page is `/account/builder/keys`, and the old address forwards there.
 
 ### Runtime
 
