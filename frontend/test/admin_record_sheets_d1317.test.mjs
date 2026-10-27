@@ -23,9 +23,11 @@ const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 function assertSheet(out, testId, width) {
   const id = out.match(/<h2 id="([^"]+)"/)?.[1];
   assert.ok(id, `${testId}: the title has an id`);
-  assert.match(out, new RegExp(`role="dialog" aria-modal="true" aria-labelledby="${id}"[^>]*data-testid="${testId}" data-width="${width}"`), testId);
-  assert.match(out, new RegExp(`data-testid="${testId}-layer"`));
-  assert.match(out, new RegExp(`data-testid="${testId}-close"`), 'its ×');
+  const dialog = (out.match(/<[a-z]+ [^>]*role="dialog"[^>]*>/g) || []).find((t) => t.includes(`data-testid="${testId}"`)) || '';
+  assert.ok(dialog.includes(`role="dialog" aria-modal="true" aria-labelledby="${id}"`), `${testId}: a modal dialog named by its title`);
+  assert.ok(dialog.includes(`data-testid="${testId}" data-width="${width}"`), `${testId}: ${width}px`);
+  assert.ok(out.includes(`data-testid="${testId}-layer"`));
+  assert.ok(out.includes(`data-testid="${testId}-close"`), 'its ×');
 }
 
 test('Team: editing a member is the shared Sheet at 640px; Add team member stays the centred modal', () => {

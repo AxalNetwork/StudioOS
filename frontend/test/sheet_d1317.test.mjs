@@ -29,7 +29,7 @@ test('the frame: a named modal dialog, its own width capped at 100vw − 108px, 
   const out = renderToStaticMarkup(h(Sheet, { title: 'Ben Sample', eyebrow: 'Accounts › All accounts', sub: 'Founder', width: 640, onClose() {}, footer: h('button', null, 'Save') }, h('p', null, 'BODY')));
   const id = out.match(/<h2 id="([^"]+)"/)?.[1];
   assert.ok(id, 'the title has an id');
-  assert.match(out, new RegExp(`role="dialog" aria-modal="true" aria-labelledby="${id}"`), 'named by its title');
+  assert.ok(out.includes(`role="dialog" aria-modal="true" aria-labelledby="${id}"`), 'named by its title');
   assert.match(out, /style="width:640px;max-width:calc\(100vw - 108px\)"/);
   assert.match(out, /rounded-l-2xl/, '16px radius on the left corners only');
   assert.match(out, /border-l border-\[#ececf1\]/, 'a hairline on the left only');
@@ -54,7 +54,8 @@ test('the frame: a named modal dialog, its own width capped at 100vw − 108px, 
 
 test('scroll: the header and the footer stay put, and only the body scrolls', () => {
   const out = renderToStaticMarkup(h(Sheet, { title: 'T', onClose() {}, footer: h('button', null, 'Save') }, h('p', null, 'BODY')));
-  const tag = (testId) => out.match(new RegExp(`<[a-z]+ class="([^"]+)" data-testid="${testId}"`))?.[1] || '';
+  const tags = [...out.matchAll(/<[a-z]+ class="([^"]+)" data-testid="([^"]+)"/g)];
+  const tag = (testId) => tags.find((m) => m[2] === testId)?.[1] || '';
   assert.match(tag('sheet-header'), /\bshrink-0\b/);
   assert.match(tag('sheet-footer'), /\bshrink-0\b/);
   assert.match(tag('sheet-body'), /\bflex-1\b.*\boverflow-y-auto\b/);
