@@ -57,6 +57,8 @@ function fixture() {
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(MIG442);
   db.exec(MIG463);
+  // D912: the check reads Solution, Business model and Team from migration 544's `narrative_sections`.
+  db.exec(sqlOf('544_narrative_sections.sql'));
   raiseEvidenceTables(db);
   personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
