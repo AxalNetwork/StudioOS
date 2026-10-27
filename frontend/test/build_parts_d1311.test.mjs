@@ -20,13 +20,13 @@ const order = (slug) => BUILD_PARTS[slug].map(([key]) => key);
 test('each module lists its connectors in the canvases\' order', () => {
   // VC1: the Hosting block after Tools history and GitHub's Code system.
   assert.deepEqual(order('operating-systems'), ['tools', 'vercel']);
-  // VC4a: Runs on under GitHub's From GitHub.
-  assert.deepEqual(order('solution-design'), ['github', 'vercel']);
+  // VC4a: Runs on under GitHub's From GitHub; D1314: Google's and Notion's proposals after.
+  assert.deepEqual(order('solution-design'), ['github', 'vercel', 'google', 'notion']);
   // VC2 and LV7: From Lovable under From GitHub; Vercel's Live strip between.
-  assert.deepEqual(order('prototype-mvp'), ['github', 'vercel', 'lovable']);
+  assert.deepEqual(order('prototype-mvp'), ['github', 'vercel', 'lovable', 'notion']);
   // VC3: "The Deploys strip sits above GitHub's Releases strip."
   // Mutation checked: put github first → this fails.
-  assert.deepEqual(order('product-roadmap'), ['vercel', 'github']);
+  assert.deepEqual(order('product-roadmap'), ['vercel', 'github', 'google', 'notion']);
   assert.deepEqual(order('company-creation'), ['github', 'vercel']);
   assert.deepEqual(order('founding-team'), ['github']);
 });
@@ -37,6 +37,7 @@ test('a part not built yet is a null on its own line, named with the task that b
     ['#2962', 'D1097', 'RunsOnFromVercel'], ['#2962', 'D1097', 'HostingFromVercel'],
     ['#2963', 'D1098', 'MvpFromVercel'], ['#2963', 'D1098', 'RoadmapFromVercel'],
     ['#2964', 'D1099', 'CompanyFromVercel'], ['#2948', 'D1083', 'FromLovable'],
+    ['#2958', 'D1093', 'FromGoogle'], ['#2953', 'D1088', 'FromNotion'],
   ]) {
     assert.ok(src.includes(`${issue} (${decision}), ${component}`), `${component} names ${issue}`);
   }

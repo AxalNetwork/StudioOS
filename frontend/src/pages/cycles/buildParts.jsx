@@ -1,11 +1,12 @@
 /**
  * D1311 (#2398, #2408) — the connector parts on Build's modules, in the order
- * the owner's canvases draw them (`design/incoming/From Lovable Page.dc.html`,
- * LV1–LV8; `From Vercel Page.dc.html` and `From Vercel · Boards.dc.html`,
- * VC1–VC7).
+ * the owner's canvases draw them (`design/incoming/Lovable Page.dc.html` and
+ * `Lovable · Boards.dc.html`, LV1–LV8; `From Vercel Page.dc.html` and
+ * `From Vercel · Boards.dc.html`, VC1–VC7; D1314: `Google Workspace Page.dc.html`,
+ * GW1–GW8, and `Notion Page.dc.html`, NT1–NT8, with their board grids).
  *
- * A module can carry several parts now: GitHub's (D782), Vercel's and
- * Lovable's. Each is one `[connector, render]` entry. A part not built yet is
+ * A module can carry several parts now: GitHub's (D782), Vercel's,
+ * Lovable's, Google's and Notion's. Each is one `[connector, render]` entry. A part not built yet is
  * `null` on its own line, named with the task that builds it, so that task
  * replaces its own line and no other: the five connector tasks do not edit the
  * same lines of CycleRoute.jsx.
@@ -28,6 +29,10 @@ export const BUILD_PARTS = Object.freeze({
     ['github', (data, ctx) => <SolutionDesignFromCode part={data?.parts?.from_code} projectId={ctx.projectId} reload={ctx.reload} />],
     // VC4a "From Vercel · Runs on", under GitHub's part: #2962 (D1097), RunsOnFromVercel, #from-vercel.
     ['vercel', null],
+    // GW3/GW6: spec Docs as proposals: #2958 (D1093), FromGoogle, #from-google.
+    ['google', null],
+    // NT3/NT6: spec pages as proposals: #2953 (D1088), FromNotion, #from-notion.
+    ['notion', null],
   ],
   'prototype-mvp': [
     // D782 (#2112): pull request states and release checks, anchored at #from-github.
@@ -36,12 +41,18 @@ export const BUILD_PARTS = Object.freeze({
     ['vercel', null],
     // LV7: From Lovable under From GitHub: #2948 (D1083), FromLovable, #from-lovable.
     ['lovable', null],
+    // NT3: a must-have database as facts: #2953 (D1088), FromNotion, #from-notion.
+    ['notion', null],
   ],
   'product-roadmap': [
     // VC3: the Deploys strip sits ABOVE GitHub's Releases strip: #2963 (D1098), RoadmapFromVercel, #from-vercel.
     ['vercel', null],
     // D782 (#2111): milestones and releases from GitHub, anchored at #from-github.
     ['github', (data) => <RoadmapFromGithub github={data?.parts?.github} />],
+    // GW3: a mapped roadmap Sheet's rows: #2958 (D1093), FromGoogle, #from-google.
+    ['google', null],
+    // NT3: a roadmap database's rows: #2953 (D1088), FromNotion, #from-notion.
+    ['notion', null],
   ],
   'operating-systems': [
     // D686 §5.4: Tools history, with GitHub's Code system, anchored at #tools.
