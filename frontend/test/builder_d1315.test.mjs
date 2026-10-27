@@ -32,7 +32,7 @@ const props = (n) => n[Object.keys(n).find((k) => k.startsWith('__reactProps$'))
 const byTestId = (root, id) => all(root).find((n) => props(n)['data-testid'] === id) || null;
 // A lone text child is set as the element's textContent, not as a text node.
 const textOf = (n) => all(n).map((x) => (x.nodeType === 3 ? x.nodeValue ?? x.textContent ?? '' : x.childNodes?.length ? '' : x.textContent || '')).join(' ');
-const text = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;|&#39;/g, "'").replace(/\s+/g, ' ').trim();
+const text = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
 test('the four pages and four drawers, each at its own address under /account/builder', () => {
   assert.deepEqual(BUILDER_PAGES.map((p) => [p.label, p.path]), [

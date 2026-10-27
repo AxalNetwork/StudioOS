@@ -679,8 +679,8 @@ test('the sign-in pane uses the signed-in enrolment routes, never the login-flow
 
 test('App.jsx: Builder opens for every role, and /account/developer… forwards to it before :section (D1315)', () => {
   const app = read('frontend/src/App.jsx');
-  const six = "guard\\(\\['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'\\], <SettingsPage \\/>\\)";
-  for (const path of ['/account/builder', '/account/builder/*']) assert.match(app, new RegExp(`<Route path="${path.replaceAll('/', '\\/').replace('*', '\\*')}" element=\\{${six}\\} \\/>`));
+  const six = "guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)";
+  for (const path of ['/account/builder', '/account/builder/*']) assert.ok(app.includes(`<Route path="${path}" element={${six}} />`), path);
   for (const path of ['/account/developer', '/account/developer/*']) assert.ok(app.includes(`<Route path="${path}" element={<BuilderRedirect />} />`), path);
   assert.ok(app.indexOf('path="/account/developer"') < app.indexOf('path="/account/:section"'));
   assert.ok(app.indexOf('path="/account/builder/*"') < app.indexOf('path="/account/:section"'));
