@@ -45,7 +45,6 @@ import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
 import { PmfPart } from './PmfPart';
 import { PmfChip } from './PmfMethod';
 import UpdateAskReplies from './UpdateAskReplies';
-import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
 import { FromYourInterviews, InterviewsSection, PainThemesSection, HypothesesSection } from './ValidateSections';
 import { acceptSuggestions } from './validatePhone';
@@ -202,9 +201,9 @@ const CYCLE_DEFS = {
           {mercuryPart('fundraising-readiness', data, ctx)}
         </>
       ),
+      // D1227 (#3226): the Calls history left Overview; Calls for Capital is the Calls tab (D1221).
       'capital-relationships': (data, ctx) => (
         <>
-          <CallsHistory calls={data?.parts?.calls} />
           <RaiseReceiptMatches role={ctx.role} onChanged={ctx.reload} />
           {mercuryPart('capital-relationships', data, ctx)}
         </>
