@@ -77,7 +77,8 @@ test('the table (DLS2): every row, the round’s word, Not recorded for a missin
   assert.ok(mine.includes('href="/deals/4"'));
   assert.match(mine, /Screened/);
   assert.match(mine, /\$1\.5M/);
-  assert.ok(mine.includes('data-testid="dealflow-wait-scores"'));
+  // D1257: the column is the strip from the batch, with its key; the wait is gone.
+  assert.ok(mine.includes('data-testid="scope-strip-key"') && !mine.includes('dealflow-wait-scores'));
   assert.ok(!/>0</.test(mine.replace(/<td>6<\/td>/, '')), 'no missing value drawn as 0');
   const all = html(h(DealsTableView, { rows, scope: 'all' }));
   assert.ok(!all.includes('href="/deals/4"'), 'All deals is not a door the investor may walk through');

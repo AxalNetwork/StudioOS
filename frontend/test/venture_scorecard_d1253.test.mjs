@@ -69,7 +69,8 @@ test('the panel draws the eleven scopes unread, the method door, and no number',
   const out = html(h(VentureScorecard));
   for (const s of SCOPES) assert.ok(out.includes(`data-testid="scorecard-scope-${s.key}"`), s.key);
   assert.ok(out.includes(`href="${METHOD}"`));
-  assert.ok(out.includes('data-testid="scorecard-wait-scores"') && out.includes('data-testid="scorecard-wait-weighting"'));
+  // D1257: with no deal there is nothing to read, so the scores' wait is gone; the weighting is part 5's.
+  assert.ok(!out.includes('scorecard-wait-scores') && out.includes('data-testid="scorecard-wait-weighting"'));
   assert.ok(!/>\s*0\s*</.test(out), 'no zero is drawn');
   const founder = html(h(VentureScorecard, { audience: 'founder' }));
   assert.ok(founder.includes('data-testid="scorecard-wait-sharing"') && !founder.includes('scorecard-wait-weighting'));
@@ -105,9 +106,9 @@ test('the wiring: the three routes, the deal tab, the deal flow column, HQ’s s
   assert.ok(app.includes(`<Route path="/raise/scorecard" element={guard(labRoles(['admin', 'founder']), <FounderScorecardPage />)} />`));
   assert.ok(app.indexOf('path="/raise/scorecard"') < app.indexOf('path="/raise/:slug"'), 'the static path is declared before the module route');
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
-  assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard />}"));
+  assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard dealId={deal.id} ndaHref={tabHref(deal.id, 'documents')} />}"), 'D1257: the tab reads its deal');
   assert.ok(!deal.includes("['scorecard', 'evidence'"), 'the scorecard tab is no longer a wait card');
-  assert.ok(read('frontend/src/pages/investor/dealflow/DealFlow.jsx').includes('<td><ScopeStrip /></td>'));
+  assert.ok(read('frontend/src/pages/investor/dealflow/DealFlow.jsx').includes('<td><DealStrip read={strips} dealId={r.id} /></td>'), 'D1257: the column reads the batch');
   assert.ok(read('frontend/src/lib/hqStrips.js').includes("['Scoring', '/admin/platform/scoring']"));
   assert.ok(app.includes('<StripLink to="/admin/platform/scoring">Scoring</StripLink>'), 'HQ’s Platform strip in the shell holds the door');
   for (const f of ['Venture Scorecard Page.dc.html', 'Venture scorecard · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);

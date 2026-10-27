@@ -4,13 +4,17 @@
  * views and the scope switch in the address, today's deal list and
  * invitations, and "Not read here yet" on every block no read carries
  * (`dealFlowModel.WAITS`).
+ *
+ * D1257 (#3280): the table's Scorecard column draws each venture's scope strip
+ * from `POST /api/venture-scores/batch` (SC6): a locked or closed scorecard
+ * is an outline with no bar, and one that could not be read says so.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { Unreadable, Unrecorded } from '../../../ui';
-import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
+import { DealStrip, StripKey, useScopeStrips } from '../../../components/scoring/scorecard/Scorecard';
 import {
   MAX_COMPARE, NOT_YET, SCOPES, SCOPE_SWITCH, WAITS,
   compareHref, dealRow, inviteRow, opensDeal, viewHref,
@@ -52,8 +56,8 @@ export function DealFlowToolbar({ view, scope }) {
   );
 }
 
-/** DLS2 from rows already read. Scope columns wait for SCORING; a row opens its deal only under Mine. */
-export function DealsTableView({ rows, scope, picked = [], onPick }) {
+/** DLS2 from rows already read, with each row's strip from the batch (`strips`); a row opens its deal only under Mine. */
+export function DealsTableView({ rows, scope, picked = [], onPick, strips = null }) {
   if (!rows.length) {
     return <section className={box} data-testid="dealflow-empty"><p className="m-0 text-sm">{scope === 'mine' ? 'Nothing in your deal flow yet. Deals you are invited to or commit on appear here.' : 'No round is listed.'}</p></section>;
   }
@@ -77,15 +81,16 @@ export function DealsTableView({ rows, scope, picked = [], onPick }) {
                 </td>
                 <td><span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[12px]">{r.round}</span></td>
                 <td>{money(r.ask, r.currency)}</td>
-                <td><ScopeStrip /></td>
+                <td><DealStrip read={strips} dealId={r.id} /></td>
                 <td>{r.daysInStage == null ? <Unrecorded reason="The stage's start is not recorded." /> : r.daysInStage}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="m-0 text-[12px] text-axal-muted">Scopes, in the scoring order: {SCOPES.join(' · ')}.</p>
-      <DealFlowWait id="scores" />
+      <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">Scopes, in the scoring order: {SCOPES.join(' · ')}.</p>
+      <StripKey />
+      {strips?.status === 'error' && strips.error?.status !== 403 && <Unreadable what="The scorecards" claim="That is not a score of zero." onRetry={strips.retry} />}
       {picked.length > 0 && (
         <div className="flex items-center gap-3" data-testid="dealflow-compare-bar">
           <span className="text-[13px]">{picked.length} selected</span>
@@ -136,6 +141,8 @@ export default function DealFlow({ view, scope, board }) {
   const pick = (id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const wantsDeals = scope !== 'new' && view === 'table';
   const [deals, retryDeals] = useRead(() => (wantsDeals ? api.listDeals(undefined, scope === 'mine' ? 'mine' : undefined) : Promise.resolve([])), [wantsDeals, scope]);
+  const rows = deals.kind === 'ok' ? (Array.isArray(deals.data) ? deals.data : []).map(dealRow) : [];
+  const strips = useScopeStrips(rows.map((r) => r.id));
   const [invites, retryInvites] = useRead(() => (scope === 'new' ? api.myDealInvitations() : Promise.resolve([])), [scope]);
 
   let body;
@@ -146,7 +153,7 @@ export default function DealFlow({ view, scope, board }) {
   } else if (view === 'table') {
     body = deals.kind === 'loading' ? null
       : deals.kind === 'unreadable' ? <section className={box}><Unreadable what="Your deal flow" claim="That is not the same as having none." onRetry={retryDeals} /></section>
-        : <DealsTableView rows={(Array.isArray(deals.data) ? deals.data : []).map(dealRow)} scope={scope} picked={picked} onPick={pick} />;
+        : <DealsTableView rows={rows} scope={scope} picked={picked} onPick={pick} strips={strips} />;
   } else {
     body = (
       <>
