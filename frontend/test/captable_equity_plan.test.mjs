@@ -58,11 +58,15 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // D1255 (#3278) added one more on purpose: Governance's founder-vesting input
   // counts the venture's founder holders with a vesting schedule, as two
   // numbers, read only — pinned below.
+  // D1325 (#3486): the never-fill registry names the cap-table stores so no
+  // fill may target them; it holds no SQL and reads nothing — pinned below.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableRegister.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/fills/neverFill.ts', 'services/raiseCycle.ts', 'services/raiseEvidenceSources.ts', 'services/records/build.ts', 'services/ventureScoring/collectors.ts'],
     'only the importer, declared readers and reviewed writer should touch these tables',
   );
+  const neverFill = read('cloudflare-worker/src/services/fills/neverFill.ts');
+  assert.doesNotMatch(neverFill, /\b(SELECT|INSERT INTO|UPDATE|DELETE FROM)\b|\.prepare\(/, 'the never-fill registry names tables; it never reads one');
   const raise = read('cloudflare-worker/src/services/raiseCycle.ts');
   assert.match(raise, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
     'Raise reads vesting through the requested project’s holders and their own users');
