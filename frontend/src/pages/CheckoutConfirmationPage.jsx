@@ -2,13 +2,13 @@
 //   Shows the order number, an itemized summary (from getOrder), a
 //   "Download Invoice PDF" action (authenticated fetch → blob via
 //   orderInvoiceBlob — NOT a plain <a href>), and "Go to Dashboard".
-// If the order param is missing/invalid → redirect to /pricing/products.
+// If the order param is missing/invalid → redirect to Models (D1288).
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Download, LayoutDashboard, Loader2, AlertTriangle, Package } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatMoney, formatDate } from '../components/products/productsShared';
-import { microMoney, purchaseState } from '../lib/aiTokens';
+import { MODELS_PATH, microMoney, purchaseState } from '../lib/aiTokens';
 
 // D755: only reads the owner's order. Every retry waits; unmount cancels timers
 // and ignores late replies. There is no credit/confirmation write here.
@@ -60,10 +60,10 @@ export default function CheckoutConfirmationPage() {
 
   useEffect(() => {
     setOrder(null); setError(null); setPollingStopped(false);
-    if (!orderRef) { navigate('/pricing/products', { replace: true }); return; }
+    if (!orderRef) { navigate(MODELS_PATH, { replace: true }); return; }
     return watchOrder(orderRef, {
       tokenPackHint, onOrder: setOrder, onError: setError,
-      onNotFound: () => navigate('/pricing/products', { replace: true }),
+      onNotFound: () => navigate(MODELS_PATH, { replace: true }),
       onExhausted: () => setPollingStopped(true),
     });
   }, [orderRef, tokenPackHint, navigate]);
@@ -96,8 +96,8 @@ export default function CheckoutConfirmationPage() {
           <AlertTriangle size={26} />
         </span>
         <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">{error}</h1>
-        <button onClick={() => navigate('/pricing/products')} className="mt-4 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
-          Back to Plans &amp; Pricing
+        <button onClick={() => navigate(MODELS_PATH)} className="mt-4 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
+          Back to Models
         </button>
       </div>
     );

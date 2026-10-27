@@ -26,7 +26,7 @@ import { aiBudgetApi } from '../lib/api/aiBudget';
 import { usageApi } from '../lib/api/usage';
 import { isSuperAdminUser } from '../lib/shellRole';
 import { addState, autoReloadLine, planBlock, storageLine } from './tokensBandModel';
-import { TOPUP_UNAVAILABLE, usageMoney } from '../lib/aiTokens';
+import { ADD_TOKENS_HASH, ADD_TOKENS_PATH, TOPUP_UNAVAILABLE, usageMoney } from '../lib/aiTokens';
 import CheckoutSheet from '../components/checkout/CheckoutSheet';
 import PackSheet from '../components/checkout/PackSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
@@ -364,7 +364,7 @@ function TokensBand({ read, onRetry, onAdd, storage, autoReload, packs, user }) 
 function Packs({ read, onRetry, signedIn, onBuy }) {
   const D = useContext(Face);
   const packs = read.status === 'ready' ? packCards(read.body) : [];
-  const back = `/login?next=${encodeURIComponent('/pricing?for=models#token-packs')}`;
+  const back = `/login?next=${encodeURIComponent(ADD_TOKENS_PATH)}`;
   return (
     <section className="axp-sec" id="token-packs" aria-labelledby="axp-packs-h" data-testid="pricing-token-packs">
       <div className="axp-kick">{PACKS.kick}</div>
@@ -478,6 +478,19 @@ export function PricingBody({ user = null }) {
     setCheckout(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wanted, ready]);
+
+  // D1288 (#3371): `ADD_TOKENS_PATH` (Models with `ADD_TOKENS_HASH`, and `&pack=<uid>` from an
+  // old address) opens the sheet on Models for a member, once; the address then drops the ask so
+  // Back does not reopen it. A visitor stays on the packs, whose Buy signs in and comes back here.
+  const addAsk = location.hash === ADD_TOKENS_HASH ? new URLSearchParams(location.search).get('pack') || '' : null;
+  useEffect(() => {
+    if (addAsk == null || !user || roleTab) return;
+    const q = new URLSearchParams(location.search);
+    q.delete('pack');
+    navigate({ pathname: location.pathname, search: q.toString() ? `?${q}` : '', hash: '' }, { replace: true });
+    setPackSheet({ pack: addAsk || null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addAsk, user, roleTab]);
 
   return (
     <Face.Provider value={D}>
