@@ -12,13 +12,15 @@ test('Workspace exposes the read foundation honestly: its claims are the feeds l
  const page=pageDescriptor(row,{role:'founder',hq:true,venture:true})!;
  assert.equal(row.auth_type,'oauth2');assert.equal(row.audience_rule,'venture');assert.equal(row.status,'coming_soon');
  assert.equal(CONNECTOR_METADATA.google_workspace.category,'Docs');
- // D1092's Validate feeds, then D1093's Build feeds. The registry's claims are the list.
+ // D1092's Validate feeds, then D1093's Build feeds, then D1095's Grow feeds. The registry's claims are the list.
  assert.deepEqual(GOOGLE_WORKSPACE_FEEDS.map(f=>[f.key,f.module,f.file_kind,f.lands]),[
   ['validate_interview_notes','customer_research','doc','fact'],
   ['validate_demand_signals','demand_signals','form','proposal'],
   ['validate_signal_evidence','experiments','form','proposal'],
   ['spec_doc','solution_design','doc','proposal'],
   ['roadmap_sheet','product_roadmap','sheet','fact'],
+  ['grow_metrics_sheet','revenue_and_traction','sheet','fact'],
+  ['grow_calendar_obligations','durable_company_building','calendar','proposal'],
  ]);
  assert.ok(Object.isFrozen(GOOGLE_WORKSPACE_FEEDS)&&GOOGLE_WORKSPACE_FEEDS.every(f=>Object.isFrozen(f)&&Object.isFrozen(f.reads)));
  for(const f of GOOGLE_WORKSPACE_FEEDS){assert.ok(MODULE_LABELS[f.module],f.module);for(const r of f.reads) assert.ok(Object.hasOwn(GOOGLE_WORKSPACE_READS,r),`${f.key}: ${r}`);}
