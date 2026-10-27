@@ -68,7 +68,7 @@ const FOUNDER_FILES = [...new Set([
   'frontend/src/pages/research/FundsZone.jsx',
   'frontend/src/pages/research/MarketDirectoryZone.jsx',
   'frontend/src/pages/FinancialsPage.jsx',
-  'frontend/src/pages/raise/DataRoomPage.jsx',
+  // D1109 (#2989): DataRoomPage.jsx is retired; the Data room tool makes no model call of its own.
   'frontend/src/pages/RaisePipelinePage.jsx',
 ])].sort();
 

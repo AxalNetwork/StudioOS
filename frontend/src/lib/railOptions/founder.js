@@ -397,7 +397,7 @@ export const FOUNDER_QUIET_PAGES = {
   'Founder · Build · Founding team': 'Its tool is the cap table, which runs no model.',
   'Founder · Build · Company creation': 'Its legal and e-signature doors run no model; the legal generator refuses founders.',
   'Founder · Raise': 'Call for Capital matches by rule.',
-  'Founder · Raise · Data room': 'The files tool and the access view run no model; the room is read on Fundraising readiness.',
+  'Founder · Raise · Data room': 'The Data room tool runs no model; the room is read on Fundraising readiness.',
   'Founder · Raise · Capital relationships': 'The pipeline, the investor match and Match to my Mercury run no model.',
   'Founder · Grow · Revenue and traction': 'The metric log runs no model.',
   'Founder · Grow · Partner network': 'Its records only.',

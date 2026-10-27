@@ -212,6 +212,9 @@ test('Access mounted: the list (Active), the matrix, one investor, the NDA strip
     assert.ok(!v.has('nda-send-g2'), 'an NDA out for signature is not sent twice');
     assert.match(v.textOf('nda-files'), /1 NDA file\..*Model\.xlsx/s);
     assert.match(v.textOf('access-report-shares'), /Larch Capital/);
+    // D1109: the advisor grant moved here from the retired files tool, for the owner.
+    assert.ok(v.has('access-advisor-grants'), 'the owner lost the advisor grant');
+    assert.match(v.textOf('access-advisor-grants'), /Advisors/, 'the advisor grant section is drawn inside it');
     await v.click('access-view-matrix');
     assert.match(v.textOf('matrix-cell-a1-g2'), /Its access does not include this folder/);
     assert.match(v.textOf('matrix-cell-a1-g1'), /Can open/);
@@ -243,7 +246,8 @@ test('Share: picks a prospect, says what it opens, sends the prospect\'s uid (ne
     await v.click('share-dialog-go');
     const sent = writes(v).filter((q) => q.url.endsWith('/data-room/p3uid/grants')).at(-1);
     assert.deepEqual(sent.body, { prospect: 'rp-1', expires_at: null, folders: null });
-    assert.match(v.textOf('access-said'), /Northwind Angels can open the room now\./);
+    // D1109: the Worker cannot say whether the address has an account, so the line never claims access.
+    assert.match(v.textOf('access-said'), /^If [^ ]+ has a StudioOS account, Northwind Angels can open the room now\. Nobody is invited by email\./);
   } finally { await v.close(); }
 });
 
@@ -284,6 +288,7 @@ test('DR16: a co-founder reads Access with the owner-only line and no Share, Rev
   try {
     assert.match(v.textOf('access-cofounder'), /Only the venture’s owner shares the room/);
     assert.ok(!v.has('access-share') && !v.has('nda-send-g1'));
+    assert.ok(!v.has('access-advisor-grants'), 'only the owner grants an advisor');
     await v.click('grant-open-g1');
     assert.ok(!v.has('investor-revoke') && !v.has('investor-change'));
   } finally { await v.close(); }

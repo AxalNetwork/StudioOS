@@ -106,11 +106,10 @@ test('investor-owned deep links keep the investor workspace shell', () => {
   );
   assert.doesNotMatch(dataRoom, /investorWorkspace\('deals', <DataRoomPage/,
     'the retired investor drawer is mounted again');
-  assert.match(
-    dataRoom,
-    /founderWorkspace\('raise', founderEditor\(/,
-    'the founder arm keeps its own workspace tab bar',
-  );
+  // D1109 (#2989): the founder's files tool is retired; the founder arm is the
+  // Data room tool (CycleRoute), and the old modes only forward.
+  assert.match(dataRoom, /<CycleRoute cycle="raise" slug="data-room" \/>/, 'the founder arm is the Data room tool');
+  assert.doesNotMatch(dataRoom, /DataRoomPage|FounderRaiseDataRoom/, 'a retired data room page is mounted again');
   // And the room the redirect's list links into keeps the investor shell.
   assert.match(
     routeBlock(app, '/research/diligence/:grantUid'),
