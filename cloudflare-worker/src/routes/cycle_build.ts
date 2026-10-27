@@ -22,6 +22,7 @@ import { ownedRow } from '../services/records/owned';
 import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, moveRoadmapItem, roadmapCreateChecks } from './progress';
 import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
+import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
@@ -227,7 +228,7 @@ async function fromCode(env: Env, projectId: number) {
   }
 }
 
-async function prototype(env: Env, p: Project): Promise<ModuleRead> {
+async function prototype(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
     `SELECT f.id, f.title, f.is_must_have, f.delivery_status, f.done_at, f.updated_at,
             f.hypothesis_id, f.due_date, u.name AS owner, h.claim AS test_hypothesis
@@ -264,7 +265,7 @@ async function prototype(env: Env, p: Project): Promise<ModuleRead> {
       { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
     sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
-    parts: { github: await prototypeGithub(env, p) } };
+    parts: { github: await prototypeGithub(env, p), vercel: await fromVercel('prototype_mvp', async () => mvpVercel(env, p.id, await projectMember(env, p, viewer))) } };
 }
 
 /** GitHub's state for a fed must-have, in the module's words (D782, #2112). */
@@ -356,7 +357,7 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
     list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
       sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
     facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 },
-    parts: { github: await roadmapGithub(env, p) } };
+    parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', () => roadmapVercel(env, p.id, RELEASES_SHOWN)) } };
 }
 
 /** How many releases the strip shows, newest first; `releases_total` gives the rest's count. */
@@ -494,6 +495,18 @@ async function fromGithub(module: 'founding_team' | 'company_creation', read: ()
   catch (error) {
     console.error('[cycle_build] github %s read failed', module, (error as Error)?.message);
     return { state: 'unreadable', reason: 'What GitHub brought could not be read.' };
+  }
+}
+
+/**
+ * D1098 (#2963): a module's part from Vercel (`services/vercel/buildReads.ts`).
+ * Its own failure leaves the module readable; the log names the module only.
+ */
+async function fromVercel(module: 'prototype_mvp' | 'product_roadmap', read: () => Promise<Record<string, unknown>>) {
+  try { return await read(); }
+  catch {
+    console.error('[cycle_build] vercel %s read failed', module);
+    return { state: 'unreadable', reason: 'What Vercel brought could not be read.' };
   }
 }
 
