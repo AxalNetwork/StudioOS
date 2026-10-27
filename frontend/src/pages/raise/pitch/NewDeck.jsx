@@ -16,6 +16,7 @@ import {
   moveRow, outlineSentence, progressRows, promptWarning, proposalCards, refusalOf, removeRow, roundLine, rowWarning,
   saveSentence, startOptions,
 } from './newDeckModel';
+import { markRecommended } from './studioActionsModel';
 
 /**
  * D897 (#2677, part 3 of #2434) — New deck at /raise/pitch/new, built to the
@@ -163,6 +164,8 @@ function Flow({ projectId, q, navigate, params, setParams }) {
   const sources = useDeckSources(projectId);
   const versions = useRead(() => api.deckListVersions(projectId), [projectId]);
   const methods = useRead(() => api.deckMethods(), []);
+  // D898 group E: the recommended template, once the builder's banner. A failed read marks nothing.
+  const recommended = useRead(() => api.deckRecommend(projectId), [projectId]);
 
   const [step, setStep] = useState(1);
   const [audience, setAudience] = useState('seed_fund');
@@ -281,7 +284,7 @@ function Flow({ projectId, q, navigate, params, setParams }) {
       {step === 1 ? (
         <StepAudience ctx={ctx} audience={audience} setAudience={setAudience} length={length} setLength={setLength}
           prompt={prompt} setPrompt={setPrompt} start={start} setStart={setStart}
-          options={startOptions(asList(versions.data, 'versions', 'decks'), methods.data?.methods || [])}
+          options={markRecommended(startOptions(asList(versions.data, 'versions', 'decks'), methods.data?.methods || []), recommended.data)}
           onContinue={() => (start.kind === 'template'
             ? setDialog({ title: 'Use this template', action: 'Use template', sentence: 'Eadwyn fills the template from your records as a proposal beside your current version. Nothing is a version until you keep cards and save.', go: applyTemplate })
             : setStep(2))} />
@@ -344,11 +347,15 @@ function StepAudience({ ctx, audience, setAudience, length, setLength, prompt, s
                 <button key={`${o.kind}:${o.id}`} type="button" disabled={o.locked} aria-pressed={on} onClick={() => setStart({ kind: o.kind, id: o.id })}
                   className={`flex aspect-[16/10] flex-col justify-between gap-1 rounded-[8px] border p-2 text-left text-[11.5px] font-semibold ${on ? 'border-axal-violet' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
                   <span>{o.label}</span>
+                  {o.recommended ? <span className={PILL_VIO} data-testid="pitch-new-recommended">Recommended</span> : null}
                   {o.locked ? <span className={PILL_MU}>Plan</span> : null}
                 </button>
               );
             })}
           </div>
+          {options.filter((o) => o.recommended && o.reason).map((o) => (
+            <span key={o.id} className={MUTED} data-testid="pitch-new-recommended-reason">Recommended: {o.label}. {o.reason}</span>
+          ))}
         </section>
       </div>
       <div className="flex flex-col gap-3.5">

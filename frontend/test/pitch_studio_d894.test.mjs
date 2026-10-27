@@ -37,11 +37,11 @@ import { api } from '../src/lib/api.js';
 import { cyclesApi } from '../src/lib/api/cycles.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import PitchStudio, { StudioAnalytics, StudioDecks } from '../src/pages/raise/pitch/PitchStudio.jsx';
-import PitchWorkspacePage from '../src/pages/PitchWorkspacePage.jsx';
+import { PitchMovedNotice } from '../src/pages/raise/pitch/PitchWorkspaceMoved.jsx';
 import {
-  ANALYTICS_PATH, EDIT_PATH, LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, REVIEW_PATH, STUDIO_PATH, TABS, TITLE,
+  ANALYTICS_PATH, BUILDER_MOVED_KEY, BUILDER_MOVED_NOTICE, BUILDER_PATH, EDIT_PATH, LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, REVIEW_PATH, STUDIO_PATH, TABS, TITLE,
   coverOf, currentVersion, dayLabel, funnelRows, isReadOnly, linkPage, linkRows, mmss, movedTarget, newLinkHref, noViewsYet,
-  readerStats, slideCaption, slideSeconds, ventureQuery, versionRows, viewsState, weeklyViews,
+  readerStats, slideCaption, slideSeconds, ventureQuery, versionRows, viewsState, weeklyViews, builderTarget,
 } from '../src/pages/raise/pitch/pitchStudioModel.js';
 
 const h = React.createElement;
@@ -374,9 +374,19 @@ test('an admin reads; everyone else the route admits works here', () => {
 test('the old ?mode=workspace address opens the editor with the moved notice drawn, the venture and the hash kept', () => {
   assert.deepEqual(movedTarget('?mode=workspace&project_id=12', '#slide-3'), { pathname: EDIT_PATH, search: `?project_id=12&moved=${MOVED_KEY}`, hash: '#slide-3' });
   assert.equal(MOVED_NOTICE, 'Pitch deck has a new address. Update your bookmark.');
-  const editor = (url) => renderedText(renderToStaticMarkup(h(MemoryRouter, { initialEntries: [url] }, h(PitchWorkspacePage))));
-  assert.ok(editor(`/raise/pitch/edit?moved=${MOVED_KEY}&project_id=12`).includes(MOVED_NOTICE), 'the editor never draws the moved notice');
-  assert.ok(!editor('/raise/pitch/edit?project_id=12').includes(MOVED_NOTICE), 'the notice shows without the moved key');
+  // The notice the editor's shell and the studio's header draw (D898 group E: the
+  // builder that drew it before retired, and the editor it sent you to drew none).
+  const notice = (url) => renderedText(renderToStaticMarkup(h(MemoryRouter, { initialEntries: [url] }, h(PitchMovedNotice))));
+  assert.ok(notice(`/raise/pitch/edit?moved=${MOVED_KEY}&project_id=12`).includes(MOVED_NOTICE), 'the editor never draws the moved notice');
+  assert.ok(!notice('/raise/pitch/edit?project_id=12').includes(MOVED_NOTICE), 'the notice shows without the moved key');
+  assert.ok(notice(`/raise/pitch?moved=${BUILDER_MOVED_KEY}`).includes(BUILDER_MOVED_NOTICE));
+  assert.equal(notice('/raise/pitch?moved=elsewhere'), '', 'a key the studio does not know draws nothing');
+  const editorSrc = read('frontend/src/pages/raise/pitch/PitchEditor.jsx');
+  assert.match(editorSrc, /data-testid="pitch-editor"><PitchMovedNotice \/>\{children\}<\/div>/, 'the editor\'s shell draws the notice');
+  assert.match(read('frontend/src/pages/raise/pitch/PitchStudio.jsx'), /<PitchMovedNotice \/>/, 'the studio\'s header draws the notice');
+  // D898 group E: the retired builder opens the studio, query and hash kept.
+  assert.equal(BUILDER_PATH, '/raise/pitch/builder');
+  assert.deepEqual(builderTarget('?project_id=12&method_id=yc_seed', '#x'), { pathname: STUDIO_PATH, search: `?project_id=12&method_id=yc_seed&moved=${BUILDER_MOVED_KEY}`, hash: '#x' });
   assert.equal(ventureQuery(12), '?project_id=12');
   assert.equal(ventureQuery(null), '');
   // D905 (#2684) adds the Notes tab (PD21).
@@ -667,26 +677,28 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
   assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*founderEditor\(<PitchStudio tab="decks" \/>\)/);
-  // D898 (#2676): the canvas's editor at /raise/pitch/edit; the template builder at /raise/pitch/builder until it retires.
+  // D898 (#2676): the canvas's editor at /raise/pitch/edit; the template builder retired (group E) and its address opens the studio.
   assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchEditor \/>\)\)\)\} \/>/);
-  assert.match(app, /<Route path="\/raise\/pitch\/builder" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchWorkspacePage \/>\)\)\)\} \/>/);
+  assert.ok(app.includes('<Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />'), 'the builder\'s address opens the studio');
+  assert.doesNotMatch(app, /PitchWorkspacePage|[^b]PitchDeckPage\b/);
+  for (const f of ['frontend/src/pages/PitchWorkspacePage.jsx', 'frontend/src/pages/PitchDeckPage.jsx']) assert.ok(!existsSync(resolve(root, f)), `${f} is back`);
   assert.match(app, /<Route path="\/raise\/pitch\/analytics" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchStudio tab="analytics" \/>\)\)\} \/>/);
   assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchStudio tab="review" \/>\)\)\} \/>/);
   assert.ok(!existsSync(resolve(root, 'frontend/src/pages/founder/FounderRaisePitch.jsx')), 'the read-only Pitch page is still on disk');
   assert.doesNotMatch(app, /FounderRaisePitch/);
   const moved = read('frontend/src/pages/raise/pitch/PitchWorkspaceMoved.jsx');
   assert.match(moved, /<Navigate to=\{movedTarget\(loc\.search, loc\.hash\)\} replace \/>/);
-  const workspace = read('frontend/src/pages/PitchWorkspacePage.jsx');
-  assert.match(workspace, /navigate\(`\$\{t\.to\}\$\{keep\}`\)/, 'a tab drops the venture again');
-  assert.match(workspace, /\{ id: 'deck', to: BUILDER_PATH,/, 'the Deck Builder tab lands on the studio home again (bug 3)');
+  assert.match(moved, /<Navigate to=\{builderTarget\(loc\.search, loc\.hash\)\} replace \/>/);
 });
 
 test('every link that carried the old address carries the new one', () => {
   assert.match(read('frontend/src/pages/cycles/ValidateSections.jsx'), /<Link to="\/raise\/pitch\/edit" title=\{PROBLEM_SLIDE_NOTE\}/);
   const rail = read('frontend/src/lib/railOptions/founder.js');
   assert.doesNotMatch(rail, /\/raise\/pitch\?mode=workspace/);
-  // D898: the two template actions belong to the builder, which moved to /raise/pitch/builder.
-  assert.equal((rail.match(/route: '\/raise\/pitch\/builder'/g) || []).length, 2);
+  // D898 group E: the builder retired; Fill from project is the studio's, a template New deck's.
+  assert.equal((rail.match(/route: '\/raise\/pitch\/builder'/g) || []).length, 0);
+  assert.match(rail, /key: 'form:deck', route: '\/raise\/pitch', label: 'Fill from project'/);
+  assert.match(rail, /key: 'form:deck-template', route: '\/raise\/pitch\/new', label: 'Use this template'/);
   for (const f of ['frontend/src/workspaces/founderZoneActions.js', 'frontend/src/workspaces/founderZoneFilters.js']) {
     assert.doesNotMatch(read(f), /'raise\/pitch'/, `${f} still holds the retired Pitch zone`);
   }

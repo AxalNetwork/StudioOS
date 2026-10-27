@@ -1827,8 +1827,8 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
 }
 
 /**
- * Task #8 — per-slide coverage map for the "Fill from project" grid in
- * PitchDeckPage. 11 cells in the canonical slide order; each cell
+ * Task #8 — per-slide coverage map for the "Fill from project" grid the
+ * old builder drew (retired by D898 group E; the fill still returns it). 11 cells in the canonical slide order; each cell
  * records (a) the source table(s) it reads, (b) whether the slide will
  * populate vs. needs founder input, and (c) a short count_label the UI
  * shows as a badge ("3/5 interviews", "0 holders", "score: ✓").

@@ -32,13 +32,16 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 | `deckAssistModel.js` | D899: pure words and derivations of the card tools — the tools and their options, the cost line, what a press sends, why a figure takes no tool, the connector groups and their card, the rail row's models. |
 | `BlockGrid.jsx` | D1112 (#2992): D898's blocks on the 12 × 6 grid, drawn one way for the editor, Present and the print page (`BlockView`, `BlockGrid`). `live` makes video, audio and link blocks real links; `sources` adds each metric tile's source line. |
 | `PrintExtras.jsx` | D1112: what the headless print page (`../../PitchDeckPrintPage.jsx`, which the PDF and PowerPoint exports photograph) draws for a studio card, the speaker notes pages and the Sources appendix, each one 1920 × 1080 page. |
-| `PitchWorkspaceMoved.jsx` | The old `/raise/pitch?mode=workspace` address: it opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`, the venture and the hash kept. |
+| `PitchWorkspaceMoved.jsx` | The old addresses. `/raise/pitch?mode=workspace` opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`; the retired builder's `/raise/pitch/builder` opens the studio with `?moved=pitch-builder` (D898 group E). The venture and the hash are kept, and `PitchMovedNotice` draws the notice once on the page it lands on. |
+| `StudioActions.jsx` | D898 group E (#2676): the retired builder's actions, now the studio's. `FillFromProject` on the Decks tab's current deck (`POST /api/decks/:id/autofill`; the proposal is reviewed at New deck's step 4), `SpinoutReadiness` for a Spin-Out deck (a read), and `BrandingCard` (the plan, the footer and the watermark, saved behind a dialog). New deck's Start from marks the recommended template. |
+| `studioActionsModel.js` | D898 group E: pure words and derivations of those actions — which deck is a Spin-Out deck, a refused fill, why a template is recommended, the readiness lines, the branding lines and the watermark's dialog. |
 
-The template builder, `../../PitchWorkspacePage.jsx` (with
-`../../PitchDeckPage.jsx`), stays at `/raise/pitch/builder`; the editor
-uses `/raise/pitch/edit` (D898). New deck (D897) at `/raise/pitch/new`
-and the Decks tab's standard-deck fast path build proposals. Nothing
-they build becomes a version until the founder saves the cards they kept.
+The old template builder retired with D898 group E: its four actions are
+`StudioActions.jsx` and New deck's Recommended mark, and `/raise/pitch/builder`
+opens the studio. The editor is at `/raise/pitch/edit` (D898). New deck (D897)
+at `/raise/pitch/new`, the Decks tab's standard-deck fast path and Fill from
+project build proposals. Nothing they build becomes a version until the
+founder saves the cards they kept.
 
 ## The rules for adding here
 

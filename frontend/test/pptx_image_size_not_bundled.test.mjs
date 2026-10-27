@@ -31,7 +31,7 @@
  * Vite honours that field for the client build, and PPTX generation in
  * this app runs in the BROWSER — `decks/spinout/buildDeck.js` imports
  * `pptxgen`, the Worker deliberately does not (see `routes/pptx.ts` and
- * `PitchDeckPage.jsx:404`). So no user-supplied image is handed to these
+ * `SpinoutLabPitchDeckPage.jsx`'s export). So no user-supplied image is handed to these
  * parsers in production either. The bundle scan below is what notices if
  * that exclusion breaks.
  */

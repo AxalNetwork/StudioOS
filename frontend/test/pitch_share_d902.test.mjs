@@ -293,13 +293,14 @@ test('the viewer page wires the closed card, the gate, the frozen note, the chip
 });
 
 /* ------------------------------------------------------------------ *
- * One writer: the editor's Share and the studio's New link
+ * One writer: the studio's New link
  * ------------------------------------------------------------------ */
 
-test('the editor\'s Share and the studio\'s New link open the one dialog; no page writes a link another way', () => {
-  const editor = read('frontend/src/pages/PitchDeckPage.jsx');
+test('the studio\'s New link opens the one dialog; no page writes a link another way', () => {
+  // D898 group E retired the template builder, whose Share opened this dialog too.
+  assert.ok(!existsSync(resolve(root, 'frontend/src/pages/PitchDeckPage.jsx')), 'the builder is back');
   const studio = read('frontend/src/pages/raise/pitch/PitchStudio.jsx');
-  for (const src of [editor, studio]) {
+  for (const src of [studio]) {
     assert.match(src, /import ShareDialog from '\.\/(raise\/pitch\/)?ShareDialog'/);
     assert.match(src, /<ShareDialog\b/);
     assert.doesNotMatch(src, /api\.(shareDeck|createDeckShare)\(/, 'the Spin-Out Lab writer stays the Lab\'s');

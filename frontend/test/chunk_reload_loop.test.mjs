@@ -312,11 +312,10 @@ test('every guard key the module lists is one a caller actually uses', () => {
   // above pin that nothing is missing; this pins that nothing is invented.
   const callers = [main, boundary, pwa, read('frontend/index.html')].join('\n');
   for (const key of RELOAD_GUARD_KEYS) {
-    if (key === 'deck_registry_recover') continue; // PitchDeckPage, read separately below
     assert.ok(callers.includes(key), `RELOAD_GUARD_KEYS lists ${key}, which no caller sets`);
   }
-  assert.match(codeOnly(read('frontend/src/pages/PitchDeckPage.jsx')), /deck_registry_recover/,
-    'the deck recovery guard must still be the key the list names');
+  // D898 group E retired the template builder and its registry reload with it.
+  assert.ok(!RELOAD_GUARD_KEYS.includes('deck_registry_recover'), 'the retired builder\'s reload key is listed again');
 });
 
 /**

@@ -15,6 +15,8 @@ import CardAssistBar from './CardAssistBar';
 import { BlockGrid } from './BlockGrid';
 import { ChartBlock, ChartLibrary, ChartToolbar } from './ChartTools';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
+import { NEW_PATH } from './newDeckModel';
+import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { cardOf, presentHref } from './presentExportModel';
 import {
   ADDABLE_KINDS, AUDIENCE_LABELS, CALLOUTS, KIND_LABELS, KIT_FAILED, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS, NO_KIT,
@@ -140,8 +142,8 @@ export default function PitchEditor() {
       <Shell>
         <div className={`${CARD} flex flex-col items-start gap-3 p-5`} data-testid="pitch-editor-no-deck">
           <span className={`text-[14px] font-extrabold ${INK}`}>No deck yet.</span>
-          <span className={MUTED}>Start one from a template, then edit it here.</span>
-          <Link className={PRIMARY} to={`/raise/pitch/builder${ventureQuery(projectId)}`}>Open the template builder</Link>
+          <span className={MUTED}>Start one from your records or a template, then edit it here.</span>
+          <Link className={PRIMARY} to={`${NEW_PATH}${ventureQuery(projectId)}`}>New deck</Link>
         </div>
       </Shell>
     );
@@ -170,7 +172,8 @@ export default function PitchEditor() {
 }
 
 function Shell({ children }) {
-  return <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-4 py-4" data-testid="pitch-editor">{children}</div>;
+  // The old `?mode=workspace` address lands here with its moved notice (D894).
+  return <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-4 py-4" data-testid="pitch-editor"><PitchMovedNotice />{children}</div>;
 }
 
 /** PD24: the header at once; the rail, the card and the panel as grey skeletons. */
