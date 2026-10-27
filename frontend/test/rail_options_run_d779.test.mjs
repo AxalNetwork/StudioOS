@@ -42,8 +42,8 @@ function handler(method, path) {
 const writes = (body) => [...body.matchAll(/(?:INSERT INTO|UPDATE|DELETE FROM)\s+([a-z_]+)/g)].map((m) => m[1]);
 
 // The part's rows, by key, so a row added to the inventory is a decision for a later part.
+// D1243 (#3256): 'Investor · Deals · Pipeline|draft:stale-deal-notes' retired with the Pipeline zone.
 const PART_1 = [
-  'Investor · Deals · Pipeline|draft:stale-deal-notes',
   'Investor · Deals · Screening|draft:screening-memo',
   'Investor · Deals · Commit|draft:ic-memo',
   'Investor · Deals · Closing|draft:closing-cover-note',
@@ -75,7 +75,7 @@ const DRAFTS = INVESTOR_RAIL_OPTIONS.filter((o) => o.handler === 'draft').map((o
 }));
 
 test('each draft option is a zone draft band whose Accept writes no other record', () => {
-  assert.equal(DRAFTS.length, 11);
+  assert.equal(DRAFTS.length, 10);
   const accept = handler('patch', '/drafts/:uid');
   // Accept stamps the draft. A surface may name an `accept` hook that writes a
   // record first; none of the investor's does.

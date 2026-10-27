@@ -163,11 +163,10 @@ const I = 'Investor';
 const INVESTOR = [
   own('/studio', key(I, 'Home')),
   own('/deals', key(I, 'Deals')),
-  own('/deals/pipeline', key(I, 'Deals', 'Pipeline')),
   own('/deals/screening', key(I, 'Deals', 'Screening')),
   own('/deals/commit', key(I, 'Deals', 'Commit')),
   own('/deals/closing', key(I, 'Deals', 'Closing')),
-  alias('/pipeline', key(I, 'Deals', 'Pipeline'), 'The investor’s legacy pipeline board, which Deals · Pipeline superseded (shellConfig).'),
+  alias('/pipeline', key(I, 'Deals'), 'D1243 (#3256): an investor’s /pipeline forwards to Deal flow’s table at /deals, which owns this key.'),
   own('/portfolio', key(I, 'Portfolio')),
   alias('/portfolio/health', key(I, 'Portfolio'), 'The overview’s legacy alias (shellConfig).'),
   own('/portfolio/positions', key(I, 'Portfolio', 'Positions')),
@@ -412,6 +411,7 @@ export const RAIL_PAGES = {
  */
 export const RAIL_BOARD_ALIASES = [
   { board: key(I, 'Fund', 'Overview'), to: key(I, 'Fund'), why: 'I13 maps to I12: the fund page is its overview (D720 §11).' },
+  { board: key(I, 'Deals', 'Pipeline'), to: key(I, 'Deals'), why: 'D1243 (#3256): the Pipeline zone retired into Deal flow’s table at /deals; /deals/pipeline and an investor’s /pipeline forward there.' },
   { board: key(SA, 'Revenue', 'Overview'), to: key(SA, 'Revenue'), why: 'H13 maps to H12: the Revenue page is its overview (D720 §11).' },
   { board: key(AD, 'Approvals', 'Exploring members'), to: key(AD, 'Accounts', 'Exploring members'), why: 'One console, /admin/exploring; Accounts is listed first.' },
   { board: key(AD, 'Programs', 'Advisor cohorts'), to: key(AD, 'Approvals', 'Advisor cohort access'), why: 'One console, Programs › Mentor cohort access › People (D953); Approvals is listed first.' },

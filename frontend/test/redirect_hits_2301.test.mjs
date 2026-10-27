@@ -134,7 +134,7 @@ test('the mounted default beacon sends canonical tab keys through fetch and tole
 });
 
 test('D1160: a role\'s forward is counted by the forward itself, never by the address bar, since the address is another role\'s page', async () => {
-  assert.deepEqual(ROLE_REDIRECTS.map((r) => r.path), ['/funds', '/funds/performance']);
+  assert.deepEqual(ROLE_REDIRECTS.map((r) => r.path), ['/funds', '/funds/performance', '/pipeline']);
   for (const { path } of ROLE_REDIRECTS) {
     assert.ok(isRedirectKey(`redirect:${path}`), `${path} is countable`);
     assert.equal(redirectPatternFor(path), null, `an investor at ${path} is not counted`);
@@ -155,6 +155,39 @@ test('D1160: a role\'s forward is counted by the forward itself, never by the ad
       h(Route, { path: '*', element: null })))); });
     assert.deepEqual(sent, ['redirect:/funds/performance']);
   } finally { await act(async () => root.unmount()); restore(); }
+});
+
+test('D1243: /deals/pipeline and an investor\'s /pipeline land on Deal flow\'s table, the query and hash kept; each is counted once', async () => {
+  // /deals/pipeline is a redirect for everyone: the address bar counts it.
+  assert.equal(redirectPatternFor('/deals/pipeline'), '/deals/pipeline');
+  // /pipeline is still the partner's, the founder's and an admin's page: only the investor's forward counts it.
+  assert.equal(redirectPatternFor('/pipeline'), null);
+  assert.ok(isRedirectKey('redirect:/pipeline') && isRedirectKey('redirect:/deals/pipeline'));
+  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  assert.ok(app.includes('<Route path="/deals/pipeline" element={<DealsPipelineRedirect />} />'));
+  const line = app.split('\n').find((l) => l.includes('<Route path="/pipeline" element='));
+  assert.match(line, /effectiveRole === 'partner' \? <PartnerBucketRoutes \/> : effectiveRole === 'investor' \? <DealsPipelineRedirect countAs="\/pipeline" \/> : investorWorkspace\('deals', <PipelineWorkspace \/>\)/,
+    'the partner keeps the bucket, the founder and an admin the board, and only an investor forwards');
+  const { pipelineMovedHref } = await import('../src/pages/investor/dealflow/dealFlowModel.js');
+  assert.equal(pipelineMovedHref(''), '/deals?view=table');
+  assert.equal(pipelineMovedHref('?scope=all&q=solar', '#top'), '/deals?scope=all&q=solar&view=table#top');
+  assert.equal(pipelineMovedHref('?view=board&stage=commit'), '/deals?view=table&stage=commit', 'the view is the table whatever the old query said');
+  const { default: DealsPipelineRedirect } = await import('../src/pages/investor/dealflow/DealsPipelineRedirect.jsx');
+  const { MemoryRouter, Routes, Route, useLocation } = await import('react-router-dom');
+  for (const [from, countAs, key] of [['/deals/pipeline?scope=all#h', null, null], ['/pipeline?q=x', '/pipeline', 'redirect:/pipeline']]) {
+    const restore = installDocument();
+    const sent = []; let at = null;
+    function Where() { const l = useLocation(); at = `${l.pathname}${l.search}${l.hash}`; return null; }
+    const root = createRoot(document.createElement('div'));
+    try {
+      await act(async () => { root.render(h(MemoryRouter, { initialEntries: [from] }, h(Routes, null,
+        h(Route, { path: '/deals/pipeline', element: h(DealsPipelineRedirect, { send: (k) => sent.push(k) }) }),
+        h(Route, { path: '/pipeline', element: h(DealsPipelineRedirect, { countAs, send: (k) => sent.push(k) }) }),
+        h(Route, { path: '/deals', element: h(Where) })))); });
+      assert.equal(at, from.startsWith('/deals') ? '/deals?scope=all&view=table#h' : '/deals?q=x&view=table', from);
+      assert.deepEqual(sent, key ? [key] : [], `${from} is counted once, by one side`);
+    } finally { await act(async () => root.unmount()); restore(); }
+  }
 });
 
 test('D1109: the Data room\'s old addresses are counted by their forward, never by the address bar, and land on the tool', async () => {

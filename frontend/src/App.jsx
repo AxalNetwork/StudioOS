@@ -103,6 +103,7 @@ const GeographyProfile = lazy(() => import('./pages/research/GeographyProfile'))
 const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
 const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
+const DealsPipelineRedirect = lazy(() => import('./pages/investor/dealflow/DealsPipelineRedirect'));
 const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
 const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucketRoutes'));
 const NetworkWorkspace = lazy(() => import('./workspaces/NetworkWorkspace'));
@@ -3441,7 +3442,8 @@ function AppInner() {
           routing one. */}
       {/* D1236 (#2423): compare up to four ventures from Deal flow. */}
       <Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
-      <Route path="/deals/pipeline" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
+      {/* D1243 (#3256): the Pipeline zone is retired; its job is Deal flow's table. The query and hash travel. */}
+      <Route path="/deals/pipeline" element={<DealsPipelineRedirect />} />
       <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
@@ -3781,8 +3783,9 @@ function AppInner() {
       <Route path="/offers" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       {/* Partner canvas P3 — the partner Pipeline root is the bucket overview,
           not the investor deal pipeline that owns this prefix for investors.
-          Investor and founder keep the page they had; partner gets the shell. */}
-      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'partner' ? <PartnerBucketRoutes /> : investorWorkspace('deals', <PipelineWorkspace />))} />
+          The founder and an admin keep the board they had; partner gets the shell.
+          D1243 (#3256): an investor's /pipeline lands on Deal flow's table, counted by the forward (ROLE_REDIRECTS). */}
+      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'partner' ? <PartnerBucketRoutes /> : effectiveRole === 'investor' ? <DealsPipelineRedirect countAs="/pipeline" /> : investorWorkspace('deals', <PipelineWorkspace />))} />
 
       {/* D395 — /partner/operations/* RETIRED. Each tab's job has a
           canvas-built home, and each address lands on it. No guard here: the
