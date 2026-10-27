@@ -50,7 +50,9 @@ export type KeepOutcome = { uid: string; field: string | null; outcome: 'kept'; 
  * left it, read by the caller on this venture.
  */
 export async function recordKept(env: Env, a: {
-  userId: number; page: string; form: string; projectId: number; recordId: number; row: Record<string, unknown>; uids: readonly string[];
+  userId: number; page: string; form: string; projectId: number | null; recordId: number; row: Record<string, unknown>; uids: readonly string[];
+  /** D1329: for a record that is not a venture's, the scopes a proposal for this row may carry (its record, its parent). */
+  scopeRefs?: readonly string[];
 }): Promise<KeepOutcome[]> {
   await ensureFillProvenanceSchema(env);
   const fields = fieldsOf(a.page, a.form);
@@ -62,8 +64,12 @@ export async function recordKept(env: Env, a: {
     const refuse = (why: string): KeepOutcome => ({ uid, field: name, outcome: 'refused', why });
     if (!p) { out.push(refuse('not_found')); continue; }
     if (p.rail_option !== `form:${a.form}` || p.kind !== 'proposal' || !name) { out.push(refuse('not_this_form')); continue; }
-    if (Number(p.payload.project) !== a.projectId) { out.push(refuse('other_venture')); continue; }
-    if (p.record_ref && p.record_ref !== `${table}:${a.recordId}`) { out.push(refuse('other_record')); continue; }
+    if (a.scopeRefs) {
+      if (!a.scopeRefs.includes(String(p.payload.scope ?? ''))) { out.push(refuse('other_record')); continue; }
+    } else {
+      if (Number(p.payload.project) !== a.projectId) { out.push(refuse('other_venture')); continue; }
+      if (p.record_ref && p.record_ref !== `${table}:${a.recordId}`) { out.push(refuse('other_record')); continue; }
+    }
     const f = fields.find((x) => x.field === name);
     if (neverFillReason(name) || (f && neverFillReason(`${f.table}.${f.column}`))) { out.push(refuse('never_fill')); continue; }
     if (!f || !offeredToEadwyn(f)) { out.push(refuse('not_offered')); continue; }
@@ -124,10 +130,35 @@ export const ROW_WRITERS: Readonly<Record<string, RowWriter>> = Object.freeze({
   },
 });
 
+/**
+ * D1329 (#3490): Add forms whose rows hang under a parent that is not a
+ * venture, by table, each through its route's own statement. An agenda
+ * session is `POST /api/events/:id/agenda`'s insert: a title, what happens,
+ * and the next place in the running order; times, speakers and places are
+ * the host's.
+ */
+type ScopedRowWriter = (env: Env, a: { parentId: number; userId: number; row: Record<string, unknown> }) => Promise<number | string>;
+export const SCOPED_ROW_WRITERS: Readonly<Record<string, ScopedRowWriter>> = Object.freeze({
+  event_agenda_items: async (env, a) => {
+    const title = typeof a.row.title === 'string' ? a.row.title.trim().slice(0, 300) : '';
+    if (!title) return 'no_title';
+    const description = typeof a.row.description === 'string' && a.row.description.trim() ? a.row.description.trim().slice(0, 4000) : null;
+    const r = await env.DB.prepare(
+      `INSERT INTO event_agenda_items (event_id, title, description, display_order)
+       VALUES (?, ?, ?, COALESCE((SELECT MAX(display_order) + 1 FROM event_agenda_items WHERE event_id = ?), 0)) RETURNING id`,
+    ).bind(a.parentId, title, description, a.parentId).first<{ id: number }>();
+    return r ? Number(r.id) : 'not_written';
+  },
+});
+
 export type RowOutcome = { uid: string; outcome: 'created'; id: number } | { uid: string; outcome: 'refused'; why: string };
 
 /** Accept all: at most ACCEPT_ALL_MAX row proposals, each written by its form's own writer and reported. */
-export async function acceptRows(env: Env, a: { userId: number; page: string; form: string; projectId: number; uids: readonly string[] }): Promise<{ outcomes: RowOutcome[]; over_limit: string[] }> {
+export async function acceptRows(env: Env, a: {
+  userId: number; page: string; form: string; projectId: number | null; uids: readonly string[];
+  /** D1329: a parent that is not a venture (`scopes.ts`), as `<kind>:<id>`, and its id. */
+  scope?: { key: string; parentId: number };
+}): Promise<{ outcomes: RowOutcome[]; over_limit: string[] }> {
   await ensureFillProvenanceSchema(env);
   const fields = fieldsOf(a.page, a.form);
   const table = fields[0]?.table;
@@ -140,8 +171,12 @@ export async function acceptRows(env: Env, a: { userId: number; page: string; fo
     const row = p?.payload.row as Record<string, unknown> | undefined;
     if (!p) { refuse('not_found'); continue; }
     if (p.rail_option !== `form:${a.form}` || p.kind !== 'proposal' || !row || typeof row !== 'object') { refuse('not_this_form'); continue; }
-    if (Number(p.payload.project) !== a.projectId || p.payload.table !== table) { refuse('other_venture'); continue; }
-    const writer = table ? ROW_WRITERS[table] : undefined;
+    if (a.scope ? p.payload.scope !== a.scope.key || p.payload.table !== table
+      : Number(p.payload.project) !== a.projectId || p.payload.table !== table) { refuse(a.scope ? 'other_record' : 'other_venture'); continue; }
+    const scoped = a.scope && table ? SCOPED_ROW_WRITERS[table] : undefined;
+    const writer: RowWriter | undefined = a.scope
+      ? (scoped ? (e, w) => scoped(e, { parentId: a.scope!.parentId, userId: w.userId, row: w.row }) : undefined)
+      : table ? ROW_WRITERS[table] : undefined;
     if (!writer) { refuse('no_writer'); continue; }
     // Only the form's own fields that Eadwyn is offered; a never-fill or measured name refuses the whole row.
     const bad = Object.keys(row).find((k) => { const f = fields.find((x) => x.field === k); return !f || neverFillReason(k) || !offeredToEadwyn(f); });
@@ -150,7 +185,7 @@ export async function acceptRows(env: Env, a: { userId: number; page: string; fo
     // Decided first, atomically, so two presses cannot both create the row; put back if the writer refuses.
     if (!(await decideRail(env, a.userId, uid, 'accept'))) { refuse('decided'); continue; }
     let made: number | string;
-    try { made = await writer(env, { projectId: a.projectId, userId: a.userId, row }); }
+    try { made = await writer(env, { projectId: a.projectId ?? 0, userId: a.userId, row }); }
     catch (e) { console.error('[fills] accept row:', (e as Error)?.name); made = 'not_written'; }
     if (typeof made === 'string') {
       await env.DB.prepare("UPDATE ai_rail_proposals SET status = 'proposed', decided_at = NULL WHERE uid = ? AND user_id = ? AND status = 'accepted'")
@@ -179,11 +214,22 @@ export async function acceptRows(env: Env, a: { userId: number; page: string; fo
  * the module's own row, scoped to the venture. `required`: a column the
  * module's writer never leaves blank, so an undo to blank is refused.
  */
-export const UNDO_WRITES: Readonly<Record<string, { read: string; write: string; int: boolean; required: boolean }>> = Object.freeze({
+export const UNDO_WRITES: Readonly<Record<string, { read: string; write: string; int: boolean; required: boolean; scoped?: true }>> = Object.freeze({
   'mvp_features.title': { read: 'SELECT project_id, title AS value FROM mvp_features WHERE id = ?', write: 'UPDATE mvp_features SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: true },
   'mvp_features.effort': { read: 'SELECT project_id, effort AS value FROM mvp_features WHERE id = ?', write: 'UPDATE mvp_features SET effort = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: true },
   'mvp_features.pain_group_id': { read: 'SELECT project_id, pain_group_id AS value FROM mvp_features WHERE id = ?', write: 'UPDATE mvp_features SET pain_group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: true, required: false },
   'mvp_features.hypothesis_id': { read: 'SELECT project_id, hypothesis_id AS value FROM mvp_features WHERE id = ?', write: 'UPDATE mvp_features SET hypothesis_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: true, required: false },
+  // D1329 (#3490): records that are not a venture's. `scoped`: the route has checked the record's own scope
+  // (`scopes.ts`), so the write is bound on the row and the fill alone.
+  'ic_decisions.memo': { read: 'SELECT NULL AS project_id, memo AS value FROM ic_decisions WHERE id = ?', write: 'UPDATE ic_decisions SET memo = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false, scoped: true },
+  'advisor_services.title': { read: 'SELECT NULL AS project_id, title AS value FROM advisor_services WHERE id = ?', write: 'UPDATE advisor_services SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: true, scoped: true },
+  'advisor_services.scope': { read: 'SELECT NULL AS project_id, scope AS value FROM advisor_services WHERE id = ?', write: 'UPDATE advisor_services SET scope = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false, scoped: true },
+  'engagement_status_reports.shipped': { read: 'SELECT NULL AS project_id, shipped AS value FROM engagement_status_reports WHERE id = ?', write: 'UPDATE engagement_status_reports SET shipped = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false, scoped: true },
+  'engagement_status_reports.next_up': { read: 'SELECT NULL AS project_id, next_up AS value FROM engagement_status_reports WHERE id = ?', write: 'UPDATE engagement_status_reports SET next_up = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false, scoped: true },
+  'events.description': { read: 'SELECT NULL AS project_id, description AS value FROM events WHERE id = ?', write: 'UPDATE events SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false, scoped: true },
+  'event_agenda_items.title': { read: 'SELECT NULL AS project_id, title AS value FROM event_agenda_items WHERE id = ?', write: 'UPDATE event_agenda_items SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: true, scoped: true },
+  'event_agenda_items.description': { read: 'SELECT NULL AS project_id, description AS value FROM event_agenda_items WHERE id = ?', write: 'UPDATE event_agenda_items SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false, scoped: true },
+  'admin_publications.summary_text': { read: 'SELECT NULL AS project_id, summary_text AS value FROM admin_publications WHERE id = ?', write: 'UPDATE admin_publications SET summary_text = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: true, scoped: true },
 });
 
 export type UndoResult = { ok: true; value: string | number | null } | { ok: false; status: 404 | 409; code: 'fill_not_found' | 'not_undoable' | 'already_undone' | 'edited' | 'no_prior' };
@@ -205,7 +251,7 @@ export async function fillForUndo(env: Env, id: number) {
 
 export async function undoFill(env: Env, userId: number, found: NonNullable<Awaited<ReturnType<typeof fillForUndo>>>): Promise<UndoResult> {
   const { fill, write, projectId, current } = found;
-  if (!write || projectId == null) return { ok: false, status: 404, code: 'not_undoable' };
+  if (!write || (projectId == null && !write.scoped)) return { ok: false, status: 404, code: 'not_undoable' };
   if (fill.undone_at) return { ok: false, status: 409, code: 'already_undone' };
   // Only while the field still holds what the fill wrote: an edit since is the member's.
   if (!same(current, fill.written_value)) return { ok: false, status: 409, code: 'edited' };
@@ -214,7 +260,7 @@ export async function undoFill(env: Env, userId: number, found: NonNullable<Awai
   const value = prior == null ? null : write.int ? Number(prior) : prior;
   const res = await env.DB.batch([
     // The row's write is guarded on the fill not being undone, so two undos racing write it once.
-    env.DB.prepare(write.write).bind(value, fill.target_row_id, projectId, fill.id),
+    write.scoped ? env.DB.prepare(write.write).bind(value, fill.target_row_id, fill.id) : env.DB.prepare(write.write).bind(value, fill.target_row_id, projectId, fill.id),
     env.DB.prepare('UPDATE fill_provenance SET undone_at = CURRENT_TIMESTAMP, undone_by = ? WHERE id = ? AND undone_at IS NULL').bind(userId, fill.id),
   ]);
   if (!Number(res[1]?.meta?.changes)) return { ok: false, status: 409, code: 'already_undone' };

@@ -40,6 +40,12 @@ export interface FillField {
 
 export const FILL_FIELD_CLASSES: readonly FillFieldClass[] = Object.freeze(['restatement', 'sourced', 'composition', 'measured']);
 
+// D1329 (#3490): the other profiles' pages.
+const COMMIT = 'Investor · Deals · Commit';
+const SERVICES = 'Advisor · Expertise · Services';
+const REPORTING = 'Operating Partner · Delivery · Reporting';
+const EVENTS = 'Admin · Approvals · Events';
+const PUBLICATIONS = 'Super Admin · Content · Publications';
 const SOLUTION_DESIGN = 'Founder · Build · Solution design';
 const REVENUE = 'Founder · Grow · Revenue and traction';
 
@@ -51,6 +57,23 @@ export const FILL_FIELDS: readonly FillField[] = Object.freeze([
   { page: SOLUTION_DESIGN, form: 'feature', field: 'effort', label: 'Effort', table: 'mvp_features', column: 'effort', class: 'composition', sources: ['eadwyn'] },
   // A measured figure: a connector's, never Eadwyn's.
   { page: REVENUE, form: 'kpi', field: 'value', label: 'MRR', table: 'project_metrics', column: 'mrr', class: 'measured', sources: ['connector:stripe', 'connector:mercury'] },
+  // D1329 (#3490, #2431 part 6): every other profile. These records are not a
+  // venture's; `scopes.ts` holds each one's own write check. No amount, legal
+  // name, approval, decision, outcome, term or member's record is listed.
+  // AF17, on Commit's IC memo (the owner's answer B): the memo's words only.
+  { page: COMMIT, form: 'ic-memo', field: 'memo', label: 'Memo', table: 'ic_decisions', column: 'memo', class: 'composition', sources: ['eadwyn'] },
+  // AF18: New service. Its price is a money term and the legal name an identity field.
+  { page: SERVICES, form: 'service', field: 'title', label: 'Title', table: 'advisor_services', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  { page: SERVICES, form: 'service', field: 'scope', label: 'What you deliver', table: 'advisor_services', column: 'scope', class: 'composition', sources: ['module:advisor/outcomes', 'eadwyn'] },
+  // AF19: a status report's Done and Next, from the engagement record at no AI tokens.
+  { page: REPORTING, form: 'status-report', field: 'shipped', label: 'Done this week', table: 'engagement_status_reports', column: 'shipped', class: 'restatement', sources: ['module:delivery/engagement'] },
+  { page: REPORTING, form: 'status-report', field: 'next_up', label: 'Next week', table: 'engagement_status_reports', column: 'next_up', class: 'restatement', sources: ['module:delivery/engagement'] },
+  // AF20: an event's content, never its approval, times, capacity or price.
+  { page: EVENTS, form: 'event', field: 'description', label: 'Description', table: 'events', column: 'description', class: 'composition', sources: ['eadwyn'] },
+  { page: EVENTS, form: 'agenda-item', field: 'title', label: 'Session', table: 'event_agenda_items', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  { page: EVENTS, form: 'agenda-item', field: 'description', label: 'What happens', table: 'event_agenda_items', column: 'description', class: 'composition', sources: ['eadwyn'] },
+  // AF21: a publication's summary (H20's draft, in the shared sheet).
+  { page: PUBLICATIONS, form: 'publication', field: 'summary_text', label: 'Summary', table: 'admin_publications', column: 'summary_text', class: 'composition', sources: ['eadwyn'] },
 ].map((f) => Object.freeze({ ...f, sources: Object.freeze([...f.sources]) })) as FillField[]);
 
 /** The fields of one form, in the form's order. */

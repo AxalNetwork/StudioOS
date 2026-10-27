@@ -40,8 +40,9 @@ import { canAccessProject } from '../services/projectAccess';
 import { FILL_FIELDS, fieldsOf, offeredToEadwyn, type FillField } from '../services/fills/fields';
 import { neverFillReason } from '../services/fills/neverFill';
 import { marksForRows, type FillMark } from '../services/fills/provenance';
-import { readSources } from '../services/fills/sources';
+import { readSources, type SourceCtx } from '../services/fills/sources';
 import { acceptRows, fillForUndo, recordKept, undoFill } from '../services/fills/keep';
+import { SCOPED_READS, isExplorer, parentKey, scopeOf, type RecordScope } from '../services/fills/scopes';
 import { logActorAct } from '../services/actorLog';
 
 const fills = new Hono<{ Bindings: Env }>();
@@ -59,6 +60,10 @@ const SENTENCES: Record<string, string> = {
   already_undone: 'That fill was already undone.',
   edited: 'The field has changed since it was filled, so it is yours now. Nothing was undone.',
   no_prior: 'The field was blank before, and it cannot be left blank, so there is nothing to put back.',
+  // D1329 (#3490): a record that is not a venture's.
+  no_profile: 'Fill opens once you hold a venture or a profile.',
+  record_not_available: 'You cannot read this record.',
+  record_not_writable: 'You cannot change this record.',
 };
 const refuse = (c: any, status: number, code: string) => c.json({ error: code, detail: SENTENCES[code] }, status);
 
@@ -70,6 +75,9 @@ const refuse = (c: any, status: number, code: string) => c.json({ error: code, d
 export const ROW_READS: Readonly<Record<string, string>> = Object.freeze({
   mvp_features: 'SELECT * FROM mvp_features WHERE id = ? AND project_id = ?',
   project_metrics: 'SELECT * FROM project_metrics WHERE id = ? AND project_id = ?',
+  // D1329 (#3490): records that are not a venture's. Each is `scopes.ts`' own read, bound on the id alone and
+  // reached only through the scoped branch, after the record's own scope is checked.
+  ...SCOPED_READS,
 });
 
 const blank = (v: unknown) => v == null || String(v).trim() === '';
@@ -80,6 +88,9 @@ fills.get('/sheet', async (c) => {
   const form = String(c.req.query('form') ?? '');
   const fields = fieldsOf(page, form);
   if (!fields.length) return refuse(c, 404, 'unknown_form');
+  // D1329: a record that is not a venture's has its own scope, and the venture's request is unchanged.
+  const recordScope = scopeOf(fields[0].table);
+  if (recordScope) return scopedSheet(c, user, page, form, fields, recordScope);
   const projectId = Number(c.req.query('project'));
   if (!Number.isSafeInteger(projectId) || projectId <= 0) return refuse(c, 400, 'invalid_project');
   const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
@@ -101,6 +112,20 @@ fills.get('/sheet', async (c) => {
   }
   const recordRef = recordId ? `${table}:${recordId}` : null;
 
+  return sheetReply(c, user, { page, form, fields, table, row, recordId, recordRef, canFill,
+    sourceCtx: { userId: Number(user.id), projectId, form, recordRef }, head: { project: projectId } });
+});
+
+/**
+ * The sheet's reply once the record and the trigger are known: the marks, the
+ * sources, Eadwyn's quote and each field's view. One body for a venture's
+ * record and (D1329) a record that is not a venture's.
+ */
+async function sheetReply(c: Context<{ Bindings: Env }>, user: User, a: {
+  page: string; form: string; fields: FillField[]; table: string; row: Record<string, unknown> | null; recordId: number | null;
+  recordRef: string | null; canFill: boolean; sourceCtx: SourceCtx; head: Record<string, unknown>;
+}) {
+  const { page, form, fields, table, row, recordId, recordRef, canFill } = a;
   // The marks: one read for the row; a failure is this block only.
   let marks: Map<string, FillMark> = new Map();
   let marksState: 'ok' | 'unreadable' = 'ok';
@@ -109,7 +134,7 @@ fills.get('/sheet', async (c) => {
     catch (e) { marksState = 'unreadable'; console.warn('[fills] sheet marks unreadable:', (e as Error)?.name); }
   }
 
-  const sources = await readSources(c.env, { userId: Number(user.id), projectId, form, recordRef }, fields);
+  const sources = await readSources(c.env, a.sourceCtx, fields);
 
   // Eadwyn's quote: the member's own runs of this form's option, settled ones only.
   let quote: { option: string; state: 'ok' | 'unreadable'; runs: number | null; average_microusd: number | null };
@@ -148,13 +173,13 @@ fills.get('/sheet', async (c) => {
   };
 
   return c.json({
-    page, form, project: projectId, record: recordRef, can_fill: canFill,
+    page, form, ...a.head, record: recordRef, can_fill: canFill,
     marks_state: marksState,
     fields: fields.map(fieldView),
     sources: sources.map((s) => ({ key: s.key, kind: s.kind, label: s.label, state: s.state, as_of: s.as_of })),
     quote,
   });
-});
+}
 
 /** The venture a write names, when the member may write it in their own session; else the refusal. */
 async function writableVenture(c: Context<{ Bindings: Env }>, user: User, raw: unknown): Promise<{ id: number } | Response> {
@@ -179,6 +204,8 @@ fills.post('/record', async (c) => {
   const page = String(body?.page ?? ''), form = String(body?.form ?? '');
   const fields = fieldsOf(page, form);
   if (!fields.length) return refuse(c, 404, 'unknown_form');
+  const recordScope = scopeOf(fields[0].table);
+  if (recordScope) return scopedRecord(c, user, page, form, fields, recordScope, body);
   const venture = await writableVenture(c, user, body?.project); if (venture instanceof Response) return venture;
   const uids = uidsOf(body?.proposals); if (!uids) return refuse(c, 400, 'invalid_proposals');
   const table = fields[0].table;
@@ -195,7 +222,10 @@ fills.post('/rows/accept', async (c) => {
   const user = await requireAuth(c) as User;
   const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   const page = String(body?.page ?? ''), form = String(body?.form ?? '');
-  if (!fieldsOf(page, form).length) return refuse(c, 404, 'unknown_form');
+  const formFields = fieldsOf(page, form);
+  if (!formFields.length) return refuse(c, 404, 'unknown_form');
+  const recordScope = scopeOf(formFields[0].table);
+  if (recordScope) return scopedRows(c, user, page, form, formFields, recordScope, body);
   const venture = await writableVenture(c, user, body?.project); if (venture instanceof Response) return venture;
   const uids = uidsOf(body?.proposals); if (!uids) return refuse(c, 400, 'invalid_proposals');
   return c.json(await acceptRows(c.env, { userId: Number(user.id), page, form, projectId: venture.id, uids }));
@@ -206,6 +236,8 @@ fills.post('/:id/undo', async (c) => {
   const id = Number(c.req.param('id'));
   if (!Number.isSafeInteger(id) || id <= 0) return refuse(c, 404, 'fill_not_found');
   const found = await fillForUndo(c.env, id);
+  const undoScope = found ? scopeOf(found.fill.target_table) : null;
+  if (found && undoScope) return scopedUndo(c, user, id, found, undoScope);
   // A fill on a venture the member cannot write reads as one that does not exist.
   if (!found || found.projectId == null) return refuse(c, 404, 'fill_not_found');
   const venture = await writableVenture(c, user, found.projectId);
@@ -216,6 +248,97 @@ fills.post('/:id/undo', async (c) => {
   await logActorAct(c.env, user, 'fill_undone', { fill_id: id, table: found.fill.target_table, column: found.fill.target_column }, venture.id);
   return c.json({ ok: true, id, value: r.value });
 });
+
+// ── D1329 (#3490, #2431 part 6): records that are not a venture's ───────────
+//
+// Each table's own write check is `scopes.ts`'. A record is named by `record`
+// (its id); an Add form names the parent its row will hang under (`parent`),
+// or none when the parent is the caller's own profile. An Explorer holds
+// nothing to fill (AF22); a reader gets marks and no trigger; a support
+// session gets no trigger and keeps nothing.
+
+interface ScopedTarget {
+  table: string; row: Record<string, unknown> | null; recordId: number | null; parentId: number | null;
+  recordRef: string | null; scopeKey: string; canWrite: boolean;
+}
+
+/** The record (or the parent) a scoped request names, if the caller may read it; else the refusal. */
+async function scopedTarget(c: Context<{ Bindings: Env }>, user: User, scope: RecordScope, table: string, rawRecord: unknown, rawParent: unknown): Promise<ScopedTarget | Response> {
+  if (isExplorer(user)) return refuse(c, 403, 'no_profile');
+  let recordId: number | null = null;
+  let row: Record<string, unknown> | null = null;
+  let parentId: number | null = null;
+  if (rawRecord != null && rawRecord !== '') {
+    recordId = Number(rawRecord);
+    if (!Number.isSafeInteger(recordId) || recordId <= 0) return refuse(c, 404, 'record_not_found');
+    row = await c.env.DB.prepare(scope.read).bind(recordId).first<Record<string, unknown>>();
+    if (!row) return refuse(c, 404, 'record_not_found');
+  } else if (scope.parent?.own) {
+    parentId = await scope.parent.own(c.env, user);
+  } else if (scope.parent) {
+    parentId = Number(rawParent);
+    if (!Number.isSafeInteger(parentId) || parentId <= 0) return refuse(c, 404, 'record_not_found');
+  } else {
+    return refuse(c, 404, 'record_not_found');
+  }
+  const access = await scope.access(c.env, user, row, parentId);
+  if (!access.read) return refuse(c, 403, 'record_not_available');
+  const recordRef = recordId ? `${table}:${recordId}` : null;
+  return { table, row, recordId, parentId, recordRef, scopeKey: recordRef ?? parentKey(scope, parentId as number), canWrite: access.write };
+}
+
+async function scopedSheet(c: Context<{ Bindings: Env }>, user: User, page: string, form: string, fields: FillField[], scope: RecordScope) {
+  const t = await scopedTarget(c, user, scope, fields[0].table, c.req.query('record'), c.req.query('parent'));
+  if (t instanceof Response) return t;
+  const support = !!(await selectJwt(c))?.payload?.impersonated_by;
+  return sheetReply(c, user, {
+    page, form, fields, table: t.table, row: t.row, recordId: t.recordId, recordRef: t.recordRef, canFill: !support && t.canWrite,
+    sourceCtx: { userId: Number(user.id), projectId: 0, form, recordRef: t.recordRef, scope: { table: t.table, row: t.row, parentId: t.parentId } },
+    head: { project: null, scope: t.scopeKey },
+  });
+}
+
+/** A scoped write: the caller's own session, a record or parent they may write. */
+async function scopedWritable(c: Context<{ Bindings: Env }>, user: User, scope: RecordScope, table: string, rawRecord: unknown, rawParent: unknown): Promise<ScopedTarget | Response> {
+  if ((await selectJwt(c))?.payload?.impersonated_by) return refuse(c, 403, 'support_session_refused');
+  const t = await scopedTarget(c, user, scope, table, rawRecord, rawParent);
+  if (t instanceof Response) return t;
+  return t.canWrite ? t : refuse(c, 403, 'record_not_writable');
+}
+
+async function scopedRecord(c: Context<{ Bindings: Env }>, user: User, page: string, form: string, fields: FillField[], scope: RecordScope, body: Record<string, unknown> | null) {
+  const uids = uidsOf(body?.proposals);
+  if (body?.record == null || body.record === '') return refuse(c, 404, 'record_not_found');
+  const t = await scopedWritable(c, user, scope, fields[0].table, body.record, null);
+  if (t instanceof Response) return t;
+  if (!uids) return refuse(c, 400, 'invalid_proposals');
+  // A proposal made on this record, or for an Add form under the parent the saved row now hangs under.
+  const refs = [t.recordRef as string];
+  const parentValue = scope.parent && t.row ? Number(t.row[scope.parent.column]) : NaN;
+  if (scope.parent && Number.isSafeInteger(parentValue)) refs.push(parentKey(scope, parentValue));
+  const outcomes = await recordKept(c.env, { userId: Number(user.id), page, form, projectId: null, recordId: t.recordId as number, row: t.row as Record<string, unknown>, uids, scopeRefs: refs });
+  return c.json({ record: t.recordRef, outcomes });
+}
+
+async function scopedRows(c: Context<{ Bindings: Env }>, user: User, page: string, form: string, fields: FillField[], scope: RecordScope, body: Record<string, unknown> | null) {
+  if (!scope.parent) return refuse(c, 404, 'record_not_found');
+  const t = await scopedWritable(c, user, scope, fields[0].table, null, body?.parent);
+  if (t instanceof Response) return t;
+  const uids = uidsOf(body?.proposals); if (!uids) return refuse(c, 400, 'invalid_proposals');
+  return c.json(await acceptRows(c.env, { userId: Number(user.id), page, form, projectId: null, uids, scope: { key: t.scopeKey, parentId: t.parentId as number } }));
+}
+
+async function scopedUndo(c: Context<{ Bindings: Env }>, user: User, id: number, found: NonNullable<Awaited<ReturnType<typeof fillForUndo>>>, scope: RecordScope) {
+  const support = !!(await selectJwt(c))?.payload?.impersonated_by;
+  const t = await scopedTarget(c, user, scope, found.fill.target_table, found.fill.target_row_id, null);
+  // A fill on a record the member cannot write reads as one that does not exist; a support session is told why.
+  if (t instanceof Response || !t.canWrite) return refuse(c, 404, 'fill_not_found');
+  if (support) return refuse(c, 403, 'support_session_refused');
+  const r = await undoFill(c.env, Number(user.id), found);
+  if (!r.ok) return refuse(c, r.status, r.code);
+  await logActorAct(c.env, user, 'fill_undone', { fill_id: id, table: found.fill.target_table, column: found.fill.target_column }, null);
+  return c.json({ ok: true, id, value: r.value });
+}
 
 /** The forms FILL_FIELDS lists, for a test and for the drift check's reader. */
 export const FILL_FORMS = Object.freeze([...new Set(FILL_FIELDS.map((f) => `${f.page} / ${f.form}`))]);
