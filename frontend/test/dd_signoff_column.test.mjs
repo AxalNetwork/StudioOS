@@ -16,7 +16,8 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = codeOnly(read('frontend/src/pages/AdminDueDiligenceCasePage.jsx'));
+// D1251 (#3266): the case's Overview draws the sections (`DdCaseWork.jsx`).
+const PAGE = codeOnly(read('frontend/src/pages/duediligence/DdCaseWork.jsx'));
 const DD = read('cloudflare-worker/src/routes/dd.ts');
 const REPORT = read('cloudflare-worker/src/services/dueDiligence.ts');
 
