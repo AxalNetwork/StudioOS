@@ -41,6 +41,15 @@ async function context(c: any, user: any, project: unknown) {
   if (!row || !await projectEnabled(c.env, row.id, p.id)) throw new WorkspaceError('company_not_enabled', 409);
   return { project: p, integration: row };
 }
+/**
+ * D1094: a cycle's Google routes (Raise's sync and decide) pass the same gates:
+ * no support session, a member who may write the venture, and this member's own
+ * Workspace connection enabled for its company. Throws a `WorkspaceError`.
+ */
+export async function workspaceContext(c: any, user: any, project: unknown): Promise<{ project: { id: number; company_id: number }; integration: { id: number; uid: string } }> {
+  if ((await selectJwt(c))?.payload.impersonated_by) throw new WorkspaceError('support_session_refused', 403);
+  return context(c, user, project);
+}
 /** Enabling a company is explicit in the consent dialog, never inferred from joining it. */
 export async function prepareWorkspaceConnect(c: any) {
   const user = await member(c);

@@ -7,14 +7,15 @@ import { pageDescriptor } from '../src/integrations/connectorPages.ts';
 import { writesProjectData } from '../src/integrations/companyScope.ts';
 import { FED_LEDGER_PROVIDERS } from '../src/integrations/fed.ts';
 
-test('Workspace exposes the read foundation honestly, with no module feed or verified live connection',()=>{
+test('Workspace exposes the read foundation honestly: its registered feeds only, and no verified live connection',()=>{
  const row=getDescriptor('google_workspace')!;
  const page=pageDescriptor(row,{role:'founder',hq:true,venture:true})!;
  assert.equal(row.auth_type,'oauth2');assert.equal(row.audience_rule,'venture');assert.equal(row.status,'coming_soon');
  assert.equal(CONNECTOR_METADATA.google_workspace.category,'Docs');
- assert.deepEqual(GOOGLE_WORKSPACE_FEEDS,[]);assert.ok(Object.isFrozen(GOOGLE_WORKSPACE_FEEDS));
- assert.deepEqual(CONNECTOR_METADATA.google_workspace.pulls,GOOGLE_WORKSPACE_FEEDS);
- assert.deepEqual(CONNECTOR_METADATA.google_workspace.feeds,[]);assert.deepEqual(CONNECTOR_METADATA.google_workspace.sends,[]);
+ // D1094 (part 5) registers Raise's three; parts 3, 4 and 6 add theirs.
+ assert.deepEqual(GOOGLE_WORKSPACE_FEEDS.map(f=>f.key),['slides_deck_version','drive_data_room_copy','calendar_last_met']);assert.ok(Object.isFrozen(GOOGLE_WORKSPACE_FEEDS));
+ assert.deepEqual(CONNECTOR_METADATA.google_workspace.pulls,GOOGLE_WORKSPACE_FEEDS.map(f=>({what:f.what,module:f.module})));
+ assert.deepEqual(CONNECTOR_METADATA.google_workspace.feeds,[...new Set(GOOGLE_WORKSPACE_FEEDS.map(f=>f.module))]);assert.deepEqual(CONNECTOR_METADATA.google_workspace.sends,[]);
  assert.equal(page.sign_in.kind,'first_party');assert.equal(page.sign_in.label,'Allow Google files');
  assert.equal(page.verified_on,null);assert.equal(page.added,null);assert.deepEqual(page.prompts,[]);
  assert.match(page.long_description.join(' '),/await their approved design/);

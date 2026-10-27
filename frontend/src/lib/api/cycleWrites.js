@@ -68,6 +68,12 @@ export function makeCycleWrites(request) {
       acceptMercuryProposal: (projectId, id, body) => request(`/cycles/raise/mercury/proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}) }),
       dismissMercuryProposal: (projectId, id) => request(`/cycles/raise/mercury/proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
       deleteMercuryFact: (projectId, id) => request(`/cycles/raise/mercury/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
+      // D1094 (#2959): the member's chosen Google files and calendar. A deck
+      // version or a "last met" waits for Accept; a data-room copy is a fact.
+      googleSync: (projectId) => request(`/cycles/raise/google/sync?${q(projectId)}`, { method: 'POST' }),
+      acceptGoogleProposal: (projectId, id) => request(`/cycles/raise/google/proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST' }),
+      dismissGoogleProposal: (projectId, id) => request(`/cycles/raise/google/proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
+      deleteGoogleCopy: (projectId, id) => request(`/cycles/raise/google/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
     },
     grow: {
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
