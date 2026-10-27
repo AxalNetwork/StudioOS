@@ -35,7 +35,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 test.after(() => removeMigratedDatabases());
 
-const SECRET = 'synthetic-publish-test-secret-0123456789';
+const SECRET = 's'.repeat(40); // in-memory test signing seed only
 const FOUNDER = 1, COFOUNDER = 2, ADMIN = 3, PARTNER = 4, ADVISOR = 5, INVESTOR = 6;
 const P = 701;
 
@@ -282,6 +282,8 @@ test('never automatic: no publish target is a sends row, send_modes refuses one,
 /** Secret-shaped fixtures, built at run time so no literal key sits in the source (push protection). */
 const FAKE_STRIPE = ['sk', 'live', '51HabcdEFGhijKLmnopQRstu'].join('_');
 const FAKE_STRIPE_LOWER = ['sk', 'test', 'abcdefghijklmnopqrstuv'].join('_');
+// A JWT-shaped string, built from its parts so no line of this file is one.
+const FAKE_JWT = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiIxMjM0NTY3ODkwIn0', 'dozjgNryP4J3jVmNHl0w5N'].join('.');
 
 test('the check: a secret, a card and an email block; the name scan finds a seeded member, who passes once they agreed to be named; a team-only figure blocks unless ticked', async () => {
   reset(); const f = fixture();
@@ -290,7 +292,7 @@ test('the check: a secret, a card and an email block; the name scan finds a seed
     [`A test key ${FAKE_STRIPE_LOWER} here`, 'secret'],
     ['Paid with 4242 4242 4242 4242 today', 'card_like'],
     ['Write to hello@northwind.example', 'email'],
-    ['Token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N', 'secret'],
+    [`Token ${FAKE_JWT}`, 'secret'],
     ['-----BEGIN RSA PRIVATE KEY-----', 'secret'],
     ['See https://admin:hunter22@northwind.example/admin', 'secret'],
   ]) {
