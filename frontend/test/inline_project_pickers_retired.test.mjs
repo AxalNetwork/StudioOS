@@ -65,11 +65,11 @@ const FROM_URL = [
   'pages/founder/FounderNetworkOrganizations.jsx',
   'pages/founder/FounderNetworkRelationships.jsx',
   'pages/founder/FounderRaiseCapital.jsx',
-  'pages/founder/FounderRaiseDataRoom.jsx',
   'pages/founder/FounderRaiseLegal.jsx',
   'pages/raise/pitch/PitchStudio.jsx',
   'pages/founder/FounderRaiseStatus.jsx',
-  'pages/raise/DataRoomPage.jsx',
+  // D1109 (#2989): `DataRoomPage.jsx` and `FounderRaiseDataRoom.jsx` are retired; the Data room
+  // tool reads `?project_id=` through CycleRoute (below).
   // #2443: an explicit venture replaces the legacy first-fetched fallback.
   'pages/RaisePipelinePage.jsx',
   // The cycle pages that replaced the four desks (D661, #1474).

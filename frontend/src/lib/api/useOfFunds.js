@@ -3,6 +3,10 @@ import { request } from '../api.js';
 const q = (project, values = {}) => new URLSearchParams({ ...values, project: String(project) }).toString();
 const seg = value => encodeURIComponent(String(value));
 export const useOfFundsApi = {
+  readings: project => request(`/cycles/raise/use-of-funds/eadwyn?${q(project)}`),
+  readingRoadmap: project => request(`/cycles/raise/use-of-funds/eadwyn/roadmap?${q(project)}`),
+  previewReading: (project, body, headers) => request(`/cycles/raise/use-of-funds/eadwyn?${q(project)}`, { method: 'POST', body: JSON.stringify(body), headers }),
+  keepReading: (project, receipt) => request(`/cycles/raise/use-of-funds/eadwyn/keep?${q(project)}`, { method: 'POST', body: JSON.stringify({ receipt }) }),
   plan: project => request(`/cycles/raise/use-of-funds/plan?${q(project)}`),
   scenarios: project => request(`/cycles/raise/use-of-funds/scenarios?${q(project)}`),
   scenario: (project, id) => request(`/cycles/raise/use-of-funds/scenarios/${seg(id)}?${q(project)}`),

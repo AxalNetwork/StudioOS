@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { PromoDrawer, PromoNotes, PromoUsage } from '../src/pages/admin/promos/PromoParts.jsx';
+import { PromoUsage } from '../src/pages/admin/promos/PromoParts.jsx';
 import { BASE, STATE_WORD, WAITS, codeHref, codesHref, stateOf, viewOf } from '../src/pages/admin/promos/promoModel.js';
 
 const h = React.createElement;
@@ -20,11 +20,13 @@ const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const NOW = Date.parse('2026-10-26T12:00:00Z');
 
 test('the address: Codes, Usage, one code’s drawer, and the filters', () => {
-  assert.deepEqual(viewOf(BASE), { tab: 'codes', id: null, filters: { state: null, applies: null } });
+  // D1275: the filters carry search, sort and page too.
+  const none = { state: null, applies: null, q: null, sort: null, page: 1 };
+  assert.deepEqual(viewOf(BASE), { tab: 'codes', id: null, filters: none });
   assert.equal(viewOf(`${BASE}/usage`).tab, 'usage');
-  assert.deepEqual(viewOf(`${BASE}/promo_1AbC`, '?state=paused&applies=plans'), { tab: 'codes', id: 'promo_1AbC', filters: { state: 'paused', applies: 'plans' } });
+  assert.deepEqual(viewOf(`${BASE}/promo_1AbC`, '?state=paused&applies=plans'), { tab: 'codes', id: 'promo_1AbC', filters: { ...none, state: 'paused', applies: 'plans' } });
   assert.equal(viewOf(`${BASE}/a.b`).id, null);
-  assert.deepEqual(viewOf(BASE, '?state=odd&applies=all').filters, { state: null, applies: 'all' });
+  assert.deepEqual(viewOf(BASE, '?state=odd&applies=all').filters, { ...none, applies: 'all' });
   assert.equal(codesHref({ state: 'active', applies: 'plans' }), `${BASE}?state=active&applies=plans`);
   assert.equal(codesHref({}), BASE);
   assert.equal(codeHref('promo_9'), `${BASE}/promo_9`);
@@ -42,12 +44,10 @@ test('states in promoState’s order: off, then expired, then at its cap, then a
   for (const [k, w] of Object.entries(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), k);
 });
 
-test('rendered: Usage waits, the drawer opens from its address and closes to the list, and Redeemed is a lower bound', () => {
-  assert.ok(html(h(PromoUsage)).includes('data-testid="promo-wait-usage"'));
-  assert.equal(html(h(PromoDrawer, { id: null })), '');
-  const d = html(h(PromoDrawer, { id: 'promo_9' }));
-  assert.ok(d.includes('data-testid="promo-drawer"') && d.includes(`href="${BASE}"`) && d.includes('promo-wait-drawer'));
-  assert.match(html(h(PromoNotes)), /lower bound/);
+test('rendered: Usage is drawn (D1276, promo_usage_d1276); only the discount by week still waits', () => {
+  const out = html(h(PromoUsage, { now: NOW }));
+  assert.ok(out.includes('data-testid="promo-usage"') && !out.includes('data-testid="promo-wait-usage"'));
+  assert.deepEqual(Object.keys(WAITS), ['discountWeeks'], 'D1275 drew the drawer, the scope and the redeemed note; D1276 the Usage tab');
 });
 
 test('the wiring: the routes, HQ only, the tabs, the row door, the canvas and the docs', () => {
@@ -59,8 +59,8 @@ test('the wiring: the routes, HQ only, the tabs, the row door, the canvas and th
   const pages = read('frontend/src/pages/admin/ConsolePages.jsx');
   assert.match(pages, /<ConsolePage hqOnly crumb=\{\{ \.\.\.PLATFORM, current: 'Promo codes' \}\}/);
   assert.ok(pages.includes('<HeaderTab to="/admin/platform/promo-codes/usage" data-testid="promo-tab-usage">Usage</HeaderTab>'));
-  assert.ok(pages.includes("{view.tab === 'usage' ? <PromoUsage /> : ("));
-  assert.ok(read('frontend/src/pages/admin/consoles/PromoCodesConsole.jsx').includes('<Link to={`/admin/platform/promo-codes/${p.id}`} className="underline">{p.code}</Link>'));
+  assert.ok(pages.includes("{view.tab === 'usage' ? <PromoUsage /> : <PromoCodesPanel view={view} />}"));
+  assert.ok(read('frontend/src/pages/admin/consoles/PromoCodesConsole.jsx').includes('<Link to={`/admin/platform/promo-codes/${encodeURIComponent(p.id)}${filterSearch(f)}`}'), 'each code opens its drawer at its address, a literal door the reachability guard reads');
   for (const f of ['Promo Codes Page.dc.html', 'Promo codes · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Promo codes · Boards.dc.html').includes('name="Promo Codes Page"'));
   assert.ok(!/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"/.test(read('design/incoming/Promo Codes Page.dc.html')), 'no asset uuid is left in the page');

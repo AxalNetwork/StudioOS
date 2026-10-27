@@ -592,6 +592,15 @@ function spendBlock(insights) {
   };
 }
 
+/**
+ * D1308 (#2366): the revised canvas groups the last five blocks under two
+ * headings, each drawn before the block it names, across the whole grid.
+ */
+export const BLOCK_HEADS = Object.freeze({
+  identity: 'Account health',
+  tickets: 'Support and AI use',
+});
+
 /** Every block, in the canvas's order. `pick` is the Activation week the viewer chose. */
 export function buildBlocks({ insights, filters = { range: '8w', compare: false }, pick }) {
   return [

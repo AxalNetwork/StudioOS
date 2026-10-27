@@ -21,7 +21,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env } from '../types';
-import { requireAuth, getCurrentUser } from '../auth';
+import { requireAuth, getCurrentUser, selectJwt } from '../auth';
 import { clampLimit, parseOffset } from '../util/pagination';
 import {
   ensureNewsSchema,
@@ -32,8 +32,9 @@ import { ensureAuthorWebsites } from '../services/authorWebsites';
 import { ensureArticleCovers } from '../services/articleCovers';
 import { computeAuthorTrust } from '../services/newsTrust';
 import { lintForSend } from '../services/telegramRedactCheck';
-import { notifyArticle } from '../services/articleNotify';
+import { notifyArticle, notifyCommentReply } from '../services/articleNotify';
 import { hashEmail } from '../util/hashEmail';
+import { countDailyView } from '../services/articleMetrics';
 import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes, isValidArticleImageName } from '../services/newsRender';
 import { SECTORS, isValidSector } from '../data/sectors';
 
@@ -97,6 +98,8 @@ function publicArticleShape(row: any) {
     word_count: row.word_count,
     read_minutes: row.read_minutes,
     views: row.views ?? 0,
+    // D1293 — a Super Admin's pick for the featured strip.
+    featured: !!row.featured_at,
     author: row.author_name || null,
     author_user_id: row.author_user_id ?? null,
     author_handle: row.author_handle ?? null,
@@ -207,14 +210,15 @@ articles.get('/', async (c) => {
     bind.push(`%${safe}%`, `%${safe}%`);
   }
 
-  // Featured strip: editorial picks bubble up via a `featured` tag — any
-  // article tagged "featured" by an admin reviewer wins the slot. Falls
-  // back to most-recent if none exist so the strip never goes empty.
-  const order = featured ? 'CASE WHEN a.tags LIKE \'%"featured"%\' THEN 0 ELSE 1 END, a.published_at DESC'
+  // Featured strip (D1293): a Super Admin's picks, `featured_at`, come
+  // first, most recently featured first. An author's own "featured" tag no
+  // longer counts (D1290 §4, question 4). Falls back to most-recent after
+  // the picks so the strip never goes empty.
+  const order = featured ? 'CASE WHEN a.featured_at IS NOT NULL THEN 0 ELSE 1 END, a.featured_at DESC, a.published_at DESC'
                           : 'a.published_at DESC';
   const sql = `SELECT a.id, a.slug, a.title, a.subtitle, a.sector, a.tags,
                       a.cover_r2_key, a.published_at, a.word_count, a.read_minutes,
-                      a.author_user_id, a.excerpt, a.seo_title, a.canonical_url,
+                      a.author_user_id, a.excerpt, a.seo_title, a.canonical_url, a.featured_at,
                       COALESCE(u.display_name, u.name) AS author_name, u.uid AS author_uid, NULL AS author_handle, u.role AS author_role,
                       u.headline AS author_headline,
                       u.socials AS author_socials_json,
@@ -323,6 +327,16 @@ articles.get('/:slug', async (c, next) => {
     c.env.DB.prepare("UPDATE articles SET views = views + 1 WHERE slug = ? AND status = 'published'")
       .bind(slug).run().catch(() => {}),
   );
+  // D1294 (#3390): the day's count, with no personal data (migration 637).
+  // The token is read only to leave an admin, the author and an impersonated
+  // session out; nothing of it is stored.
+  c.executionCtx?.waitUntil?.(
+    selectJwt(c)
+      .then((sel) => countDailyView(c.env, slug, sel ? {
+        userId: Number(sel.payload.user_id) || null, role: sel.payload.role ?? null, impersonated: !!sel.payload.impersonated_by,
+      } : null))
+      .catch(() => {}),
+  );
   const cached = seededCover ? null : await cacheLookup(c);
   if (cached) return cached;
   const row: any = await c.env.DB.prepare(
@@ -396,12 +410,52 @@ articles.get('/draft/:id', async (c) => {
   if (row.author_user_id !== user.id && user.role !== 'admin') return c.json({ error: 'forbidden' }, 403);
   const cmts = await c.env.DB.prepare(
     `SELECT c.id, c.author_id, c.body, c.anchor, c.resolved_at, c.created_at,
+            c.parent_id, c.edited_at,
             u.name AS author_name, u.role AS author_role
        FROM article_review_comments c
        LEFT JOIN users u ON u.id = c.author_id
-      WHERE c.article_id = ? ORDER BY c.created_at`,
+      WHERE c.article_id = ? ORDER BY c.created_at, c.id`,
   ).bind(id).all<any>();
   return c.json({ article: authorArticleShape(row), comments: cmts.results || [] });
+});
+
+// POST /api/articles/:id/comments/:cid/replies  { body }
+//
+// D1293 (#3389) — the author answers an admin's review comment on their own
+// article. Only the article's author may: an admin answers through
+// /api/admin/articles/:id/comments with `parent_id`, and any other member is
+// refused. The comment must be a thread's first comment on this article,
+// written by someone else. The admin who wrote it is told, without the text.
+articles.post('/:id/comments/:cid/replies', async (c) => {
+  const user = await requireAuth(c);
+  await ensureNewsSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const cid = Number(c.req.param('cid'));
+  if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(cid) || cid <= 0) return c.json({ error: 'invalid' }, 400);
+  const row: any = await c.env.DB.prepare(
+    'SELECT id, slug, title, author_user_id FROM articles WHERE id = ? LIMIT 1',
+  ).bind(id).first();
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  if (Number(row.author_user_id) !== Number(user.id)) {
+    return c.json({ error: 'not_your_article', detail: 'Only the article’s author replies here. Nothing was posted.' }, 403);
+  }
+  const parent: any = await c.env.DB.prepare(
+    'SELECT id, author_id FROM article_review_comments WHERE id = ? AND article_id = ? AND parent_id IS NULL',
+  ).bind(cid, id).first();
+  if (!parent || Number(parent.author_id) === Number(user.id)) {
+    return c.json({ error: 'comment_not_found', detail: 'That review comment is not on this article. Nothing was posted.' }, 404);
+  }
+  const body: any = await c.req.json().catch(() => ({}));
+  const text = String(body?.body || '').slice(0, 5000).trim();
+  if (!text) return c.json({ error: 'empty', detail: 'Write a reply first. Nothing was posted.' }, 400);
+  const ins: any = await c.env.DB.prepare(
+    `INSERT INTO article_review_comments (article_id, author_id, body, parent_id) VALUES (?, ?, ?, ?)`,
+  ).bind(id, user.id, text, cid).run();
+  const replyId = Number(ins?.meta?.last_row_id);
+  await notifyCommentReply(c.env, {
+    articleId: id, slug: row.slug, title: row.title, commentAuthorId: Number(parent.author_id), commentId: replyId,
+  });
+  return c.json({ id: replyId, parent_id: cid, ok: true }, 201);
 });
 
 articles.post('/draft', async (c) => {

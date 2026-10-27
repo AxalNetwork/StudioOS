@@ -31,3 +31,49 @@ export function teamForward(search = '', hash = '') {
 export function heldAccountsForward(search = '', hash = '') {
   return { pathname: ACCOUNTS_PATH, search: search || '', hash: hash || '' };
 }
+
+// ---------- D1299 (#2377): the Accounts canvas's addresses and widgets ----------
+
+/** Accounts' two tabs (ACC1, ACC2); each is its own address. */
+export const ACCOUNTS_TABS = Object.freeze([
+  { key: 'overview', label: 'Overview', to: ACCOUNTS_PATH },
+  { key: 'all', label: 'All accounts', to: `${ACCOUNTS_PATH}/all` },
+]);
+
+/** One account's record, the address #2369 and #2370's "Open member record" target. */
+export const accountRecordHref = (id) => `${ACCOUNTS_PATH}/all/${id}`;
+
+/** The record id a location names, or null: a positive whole number under `/admin/accounts/all/`. */
+export function recordIdOf(pathname) {
+  const m = /^\/admin\/accounts\/all\/([1-9]\d{0,15})\/?$/.exec(String(pathname || ''));
+  return m ? Number(m[1]) : null;
+}
+
+/** The page's line (ACC1). */
+export const ACCOUNTS_LINE = 'Every account this studio holds, by profile: who joined, who is still exploring, and who needs you.';
+
+/**
+ * ACC1's widgets, one per profile, in #2377's order and words (G1's names).
+ * `role` is the `users.role` the glance counts. The two sub-accounts have no
+ * count on any read yet, so each says why rather than drawing a zero.
+ */
+export const PROFILE_WIDGETS = Object.freeze([
+  { key: 'founder', label: 'Founders', role: 'founder' },
+  { key: 'investor', label: 'Investors', role: 'investor' },
+  { key: 'advisor', label: 'Advisors', role: 'advisor' },
+  { key: 'partner', label: 'Operating Partners', role: 'partner' },
+  { key: 'exploring', label: 'Explorers', role: 'exploring' },
+  { key: 'lp', label: 'LPs', role: null, reason: 'An LP is an approved LP application, not a role, so no account count holds it yet. The overview read counts it (D1301).' },
+  { key: 'tester', label: 'Product testers', role: null, reason: 'Not recorded: there is no Product tester sub-account yet. D1302 adds it.' },
+]);
+
+/**
+ * A widget's count from the glance's `by_role`. The glance groups every active
+ * account by role, so a role it does not list is a measured 0; a widget with no
+ * role, or no `by_role` at all, is null (not read), never 0.
+ */
+export function widgetCount(byRole, role) {
+  if (!role || !Array.isArray(byRole)) return null;
+  const row = byRole.find((r) => r && r.role === role);
+  return row && Number.isFinite(Number(row.count)) ? Number(row.count) : 0;
+}

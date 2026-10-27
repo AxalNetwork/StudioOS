@@ -28,7 +28,7 @@
  * and `/integrations`, where provider sign-ins return): they stay after
  * 2027-01-19 whatever their count, and are counted for the record.
  */
-export interface RedirectRoute { path: string; keep?: true }
+export interface RedirectRoute { path: string; keep?: true; forward?: true }
 
 /** D939: the legacy console's fixed tabs, including the two retired integration tabs.
  * Never record an arbitrary query value. These are counter keys, not Route paths.
@@ -61,6 +61,19 @@ export const ADMIN_TAB_REDIRECTS: readonly RedirectRoute[] = Object.freeze([
 export const ROLE_REDIRECTS: readonly (RedirectRoute & { role: 'admin' })[] = Object.freeze([
   { path: '/funds', role: 'admin' },
   { path: '/funds/performance', role: 'admin' },
+]);
+
+/**
+ * D1109 (#2989, part 8 of #2456): the Data room's old addresses. Each forward
+ * counts itself (`DataRoomMovedRedirect`), because the address bar cannot:
+ * `/raise/data-room` is the tool's Home and only its `?mode=` forwards, and
+ * `/raise/data-room/:id` shares its shape with the tool's tab words
+ * (`/files`, `/access`, …), which are pages. A file's number forwards; a tab word never does.
+ */
+export const FORWARD_REDIRECTS: readonly (RedirectRoute & { forward: true })[] = Object.freeze([
+  { path: '/raise/data-room?mode=workspace', forward: true },
+  { path: '/raise/data-room?mode=access', forward: true },
+  { path: '/raise/data-room/:id', forward: true },
 ]);
 
 export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
@@ -114,7 +127,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/grow/brand' }, // #2343: Grow's Brand page folded into /build/brand
   { path: '/build/discovery' }, // #2335: → Validate · Customer research
   { path: '/build/metrics' }, // #2336: → /build/kpi
-  { path: '/build/financials' }, // #2339: → /raise/capital/model
+  { path: '/build/financials' }, // #2339; D1178: → /raise/use-of-funds/runway/forecast
+  { path: '/raise/capital/model' }, // D1178 (#3105): → /raise/use-of-funds/runway/forecast?moved=capital-model
   { path: '/build/captable' }, // #2340, D1029: → /raise/cap-table
   { path: '/raise/capital/cap-table' }, // D1029: → /raise/cap-table?moved=cap-table
   { path: '/raise/cap-table/variants' }, // D1029: → /raise/cap-table/scenarios?moved=variants
@@ -188,6 +202,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/partner-invitations/firm-links' }, // D952 (#2728): Firm links moved to Advisors & Partners › Firms
   ...ADMIN_TAB_REDIRECTS,
   ...ROLE_REDIRECTS,
+  ...FORWARD_REDIRECTS,
   { path: '/admin', keep: true }, // D938 (#2743): the Admin Console is retired; every ?tab= forwards to its own page (#2375 keeps /admin)
 
 ]);

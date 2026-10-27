@@ -41,6 +41,8 @@ function freshDb() {
   exec(db, migration('093_article_views.sql'));
   exec(db, migration('346_article_publish_at.sql'));
   exec(db, M635);
+  // D1293's unpublish clears featured_at and featured_by, so the table has them.
+  exec(db, migration('636_article_featured_and_comment_threads.sql'));
   db.exec(`CREATE TABLE activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER,
                                        created_at TEXT DEFAULT (datetime('now')))`);
   return db;
@@ -87,7 +89,7 @@ test('every transition writes one audit row with the ids and both statuses, neve
   assert.equal((await call(db, `/${a}/start-review`, {}, ADMIN)).status, 200);
   assert.equal((await call(db, `/${a}/approve`, {}, ADMIN)).status, 200);
   assert.equal((await call(db, `/${a}/publish`, {}, ADMIN)).status, 200);
-  assert.equal((await call(db, `/${a}/unpublish`, {}, ADMIN)).status, 200);
+  assert.equal((await call(db, `/${a}/unpublish`, { reason: 'Returned for a later date.' }, ADMIN)).status, 200);
   const b = article(db, 'in_review');
   assert.equal((await call(db, `/${b}/request-changes`, { reason: 'The second section repeats the first.' }, ADMIN)).status, 200);
   const c = article(db, 'submitted');
@@ -126,7 +128,7 @@ test('a refused or raced transition writes no audit row', async () => {
   const a = article(db, 'draft');
   assert.equal((await call(db, `/${a}/approve`, {}, ADMIN)).status, 409);
   assert.equal((await call(db, `/${a}/publish`, {}, ADMIN)).status, 409);
-  assert.equal((await call(db, `/${a}/unpublish`, {}, ADMIN)).status, 409);
+  assert.equal((await call(db, `/${a}/unpublish`, { reason: 'Returned for a later date.' }, ADMIN)).status, 409);
   assert.deepEqual(audits(db), []);
 });
 

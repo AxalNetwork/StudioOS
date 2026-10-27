@@ -564,6 +564,49 @@ r.get('/reports/:uid', async (c) => {
   throw NO_REPORT();
 });
 
+/**
+ * D1061 (#2931): the frozen figures of every report this investor received
+ * from one company, for the company page's Figures (RPT10). The latest sent
+ * revision of each chain stands, marked `corrected` when it is not the first.
+ * Each report's figures are what the caller's own duties require, exactly as
+ * the reader shows them. Reading this records no open: only the reader does.
+ * A company that sent the caller no report is the same 404 as none.
+ */
+r.get('/companies/:projectUid/figures', async (c) => {
+  const user = await requireAuth(c);
+  const projectUid = c.req.param('projectUid');
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(projectUid)) throw NO_REPORT();
+  const rows = (await c.env.DB.prepare(
+    `SELECT u.* FROM portfolio_updates u
+       JOIN projects p ON p.id = u.project_id AND p.deleted_at IS NULL
+      WHERE p.uid = ? AND u.kind = 'report' AND u.sent_at IS NOT NULL
+        AND EXISTS (SELECT 1 FROM update_recipients r WHERE r.update_id = u.id AND r.user_id = ? AND r.audience = 'investor')
+      ORDER BY u.period_start, u.revision`,
+  ).bind(projectUid, user.id).all<ReportRow>()).results || [];
+  if (!rows.length) throw NO_REPORT();
+  const latest = new Map<number, ReportRow>();
+  for (const row of rows) {
+    const root = await rootOf(c.env, row);
+    const held = latest.get(root);
+    if (!held || Number(row.revision) > Number(held.revision)) latest.set(root, row);
+  }
+  const reports = [];
+  for (const row of latest.values()) {
+    const periods = await reportPeriods(c.env, row);
+    const own = periods.met.filter((p) => p.holder_user_id === Number(user.id));
+    reports.push({
+      uid: row.uid,
+      period: { label: row.period, start: row.period_start, end: row.period_end },
+      sent_at: row.sent_at,
+      revision: Number(row.revision),
+      corrected: Number(row.revision) > 1,
+      figures: readerFigures(storedFigures(row.figures_json), requiredOf(own)),
+    });
+  }
+  reports.sort((a, b) => String(a.period.start).localeCompare(String(b.period.start)));
+  return c.json({ ok: true, reports });
+});
+
 // ---------------------------------------------------------------- documents
 
 r.post('/reports/:uid/documents', async (c) => {

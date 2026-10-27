@@ -42,6 +42,7 @@ export const FOUNDER_HANDLERS = ['form', 'upload', 'draft', 'transcribe', 'none'
 
 const CYCLE = 'frontend/src/pages/cycles/CycleRoute.jsx';
 const PMF = 'frontend/src/workspaces/PmfExplain.jsx';
+const UOF = 'frontend/src/workspaces/UseOfFundsEadwyn.jsx';
 const ADVISOR = 'frontend/src/components/advisor/PersonalAdvisor.jsx';
 const SESSION = 'frontend/src/pages/founder/InterviewSessionPage.jsx';
 const DECK = 'frontend/src/pages/PitchDeckPage.jsx';
@@ -142,6 +143,18 @@ export const FOUNDER_OPTIONS = [
   },
 
   // ── Raise.
+  {
+    page: 'Founder · Raise · Use of funds', key: 'draft:raise/use-of-funds-check', route: '/raise/use-of-funds', label: 'Check this plan', kind: 'reason', handler: 'draft',
+    at: [[UOF, 'useOfFundsApi.previewReading(']],
+  },
+  {
+    page: 'Founder · Raise · Use of funds', key: 'draft:raise/use-of-funds-runway', route: '/raise/use-of-funds/runway', label: 'Explain the runway', kind: 'numbers', handler: 'draft',
+    at: [[UOF, 'useOfFundsApi.previewReading(']],
+  },
+  {
+    page: 'Founder · Raise · Use of funds', key: 'form:uof-milestone-wording', route: '/raise/use-of-funds/new', label: 'Suggest milestone wording', kind: 'write', handler: 'form',
+    at: [[UOF, 'useOfFundsApi.previewReading(']],
+  },
   {
     page: 'Founder · Raise · Fundraising readiness', key: 'draft:raise/pmf-explain', route: '/raise/fundraising-readiness', label: 'Explain this score', kind: 'reason', handler: 'draft',
     at: [[PMF, "explain: 'draft:raise/pmf-explain'"]],
@@ -384,8 +397,7 @@ export const FOUNDER_QUIET_PAGES = {
   'Founder · Build · Founding team': 'Its tool is the cap table, which runs no model.',
   'Founder · Build · Company creation': 'Its legal and e-signature doors run no model; the legal generator refuses founders.',
   'Founder · Raise': 'Call for Capital matches by rule.',
-  'Founder · Raise · Data room': 'The files tool and the access view run no model; the room is read on Fundraising readiness.',
-  'Founder · Raise · Use of funds': 'The financial model runs no model.',
+  'Founder · Raise · Data room': 'The Data room tool runs no model; the room is read on Fundraising readiness.',
   'Founder · Raise · Capital relationships': 'The pipeline, the investor match and Match to my Mercury run no model.',
   'Founder · Grow · Revenue and traction': 'The metric log runs no model.',
   'Founder · Grow · Partner network': 'Its records only.',

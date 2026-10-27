@@ -330,7 +330,7 @@ test('10 (route): a 403 on a Verdict record draws "Partners do not see decisions
 
 // ── 8. The data room's tool link ─────────────────────────────────────────
 
-test('8 (route): for a founder, /raise/data-room below 1024px draws "Open the files tool" → ?mode=workspace, whatever the read\'s Add points at', async () => {
+test('8 (route): for a founder, /raise/data-room below 1024px draws no door to the retired files tool (D1109), whatever the read\'s Add points at', async () => {
   const m = await mount(`/raise/data-room${Q}`, reads({
     '/cycles/raise/modules/data-room': {
       module: { slug: 'data-room', name: 'Data room' },
@@ -340,6 +340,6 @@ test('8 (route): for a founder, /raise/data-room below 1024px draws "Open the fi
   try {
     assert.equal(m.all('phone-module').length, 1);
     const tools = m.all('phone-module-tool').map((n) => ({ text: m.text(n).trim(), href: pr(n).href ?? pr(n).to }));
-    assert.deepEqual(tools.filter((t) => /Open the files tool/.test(t.text)).map((t) => t.href), [`/raise/data-room?mode=workspace&project_id=3`]);
+    assert.deepEqual(tools.filter((t) => /files tool|mode=workspace/.test(`${t.text} ${t.href}`)), [], 'the files tool is retired; Home is the tool');
   } finally { await m.close(); }
 });

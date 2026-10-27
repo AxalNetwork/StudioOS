@@ -68,15 +68,17 @@ const href = (ctx: Ctx, slug: string) => `/raise/${slug}?project=${ctx.projectId
 const addHref = (ctx: Ctx, slug: string) => `/raise/${slug}/new?project=${ctx.projectId}`;
 /**
  * The full tools the module pages summarise; the pages link to them.
- * `dataRoom` is the file tool (`DataRoomPage`), which holds upload, grants and
- * the NDA switch; the bare `/raise/data-room` becomes D696's module page.
+ * D1109 (#2989): the Data room has no tool beside its module any more: the
+ * module page is the tool, and its Access tab holds grants and the NDA
+ * (`DATA_ROOM_ACCESS`).
  */
+export const DATA_ROOM_ACCESS = '/raise/data-room/access';
 export const TOOL_HREF = {
   pitch: '/raise/pitch',
-  dataRoom: '/raise/data-room?mode=workspace',
   capTable: '/raise/cap-table',
   pipeline: '/raise/capital/pipeline',
-  model: '/raise/capital/model',
+  // D1178 (#3105): the financial model is Use of funds › Runway › Forecast.
+  model: '/raise/use-of-funds/runway/forecast',
   metrics: '/build/kpi',
 } as const;
 
@@ -906,7 +908,7 @@ export async function dataRoomCard(ctx: Ctx): Promise<Card> {
     if (!accessible.length) {
       const staged = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
       const reason = 'No files are currently downloadable by a granted investor.';
-      if (Number(staged?.n ?? 0) > 0) return { state: 'empty', series: null, next: { text: 'Manage access', href: `${TOOL_HREF.dataRoom}&project_id=${ctx.projectId}` }, reason };
+      if (Number(staged?.n ?? 0) > 0) return { state: 'empty', series: null, next: { text: 'Manage access', href: `${DATA_ROOM_ACCESS}?project_id=${ctx.projectId}` }, reason };
       return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason };
     }
     const mapped = { results: accessible.filter(f => f.checklist_item != null) };

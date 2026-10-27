@@ -5,9 +5,9 @@
  * each rule.
  *
  * WHAT IS READ TODAY. People and the case read part 1's and part 2's routes
- * (D1233, `peopleModel.js`); Renewals and Audit read part 4's (D1235,
- * `governanceModel.js`). No admin route reads a business yet, so that tab
- * says "Not read here yet" with its reason and never draws a zero (D1228 §2).
+ * (D1233, `peopleModel.js`); Businesses and its case read part 3's routes
+ * (D1234, `businessModel.js`); Renewals and Audit read part 4's routes
+ * (D1235, `governanceModel.js`). No tab remains a waiting placeholder.
  */
 
 export const BASE = '/admin/kyc';
@@ -30,17 +30,21 @@ export function personHref(id) {
   return ID.test(s) ? `${BASE}/people/${s}` : BASE;
 }
 
+const BUSINESS = /^(company|account|import|studio)-[1-9][0-9]{0,9}$/;
+
 /**
- * What an address names: the tab, and on a person's case their id. Anything
- * unknown under the page is People; a malformed id is People with no case.
+ * What an address names: the tab, and on a case the person's id or the
+ * business's uid (D1234). Anything unknown under the page is People; a
+ * malformed id opens its tab with no case.
  */
 export function viewOf(pathname = '') {
   const p = String(pathname).replace(/\/+$/, '');
-  if (p !== BASE && !p.startsWith(`${BASE}/`)) return { tab: 'people', person: null };
+  if (p !== BASE && !p.startsWith(`${BASE}/`)) return { tab: 'people', person: null, business: null };
   const [word, id, extra] = p.slice(BASE.length + 1).split('/');
-  if (word === 'people') return { tab: 'people', person: id && extra === undefined && ID.test(id) ? id : null };
+  if (word === 'people') return { tab: 'people', person: id && extra === undefined && ID.test(id) ? id : null, business: null };
+  if (word === 'businesses') return { tab: 'businesses', person: null, business: id && extra === undefined && BUSINESS.test(id) ? id : null };
   const tab = TABS.find((t) => t.key === word && t.key !== 'people');
-  return { tab: tab ? tab.key : 'people', person: null };
+  return { tab: tab ? tab.key : 'people', person: null, business: null };
 }
 
 /** The canvas's six status words, the six statuses the store holds since part 1 (D1229 §1). */
@@ -58,5 +62,4 @@ export const NOT_YET = 'Not read here yet';
 
 /** What the canvas draws that no read carries yet. Never a zero, never "none". */
 export const WAITS = Object.freeze({
-  businesses: 'No admin read returns a business yet: company records, account entities and imports sit in three stores with no reviewer.',
 });

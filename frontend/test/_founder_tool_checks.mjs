@@ -47,7 +47,6 @@ export const RETURNS = [
   ['/raise/capital','/raise/use-of-funds','← Raise › Use of funds'],
   ['/raise/capital/model','/raise/use-of-funds','← Raise › Use of funds'],
   ['/raise/capital/pipeline','/raise/capital-relationships','← Raise › Capital relationships'],
-  ['/raise/data-room','/raise/data-room','← Raise › Data room'],
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/incorporation','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/founders','/build/company-creation','← Build › Company creation'],
@@ -73,8 +72,8 @@ export const checks = {
       [],
       [{href:'/legal?project_id=41',label:'Open legal documents',quiet:true},{href:'/legal/send?project_id=41',label:'Open e-signature',quiet:true}],
       [{href:'/raise/capital-match?project_id=41',label:'Open investor match',quiet:true}],
-      // D696: the files door's own query comes first; static markup escapes its `&`.
-      [{href:'/raise/data-room?mode=workspace&amp;project_id=41',label:'Open the files tool',quiet:true}],
+      // D1109: the files tool's door (D696) left with the tool; the module page is the Data room tool.
+      [],
     ]);
   },
   gates(m=actual) {
@@ -108,7 +107,8 @@ export const checks = {
   },
   bindings(m=actual) {
     const app=codeOnly(m.sources.app);
-    const routes=RETURNS.map(r=>r[0]).filter(p=>!['/raise/capital-match','/grow/capital-match','/build/brand','/grow/launch','/legal','/legal/send'].includes(p));
+    // D1178: /raise/capital/model is a redirect to Use of funds › Forecast now, so no editor mounts there.
+    const routes=RETURNS.map(r=>r[0]).filter(p=>!['/raise/capital-match','/grow/capital-match','/build/brand','/grow/launch','/legal','/legal/send','/raise/capital/model'].includes(p));
     assert.deepEqual([routes.map(p=>[p,routeBlock(app,p)?.includes('founderEditor(')??false]),
       /const founderEditor = \(component\) => <><FounderModuleBackLink user=\{user\} \/>\{component\}<\/>/.test(app),
       /tools=\{moduleToolLinks\(cycle, slug, user, q\)\}/.test(m.sources.route)],
@@ -135,6 +135,6 @@ export const checks = {
       const block=routeBlock(app,t.path)||'';
       const roles=block.match(/guard\((?:labRoles\()?\[([^\]]*)\]/)?.[1]||'';
       return [t.path,t.roles.every(r=>roles.includes("'"+r+"'"))];
-    }),[['/build/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-match',true],['/raise/data-room',true]]);
+    }),[['/build/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-match',true]]);
   },
 };

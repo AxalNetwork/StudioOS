@@ -5,23 +5,25 @@ import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import CallsTab from '../calls/CallsTab';
-import { ProRataPanel, RoundClosesPanel } from '../RoundClosesPanel';
 import { FounderClosing } from '../../closing/ClosingRoom';
-import { CLOSING, HOME_PATH, LINE, NOT_YET, SLUG, TABS, TITLE, WAITS, tabHref, tabSearch } from './capRelModel';
+import { CLOSING, HOME_PATH, LINE, SLUG, TABS, TITLE, tabHref, tabSearch } from './capRelModel';
 import CapRelPipeline from './CapRelPipeline';
+import CapRelMatch from './CapRelMatch';
+import CapRelOutreach from './CapRelOutreach';
+import CapRelCommitments from './CapRelCommitments';
+import CapRelActivity from './CapRelActivity';
 import { CapRelOverviewBlocks, MovedNotice } from './CapRelOverview';
 
 /**
  * D1188 (#2457) — the Capital relationships tool's tab bar and tab pages.
  * CycleRoute draws Overview (the module page) with `CapRelHomeNav` under its
- * header, and `CapRelTabPage` for the tab words under the module. Pipeline and
- * Calls draw the module read; Commitments draws today's closes and pro-rata;
- * Match, Outreach and Activity say what they wait for. D1192 (#3126): Pipeline
- * is the board and list (`CapRelPipeline.jsx`), and Overview draws its blocks
- * (`CapRelOverview.jsx`) above the module page's own.
+ * header, and `CapRelTabPage` for the tab words under the module. Calls draws
+ * the module read. D1192 (#3126): Pipeline is the board and list
+ * (`CapRelPipeline.jsx`), and Overview draws its blocks (`CapRelOverview.jsx`)
+ * above the module page's own. D1193 (#3127): Match, Outreach, Commitments and
+ * Activity each draw their own read (`CapRelMatch.jsx`, `CapRelOutreach.jsx`,
+ * `CapRelCommitments.jsx`, `CapRelActivity.jsx`), so no tab waits any more.
  */
-
-const MUTED = 'text-axal-muted dark:text-gray-400';
 
 /** The tool's own tabs, a second level under the Raise modules. */
 export function CapRelTabBar({ active, search = '' }) {
@@ -53,15 +55,6 @@ export function CapRelHomeNav({ search = '', projectId = null }) {
   );
 }
 
-function Wait({ tab }) {
-  return (
-    <section className="flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900" data-testid={`caprel-wait-${tab}`}>
-      <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
-      <p className={`m-0 text-[12.5px] ${MUTED}`}>{WAITS[tab]}</p>
-    </section>
-  );
-}
-
 /** The module read, with the Worker's search, filters and sort. */
 function useModule(projectId) {
   const [reload, setReload] = useState(0);
@@ -86,20 +79,6 @@ function Calls({ projectId }) {
   return <div data-testid="caprel-calls"><CallsTab calls={read.data?.parts?.calls} status={read.status} projectId={projectId} onRetry={read.retry} /></div>;
 }
 
-/** Commitments: today's closes and pro-rata, as the old pipeline page draws them. */
-function Commitments({ projectId, search = '' }) {
-  const [err, setErr] = useState('');
-  return (
-    <div className="flex flex-col gap-4" data-testid="caprel-commitments">
-      {err && <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="caprel-commitments-error">{err}</p>}
-      {/* D1213 (#2424): the round's closing room (CP1). */}
-      <p className="m-0 text-[13px]"><Link to={tabHref(CLOSING, search)} className="font-semibold underline" data-testid="caprel-closing-door">Open the closing room</Link> for the paper, the lines and what is received.</p>
-      <RoundClosesPanel projectId={projectId} onError={setErr} />
-      <ProRataPanel projectId={projectId} onError={setErr} />
-    </div>
-  );
-}
-
 export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
   const here = TABS.find((t) => t.id === tab) || (tab === CLOSING.id ? CLOSING : TABS[0]);
   let body;
@@ -108,9 +87,12 @@ export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetry
   else if (!projectId) body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-loading" />;
   else if (tab === 'pipeline') body = <CapRelPipeline projectId={projectId} search={search} />;
   else if (tab === 'calls') body = <Calls projectId={projectId} />;
-  else if (tab === 'commitments') body = <Commitments projectId={projectId} search={search} />;
+  // D1193 (#3127): Match, Outreach, Commitments and Activity, each from its own read.
+  else if (tab === 'commitments') body = <CapRelCommitments projectId={projectId} search={search} />;
+  else if (tab === 'match') body = <CapRelMatch projectId={projectId} search={search} />;
+  else if (tab === 'outreach') body = <CapRelOutreach projectId={projectId} search={search} />;
+  else if (tab === 'activity') body = <CapRelActivity projectId={projectId} />;
   else if (tab === 'closing') body = <FounderClosing projectId={projectId} search={search} />;
-  else body = <Wait tab={tab} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`caprel-${tab}-page`}>
       {phone

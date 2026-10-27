@@ -1,5 +1,5 @@
-import React from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { PROFILE_OF_ROLE, crumbsOfKey, pageFor } from '../../lib/railPages';
@@ -13,6 +13,7 @@ import { ADMIN_CARD } from './consoles/bankCashModel';
 import { bankAccountsApi } from '../../lib/api/bankAccounts';
 import AdminBoardFrame from './AdminBoardFrame';
 import { movedNoticesFor } from './LegacyContractsRedirect';
+import { ACCOUNTS_TABS, recordIdOf } from './accountsAddress';
 // D648 (#1448) — one component per console, each in its own file under
 // ./consoles/ and each loading only its own data.
 import UsersConsole from './consoles/UsersConsole';
@@ -24,9 +25,10 @@ import { ProductTestingPanel } from './consoles/ProductTestingConsole';
 import { ProductTestingTabBody, useTestingReads } from './productTesting/ProductTestingTabs';
 import { PAGE_LINE as TESTING_LINE, tabCounts as testingTabCounts, viewOf as testingViewOf } from './productTesting/productTestingModel';
 import { PromoCodesPanel } from './consoles/PromoCodesConsole';
-import { PromoDrawer, PromoNotes, PromoUsage } from './promos/PromoParts';
+import { PromoUsage } from './promos/PromoParts';
 import { PAGE_LINE as PROMO_LINE, viewOf as promoViewOf } from './promos/promoModel';
 import { KycTabBody } from './kyc/KycTabs';
+import KycBusinesses from './kyc/KycBusinesses';
 import { PAGE_LINE as KYC_LINE, viewOf as kycViewOf } from './kyc/kycModel';
 import { BillingPanel } from './consoles/BillingConsole';
 
@@ -101,8 +103,18 @@ const PLATFORM = { label: 'Platform', to: '/admin/platform' };
  */
 export function AllAccountsPage({ onImpersonate }) {
   const copyLink = () => { navigator.clipboard?.writeText?.(window.location.href)?.catch?.(() => {}); };
+  // D1299 (#2377): `/admin/accounts/all/<id>` is one account's record (ACC4); the
+  // tabs are the Admin shell's, since a Super Admin's /admin/accounts is Team's.
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const superAdmin = isSuperAdminUser(useAuth()?.user);
+  const onOpenChange = useCallback((id) => (id ? navigate(`/admin/accounts/all/${id}`) : navigate('/admin/accounts/all')), [navigate]);
+  const tabs = superAdmin ? null : ACCOUNTS_TABS.map((t) => (
+    <HeaderTab key={t.key} to={t.to} end={t.key === 'overview'} data-testid={`accounts-tab-${t.key}`}>{t.label}</HeaderTab>
+  ));
   return (
     <ConsolePage
+      tabs={tabs}
       crumb={{ ...ACCOUNTS, current: 'All accounts' }}
       hqCrumb={{ label: 'Team', to: '/admin/hq-team', current: 'All accounts' }}
       title="All accounts"
@@ -115,7 +127,7 @@ export function AllAccountsPage({ onImpersonate }) {
       )}
       testId="admin-all-accounts"
     >
-      <UsersConsole onImpersonate={onImpersonate} />
+      <UsersConsole onImpersonate={onImpersonate} openId={recordIdOf(pathname)} onOpenChange={onOpenChange} />
     </ConsolePage>
   );
 }
@@ -133,7 +145,7 @@ export function KycPage() {
   );
   return (
     <ConsolePage crumb={{ ...APPROVALS, current: 'KYC & KYB' }} title="KYC & KYB" line={KYC_LINE} tabs={tabs} testId="admin-kyc">
-      <KycTabBody view={kycViewOf(pathname)} people={<KycConsole />} />
+      <KycTabBody view={kycViewOf(pathname)} people={<KycConsole />} businesses={<KycBusinesses />} />
     </ConsolePage>
   );
 }
@@ -254,13 +266,8 @@ export function PromoCodesPage() {
   );
   return (
     <ConsolePage hqOnly crumb={{ ...PLATFORM, current: 'Promo codes' }} title="Promo codes" line={PROMO_LINE} tabs={tabs} testId="admin-platform-promo-codes">
-      {view.tab === 'usage' ? <PromoUsage /> : (
-        <div className="flex flex-col gap-4">
-          <PromoDrawer id={view.id} />
-          <PromoNotes />
-          <PromoCodesPanel />
-        </div>
-      )}
+      {/* D1275: the list draws the drawer at `/:id` itself, so a change made there refreshes both. */}
+      {view.tab === 'usage' ? <PromoUsage /> : <PromoCodesPanel view={view} />}
     </ConsolePage>
   );
 }
