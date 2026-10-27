@@ -297,3 +297,22 @@ export function profileLine(profile, status) {
   const label = profile === 'any' ? 'Any profile' : profileLabel(profile);
   return status && status !== 'active' ? `${label} · ${STATUS_WORD[status] || status}` : label;
 }
+
+// ─── D1007 (#2822): the phone layout ────────────────────────────────────────
+
+/** Below `sm`, as the admin page header reads it: the phone layout (SEG14). */
+export const PHONE_QUERY = '(max-width: 639px)';
+
+/**
+ * One needs and offers row as the phone's single line (SEG14a): the segment,
+ * its needs met (or Not recorded), and how many offer kinds have a gap. An
+ * offer kind that could not be read is said, never counted as no gap.
+ */
+export function needsLine(row) {
+  const gaps = row.cells.filter((c) => c.gap).length;
+  const unreadable = row.cells.filter((c) => c.unreadable).length;
+  const parts = [row.name, row.needs.recorded ? `Needs met ${row.needs.text}` : 'Needs: Not recorded'];
+  if (gaps) parts.push(`${gaps} ${gaps === 1 ? 'gap' : 'gaps'}`);
+  if (unreadable) parts.push(`${unreadable} ${unreadable === 1 ? 'kind' : 'kinds'} could not be read`);
+  return { key: row.key, text: parts.join(' · '), gaps, unreadable };
+}

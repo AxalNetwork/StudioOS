@@ -166,11 +166,6 @@ export const EXPLAINERS = {
     body: 'IC meetings, founder check-ins, advisor and expert sessions, partner office hours, and Calendly bookings, in one list. Connect Google or Outlook to copy them out to your own calendar — events you keep there are not read back in.',
     docPath: 'account/notifications',
   },
-  financials: {
-    title: 'Financial model',
-    body: 'A driver-based forecast you can trust. Edit assumptions, see runway shift live, and export the working model for diligence.',
-    docPath: 'capital/metrics',
-  },
   wellbeing: {
     title: 'Founder wellbeing',
     body: 'Private check-ins, sleep / load tracking and burnout signals. Encrypted at rest — your investors never see this.',

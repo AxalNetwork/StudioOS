@@ -1,5 +1,4 @@
-import { count, summary, title, top, usd, total } from './format.js';
-import { DEAL_STAGE_LABEL, dealStage } from '../../lib/dealFlow.js';
+import { count, summary, title, top, total } from './format.js';
 
 /*
  * `/deals` — Investor canvas ID1–ID4, "Find and close investments".
@@ -20,7 +19,10 @@ import { DEAL_STAGE_LABEL, dealStage } from '../../lib/dealFlow.js';
  * derive from it, so `/deals` still stacks them as the bucket overview". That
  * sentence stopped being true when ID4 landed, and nothing failed.
  *
- * THE FOUR SECTIONS READ THE ZONES' OWN ENDPOINTS, so the board cannot disagree
+ * D1243 (#3256): THREE SECTIONS NOW. The Pipeline zone (ID1) retired into
+ * Deal flow, whose own board and table cover it above this one.
+ *
+ * THE SECTIONS READ THE ZONES' OWN ENDPOINTS, so the board cannot disagree
  * with the page a reader clicks through to. Same discipline as the partner
  * boards: a section shows the first few rows and a count, and the zone shows
  * the rest.
@@ -43,44 +45,14 @@ import { DEAL_STAGE_LABEL, dealStage } from '../../lib/dealFlow.js';
 export default function investorDealsBoard(role, api) {
   return {
     sources: {
-      // `'mine'` is the scope the pipeline zone itself passes: this fund's
-      // deals, not every deal on the platform. A board over a wider set than
-      // the page it links to would report a number the zone cannot reproduce.
-      deals: () => api.listDeals(undefined, 'mine'),
       screening: () => api.dealScreening(),
       commit: () => api.icCommitRoom(),
       closing: () => api.esignList(),
     },
     sections: [
-      {
-        slug: 'pipeline',
-        anchor: 'id-pipeline',
-        title: 'Pipeline',
-        span: 'full',
-        source: 'deals',
-        cols: '1.6fr 1fr .9fr 1fr .8fr',
-        columns: ['Company', 'Sector', 'Stage', 'Ask', 'In stage'],
-        empty: 'No deal is open to this fund yet.',
-        // A passed deal is not live and has no stage (`dealStage` returns null
-        // for one), so it is neither counted nor listed here — the zone behind
-        // this section reaches it through its own Passed chip.
-        summary: (d) => summary(count(Array.isArray(d) ? d.filter((row) => dealStage(row) !== null).length : null, 'live deal')),
-        // deals.ts's list read has no LIMIT, so the filtered length is the count (D403).
-        total: (d) => total((Array.isArray(d) ? d : []).filter((row) => dealStage(row) !== null)),
-        rows: (d) => top((Array.isArray(d) ? d : []).filter((row) => dealStage(row) !== null)).map((row) => [
-          row.project_name || `Deal #${row.id}`,
-          title(row.project_sector),
-          // `deals` has no `stage` column — the stage is the record's stored
-          // `status` translated by `dealStage`, the same vocabulary the zone
-          // uses, so the board and the page cannot disagree about one deal.
-          DEAL_STAGE_LABEL[dealStage(row)] || null,
-          usd(row.target_raise || row.amount),
-          typeof row.days_in_stage === 'number' ? `${row.days_in_stage} d` : null,
-        ]),
-        footnote: () =>
-          'Days in stage is the figure the zone is about: a stage count says how many deals sit '
-          + 'somewhere, and not which of them stopped moving.',
-      },
+      // D1243 (#3256): the Pipeline section is gone with its zone. Deal flow's
+      // own board, on the firm's stages, sits above this one on `/deals`, and
+      // its table is where `/deals/pipeline` lands.
       {
         slug: 'screening',
         anchor: 'id-screening',

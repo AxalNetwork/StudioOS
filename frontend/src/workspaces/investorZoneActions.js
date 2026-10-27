@@ -57,15 +57,10 @@ import { makeZoneActions } from './zoneActionBuilder';
 
 export const INVESTOR_ZONE_ACTIONS = {
   // ── Deals ────────────────────────────────────────────────────────────────
-  'deals/pipeline': [
-    // D494 (#1023): BUILT UP TO THE OWNER'S LINE, which here is the whole op.
-    // The columns are the deal record's stored status — one workflow every
-    // route and the IC hand-off read — so a per-firm stage set is a decision
-    // about the workflow, not a missing form. The reason names that decision.
-    { label: 'Configure stages', unbuilt: 'the columns are the deal record’s stored status, shared by every route that moves a deal; whether a firm may define its own stage set is the owner’s decision, not yet made', hover: 'Stages follow one shared deal workflow. Custom stages per firm are not decided yet.' },
-    { label: 'Save view', unbuilt: 'filters reset between visits; no saved view is stored' },
-    { label: 'Export', kind: 'export' },
-  ],
+  // D1243 (#3256): `deals/pipeline` is gone with its zone. Its three ops are
+  // Deal flow's now, and built: the firm's own stages (D1238), Save view
+  // with a name, kept per person or shared with the firm (D1239, D1240), and
+  // the table's export. None of them is declared here any more.
   // TWO OF THESE REASONS WERE FALSE, and canvas ID2 is what found it. They
   // said no scoring run and no rubric were stored. `score_snapshots` is a
   // stored scoring run with SIX dimensions — market, team, product, capital,

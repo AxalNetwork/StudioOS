@@ -123,8 +123,7 @@ test('App.jsx mounts exactly these four, unguarded (the tool\'s own routes guard
   assert.doesNotMatch(APP, /CapTableVariantsPage/);
   for (const gone of ['frontend/src/pages/CapTablePage.jsx', 'frontend/src/pages/CapTableVariantsPage.jsx', 'frontend/src/pages/captable']) assert.equal(existsSync(resolve(root, gone)), false, gone);
   assert.ok(existsSync(resolve(root, 'frontend/src/pages/SpinoutLabCapTablePage.jsx')), 'the Lab\'s copy stays until #2297\'s Lab redesign');
-  const ws = read('frontend/src/pages/CapitalWorkspacePage.jsx');
-  assert.doesNotMatch(codeOnly(ws), /cap-table|CapTablePage/, 'Capital has no Cap Table tab');
+  assert.equal(existsSync(resolve(root, 'frontend/src/pages/CapitalWorkspacePage.jsx')), false, 'D1180 deleted the workspace; it has no Cap Table tab');
 });
 
 test('each old address is counted for #2319, and none is kept past the 90 days', () => {

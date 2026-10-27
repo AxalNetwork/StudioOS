@@ -239,16 +239,11 @@ export const SHELLS = {
       { kind: 'link', label: 'Home', to: '/studio' },
       { kind: 'bucket', label: 'Deals', prefix: '/deals', tagline: 'Find and close investments',
         zones: [
-          // `/pipeline` IS NOT RETIRING, AND THAT IS WHY IT CARRIES THE FLAG.
-          // The other three legacy paths here are now real redirects (D119).
-          // This one must never become one: `/pipeline` is role-forked in
-          // App.jsx — partner gets PartnerBucketRoutes, investor and founder
-          // keep PipelineWorkspace — so redirecting it would take the founder's
-          // board and the partner's bucket root with it. The provenance is
-          // worth keeping (this zone did supersede that board for investors),
-          // so it stays recorded and `legacyRedirects` is taught to skip it
-          // rather than the fact being deleted.
-          { slug: 'pipeline', label: 'Pipeline', archetype: A.WORK_BOARD, legacy: '/pipeline', legacyForked: true },
+          // D1243 (#3256): the Pipeline zone is retired. Deal flow's table at
+          // `/deals?view=table` does its job, and `/deals/pipeline` forwards
+          // there. `/pipeline` stays role-forked in App.jsx: only an
+          // investor's forwards; the partner's bucket root and the founder's
+          // and an admin's board are untouched.
           { slug: 'screening', label: 'Screening', archetype: A.ANALYTICS, legacy: '/pipeline/screening' },
           { slug: 'commit', label: 'Commit', archetype: A.LEDGER, legacy: '/pipeline/commit' },
           // The route said "transactions"; InvestorDealsWorkspace's own nav has
@@ -508,9 +503,10 @@ export function allZoneRoutes(role) {
  * rest alone.
  *
  * `legacyForked` excludes a path that is NOT retiring because the route forks
- * on role and only one arm was superseded — `/pipeline` is the case it was
- * written for. A `?` in the path excludes a tab deep-link, which is a query on
- * a page rather than a page of its own.
+ * on role and only one arm was superseded. `/pipeline` was the case it was
+ * written for, until D1243 retired that zone (its investor arm is a counted
+ * forward in App.jsx now). A `?` in the path excludes a tab deep-link, which
+ * is a query on a page rather than a page of its own.
  */
 export function legacyRedirects(role) {
   return bucketsFor(role).flatMap((b) =>
