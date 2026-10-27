@@ -7,7 +7,7 @@ import SectorSelect from '../components/SectorSelect';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
-import { useEscapeClose } from '../components/useEscapeClose';
+import Sheet from '../ui/Sheet.jsx';
 import { getPitchCopyLengthStatus } from '../lib/pitchCopyLength';
 import { StatusBadge } from '../components/StatusBadges';
 import VentureRiskPanel from '../components/VentureRiskPanel';
@@ -541,8 +541,9 @@ function CbStat({ label, value }) {
   );
 }
 
+// D1317: the shared right-side Sheet (max-w-xl → 560); the search box stays put over the results.
 function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
-  useEscapeClose(onClose);
+  const searchRef = useRef(null);
   const [q, setQ] = useState(project?.name || '');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -593,23 +594,15 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex" role="dialog" aria-label="Look up on Crunchbase">
-      <div className="flex-1 bg-black/40" onClick={onClose} />
-      <div className="w-full max-w-xl bg-white shadow-xl flex flex-col h-full dark:bg-gray-900">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between dark:border-gray-800">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
-              <Database size={16} className="text-violet-600" /> Look up on Crunchbase
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">Search and attach a Crunchbase company snapshot to this startup.</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X size={18} /></button>
-        </div>
-        <div className="px-5 py-3 border-b border-gray-100">
+    <Sheet label="Look up on Crunchbase" width={560} onClose={onClose} testId="crunchbase-lookup" initialFocus={searchRef}
+      title={<span className="flex items-center gap-2"><Database size={16} className="text-violet-600" /> Look up on Crunchbase</span>}
+      sub="Search and attach a Crunchbase company snapshot to this startup.">
+      <div className="flex min-h-full flex-col">
+        <div className="sticky top-0 z-10 px-5 py-3 border-b border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-950">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
-              autoFocus type="text" value={q} onChange={(e) => setQ(e.target.value)}
+              ref={searchRef} type="text" value={q} onChange={(e) => setQ(e.target.value)}
               placeholder="Company name…"
               disabled={isRateLimited}
               className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed dark:border-gray-700 dark:text-gray-100"
@@ -701,7 +694,7 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
           )}
         </div>
       </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -1416,7 +1409,6 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
   const handleClose = useCallback(() => {
     if (!saving) onClose();
   }, [onClose, saving]);
-  useEscapeClose(handleClose);
 
   const submit = async () => {
     if (!form.name.trim()) {
@@ -1458,135 +1450,15 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-      onClick={handleClose}
-    >
-      <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-gray-900"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="Edit startup"
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Edit Startup</h2>
-          <button onClick={handleClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="p-5 space-y-4">
-          {EDITABLE_FIELDS.map((f) => (
-            <div key={f.key}>
-              {f.sectorSelect ? (
-                <SectorSelect
-                  label={f.label}
-                  value={form[f.key]}
-                  onChange={(v) => setForm((s) => ({ ...s, [f.key]: v }))}
-                />
-              ) : (
-                <>
-                  <label className="block text-xs text-gray-600 mb-1">
-                    {f.label}{f.required && <span className="text-red-500"> *</span>}
-                  </label>
-                  {f.textarea ? (
-                    <textarea
-                      value={form[f.key]}
-                      onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
-                      rows={3}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-                    />
-                  ) : (
-                    <input
-                      type="text"
-                      value={form[f.key]}
-                      onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
-                      className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-                    />
-                  )}
-                  {PITCH_FIELD_TYPE[f.key] && (
-                    <PitchCopyMeter status={getPitchCopyLengthStatus(form[f.key], PITCH_FIELD_TYPE[f.key])} />
-                  )}
-                </>
-              )}
-            </div>
-          ))}
-
-          {/* Task #1 — Founder company / affiliation. Surfaces on the
-              Spin-Out Demo Day's merged Team & network slide. */}
-          <div>
-            <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">Company / affiliation</label>
-            <input
-              type="text"
-              value={founderCompany}
-              maxLength={200}
-              placeholder="e.g. Acme Labs"
-              onChange={(e) => setFounderCompany(e.target.value)}
-              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-            />
-          </div>
-
-          {/* Task #2 — Revenue proof section. Powers the RevenueProofCard
-              on the Spin-Out Demo Day Validation slide. All fields optional;
-              leave blank for graceful pre-revenue state. */}
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-            <div className="mb-3">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Revenue</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                Drives the Validation slide of your Demo Day deck. Leave blank for pre-revenue.
-              </p>
-            </div>
-            <div className="grid md:grid-cols-2 gap-3">
-              <RevenueInput
-                label="Total revenue to date (USD)"
-                placeholder="e.g. 12500"
-                value={revenue.revenue}
-                onChange={(v) => setRevenue((s) => ({ ...s, revenue: v }))}
-              />
-              <RevenueInput
-                label="MRR (USD/month)"
-                placeholder="e.g. 2400"
-                value={revenue.mrr}
-                onChange={(v) => setRevenue((s) => ({ ...s, mrr: v }))}
-              />
-              <RevenueInput
-                label="Paying customers"
-                placeholder="e.g. 3"
-                value={revenue.paying_customers}
-                onChange={(v) => setRevenue((s) => ({ ...s, paying_customers: v }))}
-                integer
-              />
-              <div>
-                <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">First payment date</label>
-                <input
-                  type="date"
-                  value={revenue.first_payment_date}
-                  onChange={(e) => setRevenue((s) => ({ ...s, first_payment_date: e.target.value }))}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">Paid-pilot status</label>
-                <select
-                  value={revenue.paid_pilot_status}
-                  onChange={(e) => setRevenue((s) => ({ ...s, paid_pilot_status: e.target.value }))}
-                  className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-                >
-                  {PAID_PILOT_STATUS_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Task #1 — Spin-Out teams: co-founders + advisors roster + invites. */}
-          <ProjectMembersSection projectId={project.id} onError={onError} />
-        </div>
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50 rounded-b-xl dark:border-gray-800">
+    // D1317: one startup's record, so the shared right-side Sheet (max-w-2xl, 672px → 640).
+    <Sheet label="Edit startup" title="Edit Startup" width={640} onClose={handleClose} testId="edit-project"
+      footer={(
+        <div className="flex gap-3">
           <button
             onClick={submit}
             disabled={saving}
             className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm text-white font-medium"
+            data-testid="edit-project-save"
           >
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
@@ -1598,7 +1470,116 @@ function EditProjectModal({ project, onClose, onSaved, onError }) {
             Cancel
           </button>
         </div>
+      )}
+    >
+      <div className="p-5 space-y-4">
+        {EDITABLE_FIELDS.map((f) => (
+          <div key={f.key}>
+            {f.sectorSelect ? (
+              <SectorSelect
+                label={f.label}
+                value={form[f.key]}
+                onChange={(v) => setForm((s) => ({ ...s, [f.key]: v }))}
+              />
+            ) : (
+              <>
+                <label className="block text-xs text-gray-600 mb-1">
+                  {f.label}{f.required && <span className="text-red-500"> *</span>}
+                </label>
+                {f.textarea ? (
+                  <textarea
+                    value={form[f.key]}
+                    onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                    rows={3}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={form[f.key]}
+                    onChange={(e) => setForm((s) => ({ ...s, [f.key]: e.target.value }))}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                  />
+                )}
+                {PITCH_FIELD_TYPE[f.key] && (
+                  <PitchCopyMeter status={getPitchCopyLengthStatus(form[f.key], PITCH_FIELD_TYPE[f.key])} />
+                )}
+              </>
+            )}
+          </div>
+        ))}
+
+        {/* Task #1 — Founder company / affiliation. Surfaces on the
+            Spin-Out Demo Day's merged Team & network slide. */}
+        <div>
+          <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">Company / affiliation</label>
+          <input
+            type="text"
+            value={founderCompany}
+            maxLength={200}
+            placeholder="e.g. Acme Labs"
+            onChange={(e) => setFounderCompany(e.target.value)}
+            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+          />
+        </div>
+
+        {/* Task #2 — Revenue proof section. Powers the RevenueProofCard
+            on the Spin-Out Demo Day Validation slide. All fields optional;
+            leave blank for graceful pre-revenue state. */}
+        <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Revenue</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Drives the Validation slide of your Demo Day deck. Leave blank for pre-revenue.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <RevenueInput
+              label="Total revenue to date (USD)"
+              placeholder="e.g. 12500"
+              value={revenue.revenue}
+              onChange={(v) => setRevenue((s) => ({ ...s, revenue: v }))}
+            />
+            <RevenueInput
+              label="MRR (USD/month)"
+              placeholder="e.g. 2400"
+              value={revenue.mrr}
+              onChange={(v) => setRevenue((s) => ({ ...s, mrr: v }))}
+            />
+            <RevenueInput
+              label="Paying customers"
+              placeholder="e.g. 3"
+              value={revenue.paying_customers}
+              onChange={(v) => setRevenue((s) => ({ ...s, paying_customers: v }))}
+              integer
+            />
+            <div>
+              <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">First payment date</label>
+              <input
+                type="date"
+                value={revenue.first_payment_date}
+                onChange={(e) => setRevenue((s) => ({ ...s, first_payment_date: e.target.value }))}
+                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs text-gray-600 mb-1 dark:text-gray-400">Paid-pilot status</label>
+              <select
+                value={revenue.paid_pilot_status}
+                onChange={(e) => setRevenue((s) => ({ ...s, paid_pilot_status: e.target.value }))}
+                className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+              >
+                {PAID_PILOT_STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Task #1 — Spin-Out teams: co-founders + advisors roster + invites. */}
+        <ProjectMembersSection projectId={project.id} onError={onError} />
       </div>
-    </div>
+    </Sheet>
   );
 }

@@ -51,6 +51,10 @@ test('the dead api method now has a caller, and the drawer is mounted', () => {
   assert.ok(s.includes('api.listMyCoMarketingAttributions('),
     'GET /comarketing/me/attributions had no consumer anywhere in the frontend');
   assert.match(s, /<PitchDetailDrawer\s/, 'defining the drawer is not shipping it');
+  // D1317: the drawer is the shared right-side Sheet, at the panel's own 560px (max-w-xl).
+  assert.match(s, /^import Sheet from '\.\.\/ui\/Sheet\.jsx';$/m);
+  assert.match(s, /function PitchDetailDrawer[\s\S]*?<Sheet\s+label=\{pitch\.title\}\s+title=\{pitch\.title\}[\s\S]*?width=\{560\}\s+testId="comarketing-pitch-drawer"/);
+  assert.doesNotMatch(s, /fixed inset-0 z-50 flex justify-end/, 'no own overlay left');
   assert.match(read('frontend/src/lib/api.js'), /listMyCoMarketingAttributions: \(pitchUid\)/);
 });
 

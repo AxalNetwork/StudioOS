@@ -393,6 +393,30 @@ test('each admin act writes one fund_admin.<act> row with no bank text; mark-pai
   assert.deepEqual(updated.map((m) => m.fields.filter((f: string) => f !== 'updated_at')), [['gp_user_id'], ['carried_interest']]);
 });
 
+test('D1161: a carry change keeps its reason on the audit row; a bad reason is refused before the gate and writes nothing', async () => {
+  const env = makeEnv();
+  // Checked before the gate: a plain Admin with a bad reason is told about the reason, not asked to step up.
+  for (const [as, reason] of [[SUPER, 'short'], [SUPER, 'x'.repeat(501)], [SUPER, 42], [ADMIN, '   too short   ']] as const) {
+    const r = await call(env, as, 'PATCH', '/api/funds/1', { carried_interest: 0.3, reason });
+    assert.equal(r.status, 400, `${JSON.stringify(reason)}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body?.error, 'reason_invalid');
+  }
+  assert.equal(one(env, 'SELECT carried_interest FROM vc_funds WHERE id = 1').carried_interest, 0.2);
+  assert.equal(auditRows(env).length, 0);
+  // A reason is no permission: a plain Admin is still refused the act.
+  assert.equal((await call(env, ADMIN, 'PATCH', '/api/funds/1', { carried_interest: 0.3, reason: 'Side letter agreed at close.' })).body?.code, 'super_admin_required');
+
+  const r = await call(env, SUPER, 'PATCH', '/api/funds/1', { carried_interest: 0.3, reason: '  Side letter agreed at close.  ' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.fund.carried_interest, 0.3);
+  assert.equal('reason' in r.body.fund, false, 'the reason was written to the fund');
+  const rows = auditRows(env);
+  assert.deepEqual(rows.map((a: any) => a.action), ['fund_admin.fund.economics']);
+  assert.equal(JSON.parse(rows[0].filters_json).reason, 'Side letter agreed at close.');
+  const activity = q(env, "SELECT metadata FROM activity_logs WHERE action_type = 'fund_updated'").map((m) => JSON.parse(m.metadata));
+  assert.equal(activity.at(-1).reason, 'Side letter agreed at close.');
+});
+
 test('a GP of record\'s own act leaves no admin audit row; the mark-paid activity row is written for every caller', async () => {
   const env = makeEnv();
   assert.equal((await call(env, GP, 'POST', '/api/funds/distributions/700/mark-paid')).status, 200);

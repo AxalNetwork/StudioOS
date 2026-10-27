@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { RITUAL_KINDS, RITUAL_FREQUENCIES, WEEKDAYS } from '../../lib/cadence';
+import Sheet from '../../ui/Sheet.jsx';
 
 /**
  * The three forms behind `/build/cadence`'s ops, and the one behind its feed.
@@ -16,6 +17,11 @@ import { RITUAL_KINDS, RITUAL_FREQUENCIES, WEEKDAYS } from '../../lib/cadence';
  * the write it lost was a review nobody will retype. So: the dialog stays open,
  * the message appears in it, and the caller's `onSaved` runs only after the
  * server said yes.
+ *
+ * D1317: a ritual and a review are records, so their editors open as the
+ * shared right-side `Sheet` (520px, docked beside the Eadwyn rail), the save
+ * row in its fixed footer and submitting the form by its id. The template
+ * editor is a list of every template, not one record: it stays in `Shell`.
  */
 
 function Shell({ title, sub, onClose, children, testid }) {
@@ -50,6 +56,7 @@ export function RitualDialog({ ritual, templates, onClose, onSave }) {
   const [weekday, setWeekday] = useState(ritual?.weekday == null ? '' : String(ritual.weekday));
   const [target, setTarget] = useState(ritual?.target_minutes == null ? '' : String(ritual.target_minutes));
   const [templateId, setTemplateId] = useState(ritual?.template_id == null ? '' : String(ritual.template_id));
+  const formId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -78,13 +85,20 @@ export function RitualDialog({ ritual, templates, onClose, onSave }) {
   };
 
   return (
-    <Shell
-      testid="dialog-ritual"
+    <Sheet
+      testId="dialog-ritual"
       title={editing ? 'Edit ritual' : 'New ritual'}
       sub="A standing intention. Logging what happened on a given date is a separate record, so changing the schedule never rewrites the archive."
       onClose={onClose}
+      width={520}
+      footer={(
+        <div className="fb-cadence-sheet-foot">
+          <button type="button" onClick={onClose}>Cancel</button>
+          <button type="submit" form={formId} data-testid="button-ritual-save" disabled={busy}>{busy ? 'Saving…' : 'Save ritual'}</button>
+        </div>
+      )}
     >
-      <form onSubmit={submit} className="fb-cadence-form">
+      <form id={formId} onSubmit={submit} className="fb-cadence-form">
         <label><span>Name</span>
           <input data-testid="input-ritual-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Friday retro" maxLength={120} />
         </label>
@@ -118,12 +132,8 @@ export function RitualDialog({ ritual, templates, onClose, onSave }) {
           </select>
         </label>
         {error && <p className="fb-cadence-form-error" role="alert">{error}</p>}
-        <footer>
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="submit" data-testid="button-ritual-save" disabled={busy}>{busy ? 'Saving…' : 'Save ritual'}</button>
-        </footer>
       </form>
-    </Shell>
+    </Sheet>
   );
 }
 
@@ -141,6 +151,7 @@ export function RunDialog({ run, rituals, onClose, onSave }) {
   const [state, setState] = useState(run?.state || 'done');
   const [outcome, setOutcome] = useState(run?.outcome || '');
   const [duration, setDuration] = useState(run?.duration_minutes == null ? '' : String(run.duration_minutes));
+  const formId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -166,13 +177,20 @@ export function RunDialog({ run, rituals, onClose, onSave }) {
   };
 
   return (
-    <Shell
-      testid="dialog-run"
+    <Sheet
+      testId="dialog-run"
       title={editing ? 'Edit review' : 'File a review'}
       sub="One row per ritual per date. Filing the same date again updates it rather than adding a second, so a double-submit cannot inflate the archive."
       onClose={onClose}
+      width={520}
+      footer={(
+        <div className="fb-cadence-sheet-foot">
+          <button type="button" onClick={onClose}>Cancel</button>
+          <button type="submit" form={formId} data-testid="button-run-save" disabled={busy}>{busy ? 'Filing…' : 'File review'}</button>
+        </div>
+      )}
     >
-      <form onSubmit={submit} className="fb-cadence-form">
+      <form id={formId} onSubmit={submit} className="fb-cadence-form">
         <div className="fb-cadence-form-row">
           <label><span>Ritual</span>
             <select data-testid="select-run-ritual" value={ritualId} onChange={(e) => setRitualId(e.target.value)}>
@@ -202,12 +220,8 @@ export function RunDialog({ run, rituals, onClose, onSave }) {
             own Aug 14 row is "Skipped — travel. No note left." — so the outcome
             is never required and a blank one is stored as NULL rather than ''. */}
         {error && <p className="fb-cadence-form-error" role="alert">{error}</p>}
-        <footer>
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="submit" data-testid="button-run-save" disabled={busy}>{busy ? 'Filing…' : 'File review'}</button>
-        </footer>
       </form>
-    </Shell>
+    </Sheet>
   );
 }
 

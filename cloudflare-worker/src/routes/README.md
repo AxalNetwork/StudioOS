@@ -163,7 +163,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
 /api/admin/money-rails → admin_money_rails.ts (each Axal entity's role and each money kind's rail; admin only; D707)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641; GET /catalogue, the offered models with cost and billed unit prices, and cost and billed on /pricing and /rates, D760)
-/api/developer/usage → developer_usage.ts (D845: the caller's own usage reports over `api_usage_events`; GET / grouped by day, key, provider, connector, tool or model, GET /events the request history with a `(created_at, id)` cursor, GET /keys each key's cap, this month's charge and the 80% / 100% flag)
+/api/developer/usage → developer_usage.ts (D845: the caller's own usage reports over `api_usage_events`; GET / grouped by day, key, provider, connector, tool or model, GET /events the request history with a `(created_at, id)` cursor, GET /keys each key's cap, this month's charge and the 80% / 100% flag) D1320 (#2481): `GET /events/:execution_id` (one of the caller's own requests), `grant=` and `outcome=failed` on `/events`, and `group=category`.
 /api/ai/rail/proposals → ai_rail_proposals.ts (D780: the caller's own drafts, proposals and notes from a rail option's run, `ai_rail_proposals`; GET by option and record, POST /:uid/decide accept, edit or discard)
 /api/founder/validate → founder_validate_structure.ts (structure a session's transcript, compare two runs, ask it; accept, edit then accept or discard each placement; D658. Since D757 (#1925) `POST /sessions/:id/placements/accept` is Accept all, for a module (`{ slug }`) or chosen placements (`{ ids }`, at most 50): each placement's own claim and writer, every outcome reported)
 /api/founder/validate → founder_validate_meetings.ts (D684: schedule, list, cancel and import a Zoom or Google Meet call on an interview; D871: attach a Meet call from the member's own Calendar, and GET …/:refUid/recording, its Drive recording link)
@@ -452,3 +452,5 @@ D1051 (#2902): `billing_checkout.ts` mounts `/checkout/quote`, `/checkout/start`
 | File | Purpose |
 | --- | --- |
 | `deal_insights.ts` | D1151: NDA-gated per-deal Team, Market and Traction reads. |
+
+D1319 (#3480, part 1 of #2400): `publish.ts` mounts `/api/publish`: founder publishing to an outside service — destinations and their per-company switches, drafts, a preview and check per destination, the confirm, the sent history, Retry, Check, Mark as not sent, Retract and Mark as removed. Only the venture's founder, through their own connection, never a support session; the team reads the history. The rules and the send's state machine are `../services/publishCore.ts`; the check is `../services/publishLint.ts`. Nothing sends unless the founder presses Send.

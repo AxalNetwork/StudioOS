@@ -23,6 +23,11 @@ const LAB = codeOnly(read('frontend/src/pages/SpinoutLabIncorporatePage.jsx'));
 const VM = codeOnly(read('frontend/src/lib/cofounderAgreementViewModel.js'));
 const WORKER = read('cloudflare-worker/src/services/incorporationFiling.ts');
 
+test('D1317: a formation document’s preview opens as the shared right-side Sheet at 560px', () => {
+  assert.match(LAB, /import Sheet from '\.\.\/ui\/Sheet\.jsx';/);
+  assert.match(LAB, /<Sheet label=\{docs\.find\(\(d\) => d\.key === docModal\)\?\.name \|\| 'Document'\}[\s\S]*?onClose=\{\(\) => setDocModal\(null\)\} width=\{560\} testId="doc-modal">/);
+});
+
 test('a filed order is a paid order everywhere, and polling stops at payment', () => {
   assert.ok(PAID_STATUSES.includes('filed'));
   for (const s of PAID_STATUSES) assert.ok(TERMINAL_STATES.has(s), `${s} keeps polling until a false timeout`);

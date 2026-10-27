@@ -320,6 +320,9 @@ test('mounted VB11: an item opens its trail from D1066\'s evidence read, with th
     await r.click(`plan-progress-open-${MUST}`);
     const ev = r.requests.find((q) => q.url.includes('/cycles/build/evidence'));
     assert.match(ev.url, /project=3&table=mvp_features&id=5/);
+    assert.equal(r.props('plan-trail').role, 'dialog', 'D1317: the trail is the shared Sheet');
+    assert.ok(r.props('plan-trail')['aria-labelledby']);
+    assert.equal(r.props('plan-trail')['data-width'], 640, 'its 600px snaps to the owner’s 640');
     assert.match(r.textOf('plan-trail'), /Setup takes weeks.*Verdict · Proceed · 12 Oct.*Accepted into Prototype \/ MVP · 12 Oct.*Opened in Lovable · 13 Oct.*GitHub pull request ‘Bulk CSV import’ · linked 20 Oct.*Not recorded: built, live, tested\..*See how Raise uses it/s);
     assert.equal(r.count('plan-trail-node-missing'), 1);
   } finally { await r.close(); }
@@ -417,6 +420,9 @@ test('mounted VB6–VB8: Send to… chooses nothing for the founder, says what e
   try {
     assert.equal(r.textOf('plan-send-door'), 'Send to… · 5');
     await r.click('plan-send-door');
+    assert.equal(r.props('plan-send').role, 'dialog', 'D1317: Send to… is the shared Sheet');
+    assert.ok(r.props('plan-send')['aria-labelledby']);
+    assert.equal(r.props('plan-send')['data-width'], 640);
     assert.match(r.textOf('plan-send-opens'), /Build a clickable prototype in Lovable\./);
     assert.equal(r.props('plan-send-prepare').disabled, true, 'nothing is chosen for the founder');
     await r.change(`plan-send-item-${MUST}`, 'on');

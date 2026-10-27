@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api as legacyApi } from '../../../lib/api';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
-import { Lightbox } from '../../../ui';
 import { NOT_RECORDED, SECTIONS, TABS, money, sourceText, tabHref } from './useOfFundsModel';
 import {
   BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, FIELD, H3, MONO, MUTED, NotRecorded, Pill, SECTION_BG,
@@ -12,6 +11,7 @@ import {
   DRIVERS, MAX_COMPARE, cashPaths, cashSentence, changedDrivers, compareHref, compareIds, compareTable, driverError, driverRows, driversBody,
   forecastGap, forecastSeries, forecastTiles, fundedBySection, makeBaseView, movedNotice, scenarioBody, scenarioCard, sensitivityRows,
 } from './scenariosForecastModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1178 (#3105) — Use of funds part 5: Runway › Forecast (UF8), Scenarios
@@ -46,7 +46,7 @@ export function ForecastMovedNotice({ search }) {
 
 function Dialog({ label, title, sub, onClose, children, busy, error, go, goLabel, disabled, testId }) {
   return (
-    <Lightbox label={label} title={title} sub={sub} onClose={onClose} testId={testId} width={560} phone="sheet"
+    <Sheet label={label} title={title} sub={sub} onClose={onClose} testId={testId} width={560} phone="sheet"
       footer={(
         <div className="flex flex-col gap-2">
           {error ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid={`${testId}-error`}>{error}</p> : null}
@@ -57,7 +57,7 @@ function Dialog({ label, title, sub, onClose, children, busy, error, go, goLabel
         </div>
       )}>
       {children}
-    </Lightbox>
+    </Sheet>
   );
 }
 

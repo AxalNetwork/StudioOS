@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { railProposalsApi } from '../../../lib/api/railProposals';
-import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
+import { actionGhost, actionPrimary } from '../../../ui';
 import CapTableDialog, { useWrite } from './CapTableDialog';
 import {
   ADMIN_FOOT, CONFIRM_TAIL, FIELDS, NOT_FOUND, PRICE_LABEL, PROPOSE_FOOT, RECORD_FOOT, RECORD_TYPES,
   classesFor, correctionBody, draftBody, draftView, isoDay, issuanceBody, poolsOf, registerHolders, voidLine,
 } from './historyModel';
 import { money as moneyOf } from './capTableModel';
+import Sheet from '../../../ui/Sheet.jsx';
 
 /**
  * D1025 (#2862) — the Cap table's dialogs, each in the page (never a browser
@@ -192,7 +193,7 @@ export function DraftDrawer({ projectId, record, draft, mode = 'record', admin =
     ? `Record ${v.holder}’s ${money ? `${v.kind === 'safe' ? 'SAFE' : 'note'} for ${moneyOf(built.body.amount_cents, code)}` : `${built.body.shares.toLocaleString('en-US')} shares`}? ${CONFIRM_TAIL}`
     : 'Accept opens once you enter the amounts the document holds.';
   return (
-    <Lightbox label="Drafted by Eadwyn" eyebrow="Proposal · drafted by Eadwyn" title={v.title} width={600} onClose={() => !write.busy && onClose()} testId="captable-draft-drawer" phone="sheet"
+    <Sheet label="Drafted by Eadwyn" eyebrow="Proposal · drafted by Eadwyn" title={v.title} width={600} onClose={() => !write.busy && onClose()} testId="captable-draft-drawer" phone="sheet"
       footer={(
         <div className="flex flex-col gap-2">
           <p className="m-0 text-[12px] font-semibold text-axal-ink dark:text-gray-200" data-testid="captable-draft-confirm">{confirm}</p>
@@ -233,7 +234,7 @@ export function DraftDrawer({ projectId, record, draft, mode = 'record', admin =
           </Field>
         ) : null}
       </div>
-    </Lightbox>
+    </Sheet>
   );
 }
 

@@ -245,6 +245,10 @@ test('MEV18b at phone width: ‹ Events, the code large and in mono, the brightn
   const d = await mount('/my/events/ticket/1', { phone: false });
   try {
     assert.ok(d.by('my-events-ticket-drawer-layer'), 'on a desktop the drawer is over Upcoming');
+    // D1317: on a desktop the ticket is the shared right-side Sheet, at 640 (its own 600 snapped).
+    assert.ok(d.by('my-events-ticket-drawer-scrim'), 'a Sheet, not a centred lightbox');
+    assert.equal(d.props(d.by('my-events-ticket-drawer')).role, 'dialog');
+    assert.equal(d.props(d.by('my-events-ticket-drawer'))['data-width'], 640);
     assert.ok(d.by('my-events-ticket-close') && d.by('my-events-tabs'));
     assert.equal(d.say(d.by('my-events-ticket-code-line')), 'Show this at the door. The host scans it to check you in.');
   } finally { await d.unmount(); }
@@ -299,13 +303,15 @@ test('the hosted drawer and every dialog on the page are bottom sheets', async (
   try {
     const layer = ui.by('my-events-hosted-drawer-layer');
     assert.ok(layer && ui.props(layer)['data-phone'] === 'sheet');
+    assert.ok(ui.by('my-events-hosted-drawer-scrim'), 'D1317: the hosted event is the shared Sheet');
+    assert.equal(ui.props(ui.by('my-events-hosted-drawer'))['data-width'], 640);
     assert.ok(ui.underRoot(layer));
   } finally { await ui.unmount(); }
   // Every Lightbox the page draws, but the ticket (a page), says phone="sheet".
   for (const f of ['MyEventsPage.jsx', 'MyEventsTabs.jsx', 'MyEventsDrawers.jsx', 'MyEventsPhone.jsx']) {
     const src = read(`frontend/src/pages/events/${f}`);
     // Each opening tag, to the end of the line that names its testId.
-    for (const m of src.matchAll(/<Lightbox\b[\s\S]*?testId=[^\n]*/g)) {
+    for (const m of src.matchAll(/<(?:Lightbox|Sheet)\b[\s\S]*?testId=[^\n]*/g)) {
       if (/testId="my-events-ticket-drawer"/.test(m[0])) { assert.match(m[0], /pageBelow=\{page \? 'lg' : undefined\}/, 'the ticket is a page on a phone'); continue; }
       assert.match(m[0], /phone="sheet"/, `${f}: ${m[0].slice(0, 90)}`);
     }

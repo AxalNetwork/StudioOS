@@ -141,6 +141,11 @@ test('CAL4: the organiser\'s IC meeting — when, where, people, deal, agenda, c
   try {
     assert.ok(ui.sent.some((s) => s.url.endsWith('/api/calendar/item/ic_meeting/40')), 'the drawer reads its own item');
     assert.ok(ui.by('cal-item-drawer'));
+    // D1317: the item is the shared right-side Sheet, at its own 640px.
+    assert.equal(ui.props(ui.by('cal-item-drawer')).role, 'dialog');
+    assert.ok(ui.props(ui.by('cal-item-drawer'))['aria-labelledby'], 'named by its title');
+    assert.equal(ui.props(ui.by('cal-item-drawer'))['data-width'], 640);
+    assert.ok(ui.by('cal-item-drawer-scrim'), 'a Sheet, not a centred lightbox');
     assert.match(ui.say(ui.by('cal-item-drawer')), /IC meeting/);
     assert.equal(ui.say(ui.by('cal-item-role')), 'Organiser');
     assert.equal(ui.say(ui.by('cal-item-answer')), 'Going');
@@ -435,7 +440,10 @@ test('the page: the drawer route, each row opening its item, no browser pop-up, 
   for (const file of ['CalendarItemDrawer.jsx', 'CalendarNewDialogs.jsx']) {
     const src = read(`frontend/src/pages/${file}`);
     assert.doesNotMatch(src, /window\.(confirm|alert|prompt)\(/, `${file}: no browser pop-up`);
-    const boxes = src.match(/<Lightbox [^\n]+/g) || [];
+    const boxes = src.match(/<(?:Lightbox|Sheet) [^\n]+/g) || [];
+    // D1317: the item and its refusal are the shared Sheet; the dialogs over it stay centred.
+    assert.ok(boxes.filter((b) => /testId="cal-item-(drawer|refused)"/.test(b)).every((b) => b.startsWith('<Sheet ')), `${file}: the item is a Sheet`);
+    assert.ok(boxes.filter((b) => !/testId="cal-item-(drawer|refused)"/.test(b)).every((b) => b.startsWith('<Lightbox ')), `${file}: its dialogs stay centred`);
     // D1212 (CAL21c): the item itself is a full page on a phone; every dialog over it stays a sheet.
     const dialogs = boxes.filter((b) => !b.includes('testId="cal-item-drawer"'));
     assert.ok(dialogs.length >= 2 && dialogs.every((b) => b.includes('phone="sheet"')), `${file}: every dialog is a sheet on a phone`);

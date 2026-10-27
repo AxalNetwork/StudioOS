@@ -298,6 +298,11 @@ test('FND6: the drawer reads the LP\'s row; with no ledger line its figures read
   const v = await mount('/admin/fund-admin/lps/12?fund=9');
   try {
     assert.ok(v.by('lp-drawer-12'));
+    // D1317: the LP's drawer is the shared Sheet over the roster, 680 → 720px.
+    assert.equal(v.props('lp-drawer').role, 'dialog');
+    assert.ok(v.props('lp-drawer')['aria-labelledby']);
+    assert.equal(v.props('lp-drawer')['data-width'], 720);
+    assert.ok(v.by('lps-section'), 'the roster stays drawn under the sheet');
     assert.ok(v.s.calls.some((c) => c[0] === 'lps' && c[1].lp === 12), 'one LP\'s row, through the audited roster');
     assert.equal(v.text('lp-summary-called'), `Called Not recorded: ${NO_LEDGER}`);
     assert.equal(v.text('lp-summary-outstanding'), `Outstanding Not recorded: ${NO_LEDGER}`);

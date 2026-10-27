@@ -15,7 +15,7 @@ import { fundNoticesApi } from '../../../lib/api/fundNotices';
 import { fundBookletsApi } from '../../../lib/api/fundBooklets';
 import { Banner } from '../../account/ConnectorSheet';
 import {
-  BANKING_PARTS, LEGACY_TABS, LINE, MOVED_NOTICES, NOT_YET, TABS, TITLE, WAITS, administeredFunds, fundFilter, fundsCsv,
+  BANKING_PARTS, LEGACY_TABS, LINE, MOVED_NOTICES, TABS, TITLE, administeredFunds, fundFilter, fundsCsv,
   headerPrimary, keepFund, legacyHref, moreItems, pickFund, profilePill, tabCounts, tabOfView, viewFrom, viewHref, withFund,
 } from './fundAdminModel';
 import { useRead } from './useRead';
@@ -28,6 +28,9 @@ import { DistributionsTab } from './DistributionsTab';
 import { PerformanceTab } from './PerformanceTab';
 import { LpsTab } from './LpsTab';
 import { withQuery } from './lpsModel';
+import { FundsTab } from './FundsTab';
+import { FundPage } from './FundPage';
+import { fundIdFrom } from './fundsModel';
 
 /**
  * D714 (#1779) PR 4a — the fund administration console at `/admin/fund-admin`,
@@ -76,6 +79,13 @@ export const DEFAULT_APIS = {
     receipt: (fundId, lineId, body) => api.fundsRecordReceipt(fundId, lineId, body),
   },
   funds: {
+    // D1161 (#3068): the Funds tab and the one-fund page.
+    list: () => api.fundsList(),
+    get: (fundId) => api.fundsGet(fundId),
+    create: (body) => api.fundsCreateV2(body),
+    update: (fundId, body) => api.fundUpdate(fundId, body),
+    regenerateLpa: (fundId) => api.fundsRegenerateLpa(fundId),
+    downloadLpa: (fundId) => api.downloadFundLpa(fundId),
     distributions: (fundId) => api.fundsDistributions(fundId),
     execute: (body) => api.fundsExecuteDistribution(body),
     markPaid: (id) => api.fundsMarkDistributionPaid(id),
@@ -120,7 +130,9 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const keep = keepFund(location.search);
   const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
   const pill = profilePill(acts);
-  const primary = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null);
+  // D1161: `/admin/fund-admin/funds/:id` is one fund's page under the Funds tab.
+  const oneFund = view === 'funds' ? fundIdFrom(location.pathname) : null;
+  const primary = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null, oneFund);
   // D1162: Add LP keeps the roster’s filters.
   if (primary && view === 'lps') primary.to = `/admin/fund-admin/lps${withQuery(location.search, 'add', true)}`;
   const filterView = view === 'reports' && !/\/(periods|notices)\/?$/.test(location.pathname) ? 'reportPacks' : tab;
@@ -148,7 +160,7 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
             : <HeaderTab key={t.key} to={`/admin/fund-admin${keep}`} count={null} data-testid={`fund-admin-tab-${t.key}`}>{t.label}</HeaderTab>))}
           data-testid="fund-admin-header"
         />
-        {funds.length > 0 && view !== 'books' && <FundFilter filter={filter} pathname={location.pathname} search={location.search} />}
+        {funds.length > 0 && view !== 'books' && view !== 'funds' && <FundFilter filter={filter} pathname={location.pathname} search={location.search} />}
       </div>
       {access.status === 'unreadable' && (
         <div className="mx-4 mt-4 sm:mx-6">
@@ -184,7 +196,9 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
         )}
         {view === 'lps' && <LpsTab apis={apis} access={acts} funds={funds} />}
         {view === 'books' && <BooksTab key={params.get('fund') || 'first'} apis={apis} selectedFund={params.get('fund')} onFund={(id) => go({ fund: id })} />}
-        {view === 'funds' && <WaitCard view={view} />}
+        {view === 'funds' && (oneFund
+          ? <FundPage key={oneFund} apis={apis} access={acts} overview={overview} fundId={oneFund} />
+          : <FundsTab apis={apis} access={acts} overview={overview} />)}
 
       </div>
     </main>
@@ -192,15 +206,6 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   );
 }
 
-/** D1157: a tab with no read yet says so where its blocks would be. Never a zero, never "none". */
-function WaitCard({ view }) {
-  return (
-    <section className="mx-4 mt-5 flex flex-col gap-2 rounded-axal-md border border-axal-hairline bg-white px-[18px] py-4 sm:mx-6 dark:border-gray-800 dark:bg-gray-900" data-testid={`fund-admin-wait-${view}`}>
-      <span className="w-fit rounded-axal-pill border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
-      <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400">{WAITS[view]}</p>
-    </section>
-  );
-}
 const PER_FUND_VIEWS = ['calls', 'distributions', 'fees', 'reports'];
 
 /** The fund filter (FND2): pills on a desktop, a select on a phone; kept across tabs as `?fund=`. */

@@ -6,7 +6,7 @@ The founder's Capital relationships tool at `/raise/capital-relationships` (D118
 |---|---|
 | `CapRelTool.jsx` | The tool's tab bar (`CapRelTabBar`), Overview's tab bar (`CapRelHomeNav`), and its tab pages (`CapRelTabPage`). Calls draws the module read; every other tab draws its own file below. |
 | `capRelModel.js` | Pure: the addresses, the canvas's seven tabs, `isCapRelTab`, and the venture-only query. D1192: the board's columns and moves, the status rule, Overview's figures and Needs you, the import's rows, chunks and merged answer, and the moved notices. |
-| `CapRelPipeline.jsx` | D1192 (CRL2–CRL6): Pipeline's board and list, the investor lightbox, Add investor and Import, and the move, status, next step, step and feedback dialogs. Every write goes through `cloudflare-worker/src/services/raiseWriters.ts`. |
+| `CapRelPipeline.jsx` | D1192 (CRL2–CRL6): Pipeline's board and list, the investor sheet (the shared `Sheet`, D1317), Add investor and Import, and the move, status, next step, step and feedback dialogs. Every write goes through `cloudflare-worker/src/services/raiseWriters.ts`. |
 | `CapRelOverview.jsx` | D1192 (CRL1, CRL13): Overview's blocks above the module page's own, and the moved notice. |
 | `CapRelMatch.jsx` | D1193 (CRL7): Match, D1190's match read: each fund's Fit and why, warm paths from your own network, verified investors as a count only, and Add to pipeline with the fund filled in. |
 | `CapRelOutreach.jsx` | D1193 (CRL8): follow-ups (Done, Snooze, Draft a message), Eadwyn's drafts for the founder to send from their own email, materials sent per investor, and updates through Grow's share sheet. |
