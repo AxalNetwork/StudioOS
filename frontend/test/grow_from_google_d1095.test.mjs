@@ -170,7 +170,7 @@ test('the wiring: both Grow modules mount their part, the dialog saves the feedâ
   assert.match(route, /'revenue-and-traction': \(data, ctx\) => \(<>\s*\{fromMercury\('revenue-and-traction', data, ctx\)\}\s*<RevenueFromGoogle projectId=\{ctx\.projectId\} \/>/);
   assert.match(route, /<DurableFromGoogle projectId=\{ctx\.projectId\} \/>\s*<\/>\),/);
   const dialog = read('frontend/src/pages/cycles/MapColumnsDialog.jsx');
-  assert.ok(dialog.includes('const saved = encode(mapping, header); await googleWorkspace.mapping(file.uid, saved);'));
+  assert.ok(dialog.includes('const body = encode(mapping, header); await googleWorkspace.mapping(file.uid, body);'));
   const src = read('frontend/src/pages/cycles/GrowFromGoogle.jsx');
   assert.ok(!/\b(window\.)?(alert|confirm|prompt)\(/.test(src));
   assert.ok(!/fetch\(/.test(src));

@@ -42,9 +42,9 @@ export function guessMapping(header, fields, saved = null) {
   return out;
 }
 
-const identity = (m) => m;
+const same = (m) => m;
 
-export default function MapColumnsDialog({ file, fields, onClose, onSaved, encode = identity, decode = identity }) {
+export default function MapColumnsDialog({ file, fields, onClose, onSaved, encode = same, decode = same }) {
   const [read, setRead] = useState({ status: 'loading', rows: null });
   const [tick, setTick] = useState(0);
   const [mapping, setMapping] = useState(null);
@@ -61,7 +61,7 @@ export default function MapColumnsDialog({ file, fields, onClose, onSaved, encod
 
   const header = useMemo(() => (read.rows?.[0] || []).map((c, i) => String(c ?? '').trim() || `Column ${i + 1}`), [read.rows]);
   const body = useMemo(() => (read.rows || []).slice(1), [read.rows]);
-  useEffect(() => { if (read.status === 'ready') setMapping(guessMapping(header, fields, decode(file.mapping ?? null, header))); }, [read.status, header, fields, file.mapping, decode]);
+  useEffect(() => { if (read.status === 'ready') setMapping(guessMapping(header, fields, decode(file.mapping ?? null, header))); }, [read.status, header, fields, file.mapping]); // eslint-disable-line react-hooks/exhaustive-deps
   const problems = mapping ? mappingProblems(header, body, mapping, fields) : [];
   const skipped = new Set(problems.flatMap((p) => p.rows.map((r) => r.row)));
   const used = mapping ? Object.values(mapping).filter((v) => v !== DONT_USE) : [];
@@ -71,7 +71,7 @@ export default function MapColumnsDialog({ file, fields, onClose, onSaved, encod
 
   const save = async () => {
     setBusy(true); setRefusal('');
-    try { const saved = encode(mapping, header); await googleWorkspace.mapping(file.uid, saved); onSaved(saved); }
+    try { const body = encode(mapping, header); await googleWorkspace.mapping(file.uid, body); onSaved(body); }
     catch (e) { setRefusal(workspaceRefusal(e)); setBusy(false); }
   };
 
