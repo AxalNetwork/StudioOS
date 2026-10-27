@@ -314,6 +314,19 @@ export type DecisionInput = {
   graceReason?: string | null;
 };
 
+/**
+ * D1123 (#3003, migration 602): a founder reached this cohort week. The first
+ * reach is kept. A failed write never stops a decision: the week's share then
+ * under-counts, and the coverage row is what makes a week's share readable.
+ */
+export async function recordWeekReached(env: Env, userId: number, cycleId: number, week: number, source: 'deadline' | 'scheduler' | 'admin'): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO spinout_week_reached (user_id, cohort_cycle_id, week_number, source) VALUES (?, ?, ?, ?)`,
+    ).bind(userId, cycleId, week, source).run();
+  } catch { console.warn('[cohort] reached-week ledger write failed', { week }); }
+}
+
 /** Upsert company_week_status + append stage_transition_log. */
 export async function applyWeekDecision(env: Env, d: DecisionInput): Promise<void> {
   const decidedBy = d.triggeredBy === 'admin' ? `admin:${d.adminUserId ?? 0}` : 'system';
@@ -343,7 +356,8 @@ export async function applyWeekDecision(env: Env, d: DecisionInput): Promise<voi
   ).bind(
     d.userId, d.cycleId, d.week, d.fromStatus ?? null, d.toStatus,
     d.reason ?? null, d.triggeredBy, d.adminUserId ?? null,
-  ).run();
+  ).run();  // A decided week was reached, whoever decided it (D1123).
+  await recordWeekReached(env, d.userId, d.cycleId, d.week, d.triggeredBy);
 }
 
 async function snapshotDeliverables(env: Env, userId: number, cycleId: number, week: number, outcome: WeekOutcome): Promise<void> {
@@ -418,6 +432,8 @@ async function decideUserWeek(
   ).bind(user.id, cycle.id).all<{ week_number: number; status: string; grace_until: string | null }>();
   const rows = allRows.results || [];
   if (blockedByPriorWeek(rows.map((r) => ({ week: r.week_number, status: r.status })), week)) return 'skipped';
+  // D1123: in the cohort at this deadline with nothing earlier failed or in grace — reached.
+  await recordWeekReached(env, user.id, cycle.id, week, 'deadline');
   const existing = rows.find((r) => r.week_number === week) ?? null;
   // Already finally decided (incl. admin override) — never re-decide.
   if (existing && (existing.status === 'passed' || existing.status === 'failed')) return 'skipped';
@@ -521,6 +537,15 @@ export async function runCohortTimingTick(env: Env, now: Date): Promise<void> {
     const deadlineKey = `week_deadline:${w.cohort_cycle_id}:${w.week_number}`;
     const claim = await claimOrResumeJob(env, 'week_deadline', w.cohort_cycle_id, w.week_number, deadlineKey);
     if (claim === 'done') continue;
+    // D1123: a deadline job that begins with the ledger in place covers its
+    // week; a resumed one may have decided founders before it, so it does not.
+    if (claim === 'new') {
+      try {
+        await env.DB.prepare(
+          `INSERT OR IGNORE INTO spinout_week_reach_coverage (cohort_cycle_id, week_number) VALUES (?, ?)`,
+        ).bind(w.cohort_cycle_id, w.week_number).run();
+      } catch { console.warn('[cohort] reach coverage write failed', { week: w.week_number }); }
+    }
     const cycle: CycleRow = { id: w.cohort_cycle_id, year: w.year, month: w.month, start_at: w.start_at, end_at: w.end_at, status: w.cycle_status };
     const cutoffMs = sqliteUtcToMs(w.deadline_at) ?? nowMs;
     const parts = await cycleParticipants(env, cycle);

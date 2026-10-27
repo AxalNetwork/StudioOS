@@ -225,7 +225,9 @@ export function HeatBlock({ block, onRetry }) {
       {block.state === 'ready' && (table ? (
         <SimpleTable caption="Weeks passed, by cohort" table={{
           head: ['Cohort', 'Week 1', 'Week 2', 'Week 3', 'Week 4'],
-          rows: block.rows.map((r) => [r.label, ...r.cells.map((c) => (c.kind === 'counts' ? `${c.passed} passed · ${c.failed} failed · ${c.grace} grace` : c.text))]),
+          rows: block.rows.map((r) => [r.label, ...r.cells.map((c) => (c.kind !== 'counts' ? c.text
+            : c.share != null ? `${c.text} passed (${c.pct}%) · ${c.failed} failed · ${c.grace} grace`
+              : `${c.passed} passed · ${c.failed} failed · ${c.grace} grace`))]),
         }} />
       ) : (
         <div role="table" aria-label="Weeks passed by cohort" className="grid grid-cols-[96px_repeat(4,minmax(0,1fr))] gap-1">
@@ -240,7 +242,10 @@ export function HeatBlock({ block, onRetry }) {
                 if (c.kind === 'now') return <span key={c.n} role="cell" title={`Running; its deadline is ${c.deadline}.`} className={`${CELL} border-[1.5px] border-axal-violet text-[11px] text-axal-violet dark:border-[#a78bfa] dark:text-violet-300`}>{c.text}</span>;
                 if (c.kind !== 'counts') return <span key={c.n} role="cell" className={`${CELL} border border-axal-hairline bg-[repeating-linear-gradient(135deg,#f7f6fa_0_6px,#fff_6px_12px)] font-display text-[11px] font-semibold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400`}>{c.text}</span>;
                 return (
-                  <span key={c.n} role="cell" tabIndex={0} title={`${r.label} · Week ${c.n} · ${c.passed} passed, ${c.failed} failed, ${c.grace} in grace, ${c.pending} not decided`}
+                  <span key={c.n} role="cell" tabIndex={0} data-testid={`lab-heat-${r.key}-${c.n}`}
+                    title={c.share != null
+                      ? `${r.label} · Week ${c.n} · ${c.text} passed · ${c.pct}% of those who reached it · ${c.failed} failed, ${c.grace} in grace`
+                      : `${r.label} · Week ${c.n} · ${c.passed} passed, ${c.failed} failed, ${c.grace} in grace, ${c.pending} not decided${c.reachedReason ? `. ${c.reachedReason}` : ''}`}
                     className={`${CELL} bg-axal-lavender text-axal-ink dark:bg-violet-950/60 dark:text-gray-100`}>
                     {c.text}
                     <span className="font-display text-[10.5px] font-semibold text-axal-muted dark:text-gray-400">{c.failed} failed</span>

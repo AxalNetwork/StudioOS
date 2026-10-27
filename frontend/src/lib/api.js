@@ -2767,6 +2767,8 @@ export const api = {
   // D383 — the partner interview on an applicant (schedule replaces the live one).
   adminCohortScheduleInterview: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/interview`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortCancelInterview: (applicantId) => request(`/admin/cohort/applications/${applicantId}/interview/cancel`, { method: 'POST' }),
+  // D1123: held or missed, once the interview's time has passed.
+  adminCohortInterviewOutcome: (applicantId, outcome) => request(`/admin/cohort/applications/${applicantId}/interview/outcome`, { method: 'POST', body: JSON.stringify({ outcome }) }),
   adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),
