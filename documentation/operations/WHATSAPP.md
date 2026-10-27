@@ -76,8 +76,10 @@ credentials into an issue. See §7 before any general-availability PR.
    - Allowed SDK domains: `https://axal.vc` and `https://app.axal.vc`.
    - Keep the configuration id.
    - Read Meta's current Embedded Signup implementation page and reconcile the
-     required popup version and `extras` with W1 (#2501). Version/deprecation
-     claims in the earlier runbook were not verified here.
+     required popup version and `extras` with what `whatsapp.ts` sends.
+     Version/deprecation claims in the earlier runbook were not verified here.
+     Embedded Signup stays the way members connect at general availability:
+     W1's guided setup (D856) is a separate path, switched off (§7).
 5. **Worker secrets, before the webhook.** Meta checks the verify token when the
    webhook is saved, and without the secrets the Worker answers 503. Set them
    in HQ › Integration keys › Channels › "WhatsApp · members' own numbers
@@ -257,6 +259,11 @@ session is "Imported from WhatsApp".
   retry for 7 days. Set it back to `"canary"` or `"on"` to resume. Messages
   sent while it was off are not recovered.
 - **Back to Super Admins only:** set it to `"canary"` and deploy.
+- **The guided setup (D856), if it was ever switched on:** set
+  `WHATSAPP_MCP_SETUP = "off"` in every block and deploy. Its routes answer
+  404 at once. A connection it already finished is an ordinary WhatsApp row,
+  as Embedded Signup writes one, so it keeps working under `WHATSAPP_CHANNEL`
+  and is disconnected the same way.
 - **Stop the webhook entirely:** in App Dashboard → WhatsApp → Configuration,
   unsubscribe the fields. Deleting `WHATSAPP_APP_SECRET` also works: the
   webhook's POST then answers 503 and Meta retries for up to 7 days. Delete it
@@ -294,8 +301,17 @@ They are also rows in `documentation/architecture/GOTCHAS.md`.
 
 **Do not change canary to on yet.** This section is a release checklist, not
 an approval. W2 (#2502, translation) shipped as #2536 on 22 October 2026
-(D857). W1 (#2501, setup) is still open; its merge and combined integration
-evidence remain required before general availability.
+(D857). W1 (#2501, the guided setup) shipped as #3321 on 26 October 2026
+(D856), behind its own switch, `WHATSAPP_MCP_SETUP = "off"`, in all three
+vars blocks.
+
+**The guided setup is not part of general availability.** Members connect
+through Embedded Signup (§1). The setup's routes answer 404 while its switch
+is anything but `"on"`, and nothing draws it yet. It gets its own owner PR
+only after D856's follow-ups: the sign-in door (Meta's real registration,
+most likely as a managed provider key in HQ › Integration keys), a connector
+descriptor gated on the switch, the setup page, and a live sign-in that
+confirms every UNVERIFIED Meta fact in D856 §1 and §7.
 W5 (#2505, merged through #2530 / D860) keeps calls closed on coexistence
 numbers. `WHATSAPP_CALLS` remains `"false"`; API-only calling is future work
 after D860’s official-source, approved-notice, live-spike and all-party-consent
@@ -331,7 +347,12 @@ gates. No live call capture is advertised.
    A media lookup can expire earlier (7 days). An imported, consented
    transcript/recording stays until the member deletes the session; the
    pending-copy purge is not deletion of an interview.
-5. Pending text and media references use the column cipher. D857's stored
+5. The guided setup's switch is a readiness gate (D861 §7). In every
+   environment `whatsappMcpSetupOn` is true only for `"on"`: unset, empty,
+   `"off"`, `"canary"` and any other spelling stay closed. The channel's
+   rollout and the setup's switch do not open each other. Two mutations
+   (the setup opening for anything but `"off"`, and never opening) must fail.
+6. Pending text and media references use the column cipher. D857's stored
    translation also uses the column cipher, bound to its own transcript-segment
    row. The readiness test covers both pending text and that translated copy,
    including plaintext/corruption mutations. Imported original transcript
@@ -339,13 +360,13 @@ gates. No live call capture is advertised.
    all transcript content is encrypted. Production needs its encryption key
    provisioned. Never use a fixture test's key, print a
    decrypted message, or export rows to prove this.
-6. Repeat the real-device canary exercise after W1 merges with the shipped
-   W2 code. Include declined/withdrawn consent, a waiting voice note, the text
+7. Repeat the real-device canary exercise on the combined code (W1 and W2
+   shipped, the guided setup off), connecting through Embedded Signup. Include declined/withdrawn consent, a waiting voice note, the text
    and voice-transcript translation checks in §3 (original kept, working
    language, AI tokens and pending/retry), and one accepted proposal. Nothing populates
    Validate without
    the founder's Accept.
-7. S1 records runbook review and the remaining decisions on #2506. The owner
+8. S1 records runbook review and the remaining decisions on #2506. The owner
    verifies the four Meta requirements in D861 §3 from official pages and
    confirms the app's actual approval state. Every UNVERIFIED requirement is
    a remaining release gate.
@@ -359,6 +380,10 @@ After all evidence is reviewed, the owner requests one PR changing
 Review preview separately: its variables are not inherited and an absent
 switch defaults to canary. Do not enable it incidentally. Generated branch
 configs must be reviewed for their own intended audience before rollout.
+
+The same PR leaves `WHATSAPP_MCP_SETUP` at `"off"` in every block, and
+`WHATSAPP_CALLS` at `"false"`. A diff that changes either is not the
+rollout PR.
 
 The PR cites the verified Meta requirements, S1's review and the passing
 commit's CI. It uses the normal build/migration/deploy workflow; the owner
@@ -416,6 +441,11 @@ they remain after its successful completion, investigate. No traffic means
   interviews remain. Verify Meta-side access revocation/unsubscription in
   the owner's dashboard. Do not describe a local disconnect as proof that a
   provider token was revoked.
+- For a guided-setup concern (a step reaching Meta it should not, or a
+  ticket misused), switch the setup off as in §5 first; the channel itself
+  can stay as it is. The setup's log lines carry the step and its outcome
+  only; never add Meta's text, a token or a number to them while
+  investigating.
 - For a platform credential incident, the owner rotates/revokes access in
   Meta and provisions replacement secrets through the existing secret
   workflow. Never place the old or new value in a ticket, log or command

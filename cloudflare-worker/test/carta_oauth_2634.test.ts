@@ -60,7 +60,9 @@ for (const isDemo of [true, false]) {
       assert.equal((await decryptCredentials(env, row.uid, stored.credentials_enc))?.refresh_token, 'refresh-fixture');
       assert.equal((await impl.sync!(c, user, row)).counts?.pulled, 0);
       await impl.revokeGranted!(env, result);
-      assert.deepEqual(calls, [`${auth}/o/access_token/`, `${api}/v1alpha1/issuers`, `${auth}/o/access_token/`, ...['stakeholders', 'securities', 'vesting-schedules'].map(path => `${api}/v1alpha1/issuers/issuer-fixture/${path}`), `${auth}/o/revoke_token/`]);
+      // sync() fetches stakeholders and securities together (Promise.all), so either may be asked first.
+      const both = calls.slice(3, 5).sort();
+      assert.deepEqual([...calls.slice(0, 3), ...both, ...calls.slice(5)], [`${auth}/o/access_token/`, `${api}/v1alpha1/issuers`, `${auth}/o/access_token/`, ...['securities', 'stakeholders', 'vesting-schedules'].map(path => `${api}/v1alpha1/issuers/issuer-fixture/${path}`), `${auth}/o/revoke_token/`]);
     } finally { globalThis.fetch = before; db.close(); }
   });
 }

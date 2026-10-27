@@ -133,7 +133,10 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
   assert.deepEqual(routeFor('/admin/programs/perks/queue'), { program: 'perks', tab: 'queue' });
   assert.deepEqual(routeFor('/admin/programs/learning/people'), { program: 'learning', tab: 'people' });
   assert.deepEqual(routeFor('/admin/programs/referral-partners/how-it-runs'), { program: 'referral-partners', tab: 'how' });
-  assert.deepEqual(routeFor('/admin/programs/investor-cohorts'), { program: 'investor-cohorts', tab: 'page' });
+  // D963 (#2796): Investor cohort access gains Overview and Activity.
+  assert.deepEqual(routeFor('/admin/programs/investor-cohorts'), { program: 'investor-cohorts', tab: 'overview' });
+  assert.deepEqual(routeFor('/admin/programs/investor-cohorts/activity'), { program: 'investor-cohorts', tab: 'activity' });
+  assert.deepEqual(routeFor('/admin/programs/referral-partners/queue'), { program: 'referral-partners', tab: 'queue' });
   assert.deepEqual(routeFor('/admin/programs/ai-native-venture'), { program: 'ai-native-venture', tab: 'page' });
   // A program has only the tabs it has today; one tab is no strip.
   assert.deepEqual(Object.fromEntries(Object.entries(PAGES).map(([k, p]) => [k, p.tabs.map((t) => t.label)])), {
@@ -142,8 +145,9 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     'refer-and-earn': ['Overview', 'How it runs', 'Queue', 'Settings', 'Activity'],
     perks: ['Overview', 'How it runs', 'Queue', 'Activity'],
     learning: ['Overview', 'How it runs', 'People', 'Activity'],
-    'referral-partners': ['Overview', 'How it runs'],
-    'investor-cohorts': [],
+    // D963 (#2796): Referral partners' Queue and Activity, Investor cohort access's Overview and Activity.
+    'referral-partners': ['Overview', 'How it runs', 'Queue', 'Activity'],
+    'investor-cohorts': ['Overview', 'Activity'],
     'ai-native-venture': [],
   });
   assert.equal(movedNotice('/admin/programs', '?moved=held'), 'Programs has a new address. Update your bookmark.');
@@ -538,13 +542,14 @@ test('Learning: Overview counts published rows only and lists every row; People 
   } finally { await people.close(); }
 });
 
-test('Referral partners links D923\'s tabs, with Commissions for a Super Admin only; Investor and AI-native are one page each', async () => {
+test('Referral partners links D923\'s tabs, with Commissions for a Super Admin only; Investor and AI-native take part 10\'s words (D963)', async () => {
   const admin = await mounted('/admin/programs/referral-partners', ProgramPage, worker());
   try {
     for (const d of ['/admin/partner-invitations/deals', '/admin/partner-invitations/referrals', '/admin/partner-invitations']) assert.ok(admin.hrefs().includes(d), d);
     assert.ok(!admin.hrefs().includes('/admin/commissions'));
     assert.equal(admin.textOf('programs-partners-hq'), HQ_READS_COMMISSIONS);
-    assert.ok(!admin.has('programs-facts'), 'Who, Join and Terms wait for part 5');
+    // D963: Who, Join and Terms in OD3's words, from part 5.
+    assert.match(admin.textOf('programs-facts'), /^Who: Members HQ adds as referral partners/);
   } finally { await admin.close(); }
   const hq = await mounted('/admin/programs/referral-partners', ProgramPage, worker({ user: SUPER }), { user: SUPER });
   try {
@@ -552,13 +557,13 @@ test('Referral partners links D923\'s tabs, with Commissions for a Super Admin o
   } finally { await hq.close(); }
   const investor = await mounted('/admin/programs/investor-cohorts', ProgramPage, worker());
   try {
-    assert.equal(investor.textOf('programs-investor-banner'), 'New program. This is the design; nothing runs yet.');
-    assert.ok(!investor.has('programs-tabs'), 'one tab is no strip');
+    assert.match(investor.textOf('programs-investor-banner'), /^Not running yet\./);
+    assert.ok(investor.has('programs-tabs'), 'Overview and Activity');
     assert.equal(investor.textOf('programs-header-status'), '○Not built yet');
   } finally { await investor.close(); }
   const ai = await mounted('/admin/programs/ai-native-venture', ProgramPage, worker());
   try {
-    assert.match(ai.textOf('programs-header-line'), /^Not recordedThe playbook is not written yet\.$/);
+    assert.equal(ai.textOf('programs-header-line'), 'Founders build an AI-native company with Eadwyn and the studio’s tools.', 'OD-AIN A');
     assert.ok(!ai.has('programs-tabs'));
     assert.ok(!/\[A venture program/.test(ai.text()), 'the bracketed sample never ships');
   } finally { await ai.close(); }
@@ -578,7 +583,8 @@ test('the routes: each address under today\'s guard, never hqOnly, and the three
     AdminReferAndEarn: ['/admin/programs/refer-and-earn', '/admin/programs/refer-and-earn/how-it-runs', '/admin/programs/refer-and-earn/queue', '/admin/programs/refer-and-earn/settings', '/admin/programs/refer-and-earn/activity'],
     AdminProgramPage: ['/admin/programs/perks', '/admin/programs/perks/how-it-runs', '/admin/programs/perks/queue', '/admin/programs/perks/activity', '/admin/programs/learning',
       '/admin/programs/learning/how-it-runs', '/admin/programs/learning/people', '/admin/programs/learning/activity', '/admin/programs/referral-partners',
-      '/admin/programs/referral-partners/how-it-runs', '/admin/programs/investor-cohorts', '/admin/programs/ai-native-venture'],
+      '/admin/programs/referral-partners/how-it-runs', '/admin/programs/referral-partners/queue', '/admin/programs/referral-partners/activity',
+      '/admin/programs/investor-cohorts', '/admin/programs/investor-cohorts/activity', '/admin/programs/ai-native-venture'],
   };
   for (const [component, paths] of Object.entries(pages)) {
     for (const p of paths) assert.ok(APP.includes(`\n      <Route path="${p}" element={guard(['admin'], <${component} />)} />`), p);
@@ -711,8 +717,9 @@ test('the pages read D953 §2\'s reads, D961\'s catalogue read and D962\'s throu
   const clients = [...src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api(?:\/(\w+))?'/g)]
     .flatMap((imp) => imp[1].split(',').map((s) => `${imp[2] || 'api'}:${s.trim()}`).filter((s) => !s.endsWith(':')));
   // D964 (#2797) adds part 2's proposal client, the contracts library's templates (Terms) and HQ's grants read (the Studio filter); D961 part 1's catalogue client; D962 part 1's programsApi.
-  assert.deepEqual([...new Set(clients)].sort(), ['adminPrograms:adminProgramsApi', 'api:api', 'contracts:contractsApi', 'insights:insightsApi', 'learning:learningApi',
-    'programGrants:programGrantsApi', 'programProposals:programProposalsApi', 'programs:programsApi'],
+  // D963 (#2796) adds parts 5 and 6's clients.
+  assert.deepEqual([...new Set(clients)].sort(), ['adminPrograms:adminProgramsApi', 'api:api', 'contracts:contractsApi', 'insights:insightsApi', 'investorCohorts:investorCohortsApi',
+    'learning:learningApi', 'programGrants:programGrantsApi', 'programProposals:programProposalsApi', 'programs:programsApi', 'referralPartners:referralPartnersApi'],
     'the existing clients, each from its own module (lib/api re-exports them, but a named import of lib/api must name what api.js itself declares)');
   // D960 lifted Guard H for applications (a failure is a 503 now); participants still answer [] on any error.
   assert.doesNotMatch(src, /adminSpinoutParticipants|spinout-participants/, 'Guard H');

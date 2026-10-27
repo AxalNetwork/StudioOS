@@ -509,6 +509,7 @@ const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/Adv
 // wrapped in its own <Suspense fallback> so fetching a chunk can't blank the app.
 const InactivityWarningModal = lazy(() => import('./components/InactivityWarningModal'));
 const RecordLivePage = lazy(() => import('./pages/founder/RecordLivePage'));
+const RecordChannelPage = lazy(() => import('./pages/founder/RecordChannelPage'));
 const NotificationBell = lazy(() => import('./components/NotificationBell'));
 const FounderWellbeingMenu = lazy(() => import('./components/FounderWellbeingMenu'));
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
@@ -2670,6 +2671,11 @@ function AppInner() {
       <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" lightbox />)} />
       {/* D685 §5.6.2 (#1588): the Recording View full screen, bound to the app's one recording. */}
       <Route path="/validate/record/live" element={guard(labRoles(['admin', 'founder']), <RecordLivePage />)} />
+      {/* D1309 (#2507, #2515, #2525): Record a session's channels, each at its own address (recordChannels.js).
+          Static, so /validate/:slug/:id never reads them as a record. */}
+      <Route path="/validate/record/whatsapp" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/telegram" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/calls" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
       {/* D695: every Add has an address. Customer research's Add stays Record a session, the query kept. */}
@@ -2811,6 +2817,8 @@ function AppInner() {
       {/* Each tool at its #2375 address, under AdminPageHeader. All accounts
           is a sub-path of Accounts (/admin/accounts, D941). */}
       <Route path="/admin/accounts/all" element={guard(['admin'], <AllAccountsPage onImpersonate={handleImpersonate} />)} />
+      {/* D1299 (#2377): one account's record, the address #2369 and #2370's "Open member record" target. */}
+      <Route path="/admin/accounts/all/:id" element={guard(['admin'], <AllAccountsPage onImpersonate={handleImpersonate} />)} />
       {/* D1026 (CT17, CT18) — a venture's cap table as an Advisor, an Operating
           Partner, an Admin or the Super Admin reads it. The Worker decides the level. */}
       <Route path="/cap-tables/:projectId" element={guard(['admin', 'advisor', 'partner'], <CapTableReadPage />)} />
@@ -2919,7 +2927,11 @@ function AppInner() {
       <Route path="/admin/programs/learning/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
+      {/* D963 (#2796): Referral partners' Queue and Activity, and Investor cohort access's Activity. */}
+      <Route path="/admin/programs/referral-partners/queue" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/referral-partners/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/investor-cohorts" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/investor-cohorts/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/ai-native-venture" element={guard(['admin'], <AdminProgramPage />)} />
       {/* D1038 (#2390) — Approvals left /admin/held/ when it was rebuilt to its
           canvas, as Insights and Community did: Inbox, Lanes and Decided, and

@@ -37,11 +37,13 @@ import { activationFunnel, type ActivationCohort } from './activationFunnel';
 import { weekStartOf } from './okrWeeks';
 import { HQ_SCOPE_LABEL } from './studioGlance';
 import { OPEN_TICKET_STATUSES, ticketBacklog } from './supportQueues';
+import {
+  DAY_MS, DORMANT_DAYS, type AccountFilter, type AccountRow, deactivatedCount, dormantCount, fb, liveAccounts,
+  lpTotal, n, signupsByWeek, sqlTime, sumBy,
+} from './accountCounts';
 
-const DAY_MS = 86_400_000;
-
-/** Days without a request before an account counts as dormant. */
-export const DORMANT_DAYS = 30;
+// D1301: how an account is counted lives in `accountCounts.ts`, shared with Admin › Accounts.
+export { DORMANT_DAYS };
 
 /** The plan tier that is not paid. Every other tier is. */
 export const FREE_TIER = 'free';
@@ -89,7 +91,7 @@ export const INSIGHTS_DEFINITIONS = {
   spend: 'AI spend this calendar month (UTC), from the AI usage log, by the profile of the account that spent it.',
 } as const;
 
-export type InsightsFilter = { role: string | null; country: string | null };
+export type InsightsFilter = AccountFilter;
 
 export type InsightsQuery = InsightsFilter & {
   range: AnalyticsRange;
@@ -109,14 +111,6 @@ const unreadable = (what: string, e: unknown): Unreadable => {
   };
 };
 
-/** `YYYY-MM-DD HH:MM:SS`, SQLite's own format (D162). */
-const sqlTime = (ms: number) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
-
-const n = (v: unknown) => Math.max(0, Math.trunc(Number(v) || 0));
-
-/** The four binds every `(? IS NULL OR u.role = ?) AND (? IS NULL OR u.country = ?)` clause takes. */
-const fb = (f: InsightsFilter) => [f.role, f.role, f.country, f.country];
-
 /** The weeks immediately before `axis`, the same length: what `compare=1` draws. */
 export function previousAxis(axis: WeekAxis): WeekAxis {
   const [y, m, d] = axis.weeks[0].split('-').map(Number);
@@ -125,96 +119,20 @@ export function previousAxis(axis: WeekAxis): WeekAxis {
 }
 
 // ---------------------------------------------------------------------------
-// The account table: totals, profiles, plans, countries, checks, bands.
+// The account table (`accountCounts.ts`): totals, profiles, plans, countries, checks, bands.
 // ---------------------------------------------------------------------------
-
-type AccountRow = {
-  role: string; tier: string; country: string; kyc: string; pct: number | null;
-  n: number; new_30d: number; lp: number;
-};
-
-/**
- * One grouped pass over the live accounts. Every block about who the accounts
- * are folds from these rows, so the totals of INS2, INS4, INS6, INS7 and INS8
- * are the same total.
- */
-async function liveAccounts(env: Env, f: InsightsFilter, nowMs: number): Promise<AccountRow[]> {
-  const q = await env.DB.prepare(
-    `SELECT COALESCE(NULLIF(u.role, ''), 'no role') AS role,
-            COALESCE(NULLIF(u.subscription_tier, ''), 'free') AS tier,
-            COALESCE(TRIM(u.country), '') AS country,
-            COALESCE(NULLIF(u.kyc_status, ''), 'not_started') AS kyc,
-            u.profile_completion_pct AS pct,
-            COUNT(*) AS n,
-            SUM(CASE WHEN datetime(u.created_at) >= datetime(?, '-30 days') THEN 1 ELSE 0 END) AS new_30d,
-            0 AS lp
-       FROM users u
-      WHERE u.is_active = 1
-        AND (? IS NULL OR u.role = ?) AND (? IS NULL OR u.country = ?)
-      GROUP BY 1, 2, 3, 4, 5`,
-  ).bind(sqlTime(nowMs), ...fb(f)).all<AccountRow>();
-  return (q.results || []).map((r) => ({ ...r, n: n(r.n), new_30d: n(r.new_30d) }));
-}
-
-function sumBy<K extends keyof AccountRow>(rows: AccountRow[], key: K): Array<{ key: string; count: number }> {
-  const by = new Map<string, number>();
-  for (const r of rows) by.set(String(r[key]), (by.get(String(r[key])) ?? 0) + r.n);
-  return [...by].map(([k, c]) => ({ key: k, count: c })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
-}
 
 async function lpCount(env: Env, f: InsightsFilter) {
   try {
-    const r = await env.DB.prepare(
-      `SELECT COUNT(DISTINCT l.user_id) AS n
-         FROM lp_applications l JOIN users u ON u.id = l.user_id
-        WHERE l.status = 'approved' AND u.is_active = 1
-          AND (? IS NULL OR u.role = ?) AND (? IS NULL OR u.country = ?)`,
-    ).bind(...fb(f)).first<{ n: number }>();
-    return { available: true as const, count: n(r?.n) };
+    return { available: true as const, count: await lpTotal(env, f) };
   } catch (e) {
     return unreadable('The LP applications', e);
   }
 }
 
-async function deactivatedCount(env: Env, f: InsightsFilter) {
-  const r = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM users u
-      WHERE u.is_active = 0 AND (? IS NULL OR u.role = ?) AND (? IS NULL OR u.country = ?)`,
-  ).bind(...fb(f)).first<{ n: number }>();
-  return n(r?.n);
-}
-
 // ---------------------------------------------------------------------------
 // Weekly lines: sign-ups by profile, distinct active accounts.
 // ---------------------------------------------------------------------------
-
-type GrowthWeek = { week: string; total: number; to_date: boolean; by_profile: Record<string, number> };
-
-/** Every account created per week, deactivated included (the glance's count), by profile. */
-async function signupsByWeek(env: Env, axis: WeekAxis, f: InsightsFilter): Promise<GrowthWeek[]> {
-  const q = await env.DB.prepare(
-    `SELECT date(u.created_at, '-6 days', 'weekday 1') AS week,
-            COALESCE(NULLIF(u.role, ''), 'no role') AS role, COUNT(*) AS n
-       FROM users u
-      WHERE datetime(u.created_at) >= datetime(?) AND datetime(u.created_at) < datetime(?)
-        AND (? IS NULL OR u.role = ?) AND (? IS NULL OR u.country = ?)
-      GROUP BY 1, 2`,
-  ).bind(axis.from, axis.to, ...fb(f)).all<{ week: string; role: string; n: number }>();
-  const by = new Map<string, Record<string, number>>(axis.weeks.map((w) => [w, {}]));
-  for (const r of q.results || []) {
-    const row = by.get(String(r.week));
-    if (row) row[String(r.role)] = (row[String(r.role)] ?? 0) + n(r.n);
-  }
-  return axis.weeks.map((w) => {
-    const by_profile = by.get(w)!;
-    return {
-      week: w,
-      total: Object.values(by_profile).reduce((t, x) => t + x, 0),
-      to_date: w === axis.current,
-      by_profile,
-    };
-  });
-}
 
 /**
  * Distinct signed-in accounts per week on `ACTIVE_ACCOUNT_BASIS`, in ONE
@@ -275,23 +193,6 @@ async function retentionCohorts(env: Env, axis: WeekAxis, f: InsightsFilter, now
     .all<{ week: string; signups: number; retained: number }>();
   const by = new Map((q.results || []).map((r) => [String(r.week), r]));
   return axis.weeks.map((w) => ({ week: w, signups: n(by.get(w)?.signups), retained_30d: n(by.get(w)?.retained) }));
-}
-
-/**
- * `users.last_active_at` is stamped by `middleware/lastActive.ts` on every
- * signed-in request. An account it has never stamped is counted apart
- * (`never_seen`): it may predate the stamp, so it is not called dormant.
- */
-async function dormantCount(env: Env, f: InsightsFilter, nowMs: number) {
-  const r = await env.DB.prepare(
-    `SELECT SUM(CASE WHEN u.last_active_at IS NOT NULL
-                      AND datetime(u.last_active_at) < datetime(?) THEN 1 ELSE 0 END) AS dormant,
-            SUM(CASE WHEN u.last_active_at IS NULL THEN 1 ELSE 0 END) AS never_seen
-       FROM users u
-      WHERE u.is_active = 1
-        AND (? IS NULL OR u.role = ?) AND (? IS NULL OR u.country = ?)`,
-  ).bind(sqlTime(nowMs - DORMANT_DAYS * DAY_MS), ...fb(f)).first<{ dormant: number; never_seen: number }>();
-  return { dormant: n(r?.dormant), never_seen: n(r?.never_seen) };
 }
 
 async function tickets(env: Env, f: InsightsFilter) {
