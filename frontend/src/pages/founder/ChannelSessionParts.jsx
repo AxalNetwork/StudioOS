@@ -387,7 +387,7 @@ export function ChannelProposals({ groups, editHref, onAccept, onDiscard, onAcce
               <li key={it.id} className="flex flex-col gap-1.5 py-2.5" data-testid={`proposal-${it.id}`}>
                 <span className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-gray-900 dark:text-gray-100">{it.t}{it.build ? <Pill tone="lav" testId={`proposal-build-${it.id}`}>{buildLabel}</Pill> : null}</span>
                 {it.q ? <blockquote className="m-0 border-l-2 border-violet-300 pl-2 text-[12.5px] text-gray-700 dark:border-violet-500 dark:text-gray-300">“{it.q}”</blockquote> : <span className={MUTED}>Quote not recorded.</span>}
-                <span className="flex flex-wrap items-center gap-3"><Confidence conf={it.conf} /></span>
+                <span className="flex flex-wrap items-center gap-3"><Confidence conf={it.conf} />{it.mod ? <span className={MUTED} data-testid={`proposal-mod-${it.id}`}>{it.mod}</span> : null}</span>
                 <div className="flex flex-wrap gap-1.5">
                   {it.canAccept ? <button type="button" className={BTN_SEC} onClick={() => setAsk({ kind: 'accept', it })} data-testid={`proposal-accept-${it.id}`}>Accept</button> : <span className={MUTED}>Proposed only: it cannot be accepted from here.</span>}
                   <Link to={editHref} className={BTN_GHOST} data-testid={`proposal-edit-${it.id}`}>Edit</Link>

@@ -28,10 +28,12 @@ import { BotError, dispatchBot, sessionBot, botControl, botView, stopSessionBot 
  *   GET    /sessions/active                 D685: the caller's recordings in flight
  *   GET    /meetings/setup                  D875: the Zoom and Google Meet setup, step by step, from stored rows
  *   GET    /meetings/upcoming               D875: the caller's calendar calls in the next 14 days, not yet attached
+ *   GET    /meetings/calls?project_id=      D878: one venture's calls (Zoom, Meet, uploads, the bot), each with its audio
  *   POST   /sessions/:id/marks              mark a moment (D685: gated, client_key, capped)
  *   GET    /sessions/:id/live               WebSocket: the live transcript
  *   POST   /sessions/:id/transcribe         the final transcript
  *   PATCH  /sessions/:id/segments/:segId    assign a passage's speaker
+ *   PATCH  /sessions/:id/speakers           D878: { from, to } renames one speaker in every passage
  *   GET    /sessions/:id/receipt            what each job cost, and the budget left
  *   GET    /sessions/:id/audio              one signed download per recorded chunk (D690)
  *   DELETE /sessions/:id                    the session, its audio and its transcript
@@ -82,6 +84,7 @@ import { QUOTE_WITHHELD } from '../services/cycleValidate';
 import { mintDownloadToken } from '../services/signedDownload';
 import { consentForSession } from '../services/channels/consent';
 import { meetingSetup, upcomingCalls } from '../services/channels/meetingSetup';
+import { callList } from '../services/channels/callList';
 import { MEETING_ERRORS, MeetingProviderError } from '../services/channels/meetings';
 import { assertStorageRoom } from '../services/storageRoom';
 
@@ -171,6 +174,18 @@ sessions.put('/sessions/audio-retention', async (c) => {
 sessions.get('/meetings/setup', async (c) => {
   const user = (await requireAuth(c)) as User;
   return json(await meetingSetup(c.env, user.id));
+});
+
+// D878 (#2525) — Record a session › Calls: one venture's calls across its
+// interviews, for the Calls and Retention boards. Scoped as every session
+// route is (`canWrite`); another member's venture answers 404.
+sessions.get('/meetings/calls', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  const projectId = Number(c.req.query('project_id'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return json({ detail: 'project_id_required' }, 400);
+  const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(projectId).first() as ProjectRef | null;
+  if (!project || !canWrite(project, user)) return notFound('Project');
+  return json(await callList(c.env, projectId));
 });
 
 sessions.get('/meetings/upcoming', async (c) => {
@@ -1115,6 +1130,23 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
     segments: segments.length,
     usage: { model: modelUsed, requested_model: model, fallback_used: fallback, audio_minutes: totalMinutes, cost_microusd: costMicro },
   });
+});
+
+// D878 (#2525) — Rename speaker (MC5): one speaker's name in every passage
+// of the session, so "Speaker 3" becomes a name once, not line by line.
+sessions.patch('/sessions/:id/speakers', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  const body = await c.req.json<any>().catch(() => ({}));
+  const from = text(body?.from, 80);
+  const to = text(body?.to, 80);
+  if (!from || !to) return json({ detail: 'speaker_label_required' }, 400);
+  const r = await c.env.DB.prepare(
+    'UPDATE interview_transcript_segments SET speaker_label = ? WHERE session_id = ? AND speaker_label = ?',
+  ).bind(to, s.session.id, from).run();
+  const renamed = Number(r.meta?.changes || 0);
+  if (!renamed) return notFound('Speaker');
+  return json({ ok: true, speaker_label: to, renamed });
 });
 
 sessions.patch('/sessions/:id/segments/:segmentId', async (c) => {

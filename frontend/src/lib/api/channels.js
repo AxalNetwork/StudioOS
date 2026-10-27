@@ -28,6 +28,9 @@
 //   reply            POST   /channels/threads/:uid/reply   { text, client_key }
 //   retryVoice       POST   /channels/threads/:uid/voice/:message/retry  a voice note that was not transcribed, again (#1586) → { ok, queued }
 //   meetings         GET    /founder/validate/interviews/:id/meetings
+//   meetingSetup     GET    /founder/validate/meetings/setup     D875: Zoom and Meet, step by step, from stored rows
+//   upcomingCalls    GET    /founder/validate/meetings/upcoming  D875: the next 14 days' calendar calls not yet attached
+//   calls            GET    /founder/validate/meetings/calls?project_id=  D878 (#2525): one venture's calls, each with its audio
 //   scheduleMeeting  POST   /founder/validate/interviews/:id/meetings  { provider, starts_at, duration_min, topic?, consent, auto_record? }
 //   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
 //   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
@@ -200,6 +203,8 @@ export const channelsApi = {
   upcomingCalls: () => request('/founder/validate/meetings/upcoming'),
   /** D878 (#2525): every call and uploaded recording of the member's, with each session's audio state. */
   calls: () => request('/founder/validate/meetings'),
+  /** D878 (#2525): one venture's calls, each with its ref and audio. */
+  ventureCalls: (projectId) => request(`/founder/validate/meetings/calls?project_id=${enc(projectId)}`),
 };
 
 /** The Telegram Business interview bot, for Super Admins (D756): its health, and registering its webhook. */

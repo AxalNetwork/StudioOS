@@ -166,8 +166,9 @@ test('every request in the module is written as a literal path the drift check c
     'GET /channels/whatsapp/setup', 'GET /founder/validate/interviews/:p/meetings',
     // D871 (#2518): a Meet call's Drive recordings.
     'GET /founder/validate/interviews/:p/meetings/:p/recording',
-    // D875 (#2522) and D878 (#2525): the setup, the upcoming calls and the member's calls, for Record a session › Calls.
+    // D875 (#2522) and D878 (#2525): the setup, the upcoming calls, the member's calls and one venture's calls, for Record a session › Calls.
     'GET /founder/validate/meetings',
+    'GET /founder/validate/meetings/calls',
     'GET /founder/validate/meetings/setup',
     'GET /founder/validate/meetings/upcoming',
     'POST /admin/channels/telegram/webhook',
