@@ -139,6 +139,22 @@ be a dead control. S21's decision (D1323) records what the boards settle
 (#2431's questions 1 to 5 and 7) and splits the build into six parts, D1324 to
 D1329. The sheet is D1317's shared `Sheet`, at 520px.
 
+## Landed 2026-10-27 — Grow › Publish to… and sent history (#2400)
+
+The owner's artifacts came from the prompt on #2400:
+- `Publish Sheet Page.dc.html` (`E1DVsKDVPjraAxCM7NFV4F`) is the page;
+- `Publish · Boards.dc.html` (`RoUFfKU17q28BMT4hPoBTi`) is the board grid, PUB1
+  to PUB12; it imports the page by name.
+
+**Two edits, named.** In both files the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. No other value was
+edited.
+
+**Grade: NEW.** No founder publish exists yet, and nothing is mounted: a
+Publish to… with no Worker behind it would be a dead control. S21's decision
+(D1318) records what the canvas settles (#2400's A, B, E and G) and splits the
+build into four parts, D1319 to D1322. The sheet is D1317's shared `Sheet`.
+
 ## Landed 2026-10-27 — Google Workspace and Notion in the four cycles (#2402, #2405)
 
 The owner's four artifacts came from the prompts on #2402 and #2405. Each was
