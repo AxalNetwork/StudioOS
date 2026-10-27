@@ -285,13 +285,14 @@ export function ViewsMenu({ views, current, activeUid, edited, onPick, onSave, o
 }
 
 /** DLS2's "Add to my deal flow" on a listed round, at the stage chosen. Closing follows a commitment (D1238 §3). */
-export function AddToFlowDialog({ row, onClose, onAdded }) {
+/** D1241: `viaKey` adds a New for you row, so the flow records how it came in. */
+export function AddToFlowDialog({ row, viaKey = null, onClose, onAdded }) {
   const [stage, setStage] = useState('sourcing');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const go = async () => {
     setBusy(true); setError('');
-    try { onAdded(await dealFlowApi.add({ deal_id: Number(row.id), stage })); } catch (e) { reportError('DealFlow:add', e); setError(e?.message || 'The deal could not be added. Try again.'); } finally { setBusy(false); }
+    try { onAdded(await dealFlowApi.add({ deal_id: Number(row.id), stage, ...(viaKey ? { via_key: viaKey } : {}) })); } catch (e) { reportError('DealFlow:add', e); setError(e?.message || 'The deal could not be added. Try again.'); } finally { setBusy(false); }
   };
   return (
     <Lightbox label="Add to my deal flow" title={`Add ${row.name} to your deal flow?`} onClose={onClose} width={480} testId="dealflow-add"

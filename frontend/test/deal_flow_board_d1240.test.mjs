@@ -256,6 +256,9 @@ test('mounted board (DLS1): stages with counts and asks, cards with bands, fit a
     // A drop on another column moves the card.
     await act(async () => { t.props(t.byId('dealflow-col-commit')).onDrop({ preventDefault() {}, dataTransfer: { getData: () => '1' } }); });
     await t.settle();
+    // D1241 (#3254): a move to Commit is said first (DLS10), then made.
+    assert.ok(t.byId('dealflow-commit'));
+    await t.click('dealflow-commit-go');
     assert.deepEqual(s.calls.filter((c) => c[0] === 'update').at(-1), ['update', '1', { stage: 'commit' }]);
     // A refused move says why, and nothing moves.
     dealFlowApi.update = async () => { const e = new Error('Closing follows a commitment. Commit on the deal page first.'); e.code = 'closing_needs_commitment'; throw e; };
@@ -426,6 +429,7 @@ test('mounted phone (DLS18): the board one stage at a time with Move to, and the
     assert.ok(t.byId('dealflow-card-1'));
     assert.equal(t.props(t.byId('dealflow-card-1')).draggable, false);
     await t.change('dealflow-move-1', 'commit');
+    await t.click('dealflow-commit-go'); // D1241: Move to Commit is said first.
     assert.deepEqual(s.calls.filter((c) => c[0] === 'update').at(-1), ['update', '1', { stage: 'commit' }]);
     await act(async () => t.root.render(page('/deals?view=table')));
     await t.settle();
