@@ -127,7 +127,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/grow/brand' }, // #2343: Grow's Brand page folded into /build/brand
   { path: '/build/discovery' }, // #2335: → Validate · Customer research
   { path: '/build/metrics' }, // #2336: → /build/kpi
-  { path: '/build/financials' }, // #2339: → /raise/capital/model
+  { path: '/build/financials' }, // #2339; D1178: → /raise/use-of-funds/runway/forecast
+  { path: '/raise/capital/model' }, // D1178 (#3105): → /raise/use-of-funds/runway/forecast?moved=capital-model
   { path: '/build/captable' }, // #2340, D1029: → /raise/cap-table
   { path: '/raise/capital/cap-table' }, // D1029: → /raise/cap-table?moved=cap-table
   { path: '/raise/cap-table/variants' }, // D1029: → /raise/cap-table/scenarios?moved=variants
