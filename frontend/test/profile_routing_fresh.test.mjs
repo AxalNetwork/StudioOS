@@ -154,8 +154,9 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 178 (D1277, #2482): `AI tokens`, Usage's third page.
   // 179 (D1290, #2383): `Content queue`, its four tabs and one address per article.
   // 180 (D1299, #2377): `Accounts`, Overview and All accounts at their own addresses.
+  // 181 (D1309, #2507, #2515, #2525): `Validate · Record a session › channels`, WhatsApp, Telegram and Calls.
   //
-  // D1310 (2026-10-27): THE LEDGER ENDS AT 180. Every branch that added a row
+  // D1310 (2026-10-27): THE LEDGER ENDS AT 181. Every branch that added a row
   // also changed this one line, so ROUTE_MAP and this file conflicted on every
   // pair of such branches. ROUTE_MAP now merges with `union` (.gitattributes),
   // and the count is read from the tables themselves instead: every table

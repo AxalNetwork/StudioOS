@@ -292,6 +292,7 @@ import adminInsights from './routes/admin_insights';
 import adminPrograms from './routes/admin_programs';
 import adminProgramProposals from './routes/admin_program_proposals';
 import adminInsightsExport from './routes/admin_insights_export';
+import adminAccountsOverview from './routes/admin_accounts_overview';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
@@ -1214,6 +1215,8 @@ app.route('/api/admin/studio', adminStudioGlance);
 // D893 (#2661): the logged, counts-only export of the Insights read below. Mounted first, so /export never reaches the read's router.
 app.route('/api/admin/insights/export', adminInsightsExport);
 app.route('/api/admin/insights', adminInsights);
+// D1301 (#3397): Admin › Accounts' overview, counted as Insights counts.
+app.route('/api/admin/accounts/overview', adminAccountsOverview);
 // D954 (#2787): Admin › Programs — the registry, the playbook, the catalogue read and each program's activity.
 // D955: proposals before the programs router, whose `/:key` would otherwise answer `proposals`.
 app.route('/api/admin/programs/proposals', adminProgramProposals);
