@@ -2919,7 +2919,11 @@ function AppInner() {
       <Route path="/admin/programs/learning/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
+      {/* D963 (#2796): Referral partners' Queue and Activity, and Investor cohort access's Activity. */}
+      <Route path="/admin/programs/referral-partners/queue" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/referral-partners/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/investor-cohorts" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/investor-cohorts/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/ai-native-venture" element={guard(['admin'], <AdminProgramPage />)} />
       {/* D1038 (#2390) — Approvals left /admin/held/ when it was rebuilt to its
           canvas, as Insights and Community did: Inbox, Lanes and Decided, and
