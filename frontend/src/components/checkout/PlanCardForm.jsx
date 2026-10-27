@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { useSettings } from '../../contexts/SettingsContext';
 import { buildAppearance, getStripe } from '../../lib/stripe';
+import { sheetAppearance } from './checkoutModel';
 
 /**
  * D1053 (#2904) — the card form on the sheet (PAYX2), loaded with the sheet so
@@ -61,7 +62,7 @@ export default function PlanCardForm({ amount, currency, onReady, onChange, mode
   if (!configured) return null;
   // A deferred intent needs an amount above zero; the charge itself is the Worker's intent.
   // D1287: a token pack is a one-time payment (`mode: 'payment'`) on the order's PaymentIntent.
-  const options = { mode: mode === 'payment' ? 'payment' : 'subscription', amount: Math.max(50, Number(amount) || 0), currency: String(currency || 'usd').toLowerCase(), appearance: buildAppearance(isDark) };
+  const options = { mode: mode === 'payment' ? 'payment' : 'subscription', amount: Math.max(50, Number(amount) || 0), currency: String(currency || 'usd').toLowerCase(), appearance: sheetAppearance(buildAppearance(isDark), isDark) };
   return (
     <Elements key={`${options.mode}:${isDark ? 'd' : 'l'}:${options.amount}:${options.currency}`} stripe={stripePromise} options={options}>
       <Inner onReady={ready} onChange={onChange} />
