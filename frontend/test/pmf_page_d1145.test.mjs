@@ -240,6 +240,10 @@ test('5. the page: the tiles, the ten inputs, an input lightbox, the gaps filter
     const claims = t.all('pmf-input-row').find((n) => t.props(n)['data-key'] === 'claims_supported');
     await t.click(t.all('pmf-input-open')[t.all('pmf-input-row').indexOf(claims)]);
     assert.equal(t.count('pmf-input-lightbox'), 1);
+    const sheet = t.props(t.one('pmf-input-lightbox'));
+    assert.equal(sheet.role, 'dialog', 'D1317: the input opens as the shared Sheet');
+    assert.ok(sheet['aria-labelledby'], 'named by its title');
+    assert.equal(sheet['data-width'], 640, 'its own 600, on the Sheet’s list');
     assert.match(t.textOf('pmf-input-lightbox'), /30 of 100/);
     assert.match(t.textOf('pmf-input-lightbox'), /6\.3 points/);
     assert.ok(!t.textOf('pmf-input-lightbox').includes('open claims Supported'), 'method rules are read through RD4, not copied from v1');
@@ -286,7 +290,7 @@ test('8. a failed read is Unreadable with Try again, and a failed history says s
 
 test('9. the wiring: an input is a bottom sheet on a phone, dark colours, phone targets, and Eadwyn writes nothing here', () => {
   const src = readFileSync('frontend/src/pages/cycles/PmfPart.jsx', 'utf8');
-  assert.match(src, /<Lightbox [^>]*phone="sheet"/, 'RD18 B: an input as a bottom sheet');
+  assert.match(src, /<Sheet [^>]*phone="sheet"/, 'RD18 B: an input as a bottom sheet (D1317: the shared Sheet)');
   assert.ok((src.match(/dark:/g) || []).length > 40, 'RD19: dark colours throughout');
   assert.match(src, /max-sm:min-h-\[44px\]/, 'phone tap targets');
   assert.ok(!/window\.(alert|confirm|prompt)/.test(src), 'no browser pop-up');
