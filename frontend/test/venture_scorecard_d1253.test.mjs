@@ -85,9 +85,11 @@ test('the strip: unread is one outlined strip read as Not read here yet; locked 
   assert.ok(locked.includes('data-testid="scope-strip-locked"') && !locked.includes('height:'), 'a locked strip draws no bar');
 });
 
-test('the method page draws the scopes and grades, and says model v1 is not published; HQ reads its part 6 blocks and waits on part 3', () => {
+test('the method page draws the scopes and grades, and reads the model in force; HQ reads its part 6 blocks and waits on part 3', () => {
   const m = html(h(ScoringMethodPage));
-  assert.match(m, /It is not published yet, so no venture carries a score from it today\./);
+  // D1260 (#3283): the page no longer says v1 is unpublished; it reads the live model (tested in method_and_screening_d1260).
+  assert.doesNotMatch(m, /It is not published yet/);
+  assert.match(m, /Reading the model in force…/);
   for (const s of SCOPE_LABELS) assert.ok(m.includes(s), s);
   assert.match(m, /Measured<\/b> · 1\.0/);
   const hq = html(h(HqScoringPage));
