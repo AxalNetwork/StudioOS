@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { Building2, Check, AlertCircle, LogIn } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
+import { companyPathFor } from './account/companies/companiesModel';
 
 /**
  * Task #121 — where a company invitation is accepted.
@@ -103,9 +104,10 @@ export default function AcceptCompanyInvitePage() {
                 ? `You were already a member of ${result?.company_name || 'this company'}, so nothing changed.`
                 : `You have joined ${result?.company_name || 'the company'}${result?.role_in_company ? ` as ${result.role_in_company}` : ''}.`}
             </p>
-            <Link to="/company-settings"
+            {/* D1140: the company's own page under Companies and projects, where it can be made active. */}
+            <Link to={result?.company_uid ? companyPathFor(result.company_uid) : '/account/companies'}
               className="mt-5 inline-flex items-center justify-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700">
-              Open company settings
+              Open the company
             </Link>
           </>
         ) : (
