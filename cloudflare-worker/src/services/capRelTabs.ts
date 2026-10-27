@@ -127,17 +127,24 @@ export function activitySource(action: string, details: string | null): Activity
   return 'typed';
 }
 
-const ACTIVITY_FROM = `FROM activity_logs a
+// The two statements repeat one FROM clause, written out in each so the schema guard reads both (a spliced `${}` is skipped).
+const ACTIVITY_COUNT = `SELECT COUNT(*) AS n
+  FROM activity_logs a
       LEFT JOIN users u ON u.id = a.user_id
       LEFT JOIN raise_prospects p ON p.project_id = a.project_id AND a.entity_id GLOB '[1-9]*' AND p.id = CAST(a.entity_id AS INTEGER)
      WHERE a.project_id = ? AND a.entity_type = ?
        AND (? IS NULL OR a.action IN (SELECT value FROM json_each(?)))
        AND (? IS NULL OR a.entity_id = ?)
        AND (? IS NULL OR a.details LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\' OR p.firm LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\')`;
-const ACTIVITY_COUNT = `SELECT COUNT(*) AS n ${ACTIVITY_FROM}`;
 const ACTIVITY_ROWS = `SELECT a.id, a.action, a.details, a.created_at, a.user_id, u.name AS who, u.founder_id AS who_founder,
        p.id AS prospect_id, p.name AS prospect_name, p.firm AS prospect_firm
-  ${ACTIVITY_FROM}
+  FROM activity_logs a
+      LEFT JOIN users u ON u.id = a.user_id
+      LEFT JOIN raise_prospects p ON p.project_id = a.project_id AND a.entity_id GLOB '[1-9]*' AND p.id = CAST(a.entity_id AS INTEGER)
+     WHERE a.project_id = ? AND a.entity_type = ?
+       AND (? IS NULL OR a.action IN (SELECT value FROM json_each(?)))
+       AND (? IS NULL OR a.entity_id = ?)
+       AND (? IS NULL OR a.details LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\' OR p.firm LIKE ? ESCAPE '\\' OR u.name LIKE ? ESCAPE '\\')
  ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?`;
 
 /** CRL12: every logged change to the venture's pipeline, round and closes, newest first. */
