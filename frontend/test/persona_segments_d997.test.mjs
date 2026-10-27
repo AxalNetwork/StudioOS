@@ -129,21 +129,8 @@ test('mounted Overview, as an Admin: one h1, the Accounts crumb and notice, and 
   } finally { await v.unmount(); s.restore(); }
 });
 
-test('mounted Unclassified: members with no segment, profile chips, and a failed read that says so', async () => {
-  let s = stub(() => json({ users: USERS }));
-  let v = await render('/admin/persona-segments/unclassified');
-  try {
-    assert.match(v.of('seg-profile-chips'), /All\s*4.*Founders\s*1.*Investors\s*1.*Advisors\s*1.*Operating Partners\s*0.*Explorers\s*1/s);
-    assert.equal(v.count('seg-unclassified-row'), 4);
-    assert.match(v.of('seg-count'), /1–4 of 4/);
-  } finally { await v.unmount(); s.restore(); }
-  s = stub(() => json({ detail: 'down' }, 503));
-  v = await render('/admin/persona-segments/unclassified');
-  try {
-    assert.match(v.of('seg-list-failed'), /not a claim that no one has a segment/);
-    assert.ok(!v.has('seg-unclassified-none'));
-  } finally { await v.unmount(); s.restore(); }
-});
+// D1006 (#2821): Unclassified reads D1002's members with no segment, with why and ask to
+// finish, not the persona list; persona_segments_d1006.test.mjs mounts it.
 
 // ---------------------------------------------------------------- the source
 

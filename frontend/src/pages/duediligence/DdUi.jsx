@@ -30,8 +30,8 @@ export function Refusal({ text, testId }) {
   return text ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid={testId}>{text}</p> : null;
 }
 
-/** Runs a dialog's write; a refusal stays in the dialog, in the Worker's words (423 is the pause). */
-export function useSend() {
+/** Runs a dialog's write; a refusal stays in the dialog, in the Worker's words (423 is the pause). `explain` reads a refusal's code first where a page knows its codes. */
+export function useSend(explain = refusalText) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const send = async (fn, fallback) => {
@@ -41,7 +41,7 @@ export function useSend() {
     try {
       await fn();
     } catch (e) {
-      setError(refusalText(e, fallback));
+      setError(explain(e, fallback));
     } finally { setBusy(false); }
   };
   return { busy, error, setError, send };
