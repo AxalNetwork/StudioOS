@@ -21,10 +21,60 @@ export const TOKENS_LINE = '$1 of tokens buys $1 of AI use. Tokens never expire.
  * once D762's billing PR (#2019) lands.
  */
 export const AI_DRAW_LINE = 'Each run is paid from your AI allowance first, then from your tokens.';
-/** Every Add tokens link and the retired checkout redirect share this destination. */
-// D786 (#2211): the token packs are on the catalogue, at /pricing/products.
-export const TOKEN_PACKS_PATH = '/pricing/products#token-packs';
-export const ADD_TOKENS_PATH = TOKEN_PACKS_PATH;
+/**
+ * Every Add tokens link, and every old address for buying tokens, share this
+ * destination. D1288 (#3371): Pricing's Models tab, where `#add-tokens` opens
+ * D1287's sheet in pack mode. Inside the app a signed-in member's click never
+ * goes there: `AddTokensHost` opens the same sheet over the page they are on.
+ * The address is for links from outside the app, and for a visitor.
+ */
+export const ADD_TOKENS_PATH = '/pricing?for=models#add-tokens';
+/** The packs on Models (D1285). Kept as a name for the old storefront's callers. */
+export const TOKEN_PACKS_PATH = ADD_TOKENS_PATH;
+/** Pricing's Models tab, where the old storefront's back links go (D1288). */
+export const MODELS_PATH = '/pricing?for=models';
+/** The hash Pricing opens the sheet on. */
+export const ADD_TOKENS_HASH = '#add-tokens';
+
+/** `ADD_TOKENS_PATH` on one pack (`?pack=<uid>`), for the redirects that keep it. */
+export function addTokensHref(packUid = null) {
+  const uid = typeof packUid === 'string' ? packUid.trim() : '';
+  return uid ? `/pricing?for=models&pack=${encodeURIComponent(uid)}${ADD_TOKENS_HASH}` : ADD_TOKENS_PATH;
+}
+
+/** True for an address that is Add tokens: Pricing with `#add-tokens`, with or without a pack. */
+export function isAddTokensHref(href) {
+  if (typeof href !== 'string' || !href.startsWith('/pricing?')) return false;
+  const hash = href.indexOf('#');
+  if (hash < 0 || href.slice(hash) !== ADD_TOKENS_HASH) return false;
+  const q = new URLSearchParams(href.slice('/pricing?'.length, hash));
+  return q.get('for') === 'models';
+}
+
+/** The pack an Add tokens address names (`?pack=<uid>`), or null. */
+export function packOfHref(href) {
+  if (!isAddTokensHref(href)) return null;
+  const uid = new URLSearchParams(href.slice('/pricing?'.length, href.indexOf('#'))).get('pack');
+  return uid && uid.trim() ? uid.trim() : null;
+}
+
+export const ADD_TOKENS_EVENT = 'studioos:add_tokens_open';
+
+/**
+ * D1288 (CRP9): opens D1287's sheet in pack mode over the current page, with
+ * no route change, for the one `AddTokensHost` (App.jsx). `from` names the
+ * page for the landing's "Back to [from]"; `pack_uid` picks a pack. False
+ * when there is no window.
+ */
+export function openAddTokens({ from = null, pack_uid = null } = {}) {
+  if (typeof window === 'undefined') return false;
+  const detail = {
+    from: typeof from === 'string' && from.trim() ? from.trim() : null,
+    pack_uid: typeof pack_uid === 'string' && pack_uid.trim() ? pack_uid.trim() : null,
+  };
+  window.dispatchEvent(new CustomEvent(ADD_TOKENS_EVENT, { detail }));
+  return true;
+}
 
 const integer = (n) => Number.isSafeInteger(n) && n >= 0;
 /** A price the checkout can sell: a Stripe price ID, USD, a whole positive amount in cents. */

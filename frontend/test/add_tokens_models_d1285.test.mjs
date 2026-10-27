@@ -145,6 +145,6 @@ test('a visitor: no band, no balance read, and Sign in to buy comes back to the 
     assert.equal(w.calls.me, 0);
     const signIn = walk(w.container).filter((n) => n.tagName === 'A' && text(n) === 'Sign in to buy');
     assert.equal(signIn.length, 2);
-    assert.equal(new URL(props(signIn[0]).href, 'https://example.test').searchParams.get('next'), '/pricing?for=models#token-packs');
+    assert.equal(new URL(props(signIn[0]).href, 'https://example.test').searchParams.get('next'), '/pricing?for=models#add-tokens'); // D1288: back to Add tokens
   } finally { await w.done(); }
 });

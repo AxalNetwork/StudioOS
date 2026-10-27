@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
-import { TOPUP_UNAVAILABLE } from '../../lib/aiTokens';
+import { TOPUP_UNAVAILABLE, openAddTokens } from '../../lib/aiTokens';
 import { api } from '../../lib/api';
 import { Pill, Unreadable } from '../../ui';
 import { BTN, LoadingRows, Outcome, PanelCard, useAccountRead } from './AccountCenter';
@@ -15,9 +14,10 @@ import { NO_CARD, TOKENS_FOOTNOTE, allowanceView, balanceText, packCards, paymen
  * orders stay where they were built; `BillingCards` lays the page out around
  * them in the canvas's order. Rules and words are `billingModel.js`.
  *
- * Buy goes to the existing checkout with the chosen pack (D755); this page
- * never takes a payment itself, and never collects card data: the card is
- * managed through Stripe's customer portal.
+ * Buy tokens and each pack's Buy open Add tokens' sheet over this page (D1288,
+ * `openAddTokens`), on the chosen pack; this page never takes a payment
+ * itself, and never collects card data: the card is managed through Stripe's
+ * customer portal.
  */
 
 const LABEL = 'font-mono text-[10.5px] font-semibold uppercase tracking-[0.06em] text-axal-muted dark:text-gray-400';
@@ -25,7 +25,7 @@ const MONO = 'font-mono';
 
 function goTo(url) { window.location.assign(url); }
 
-/** Token balance, with Buy tokens (to the pack cards below). */
+/** Token balance, with Buy tokens (Add tokens' sheet, D1288). */
 export function TokenBalanceCard({ me }) {
   const balance = me.status === 'ready' ? balanceText(me.data) : null;
   return (
@@ -41,7 +41,7 @@ export function TokenBalanceCard({ me }) {
                   {balance} <span className="font-sans text-[13px] font-medium tracking-normal text-axal-muted dark:text-gray-400">AI tokens</span>
                 </span>
               </div>
-              <a href="#buy-tokens" className={BTN.primary} data-testid="link-buy-tokens">Buy tokens</a>
+              <button type="button" className={BTN.primary} onClick={() => openAddTokens({ from: 'Billing' })} data-testid="link-buy-tokens">Buy tokens</button>
             </div>
           )}
     </PanelCard>
@@ -76,7 +76,7 @@ export function PlanAllowanceCard({ me, now }) {
   );
 }
 
-/** Buy tokens: the packs on sale, each with its live offer (D790), Buy to the existing checkout, and the footnote. */
+/** Buy tokens: the packs on sale, each with its live offer (D790), Buy opening the sheet on that pack (D1288), and the footnote. */
 export function BuyTokensCard({ topUp }) {
   const cards = topUp.status === 'ready' ? packCards(topUp.data) : [];
   return (
@@ -93,7 +93,7 @@ export function BuyTokensCard({ topUp }) {
                       <span className="text-[12px] text-axal-muted dark:text-gray-400">of AI tokens</span>
                       {p.offer && <span className="self-start"><Pill tone="info" data-testid={`pack-offer-${p.key}`}>{p.offer}</Pill></span>}
                       {p.firstOnly && <span className="self-start"><Pill tone="neutral" data-testid={`pack-first-${p.key}`}>First purchase only</Pill></span>}
-                      <Link to={p.href} className={`${BTN.ghost} mt-auto`} data-testid={`pack-buy-${p.key}`}>Buy</Link>
+                      <button type="button" className={`${BTN.ghost} mt-auto`} onClick={() => openAddTokens({ from: 'Billing', pack_uid: p.key })} data-testid={`pack-buy-${p.key}`}>Buy</button>
                     </div>
                   ))}
                 </div>

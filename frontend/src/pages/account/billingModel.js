@@ -14,7 +14,7 @@
  * WORDS (D793, D-c): "AI tokens" and "token balance". Perks credits never
  * appear on this page.
  */
-import { microMoney } from '../../lib/aiTokens';
+import { addTokensHref, microMoney } from '../../lib/aiTokens';
 
 /** The canvas's footnote under Buy tokens. */
 export const TOKENS_FOOTNOTE = '$1 of tokens buys $1 of AI use at the posted rates. Tax does not buy tokens. Tokens you buy never expire.';
@@ -80,7 +80,7 @@ export function packCards(topUp) {
     const dollars = p.unit_amount % 100 === 0 ? String(p.unit_amount / 100) : (p.unit_amount / 100).toFixed(2);
     return {
       key, amount: `$${dollars}`, offer, firstOnly: p.first_purchase_only === true,
-      href: `/checkout?token_pack=${encodeURIComponent(key)}`,
+      href: addTokensHref(key),
     };
   });
 }
