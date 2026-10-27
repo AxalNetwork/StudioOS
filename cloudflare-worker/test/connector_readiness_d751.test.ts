@@ -45,8 +45,9 @@ function registeringFiles(): string[] {
 const FILES = registeringFiles();
 for (const f of FILES) await import(pathToFileURL(f).href);
 
-const NINE = ['calendly', 'carta', 'docusign', 'github', 'hubspot', 'salesforce', 'slack', 'stripe', 'zoom'];
-const MANAGED = NINE.filter((k) => k !== 'zoom');
+// D1096 adds Vercel's read-only Integration.
+const TEN = ['calendly', 'carta', 'docusign', 'github', 'hubspot', 'salesforce', 'slack', 'stripe', 'vercel', 'zoom'];
+const MANAGED = TEN.filter((k) => k !== 'zoom');
 const NAMES: Record<string, string> = { github: 'GitHub', slack: 'Slack', zoom: 'Zoom' };
 const FOUNDER = 1, ADMIN = 2, STUDIO = 3;
 
@@ -129,23 +130,23 @@ const GH = { GITHUB_APP_CLIENT_ID: FIXTURE_ID, GITHUB_APP_CLIENT_SECRET: FIXTURE
 
 test.beforeEach(() => _clearOauthCredsCache());
 
-test('D751 1-2: /available says configured for the nine OAuth connectors only, from the env pair', async () => {
+test('D751 1-2: /available says configured for the ten OAuth connectors only, from the env pair', async () => {
   const f = fixture();
   // #2634: Carta is visible to its founder/investor audiences only.
   const none = await rows(f.env, FOUNDER);
   assert.equal((await rows(f.env, ADMIN)).has('carta'), false);
-  for (const k of NINE) assert.equal(none.get(k)?.configured, false, k);
+  for (const k of TEN) assert.equal(none.get(k)?.configured, false, k);
   for (const k of ['figma', 'google_calendar', 'microsoft_365', 'crunchbase', 'affinity', 'mercury']) {
     if (none.has(k)) assert.ok(!('configured' in none.get(k)), `${k} carries no configured`);
   }
   assert.ok(none.has('figma') && none.has('crunchbase') && none.has('google_calendar'));
-  for (const k of NINE) assert.equal(none.get(k).has_implementation, true, `${k} has_implementation unchanged`);
+  for (const k of TEN) assert.equal(none.get(k).has_implementation, true, `${k} has_implementation unchanged`);
   assert.equal(none.get('figma').has_implementation, false);
 
   _clearOauthCredsCache();
   const gh = await rows(fixture({ env: GH }).env);
   assert.equal(gh.get('github').configured, true);
-  for (const k of NINE.filter((x) => x !== 'github')) assert.equal(gh.get(k).configured, false, k);
+  for (const k of TEN.filter((x) => x !== 'github')) assert.equal(gh.get(k).configured, false, k);
 });
 
 test('D751 3: a D1 row that decrypts is configured; one that does not is not', async () => {
@@ -275,10 +276,10 @@ test('D751 8: no response carries a secret or a client field', () => {
   }
 });
 
-test('D751 13: every OAuth provider with an impl implements ready, and they are exactly the nine', () => {
+test('D751 13: every OAuth provider with an impl implements ready, and they are exactly the ten', () => {
   const withImpl = REGISTRY.filter((p) => p.auth_type === 'oauth2' && getProviderImpl(p.key)).map((p) => p.key).sort();
-  assert.deepEqual(withImpl, NINE);
+  assert.deepEqual(withImpl, TEN);
   for (const k of withImpl) assert.equal(typeof getProviderImpl(k)!.ready, 'function', `${k} implements ready`);
   assert.ok(FILES.some((f) => f.endsWith('services/channels/zoom.ts')), 'Zoom registers outside providers/');
-  assert.ok(Object.keys(NAMES).every((k) => NINE.includes(k)));
+  assert.ok(Object.keys(NAMES).every((k) => TEN.includes(k)));
 });

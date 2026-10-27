@@ -280,7 +280,8 @@ export async function setInterviewStage(
  */
 export const DEMAND_KINDS = ['loi', 'pre_sale', 'waitlist', 'need_to_have', 'would_pay'] as const;
 export const DEMAND_STATUSES = ['confirmed', 'counted', 'to_confirm'] as const;
-export const DEMAND_SOURCES = ['manual', 'interview', 'session'] as const;
+/** D1092: `google_forms` is a Form response the founder's mapping qualified; it arrives `to_confirm`. */
+export const DEMAND_SOURCES = ['manual', 'interview', 'session', 'google_forms'] as const;
 
 export type DemandSignalInput = {
   projectId: number;
