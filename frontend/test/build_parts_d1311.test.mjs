@@ -45,7 +45,7 @@ test('a part not built yet is a null on its own line, named with the task that b
   // D1088 (#2953) filled Notion's three lines: From Notion draws last on each module.
   assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['github', 'notion']);
   assert.deepEqual(builtParts('prototype-mvp').map(([k]) => k), ['github', 'notion']);
-  assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'notion']);
+  assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'notion'], 'D1097\'s Runs on, then From Notion');
   // CycleRoute takes Build's parts from here, and from nowhere else.
   assert.match(read('frontend/src/pages/cycles/CycleRoute.jsx'), /parts: toFnMap\(buildPartsMap\(\)\),/);
 });
