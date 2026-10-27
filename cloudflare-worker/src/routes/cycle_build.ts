@@ -8,6 +8,7 @@ import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
 import { lovableRepositories } from '../integrations/providers/github/lovableMark';
+import { lovablePart } from '../services/lovableAppLinks';
 import { foundingTeamFromCode, mapLogin, unmapLogin } from '../integrations/providers/github/team';
 import { acceptCompanyProposal, companyFromCode, dismissCompanyProposal } from '../integrations/providers/github/company';
 import { acceptVercelProposal, companyFromVercel, dismissVercelProposal } from '../services/vercel/company';
@@ -268,7 +269,9 @@ async function prototype(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
     sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
-    parts: { github: await prototypeGithub(env, p), vercel: await fromVercel('prototype_mvp', async () => mvpVercel(env, p.id, await projectMember(env, p, viewer))) } };
+    // D1083 (#2948): From Lovable, the project's one app link, under From GitHub. D1098 (#2963): Vercel's Live strip and previews.
+    parts: { github: await prototypeGithub(env, p), vercel: await fromVercel('prototype_mvp', async () => mvpVercel(env, p.id, await projectMember(env, p, viewer))),
+      lovable: await lovablePart(env, p.id, 'build', [{ id: p.id, label: 'Prototype / MVP' }]) } };
 }
 
 /** GitHub's state for a fed must-have, in the module's words (D782, #2112). */

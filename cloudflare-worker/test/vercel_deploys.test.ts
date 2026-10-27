@@ -12,6 +12,8 @@
  *   - Retention keeps 180 days or the newest 500; a deployment removed stays
  *     removed.
  *   - A store that cannot be read makes the part Unreadable; the module reads.
+ *   - One Live line per host (D1083's `liveHost.ts`): a Lovable app address
+ *     equal to a Vercel production domain is Vercel's line, drawn once.
  *
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/vercel_deploys.test.ts
@@ -68,6 +70,7 @@ async function world(opts: { withDeploys?: boolean } = {}) {
   addMvpStores(db);
   db.exec(mig('589_vercel_installations.sql'));
   if (opts.withDeploys !== false) db.exec(mig('591_vercel_deployments.sql'));
+  db.exec(mig('585_lovable_app_links.sql'));
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', KEK_PII: 'fixture-cipher-key-'.repeat(4) } as any;
   const enc = await encryptCredentials(env, 'vc-d', { access_token: 'fixture_vercel_token', configuration_id: 'icfg_fixture', team_id: 'team_fixture' });
   db.prepare(`INSERT INTO integrations(id, uid, user_id, provider_key, auth_type, credentials_enc, config_json) VALUES (41, 'vc-d', 1, 'vercel', 'oauth2', ?, ?)`)
@@ -221,6 +224,25 @@ test('nothing from Vercel is empty with its reason; a store that cannot be read 
     }
     assert.ok(logged.every((a) => !JSON.stringify(a).includes('acme')), 'the log names the module only');
   } finally { console.error = quiet; }
+});
+
+test('one Live line per host: a Lovable app on a Vercel production domain is Vercel\'s line, drawn once (D1083, D1311)', async () => {
+  const w = await world();
+  project(w.db);
+  w.db.exec(`INSERT INTO lovable_app_links (uid, project_id, module, record_table, record_id, app_url, last_status, checked_at)
+    VALUES ('lov-1', 101, 'prototype-mvp', 'projects', 101, 'https://App.Acme.example/', 'live', '2026-10-23T14:05:00Z')`);
+  const { status, body } = await moduleRead(w.env, 'prototype-mvp');
+  assert.equal(status, 200, JSON.stringify(body));
+  assert.deepEqual(body.parts.vercel.live.map((l: any) => [l.domain, l.label]), [['app.acme.example', 'Live']], 'Vercel draws the Live line');
+  assert.equal(body.parts.lovable.slots[0].link.hosted_on, 'vercel', 'From Lovable reads "Hosted on Vercel" and draws no Live line of its own');
+  // Another host is Lovable's own line; a project name never matches.
+  w.db.exec(`UPDATE lovable_app_links SET app_url = 'https://www.app.acme.example'`);
+  assert.equal((await moduleRead(w.env, 'prototype-mvp')).body.parts.lovable.slots[0].link.hosted_on, null);
+  w.db.exec(`UPDATE lovable_app_links SET app_url = 'https://acme-web.lovable.app'`);
+  assert.equal((await moduleRead(w.env, 'prototype-mvp')).body.parts.lovable.slots[0].link.hosted_on, null);
+  // An unchosen project's domain claims nothing.
+  w.db.exec(`UPDATE lovable_app_links SET app_url = 'https://app.acme.example'; DELETE FROM vercel_projects`);
+  assert.equal((await moduleRead(w.env, 'prototype-mvp')).body.parts.lovable.slots[0].link.hosted_on, null);
 });
 
 // ── Product roadmap ──────────────────────────────────────────────────────────

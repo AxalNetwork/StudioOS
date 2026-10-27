@@ -37,6 +37,7 @@ import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import GrowFromMercury from './GrowFromMercury';
 import MercuryRaiseFeed from './MercuryRaiseFeed';
+import FromLovable from './FromLovable';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -153,6 +154,12 @@ const CYCLE_DEFS = {
         <RecordView record={record} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
           onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
       )} />,
+      // D1083 (#2948, LV5–LV7): From Lovable under the claim's record, one slot per experiment.
+      experiments: (read, ctx) => <div className="space-y-3">
+        <RecordView record={read} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
+          onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
+        {read?.parts?.lovable && <FromLovable part={read.parts.lovable} cycle="validate" projectId={ctx.projectId} onRetry={ctx.reload} />}
+      </div>,
     }),
   },
   /**
