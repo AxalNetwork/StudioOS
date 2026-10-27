@@ -99,6 +99,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/grants',         'Program grants under Licences (D981)'],
   ['frontend/src/pages/admin/kyc',            'KYC & KYB (D1228): its tabs, one person\'s case and its dialogs (D1233), Renewals and Audit (D1235), and the models they read'],
   ['frontend/src/pages/subsidiary/licence',   'the Licences page\'s tabs, the Administrator\'s own licence (D800, D804, D988)'],
+  ['frontend/src/pages/admin/kyc',            'KYC & KYB under Approvals (D1228): People\'s case (D1233), Businesses and a business\'s case (D1234), their dialogs and models'],
   ['frontend/src/pages/admin/lab',            'the Spin-Out Lab\'s admin page under Programs (D937)'],
   ['frontend/src/pages/admin/fundAdmin',      'the fund administration console (D714) and, since D880, Axal VC\'s own Mercury connections'],
   ['frontend/src/pages/admin/segments',       'Persona segments under Accounts (D997)'],

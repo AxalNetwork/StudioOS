@@ -43,6 +43,15 @@ async function documentBlob(userId, docId = null, { signal } = {}) {
   const path = docId == null
     ? `/api${one(userId)}/document`
     : `/api${one(userId)}/documents/${encodeURIComponent(docId)}`;
+  return fetchKycDocument(path, { signal });
+}
+
+/** D1234: one business document's bytes for the viewer inside the page; the Worker logs the view. */
+export const businessDocumentBlob = (uid, documentId, { signal } = {}) =>
+  fetchKycDocument(`/api/kyc/businesses/${encodeURIComponent(uid)}/documents/${encodeURIComponent(documentId)}`, { signal });
+
+/** D1234: the same binary read for any KYC document path, a person's or a business's. */
+export async function fetchKycDocument(path, { signal } = {}) {
   const deadline = armDeadline(DEFAULT_TIMEOUT_MS, signal);
   const access = () => { const e = new Error('Your HQ staff sign-in is needed to open this document.'); e.code = 'access_required'; return e; };
   try {
