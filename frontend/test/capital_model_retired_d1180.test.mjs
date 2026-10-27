@@ -44,7 +44,7 @@ test('?mode=workspace and the model\'s old addresses land on Forecast with the v
   const app = read('frontend/src/App.jsx');
   assert.match(app, /get\('mode'\) === 'workspace'\s*\n\s*\? <UseOfFundsMovedRedirect count="\/raise\/capital\?mode=workspace" \/>\s*\n\s*: <FounderRaiseCapital \/>/);
   for (const p of ['/raise/capital/model', '/build/financials']) {
-    assert.match(app, new RegExp(`path="${p.replace(/\//g, '\\/')}" element=\\{<UseOfFundsMovedRedirect \\/>\\}`), p);
+    assert.ok(app.includes(`path="${p}" element={<UseOfFundsMovedRedirect />}`), p);
     assert.ok(REDIRECT_ROUTES.some((r) => r.path === p), `${p} is no longer counted`);
   }
   assert.ok(FORWARD_REDIRECTS.some((r) => r.path === '/raise/capital?mode=workspace'));
