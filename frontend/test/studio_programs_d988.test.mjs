@@ -245,6 +245,10 @@ test('GR9: the sheet lists only programs HQ offers, says what the term stands at
     await act(async () => { v.props('licence-program-ask-referral-partners').onClick(); });
     await v.settle();
     const sheetText = v.of('program-request-sheet');
+    // D1317: the shared right-side Sheet at 480px, named by its title.
+    assert.equal(v.props('program-request-sheet').role, 'dialog');
+    assert.ok(v.props('program-request-sheet')['aria-labelledby']);
+    assert.equal(v.props('program-request-sheet')['data-width'], 480);
     assert.doesNotMatch(sheetText, /Product testing|AI-native Venture|Perks/, 'only programs HQ offers');
     assert.equal(v.props('program-request-program').value, 'referral-partners');
     assert.match(v.of('program-request-answer'), /HQ answers within 3 days/);
