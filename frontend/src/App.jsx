@@ -3085,6 +3085,9 @@ function AppInner() {
       <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/persona-segments/new" element={guard(['admin'], <NewPersonaSegment />)} />
       <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
+      {/* D1006 (#2821): Activity and Suggestions are the page's tabs, so a segment key can never be "activity". */}
+      <Route path="/admin/persona-segments/activity" element={guard(['admin'], <PersonaSegments />)} />
+      <Route path="/admin/persona-segments/suggestions" element={guard(['admin'], <PersonaSegments />)} />
       {/* D1005 (#2820): one segment, its three tabs as sub-paths. */}
       <Route path="/admin/persona-segments/:key" element={guard(['admin'], <PersonaSegmentPage />)} />
       <Route path="/admin/persona-segments/:key/members" element={guard(['admin'], <PersonaSegmentPage />)} />
