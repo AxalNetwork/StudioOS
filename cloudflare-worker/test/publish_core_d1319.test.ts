@@ -272,7 +272,8 @@ test('never automatic: no publish target is a sends row, send_modes refuses one,
   assert.doesNotMatch(readFileSync(new URL('integrations/autopush.ts', src), 'utf8'), /publish/);
   assert.deepEqual(files.filter((p) => readFileSync(p, 'utf8').includes('registerPublishTarget(') && !p.endsWith('publishTargets.ts')), [], 'only tests register a fake target');
   // Part 1 adds no provider: nothing can be published yet.
-  assert.deepEqual([PUBLISH_TARGETS.length, PUBLISH_SOURCES.length, PUBLISHERS.size], [0, 0, 0]);
+  // D1333 (#3481, part 2) fills PUBLISH_SOURCES: twelve store rows across the nine places (`publish_sources_d1333.test.ts`).
+  assert.deepEqual([PUBLISH_TARGETS.length, PUBLISH_SOURCES.length, PUBLISHERS.size], [0, 12, 0]);
   assert.ok(Object.isFrozen(PUBLISH_TARGETS) && Object.isFrozen(PUBLISH_SOURCES));
   assert.equal(PUBLISH_MODULES.length, 9);
   assert.equal(publishTarget('fakepub')!.retract, 'delete');
