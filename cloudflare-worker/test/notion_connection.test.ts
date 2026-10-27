@@ -294,8 +294,9 @@ test('7. the source: only reads.ts opens a Notion session; no source names a Not
   const d = getDescriptor('notion')!;
   assert.deepEqual([d.status, d.auth_type, d.audience_rule, d.docs_url], ['beta', 'oauth_mcp', 'venture', 'https://developers.notion.com/docs/mcp']);
   assert.deepEqual(CONNECTOR_METADATA.notion.sends, []);
-  assert.deepEqual(CONNECTOR_METADATA.notion.feeds, [], 'nothing lands until a part builds a feed');
-  assert.deepEqual([...NOTION_FEEDS], []);
+  // Parts 3–6 each add their feeds (D1088 added Build's); the registry reads the list, nothing else.
+  assert.deepEqual(CONNECTOR_METADATA.notion.feeds, [...new Set(NOTION_FEEDS.map((f) => f.module))], 'the registry\'s feeds are the list\'s modules');
+  for (const f of NOTION_FEEDS) assert.ok(MODULE_LABELS[f.module], `${f.key} lands in a labelled module`);
   assert.equal(writesProjectData('notion'), true);
   assert.equal(FED_LEDGER_PROVIDERS.has('notion'), true);
   assert.equal(MODULE_LABELS.product_improvement, 'Product improvement');
