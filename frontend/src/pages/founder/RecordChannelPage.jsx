@@ -4,7 +4,9 @@ import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
 import { INBOX, PAGE_LINE, RECORD_CHANNELS, channelOf } from './recordChannels';
 import RecordWhatsAppTool from './RecordWhatsAppTool.jsx';
 import RecordTelegramTool from './RecordTelegramTool.jsx';
+import RecordCallsTool from './RecordCallsTool.jsx';
 import { tgRoute, waRoute } from './channelSessionModel.js';
+import { mcRoute } from './callsModel.js';
 
 const LINK = 'font-semibold text-violet-700 underline underline-offset-2 dark:text-violet-300';
 
@@ -21,11 +23,14 @@ const LINK = 'font-semibold text-violet-700 underline underline-offset-2 dark:te
  *
  * D869 (#2515): Telegram's boards are built too, the same tool with Telegram
  * as the channel (`RecordTelegramTool`); `telegramApi` is the tests' stub.
- * Calls keeps this page until #2525.
+ *
+ * D878 (#2525): Calls' boards are built (`RecordCallsTool`, MC1–MC7), on
+ * WhatsApp's parts; `callsApi` is the tests' stub. `ChannelToday` stays for a
+ * channel whose boards are still to build; none is left today.
  */
-export default function RecordChannelPage({ whatsappApi, telegramApi }) {
+export default function RecordChannelPage({ whatsappApi, telegramApi, callsApi }) {
   const { pathname } = useLocation();
-  const ch = (waRoute(pathname) ? RECORD_CHANNELS[0] : tgRoute(pathname) ? RECORD_CHANNELS[1] : channelOf(pathname)) || RECORD_CHANNELS[0];
+  const ch = (waRoute(pathname) ? RECORD_CHANNELS[0] : tgRoute(pathname) ? RECORD_CHANNELS[1] : mcRoute(pathname) ? RECORD_CHANNELS[2] : channelOf(pathname)) || RECORD_CHANNELS[0];
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-6" data-testid={`record-channel-${ch.key}`}>
       <AdminPageHeader
@@ -39,7 +44,8 @@ export default function RecordChannelPage({ whatsappApi, telegramApi }) {
       />
       {ch.key === 'whatsapp' ? <RecordWhatsAppTool {...(whatsappApi ? { api: whatsappApi } : {})} />
         : ch.key === 'telegram' ? <RecordTelegramTool {...(telegramApi ? { api: telegramApi } : {})} />
-          : <ChannelToday ch={ch} />}
+          : ch.key === 'calls' ? <RecordCallsTool {...(callsApi ? { api: callsApi } : {})} />
+            : <ChannelToday ch={ch} />}
     </div>
   );
 }

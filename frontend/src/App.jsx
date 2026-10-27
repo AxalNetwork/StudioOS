@@ -2711,6 +2711,9 @@ function AppInner() {
       <Route path="/validate/record/telegram/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/telegram/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/record/calls" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      {/* D878 (#2525): Calls' tabs are paths under its address, as WhatsApp's and Telegram's are. */}
+      <Route path="/validate/record/calls/:tab" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
+      <Route path="/validate/record/calls/:tab/:id" element={guard(labRoles(['admin', 'founder']), <RecordChannelPage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
       {/* D695: every Add has an address. Customer research's Add stays Record a session, the query kept. */}

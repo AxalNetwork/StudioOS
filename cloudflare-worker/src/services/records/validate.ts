@@ -1347,11 +1347,23 @@ const experiments: ModuleSpec = {
         const res = await ctx.env.DB.prepare(
           'SELECT id, title, method, target, result, status FROM hypothesis_experiments WHERE hypothesis_id = ? AND project_id = ? ORDER BY id',
         ).bind(Number(id), ctx.projectId).all<Any>();
+        // D1082 (#2947): each row's last Build in Lovable, from D1068's handoff store. Its own read: a
+        // failure leaves the experiments drawn, with no "Opened in Lovable on" line.
+        const opened = new Map<string, string>();
+        try {
+          const rows = (await ctx.env.DB.prepare(`SELECT record_id, MAX(opened_at) AS at FROM build_handoffs
+            WHERE project_id = ? AND provider = 'lovable' AND record_table = 'hypothesis_experiments' GROUP BY record_id`)
+            .bind(ctx.projectId).all<{ record_id: string; at: string }>()).results || [];
+          for (const r of rows) opened.set(String(r.record_id), r.at);
+        } catch { /* the rows stand without it */ }
+        const writer = canWrite(ctx.project, ctx.user);
         return {
           rows: (res.results || []).map((x) => {
             const [word, tone] = EXPERIMENT_STATUS[String(x.status)] ?? ['Planned', 'grey'];
             return { a: String(x.title), b: joined(x.method, x.target ? `target ${x.target}` : null, x.result), c: word, tone,
-              action: { key: 'experiment-status', body: { experiment_id: Number(x.id) } } };
+              action: { key: 'experiment-status', body: { experiment_id: Number(x.id) } },
+              lovable: { cycle: 'validate' as const, project_id: ctx.projectId, record: { kind: 'experiment', id: String(x.id) },
+                can_launch: writer && String(x.status) === 'planned', opened_at: opened.get(String(x.id)) ?? null } };
           }),
           empty: 'No experiment yet.',
           action: 'add-experiment',

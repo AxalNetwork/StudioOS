@@ -1,8 +1,9 @@
 // D1236 (#2423) — Deal flow at /deals (DLS1–DLS18): the view and the scope
 // switch in the address, today's list and invitations, SCORING's eleven scopes
 // with no Overall, the round's status words, a row opening its deal only where
-// the investor may read it, compare picks in the address, and "Not read here
-// yet" on every block no read carries — never a zero.
+// the investor may read it, and compare picks in the address. D1241 (#3254)
+// retired the last "Not read here yet" waits (New for you and Compare's chart):
+// `deal_flow_part5_d1241.test.mjs` holds them now.
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/deal_flow_d1236.test.mjs
@@ -12,9 +13,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { CompareView, DealFlowToolbar, InvitesView } from '../src/pages/investor/dealflow/DealFlow.jsx';
+import { CompareView, DealFlowToolbar } from '../src/pages/investor/dealflow/DealFlow.jsx';
 import {
-  BASE, NOT_YET, SCOPES, WAITS, compareHref, compareIds, dealRow, inviteRow, opensDeal, roundWord, viewHref, viewOf,
+  BASE, SCOPES, compareHref, compareIds, dealRow, opensDeal, roundWord, viewHref, viewOf,
 } from '../src/pages/investor/dealflow/dealFlowModel.js';
 
 const h = React.createElement;
@@ -48,14 +49,12 @@ test('SCORING’s eleven scopes in its order, no Overall; the round’s words; a
   assert.deepEqual(['mine', 'all', 'new'].map(opensDeal), [true, false, false]);
 });
 
-test('a value the read did not return stays null, and no wait says zero or none', () => {
+test('a value the read did not return stays null', () => {
   const r = dealRow({ id: 7, project_name: 'Acme', status: 'active', amount: null, days_in_stage: null });
   assert.equal(r.ask, null);
   assert.equal(r.daysInStage, null);
   assert.equal(r.round, 'Raising');
   assert.equal(dealRow({}).name, 'Name not recorded');
-  assert.equal(inviteRow({ deal_id: 3, project_name: 'B' }).id, '3');
-  for (const [k, w] of Object.entries(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), k);
 });
 
 /* ------------------------------------------------------------------ *
@@ -76,21 +75,15 @@ test('the toolbar: the scope switch and the view switch are addresses; New for y
 // D1257's strip on a row list already read stays on `DealsTableView`, covered by
 // `venture_scorecard_panel_d1257.test.mjs`.
 
-test('New for you (DLS6): the studio’s invitations, and the other ways in waiting', () => {
-  const out = html(h(InvitesView, { rows: [inviteRow({ deal_id: 9, project_name: 'Harbor AI', message: 'Fits your thesis.' })] }));
-  assert.ok(out.includes('href="/deals/9"'));
-  assert.match(out, /Fits your thesis\./);
-  assert.ok(out.includes('data-testid="dealflow-wait-entered"') && out.includes(NOT_YET));
-  assert.match(html(h(InvitesView, { rows: [] })), /No invitation is waiting for you\./);
-});
-
-test('Compare (DLS8): the picked ventures, fewer than two asks for more, and the chart waits', () => {
-  const picks = [dealRow({ id: 1, project_name: 'A', status: 'active' }), dealRow({ id: 2, project_name: 'B', status: 'funded' })];
-  const out = html(h(CompareView, { picks, missing: 1 }));
+// D1241 (#3254): New for you reads every way in (`NewForYou.jsx`), and Compare draws
+// its chart and table from SCORING's batch; `deal_flow_part5_d1241.test.mjs` holds both.
+test('Compare (DLS8): fewer than two picks asks for more, and a missing pick is said', () => {
+  const v = (id, name) => ({ id: String(id), name, round: 'Raising', ask: null, stage: null, scores: { state: 'loading', byScope: {} }, fit: null });
+  const out = html(h(CompareView, { ventures: [v(1, 'A'), v(2, 'B')], missing: 1 }));
   assert.match(out, /Compare · 2 ventures/);
   assert.ok(out.includes('data-testid="dealflow-compare-missing"'));
-  assert.ok(out.includes('data-testid="dealflow-wait-compare"'));
-  assert.match(html(h(CompareView, { picks: picks.slice(0, 1) })), /Pick at least two ventures/);
+  assert.ok(!out.includes('dealflow-wait-compare'), 'the chart no longer waits');
+  assert.match(html(h(CompareView, { ventures: [v(1, 'A')] })), /Pick at least two ventures/);
 });
 
 /* ------------------------------------------------------------------ *

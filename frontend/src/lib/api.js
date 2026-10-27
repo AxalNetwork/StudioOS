@@ -106,6 +106,7 @@ export * from './api/licenceFeeInvoices.js';
 export * from './api/licencePrograms.js';
 export * from './api/licenceRequests.js';
 export * from './api/licenceTerms.js';
+export * from './api/lovable.js';
 export * from './api/lovableAppLinks.js';
 export * from './api/mcpOauth.js';
 export * from './api/memberCredits.js';

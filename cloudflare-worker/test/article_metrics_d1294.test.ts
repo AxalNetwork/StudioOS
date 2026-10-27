@@ -17,7 +17,7 @@ import { Hono } from 'hono';
 import adminRouter from '../src/routes/admin_articles.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import articles from '../src/routes/articles.ts';
-import { NOT_RECORDED_YET, countDailyView, median, rangeOf, viewDay, weekOf } from '../src/services/articleMetrics.ts';
+import { NOT_RECORDED_YET, countDailyView, median, perDaySincePublish, rangeOf, viewDay, weekOf } from '../src/services/articleMetrics.ts';
 import { SUBMISSIONS_PER_WEEK } from '../src/services/newsSchema.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { splitStatements } from './_baseline.mjs';
@@ -214,7 +214,8 @@ test('performance before any daily row says Not recorded, never 0; decisions per
   assert.deepEqual(r.body.weeks.map((w: any) => w.week), ['2026-10-05', '2026-10-12']);
   assert.ok(r.body.weeks.every((w: any) => w.views === null), 'no daily row: null, never 0');
   assert.equal(r.body.views_by_sector, null);
-  assert.equal(r.body.top_articles, null);
+  // D1332: the top articles rank by views all time, so they need no daily row.
+  assert.ok(Array.isArray(r.body.top_articles), 'an array even before the first daily row');
   assert.deepEqual(r.body.weeks.map((w: any) => [w.published, w.approved, w.rejected, w.changes_requested, w.submitted]), [[1, 2, 0, 0, 0], [0, 0, 2, 1, 1]]);
   assert.equal(r.body.decisions.median_hours_to_decision, 36, 'median of 24 h and 48 h');
   assert.equal(r.body.decisions.timed, 2);
@@ -232,9 +233,27 @@ test('performance after daily rows: views by week from the first counted day, a 
   assert.match(r.body.views_reason, /counted from 2026-10-14/);
   assert.deepEqual(r.body.weeks.map((w: any) => [w.week, w.views, w.views_partial]), [['2026-10-05', null, false], ['2026-10-12', 5, true], ['2026-10-19', 9, false]]);
   assert.deepEqual(r.body.views_by_sector, [{ sector: 'B2B software', views: 12 }, { sector: 'No sector', views: 2 }]);
-  assert.deepEqual(r.body.top_articles.map((t: any) => [t.id, t.views, t.author_name]), [[a, 12, 'Ann'], [b, 2, 'Ben']]);
+  // D1332: ranked by views all time (both 0 here), then the newer publish first; the range's daily rows do not rank them.
+  assert.deepEqual(r.body.top_articles.map((t: any) => [t.id, t.views_all_time, t.author_name]), [[b, 0, 'Ben'], [a, 0, 'Ann']]);
   const quiet = await call(db, '/performance?from=2026-10-26&to=2026-11-01');
   assert.deepEqual(quiet.body.weeks.map((w: any) => w.views), [0], 'after the first counted day, a week with no read is a real 0');
+});
+
+test('D1332: the top articles are every published article by views all time, with views per day since publish', async () => {
+  const db = freshDb();
+  const old = article(db, ANN, 'published', { views: 900, published_at: '2026-01-01T09:00:00Z' });
+  const fresh = article(db, BEN, 'published', { views: 40, published_at: '2026-10-20T09:00:00Z' });
+  article(db, ANN, 'approved', { views: 5000 });
+  const put = db.prepare('INSERT INTO article_daily_views (article_id, day, views) VALUES (?, ?, ?)');
+  put.run(fresh, '2026-10-21', 40);
+  const r = await call(db, '/performance?from=2026-10-19&to=2026-10-25');
+  assert.deepEqual(r.body.top_articles.map((t: any) => [t.id, t.views_all_time]), [[old, 900], [fresh, 40]], 'all time, not the range; an unpublished article is left out');
+  assert.equal(r.body.top_articles_of, 2);
+  assert.ok(r.body.top_articles.every((t: any) => typeof t.views_per_day === 'number'));
+  assert.equal(perDaySincePublish(900, '2026-01-01T09:00:00Z', new Date('2026-01-31T09:00:00Z')), 30);
+  assert.equal(perDaySincePublish(40, '2026-10-20 09:00:00', new Date('2026-10-20T18:00:00Z')), 40, 'the first day counts as one');
+  assert.equal(perDaySincePublish(10, '2026-10-01T00:00:00Z', new Date('2026-10-04T00:00:00Z')), 3.3);
+  assert.equal(perDaySincePublish(10, null), null, 'no publish date: no rate');
 });
 
 test('performance refuses a range it cannot read, in words', async () => {

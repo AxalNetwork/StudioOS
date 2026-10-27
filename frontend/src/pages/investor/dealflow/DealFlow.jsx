@@ -4,8 +4,13 @@
  * the firm's own stages (DLS1) with drag, Move to and Undo; the table's scope
  * columns, Fit, sticky columns and sort (DLS2); the popovers, the Filters
  * drawer and saved views (DLS3–DLS5); the states (DLS13–DLS16) and the phone
- * (DLS18). Its reads are `flowModel.js`'s; New for you and Compare stay as
- * D1236 drew them until part 5 (#3254).
+ * (DLS18). Its reads are `flowModel.js`'s.
+ *
+ * D1241 (#3254): New for you (DLS6, `NewForYou.jsx`), the peek (DLS7,
+ * `PeekDrawer.jsx`), Compare (DLS8–DLS9, `Compare.jsx`) and the stage-move
+ * dialogs (DLS10, `StageDialogs.jsx`): a move back and a move to Commit open a
+ * dialog, a move forward leaves an Undo toast, and Passed is reached only by
+ * the pass with its reason.
  *
  * D1257 (#3280): the table's Scorecard column (`FlowTable`) draws each
  * venture's scope strip from `POST /api/venture-scores/batch` (SC6): a locked
@@ -24,8 +29,8 @@ import { Unreadable, Unrecorded, usePhoneWidth } from '../../../ui';
 import { DealStrip, StripKey } from '../../../components/scoring/scorecard/Scorecard';
 import WeightingControl from '../../../components/scoring/scorecard/Weighting';
 import {
-  MAX_COMPARE, NOT_YET, SCOPES, SCOPE_SWITCH, WAITS,
-  compareHref, dealRow, inviteRow, opensDeal, viewHref,
+  MAX_COMPARE, SCOPES, SCOPE_SWITCH,
+  compareHref, opensDeal, viewHref,
 } from './dealFlowModel';
 import {
   DEFAULT_COLUMNS, STAGE_WORD, emptyFilters, filterCount, fitOf, flowRows, namesSettings, passes, pickToggle, scoresOf, settingsHref, settingsOf,
@@ -36,18 +41,15 @@ import { FlowTable, PhoneCards } from './FlowTable';
 import {
   AddToFlowDialog, CardScopesPopover, ColumnsPopover, DeleteViewDialog, FilterChips, FiltersDrawer, SaveViewDialog, SortPopover, TOOL, ViewsMenu,
 } from './FlowControls';
+import NewForYou from './NewForYou';
+import PeekDrawer from './PeekDrawer';
+import { CommitDialog, MoveBackDialog, PassDialog } from './StageDialogs';
+import { moveKind } from './movesModel';
+
+export { CompareView, DealCompare } from './Compare';
 
 const box = 'flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 const pill = (on) => `rounded-full px-3 py-1 text-[13px] font-semibold ${on ? 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`;
-
-export function DealFlowWait({ id }) {
-  return (
-    <div className="flex flex-col gap-1" data-testid={`dealflow-wait-${id}`}>
-      <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
-      <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400">{WAITS[id]}</p>
-    </div>
-  );
-}
 
 const money = (n, currency) => {
   if (n == null) return <Unrecorded reason="No ask is recorded on this round." />;
@@ -117,28 +119,6 @@ export function DealsTableView({ rows, scope, picked = [], onPick, strips = null
           <button type="button" className="text-[13px] underline" onClick={() => picked.forEach((id) => onPick?.(id))}>Clear</button>
         </div>
       )}
-    </section>
-  );
-}
-
-/** DLS6 from invitations already read; the other ways in wait. */
-export function InvitesView({ rows }) {
-  return (
-    <section className={box} data-testid="dealflow-new">
-      <h2 className="m-0 text-[15px] font-bold">Invited by the studio</h2>
-      {rows.length === 0
-        ? <p className="m-0 text-sm">No invitation is waiting for you.</p>
-        : (
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {rows.map((r) => (
-              <li key={`${r.id}-${r.at}`} className="flex flex-col" data-testid={`dealflow-invite-${r.id}`}>
-                <Link to={`/deals/${r.id}`} className="font-semibold underline">{r.name}</Link>
-                {r.message && <span className="text-[12.5px] text-axal-muted">“{r.message}”</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      <DealFlowWait id="entered" />
     </section>
   );
 }
@@ -222,7 +202,6 @@ export default function DealFlow({ view, scope, board }) {
   const lists = scope !== 'new';
   const [flow, retryFlow] = useRead(() => (lists ? dealFlowApi.flow() : Promise.resolve(null)), [lists]);
   const [deals, retryDeals] = useRead(() => (lists ? api.listDeals() : Promise.resolve([])), [lists]);
-  const [invites, retryInvites] = useRead(() => (scope === 'new' ? api.myDealInvitations() : Promise.resolve([])), [scope]);
   const [views, retryViews] = useRead(() => dealViewsApi.list(), []);
   const [weights] = useRead(() => ventureScoresApi.weights(), []);
   const [entries, setEntries] = useState(null);
@@ -253,18 +232,35 @@ export default function DealFlow({ view, scope, board }) {
 
   const replaceEntry = (row) => setEntries((xs) => (xs || []).map((x) => (String(x.deal_id) === String(row.deal_id) ? row : x)));
   /** A move: the stage is the Worker's once it answers; the page says what moved, with Undo. */
-  const move = async (row, stage, undo = false) => {
+  const doMove = async (row, stage, undo = false) => {
     if (busy) return;
     const from = row.stage;
     setBusy(true);
     try {
       replaceEntry(await dealFlowApi.update(row.id, { stage }));
-      setToast({ kind: 'moved', text: `${undo ? 'Moved back' : 'Moved'} ${row.name} to ${STAGE_WORD[stage]}.`, undo: !undo && from !== 'passed' ? () => move({ ...row, stage }, from, true) : null });
+      setToast({ kind: 'moved', text: `${undo ? 'Moved back' : 'Moved'} ${row.name} to ${STAGE_WORD[stage]}.`, undo: !undo && from !== 'passed' ? () => doMove({ ...row, stage }, from, true) : null });
     } catch (e) {
       reportError('DealFlow:move', e);
       setToast({ kind: 'refused', text: e?.message || `${row.name} could not be moved. Nothing changed.` });
     } finally { setBusy(false); }
   };
+  /** DLS10: a move back or to Commit is said first; Passed only by the pass; Closing is the Worker's to refuse without a commitment. */
+  const move = (row, stage) => {
+    const kind = moveKind(row.stage, stage);
+    if (kind === 'pass') setDialog({ kind: 'pass', row });
+    else if (kind === 'back') setDialog({ kind: 'back', row, to: stage });
+    else if (kind === 'commit') setDialog({ kind: 'commit', row });
+    else doMove(row, stage);
+  };
+  /** A dialog's move: it throws so the dialog keeps its own refusal. */
+  const confirmMove = async (row, stage) => {
+    const next = await dealFlowApi.update(row.id, { stage });
+    replaceEntry(next);
+    setDialog(null);
+    setToast({ kind: 'moved', text: `Moved ${row.name} to ${STAGE_WORD[next?.stage || stage]}.` });
+  };
+  const peekRow = dialog?.kind === 'peek' ? rows.find((r) => r.id === dialog.id) || null : null;
+  const saveNote = async (row, note) => { replaceEntry(await dealFlowApi.update(row.id, { note })); };
 
   const controls = lists && (
     <div className="flex flex-col gap-2" data-testid="dealflow-controls">
@@ -287,9 +283,7 @@ export default function DealFlow({ view, scope, board }) {
 
   let body;
   if (scope === 'new') {
-    body = invites.kind === 'loading' ? null
-      : invites.kind === 'unreadable' ? <section className={box}><Unreadable what="Your invitations" claim="That is not the same as having none." onRetry={retryInvites} /></section>
-        : <InvitesView rows={(Array.isArray(invites.data) ? invites.data : []).filter((i) => i.status === 'pending').map(inviteRow)} />;
+    body = <NewForYou onToast={(text) => setToast({ kind: 'moved', text })} />;
   } else if (flow.kind === 'loading' || deals.kind === 'loading' || (entries == null && flow.kind === 'ok')) {
     body = view === 'board' ? <FlowBoardLoading /> : <section className={box} aria-busy="true" data-testid="dealflow-table-loading"><p className="m-0 text-[13px] text-axal-muted">Reading…</p></section>;
   } else if (flow.kind === 'unreadable' || (scope === 'all' && deals.kind === 'unreadable')) {
@@ -319,12 +313,12 @@ export default function DealFlow({ view, scope, board }) {
         {scoresFailed}
         {unshared && <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="dealflow-not-shared-line">Scores and fit show on deals you are invited to or have committed on; the other rounds read Not shared.</p>}
         {nothing || (view === 'board'
-          ? (phone ? <PhoneBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} />
-            : <FlowBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} />)
-          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} />
+          ? (phone ? <PhoneBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
+            : <FlowBoard rows={shown.filter((r) => r.inFlow)} cards={settings.cards} picked={picked} onPick={pick} onMove={move} busy={busy} showPassed={settings.filters.stage.includes('passed')} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />)
+          : (phone ? <PhoneCards rows={shown} cards={settings.cards} picked={picked} onPick={pick} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />
             : <FlowTable rows={shown} columns={settings.columns} sort={settings.sort} onSort={(sort) => setSettings({ sort })} filters={settings.filters}
               onMin={(key, min) => setSettings({ filters: { ...settings.filters, min: { ...settings.filters.min, [key]: min } } })}
-              picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} words={words} onWords={setWords} />))}
+              picked={picked} onPick={pick} onAdd={(row) => setDialog({ kind: 'add', row })} page={page} onPage={setPage} words={words} onWords={setWords} onPeek={(r) => setDialog({ kind: 'peek', id: r.id })} />))}
         {view === 'board' && scope === 'all' && <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400">The board holds the rounds in your deal flow. Rounds not on it are in the Table, each with Add to my deal flow.</p>}
       </>
     );
@@ -365,6 +359,15 @@ export default function DealFlow({ view, scope, board }) {
       {dialog?.kind === 'delete' && (
         <DeleteViewDialog view={dialog.view} onClose={() => setDialog(null)} onDeleted={() => { setDialog(null); retryViews(); if (viewUid === dialog.view.uid) navigate(settingsHref({ view, scope, settings }), { replace: true }); }} />
       )}
+      {peekRow && (
+        <PeekDrawer row={peekRow} picked={picked} busy={busy} onClose={() => setDialog(null)} onMove={move} onPass={(r) => setDialog({ kind: 'pass', row: r })} onPick={pick} onSaveNote={saveNote} />
+      )}
+      {dialog?.kind === 'pass' && (
+        <PassDialog row={dialog.row} invited={dialog.row.enteredVia === 'invited'} onClose={() => setDialog(null)}
+          onPassed={(next) => { replaceEntry(next); setDialog(null); setToast({ kind: 'moved', text: `You passed on ${dialog.row.name}. The round stays open for other investors.` }); }} />
+      )}
+      {dialog?.kind === 'back' && <MoveBackDialog row={dialog.row} to={dialog.to} onClose={() => setDialog(null)} onMove={() => confirmMove(dialog.row, dialog.to)} />}
+      {dialog?.kind === 'commit' && <CommitDialog row={dialog.row} onClose={() => setDialog(null)} onMove={() => confirmMove(dialog.row, 'commit')} />}
       {dialog?.kind === 'add' && (
         <AddToFlowDialog row={dialog.row} onClose={() => setDialog(null)}
           onAdded={(row) => { setDialog(null); setEntries((xs) => [row, ...(xs || [])]); setToast({ kind: 'moved', text: `Added ${dialog.row.name} to your deal flow at ${STAGE_WORD[row.stage] || 'its stage'}.` }); }} />
@@ -373,38 +376,3 @@ export default function DealFlow({ view, scope, board }) {
   );
 }
 
-/** DLS8 from the picks already read: each venture, then the chart's wait. */
-export function CompareView({ picks, missing = 0 }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="dealflow-compare-page">
-      <Link to="/deals?view=table" className="w-fit text-[13px] font-semibold text-violet-700 underline dark:text-violet-300">‹ Deal flow</Link>
-      <h2 className="m-0 text-[20px] font-extrabold">Compare · {picks.length} ventures</h2>
-      {picks.length < 2
-        ? <section className={box} data-testid="dealflow-compare-few"><p className="m-0 text-sm">Pick at least two ventures to compare, from the table.</p></section>
-        : (
-          <section className={box}>
-            <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 sm:grid-cols-2 lg:grid-cols-4">
-              {picks.map((r) => (
-                <li key={r.id} className="rounded-lg border border-axal-hairline p-3" data-testid={`dealflow-compare-${r.id}`}>
-                  <span className="font-semibold">{r.name}</span>
-                  <span className="block text-[12px] text-axal-muted">{r.round} · {money(r.ask, r.currency)}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-      {missing > 0 && <p className="m-0 text-[13px] text-axal-muted" data-testid="dealflow-compare-missing">{missing} of the picked ventures are not on your list.</p>}
-      <section className={box}><DealFlowWait id="compare" /></section>
-    </div>
-  );
-}
-
-/** /deals/compare: reads the list once and keeps the picked ids that are on it. */
-export function DealCompare({ ids }) {
-  const [deals, retry] = useRead(() => api.listDeals(undefined, 'mine'), []);
-  if (deals.kind === 'loading') return null;
-  if (deals.kind === 'unreadable') return <section className={box}><Unreadable what="The ventures to compare" claim="That is not the same as having none." onRetry={retry} /></section>;
-  const rows = (Array.isArray(deals.data) ? deals.data : []).map(dealRow);
-  const picks = ids.map((id) => rows.find((r) => r.id === id)).filter(Boolean);
-  return <CompareView picks={picks} missing={ids.length - picks.length} />;
-}

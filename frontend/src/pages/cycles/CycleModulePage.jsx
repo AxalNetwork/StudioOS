@@ -6,6 +6,7 @@ import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
 import { cardView, cellView, cycleOf, isPlainClick, pageButtons, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
+import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 
 /**
  * D661 (#1474) — one module page for all 26 modules, drawn to
@@ -62,7 +63,7 @@ export function Cell({ cell, first = false, linkState = undefined, plain = false
  * passes its `state` on, so an Add's `/new` address carries `state.under`
  * and closing it can go back to the page that opened it (D695).
  */
-export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref }) {
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null }) {
   const [text, setText] = useState(query.q || '');
   const cols = Array.isArray(records?.cols) ? records.cols : [];
   const rows = Array.isArray(records?.rows) ? records.rows : [];
@@ -87,7 +88,9 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
             return addBtn?.text && (addBtn.onClick
               ? <button key={addBtn.text} type="button" onClick={addBtn.onClick} className={className}>{addBtn.text}</button>
               : addHref ? <Link key={addBtn.text} to={addHref} state={addBtn.state} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
-          })}</div>
+          })}
+          {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
+          {lovable && <BuildInLovable lovable={lovable} />}</div>
         </div>
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}
@@ -175,7 +178,7 @@ function RowAction({ action }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -227,6 +230,7 @@ export default function CycleModulePage({
             onQuery={onQuery}
             onRetry={onRetryRecords || onRetry}
             add={add}
+            lovable={lovable}
             rowAction={rowAction}
             rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
           />

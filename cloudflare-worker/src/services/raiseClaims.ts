@@ -229,9 +229,12 @@ async function surface(name: ClaimSurface, run: () => Promise<{ version: string 
   catch { return { surface: name, version: null, state: 'unreadable', claims: [] }; }
 }
 
-/** The newest narrative version's figures, one claim per field and figure. */
-const narrative = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<string, string>) => surface('narrative', async () => {
-  const latest = await env.DB.prepare('SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0')
+/**
+ * A narrative version's figures, one claim per field and figure (D1264). With
+ * no version, the newest saved one; D912's check passes the version asked about.
+ */
+export const narrative = (env: Env, projectId: number, items: PinnedItem[], kinds: Map<string, string>, asked?: number | null) => surface('narrative', async () => {
+  const latest = asked != null ? { v: asked } : await env.DB.prepare('SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0')
     .bind(projectId).first<{ v: number | null }>();
   if (latest?.v == null) return { version: null, claims: [] };
   const version = `v${latest.v}`;
@@ -390,7 +393,17 @@ export async function checkDeckVersion(env: Env, projectId: number, row: DeckRow
   return writeSurfaces(env, projectId, [await deck(env, projectId, items, kinds, row)], now);
 }
 
-/** Writes what changed for the surfaces given; the one writer both checks share. */
+/**
+ * D912 (#2696): one narrative version, checked and written as the Evidence
+ * read checks the newest. Other surfaces and other versions are untouched.
+ */
+export async function checkNarrativeVersion(env: Env, projectId: number, version: number, now = new Date().toISOString()): Promise<ClaimCheck> {
+  const items = await pinnedItems(env, projectId);
+  const kinds = await signalKinds(env, projectId, items);
+  return writeSurfaces(env, projectId, [await narrative(env, projectId, items, kinds, version)], now);
+}
+
+/** Writes what changed for the surfaces given; the one writer the checks share. */
 export async function writeSurfaces(env: Env, projectId: number, surfaces: Surface[], now = new Date().toISOString()): Promise<ClaimCheck> {
   const read = surfaces.filter((s) => s.state === 'recorded');
   const computed = read.flatMap((s) => s.claims).slice(0, MAX_WRITES);

@@ -7,6 +7,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 
 | File | What it holds |
 | --- | --- |
+| `lovable/` | D1082 (#2947): Build in Lovable's dialog, button and model, mounted on an experiment row and beside Add must-have. See its README. |
 | `FromGoogle.jsx` | D1091 (#2956, D1314 §3: GW3's frame, GW7's states): the one From Google section a module mounts for its chosen Google file. It reads the file itself; the feed hands it the rows, columns, `deleted`, `partly`, `onSync` and `onDeleteRow`. Loading, Empty (Choose from Google Drive), Unreadable (rows kept, Choose again), Partly synced (Sync again), and Delete's in-page dialog. Parts 3–6 (#2957–#2960) mount it |
 | `ValidateFromGoogle.jsx` | D1092 (#2957): From Google on Validate's three modules, from `parts.from_google`: the shared section's rows on Customer research (interview notes) and Demand and urgency signals (signals To confirm), Choose the interview for an unmapped Doc, GW5's Map a question with a preview that stores nothing, and Experiments' confirmed signals offered as evidence with the hypothesis picker and Dismiss; `team_only`, `not_connected` and `unreadable` for this part only |
 | `MapColumnsDialog.jsx` | D1091 (#2956, D1314 §3: GW4): Map columns, used by both Sheet feeds (#2958, #2960): the Sheet's preview, a field or Don’t use per column, a date or number field checked against the preview's rows with the rows named, and the mapping saved as a draft ; `encode` and `decode` (D1093 part two) let a feed save its Worker's own shape |

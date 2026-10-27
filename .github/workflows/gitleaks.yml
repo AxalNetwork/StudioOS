@@ -20,7 +20,9 @@ jobs:
   scan:
     name: scan
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Full history of every branch. Five minutes cancelled a slow fetch
+    # before gitleaks ran, and the check then reads as a failed secret scan.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
