@@ -166,7 +166,7 @@ export const DOORS = {
       { t: 'Cadence and KPIs', route: '/build/cadence' },
       { t: 'Pitch deck builder', route: '/raise/pitch' },
       { t: 'Cap table', route: '/raise/cap-table' },
-      { t: 'Investor match', route: '/raise/capital-match' },
+      { t: 'Investor match', route: '/raise/capital-relationships/match' },
       { t: 'Data room', route: '/raise/data-room' },
       { t: 'Legal and 83(b)', route: '/raise/legal' },
       { t: 'Talent', route: '/grow/talent' },

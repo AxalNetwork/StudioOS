@@ -24,7 +24,7 @@ import { needsCount } from '../lib/licencePage';
  * from getSidebarGroups() in sidebarConfig.js, keyed by the active role.
  *
  * Note the render order, which is the app's universal chrome and is deliberate:
- * CompanySwitcher → search filter → role groups → Company Settings. The search
+ * CompanySwitcher → search filter → role groups → Companies and projects (D1140). The search
  * here is a client-side filter over already-rendered nav labels; it is NOT the
  * global Vectorize-backed /search.
  */
@@ -301,21 +301,22 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
       })}
     </nav>
     <div className="flex-none border-t border-gray-200 dark:border-gray-700">
+      {/* D1140 (#3020, CMP19a): the last row is Companies and projects; Company Settings moved under it. */}
       <NavLink
-        to="/company-settings"
+        to="/account/companies"
         onClick={onNavigate}
         className={({ isActive }) =>
           collapsed
             ? `flex flex-col items-center gap-0.5 px-1 py-2.5 text-[10px] w-full transition-colors ${isActive ? partnerAccent ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
             : `flex items-center gap-3 px-5 py-2.5 text-sm w-full transition-colors ${isActive ? partnerAccent ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
         }
-        title={collapsed ? 'Company Settings' : undefined}
+        title={collapsed ? 'Companies and projects' : undefined}
       >
         <Building2 size={collapsed ? 18 : 16} />
         {collapsed ? (
           <span className="truncate w-full text-center">Co.</span>
         ) : (
-          <span className="truncate">Company Settings</span>
+          <span className="truncate">Companies and projects</span>
         )}
       </NavLink>
     </div>

@@ -109,7 +109,8 @@ test('the wiring: the three routes, the deal tab, the deal flow column, HQ’s s
   const deal = read('frontend/src/pages/DealRoomPage.jsx');
   assert.ok(deal.includes("{tab === 'scorecard' && <VentureScorecard />}"));
   assert.ok(!deal.includes("['scorecard', 'evidence'"), 'the scorecard tab is no longer a wait card');
-  assert.ok(read('frontend/src/pages/investor/dealflow/DealFlow.jsx').includes('<td><ScopeStrip /></td>'));
+  // D1240 (#3253): Deal flow's Scorecard column draws the strip from SCORING's batch.
+  assert.ok(read('frontend/src/pages/investor/dealflow/FlowTable.jsx').includes('<ScopeStrip scopes={stripScopes(row.scores)} />'));
   assert.ok(read('frontend/src/lib/hqStrips.js').includes("['Scoring', '/admin/platform/scoring']"));
   assert.ok(app.includes('<StripLink to="/admin/platform/scoring">Scoring</StripLink>'), 'HQ’s Platform strip in the shell holds the door');
   for (const f of ['Venture Scorecard Page.dc.html', 'Venture scorecard · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);

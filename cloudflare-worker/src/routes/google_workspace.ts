@@ -22,7 +22,8 @@ const fileView = (row: any) => ({ uid: row.uid, project_id: row.project_id, modu
   mime_type: row.mime_type, mapping: row.mapping_json ? JSON.parse(row.mapping_json) : null, modified_time: row.modified_time,
   last_synced_at: row.last_synced_at, status: row.status, last_error: row.last_error });
 const idOf = (v: unknown) => { const n = Number(v); if (!Number.isSafeInteger(n) || n <= 0) throw new WorkspaceError('invalid_project', 400); return n; };
-async function member(c: any) {
+/** The signed-in member, never a support session. D1092's Validate routes reuse it. */
+export async function member(c: any) {
   const user = await requireAuth(c);
   if ((await selectJwt(c))?.payload.impersonated_by) throw new WorkspaceError('support_session_refused', 403);
   return user;
@@ -35,7 +36,8 @@ async function venture(c: any, user: any, project: unknown) {
   if (!row?.company_id) throw new WorkspaceError('company_not_enabled', 409);
   return row as { id: number; company_id: number };
 }
-async function context(c: any, user: any, project: unknown) {
+/** The venture and the member's enabled Workspace connection for it. D1092's Validate routes reuse it. */
+export async function context(c: any, user: any, project: unknown) {
   const p = await venture(c, user, project);
   const row = await c.env.DB.prepare("SELECT id,uid FROM integrations WHERE user_id = ? AND provider_key = 'google_workspace' AND status = 'active'").bind(user.id).first();
   if (!row || !await projectEnabled(c.env, row.id, p.id)) throw new WorkspaceError('company_not_enabled', 409);
@@ -109,7 +111,8 @@ async function picked(c: any, user: any) {
 }
 workspace.put('/files/:uid/mapping', safe(async (c, user) => {
   const row = await picked(c, user);
-  if (!['sheet','form'].includes(row.kind)) throw new WorkspaceError('mapping_not_supported', 400);
+  // D1092: a Customer research Doc maps to the interview whose session its notes become.
+  if (!['sheet','form'].includes(row.kind) && !(row.kind === 'doc' && row.module === 'customer_research')) throw new WorkspaceError('mapping_not_supported', 400);
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body.mapping !== 'object' || body.mapping === null || Array.isArray(body.mapping) || JSON.stringify(body.mapping).length > 10000) throw new WorkspaceError('invalid_mapping', 400);
   // This stores a draft mapping only. Each feed validates its allowed fields before syncing.

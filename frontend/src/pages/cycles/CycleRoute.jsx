@@ -35,14 +35,9 @@ import PhoneCycleRoot from './PhoneCycleRoot';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
-import ToolsHistory from './ToolsHistory';
-import SolutionDesignFromCode from './SolutionDesignFromCode';
-import FoundingTeamFromCode from './FoundingTeamFromCode';
-import CompanyFromCode from './CompanyFromCode';
 import GrowFromMercury from './GrowFromMercury';
 import MercuryRaiseFeed from './MercuryRaiseFeed';
-import RoadmapFromGithub from './RoadmapFromGithub';
-import MvpFromGithub from './MvpFromGithub';
+import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
 import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
@@ -214,7 +209,8 @@ const CYCLE_DEFS = {
       // D1029: the Cap table module page is the tool, so it has no door to itself.
       // D1173 (#2455): the venture travels with the link (broken item 8).
       'use-of-funds': (q) => ({ label: 'Open the forecast', href: forecastHref(q) }),
-      'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
+      // D1194 (#3128): the old pipeline retired into the tool; its door opens the Pipeline tab with the venture.
+      'capital-relationships': (q) => ({ label: 'Open the investor pipeline', href: `/raise/capital-relationships/pipeline${q || ''}` }),
       // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
     }),
     add: toFnMap({}),
@@ -345,19 +341,10 @@ const CYCLE_DEFS = {
     path: 'connect',
     Mount: BuildMount,
     action: (q, open) => ({ label: 'Connect a tool', href: `/build/connect${q}`, onOpen: open }),
-    // D686 §5.4: Operating systems' Tools history, anchored at #tools.
-    // D782 (#2114): Solution design's From GitHub (Built with, proposals, notes), anchored at #from-github.
-    parts: toFnMap({
-      'solution-design': (data, ctx) => <SolutionDesignFromCode part={data?.parts?.from_code} projectId={ctx.projectId} reload={ctx.reload} />,
-      // D782 (#2112): Prototype / MVP's pull request states and release checks, anchored at #from-github.
-      'prototype-mvp': (data) => <MvpFromGithub github={data?.parts?.github} />,
-      // D782 (#2111): Product roadmap's milestones and releases from GitHub, anchored at #from-github.
-      'product-roadmap': (data) => <RoadmapFromGithub github={data?.parts?.github} />,
-      'operating-systems': (data) => <ToolsHistory tools={data?.parts?.tools} />,
-      // D782 (#2115): who builds (the founder matches each login) and where the code sits, anchored at #from-github.
-      'founding-team': (data, ctx) => <FoundingTeamFromCode part={data?.parts?.github} projectId={ctx.projectId} reload={ctx.reload} />,
-      'company-creation': (data, ctx) => <CompanyFromCode part={data?.parts?.github} projectId={ctx.projectId} reload={ctx.reload} />,
-    }),
+    // D1311 (#2398, #2408): each module's connector parts, in the canvases'
+    // order, one line per connector (buildParts.jsx). GitHub's are D782's;
+    // Vercel's and Lovable's lines wait there for their tasks.
+    parts: toFnMap(buildPartsMap()),
     tools: toFnMap({
       'product-roadmap': (q) => ({ label: 'Open the roadmap: Now, Next and Later', href: `/build/roadmap${q}` }),
       'founding-team': (q) => ({ label: 'Open the cap table and vesting', href: `/raise/cap-table${q || ''}` }),
