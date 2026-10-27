@@ -111,6 +111,26 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-27 — Lovable and Vercel in Validate and Build (#2398, #2408)
+
+The owner's three artifacts came from the prompts on #2398 and #2408. Each was
+decoded by `scripts/read-canvas.mjs`:
+- `From Lovable Page.dc.html` (`VzvyBQScibFwCmPhwzqHvd`) is Lovable's page,
+  LV1 to LV8, as variants of one page (`v`); it has no board grid;
+- `From Vercel Page.dc.html` (`QyfJJphpixYJXkkGEsDLVL`) is Vercel's page;
+- `From Vercel · Boards.dc.html` (`LwXtNrAiHcBPt1zsH86xuK`) is the board grid,
+  VC1 to VC7; it imports the page by name.
+
+**Two edits, named.** In both pages, the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. No other value was
+edited. **One gap, not edited:** the export left the Build in Lovable dialog's
+body as the literal `%%DLG%%` and `%%DLGBODY%%`, so LV2 and LV3 draw the
+dialog's frame and buttons only. Its words are #2398 § Screens (D1311 §3).
+
+**Grade: UPGRADE.** The parts go on module pages that are live. S21's
+integration (D1311) gives Build's modules one line per connector part, in the
+canvases' order; the parts are #2947, #2948 (Lovable) and #2962, #2963,
+#2964 (Vercel).
 ## Landed 2026-10-26 — Validate › Record a session › WhatsApp, Telegram, Calls (#2507, #2515, #2525)
 
 The owner's four artifacts came from the prompts on #2507, #2515 and #2525.

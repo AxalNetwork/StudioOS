@@ -462,7 +462,8 @@ test('the Tools history on Operating systems: one row per connection with its Op
   assert.doesNotMatch(none, /tools<\/span>/, 'no count without a company');
   assert.equal(renderToStaticMarkup(h(MemoryRouter, null, h(ToolsHistory, { tools: null }))), '', 'no part, nothing drawn');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /'operating-systems': \(data\) => <ToolsHistory tools=\{data\?\.parts\?\.tools\} \/>/);
+  // D1311: Build's parts live in buildParts.jsx, one line per connector.
+  assert.match(readFileSync('frontend/src/pages/cycles/buildParts.jsx', 'utf8'), /\['tools', \(data\) => <ToolsHistory tools=\{data\?\.parts\?\.tools\} \/>\]/);
   assert.match(route, /loadOptions=\{edit\.loadOptions \? \(\) => edit\.loadOptions\(cyclesWrite, projectId, edit\.idOf\(editing\)\) : null\}/);
 });
 
