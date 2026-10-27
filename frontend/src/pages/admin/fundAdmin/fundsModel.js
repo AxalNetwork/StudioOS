@@ -6,7 +6,10 @@
  * reads "Not recorded", never 20% or 2%; New fund asks for both, so a blank
  * never becomes the store's default.
  */
+import { NOT_RECORDED } from '../../../lib/absence.js';
 import { money } from './fundAdminModel.js';
+
+export { NOT_RECORDED };
 
 export const FUND_REASON_MIN = 10;
 export const FUND_REASON_MAX = 500;
@@ -37,7 +40,6 @@ export const PROVIDERS = Object.freeze([
 ]);
 export const PROVIDER_MAX = 200;
 
-export const NOT_RECORDED = 'Not recorded';
 export const NO_CARRY = 'No carry recorded for this fund.';
 export const NO_FEE = 'No management fee recorded for this fund.';
 export const NO_GP = 'No general partner of record';
