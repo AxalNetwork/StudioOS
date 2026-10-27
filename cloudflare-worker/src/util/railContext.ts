@@ -49,17 +49,25 @@ const BUDGET_REFUSALS: ReadonlySet<string> = new Set(['budget_user_day', 'budget
  * is 422, and a guard that could not check is 503, each in the guard's words; an
  * allowance that could not be read is 503. Null when the model could not be
  * reached (or is not offered): the press keeps the non-AI path it already had.
+ *
+ * D1326 (#3487): `runRefusalView` is the same answer as data, so a streamed
+ * run (`POST /api/ai/rail/run`) says it in its `done` event in the same words.
  */
-export function refuseRun(c: Context<any>, r: { refusal?: string | null; error?: string }): Response | null {
+export function runRefusalView(r: { refusal?: string | null; error?: string }): { status: 402 | 403 | 422 | 503; code: string; message: string } | null {
   const why = r.refusal ?? '';
-  if (why === 'assist_off') return refuseAssistOff(c);
+  if (why === 'assist_off') return { status: 403, code: 'assist_off', message: ASSIST_OFF_MESSAGE };
   // D791: a paused member is refused in the pause's words, 403 like the switch.
-  if (why === 'ai_paused') return refuse(c, 403, { code: why, message: budgetRefusalMessage(why) });
+  if (why === 'ai_paused') return { status: 403, code: why, message: budgetRefusalMessage(why) };
   // D788: the spend limit's words name the member's limit and its reset, which only the run's own message carries.
-  if (BUDGET_REFUSALS.has(why)) return refuse(c, 402, { code: why, message: why === 'spend_limit' && r.error ? r.error : budgetRefusalMessage(why) });
-  if (why === 'guard_blocked' || why === 'guard_blocked_output') return refuse(c, 422, { code: why, message: r.error || 'Eadwyn cannot help with that.' });
-  if (why === 'guard_unavailable' || why === 'misconfigured') return refuse(c, 503, { code: why, message: r.error || 'The AI check could not run. Nothing was charged.' });
+  if (BUDGET_REFUSALS.has(why)) return { status: 402, code: why, message: why === 'spend_limit' && r.error ? r.error : budgetRefusalMessage(why) };
+  if (why === 'guard_blocked' || why === 'guard_blocked_output') return { status: 422, code: why, message: r.error || 'Eadwyn cannot help with that.' };
+  if (why === 'guard_unavailable' || why === 'misconfigured') return { status: 503, code: why, message: r.error || 'The AI check could not run. Nothing was charged.' };
   return null;
+}
+
+export function refuseRun(c: Context<any>, r: { refusal?: string | null; error?: string }): Response | null {
+  const v = runRefusalView(r);
+  return v ? refuse(c, v.status, { code: v.code, message: v.message }) : null;
 }
 
 /**

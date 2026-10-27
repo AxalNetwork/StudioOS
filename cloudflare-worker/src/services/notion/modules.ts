@@ -65,10 +65,12 @@ export const NOTION_MODULES: Readonly<Record<string, NotionModule>> = Object.fre
   data_room: { key: 'data_room', section: 'raise', label: 'Data room', kinds: ['page', 'page_tree'], lands: 'proposal', proposal: 'data_room_snapshot', fields: {} },
   distribution: { key: 'distribution', section: 'grow', label: 'Distribution', kinds: ['database'], lands: 'fact',
     fields: { title: text('Title', true), planned_on: { label: 'Planned on', type: 'date' },
-      status: { label: 'Status', type: 'choice', values: ['idea', 'planned', 'scheduled', 'published', 'dropped'] }, channel: text('Channel') } },
+      status: { label: 'Status', type: 'choice', values: ['idea', 'planned', 'scheduled', 'published', 'dropped'] }, channel: text('Channel'), url: text('Link') } },
   product_improvement: { key: 'product_improvement', section: 'grow', label: 'Product improvement', kinds: ['database'], lands: 'fact',
     fields: { body: text('Feedback', true), theme: text('Theme'), status: { label: 'Status', type: 'choice', values: ['open', 'planned', 'shipped'] },
-      source: { label: 'Source', type: 'choice', values: ['customer', 'investor', 'team'] } },
+      source: { label: 'Source', type: 'choice', values: ['customer', 'investor', 'team'] },
+      // D1090: who gave it, only when the founder maps a column for it.
+      from_name: text('From (name)'), from_email: text('From (email)') },
     defaultSources: ['customer', 'investor', 'team'] },
 } as Record<string, NotionModule>);
 
@@ -132,6 +134,8 @@ export function cleanFieldMap(moduleKey: string, kind: SourceKind, raw: unknown)
     if (!mod.defaultSources?.includes(String(src.default_source))) throw new FieldMapError('invalid_default_source');
     out.default_source = String(src.default_source);
   }
+  // D1090: feedback always says where it came from: a Source column, or the founder's default.
+  if (mod.defaultSources && !out.fields.source && !out.default_source) throw new FieldMapError('source_required', 'source');
   return out;
 }
 
@@ -181,5 +185,7 @@ export function mapRow(moduleKey: string, map: FieldMap, properties: Record<stri
     values[field] = c.value;
   }
   if (mod.defaultSources && values.source == null && map.default_source) values.source = map.default_source;
+  // A row whose Source cell is empty, with no default to fall back on, is not read: never a guessed source.
+  if (mod.defaultSources && values.source == null) return { values: null, skip: { reason: 'empty_required', field: 'source' } };
   return { values, skip: null };
 }

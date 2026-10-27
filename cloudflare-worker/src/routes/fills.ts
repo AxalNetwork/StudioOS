@@ -20,8 +20,20 @@
  *
  * Refusals are codes with fixed sentences; logs carry codes and kinds, never a
  * value.
+ *
+ * D1326 (#3487, part 3) adds the writes, each in the member's own session (a
+ * support session is refused) and on a venture they may write:
+ *
+ *   POST /api/fills/record      { page, form, project, record, proposals: [uid] }
+ *     after the form's own Save: re-reads the row and keeps only fields that
+ *     equal what was proposed; one decision and one provenance row each.
+ *   POST /api/fills/rows/accept { page, form, project, proposals: [uid] }
+ *     Accept all for row proposals: at most 50, each through its form's writer.
+ *   POST /api/fills/:id/undo
+ *     puts back what the fill replaced, only while the field holds the fill.
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { canAccessProject } from '../services/projectAccess';
@@ -29,6 +41,8 @@ import { FILL_FIELDS, fieldsOf, offeredToEadwyn, type FillField } from '../servi
 import { neverFillReason } from '../services/fills/neverFill';
 import { marksForRows, type FillMark } from '../services/fills/provenance';
 import { readSources } from '../services/fills/sources';
+import { acceptRows, fillForUndo, recordKept, undoFill } from '../services/fills/keep';
+import { logActorAct } from '../services/actorLog';
 
 const fills = new Hono<{ Bindings: Env }>();
 
@@ -37,6 +51,14 @@ const SENTENCES: Record<string, string> = {
   invalid_project: 'Choose a venture.',
   project_not_available: 'You cannot read this venture.',
   record_not_found: 'That record is not on this venture.',
+  project_not_writable: 'You cannot change this venture.',
+  support_session_refused: 'A support session cannot keep or undo a fill.',
+  invalid_proposals: 'Name the proposals to keep, at least one.',
+  fill_not_found: 'That fill is not one you can undo.',
+  not_undoable: 'That fill is not one you can undo.',
+  already_undone: 'That fill was already undone.',
+  edited: 'The field has changed since it was filled, so it is yours now. Nothing was undone.',
+  no_prior: 'The field was blank before, and it cannot be left blank, so there is nothing to put back.',
 };
 const refuse = (c: any, status: number, code: string) => c.json({ error: code, detail: SENTENCES[code] }, status);
 
@@ -132,6 +154,67 @@ fills.get('/sheet', async (c) => {
     sources: sources.map((s) => ({ key: s.key, kind: s.kind, label: s.label, state: s.state, as_of: s.as_of })),
     quote,
   });
+});
+
+/** The venture a write names, when the member may write it in their own session; else the refusal. */
+async function writableVenture(c: Context<{ Bindings: Env }>, user: User, raw: unknown): Promise<{ id: number } | Response> {
+  if ((await selectJwt(c))?.payload?.impersonated_by) return refuse(c, 403, 'support_session_refused');
+  const projectId = Number(raw);
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return refuse(c, 400, 'invalid_project');
+  const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .bind(projectId).first<{ id: number; founder_id: number | null; company_id: number | null }>();
+  if (!project || !(await canAccessProject(c.env, user, project, { write: true }))) return refuse(c, 403, 'project_not_writable');
+  return { id: projectId };
+}
+
+const uidsOf = (raw: unknown): string[] | null => {
+  if (!Array.isArray(raw) || !raw.length || raw.length > 200) return null;
+  const out = raw.filter((u) => typeof u === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(u)) as string[];
+  return out.length === raw.length ? out : null;
+};
+
+fills.post('/record', async (c) => {
+  const user = await requireAuth(c) as User;
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  const page = String(body?.page ?? ''), form = String(body?.form ?? '');
+  const fields = fieldsOf(page, form);
+  if (!fields.length) return refuse(c, 404, 'unknown_form');
+  const venture = await writableVenture(c, user, body?.project); if (venture instanceof Response) return venture;
+  const uids = uidsOf(body?.proposals); if (!uids) return refuse(c, 400, 'invalid_proposals');
+  const table = fields[0].table;
+  const recordId = Number(body?.record);
+  if (!Number.isSafeInteger(recordId) || recordId <= 0 || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
+  // The row as the form's own Save left it: the authority on what was kept.
+  const row = await c.env.DB.prepare(ROW_READS[table]).bind(recordId, venture.id).first<Record<string, unknown>>();
+  if (!row) return refuse(c, 404, 'record_not_found');
+  const outcomes = await recordKept(c.env, { userId: Number(user.id), page, form, projectId: venture.id, recordId, row, uids });
+  return c.json({ record: `${table}:${recordId}`, outcomes });
+});
+
+fills.post('/rows/accept', async (c) => {
+  const user = await requireAuth(c) as User;
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  const page = String(body?.page ?? ''), form = String(body?.form ?? '');
+  if (!fieldsOf(page, form).length) return refuse(c, 404, 'unknown_form');
+  const venture = await writableVenture(c, user, body?.project); if (venture instanceof Response) return venture;
+  const uids = uidsOf(body?.proposals); if (!uids) return refuse(c, 400, 'invalid_proposals');
+  return c.json(await acceptRows(c.env, { userId: Number(user.id), page, form, projectId: venture.id, uids }));
+});
+
+fills.post('/:id/undo', async (c) => {
+  const user = await requireAuth(c) as User;
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) return refuse(c, 404, 'fill_not_found');
+  const found = await fillForUndo(c.env, id);
+  // A fill on a venture the member cannot write reads as one that does not exist.
+  if (!found || found.projectId == null) return refuse(c, 404, 'fill_not_found');
+  const venture = await writableVenture(c, user, found.projectId);
+  if (venture instanceof Response) return venture.status === 403 && (await selectJwt(c))?.payload?.impersonated_by ? venture : refuse(c, 404, 'fill_not_found');
+  const r = await undoFill(c.env, Number(user.id), found);
+  if (!r.ok) return refuse(c, r.status, r.code);
+  // Who and when are on the provenance row; the log line carries ids only.
+  await logActorAct(c.env, user, 'fill_undone', { fill_id: id, table: found.fill.target_table, column: found.fill.target_column }, venture.id);
+  return c.json({ ok: true, id, value: r.value });
 });
 
 /** The forms FILL_FIELDS lists, for a test and for the drift check's reader. */

@@ -55,6 +55,8 @@ import HqSupportSessionBar from './components/HqSupportSessionBar';
 import HqViewingAsBar from './components/HqViewingAsBar';
 import BranchNotDeployedBar from './components/BranchNotDeployedBar';
 import CheckoutHost from './components/checkout/CheckoutHost';
+// D1288 (#3371): the one Add tokens host, and the old token addresses' redirect.
+import AddTokensHost, { TokensRedirect } from './components/checkout/AddTokensHost';
 import RenewalBanner from './components/checkout/RenewalBanner';
 // D504 — the phone's tab bar (D425), mounted by the shell beside the drawer's
 // backdrop. It takes the shell role AS RESOLVED, never the sidebar's
@@ -614,6 +616,7 @@ function ProductsRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/pricing/products', search: loc.search, hash: loc.hash }} replace />;
 }
+
 
 
 function DashboardRedirect() {
@@ -3432,7 +3435,7 @@ function AppInner() {
           (ProductsPage draws `SitePage` for them). */}
       {/* D786 (#2211): the catalogue, add-ons, licences and cart moved to
           /pricing/products, unchanged; /plans-and-pricing redirects to /pricing. */}
-      <Route path="/pricing/products" element={user ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />) : <ProductsPage />} />
+      <Route path="/pricing/products" element={<TokensRedirect>{user ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />) : <ProductsPage />}</TokensRedirect>} />
       {/* Product slide-over deep link — same page, pre-opens the detail panel. */}
       <Route path="/pricing/products/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
       <Route path="/plans-and-pricing" element={<PlansAndPricingRedirect />} />
@@ -3441,7 +3444,7 @@ function AppInner() {
       <Route path="/products" element={<ProductsRedirect />} />
       <Route path="/products/:productId" element={<ParamRedirect to="/pricing/products/:productId" />} />
       {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
-      <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
+      <Route path="/checkout" element={<TokensRedirect>{guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)}</TokensRedirect>} />
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
       {/* THE BUCKET ROOT GOES TO THE BUCKET ROUTER, which is what its four zone
           routes below already do. It used to go to `InvestorWorkspacePage`,
@@ -4121,7 +4124,8 @@ function GlobalPaywallMount() {
 function GlobalCheckoutMount() {
   const { user } = useAuth();
   if (!user) return null;
-  return <CheckoutHost user={user} />;
+  // D1288: Add tokens' sheet is the same kind of host, beside it.
+  return <><CheckoutHost user={user} /><AddTokensHost user={user} /></>;
 }
 
 // Founder-only global listener — lazy + gated on auth so a logged-out visitor
