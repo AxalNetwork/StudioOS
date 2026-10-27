@@ -4,7 +4,8 @@ import { Card } from '../../ui';
 import HeldZone from './HeldZone';
 import { Figure, useHeldGlance } from './heldFigures';
 import AdminPageHeader, { HeaderTab } from '../../ui/AdminPageHeader';
-import { ACCOUNTS_LINE, ACCOUNTS_TABS, PROFILE_WIDGETS, widgetCount } from './accountsAddress';
+import { ACCOUNTS_LINE, ACCOUNTS_TABS } from './accountsAddress';
+import AccountsOverview from './accounts/AccountsOverview';
 
 /**
  * Admin · Accounts on HQ-held accounts — S20's row (D286).
@@ -23,34 +24,15 @@ import { ACCOUNTS_LINE, ACCOUNTS_TABS, PROFILE_WIDGETS, widgetCount } from './ac
  * is HQ's", so this links the tab and does not draw the taxonomy), Trash
  * (D283 placed it on Accounts as the console's own header link; the card is
  * the row's door to it), and the Exploring board, also an Approvals lane.
+ *
+ * D1304 (#3401): above them, the Overview as the canvas draws it
+ * (`accounts/AccountsOverview.jsx`, ACC1 and ACC8–ACC11) over D1301's read. It
+ * replaces D1299's totals and per-profile counts from the glance; these four
+ * doors keep the glance, so the page never blanks when the overview fails.
  */
 const OPEN = 'font-semibold text-axal-ink underline underline-offset-2';
 
 const NOT_ON_GLANCE = 'Retagging is per person, and no count of it is on the Studio glance.';
-
-/** D1299: ACC1's totals row, from the same glance; a figure the glance lacks says so. */
-function AccountsTotals({ glance, acc }) {
-  const ready = acc?.kind === 'ready';
-  const v = (x) => (ready ? x : acc?.kind === 'unreadable' ? null : undefined);
-  const tiles = [
-    ['total', 'Active accounts', v(acc?.total)],
-    ['new7d', 'New in 7 days', v(acc?.new7d)],
-    ['new30d', 'New in 30 days', v(acc?.new30d)],
-    ['deactivated', 'Deactivated', v(acc?.deactivated)],
-  ];
-  return (
-    <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="accounts-totals">
-      {tiles.map(([k, label, value]) => (
-        <li key={k}>
-          <Card className="h-full p-4" data-testid={`accounts-total-${k}`}>
-            <h3 className="font-mono text-[10.5px] uppercase tracking-[.07em] text-axal-muted">{label}</h3>
-            <Figure state={glance} value={value} reason={acc?.reason} testId={`accounts-total-${k}-count`} />
-          </Card>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export default function HeldAccounts() {
   // D555: each card shows its number, from the same glance as the Studio overview.
@@ -78,18 +60,8 @@ export default function HeldAccounts() {
         ))}
         data-testid="accounts-header"
       />
-      <AccountsTotals glance={glance} acc={acc} />
-      <h2 className="mt-5 text-[13px] font-extrabold tracking-tight text-axal-ink">By profile</h2>
-      <ul className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="accounts-profile-widgets">
-        {PROFILE_WIDGETS.map((w) => (
-          <li key={w.key}>
-            <Card className="h-full p-4" data-testid={`accounts-widget-${w.key}`}>
-              <h3 className="text-[13px] font-extrabold tracking-tight text-axal-ink">{w.label}</h3>
-              <Figure state={glance} value={w.role ? (ready ? widgetCount(acc.byRole, w.role) : unreadAcc) : undefined} unit="active" reason={w.role ? acc?.reason : w.reason} testId={`accounts-widget-${w.key}-count`} />
-            </Card>
-          </li>
-        ))}
-      </ul>
+      {/* D1304 (#3401): the Overview complete (ACC1, ACC8–ACC11), from D1301's read. */}
+      <AccountsOverview />
       <h2 className="mt-5 text-[13px] font-extrabold tracking-tight text-axal-ink">Also in Accounts</h2>
       <ul className="mt-2 grid gap-3 sm:grid-cols-2" data-testid="held-accounts-cards">
         <li>
