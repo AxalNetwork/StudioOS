@@ -37,7 +37,8 @@ test('the registry row: read-only, founder-facing, project data, the three Read 
   assert.deepEqual([d.auth_type, d.audience_rule, d.supports_pat, d.status], ['oauth2', 'venture', false, 'beta']);
   assert.deepEqual(d.oauth_scopes, [...VERCEL_READ_SCOPES]);
   assert.equal(CONNECTOR_METADATA.vercel.category, 'Hosting');
-  assert.ok(CONNECTOR_METADATA.vercel.permissions.at(-1) === 'Axal VC cannot deploy, cancel, roll back or change anything.');
+  assert.equal(CONNECTOR_METADATA.vercel.permissions.length, VERCEL_READ_SCOPES.length, 'one line per scope');
+  assert.ok(CONNECTOR_METADATA.vercel.permissions.at(-1)!.endsWith('Axal VC cannot deploy, cancel, roll back or change anything.'));
   assert.equal(writesProjectData('vercel'), true, 'a Vercel connection writes into a company\'s projects, so it needs one');
   assert.ok(!CONNECTOR_PAGES.vercel.tools.some((t) => t.access === 'write'), 'no write tool');
 });
