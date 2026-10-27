@@ -28,65 +28,50 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = codeOnlyJsx(adminConsoleSource());
 const API = codeOnlyJsx(read('frontend/src/lib/api.js'));
 
-test('the role tiles count the directory, never the rows on screen', () => {
-  // The exact expression that was wrong, banned by shape rather than by name:
-  // any `users.filter(...).length` is a count of the page.
-  assert.doesNotMatch(PAGE, /users\.filter\([^)]*\)\.length/,
-    'a tile is counting the loaded rows again — that is the page, not the total');
-  assert.doesNotMatch(PAGE, /all:\s*users\.length/,
-    '"All Users" is back to counting the page');
-  // And what replaced it reads the envelope's totals.
-  assert.match(PAGE, /const counts = totals/, 'the tiles no longer read the server totals');
-  assert.match(PAGE, /totals\.by_role/, 'the per-role totals are not read');
+// D1305 (#3402): the tiles, search and table are All accounts' now
+// (`pages/admin/accounts/`), over D1300's read. The same properties hold there.
+const TABLE = codeOnlyJsx(read('frontend/src/pages/admin/accounts/AllAccounts.jsx'));
+const MODEL = codeOnlyJsx(read('frontend/src/pages/admin/accounts/allAccountsModel.js'));
+
+test('the profile chips count the directory, never the rows on screen', () => {
+  assert.doesNotMatch(PAGE, /users\.filter\([^)]*\)\.length/, 'a count is taken from the loaded rows again — that is the page, not the total');
+  for (const src of [TABLE, MODEL]) {
+    assert.doesNotMatch(src, /(?:users|rows)\.filter\([^)]*\)\.length/,
+      'a count is taken from the loaded rows again — that is the page, not the total');
+  }
+  // The chips read the envelope's whole-table totals.
+  assert.match(TABLE, /const byRole = env\?\.by_role \|\| null;/);
+  assert.match(TABLE, /c\.value \? Number\(byRole\[c\.value\] \|\| 0\) : Number\(env\?\.total \|\| 0\)/);
 });
 
-test('a total that has not been read yet is Unrecorded, not zero', () => {
-  // "Not read yet" and "none" are different things, and a zero for the first
-  // is the same lie one beat earlier. `Unrecorded` is the shared primitive.
-  assert.match(PAGE, /count === null \? <Unrecorded \/> : count/,
-    'an unread total renders as a number rather than as a stated absence');
-  // Imported from the shared module, among whatever else the page takes from
-  // it, and never declared here. The second half is the property this message
-  // has always named; the first used to pin the whole import line, which
-  // failed the day the page took a second primitive from the same module
-  // (D236 imports `Unreadable` beside it) while the property still held.
-  assert.match(PAGE, /import \{[^}]*\bUnrecorded\b[^}]*\} from '(?:\.\.\/){3}ui'/,
-    'the honesty primitive must be imported from ../ui');
-  assert.doesNotMatch(PAGE, /\b(?:function|const|let|var|class)\s+Unrecorded\b/,
-    'the honesty primitive must be imported, not re-declared');
+test('a total that has not been read yet is drawn as nothing, not zero', () => {
+  // Until the envelope answers, a chip draws no number at all.
+  assert.match(TABLE, /const n = byRole \? \([^\n]*\) : null;/);
+  assert.match(TABLE, /\{n != null \? <span/);
 });
 
-test('the panel says what the table is showing', () => {
-  // A tile reading 341 above a table of 100 rows would be its own confusion.
-  // The caption is what makes them agree.
-  assert.match(PAGE, /data-testid="admin-user-showing"/);
-  assert.match(PAGE, /Showing the newest \$\{userPage\.showing\} of \$\{counts\.all\} accounts/,
-    'the caption no longer reconciles the tiles with the page');
+test('the table says what it is showing, over the filtered set', () => {
+  // "1–25 of 61": the page's place in D1300's `matched`, never the page's length.
+  assert.match(MODEL, /return `\$\{fmt\(env\.from\)\}–\$\{fmt\(env\.to\)\} of \$\{fmt\(matched\)\}`;/);
+  assert.match(TABLE, /data-testid="accounts-count">\{env \? countLine\(env\) : ''\}/);
 });
 
 test('the search box exists, is bound, and is gated at two characters', () => {
-  assert.match(PAGE, /data-testid="admin-user-search"/, 'the search input is gone');
-  assert.match(PAGE, /value=\{userQuery\}/, 'the input is not bound to its state');
-  assert.match(PAGE, /onChange=\{\(e\) => setUserQuery\(e\.target\.value\)\}/);
-  // The browser gate mirrors the route's own refusal. It is a convenience, not
-  // the control — `admin.ts` returns `query_too_short` regardless — and the
-  // comment in the page says so.
-  assert.match(PAGE, /next\.length >= 2 \? next : ''/,
-    'the box no longer holds back a one-character query, so the route will 400 mid-typing');
-  assert.match(PAGE, /setTimeout\(/, 'the search is not debounced, so every keystroke is a request');
+  assert.match(TABLE, /data-testid="accounts-search"/, 'the search input is gone');
+  assert.match(TABLE, /value=\{query\} onChange=\{\(e\) => setQuery\(e\.target\.value\)\}/);
+  // The browser gate mirrors the route's own refusal (`query_too_short`).
+  assert.match(MODEL, /if \(q\.length >= 2\) out\.q = q;/,
+    'a one-character query is sent, so the route will 400 mid-typing');
+  assert.match(TABLE, /setTimeout\(/, 'the search is not debounced, so every keystroke is a request');
 });
 
 test('the scope caption names what it searches: the territory on a branch, HQ-held accounts off one', () => {
-  // S0 wall rule 2. On a branch the caption names the territory. Off a branch
-  // it said nothing until D286; now it says "HQ-held accounts" (S20's wall
-  // rule 2), because that is what the table reads and "all accounts" would be
-  // the vague caption this test always refused.
   assert.match(PAGE, /const accountScope = branchOfUser\(viewer\)/,
     'the caption is not fed from the branch fact');
   assert.match(PAGE, /Searching \$\{viewer\.branch\.name \|\| viewer\.branch\.code\} accounts/);
   assert.match(PAGE, /: 'Searching HQ-held accounts';/, 'off a branch the caption no longer says HQ-held accounts');
-  assert.match(PAGE, /\{accountScope && \(/, 'the caption element is unconditional');
-  // The same reader the territory badge uses, so the two cannot disagree.
+  assert.match(PAGE, /scopeLine=\{accountScope\}/, 'the caption is not handed to the table');
+  assert.match(TABLE, /\{scopeLine \? <p[^>]*data-testid="accounts-scope">\{scopeLine\}\. Type at least two characters\.<\/p> : null\}/);
   assert.match(PAGE, /import \{ branchOfUser \} from '(?:\.\.\/){3}lib\/shellRole'/);
 });
 
@@ -112,7 +97,7 @@ test('the api method keeps its no-argument form, and the envelope stays opt-in',
   // though it were a whole. That is the stronger assertion, and it is what
   // `hq_team_h9.test.mjs` also guards from the other side.
   const callers = [
-    'frontend/src/pages/admin/consoles/UsersConsole.jsx',
+    'frontend/src/pages/admin/accounts/AllAccounts.jsx',
     'frontend/src/pages/branch/BranchAccounts.jsx',
     'frontend/src/pages/hq/SuperAdminHolders.jsx',
   ];

@@ -13,12 +13,17 @@
  * session on review (see assistantSession.js).
  */
 
-/** The four channel providers, by the key the Worker stores, with the label shown. */
+/**
+ * The channel providers, by the key the Worker stores, with the label shown.
+ * D1092: `google_docs` is a Doc of notes the founder chose on the Google
+ * Workspace page and mapped to the interview.
+ */
 export const CHANNEL_ORIGINS = Object.freeze({
   telegram: 'Telegram',
   whatsapp: 'WhatsApp',
   zoom: 'Zoom',
   google_meet: 'Google Meet',
+  google_docs: 'Google Docs',
 });
 
 /** The provider key when the session came from a channel, otherwise null. */

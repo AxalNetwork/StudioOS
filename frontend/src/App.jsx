@@ -3853,9 +3853,9 @@ function AppInner() {
       <Route path="/raise" element={founderRaiseLanding
         ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)
         : <Navigate to="/raise/capital-relationships/pipeline" replace />} />
-      {/* D686 §3.1 item 14: a founder's call inside the Raise shell; investors and counsel stay on /round-calls/:uid. */}
-      <Route path="/raise/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />
-      {/* D1221 (#2458): one call at its address under Capital relationships › Calls (CLS8); /raise/calls/:uid stays until part 6 counts its redirect. */}
+      {/* D1227 (#3226): the old address of one call forwards, keeping its query, and is counted (REDIRECT_ROUTES) until #2319. */}
+      <Route path="/raise/calls/:uid" element={guard(labRoles(['admin', 'founder']), <ParamRedirect to="/raise/capital-relationships/calls/:uid" />)} />
+      {/* D1221 (#2458): one call at its address under Capital relationships › Calls (CLS8), inside the Raise shell (D686 §3.1 item 14); investors and counsel stay on /round-calls/:uid. */}
       <Route path="/raise/capital-relationships/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />
       {/* D686 §5.1: Call for Capital, the Raise page with its lightbox open; /raise/calls is the history's address. */}
       <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />

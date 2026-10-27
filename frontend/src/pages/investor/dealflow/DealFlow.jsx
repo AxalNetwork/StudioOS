@@ -6,6 +6,11 @@
  * drawer and saved views (DLS3–DLS5); the states (DLS13–DLS16) and the phone
  * (DLS18). Its reads are `flowModel.js`'s; New for you and Compare stay as
  * D1236 drew them until part 5 (#3254).
+ *
+ * D1257 (#3280): the table's Scorecard column (`FlowTable`) draws each
+ * venture's scope strip from `POST /api/venture-scores/batch` (SC6): a locked
+ * scorecard is an outline with no bar. `DealsTableView` keeps the same strip
+ * for a row list that is already read.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -16,10 +21,11 @@ import { ventureScoresApi } from '../../../lib/api/ventureScores.js';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Unreadable, Unrecorded, usePhoneWidth } from '../../../ui';
+import { DealStrip, StripKey } from '../../../components/scoring/scorecard/Scorecard';
 import WeightingControl from '../../../components/scoring/scorecard/Weighting';
 import {
-  NOT_YET, SCOPE_SWITCH, WAITS,
-  compareHref, dealRow, inviteRow, viewHref,
+  MAX_COMPARE, NOT_YET, SCOPES, SCOPE_SWITCH, WAITS,
+  compareHref, dealRow, inviteRow, opensDeal, viewHref,
 } from './dealFlowModel';
 import {
   DEFAULT_COLUMNS, STAGE_WORD, emptyFilters, filterCount, fitOf, flowRows, namesSettings, passes, pickToggle, scoresOf, settingsHref, settingsOf,
@@ -66,6 +72,52 @@ export function DealFlowToolbar({ view, scope, hrefFor = viewHref }) {
       {/* D1258 (#3281): SC7, the caller's weighting for the scorecard sort. */}
       {scope !== 'new' && <WeightingControl />}
     </div>
+  );
+}
+
+/** DLS2 from rows already read, with each row's strip from the batch (`strips`); a row opens its deal only under Mine. */
+export function DealsTableView({ rows, scope, picked = [], onPick, strips = null }) {
+  if (!rows.length) {
+    return <section className={box} data-testid="dealflow-empty"><p className="m-0 text-sm">{scope === 'mine' ? 'Nothing in your deal flow yet. Deals you are invited to or commit on appear here.' : 'No round is listed.'}</p></section>;
+  }
+  return (
+    <section className={box} data-testid="dealflow-table">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-[13px]">
+          <thead>
+            <tr className="text-[11px] uppercase text-gray-500">
+              <th className="py-1"><span className="sr-only">Compare</span></th>
+              <th>Venture</th><th>Round</th><th>Ask</th><th>Scorecard</th><th>Days in stage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-t border-gray-100 dark:border-gray-800" data-testid={`dealflow-row-${r.id}`}>
+                <td className="py-1.5"><input type="checkbox" aria-label={`Compare ${r.name}`} checked={picked.includes(r.id)} disabled={!picked.includes(r.id) && picked.length >= MAX_COMPARE} onChange={() => onPick?.(r.id)} /></td>
+                <td>
+                  {opensDeal(scope) ? <Link to={`/deals/${r.id}`} className="font-semibold underline">{r.name}</Link> : <span className="font-semibold">{r.name}</span>}
+                  {r.sector && <span className="block text-[12px] text-axal-muted">{r.sector}</span>}
+                </td>
+                <td><span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[12px]">{r.round}</span></td>
+                <td>{money(r.ask, r.currency)}</td>
+                <td><DealStrip read={strips} dealId={r.id} /></td>
+                <td>{r.daysInStage == null ? <Unrecorded reason="The stage's start is not recorded." /> : r.daysInStage}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">Scopes, in the scoring order: {SCOPES.join(' · ')}.</p>
+      <StripKey />
+      {strips?.status === 'error' && strips.error?.status !== 403 && <Unreadable what="The scorecards" claim="That is not a score of zero." onRetry={strips.retry} />}
+      {picked.length > 0 && (
+        <div className="flex items-center gap-3" data-testid="dealflow-compare-bar">
+          <span className="text-[13px]">{picked.length} selected</span>
+          {picked.length >= 2 ? <Link to={compareHref(picked)} className="font-semibold underline" data-testid="dealflow-compare">Compare</Link> : <span className="text-[13px] text-axal-muted">Pick at least two to compare.</span>}
+          <button type="button" className="text-[13px] underline" onClick={() => picked.forEach((id) => onPick?.(id))}>Clear</button>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -37,6 +37,7 @@ import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import GrowFromMercury from './GrowFromMercury';
 import MercuryRaiseFeed from './MercuryRaiseFeed';
+import FromLovable from './FromLovable';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -44,7 +45,6 @@ import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
 import { PmfPart } from './PmfPart';
 import { PmfChip } from './PmfMethod';
 import UpdateAskReplies from './UpdateAskReplies';
-import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
 import { FromYourInterviews, InterviewsSection, PainThemesSection, HypothesesSection } from './ValidateSections';
 import { acceptSuggestions } from './validatePhone';
@@ -153,6 +153,12 @@ const CYCLE_DEFS = {
         <RecordView record={record} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
           onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
       )} />,
+      // D1083 (#2948, LV5–LV7): From Lovable under the claim's record, one slot per experiment.
+      experiments: (read, ctx) => <div className="space-y-3">
+        <RecordView record={read} activity={ctx.activity} cycleName={ctx.cycleName} moduleName={ctx.moduleName} onLink={ctx.onLink}
+          onForm={ctx.onForm} onWrite={ctx.onWrite} onClient={ctx.onClient} onShowAll={ctx.onShowAll} />
+        {read?.parts?.lovable && <FromLovable part={read.parts.lovable} cycle="validate" projectId={ctx.projectId} onRetry={ctx.reload} />}
+      </div>,
     }),
   },
   /**
@@ -195,9 +201,9 @@ const CYCLE_DEFS = {
           {mercuryPart('fundraising-readiness', data, ctx)}
         </>
       ),
+      // D1227 (#3226): the Calls history left Overview; Calls for Capital is the Calls tab (D1221).
       'capital-relationships': (data, ctx) => (
         <>
-          <CallsHistory calls={data?.parts?.calls} />
           <RaiseReceiptMatches role={ctx.role} onChanged={ctx.reload} />
           {mercuryPart('capital-relationships', data, ctx)}
         </>

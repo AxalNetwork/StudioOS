@@ -86,6 +86,7 @@ export * from './api/fundReports.js';
 export * from './api/fundStructure.js';
 export * from './api/googleSignIn.js';
 export * from './api/googleWorkspace.js';
+export * from './api/googleWorkspaceBuild.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
@@ -102,6 +103,7 @@ export * from './api/licenceFeeInvoices.js';
 export * from './api/licencePrograms.js';
 export * from './api/licenceRequests.js';
 export * from './api/licenceTerms.js';
+export * from './api/lovableAppLinks.js';
 export * from './api/mcpOauth.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
@@ -111,6 +113,7 @@ export * from './api/narrative.js';
 export * from './api/network.js';
 export * from './api/newDeck.js';
 export * from './api/newsletter.js';
+export * from './api/notion.js';
 export * from './api/partnerDealReads.js';
 export * from './api/partnerDealTypes.js';
 export * from './api/partnerProfiles.js';
@@ -2767,6 +2770,8 @@ export const api = {
   // D383 — the partner interview on an applicant (schedule replaces the live one).
   adminCohortScheduleInterview: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/interview`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortCancelInterview: (applicantId) => request(`/admin/cohort/applications/${applicantId}/interview/cancel`, { method: 'POST' }),
+  // D1123: held or missed, once the interview's time has passed.
+  adminCohortInterviewOutcome: (applicantId, outcome) => request(`/admin/cohort/applications/${applicantId}/interview/outcome`, { method: 'POST', body: JSON.stringify({ outcome }) }),
   adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
   adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),

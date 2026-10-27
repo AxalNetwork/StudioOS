@@ -349,8 +349,17 @@ export function interviewOf(d, now = Date.now(), zone = Intl.DateTimeFormat().re
   if (!iv || iv.status !== 'scheduled') return { state: 'none' };
   const at = parseStamp(iv.scheduled_at);
   const yours = at === null ? null : new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(at));
+  // D1123: what happened is recorded once its time has passed; recorded, it is never moved or cancelled.
+  if (iv.outcome === 'held' || iv.outcome === 'missed') {
+    return {
+      state: 'recorded', outcome: iv.outcome, word: iv.outcome === 'held' ? 'Held' : 'Missed',
+      line: [etTime(at, now), iv.duration_min ? `${iv.duration_min} min` : null, iv.location].filter(Boolean).join(' · '),
+      recorded: iv.outcome_at ? `Recorded ${etTime(parseStamp(iv.outcome_at), now)}` : 'Recorded',
+    };
+  }
   return {
     state: 'set',
+    due: at !== null && at <= now,
     line: [etTime(at, now), iv.duration_min ? `${iv.duration_min} min` : null, iv.location].filter(Boolean).join(' · '),
     yours: zone === 'America/New_York' || !yours ? null : `Your time ${yours}`,
     note: iv.note || null,
@@ -385,6 +394,10 @@ export const APPLICATION_REFUSALS = Object.freeze({
   time_in_past: 'An interview cannot be scheduled in the past.',
   invalid_time: 'Give the interview a date and a time.',
   no_scheduled_interview: 'There is no interview to cancel.',
+  // D1123: recording an interview's outcome.
+  outcome_recorded: 'This interview’s outcome is already recorded. Close this, and read it again.',
+  interview_not_yet: 'This interview’s time has not come yet, so nothing can be recorded about it.',
+  invalid_outcome: 'Choose whether the interview was held or missed.',
 });
 /** The refusal codes that a confirmation answers: the dialog shows the checkbox for them. */
 export const needsConfirm = (e) => (e?.code || e?.data?.error) === 'over_places';
@@ -482,6 +495,17 @@ export function yourTime(iso, zone = Intl.DateTimeFormat().resolvedOptions().tim
 }
 
 /** The interview's cancel: no reason is stored for it (D383). */
+/** D1123: record what happened at an interview whose time has passed. */
+export const OUTCOMES = [
+  { value: 'held', label: 'Held — the interview happened' },
+  { value: 'missed', label: 'Missed — it did not happen' },
+];
+export const outcomeCopy = (row) => ({
+  title: `What happened at the interview with ${row.company}?`,
+  sub: 'Recorded once. A held interview counts as interviewed on the Overview; a missed one does not. The founder is not told.',
+  action: 'Record it',
+});
+
 export const cancelCopy = (row) => ({
   title: `Cancel the interview with ${row.company}?`,
   sub: 'The founder no longer sees an interview time. You can schedule another.',
@@ -534,5 +558,6 @@ export function cannotAct(kind, row) {
   if (kind === 'move') return row.movable ? null : `${row.company} cannot move: it is ${row.status.word.toLowerCase()}.`;
   if (kind === 'interview') return row.interviewable ? null : 'Only an undecided application gets an interview.';
   if (kind === 'cancel') return row.hasInterview ? null : 'There is no interview to cancel.';
+  if (kind === 'outcome') return row.hasInterview ? null : 'There is no interview to record.';
   return row.decidable ? null : `Decisions are closed for ${row.company}: it is ${row.status.word.toLowerCase()}.`;
 }

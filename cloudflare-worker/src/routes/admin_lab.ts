@@ -14,7 +14,12 @@ type Read = { available: true; rows: Row[] } | { available: false; reason: strin
 const missing = (reason: string) => ({ recorded: false as const, reason });
 const unreadable = (reason: string) => ({ available: false as const, reason });
 const value = (n: number) => ({ available: true as const, value: n });
-const INTERVIEW_REASON = 'Interview scheduling is recorded, but attendance or completion is not. A scheduled time does not prove an interview happened.';
+// D1123 (#3003, migration 602): an interview counts as interviewed only when an
+// admin recorded it held. An interview before recording began, with no outcome,
+// keeps its cohort's count Not recorded until each is answered.
+const CAPTURE_REASON = 'Interview outcomes are not recorded on this database yet (migration 602).';
+const REACH_REASON = 'This week was decided before reached weeks were recorded (migration 602), so who reached it is not known.';
+const dateOf = (ts: string) => (ts || '').slice(0, 10);
 async function read(db: D1Database, sql: string, reason: string, binds: any[] = []): Promise<Read> {
   try {
     const result: { success?: boolean; results?: Row[] } = await db.prepare(sql).bind(...binds).all<Row>();
@@ -93,7 +98,7 @@ r.get('/overview', async (c) => {
   const now = new Date().toISOString();
   const weeks = labWeeks(Date.parse(now));
   // Independent reads: the absent/failing source affects only its metrics.
-  const [cycles, pools, starts, interviews, outcomes, windows, incorporations, certificates, weekly, settings] = await Promise.all([
+  const [cycles, pools, starts, interviews, outcomes, windows, incorporations, certificates, weekly, settings, capture, held, reach, coverage] = await Promise.all([
     read(c.env.DB, `SELECT id, year, month, status, app_status, start_at, end_at, applications_open_at, applications_close_at, force_proceed
       FROM cohort_cycles ORDER BY year DESC, month DESC`, 'Cohorts could not be read.'),
     read(c.env.DB, `SELECT cohort_cycle_id, COUNT(*) AS applied,
@@ -148,7 +153,41 @@ r.get('/overview', async (c) => {
       'Weekly application submissions could not be read.', [...weeks.flatMap(w => [w.start, w.end]), now]),
     // D948: the minimum and places Settings hold, for SL2's capacity bar. Null when unreadable.
     readCohortSizeSettings(c.env),
+    // D1123: when outcome recording began, and each cohort's recorded outcomes.
+    read(c.env.DB, `SELECT started_at FROM lab_metric_capture WHERE metric = 'interview_outcome'`, 'When interview outcomes began to be recorded could not be read.'),
+    read(c.env.DB, `SELECT ca.cohort_cycle_id,
+      COUNT(DISTINCT CASE WHEN i.outcome = 'held' THEN ca.application_id END) AS held,
+      COUNT(DISTINCT CASE WHEN i.outcome IS NULL AND i.status = 'scheduled'
+        AND datetime(i.scheduled_at) < datetime((SELECT started_at FROM lab_metric_capture WHERE metric = 'interview_outcome')) THEN i.id END) AS before_capture,
+      COUNT(DISTINCT CASE WHEN i.outcome IS NULL AND i.status = 'scheduled' AND datetime(i.scheduled_at) <= datetime(?)
+        AND datetime(i.scheduled_at) >= datetime((SELECT started_at FROM lab_metric_capture WHERE metric = 'interview_outcome')) THEN i.id END) AS awaiting
+      FROM cohort_applicants ca JOIN spinout_application_interviews i ON i.application_id = ca.application_id
+      GROUP BY ca.cohort_cycle_id`, 'Interview outcomes could not be read.', [now]),
+    // D1123: the founders who reached each week, and which of them passed it.
+    read(c.env.DB, `SELECT l.cohort_cycle_id, l.week_number, COUNT(DISTINCT l.user_id) AS reached,
+      COUNT(DISTINCT CASE WHEN s.status = 'passed' THEN l.user_id END) AS passed
+      FROM spinout_week_reached l LEFT JOIN company_week_status s ON s.user_id = l.user_id
+        AND s.cohort_cycle_id = l.cohort_cycle_id AND s.week_number = l.week_number
+      GROUP BY l.cohort_cycle_id, l.week_number`, 'Who reached each week could not be read.'),
+    read(c.env.DB, `SELECT cohort_cycle_id, week_number, covered_from FROM spinout_week_reach_coverage`, 'Which weeks record who reached them could not be read.'),
   ]);
+  const captureStart: string | null = capture.available ? (capture.rows[0]?.started_at ?? null) : null;
+  const interviewedOf = (cycleId: number) => {
+    if (!capture.available) return capture;
+    if (!captureStart) return missing(CAPTURE_REASON);
+    if (!held.available) return held;
+    const h = held.rows.find(p => p.cohort_cycle_id === cycleId);
+    const before = Number(h?.before_capture || 0);
+    if (before > 0) return missing(`${before} interview${before === 1 ? '' : 's'} before ${dateOf(captureStart)}, when outcomes began to be recorded, ${before === 1 ? 'has' : 'have'} no recorded outcome. Record each as held or missed to count this cohort.`);
+    return { ...value(Number(h?.held || 0)), awaiting: Number(h?.awaiting || 0) };
+  };
+  const reachedOf = (cycleId: number, week: number) => {
+    if (!reach.available) return reach;
+    if (!coverage.available) return coverage;
+    if (!coverage.rows.some(r => r.cohort_cycle_id === cycleId && Number(r.week_number) === Number(week))) return missing(REACH_REASON);
+    const r = reach.rows.find(x => x.cohort_cycle_id === cycleId && Number(x.week_number) === Number(week));
+    return { ...value(Number(r?.reached || 0)), passed: Number(r?.passed || 0) };
+  };
   let rows: Row[] = [];
   if (cycles.available) rows = cycles.rows.map(cycle => {
     const pool = pools.available ? pools.rows.find(p => p.cohort_cycle_id === cycle.id) : null;
@@ -163,7 +202,7 @@ r.get('/overview', async (c) => {
       declined: metric('declined'), withdrawn: metric('withdrawn'), carried_forward: metric('carried_forward'),
       carried_in: metric('carried_in'), started: starts.available ? value(Number(starts.rows.find(p => p.cohort_cycle_id === cycle.id)?.started || 0)) : starts,
       interview_set: interviews.available ? value(Number(iv?.interview_set || 0)) : interviews,
-      interviewed: missing(INTERVIEW_REASON),
+      interviewed: interviewedOf(cycle.id),
       waiting: interviews.available ? value(Number(iv?.waiting || 0)) : interviews,
       in_grace: outcomes.available ? value(Number(ws[0]?.in_grace || 0)) : outcomes,
       weeks: !outcomes.available ? outcomes : !windows.available ? windows : {
@@ -173,7 +212,7 @@ r.get('/overview', async (c) => {
           failed: Number(ws.find(s => s.week_number === w.week_number && s.status === 'failed')?.n || 0),
           in_grace: Number(ws.find(s => s.week_number === w.week_number && s.status === 'grace')?.n || 0),
           pending: Number(ws.find(s => s.week_number === w.week_number && s.status === 'pending')?.n || 0),
-          reached: missing('Week unlock does not persist a per-founder reached-week ledger. Outcome rows are not a reached-week denominator.'),
+          reached: reachedOf(cycle.id, w.week_number),
         })),
       },
       incorporated: !incorporations.available ? incorporations : Number(inc?.ambiguous || 0) > 0
@@ -203,6 +242,8 @@ r.get('/overview', async (c) => {
     incorporated: 'incorporation_completed milestones after the recorded start (or cohort start for a historical activation), associated through the recorded start/activation candidates. Multiple candidate cohorts make attribution ambiguous. Not application declarations or the global incorporated flag.',
     certificates_issued: 'Currently issued certificates whose frozen public_cohort matches YYYY-MM or the canonical Month Year Cohort label; revoked or unattributed certificates are not counted.',
     waiting: 'Pending pool assignments without a latest scheduled interview; scheduled does not mean interviewed.',
+    interviewed: 'Applications in the cohort pool with an interview an admin recorded as held (D1123). Scheduled is not interviewed; an interview from before outcomes were recorded, with none recorded, leaves the count Not recorded.',
+    reached: 'Founders in the cohort at a week’s deadline with no earlier week failed or in grace, or decided for that week (D1123). Recorded for weeks whose deadline was processed after migration 602; passed counts only those who reached it.',
     in_grace: 'Distinct members with a recorded grace outcome; expired grace remains grace until the scheduler decides it.',
   } });
 });
@@ -294,7 +335,7 @@ r.get('/applications/:applicant_id{[0-9]+}', async (c) => {
   const [founder, interview, cohorts, plan] = await Promise.all([
     read(c.env.DB, `SELECT a.withdrawn_at, a.applicant_note, a.applicant_note_at, a.applicant_asks_json
       FROM spinout_applications a WHERE a.id = ?`, 'What the founder was told could not be read.', [item.application_id]),
-    read(c.env.DB, `SELECT id, scheduled_at, duration_min, location, note, status, reschedule_requested_at, reschedule_reason
+    read(c.env.DB, `SELECT id, scheduled_at, duration_min, location, note, status, reschedule_requested_at, reschedule_reason, outcome, outcome_at
       FROM spinout_application_interviews WHERE application_id = ? ORDER BY id DESC LIMIT 1`,
       'The interview could not be read.', [item.application_id]),
     read(c.env.DB, `SELECT id, year, month, status, app_status, start_at, end_at, applications_open_at, applications_close_at, force_proceed
