@@ -86,7 +86,7 @@ export function stopCopy(file, rows = null) {
 
 /** A refusal's code, in words. The Worker answers codes only (D1091). */
 export function workspaceRefusal(e) {
-  const code = e?.code || e?.data?.error || e?.message;
+  const code = e?.code || e?.data?.error;
   const WORDS = {
     google_not_connected: 'Google is not connected yet. Connect your Google account on the Google page first.',
     workspace_not_allowed: 'Google files are not allowed yet. Allow Google files first.',
@@ -102,6 +102,7 @@ export function workspaceRefusal(e) {
     picker_cancelled: 'Nothing was chosen.',
     invalid_files: 'Choose between 1 and 20 files.',
     mapping_not_supported: 'Only a Sheet or a Form is mapped.',
+    consent_not_google: 'Google did not answer with its consent page. Try again in a moment.',
   };
   return WORDS[code] || 'Google could not be read just now. Nothing changed. Try again.';
 }

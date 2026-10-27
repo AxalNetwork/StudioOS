@@ -88,10 +88,10 @@ function AllowDialog({ onClose, assign }) {
     try {
       const r = await googleWorkspace.connect(project, enable);
       const url = r?.redirect_url || r?.auth_url;
-      if (typeof url !== 'string' || !GOOGLE_CONSENT.test(url)) throw new Error('Google did not answer with its consent page. Try again in a moment.');
+      if (typeof url !== 'string' || !GOOGLE_CONSENT.test(url)) throw Object.assign(new Error('consent_not_google'), { code: 'consent_not_google' });
       assign(url);
     } catch (e) {
-      setRefusal(e?.code || e?.data?.error ? workspaceRefusal(e) : (e?.message || workspaceRefusal(e)));
+      setRefusal(workspaceRefusal(e));
       setBusy(false);
     }
   };
@@ -144,7 +144,7 @@ function ChooseDialog({ onClose, onDone, picker }) {
       const r = await googleWorkspace.choose(project, module, ids);
       onDone(`${r?.added ?? ids.length} ${(r?.added ?? ids.length) === 1 ? 'file' : 'files'} chosen for ${modulePath(module)}.`);
     } catch (e) {
-      setRefusal(workspaceRefusal(e?.code ? e : { code: e?.message, data: e?.data }));
+      setRefusal(workspaceRefusal(e));
       setBusy(false);
     }
   };

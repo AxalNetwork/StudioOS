@@ -565,7 +565,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     verified_on: null,
   },
   google_workspace: {
-    tagline: 'Choose Google files for your modules. Axal VC reads only the files you choose.',
+    tagline: 'Choose Google files for your modules. Coming soon.',
     long_description: [
       'Axal VC reads only files you choose. It cannot browse the rest of your Drive.',
       'Connect Google first at /account/connectors/google, then allow Google files and choose them on this page, for a venture and a module.',

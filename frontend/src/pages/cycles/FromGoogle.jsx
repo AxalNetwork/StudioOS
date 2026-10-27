@@ -116,7 +116,7 @@ export default function FromGoogle({
       const ids = await picker.choose(config);
       if (ids.length) { await googleWorkspace.choose(project, module, ids); reload(); }
     } catch (e) {
-      setNote(workspaceRefusal(e?.code ? e : { code: e?.message, data: e?.data }));
+      setNote(workspaceRefusal(e));
     } finally { setBusy(false); }
   };
   const sync = async () => {
