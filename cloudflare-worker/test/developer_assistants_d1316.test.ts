@@ -122,7 +122,6 @@ async function mcp(env: any, token: string | null, method: string, params: unkno
   return { status: r.status, headers: r.headers, body: await r.json().catch(() => null) as any };
 }
 const callTool = (env: any, token: string, name: string, args: Record<string, unknown> = {}) => mcp(env, token, 'tools/call', { name, arguments: args });
-const toolJson = (r: any) => JSON.parse(r.body.result.content[0].text);
 
 
 const logLines = (db: any) => db.prepare("SELECT user_id, details FROM activity_logs WHERE action = 'mcp_tool_call' ORDER BY id").all()
