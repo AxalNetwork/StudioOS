@@ -414,6 +414,8 @@ import { adminPartnerSettlements, partnerSettlements } from './routes/partner_se
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
+// D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
+import notionRoutes, { notionCycleRoutes } from './routes/notion';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
@@ -1344,6 +1346,8 @@ app.route('/api/research/overview', researchOverview);
 app.route('/api/research', researchMarkets);
 app.route('/api/research', researchSectors);
 // D664 (#1477): the Grow cycle's overview, module reads and store writes.
+// D1086 (#2951): each section's Notion sync, ahead of the cycle routers so `/:section/notion` is never read as a module.
+app.route('/api/cycles', notionCycleRoutes);
 app.route('/api/cycles/grow', cycleGrow);
 app.route('/api/research', research);
 // D642 — usage is keyed on the caller, across all their companies.
@@ -1438,6 +1442,8 @@ app.route('/api/developer/limits', developerLimits);
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
 // D1080 (#2945): Sign in with <Provider> for every other MCP record, and its client ID metadata documents.
 app.route('/api/integrations/mcp', connectorMcpOauthRoutes);
+// D1086 (#2951): Notion's sources, ahead of the integrations router so `notion` is never read as a connection uid.
+app.route('/api/connectors/notion', notionRoutes);
 // D1096 (#2961): Vercel signs every installation's events to one URL; ahead of the per-connection receiver.
 app.route('/api/connectors/webhook/vercel', vercelWebhook);
 app.route('/api/connectors', integrations);
