@@ -60,7 +60,7 @@ function dealId(c: Ctx): number {
 export const noteDeps = { run: runAI, scorecard: storedScorecard };
 
 function failure(c: Ctx, e: unknown) {
-  if (e instanceof NoteError) return refuse(c, e.status, { code: e.code, message: e.message, extra: { code: e.code } });
+  if (e instanceof NoteError) return refuse(c, e.status, { code: e.code, message: e.sentence, extra: { code: e.code } });
   if (e instanceof FlowError) return refuse(c, e.status, { code: e.code, message: e.sentence, extra: { code: e.code } });
   const message = e instanceof Error ? e.message : '';
   if (AUTH_ERROR_STATUSES[message]) return mapError(c, e);

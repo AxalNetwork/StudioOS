@@ -31,9 +31,10 @@ export const COMPARE_MIN = 2;
 export const COMPARE_MAX = 4;
 const RECEIPT_TTL_MS = 15 * 60 * 1000;
 
+/** A refusal: its code, status and the sentence the page prints, written here, never a provider's text. */
 export class NoteError extends Error {
-  code: string; status: number;
-  constructor(code: string, status: number, message: string) { super(message); this.code = code; this.status = status; }
+  code: string; status: number; sentence: string;
+  constructor(code: string, status: number, sentence: string) { super(code); this.code = code; this.status = status; this.sentence = sentence; }
 }
 
 export const SCOPE_LABEL: Readonly<Record<string, string>> = Object.freeze(Object.fromEntries(SCOPE_ORDER.map((k) =>
