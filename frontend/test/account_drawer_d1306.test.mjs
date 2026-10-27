@@ -36,7 +36,11 @@ test('#2377 G1: Operating Partner and Explorer are the profiles’ names, in the
   const picker = codeOnly(read('frontend/src/pages/admin/consoles/UsersConsole.jsx'));
   assert.doesNotMatch(picker, /label: 'Partner'/, 'the picker still says Partner');
   const badges = read('frontend/src/pages/admin/consoles/shared.jsx');
-  const colour = (k) => badges.match(new RegExp(`\\b${k}: '([^']+)'`))?.[1];
+  const BADGE = {
+    admin: /\badmin: '([^']+)'/, founder: /\bfounder: '([^']+)'/, partner: /\bpartner: '([^']+)'/,
+    investor: /\binvestor: '([^']+)'/, advisor: /\badvisor: '([^']+)'/, exploring: /\bexploring: '([^']+)'/,
+  };
+  const colour = (k) => badges.match(BADGE[k])?.[1];
   assert.notEqual(colour('advisor'), colour('exploring'), 'Advisor and Explorer share a colour');
   assert.equal(new Set(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'].map(colour)).size, 6, 'two profiles share a colour');
 });
