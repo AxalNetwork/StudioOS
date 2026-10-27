@@ -24,6 +24,10 @@ import {
 } from '../services/updateShare';
 
 import { openCallForUpdate, openCallSummary, updateAskLinks, replyToLinkedCall, RoundCallError } from '../services/roundCalls';
+import { PublishRefusal, canPublish } from '../services/publishCore';
+import { createDraft, publishPart } from '../services/publishSources';
+import { isTeamViewer } from '../services/mercury/growFeeds';
+import { isSupportSession } from '../integrations/providers/mercury';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -680,6 +684,40 @@ r.get('/:uid/page', async (c) => {
 
 // POST /api/portfolio-updates/asks/:askUid/replies — a recipient answers an
 // ask; the reply becomes an item in the module that asked.
+// D1333 (#3481, part 2 of #2400): Publish to… from a sent update. The draft is pre-filled with the
+// network's version (the title and the asks; the metrics only if the founder included them), each
+// line with its source and date. Nothing is sent here: the founder previews and confirms in
+// /api/publish. Only the venture's founder makes one (`canPublish`); the team reads the gate.
+async function sentUpdate(c: any) {
+  const u = await c.env.DB.prepare('SELECT id, uid, project_id, kind, sent_at FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid'))
+    .first() as { id: number; uid: string; project_id: number; kind: string | null; sent_at: string | null } | null;
+  if (!u || u.kind === 'report') return null;
+  return u;
+}
+const publishRefused = (c: any, e: unknown) => (e instanceof PublishRefusal ? c.json({ error: e.code, detail: e.sentence }, e.status) : null);
+r.get('/:uid/publish', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const u = await sentUpdate(c);
+    if (!u || !(await isTeamViewer(c.env, user, u.project_id))) return c.json({ detail: 'Not found' }, 404);
+    if (!u.sent_at) return c.json({ detail: 'Only a sent update can be published', error: 'not_sent' }, 409);
+    return c.json({ update: u.uid, publish: await publishPart(c.env, user, await isSupportSession(c), u.project_id, 'updates') });
+  } catch (e) { return mapError(c, e); }
+});
+r.post('/:uid/publish-draft', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const u = await sentUpdate(c);
+    if (!u) return c.json({ detail: 'Not found' }, 404);
+    try { await canPublish(c.env, { user, support: await isSupportSession(c), projectId: u.project_id }); }
+    catch (e) { const res = publishRefused(c, e); if (res) return res; throw e; }
+    if (!u.sent_at) return c.json({ detail: 'Only a sent update can be published', error: 'not_sent' }, 409);
+    const b = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const made = await createDraft(c.env, u.project_id, 'updates', user.id, { source_refs: [`portfolio_updates:${u.uid}`], team_only_included: b?.team_only_included === true });
+    return c.json({ draft_uid: made.uid, prefill: made.prefill }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
 r.post('/asks/:askUid/replies', async (c) => {
   try {
     const user = await requireAuth(c);
