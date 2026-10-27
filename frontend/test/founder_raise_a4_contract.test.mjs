@@ -6,9 +6,14 @@ import { resolve } from 'node:path';
 const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 test('the pitch editor opens on the venture a link names', () => {
   // The A4 desk that seeded this handoff is retired (D661, #1474); a link
-  // that names the venture in `?project_id=` still opens the editor on it.
-  const editor = read('frontend/src/pages/PitchDeckPage.jsx');
-  assert.match(editor, /Number\(searchParams\.get\('project_id'\)\)/);
+  // that names the venture in `?project_id=` still opens the deck on it. The
+  // template builder that held this retired too (D898 group E); the studio
+  // and the editor each read the venture from the address.
+  for (const f of ['frontend/src/pages/raise/pitch/PitchStudio.jsx', 'frontend/src/pages/raise/pitch/PitchEditor.jsx']) {
+    const src = read(f);
+    assert.match(src, /const requested = params\.get\('project_id'\);/, f);
+    assert.match(src, /list\.find\(\(p\) => String\(p\.id\) === String\(requested\)\)/, f);
+  }
 });
 
 test('a per-share price is not rendered by the whole-dollar formatter', () => {

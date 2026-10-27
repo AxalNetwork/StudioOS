@@ -1057,7 +1057,7 @@ export async function routeAnswer(
 
     // ---- AC-2: deck-draft seed (pitch_decks) -------------------------
     // Stored as the canonical array-of-slide-objects shape that
-    // routes/decks.ts and the PitchDeckPage UI consume:
+    // routes/decks.ts and the deck pages consume:
     //   [{ title, subtitle, body, bullets, image_url }, …]
     // We merge by title so subsequent answers update the same slide
     // rather than appending duplicates.

@@ -63,8 +63,8 @@ export const RELOAD_GUARD_KEYS = [
   // `preserveReloadGuards` carries it through `clearSession`'s sweep, and so
   // `chunk_reload_loop.test.mjs` can hold it to the same bar as the rest.
   'axal:sw-kill-attempts',
-  // `PitchDeckPage`'s stale deck-registry recovery.
-  'deck_registry_recover',
+  // (`deck_registry_recover`, the template builder's stale-registry reload,
+  // retired with the builder in D898 group E.)
 ];
 
 /**

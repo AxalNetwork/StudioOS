@@ -29,7 +29,10 @@ import { ENGAGEMENT_VIEW_ROWS } from '../../../lib/deckShareViews.js';
 
 export const STUDIO_PATH = '/raise/pitch';
 export const EDIT_PATH = '/raise/pitch/edit';
-/** D898: today's template builder, which New deck opens until part 3 (New deck) and the editor's last part replace it. */
+/**
+ * D898 group E (#2676): the retired template builder's address. It opens the
+ * studio with `?moved=pitch-builder`; its four actions are the studio's now.
+ */
 export const BUILDER_PATH = '/raise/pitch/builder';
 export const REVIEW_PATH = '/raise/pitch/review';
 export const ANALYTICS_PATH = '/raise/pitch/analytics';
@@ -38,6 +41,10 @@ export const NOTES_PATH = '/raise/pitch/notes';
 /** The old `?mode=workspace` address now redirects to the editor with this key. */
 export const MOVED_KEY = 'pitch-workspace';
 export const MOVED_NOTICE = 'Pitch deck has a new address. Update your bookmark.';
+export const BUILDER_MOVED_KEY = 'pitch-builder';
+export const BUILDER_MOVED_NOTICE = 'The template builder is now part of the studio: Fill from project and Branding are on Decks, and templates are in New deck.';
+/** Every moved notice the studio's pages draw, by its `?moved=` key. */
+export const MOVED_NOTICES = Object.freeze({ [MOVED_KEY]: MOVED_NOTICE, [BUILDER_MOVED_KEY]: BUILDER_MOVED_NOTICE });
 
 export const TITLE = 'Pitch deck studio';
 // D896 (#2675): the second sentence is back now that every source read carries its chip.
@@ -66,6 +73,13 @@ export function movedTarget(search = '', hash = '') {
   next.delete('mode');
   next.set('moved', MOVED_KEY);
   return { pathname: EDIT_PATH, search: `?${next.toString()}`, hash };
+}
+
+/** Where the retired `/raise/pitch/builder` sends you: the studio, query and hash kept. */
+export function builderTarget(search = '', hash = '') {
+  const next = new URLSearchParams(search);
+  next.set('moved', BUILDER_MOVED_KEY);
+  return { pathname: STUDIO_PATH, search: `?${next.toString()}`, hash };
 }
 
 /**

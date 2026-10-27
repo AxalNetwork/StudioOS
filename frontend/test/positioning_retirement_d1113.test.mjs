@@ -7,7 +7,8 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {createRoot} from 'react-dom/client';
 import {MemoryRouter,Routes,Route,useLocation} from 'react-router-dom';
 import {api} from '../src/lib/api.js';
-import PitchWorkspacePage from '../src/pages/PitchWorkspacePage.jsx';
+import {StudioDecks} from '../src/pages/raise/pitch/PitchStudio.jsx';
+import {TABS} from '../src/pages/raise/pitch/pitchStudioModel.js';
 import PitchPositioningRedirect from '../src/pages/raise/narrative/PitchPositioningRedirect.jsx';
 import {NarrativeHome} from '../src/pages/raise/narrative/NarrativeTool.jsx';
 import {homeFooter} from '../src/pages/raise/narrative/narrativeModel.js';
@@ -22,8 +23,10 @@ test('the retired page and client method are gone, and remaining pages import no
   assert.equal(existsSync('frontend/src/pages/PitchPositioningPage.jsx'),false);
   assert.equal(Object.hasOwn(api,'deckPositioning'),false);
   for(const file of sourceFiles('frontend/src')) assert.doesNotMatch(readFileSync(file,'utf8'),/(?:from\s*|import\(\s*)['"][^'"]*PitchPositioningPage(?:\.jsx)?['"]/,file);
-  const html=renderToStaticMarkup(h(MemoryRouter,{initialEntries:['/raise/pitch/builder?project_id=3']},h(PitchWorkspacePage)));
-  assert.ok(!html.includes('pitch-tab-positioning'));assert.ok(html.includes('pitch-tab-deck'));assert.ok(html.includes('pitch-tab-review'));
+  // D898 group E retired the builder whose tab row this read; the studio's tabs carry no Positioning tab.
+  assert.equal(existsSync('frontend/src/pages/PitchWorkspacePage.jsx'),false);
+  assert.deepEqual(TABS.map(t=>t.id),['decks','review','analytics','notes']);
+  assert.equal(typeof StudioDecks,'function');
 });
 
 test('NAR1 starts with the moved sentence while preserving the actual deck-read state',()=>{

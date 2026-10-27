@@ -4,8 +4,8 @@ import React from 'react';
 //
 // Fixed, canonical sections in a fixed order; founders only set the
 // percentages. Persisted as structured data ({ label, pct }, non-zero only)
-// by BOTH the founder intake form and the post-intake deck-side editor
-// (UseOfFundsEditor). Labels contain colons, so the allocation is stored as
+// by the founder intake form (and, until D898 group E retired it with the
+// template builder, the deck-side UseOfFundsEditor). Labels contain colons, so the allocation is stored as
 // JSON, never delimited text. Do NOT rename/add/remove sections — the labels
 // are the storage key the deck assembler maps back onto these slots.
 export const FUND_SECTIONS = [

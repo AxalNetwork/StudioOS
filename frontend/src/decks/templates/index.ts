@@ -27,15 +27,15 @@ import { SLIDE_META } from '../../lib/pitchDeckViewModel';
  * WIDENED IN #201, NARROWED AGAIN IN #207, and the two moves are the same
  * lesson from opposite ends. #201 found the type reading
  * `'commercial' | 'fundraising'` while `demo_day` and `axal_spinout_demoday`
- * below both write `'event'` and `PitchDeckPage.jsx` hard-codes an `'event'`
- * tab — the type was false about data that had shipped all along, so `'event'`
+ * below both write `'event'` and `PitchDeckPage.jsx` (retired by D898 group E)
+ * hard-coded an `'event'` tab — the type was false about data that had shipped all along, so `'event'`
  * was added. It also added `'narrative'`, for a different and weaker reason:
  * the worker emitted it, and the note here said such a method was "reachable
  * only under All".
  *
  * THAT WAS THE BUG, NOT A CAVEAT. `'narrative'` describes a deck's STYLE and
  * every reader of this field routes by AUDIENCE — `shareDeckAudience.js` picks
- * the post-NDA flow from it, and `PitchDeckPage.jsx:1570` prefers the worker's
+ * the post-NDA flow from it, and the old builder's picker preferred the worker's
  * value over this table's for both the card label and the chips. So
  * `sequoia_classic`, the template founders raise money with, displayed
  * "NARRATIVE" in the picker and vanished from the Fundraising filter. #207

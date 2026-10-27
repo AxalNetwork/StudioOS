@@ -3005,7 +3005,8 @@ export const api = {
   // token signs {deck_id, exp} and is short-lived (3–5 min).
   deckPrintExportRead: (token) => request(`/decks/print-export/${encodeURIComponent(token)}`),
   deckGetBrand: () => request('/decks/brand'),
-  deckSetWatermark: (url) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url }) }),
+  // D898 group E: the studio names the venture, so the change is on its ledger.
+  deckSetWatermark: (url, projectId) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url, ...(projectId ? { project_id: projectId } : {}) }) }),
 
   // #2324: the Network Effects page is removed; these are the syndicate reads
   // and the close a deal room (components/deals/DealSyndicates.jsx) still uses.

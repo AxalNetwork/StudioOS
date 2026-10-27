@@ -45,10 +45,10 @@ const PMF = 'frontend/src/workspaces/PmfExplain.jsx';
 const UOF = 'frontend/src/workspaces/UseOfFundsEadwyn.jsx';
 const ADVISOR = 'frontend/src/components/advisor/PersonalAdvisor.jsx';
 const SESSION = 'frontend/src/pages/founder/InterviewSessionPage.jsx';
-const DECK = 'frontend/src/pages/PitchDeckPage.jsx';
 const REVIEWER = 'frontend/src/pages/DeckReviewerPage.jsx';
 const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
 const STUDIO = 'frontend/src/pages/raise/pitch/PitchStudio.jsx';
+const STUDIO_ACTIONS = 'frontend/src/pages/raise/pitch/StudioActions.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
 const ASSIST_BAR = 'frontend/src/pages/raise/pitch/CardAssistBar.jsx';
 const ADD_MENU = 'frontend/src/pages/raise/pitch/AddMenu.jsx';
@@ -191,14 +191,16 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-objection', route: '/raise/investor-narrative/story', label: 'Answer an objection', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/raise/narrative/StoryTab.jsx', 'narrativeApi.draftObjection(']],
   },
-  // The pitch deck's editor, the module's tool link, and its Review tab.
+  // The pitch deck's two template fills. D898 group E (#2676): the template
+  // builder retired; Fill from project is on the studio's Decks tab, and a
+  // template is started from New deck.
   {
-    page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch/builder', label: 'Fill from project', kind: 'write', handler: 'form',
-    at: [[DECK, 'api.deckAutofill(']],
+    page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch', label: 'Fill from project', kind: 'write', handler: 'form',
+    at: [[STUDIO_ACTIONS, 'api.deckAutofill(']],
   },
   {
-    page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch/builder', label: 'Use this template', kind: 'write', handler: 'form',
-    at: [[DECK, 'api.deckApplyMethod('], [NEW_DECK, 'api.deckApplyMethod(']],
+    page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch/new', label: 'Use this template', kind: 'write', handler: 'form',
+    at: [[NEW_DECK, 'api.deckApplyMethod(']],
   },
   // D897 (#2677): New deck (PD5, PD6) and the studio's fast path (PD2).
   {

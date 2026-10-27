@@ -27,6 +27,8 @@ import { newDeckApi } from '../../../lib/api/newDeck';
 import { railPressHeaders } from '../../../lib/railPage';
 import { FAST_TITLE, NEW_PATH, buildSentence, fastPathLine, refusalOf } from './newDeckModel';
 import ShareDialog from './ShareDialog';
+import { BrandingCard, FillFromProject, SpinoutReadiness } from './StudioActions';
+import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel } from './shareModel';
 
 /**
@@ -48,7 +50,8 @@ import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel }
  *   /raise/pitch/new        New deck (PD3–PD6, D897): `NewDeck.jsx`. The Decks
  *                           tab's New deck and its fast path (PD2) open it.
  *   /raise/pitch/edit       the card editor (D898, PD1).
- *   /raise/pitch/builder    the template builder (PitchWorkspacePage).
+ *   /raise/pitch/builder    redirects here: the template builder retired once
+ *                           its four actions were the studio's (D898 group E).
  *
  * WHO. The venture's founder works here, as does anyone else the route admits
  * who is not an admin. An admin reads it and leaves notes: no New deck, no New
@@ -173,7 +176,7 @@ export default function PitchStudio({ tab = 'decks' }) {
       workspace="Raise"
       // The founder's tool, whoever reads it: a reader is told by the banner.
       role="founder"
-      note="The studio reads your deck's versions and the views on your investor links. The figures on a card come from the deck builder until the source chips land."
+      note="The studio reads your deck's versions and the views on your investor links. Every figure on a card comes from your records and shows its source."
       data-testid="pitch-studio-rail"
     />
   );
@@ -217,6 +220,8 @@ function StudioHeader({ tab, q, readOnly, showNew }) {
         {/* D897 (#2677): New deck is PD3–PD6 at /raise/pitch/new. */}
         {showNew ? <Link to={`${NEW_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-new">New deck</Link> : null}
       </div>
+      {/* D898 group E: the retired builder's address lands here and says so once. */}
+      <PitchMovedNotice />
       {/* The reviewer is its own tool, and its writes are its own: Review draws no banner. */}
       {readOnly && tab !== 'review' ? (
         <div role="note" className="rounded-[10px] bg-amber-100 px-3 py-2 text-[12.5px] font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pitch-studio-readonly">
@@ -301,7 +306,10 @@ export function StudioDecks({ reads, readOnly, q }) {
       </div>
       <aside className="flex flex-col gap-3.5" aria-label="Readers">
         {current?.id && reads.versions.status === 'ok' ? <NewInData current={current} q={q} /> : null}
+        {/* D898 group E: the builder's Spin-Out readiness and Branding, now the studio's. */}
+        {reads.deck.status === 'ok' ? <SpinoutReadiness projectId={reads.project?.id ?? null} deck={reads.deck.data} /> : null}
         <ReadersAside reads={reads} hasDeck={Boolean(current)} />
+        {reads.project?.id && reads.versions.status === 'ok' ? <BrandingCard projectId={reads.project.id} readOnly={readOnly} /> : null}
       </aside>
     </div>
   );
@@ -434,6 +442,8 @@ function CurrentDeck({ project, current, versions, deck, q, phone, readOnly, che
           {/* D901 (#2680): present reads, so a read-only viewer presents too (PD21); export writes the ledger. */}
           <Link to={presentHref(project?.id, current.id)} className={GHOST} data-testid="pitch-studio-present">Present</Link>
           {!readOnly ? <button type="button" className={GHOST} onClick={() => setExporting(true)} data-testid="pitch-studio-export">Export</button> : null}
+          {/* D898 group E: Fill from project, once the builder's; its proposal is reviewed at New deck. */}
+          {!readOnly && deck.status === 'ok' && deck.data?.id ? <FillFromProject deck={deck.data} q={q} /> : null}
         </div>
       </div>
       {exporting ? <ExportDialog versions={versions} current={current} onClose={() => setExporting(false)} /> : null}
