@@ -14,7 +14,7 @@
  */
 import { NOT_RECORDED, conflictsWord, dueOf, fmtDay, verdictWord } from './ddReviewModel.js';
 import { SEVERITY_WORD, dayText, depthWord, refusalText, subjectTypeWord } from './ddListModel.js';
-import { bandWord, decisionWord } from './ddModel.js';
+import { CASE_TABS, bandWord, decisionWord } from './ddModel.js';
 
 export { NOT_RECORDED, bandWord, decisionWord, depthWord, fmtDay, refusalText, verdictWord };
 
@@ -47,6 +47,17 @@ export const WHO = Object.freeze({
   verdict: 'The section’s reviewer, the case lead or an Admin records its verdict.',
   archived: 'This case is archived. It takes no further change.',
 });
+
+/* ------------------------------------------------------------------ *
+ * The tabs (DDL3, RT)
+ * ------------------------------------------------------------------ */
+
+/** A section reviewer's tabs (RT): the case's other tabs are the deal team's. */
+export const REVIEWER_TABS = Object.freeze(['overview', 'checklist', 'flags', 'activity']);
+/** The tabs a read draws: all nine for the deal team, RT's four on a read scoped to a reviewer's sections. */
+export const tabsFor = (data) => (data?.case?.scoped ? CASE_TABS.filter((t) => REVIEWER_TABS.includes(t.key)) : CASE_TABS);
+/** The tab drawn at an address: a scoped reader on a deal-team tab is told so, never shown the tab. */
+export const tabOpen = (data, tab) => tabsFor(data).some((t) => t.key === tab);
 
 /* ------------------------------------------------------------------ *
  * The header (DDL3)
@@ -239,7 +250,7 @@ export const SOURCE_WORD = Object.freeze({ raised: 'Raised by hand', connector: 
 export const flagSourceWord = (f) => SOURCE_WORD[f.source] || (f.kind === 'checklist' ? 'Checklist' : NOT_RECORDED);
 const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
 
-/** The flags the filters keep, severest first; open and closed apart. */
+/** The flags the filters keep, severest first. Not closed (the default) lists the closed ones apart; a chosen state lists only its own. */
 export function flagRows(flags, { severity = '', state = 'not_closed', section = '', source = '' } = {}) {
   const keep = (f) => (!severity || f.severity === severity)
     && (!section || String(f.section_id) === String(section))
@@ -247,7 +258,8 @@ export function flagRows(flags, { severity = '', state = 'not_closed', section =
     && (state === 'any' || (state === 'not_closed' ? f.state !== 'closed' : f.state === state));
   const sorted = (list) => [...list].sort((a, b) => (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
   const all = flags || [];
-  return { open: sorted(all.filter((f) => f.state !== 'closed' && keep(f))), closed: state === 'not_closed' ? sorted(all.filter((f) => f.state === 'closed')) : [] };
+  if (state !== 'not_closed') return { open: sorted(all.filter(keep)), closed: [] };
+  return { open: sorted(all.filter(keep)), closed: sorted(all.filter((f) => f.state === 'closed')) };
 }
 
 /** The flags' headline (DDL5): the severest open and where. */
@@ -464,6 +476,21 @@ export function decisionChoices(sections, flags) {
     { key: 'withdrawn', label: 'Withdrawn' },
   ].filter((c) => !c.disabled);
 }
+
+/** Decide's body (DDL14 D), or what to fix. The Worker holds Proceed to the flag rule either way. */
+export function decisionBody({ decision = '', reason = '' }, sections, flags) {
+  const choices = decisionChoices(sections, flags).map((c) => c.key);
+  if (!decision) return { error: 'Choose the decision.' };
+  if (!choices.includes(decision)) return { error: BLOCKED_LINE };
+  const r = String(reason).trim();
+  if (!r) return { error: 'Say why. The reason is recorded with the decision.' };
+  if (r.length > 2000) return { error: 'The reason is at most 2,000 characters.' };
+  return { body: { decision, reason: r } };
+}
+
+const DEPTH_RANK = { lite: 0, standard: 1, deep: 2 };
+/** Widen's choices (DDL14 H): only a deeper template than the case has. */
+export const widenChoices = (depth) => ['standard', 'deep'].filter((d) => DEPTH_RANK[d] > (DEPTH_RANK[depth || 'standard'] ?? 1));
 
 /** The flags in Condition to close: Sign-off's conditions. */
 export const conditionFlags = (flags) => (flags || []).filter((f) => f.state === 'condition_to_close');

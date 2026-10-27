@@ -85,8 +85,8 @@ export const ADMIN_BOARDS = [
 export const ADMIN_OPTIONS = [];
 
 export const ADMIN_QUIET_CONTROLS = [
-  { page: 'S11', label: 'Upload signed NDA', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'accept="application/pdf,image/*"', why: 'Stores the reviewer\'s signed NDA; no model reads it.' },
-  { page: 'S11', label: 'Generate report', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'await dd.generateReport(uid)', why: 'The Worker assembles the report from the case\'s recorded sections and findings (routes/dd.ts, POST /cases/:uid/report); no model writes it.' },
+  { page: 'S11', label: 'Upload signed NDA', file: 'pages/duediligence/DdCaseDialogs.jsx', anchor: 'data-testid="dd-verdict-nda"', why: 'Stores the reviewer\'s signed NDA; no model reads it.' },
+  { page: 'S11', label: 'Generate report', file: 'pages/duediligence/DdCaseDialogs.jsx', anchor: 'await dd.generateReport(uid)', why: 'The Worker assembles the report from the case\'s recorded sections and findings (routes/dd.ts, POST /cases/:uid/report); no model writes it.' },
   { page: 'S29', label: 'Upload photo', file: 'pages/admin/advisors/DeckRosterDialogs.jsx', anchor: 'onChange={(e) => submitPhoto(e.target.files?.[0])}', why: 'Stores the profile photo; no model reads it.' },
 ];
 
