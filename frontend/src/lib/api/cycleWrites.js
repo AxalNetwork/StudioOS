@@ -133,6 +133,9 @@ export function makeCycleWrites(request) {
       unmatchGithubLogin: (projectId, login) => request(`/cycles/build/founding-team/github-logins/${seg(login)}?${q(projectId)}`, { method: 'DELETE' }),
       acceptCompanyProposal: (projectId, id) => request(`/cycles/build/company-creation/proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST' }),
       dismissCompanyProposal: (projectId, id) => request(`/cycles/build/company-creation/proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
+      // D1099 (#2964): the founder's decision on the step Vercel's facts proposed. Nothing changes on Vercel.
+      acceptVercelProposal: (projectId, id) => request(`/cycles/build/company-creation/vercel-proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST' }),
+      dismissVercelProposal: (projectId, id) => request(`/cycles/build/company-creation/vercel-proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
     },
   };
 }
