@@ -144,6 +144,8 @@ D1080 (#2945): `GET /api/integrations/mcp/:key/start`, `GET /api/integrations/mc
 
 D1085 (#2950): Notion is the first record those routes serve: `/api/integrations/mcp/notion/start`, `/callback` and `/client.json`, and its directory page `/account/connectors/notion` ("Sign in with Notion", read-only). `POST /api/connectors/connect` for `notion` is 410 `sign_in_only`, or 403 `support_session_refused` in a support session; `DELETE /api/connectors/:uid` revokes the grant at Notion, best effort, before the row is deleted. Every read is `services/notion/reads.ts`; nothing lands in a module yet.
 
+D1086 (#2951): a founder's picked Notion sources (`routes/notion.ts`, mounted ahead of the integrations router and of the cycle sections). `/api/connectors/notion`: `GET /search`, `GET`/`POST /sources`, `GET /sources/:uid/schema`, `PATCH`/`DELETE /sources/:uid` (Stop using), `GET /sources/:uid/preview` (stores nothing). `/api/cycles/:section/notion` (`validate`, `build`, `raise`, `grow`): `GET` (a module's From Notion), `POST /sync` (founder-pressed, budgeted, resumes from a KV cursor), `POST /proposals/:id/accept`, `/dismiss`, `DELETE /facts/:ledgerId`. The SPA draws the Sources list and Add a source on `/account/connectors/notion` (`NotionSourcesSection.jsx`) and a shared `cycles/FromNotion.jsx` that parts 3–6 mount. Owner, venture and company are checked on every write; a support session is refused.
+
 ### Fund notices and booklets Worker contract (D716, #1781)
 
 The Subscription Booklet's store is mounted at `/api/fund-booklets` (`routes/fund_booklets.ts`, `services/subscriptionBooklet.ts`, migration 478).

@@ -111,6 +111,7 @@ export * from './api/narrative.js';
 export * from './api/network.js';
 export * from './api/newDeck.js';
 export * from './api/newsletter.js';
+export * from './api/notion.js';
 export * from './api/partnerDealReads.js';
 export * from './api/partnerDealTypes.js';
 export * from './api/partnerProfiles.js';
