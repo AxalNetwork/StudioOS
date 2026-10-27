@@ -89,6 +89,19 @@ through `GET /api/fund-ledger/:id`. No new Worker route or migration.
 Nested drawers and the authenticator become phone sheets in Fund admin.
 See `decisions/D1165.md` for data boundaries and live checks still UNVERIFIED.
 
+### Fund admin Funds tab and one fund (D1161, #3068)
+
+`/admin/fund-admin/funds` (FND3) reads `GET /api/funds` and splits it by the
+overview's administered funds; the rest sit under "Run by an outside GP".
+`?new=1` opens New fund (`POST /api/funds`, both rates required).
+`/admin/fund-admin/funds/:id` (FND4) reads `GET /api/funds/:id`; `?edit=facts`
+opens Edit fund facts. Economics' Change sends `PATCH /api/funds/:id` with an
+optional `reason` (10 to 500 characters, else 400 `reason_invalid` before the
+act gate), kept on the `fund_admin.<act>` audit row and the `fund_updated`
+activity row. The LPA card uses `GET /api/funds/:id/lpa/download` and
+`POST /api/funds/:id/regenerate-lpa`. No new route or migration. See
+`decisions/D1161.md`.
+
 ### Fund administration Worker contract (D714, #1779)
 
 `services/fundAdminAccess.ts`'s `FUND_ACTS` names every fund act, its routes and its tier. After its own `requireFundGp`, each fund write in `funds.ts` runs `assertFundAct`; the two legacy `/api/capital` issue routes and the ledger writes in `fund_ledger.ts` run `assertAdminAct`. A support session is refused every act (`403 support_session_refused`). On HQ:
