@@ -213,7 +213,7 @@ const CYCLE_DEFS = {
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
       // D1029: the Cap table module page is the tool, so it has no door to itself.
       // D1173 (#2455): the venture travels with the link (broken item 8).
-      'use-of-funds': (q) => ({ label: 'Open the financial model', href: forecastHref(q) }),
+      'use-of-funds': (q) => ({ label: 'Open the forecast', href: forecastHref(q) }),
       // D1194 (#3128): the old pipeline retired into the tool; its door opens the Pipeline tab with the venture.
       'capital-relationships': (q) => ({ label: 'Open the investor pipeline', href: `/raise/capital-relationships/pipeline${q || ''}` }),
       // D1109 (#2989): the Data room module page is the tool, so it has no door to the retired access view.
@@ -693,7 +693,10 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false }) {
+/** D1178: a Use of funds page under a tab, and the tab it sits under. */
+const UOF_SUB_TAB = { forecast: 'runway', compare: 'scenarios' };
+
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null }) {
   const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
@@ -799,7 +802,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D1109 (#2989): a file's number was its record page; it forwards to its window over Files, counted.
   const dataRoomOldFile = record && cycle === 'raise' && !dataRoomFile && isOldFileAddress(slug, recordId) ? recordId : null;
   // D1173 (#2455): the Use of funds tool's tabs are words under its module, never section records.
-  const uofTab = record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
+  // D1178 (#3105): `/runway/forecast` and `/scenarios/compare` are pages under a tab, given as `uofSub`.
+  const uofTab = uofSub && cycle === 'raise' ? UOF_SUB_TAB[uofSub] || null
+    : record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
   // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
   const capRelTab = record && cycle === 'raise' && isCapRelTab(slug, recordId) ? recordId : null;
   const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def,
@@ -1001,9 +1006,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else if (reporting && cycle === 'grow') {
     // D1056 (#2427): Grow's Reporting desk, under the tab row with Reporting lit.
+    // D1060 (#2930): and one report, `reporting="report"|"edit"` with its uid as `:id`.
     body = (
       <ReportingDesk tab={reporting} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} />
+        search={location.search} cards={tabs} action={action} phone={phone} reportUid={recordId ?? null} role={user?.role ?? null} />
     );
   } else if (buildPlan && cycle === 'build') {
     // D1063 (#2426): Validate → Build's plan, under Build's header and tab row.
@@ -1026,9 +1032,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   } else if (uofTab) {
     body = (
       <div className="space-y-4">
-      <UseOfFundsTabPage tab={uofTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+      <UseOfFundsTabPage tab={uofTab} sub={uofSub} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
-      {uofTab === 'runway' && user?.role === 'founder' && projectStatus === 'ready' && projectId && <UseOfFundsEadwyn key={projectId} projectId={projectId} ai={ai} />}
+      {uofTab === 'runway' && !uofSub && user?.role === 'founder' && projectStatus === 'ready' && projectId && <UseOfFundsEadwyn key={projectId} projectId={projectId} ai={ai} />}
       </div>
     );
   } else if (capRelTab) {

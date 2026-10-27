@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e9e7ee}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Founder › Validate › Customer research › Record a session</span><h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">{{ title }}</h1><p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">{{ intro }}</p></header>
+<sc-for list="{{ rows }}" as="r" hint-placeholder-count="9"><section id="{{ r.id }}" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ r.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ r.t }}</h2></div><sc-if value="{{ r.n }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:13px;line-height:1.55;color:#3f3a47">{{ r.n }}</p></sc-if><div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap"><sc-for list="{{ r.f }}" as="f" hint-placeholder-count="1"><div style="display:flex;flex-direction:column;gap:8px"><sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if><div style="{{ f.st }}"><dc-import name="Session Channels Page" v="{{ f.v }}" hint-size="100%,900px"></dc-import></div></div></sc-for></div></section></sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = 'width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)';
+    const M = 'width:390px;height:844px;border-radius:28px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.12)';
+    const f = (v, cap) => ({ v, cap: cap || '', st: /^(wa12|tgm|mcm)/.test(v) ? M : D });
+    const R = (id, t, n, fr) => ({ id, t, n: n || '', f: fr });
+    return { title: 'Record a session · Calls', intro: 'MC1 to MC7, the phone frames, and every board’s states. Google Meet, Zoom and uploaded recordings, with the same components as the WhatsApp and Telegram boards.', rows: [
+      R('MC1', 'Connect calls', 'Google needs a new sign-in, with Reconnect. Zoom is in beta for invited founders, and the host’s plan keeps it from saving transcripts.', [f('mc1')]),
+      R('MC2', 'Upcoming calls · next 14 days', 'Attached calls show their interview; the others offer “Attach to interview”.', [f('mc2')]),
+      R('MC3', 'A call’s status', 'Left: imported from the Meet transcript. Right: Zoom saved no transcript, so the next steps are Transcribe with Axal or Upload the recording.', [f('mc3')]),
+      R('MC4', 'Upload a recording', 'The upload resumes from the chunk it stopped at. The transcript starts only after the attestation.', [f('mc4')]),
+      R('MC5', 'Transcript', 'Speakers by name or “Speaker n”, with Rename speaker. Each turn has its timestamp and jumps to its audio. The Original · Translation · Both switch works.', [f('mc5')]),
+      R('MC6', 'Summary, decisions and action items', 'Each is a proposal with its evidence. Data points land in Validate modules once accepted.', [f('mc6')]),
+      R('MC7', 'Retention', 'Audio is kept for the days chosen; text stays until you delete it. The delete dialog is drawn beside the list.', [f('mc7')]),
+      R('MC-M', 'Mobile 390 · call status and transcript', 'Every tap target at least 44 by 44 px.', [f('mcm3', 'MC3 Call status'), f('mcm5', 'MC5 Transcript')]),
+      R('MC-S', 'States · each board', 'Empty, loading, error and not connected, for MC1 to MC7.', [f('mcs')]),
+    ] };
+  }
+}
+</script>
+</body></html>

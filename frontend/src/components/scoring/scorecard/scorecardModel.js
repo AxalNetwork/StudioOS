@@ -97,7 +97,5 @@ export const WAITS = Object.freeze({
   sharing: 'Who sees your scorecard is not stored yet. Until it is, no investor sees a score of yours (part 3).',
   trajectory: 'The trajectory across model versions is not stored yet (part 5).',
   weighting: 'Your weighting, the sort it drives on the deal list, is not stored yet (parts 3 and 5).',
-  models: 'Model versions, their weights and freshness windows, and Publish are not stored yet (parts 2 and 6).',
-  indices: 'Country indices for Geographic and Political and regulatory are not imported: the owner chooses the source and its licence first (part 6).',
   fairness: 'The quarterly fairness check by stage, sector, studio and connector use is not computed yet (part 3).',
 });

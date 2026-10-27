@@ -105,7 +105,9 @@ export const checks = {
   },
   bindings(m=actual) {
     const app=codeOnly(m.sources.app);
-    const routes=RETURNS.map(r=>r[0]).filter(p=>!['/build/brand','/grow/launch','/legal','/legal/send'].includes(p));
+    // D1178: /raise/capital/model is a redirect to Use of funds › Forecast now, so no editor mounts there.
+    // D1194: the capital-match addresses forward to the tool, so they mount no editor either.
+    const routes=RETURNS.map(r=>r[0]).filter(p=>!['/raise/capital-match','/grow/capital-match','/build/brand','/grow/launch','/legal','/legal/send','/raise/capital/model'].includes(p));
     assert.deepEqual([routes.map(p=>[p,routeBlock(app,p)?.includes('founderEditor(')??false]),
       /const founderEditor = \(component\) => <><FounderModuleBackLink user=\{user\} \/>\{component\}<\/>/.test(app),
       /tools=\{moduleToolLinks\(cycle, slug, user, q\)\}/.test(m.sources.route)],
