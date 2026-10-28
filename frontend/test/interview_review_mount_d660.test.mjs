@@ -164,3 +164,35 @@ test('#1589 structure() sends only a string model; anything else is no model', a
     assert.deepEqual(calls[0], ['structure', 7, sent], String(given));
   }
 });
+
+
+test('S33: timed-out structuring re-reads saved placements without resubmitting or hiding uncertainty', async () => {
+  const h = holder();
+  const error = Object.assign(new Error('outcome unknown'), { code: 'timeout' });
+  let writes = 0;
+  const { api, calls } = fakeApi({ structure: async () => { writes += 1; throw error; } });
+  await makeReviewActions({ api, sessionId: 7, set: h.set }).structure();
+  assert.equal(writes, 1);
+  assert.deepEqual(calls, [['placements', 7]]);
+  assert.deepEqual(h.get().read, F.PLACEMENTS_ONE_RUN);
+  assert.equal(h.get().runError, error);
+  assert.equal(h.get().running, false);
+});
+
+test('S33: interview generation requests get the AI deadline, ordinary reads keep 30 seconds', async () => {
+  const previousFetch = globalThis.fetch, previousTimer = globalThis.setTimeout;
+  const deadlines = [];
+  globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
+  globalThis.fetch = async () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  globalThis.setTimeout = (fn, ms, ...args) => { deadlines.push(ms); return previousTimer(fn, ms, ...args); };
+  try {
+    const { interviewSessionsApi: api } = await import('../src/lib/api/interviewSessions.js');
+    for (const run of [() => api.structure(7), () => api.summarise(7), () => api.ask(7, 'What changed?')]) {
+      deadlines.length = 0; await run();
+      assert.ok(deadlines.includes(180_000));
+      assert.ok(!deadlines.includes(30_000));
+    }
+    deadlines.length = 0; await api.placements(7);
+    assert.ok(deadlines.includes(30_000));
+  } finally { globalThis.fetch = previousFetch; globalThis.setTimeout = previousTimer; }
+});

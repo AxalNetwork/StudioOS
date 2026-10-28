@@ -185,7 +185,12 @@ export function makeReviewActions({ api, sessionId, set, onSpent, isLive = () =>
       set((st) => ({ ...st, running: true, runError: null }));
       // Only a model id is sent; anything else (a click event, say) is no model, so the Worker picks its default (#1589).
       // D778 part 8: the press names its own option, keeping the mounted rail's page.
-      try { await api.structure(sessionId, typeof model === 'string' && model ? model : undefined, railPressHeaders('structure:transcript')); await reload(); } catch (e) { put((st) => ({ ...st, runError: e })); }
+      try { await api.structure(sessionId, typeof model === 'string' && model ? model : undefined, railPressHeaders('structure:transcript')); await reload(); } catch (e) {
+        put((st) => ({ ...st, runError: e }));
+        // A timeout is not a refusal: the server may have saved placements.
+        // Read them without repeating the paid write; retain the uncertain outcome.
+        if (e?.code === 'timeout') await reload();
+      }
       put((st) => ({ ...st, running: false }));
       spent();
     },
