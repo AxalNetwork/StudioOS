@@ -98,6 +98,18 @@ export class CardFormBoundary extends React.Component {
  */
 export const SHEET_BAR = 'sticky top-0 z-10 bg-white pt-[env(safe-area-inset-top)] dark:bg-gray-900 sm:pt-0';
 export const SHEET_SCROLL_PAD = 'pb-[env(safe-area-inset-bottom)] sm:pb-0';
+/**
+ * D1365: a press on the dimmed page around a sheet closes it, as Close does,
+ * except while a payment is being taken. Only a press that starts and lands on
+ * the backdrop itself counts, so selecting text inside the sheet never closes it.
+ */
+export function backdropClose(close, locked = false) {
+  let start = null;
+  return {
+    onMouseDown: (e) => { start = e.target === e.currentTarget ? e.target : null; },
+    onClick: (e) => { if (!locked && start && e.target === e.currentTarget && e.target === start) close(); start = null; },
+  };
+}
 
 export function useDialog(onClose) {
   const box = useRef(null);
@@ -413,7 +425,7 @@ export default function CheckoutSheet({ plan, spec, user, role, held, planRead, 
   const notHere = mode === 'pay' || mode === 'change' ? 'unsellable' : mode;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center" data-testid="checkout-backdrop">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center" data-testid="checkout-backdrop" {...backdropClose(close, locked)}>
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="checkout-title" tabIndex={-1}
         className={`relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px] ${SHEET_SCROLL_PAD}`}
         data-testid="checkout-sheet">

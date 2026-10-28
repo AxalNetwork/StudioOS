@@ -293,3 +293,21 @@ test('D1365: on a phone the sheet\'s bar stays in reach — sticky, clear of the
     assert.equal(closed, 1);
   } finally { await v.close(); }
 });
+
+test('D1365: on any screen, Cancel beside Pay and a press on the dimmed page close the sheet; a press inside it never does', async () => {
+  // Mutation checked: close on any backdrop click → the press that started inside the sheet closes it.
+  let closed = 0;
+  const v = await mount({ pack: 'k25', bridge: fakeBridge([]), onClose: () => { closed += 1; } }, ROUTES);
+  try {
+    const backdrop = v.props('pack-backdrop');
+    const self = {};
+    const inner = {};
+    await act(async () => { backdrop.onMouseDown({ target: inner, currentTarget: self }); backdrop.onClick({ target: self, currentTarget: self }); });
+    assert.equal(closed, 0, 'a drag that began inside the sheet is not a close');
+    await act(async () => { backdrop.onMouseDown({ target: self, currentTarget: self }); backdrop.onClick({ target: self, currentTarget: self }); });
+    assert.equal(closed, 1, 'a press on the dimmed page closes it');
+    assert.equal(v.text('pack-cancel'), 'Cancel');
+    await v.click('pack-cancel');
+    assert.equal(closed, 2);
+  } finally { await v.close(); }
+});

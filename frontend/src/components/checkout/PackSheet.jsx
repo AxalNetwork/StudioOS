@@ -6,7 +6,7 @@ import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { topUpRows } from '../../pages/account/usageModel';
 import { notifyTokensAdded } from '../../lib/aiTokens';
 import { SECURE_LINE, SELLER_LINE, declineFamily, newNonce, refusalView } from './checkoutModel';
-import { CardFormBoundary, SHEET_BAR, SHEET_SCROLL_PAD, STRIPE_BRIDGE, useDialog } from './CheckoutSheet';
+import { CardFormBoundary, SHEET_BAR, SHEET_SCROLL_PAD, STRIPE_BRIDGE, backdropClose, useDialog } from './CheckoutSheet';
 import {
   HISTORY_EMPTY, HISTORY_EMPTY_LINE, HISTORY_MORE, HISTORY_TITLE, NOTHING_ON_SALE, PACK_PROMO, PACK_RATE, PACK_TITLE, PACKS_UNREADABLE,
   PICK_ANOTHER, RUNS_TOGGLE, autoReloadView, backLabel, balanceLine, countFrames, holdRule, intentBody, keepsReading, landingView,
@@ -280,7 +280,7 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
   const paid = intent ? totals.find((t) => t.key === 'due')?.value : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center" data-testid="pack-backdrop">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center" data-testid="pack-backdrop" {...backdropClose(close, locked)}>
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="pack-title" tabIndex={-1}
         className={`relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px] ${SHEET_SCROLL_PAD}`}
         data-testid="pack-sheet">
@@ -372,6 +372,8 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
                     <button type="button" className={PRIMARY} onClick={pay} disabled={locked || !pack || !!rule || !card} data-testid="pack-pay">
                       {locked ? 'Processing…' : pack ? `Pay ${totals.find((t) => t.key === 'due')?.value ?? pack.price}` : 'Pay'}
                     </button>
+                    {/* D1365: a way out beside Pay, on every screen size; none while a payment is taken. */}
+                    {!locked && <button type="button" className={`${LINK} self-center`} onClick={close} data-testid="pack-cancel">Cancel</button>}
                     {rule && <p className={`m-0 ${SUB}`} data-testid="pack-pay-blocked">{PICK_ANOTHER}</p>}
                     {locked && <p className="m-0 text-[12.5px] font-bold text-axal-ink dark:text-gray-100" data-testid="pack-processing">Don’t close this window.</p>}
                   </div>
