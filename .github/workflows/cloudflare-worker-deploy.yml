@@ -168,6 +168,7 @@ jobs:
       # to the pattern only with a run that shows it. `set -o pipefail` keeps
       # `tee` from turning a failed deploy into a green step.
       - name: Deploy to Cloudflare Worker
+        id: publish
         working-directory: cloudflare-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -191,18 +192,22 @@ jobs:
           exit 1
 
       # D1364 (#3591): stamp the build that just shipped, from the repo root,
-      # before it is cached. Without it the next deploy's build refuses the
-      # restored ledger ("restored deployment ledger is unstamped"). A failed
-      # publish skips this step; building alone never advances the clock.
+      # before it is cached. The stamp step itself has no if, so a failed
+      # stamp stays red. The save below still runs when publish succeeded,
+      # so a failed timestamp does not drop the tree already serving.
+      # A failed or skipped publish never saves. Building alone never
+      # advances the clock.
       - name: Record successful asset deployment
         run: node scripts/record-asset-deploy.mjs
 
-      # D529 — only after the deploy above succeeded (a failed step skips
-      # this one), save what production now serves for the next deploy to
-      # restore, including the deployedAt stamp above. Smoke runs afterward
-      # as a dependent job, so a failed probe cannot lose the tree that shipped.
-      # One entry per run; the restore takes the newest by prefix.
+      # D529 — save what production now serves for the next deploy to restore.
+      # always() plus the publish outcome: a failed stamp does not skip this,
+      # and a failed publish does. Smoke runs afterward as a dependent job,
+      # so a failed probe cannot lose the tree that shipped. One entry per
+      # run; the restore takes the newest by prefix.
+
       - name: Save the deployed assets for the next deploy
+        if: always() && steps.publish.outcome == 'success'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |

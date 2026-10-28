@@ -16,7 +16,8 @@ const { isPublicPath } = await import('../src/lib/api.js');
 
 const src = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const render = (el, url = INTERVIEW_NOTICE_PATH) => renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [url] }, el));
-const page = (url, props = {}) => render(React.createElement(InterviewNoticePage, props), url);
+// D756 freezes the original chat notice; D886 separately tests the current bot notice.
+const page = (url, props = {}) => render(React.createElement(InterviewNoticePage, { notices: INTERVIEW_NOTICES, current: INTERVIEW_NOTICE_VERSION, ...props }), url);
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').replace(/ ([.,])/g, '$1').trim();
 const article = (html) => text(html.slice(html.indexOf('<article'), html.indexOf('</article>')));
 

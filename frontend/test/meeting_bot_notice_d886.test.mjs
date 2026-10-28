@@ -5,13 +5,19 @@ import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import * as notice from '../../meeting-bot/notice.mjs';
-import * as noticePage from '../src/pages/InterviewNoticePage.jsx';
+import * as candidateNotice from '../../meeting-bot/notice.mjs';
+import * as candidatePage from '../src/pages/InterviewNoticePage.jsx';
 import MeetingBotConsentNotice from '../src/pages/founder/MeetingBotConsentNotice.jsx';
 import { mutationCheck, sourceModule } from './_record_d696.mjs';
 
 const h = React.createElement;
-const read = (path) => readFileSync(new URL('../../' + path, import.meta.url), 'utf8');
+// Keep unpublished regressions independent of the candidate's publication state.
+const read = (path) => readFileSync(new URL('../../' + path, import.meta.url), 'utf8')
+  .replace(/MEETING_BOT_NOTICE_APPROVED_AT = '[^']+';/, 'MEETING_BOT_NOTICE_APPROVED_AT = null;')
+  .replace("import { MEETING_BOT_NOTICE_APPROVED_AT, MEETING_BOT_NOTICE_PUBLISHED, MEETING_BOT_NOTICE_VERSION } from '../../../meeting-bot/notice.mjs';", "const MEETING_BOT_NOTICE_APPROVED_AT = null; const MEETING_BOT_NOTICE_PUBLISHED = false; const MEETING_BOT_NOTICE_VERSION = 2;");
+const notice = await sourceModule(read('meeting-bot/notice.mjs'), '../../meeting-bot/notice.mjs');
+const noticePage = await sourceModule(read('frontend/src/pages/InterviewNoticePage.jsx'), 'pages/InterviewNoticePage.jsx', true);
+
 const renderPage = (Page, props = {}, url = '/privacy/interviews') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [url] }, h(Page, props)));
 const plain = (html) => html.replace(/<[^>]*>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
@@ -155,7 +161,7 @@ test('the publication guard rejects silently replacing the live notice with the 
 
 test('publishing makes version 2 current, preserves old links and keeps the legacy map immutable', async () => {
   const published = read('frontend/src/pages/InterviewNoticePage.jsx').replace(
-    "import { MEETING_BOT_NOTICE_APPROVED_AT, MEETING_BOT_NOTICE_PUBLISHED, MEETING_BOT_NOTICE_VERSION } from '../../../meeting-bot/notice.mjs';",
+    "const MEETING_BOT_NOTICE_APPROVED_AT = null; const MEETING_BOT_NOTICE_PUBLISHED = false; const MEETING_BOT_NOTICE_VERSION = 2;",
     "const MEETING_BOT_NOTICE_APPROVED_AT = '2000-01-01'; const MEETING_BOT_NOTICE_PUBLISHED = true; const MEETING_BOT_NOTICE_VERSION = 2;",
   );
   await mutationCheck(published, 'pages/InterviewNoticePage.jsx', (api) => {
@@ -196,4 +202,16 @@ test('rollout assertions reject each environment being enabled prematurely', () 
     assert.throws(() => checkConfig(mutated), { name: 'AssertionError' });
   }
   checkConfig(config);
+});
+
+test('restricted candidate publishes the approved date and the same public notice as the runtime', () => {
+  assert.equal(candidateNotice.MEETING_BOT_NOTICE_APPROVED_AT, '2026-10-22');
+  assert.equal(candidateNotice.MEETING_BOT_NOTICE_PUBLISHED, true);
+  assert.equal(candidateNotice.meetingBotNotice(), candidateNotice.draftMeetingBotNotice());
+  for (const url of ['/privacy/interviews', '/privacy/interviews?n=2']) {
+    const body = plain(renderPage(candidatePage.default, {}, url));
+    assert.match(body, /Notice version 2/);
+    assert.match(body, /Last updated 2026-10-22/);
+  }
+  assert.match(plain(renderPage(candidatePage.default, {}, '/privacy/interviews?n=1')), /Notice version 1/);
 });
