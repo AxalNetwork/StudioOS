@@ -112,6 +112,8 @@ test('every connectors call goes to /api/connectors through one module, re-expor
   const f = mockFetch({});
   try {
     const { connectorsApi } = await import('../src/lib/api/connectors.js');
+    const { connectorsApi: exportedConnectorsApi } = await import('../src/lib/api.js');
+    assert.equal(exportedConnectorsApi, connectorsApi, 'api.js re-exports the same connectors client');
     await connectorsApi.available();
     await connectorsApi.list();
     await connectorsApi.waitlist();
@@ -143,8 +145,6 @@ test('every connectors call goes to /api/connectors through one module, re-expor
   assert.deepEqual(f.calls[3].body, { provider_key: 'salesforce' });
   assert.deepEqual(f.calls[7].body, { tool: 'Notion', use: 'Docs' });
   assert.deepEqual(f.calls[13].body, { company_ids: [10, 20] });
-  // D1217 (#3214) adds companyReceivingAccounts.js in its alphabetical place.
-  assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/companyEin\.js';\nexport \* from '\.\/api\/companyReceivingAccounts\.js';\nexport \* from '\.\/api\/companySheet\.js';\nexport \* from '\.\/api\/connectors\.js';\nexport \* from '\.\/api\/contacts\.js';\nexport \* from '\.\/api\/contracts\.js';/);
   for (const f2 of ['AccountConnectors.jsx', 'ConnectorSheet.jsx', 'ConnectToolSheet.jsx', 'connectorTools.jsx']) {
     assert.doesNotMatch(read(`frontend/src/pages/account/${f2}`), /api\.integrations\w+\(|['"`]\/integrations\//, `${f2} still calls /api/integrations`);
   }

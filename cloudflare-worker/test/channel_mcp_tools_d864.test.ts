@@ -14,7 +14,7 @@
 import test from 'node:test';
 import { encryptColumn } from '../src/services/columnCipher.ts';
 import assert from 'node:assert/strict';
-import { callTool, listedTools, registeredTools } from '../src/mcp/server.ts';
+import { callTool, EXECUTION_META, listedTools, registeredTools } from '../src/mcp/server.ts';
 import {
   businessMessage, call, consentGiven, count, INTERVIEW, ME, mig, mockFetch, OTHER, OTHER_PROJECT, PROJECT, SECRET_VALUES,
   TG_ME, telegramApi, tgHook, WA_CUSTOMER, world,
@@ -113,14 +113,32 @@ test('default tool output carries no message text, a contact name, a phone numbe
   const s = await setup();
   s.db.prepare(`INSERT INTO validate_proposals (project_id, kind, payload_json, status, session_id, citation_json) VALUES (?, 'pain_tag', ?, 'pending', ?, ?)`)
     .run(PROJECT, JSON.stringify({ label: 'Manual reconciliation' }), s.sessionB, JSON.stringify({ kind: 'transcript', quote: QUOTE }));
-  const outs = [
-    await quiet(() => callTool(s.env, grant([PROJECT, SECOND]), 'g-864', tool('list_channel_chats'), {}, READ)),
-    await quiet(() => callTool(s.env, grant([PROJECT]), 'g-864', tool('get_session_insights'), { company: PROJECT, session_id: s.sessionB }, READ)),
-    await quiet(() => callTool(s.env, grant([PROJECT]), 'g-864', tool('assign_chat_to_interview'), { company: PROJECT, chat: s.A, interview_id: INTERVIEW }, WRITE)),
-  ];
+  // Force a provider-id substring in valid execution UUIDs, so this regression
+  // is deterministic instead of depending on random CI identifiers.
+  const originalUUID = crypto.randomUUID;
+  let sequence = 0;
+  crypto.randomUUID = (() => `80020000-0000-4000-8000-${String(++sequence).padStart(12, '0')}`) as typeof crypto.randomUUID;
+  let outs;
+  try {
+    outs = [
+      await quiet(() => callTool(s.env, grant([PROJECT, SECOND]), 'g-864', tool('list_channel_chats'), {}, READ)),
+      await quiet(() => callTool(s.env, grant([PROJECT]), 'g-864', tool('get_session_insights'), { company: PROJECT, session_id: s.sessionB }, READ)),
+      await quiet(() => callTool(s.env, grant([PROJECT]), 'g-864', tool('assign_chat_to_interview'), { company: PROJECT, chat: s.A, interview_id: INTERVIEW }, WRITE)),
+    ];
+  } finally { crypto.randomUUID = originalUUID; }
+  // Execution IDs are also public opaque identifiers. Validate and omit only
+  // their two contract fields; all other metadata and every payload stay checked.
+  const publicOuts = outs.map((out) => {
+    const meta = { ...out._meta };
+    assert.match(meta.execution_id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert.equal(meta[EXECUTION_META], meta.execution_id);
+    delete meta.execution_id;
+    delete meta[EXECUTION_META];
+    return { ...out, _meta: meta };
+  });
   // Axal's opaque chat uids may randomly contain a short numeric provider id.
   // They are explicitly part of the public contract, so check the other fields.
-  const dump = [s.A, s.B, s.C, s.W].reduce((text, uid) => text.split(uid).join('[Axal chat uid]'), JSON.stringify(outs));
+  const dump = [s.A, s.B, s.C, s.W].reduce((text, uid) => text.split(uid).join('[Axal chat uid]'), JSON.stringify(publicOuts));
   for (const t of [...Object.values(TEXT), QUOTE, 'Sam', 'Okafor', '8001', '8002', TG_ME, WA_CUSTOMER, ...SECRET_VALUES]) {
     assert.equal(dump.includes(t), false, `a tool output carried ${t}`);
   }

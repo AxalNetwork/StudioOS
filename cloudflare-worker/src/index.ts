@@ -21,6 +21,8 @@ import { LEGACY_BUILDER_PATHS, builderRedirectTarget } from './services/builderR
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
 import { developerKeys } from './routes/developer_keys';
+import { connectorApi } from './routes/connector_api';
+import { adminConnectorClients } from './routes/admin_connector_clients';
 import { developerLimits } from './routes/developer_limits';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -1481,6 +1483,10 @@ app.route('/api/connectors/custom', connectorsCustomRoutes);
 app.route('/api/mcp/consent', mcpConsent);
 // D841 (#2464): a member's own API keys for /mcp, behind API_KEYS_ENABLED.
 app.route('/api/developer/keys', developerKeys);
+// D1361: the connector API, read-only REST over the MCP tools for a member API key (a Lovable custom connector).
+app.route('/api/connector/v1', connectorApi);
+// D1361: the Lovable connector's OAuth client, minted and rotated by a Super Admin.
+app.route('/api/admin/connector-clients', adminConnectorClients);
 // D849 (#2472): the limits in force on the member's connections and keys.
 app.route('/api/developer/limits', developerLimits);
 // D840 (#2346): Sign in with Mercury, ahead of the integrations router.

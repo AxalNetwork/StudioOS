@@ -23,6 +23,7 @@ files say how to act on it.
 | `CLOSING.md` | Run a closing end to end (D1220): open it, prepare and send the paper, countersign for Axal, choose each route, share instructions, record evidence, the founder's cap-table decision, and Mark Closed; what no page does yet. |
 | `MERCURY_MEMBER_CHECKS.md` | Run D752's read-only live checks: four Mercury field names for S02 or S03, and the owner's walk-through with a test investor and founder (#1008 item 34). |
 | `MCP_API_RUNBOOK.md` | Switch member API keys for `/mcp` on, check them read-only, roll back, revoke a member's keys and read usage in aggregate (D850). |
+| `LOVABLE_CONNECTOR.md` | Add Axal VC to a Lovable workspace as a custom connector: mint the OAuth client, the form's values, connecting and checking (D1361). The contract is `AXAL_CONNECTOR_API.openapi.json`. |
 | `REDIRECT_RETIREMENT.md` | Retire the SPA's internal redirects on 2027-01-19 (#2301): what is counted and kept, the D1 query for the last 30 days, and what to remove. |
 | `S1_HANDOFF_2026-10-18.md` | Take over S1, the coordinator session. A dated handoff, true on its date. |
 
