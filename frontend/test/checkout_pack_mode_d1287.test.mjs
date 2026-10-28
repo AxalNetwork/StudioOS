@@ -278,6 +278,40 @@ test('CRP15: Pay sits in a bar fixed at the bottom on a phone and in place from 
   } finally { await v.close(); }
 });
 
+test('D1365: on a phone the sheet\'s bar stays in reach — sticky, clear of the status bar — and Close closes it with nothing on sale', async () => {
+  // Mutation checked: drop `sticky` (or the top safe area) from SHEET_BAR → the bar scrolls away under the status bar.
+  let closed = 0;
+  const v = await mount({ onClose: () => { closed += 1; } }, { ...ROUTES, topUp: { ...TOP_UP, packs: [] } });
+  try {
+    assert.equal(v.text('pack-rows-none'), 'Top-up isn’t available yet.');
+    const bar = v.props('pack-bar').className;
+    assert.match(bar, /\bsticky top-0\b/);
+    assert.match(bar, /pt-\[env\(safe-area-inset-top\)\]/);
+    assert.match(bar, /\bbg-white\b.*\bdark:bg-gray-900\b/, 'opaque, so content scrolls under it unseen, in both themes');
+    assert.match(v.props('pack-sheet').className, /pb-\[env\(safe-area-inset-bottom\)\]/, 'clear of the home indicator');
+    await v.click('pack-close');
+    assert.equal(closed, 1);
+  } finally { await v.close(); }
+});
+
+test('D1365: on any screen, Cancel beside Pay and a press on the dimmed page close the sheet; a press inside it never does', async () => {
+  // Mutation checked: close on any backdrop click → the press that started inside the sheet closes it.
+  let closed = 0;
+  const v = await mount({ pack: 'k25', bridge: fakeBridge([]), onClose: () => { closed += 1; } }, ROUTES);
+  try {
+    const backdrop = v.props('pack-backdrop');
+    const self = {};
+    const inner = {};
+    await act(async () => { backdrop.onMouseDown({ target: inner, currentTarget: self }); backdrop.onClick({ target: self, currentTarget: self }); });
+    assert.equal(closed, 0, 'a drag that began inside the sheet is not a close');
+    await act(async () => { backdrop.onMouseDown({ target: self, currentTarget: self }); backdrop.onClick({ target: self, currentTarget: self }); });
+    assert.equal(closed, 1, 'a press on the dimmed page closes it');
+    assert.equal(v.text('pack-cancel'), 'Cancel');
+    await v.click('pack-cancel');
+    assert.equal(closed, 2);
+  } finally { await v.close(); }
+});
+
 // ---------------------------------------------------------------- D1366: the custom amount
 const CUSTOM = { price_id: 'price_unit', unit_amount: 100, currency: 'usd', min_cents: 500, max_cents: 50_000 };
 

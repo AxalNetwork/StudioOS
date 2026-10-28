@@ -21,7 +21,10 @@ That is the Lovable → Axal VC direction. The Axal VC → Lovable connection
 2. **Mint the Lovable client.**
    1. Open **HQ › Integration keys** as a Super Admin. The **Lovable
       connector** card is at the bottom.
-   2. Choose **Create the client**.
+   2. Sign in with TOTP, then choose **Create the client**. Creating or
+      replacing requires verification within the last 15 minutes; complete
+      the existing verification prompt if asked. Other sign-in factors must
+      sign in again with TOTP.
    3. Copy the **Client ID** and **Client secret**. The secret is shown
       once.
    4. If the secret leaks, choose **Create a new client**: the old one stops

@@ -119,7 +119,7 @@ test('#3591: the deploy workflow stamps the shipped build after wrangler deploy 
   const yml=fs.readFileSync(new URL('../../.github/workflows/cloudflare-worker-deploy.yml',import.meta.url),'utf8');
   const deploy=yml.slice(yml.indexOf('\n  deploy:'),yml.indexOf('\n  schema-drift:'));
   const ship=deploy.indexOf('wrangler deploy --config ../wrangler.toml --env production');
-  const step=deploy.indexOf('- name: Record the successful deployment');
+  const step=deploy.indexOf('- name: Record successful asset deployment');
   const stamp=deploy.indexOf('run: node scripts/record-asset-deploy.mjs');
   const save=deploy.indexOf('actions/cache/save@');
   assert.ok(ship>0 && ship<step && step<stamp && stamp<save, 'deploy, then stamp, then cache');
