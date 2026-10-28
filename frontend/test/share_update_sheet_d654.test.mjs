@@ -143,7 +143,7 @@ test('Grow\'s header opens the sheet, and /updates/:uid is routed', () => {
   assert.match(route, /<ShareUpdateLightbox projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} asPage=\{asPage\} \/>/);
   assert.match(route, /\(uid\) => navigate\(`\/updates\/\$\{encodeURIComponent\(uid\)\}`, \{ replace: true \}\)/);
   // D686 §5.4: the mount also re-reads the cycle page after a change (Build's Connect a tool), on close.
-  assert.match(route, /<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\} onDone=\{onDone\}\s*asPage=\{phone \? \{ pageBelow: 'lg', bar: phoneBar\(moduleName \|\| name\), pageClass: PHONE_GUTTER \} : undefined\}\s*onChanged=\{\(\) => \{ dirty\.current = true; \}\} \/>/);
+  assert.match(route, /<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\} onDone=\{onDone\}\s*asPage=\{phone \? \{ pageBelow: 'lg', bar: phoneBar\(moduleName \|\| name, cycle !== 'validate'\), pageClass: PHONE_GUTTER \} : undefined\}\s*onChanged=\{\(\) => \{ dirty\.current = true; \}\} \/>/);
   assert.match(route, /if \(!lightbox && dirty\.current\) \{ dirty\.current = false; setReload\(\(n\) => n \+ 1\); \}/);
   assert.match(readFileSync('frontend/src/App.jsx', 'utf8'), /path="\/updates\/:uid" element=\{guard\(\[[^\]]+\], <SentUpdatePage \/>\)\}/);
 });

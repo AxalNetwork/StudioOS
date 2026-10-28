@@ -65,7 +65,7 @@ test('structured decisions and the guard cannot become chat or vision choices', 
 test('all persona modules retain their boundaries, including Super Admin elevation', () => {
   const profiles = ['Founder', 'Investor', 'Advisor', 'Operating Partner', 'Admin', 'Super Admin'];
   const roles = ['founder', 'investor', 'advisor', 'partner', 'admin'];
-  assert.deepEqual(roles.map(role => profiles.filter(p => modulePageAllowed({ role }, `${p} · Home`))), profiles.slice(0, 5).map(p => [p]));
+  assert.deepEqual(roles.map(role => profiles.filter(p => modulePageAllowed({ role }, `${p} · Home`))), [...profiles.slice(0, 4).map(p => [p]), profiles.slice(0, 5)]);
   assert.deepEqual([modulePageAllowed({ role: 'admin', is_super_admin: 1 }, 'Super Admin · Platform'), modulePageAllowed({ role: 'founder', is_super_admin: 1 }, 'Super Admin · Platform')], [true, false]);
 });
 
@@ -84,14 +84,14 @@ test('Founder, Investor, Advisor, Partner, Admin and Super Admin dispatch under 
   try {
     const results = [];
     const id = '@cf/zai-org/glm-4.7-flash';
-    for (const [user, role, profile] of [[2, 'founder', 'Founder'], [3, 'investor', 'Investor'], [4, 'advisor', 'Advisor'], [5, 'partner', 'Operating Partner'], [6, 'admin', 'Admin'], [1, 'admin', 'Super Admin']] as const) {
+    for (const [user, role, profile] of [[2, 'founder', 'Founder'], [3, 'investor', 'Investor'], [4, 'advisor', 'Advisor'], [5, 'partner', 'Operating Partner'], [6, 'admin', 'Admin'], [1, 'admin', 'Super Admin'], [6, 'admin', 'Founder']] as const) {
       f.db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, user);
       f.db.prepare('UPDATE member_subscription_amounts SET plan_family = ? WHERE user_id = ?').run(role, user);
       const page = rows.find(r => r.pageKey.startsWith(profile + ' · ') && moduleConnections(r, switches).some(m => m.id === id))!;
       const result = await post(f, { page: page.pageKey, model: id, text: 'Explain this material.' }, 'run', user);
       results.push([profile, result.body.ok]);
     }
-    assert.deepEqual(results, ['Founder', 'Investor', 'Advisor', 'Operating Partner', 'Admin', 'Super Admin'].map(p => [p, true]));
+    assert.deepEqual(results, ['Founder', 'Investor', 'Advisor', 'Operating Partner', 'Admin', 'Super Admin', 'Founder'].map(p => [p, true]));
     assert.deepEqual(f.db.prepare("SELECT DISTINCT user_id FROM ai_usage_logs WHERE task = 'module_chat' ORDER BY user_id").all().map((r: any) => r.user_id), [1, 2, 3, 4, 5, 6]);
   } finally { f.db.close(); }
 });
