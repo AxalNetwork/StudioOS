@@ -154,7 +154,8 @@ test('D900: who runs and who reads — the founder runs; an Admin reads states w
   const row = admin.body.claims.find((c: any) => c.figure === 'paying_customers');
   assert.equal(row.state, 'mismatch');
   for (const k of ['stated_value', 'stated_shown', 'record', 'note']) assert.equal(k in row, false, `an Admin reads no ${k}`);
-  assert.doesNotMatch(JSON.stringify(admin.body), /\b42\b|\b38\b/);
+  // checked_at is "YYYY-MM-DD HH:MM:SS". A minute of 42 or 38 is not the figure.
+  assert.doesNotMatch(JSON.stringify(admin.body).replace(/\d{2}:\d{2}:\d{2}/g, ''), /\b42\b|\b38\b/);
   const owner = await call(db, OWNER, 'GET', '/api/decks/21/check');
   assert.equal(owner.body.can_check, true);
   assert.equal(owner.body.claims.find((c: any) => c.figure === 'paying_customers').stated_shown, '42');
@@ -256,7 +257,8 @@ test('D900: one raise.pitch-deck cycle row per write, never a figure or the note
   assert.deepEqual(rows.map((r) => r.action), ['deck_checked', 'claim_kept_with_note', 'deck_figure_replaced']);
   for (const r of rows) {
     assert.match(String(r.entity_type), /pitch/);
-    assert.doesNotMatch(String(r.details), /\b42\b|\b38\b|secret/);
+    // A written-at clock can read 42 or 38. The figure is what remains once the clock is gone.
+    assert.doesNotMatch(String(r.details).replace(/\d{2}:\d{2}:\d{2}/g, ''), /\b42\b|\b38\b|secret/);
   }
   assert.ok(logs(db).length >= 3);
 });
