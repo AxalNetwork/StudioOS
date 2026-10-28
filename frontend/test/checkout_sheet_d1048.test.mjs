@@ -646,6 +646,8 @@ test('D1055 PAYX20 at 390: ‹ Back and Checkout, the summary as one row with De
     assert.match(back.className, /min-h-\[44px\]/);
     // Mutation checked: show the × on the phone → two ways out in the top bar.
     assert.match(v.props('checkout-close').className, /^hidden .*\bsm:grid\b/);
+    // D1365: the phone's top bar stays in reach and clear of the status bar.
+    assert.match(v.props('checkout-bar').className, /\bsticky top-0\b.*pt-\[env\(safe-area-inset-top\)\]/);
     const row = v.props('checkout-summary-row');
     assert.equal(v.text('checkout-summary-row'), 'Validate + Build · $20/monthDetails ⌄');
     assert.equal(row['aria-expanded'], false);
