@@ -78,7 +78,9 @@ test('D1355: the official sign-in wording and all button states survive busy/dis
   const reconnect=renderToStaticMarkup(h(LinkedInSignInButton,{context:'Reconnect', 'aria-description':'Reconnect LinkedIn'}));
   assert.ok(reconnect.includes('aria-label="Sign in with LinkedIn — Reconnect"') && reconnect.includes('aria-description="Reconnect LinkedIn"') && />Reconnect<\/span>/.test(reconnect));
   const unavailable=renderToStaticMarkup(h(LinkedInSignInButton,{disabled:true}));
-  assert.ok(unavailable.includes('cursor-not-allowed') && unavailable.includes('Please wait…') && !unavailable.includes('cursor-wait'));
+  const waiting=renderToStaticMarkup(h(LinkedInSignInButton,{disabled:true,disabledReason:'Please wait…'}));
+  assert.match(waiting, />Please wait…<\/span>/);
+  assert.ok(unavailable.includes('cursor-not-allowed') && !unavailable.includes('Please wait…') && !unavailable.includes('cursor-wait'));
 
 });
 
@@ -124,12 +126,13 @@ test('D1355: the real LinkedIn page retains unavailable and reconnect context', 
 });
 
 
-test('D1355: disconnect disables reconnect without falsely announcing that sign-in is opening', async () => {
+test('D1355: disconnect and reconnect announce only their actual pending operation', async () => {
   const catalogue=buildCatalogue({firstParty:{linkedin:{configured:true,connected:true}}});
   catalogue.find(p=>p.key === 'linkedin').connection.last_error='invalid_grant: expired';
-  const oldDisconnect=api.linkedinDisconnect, oldFetch=globalThis.fetch;
-  let finish, call;
+  const oldDisconnect=api.linkedinDisconnect, oldStart=api.linkedinOAuthStart, oldFetch=globalThis.fetch;
+  let finish, finishStart, call;
   api.linkedinDisconnect=()=>new Promise(resolve=>{finish=resolve;});
+  api.linkedinOAuthStart=()=>new Promise(resolve=>{finishStart=resolve;});
   globalThis.fetch=async()=>new Response(JSON.stringify({connected:true,imported:{linkedin_only:0,kept:0},reviews:[]}),{status:200,headers:{'Content-Type':'application/json'}});
   let m;
   try {
@@ -142,10 +145,19 @@ test('D1355: disconnect disables reconnect without falsely announcing that sign-
     assert.equal(button['aria-busy'],undefined);
     assert.doesNotMatch(m.text(), /Opening LinkedIn/);
     assert.match(m.text(), /Disconnecting…/);
+    assert.match(m.text(), /Please wait…/);
+    await act(async()=>{finish({ok:true});await call;});
+    finish=null;
+    await act(async()=>{m.props(by('connector-page-connect-button')).onClick();});
+    const opening=m.props(by('connector-page-connect-button'));
+    assert.equal(opening.disabled,true);
+    assert.equal(opening['aria-busy'],true);
+    assert.match(m.text(), /Opening LinkedIn…/);
   } finally {
     if(finish) await act(async()=>{finish({ok:true});await call;});
+    if(finishStart) await act(async()=>{finishStart({authorize_url:''});});
     if(m) await m.unmount();
-    api.linkedinDisconnect=oldDisconnect;globalThis.fetch=oldFetch;
+    api.linkedinOAuthStart=oldStart;api.linkedinDisconnect=oldDisconnect;globalThis.fetch=oldFetch;
   }
 });
 

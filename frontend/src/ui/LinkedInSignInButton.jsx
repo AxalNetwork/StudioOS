@@ -3,7 +3,7 @@ import { LINKEDIN_SIGNIN } from './linkedinBrand';
 const STATUS = 'text-center text-[12px] leading-snug text-gray-600 dark:text-gray-300';
 
 /** D1355: unchanged official artwork; flow context stays outside the image. */
-export default function LinkedInSignInButton({ busy = false, disabled = false, context, className = '', ...props }) {
+export default function LinkedInSignInButton({ busy = false, disabled = false, context, disabledReason, className = '', ...props }) {
   const label = context ? `Sign in with LinkedIn — ${context}` : 'Sign in with LinkedIn';
   const cursor = busy ? 'cursor-wait' : disabled ? 'cursor-not-allowed' : 'cursor-pointer';
   return <span className={`inline-flex min-w-0 flex-col items-stretch gap-1 ${className}`}>
@@ -18,6 +18,6 @@ export default function LinkedInSignInButton({ busy = false, disabled = false, c
       </span>
     </button>
     {busy && <span role="status" className={STATUS}>Opening LinkedIn…</span>}
-    {!busy && disabled && <span className={STATUS}>Please wait…</span>}
+    {!busy && disabled && disabledReason && <span className={STATUS}>{disabledReason}</span>}
   </span>;
 }
