@@ -87,9 +87,6 @@ async function backfill(env: Env, userId: number): Promise<void> {
   ).bind(userId, userId).run();
 }
 
-const SELECT = `SELECT s.*, u.name AS other_name, u.display_name AS other_display_name, u.role AS other_role, u.email AS other_email
-  FROM mail_address_shares s JOIN users u ON u.id = CASE WHEN s.user_low = ?1 THEN s.user_high ELSE s.user_low END`;
-
 /** What the member sees of one pair. The other's address only when both have shared. */
 function view(row: ShareRow & { other_name: string | null; other_display_name: string | null; other_role: string | null; other_email: string | null }, userId: number) {
   const s = sides(row, userId);
@@ -115,15 +112,22 @@ export type ShareView = ReturnType<typeof view>;
 /** The member's Network matches, newest first. */
 export async function listShares(env: Env, user: User): Promise<ShareView[]> {
   await backfill(env, Number(user.id));
-  const { results } = await env.DB.prepare(`${SELECT} WHERE s.user_low = ?1 OR s.user_high = ?1 ORDER BY s.created_at DESC, s.id DESC`)
-    .bind(Number(user.id)).all<any>();
+  // The other member's columns, written out in both reads: no SQL text is assembled.
+  const { results } = await env.DB.prepare(
+    `SELECT s.*, u.name AS other_name, u.display_name AS other_display_name, u.role AS other_role, u.email AS other_email
+       FROM mail_address_shares s JOIN users u ON u.id = CASE WHEN s.user_low = ?1 THEN s.user_high ELSE s.user_low END
+      WHERE s.user_low = ?1 OR s.user_high = ?1 ORDER BY s.created_at DESC, s.id DESC`,
+  ).bind(Number(user.id)).all<any>();
   return (results || []).map((r: any) => view(r, Number(user.id)));
 }
 
 /** One pair this member is in, or 404. */
 export async function shareOf(env: Env, user: User, uid: string): Promise<ShareView> {
-  const row = await env.DB.prepare(`${SELECT} WHERE s.uid = ?2 AND (s.user_low = ?1 OR s.user_high = ?1)`)
-    .bind(Number(user.id), String(uid)).first<any>();
+  const row = await env.DB.prepare(
+    `SELECT s.*, u.name AS other_name, u.display_name AS other_display_name, u.role AS other_role, u.email AS other_email
+       FROM mail_address_shares s JOIN users u ON u.id = CASE WHEN s.user_low = ?1 THEN s.user_high ELSE s.user_low END
+      WHERE s.uid = ?2 AND (s.user_low = ?1 OR s.user_high = ?1)`,
+  ).bind(Number(user.id), String(uid)).first<any>();
   if (!row) throw shareNotFound();
   return view(row, Number(user.id));
 }
