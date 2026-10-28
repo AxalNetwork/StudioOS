@@ -123,7 +123,9 @@ export function resolveRailChain(
   const demoted = catalogue.defaultDemoted(env);
   const paid = (id: string) => catalogue.modelById(id)?.paid_only === true;
   const stored = [picks.option, picks.page].find((id) => id && fits.includes(id)) ?? null;
-  const fallback = (demoted ? fits.find((id) => !paid(id)) : null) ?? fits[0];
+  const automatic = fits.filter(id => !row.models.find(m => m.id === id)?.optional);
+  const fallback = (demoted ? automatic.find((id) => !paid(id)) : null) ?? automatic[0];
+  if (!picks.caller && !stored && !fallback) return null;
   const primary = picks.caller ?? stored ?? fallback;
   const source = picks.caller ? 'caller' : stored ? 'pick' : 'default';
   const chain = fits.filter((id) => id !== primary && !row.models.find(m => m.id === id)?.optional && !(demoted && paid(id)));

@@ -9,7 +9,7 @@ import { MODEL_CONNECTIONS, moduleConnections } from '../src/services/ai/moduleC
 import { pcmBytes, pcmMinutes, questionsValid, specialistOutput } from '../src/services/ai/moduleShapes.ts';
 import { railRows, railOptionRows, resolveRailChain } from '../src/services/ai/railMatrix.ts';
 import { publicModels } from '../src/services/ai/publicModels.ts';
-import { run, __resetForTest } from '../src/services/aiRouter.ts';
+import { run, quoteRun, ROUTE, __resetForTest } from '../src/services/aiRouter.ts';
 import { searchIndexAccepts, parseEmbed } from '../src/services/ai/shapes.ts';
 import { unitPrice } from '../src/services/ai/pricing.ts';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
@@ -65,6 +65,16 @@ test('structured decisions and the guard cannot become chat or vision choices', 
   assert.deepEqual(bad, []);
   const row = rows.find(r => r.kind === 'reason')!;
   assert.deepEqual(resolveRailChain(row, { vision: false }, switches, { caller: '@cf/cloudflare/clef' }), { ok: false, refusal: 'model_not_offered', model: '@cf/cloudflare/clef' });
+});
+
+test('optional choices never replace automatic defaults under paid-plan demotion', () => {
+  const paid = '@cf/deepseek-ai/deepseek-v4-pro-0813', optional = '@cf/meta/llama-3.2-1b-instruct';
+  const row = { pageKey: 'Founder · Studio', kind: 'chat', routeTask: 'rail_chat', models: [
+    { id: paid, role: 'Default', line: '' }, { id: optional, role: 'Alternative', line: '', optional: true },
+  ] };
+  assert.deepEqual(resolveRailChain(row, { vision: false }, {}, {}), { ok: true, primary: paid, chain: [], source: 'default' });
+  assert.equal(resolveRailChain({ ...row, models: [row.models[1]] }, { vision: false }, {}, {}), null);
+  assert.deepEqual(resolveRailChain(row, { vision: false }, {}, { page: optional }), { ok: true, primary: optional, chain: [], source: 'pick' });
 });
 
 test('all persona modules retain their boundaries, including Super Admin elevation', () => {
@@ -148,6 +158,54 @@ test('schema limits and incompatible input shapes refuse before a model call', a
   } finally { f.db.close(); }
 });
 
+test('rerank quote and run reject malformed or oversized contexts before inference or holds', async () => {
+  const f = fixture(), id = '@cf/baai/bge-reranker-base';
+  try {
+    const statuses = [];
+    for (const action of ['quote', 'run']) {
+      for (const contexts of [{ text: 'wrong shape' }, 'wrong shape', [], [''], Array(101).fill('excerpt'), ['x'.repeat(24_001)]]) {
+        statuses.push((await post(f, { page: pageFor(id).pageKey, model: id, text: 'Find evidence.', contexts }, action)).status);
+      }
+    }
+    const invalidQuote = await quoteRun(f.env, { task: 'module_rerank', userId: 2, model: id, rerank: { query: 'query', contexts: 'wrong' as any } });
+    assert.deepEqual([statuses, invalidQuote.ok ? null : invalidQuote.refusal, f.calls.length, f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n], [Array(12).fill(400), 'invalid_input', 0, 0]);
+    // Hold the guard input fixed to isolate the rerank model's input estimate.
+    const short = await quoteRun(f.env, { task: 'module_rerank', userId: 2, model: id, guardText: 'Same safety input.', rerank: { query: 'query', contexts: ['x'] } });
+    const long = await quoteRun(f.env, { task: 'module_rerank', userId: 2, model: id, guardText: 'Same safety input.', rerank: { query: 'query', contexts: ['x'.repeat(10_000)] } });
+    assert.equal(short.ok && long.ok && long.hold_microusd > short.hold_microusd, true);
+  } finally { f.db.close(); }
+});
+
+test('quotes and runs share language, voice and sentiment validation', async () => {
+  const f = fixture();
+  try {
+    const statuses = [];
+    for (const action of ['quote', 'run']) {
+      for (const [id, text, extra] of [
+        ['@cf/meta/m2m100-1.2b', 'Passage.', { target_language: {} }],
+        ['@cf/meta/m2m100-1.2b', 'Passage.', { source_language: 12, target_language: 'fr' }],
+        ['@cf/myshell-ai/melotts', 'Sentence.', { voice: {} }],
+        ['@cf/myshell-ai/melotts', 'Sentence.', { language: ['en'] }],
+        ['@cf/huggingface/distilbert-sst-2-int8', 'x'.repeat(513), {}],
+      ] as const) statuses.push((await post(f, { page: pageFor(id).pageKey, model: id, text, ...extra }, action)).status);
+    }
+    assert.deepEqual([statuses, f.calls.length, f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n], [Array(10).fill(400), 0, 0]);
+  } finally { f.db.close(); }
+});
+
+test('Llama vision keeps message roles and options; incompatible multi-image fallbacks are skipped', async () => {
+  const llama = '@cf/meta/llama-3.2-11b-vision-instruct', scout = '@cf/meta/llama-4-scout-17b-16e-instruct';
+  const f = fixture(), original = ROUTE.rail_vision;
+  try {
+    const first = await run(f.env, { task: 'module_chat', userId: 2, model: llama, text: 'Read.', systemPrompt: 'Keep context.', images: [png], temperature: 0.2, maxTokens: 128 });
+    assert.deepEqual([first.ok, f.calls[0].input], [true, { messages: [{ role: 'system', content: 'Keep context.' }, { role: 'user', content: [{ type: 'text', text: 'Read.' }, { type: 'image_url', image_url: { url: png } }] }], max_tokens: 128, temperature: 0.2 }]);
+    ROUTE.rail_vision = { ...original, model: llama, fallbackChain: [scout] };
+    f.calls.length = 0;
+    const second = await run(f.env, { task: 'rail_vision', userId: 2, text: 'Compare.', images: [png, png] });
+    assert.deepEqual([second.ok, second.usage.model, f.calls.map(c => c.id)], [true, scout, [scout]]);
+  } finally { ROUTE.rail_vision = original; f.db.close(); }
+});
+
 test('assist off, no allowance, paused AI and a closed partner gate cannot spend', async () => {
   const outcomes = [];
   for (const mode of ['assist', 'budget', 'paused', 'partner']) {
@@ -159,10 +217,10 @@ test('assist off, no allowance, paused AI and a closed partner gate cannot spend
       if (mode === 'paused') f.db.exec('CREATE TABLE IF NOT EXISTS member_ai_pauses(user_id INTEGER PRIMARY KEY,paused_at TEXT,paused_by INTEGER); INSERT INTO member_ai_pauses(user_id) VALUES(2)');
       if (mode === 'partner') { f.env.AI_PARTNER_MODELS = ''; body = { page: 'Founder · Studio', model: '@cf/deepgram/aura-2-en', text: 'Hello.' }; }
       const r = await post(f, body);
-      outcomes.push([r.body.ok === true, f.calls.length]);
+      outcomes.push([r.body.ok === true, f.calls.length, r.status]);
     } finally { f.db.close(); }
   }
-  assert.deepEqual(outcomes, [[false, 0], [false, 0], [false, 0], [false, 0]]);
+  assert.deepEqual(outcomes, [[false, 0, 403], [false, 0, 402], [false, 0, 403], [false, 0, 400]]);
 });
 
 test('unreadable specialist answers are withheld; malformed inputs never become guesses', async () => {
@@ -198,13 +256,16 @@ test('sentiment, image labels and turn detection use their own requests and bill
 test('standalone embeddings never write axal-search; each model bills its catalogue rate', async () => {
   const results = [];
   for (const [id] of Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'embed')) {
-    const f = fixture(() => ({ data: [[0.2, 0.8]], usage: { prompt_tokens: 10 } }));
+    const vector = id === '@cf/baai/bge-base-en-v1.5' ? Array(768).fill(0.2) : [0.2, 0.8];
+    const f = fixture(() => ({ data: [vector], usage: { prompt_tokens: 10 } }));
+    let indexCalls = 0;
+    f.env.VECTORIZE = { upsert: async () => { indexCalls += 1; return {}; }, insert: async () => { indexCalls += 1; return {}; }, query: async () => { indexCalls += 1; return { matches: [] }; }, deleteByIds: async () => { indexCalls += 1; return {}; } };
     try {
       const r = await post(f, { page: pageFor(id).pageKey, model: id, text: 'Relevant research.' });
-      results.push([r.body.ok, r.body.embedding, Math.abs(r.body.usage.est_cost_usd - Number(unitPrice(id, 'tokens_in')) * 10 / 1e6) < 1e-15, searchIndexAccepts(id, [0.2, 0.8])]);
+      results.push([r.body.ok, r.body.embedding, Math.abs(r.body.usage.est_cost_usd - Number(unitPrice(id, 'tokens_in')) * 10 / 1e6) < 1e-15, searchIndexAccepts(id, vector), indexCalls]);
     } finally { f.db.close(); }
   }
-  assert.deepEqual(results, Array(6).fill([true, [0.2, 0.8], true, false]));
+  assert.deepEqual(results, Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'embed').map(([id]) => [true, id === '@cf/baai/bge-base-en-v1.5' ? Array(768).fill(0.2) : [0.2, 0.8], true, id === '@cf/baai/bge-base-en-v1.5', 0]));
   assert.deepEqual([parseEmbed({ data: [[]] }, 'text').vector, parseEmbed({ data: [[NaN]] }, 'text').vector, parseEmbed({ data: [['0.2']] }, 'text').vector], [null, null, null]);
 });
 

@@ -8,10 +8,11 @@ import { bodyLimit } from 'hono/body-limit';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
+import { runRefusalView } from '../util/railContext';
 import { resolveRail, resolveRailOption } from '../services/ai/railMatrix';
 import { moduleConnections } from '../services/ai/moduleConnections';
 import { pcmBytes, pcmMinutes, pcmWave, questionsValid } from '../services/ai/moduleShapes';
-import { INDIC_FLORES, INDIC_TRANSLATION_MODEL, imagesRefusal } from '../services/ai/shapes';
+import { INDIC_FLORES, INDIC_TRANSLATION_MODEL, imagesRefusal, rerankRefusal } from '../services/ai/shapes';
 import { run as runModuleModel, quoteRun, normaliseSurface, type RunOptions, type TaskClass } from '../services/aiRouter';
 
 const modules = new Hono<{ Bindings: Env }>();
@@ -34,7 +35,7 @@ modules.get('/', async c => {
   return c.json({ ok: true, page: row.pageKey, models: moduleConnections(row, c.env) });
 });
 
-/** POST /api/ai/modules/run (or /quote): page, model, text and the shape's inputs.
+/** POST /api/ai/modules/run (or /quote): page, surface, model, text and the shape's inputs.
  * Authentication supplies the charged member; the body cannot choose one.
  */
 for (const action of ['run', 'quote'] as const) modules.post(`/${action}`, async c => {
@@ -85,13 +86,21 @@ for (const action of ['run', 'quote'] as const) modules.post(`/${action}`, async
   } else if (operation === 'translate') {
     opts.translate = { sourceLang: body.source_language, targetLang: body.target_language };
     if (connection.id === INDIC_TRANSLATION_MODEL && (body.source_language !== 'en' || !Object.hasOwn(INDIC_FLORES, body.target_language))) return invalid(c, 'This model translates English into a supported Indic language.');
-  } else if (operation === 'rerank') opts.rerank = { query: body.text, contexts: body.contexts };
+  } else if (operation === 'rerank') {
+    opts.rerank = { query: body.text, contexts: body.contexts };
+    if (rerankRefusal(opts.rerank) || body.contexts.reduce((n: number, text: string) => n + text.length, 0) > 24_000) return invalid(c, 'Send non-empty context excerpts totalling up to 24,000 characters.');
+  }
   else if (operation === 'voice') opts.speak = { voice: body.voice, lang: body.language };
   else if (operation === 'draw') opts.draw = {};
   else if (operation === 'vision' && images?.length !== 1) return invalid(c, 'Send one image and a question.');
   const result = action === 'quote' ? await quoteRun(c.env, { ...opts, surface })
     : await runModuleModel(c.env, { ...opts, surface, rail: opts.rail });
-  if (action === 'quote' || !result.ok) return c.json(result as any, result.ok ? 200 : 422);
+  if (action === 'quote' || !result.ok) {
+    if (result.ok) return c.json(result as any, 200);
+    const refusal = runRefusalView(result);
+    const status = refusal?.status ?? (['invalid_input', 'model_not_offered', 'model_unpriced'].includes(result.refusal ?? '') ? 400 : 503);
+    return c.json({ ...result, message: refusal?.message ?? result.error }, status);
+  }
   const r = result as Awaited<ReturnType<typeof runModuleModel>>;
   return c.json({ ok: true, output: r.output ?? null, embedding: r.embedding ?? null, ranking: r.ranking ?? null,
     audio: r.audio ? { mime: r.audio.mime, data: bytes64(r.audio.bytes) } : null,

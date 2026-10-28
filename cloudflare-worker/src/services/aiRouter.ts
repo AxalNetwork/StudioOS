@@ -1432,9 +1432,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     // budget and its control as its model page gives it (`./ai/shapes.ts`).
     // D761 PR 2: a vision run's images ride on the last user message as content parts.
     const images = opts.images?.length ? opts.images : null;
-    const payload = model === '@cf/meta/llama-3.2-11b-vision-instruct' && images
-      ? { prompt: messages.map(m => m.content).join('\n'), image: Array.from(Uint8Array.from(atob(images[0].split(',')[1]), x => x.charCodeAt(0))), max_tokens: opts.maxTokens ?? 512 }
-      : shapes.chatRequest(facts, images ? shapes.withImages(messages, images) : messages, {
+    const payload = shapes.chatRequest(facts, images ? shapes.withImages(messages, images) : messages, {
       maxTokens: shapes.maxTokensFor(facts, opts.maxTokens, ROUTE[opts.task]?.reasoningMaxTokens),
       temperature: opts.temperature,
       stream: opts.stream,
@@ -1738,7 +1736,8 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
 function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], guardOn: boolean, guardInput: string, multiplier: number): number {
   // UTF-8 bytes bound input tokenization; include chat/system overhead.
   // Reserve the most expensive offered fallback, refund to the actual logged estimate.
-  const inputBytes = new TextEncoder().encode(defaultContentBlob(opts) + (opts.systemPrompt || '') + (opts.specialist?.operation === 'decision' ? JSON.stringify(opts.specialist.questions) : '')).byteLength;
+  const material = opts.rerank ? [opts.rerank.query, ...opts.rerank.contexts].join('\n') : defaultContentBlob(opts);
+  const inputBytes = new TextEncoder().encode(material + (opts.systemPrompt || '') + (opts.specialist?.operation === 'decision' ? JSON.stringify(opts.specialist.questions) : '')).byteLength;
   const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64 + (opts.images?.length ?? 0) * 1024;
   // D761: a reasoning model's output budget is its task's, not 512.
   const outputBound = Math.max(opts.specialist ? 2048 : 0, ...models
@@ -1783,6 +1782,8 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
     : input;
   const route = ROUTE[opts.task];
   if (!route) return { ok: false, refusal: 'misconfigured', error: `unknown task ${opts.task}` };
+  const badInput = inputRefusal(opts);
+  if (badInput) return { ok: false, refusal: 'invalid_input', error: badInput };
   if (opts.rail && !route.isAudio) {
     try { if (await assistOff(env, opts.userId, opts.rail.page)) return { ok: false, refusal: 'assist_off', error: ASSIST_OFF_MESSAGE }; }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether AI assistance is on for this page could not be checked.' }; }
@@ -2133,6 +2134,10 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     return r;
   };
   const callWai = async (model: string): Promise<ProviderResult> => {
+    // A fallback must not silently discard additional supplied images.
+    if (model === '@cf/meta/llama-3.2-11b-vision-instruct' && (opts.images?.length ?? 0) > 1) {
+      return record(model, { ok: false, status: 400, error: 'Llama 3.2 Vision reads one image per run.' }, false);
+    }
     // D761: an input the model's context window cannot hold skips the model
     // without calling it. An unknown window always fits.
     const facts = shapes.factsFor(model);
