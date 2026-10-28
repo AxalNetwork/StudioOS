@@ -152,6 +152,13 @@ for (const [cycle, path, name, testId] of ACTIONS) {
       const bars = m.fibers(CycleBar);
       assert.equal(bars.length, 1, 'one bar');
       assert.equal(bars[0].back.label, name, 'a deep link goes back to the cycle');
+      if (cycle === 'validate') {
+        assert.equal(bars[0].eadwynLabel, undefined, 'recording header has no competing Eadwyn trigger');
+        const entry = m.by('record-eadwyn-entry');
+        assert.ok(entry, 'Eadwyn has an in-page entry');
+        assert.ok(nodes.indexOf(entry) > nodes.indexOf(page), 'entry follows the recording form');
+      } else assert.equal(m.by('record-eadwyn-entry'), undefined);
+
       assert.equal(typeof bars[0].back.onClick, 'function', 'Back is closeAction');
       assert.equal(m.by('phone-root'), undefined, 'no root under it');
       assert.equal(m.by('cycle-overview'), undefined, 'no overview under it');
@@ -164,6 +171,7 @@ for (const [cycle, path, name, testId] of ACTIONS) {
       assert.ok(m.nodes().some((n) => pr(n).role === 'dialog'), 'the dialog');
       assert.ok(m.by('cycle-route-body'), 'the body under it');
       assert.equal(m.fibers(CycleBar).length, 0);
+      assert.equal(m.by('record-eadwyn-entry'), undefined, 'desktop keeps its existing rail');
     } finally { await m.unmount(); }
   });
 }

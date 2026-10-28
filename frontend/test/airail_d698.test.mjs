@@ -655,15 +655,19 @@ test('19 · the fallback label: "<section> · <module>", "<section> · Overview"
 });
 
 test('19 · a page\'s own button hides the floating button and opens the panel with its label', async () => {
+  for (const inline of [false, true]) {
   const m = await mount(viewing('founder', h(React.Fragment, null,
-    h(WorkerRail, { workspace: 'Validate' }), h(EadwynButton, { label: 'Validate · Customer research' }))));
+    h(WorkerRail, { workspace: 'Validate' }), h(EadwynButton, { label: 'Validate · Customer research', inline }))));
   try {
     const button = m.by('button-eadwyn-open');
+    assert.equal(m.text(button).includes('Eadwyn AI'), inline);
+    assert.equal(m.pr(button).className.includes('ead-open-inline'), inline);
     assert.equal(m.pr(button)['aria-label'], 'Open Eadwyn for this page');
     assert.equal(m.all('button-worker-rail-fab').length, 0, 'the floating button draws beside the page\'s own');
     await m.click('button-eadwyn-open');
     assert.equal(m.text(m.by('text-eadwyn-panel-label')), 'Validate · Customer research');
   } finally { await m.unmount(); }
+  }
 });
 
 test('19 · the panel closes on the scrim, the ×, Escape, a route change and widening', async () => {

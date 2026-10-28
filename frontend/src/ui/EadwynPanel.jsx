@@ -104,19 +104,20 @@ export function EadwynPanel({ label, style, children }) {
  * serves no one (any viewer but a founder on a founder page) it draws nothing
  * and registers nothing.
  */
-export function EadwynButton({ label, className = '' }) {
+export function EadwynButton({ label, className = '', inline = false }) {
   const available = useEadwynTrigger();
   if (!available) return null;
   return (
     <button
       type="button"
-      className={`ead-open ${className}`.trim()}
+      className={`ead-open ${inline ? 'ead-open-inline' : ''} ${className}`.trim()}
       aria-label="Open Eadwyn for this page"
       aria-haspopup="dialog"
       onClick={() => openEadwynPanel(label)}
       data-testid="button-eadwyn-open"
     >
       <img src="/eadwyn-ai.png" alt="" width="22" height="22" />
+      {inline && <span>Eadwyn AI</span>}
     </button>
   );
 }
