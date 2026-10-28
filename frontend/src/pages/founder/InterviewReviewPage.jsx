@@ -7,6 +7,7 @@ import SessionSummary from './SessionSummary';
 import { REVIEWABLE, afterDelete, findPassages, pickSession, recordParts, sessionLabel, statusWord } from './interviewReviewModel';
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
 import { useRailOption } from '../../ui/railCrumbs';
+import { modelName } from '../../ui/railModels.js';
 import { railPressHeaders } from '../../lib/railPage.js';
 import { RecordActions, RecordActivity, RecordFacts, RecordSection, useRecordPhone } from '../cycles/RecordView';
 import { declaredActions, pillView, recordActionBody, recordFormFor, toneOf } from '../cycles/recordModel';
@@ -327,7 +328,7 @@ export default function InterviewRecord({
                 <ul className="m-0 list-none space-y-1 p-0 text-[12.5px] text-axal-ink dark:text-gray-200">
                   {receipt.items.map((r, i) => (
                     <li key={i} className="flex justify-between gap-2" data-testid="record-cost-line">
-                      <span>{r.kind} · {r.model}{r.fallback_used ? ' (fallback)' : ''}{r.outcome !== 'ok' && r.outcome ? ` · ${r.outcome}` : ''}</span>
+                      <span>{r.kind} · {r.model === '@cf/deepgram/nova-3' ? 'Nova-3' : modelName(r.model) || r.model?.split('/').pop() || 'Model not recorded'}{r.fallback_used ? ' (fallback)' : ''}{r.outcome !== 'ok' && r.outcome ? ` · ${r.outcome}` : ''}</span>
                       <span className="tabular-nums">{usd(r.cost_microusd)}</span>
                     </li>
                   ))}
