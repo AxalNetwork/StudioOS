@@ -21,7 +21,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import custom, { CSRF_COOKIE, customDepsFor } from '../src/routes/connectors_custom.ts';
 import mailAccounts from '../src/routes/mail_accounts.ts';
 import { callCustomTool, CustomMcpError, customRowFor, mailSendShape } from '../src/integrations/customMcp.ts';
-import { mcpMailDeps } from '../src/services/mail/adapters/mcp.ts';
+import { mcpMailDeps } from '../src/services/mail/adapters/memberMcp.ts';
 import { personalFixture } from './_mercury_personal_d713.ts';
 import { NOTES_MCP, defaultNotesTools, notesFake } from './_mcp_fake.mjs';
 
