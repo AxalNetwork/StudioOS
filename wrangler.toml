@@ -598,6 +598,11 @@ ROUND_CALLS_ENABLED = "false"
 GOOGLE_SIGNIN_POPUP = "off"
 # D720 §3 / D762 — see top-level [vars]. Mirrored because env tables don't inherit.
 AI_BILLING = "charged"
+# D1366: the token pack members buy (D755's STRIPE_PRICE_AI_TOPUP fallback): the
+# sandbox "AI top-up" product's $10 one-time USD price, the same Stripe mode as
+# STRIPE_SECRET_KEY. Not a secret. Once HQ › Token packs adopts it (or sells its
+# own packs), delete this line (documentation/operations/AI_TOKEN_PACKS.md).
+STRIPE_PRICE_AI_TOPUP = "price_1UNzpEF1hAXeCvFjjXynLkhe"
 # D754 / D756 / D757 — see top-level [vars]. Mirrored because env tables
 # don't inherit.
 WHATSAPP_CHANNEL = "canary"
