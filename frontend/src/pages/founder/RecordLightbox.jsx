@@ -173,17 +173,32 @@ export default function RecordLightbox({
   // D1346 (#3554): `GET /founder/validate/meetings/bot`, when the caller has read it already.
   initialBot,
 }) {
-  // The chips' statuses (#1586): `GET /api/channels` once, unless the caller
-  // passed the read. A failed read is null, and the chips then say "Not
-  // available yet" rather than guessing (`chipStatus`).
+  // D1346 (#3663): a connector can change while this form stays open in
+  // another tab. Refresh on return without resetting the interview fields.
   const [channels, setChannels] = useState(initialChannels === undefined ? null : initialChannels);
   useEffect(() => {
-    if (initialChannels !== undefined || !fields.channels) return undefined;
+    if (initialChannels !== undefined) { setChannels(initialChannels); return undefined; }
+    if (!fields.channels) return undefined;
     let alive = true;
-    channelsSource.overview()
-      .then((r) => { if (alive) setChannels(r || null); })
-      .catch(() => { if (alive) setChannels(null); });
-    return () => { alive = false; };
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const result = await channelsSource.overview();
+        if (alive && current === request) setChannels(result || null);
+      } catch {
+        if (alive && current === request) setChannels(null);
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    refresh();
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [channelsSource, initialChannels, fields.channels]);
   // D1346 (#3554): whether Eadwyn AI can join, read on open so Send is disabled up front, not refused
   // after the press. undefined is still reading; null is unreadable (Try again reads it once more).

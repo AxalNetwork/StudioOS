@@ -56,7 +56,7 @@ function tabs() {
 
 test('the rules: what is offered per platform, which link fills, and the bot state never guesses', () => {
   assert.deepEqual(createMeetingOffer('video', 'zoom', CONNECTED), { kind: 'create', connected: true, connectHref: null, connectLabel: 'Connect Zoom to create the meeting here' });
-  assert.deepEqual(createMeetingOffer('video', 'google_meet', UNCONNECTED), { kind: 'create', connected: false, connectHref: '/account/connectors', connectLabel: 'Connect Google to create the meeting here' });
+  assert.deepEqual(createMeetingOffer('video', 'google_meet', UNCONNECTED), { kind: 'create', connected: false, connectHref: '/account/connectors/google', connectLabel: 'Connect Google Calendar to create a Meet meeting here' });
   assert.equal(createMeetingOffer('video', 'zoom', null).connected, null, 'an unread connection is not "not connected"');
   // D1359: Teams is created on the Microsoft calendar connection; the Worker decides whether it is connected.
   assert.deepEqual(createMeetingOffer('video', 'teams', CONNECTED), { kind: 'create', connected: null, connectHref: null, connectLabel: 'Connect Microsoft to create the meeting here', note: TEAMS_CREATE_NOTE });
@@ -91,7 +91,7 @@ test('D1362 the plan: import on a connected Zoom or Meet (with Eadwyn AI when it
   assert.deepEqual(plan('teams', '', BOT_ON), { kind: 'bot', create: true, bot: true });
   assert.deepEqual(plan('teams', TEAMS_LINK, BOT_ON), { kind: 'bot', create: false, bot: true });
   assert.deepEqual(plan('teams', '', BOT_OFF), { kind: 'none', create: false, reason: TEAMS_NO_CAPTURE });
-  assert.deepEqual(plan('google_meet', '', BOT_OFF, UNCONNECTED), { kind: 'none', create: false, reason: 'Connect Google to create the meeting here, or paste the meeting link.' });
+  assert.deepEqual(plan('google_meet', '', BOT_OFF, UNCONNECTED), { kind: 'none', create: false, reason: 'Connect Google Calendar to create a Meet meeting here, or paste the meeting link.' });
   assert.equal(plan('zoom', 'https://evil.example/j/1', BOT_ON).kind, 'none', 'a bad link starts nothing');
   assert.equal(callStartPlan({ mode: 'phone', provider: 'whatsapp', link: '', channels: CONNECTED, bot: null, botLink: false, offer: null }), null);
   assert.match(callStartNote(plan('zoom', '', BOT_OFF), 'zoom'), /^Start creates the Zoom meeting on your account, opens it\. When the call ends, Axal imports Zoom’s own transcript into this interview\. Eadwyn AI can’t join Zoom calls on Axal yet\.$/);
@@ -169,8 +169,8 @@ test('not connected: Start waits for a connection and links to it', async () => 
   try {
     await press(m, 'record-provider-google_meet');
     assert.equal(m.props(by(m, 'record-start'))['aria-disabled'], true);
-    assert.equal(m.props(by(m, 'record-create-connect')).href, '/account/connectors');
-    assert.match(m.text(), /Connect Google to create the meeting here, or paste the meeting link\./);
+    assert.equal(m.props(by(m, 'record-create-connect')).href, '/account/connectors/google');
+    assert.match(m.text(), /Connect Google Calendar to create a Meet meeting here, or paste the meeting link\./);
     assert.equal(by(m, 'record-connect-link'), undefined, 'the Meet chip itself asks for no connection');
     await press(m, 'record-start');
     assert.deepEqual([s.made, s.device, s.sent], [[], [], []], 'a Start that is off does nothing');
@@ -245,5 +245,82 @@ test('the availability is read once on open; unreadable says so with Try again, 
     await change(m, 'record-link', ZOOM_LINK);
     assert.equal(by(m, 'record-bot-state'), undefined);
     assert.match(m.text(), /sends Eadwyn AI to join/);
+  } finally { await m.unmount(); }
+});
+
+// Keep a form mounted while its account connection changes in another tab.
+function ReturnEvents({ listeners, children }) {
+  React.useLayoutEffect(() => {
+    const install = (target, prefix) => {
+      const add = target.addEventListener;
+      const remove = target.removeEventListener;
+      target.addEventListener = (name, fn, ...args) => {
+        listeners.set(`${prefix}:${name}`, fn);
+        add.call(target, name, fn, ...args);
+      };
+      target.removeEventListener = (name, fn, ...args) => {
+        if (listeners.get(`${prefix}:${name}`) === fn) listeners.delete(`${prefix}:${name}`);
+        remove.call(target, name, fn, ...args);
+      };
+    };
+    install(window, 'window'); install(document, 'document');
+  }, []);
+  return children;
+}
+
+test('Google connection refreshes on return, preserves the form, and clears disconnected or unreadable status', async () => {
+  const s = setup({ bot: BOT_ON });
+  delete s.props.channels;
+  s.props.interview = null;
+  let response = UNCONNECTED;
+  let calls = 0;
+  s.props.channelsSource.overview = async () => { calls++; if (response instanceof Error) throw response; return response; };
+  const listeners = new Map();
+  const m = await mountContracts(h(ReturnEvents, { listeners }, h(RecordLightbox, s.props)));
+  try {
+    await press(m, 'record-provider-google_meet');
+    await change(m, 'record-name', 'Unsaved interview');
+    assert.ok(by(m, 'record-create-connect'), 'initially asks to connect');
+    response = CONNECTED;
+    await act(async () => listeners.get('window:focus')());
+    assert.equal(by(m, 'record-create-connect'), undefined, 'return recognises completed connection');
+    assert.match(m.text(), /Start creates the Google Meet meeting on your account/);
+    assert.equal(m.props(by(m, 'record-name')).value, 'Unsaved interview', 'refresh preserves entered fields');
+    response = UNCONNECTED;
+    document.visibilityState = 'hidden';
+    const before = calls;
+    await act(async () => listeners.get('document:visibilitychange')());
+    assert.equal(calls, before, 'hidden tabs do not refresh');
+    document.visibilityState = 'visible';
+    await act(async () => listeners.get('document:visibilitychange')());
+    assert.ok(by(m, 'record-create-connect'), 'return also recognises disconnection');
+    response = CONNECTED;
+    await act(async () => listeners.get('window:focus')());
+    response = new Error('offline');
+    await act(async () => listeners.get('window:focus')());
+    assert.equal(by(m, 'record-create-connect'), undefined, 'unreadable is not a disconnected claim');
+    assert.doesNotMatch(m.text(), /Google Meet · Connected/);
+  } finally { await m.unmount(); }
+  assert.equal(listeners.has('window:focus'), false, 'focus listener removed on close');
+  assert.equal(listeners.has('document:visibilitychange'), false, 'visibility listener removed on close');
+});
+
+test('a late connection read cannot overwrite a newer return read', async () => {
+  const s = setup({ bot: BOT_ON });
+  delete s.props.channels;
+  const pending = [];
+  s.props.channelsSource.overview = () => new Promise((resolve, reject) => pending.push({ resolve, reject }));
+  const listeners = new Map();
+  const m = await mountContracts(h(ReturnEvents, { listeners }, h(RecordLightbox, s.props)));
+  try {
+    await press(m, 'record-provider-google_meet');
+    await act(async () => { listeners.get('window:focus')(); });
+    await act(async () => pending[1].resolve(CONNECTED));
+    await act(async () => pending[0].resolve(UNCONNECTED));
+    assert.equal(by(m, 'record-create-connect'), undefined, 'older response cannot restore Connect');
+    await act(async () => { listeners.get('window:focus')(); listeners.get('window:focus')(); });
+    await act(async () => pending[3].resolve(CONNECTED));
+    await act(async () => pending[2].reject(new Error('late failure')));
+    assert.match(m.text(), /Google Meet · Connected/, 'older error cannot erase the newer success');
   } finally { await m.unmount(); }
 });
