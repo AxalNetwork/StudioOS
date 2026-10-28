@@ -60,11 +60,13 @@ test('additional models do not change canvas defaults or automatic fallback chai
   assert.equal(resolveRailChain(choice, { vision: false }, switches, { caller: optional.id })?.ok, true);
 });
 
-test('structured decisions and the guard cannot become chat or vision choices', () => {
-  const bad = [...rows, ...railOptionRows()].flatMap(r => r.models.filter(m => ['decision', 'guard', 'sentiment', 'image_labels', 'turn'].includes(MODEL_CONNECTIONS[m.id]?.operation)).map(m => m.id));
+test('structured decisions, the guard and standalone image queries cannot become chat choices', () => {
+  const bad = [...rows, ...railOptionRows()].flatMap(r => r.models.filter(m => ['decision', 'guard', 'sentiment', 'image_labels', 'turn', 'vision'].includes(MODEL_CONNECTIONS[m.id]?.operation)).map(m => m.id));
   assert.deepEqual(bad, []);
   const row = rows.find(r => r.kind === 'reason')!;
   assert.deepEqual(resolveRailChain(row, { vision: false }, switches, { caller: '@cf/cloudflare/clef' }), { ok: false, refusal: 'model_not_offered', model: '@cf/cloudflare/clef' });
+  const vision = rows.find(r => r.kind === 'vision')!;
+  assert.deepEqual(resolveRailChain(vision, { vision: true }, switches, { caller: '@cf/moondream/moondream3.1-9B-A2B' }), { ok: false, refusal: 'model_not_offered', model: '@cf/moondream/moondream3.1-9B-A2B' });
 });
 
 test('optional choices never replace automatic defaults under paid-plan demotion', () => {
@@ -314,7 +316,7 @@ test('Moondream uses image-query shape; no reasoning trace is returned as the an
   try {
     const id = '@cf/moondream/moondream3.1-9B-A2B';
     const r = await post(f, { page: pageFor(id).pageKey, model: id, text: 'What is shown?', images: [png] });
-    assert.deepEqual([r.body.ok, r.body.output, f.calls[0].input], [true, 'A chart.', { task: 'query', image: png, question: 'What is shown?', max_tokens: 1024 }]);
+    assert.deepEqual([r.body.ok, r.body.output, f.calls[0]?.input], [true, 'A chart.', { task: 'query', image: png, question: 'What is shown?', max_tokens: 1024 }]);
   } finally { f.db.close(); }
 });
 

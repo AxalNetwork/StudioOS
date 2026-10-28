@@ -20,9 +20,9 @@ export function connectionOnPage(id: string, page: Pick<Page, 'pageKey' | 'kind'
 }
 
 export function withModuleModels<T extends Page>(row: T): T {
-  const models = row.models.map(m => ({ ...m, ...(MODEL_CONNECTIONS[m.id]?.operation === 'vision' ? { optional: true } : {}) }));
+  const models = row.models.filter(m => MODEL_CONNECTIONS[m.id]?.operation !== 'vision').map(m => ({ ...m }));
   for (const [id, c] of Object.entries(MODEL_CONNECTIONS)) {
-    if (!['chat', 'vision'].includes(c.operation) || !connectionOnPage(id, row) || models.some(m => m.id === id)) continue;
+    if (c.operation !== 'chat' || !connectionOnPage(id, row) || models.some(m => m.id === id)) continue;
     models.push({ id, role: 'Alternative', line: c.purpose, optional: true });
   }
   return { ...row, models };
@@ -31,8 +31,7 @@ export function withModuleModels<T extends Page>(row: T): T {
 /** A specialist never goes to chat just because the catalogue says Text Generation. */
 export function chatCompatible(id: string, vision: boolean): boolean {
   const c = MODEL_CONNECTIONS[id];
-  if (!c || (c.operation !== 'chat' && c.operation !== 'vision')) return false;
-  if (c.operation === 'vision') return vision;
+  if (!c || c.operation !== 'chat') return false;
   return !vision || modelById(id)?.capabilities.includes('Vision') === true;
 }
 

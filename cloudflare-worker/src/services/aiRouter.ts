@@ -1348,6 +1348,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
         : { ok: false, status: 502, error: 'Unreadable specialist response' };
     }
     if (model === '@cf/moondream/moondream3.1-9B-A2B') {
+      if (opts.task !== 'module_vision') return { ok: false, status: 400, error: 'This image reader uses the standalone image-query operation.' };
       if (opts.images?.length !== 1) return { ok: false, status: 400, error: 'Moondream needs one image' };
       const raw = await ai.run(model, { task: 'query', image: opts.images[0], question: defaultContentBlob(opts), max_tokens: opts.maxTokens ?? 512 }, runOpt) as any;
       if (typeof raw?.answer !== 'string' || !raw.answer.trim()) return { ok: false, status: 502, error: 'Unreadable image answer' };
@@ -1705,7 +1706,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   // task's, and only bge-base writes axal-search. A row with no model for the
   // run leaves the route in charge too.
   let railed: { primary: string; chain: string[] } | null = null;
-  const railShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist;
+  const railShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && opts.task !== 'module_vision';
   const railRow = opts.rail && railShaped
     ? resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page)
     : null;

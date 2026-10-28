@@ -407,7 +407,7 @@ test('a rail run resolves the caller\'s model, then the pick, then the default a
   assert.deepEqual(resolveRailChain(CHAT, text, OFF, { caller: '@cf/qwen/qwq-32b', page: b }), { ok: true, primary: '@cf/qwen/qwq-32b', chain: [a, b, c], source: 'caller' });
   assert.deepEqual(resolveRailChain(CHAT, text, OFF, { caller: '@cf/baai/bge-m3' }), { ok: false, refusal: 'model_not_offered', model: '@cf/baai/bge-m3' });
   // A vision run takes only the row's models that read images.
-  assert.deepEqual(compatibleModels(VISION, { vision: true }, OFF), ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/moondream/moondream3.1-9B-A2B']);
+  assert.deepEqual(compatibleModels(VISION, { vision: true }, OFF), ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct']);
   assert.equal((resolveRailChain(CHAT, { vision: true }, OFF, { caller: '@cf/zai-org/glm-4.7-flash' }) as any).refusal, 'model_not_offered');
   // A row with no model for the run leaves the task's route in charge.
   const searchRow = ROWS.find((r) => r.kind === 'search')!;
