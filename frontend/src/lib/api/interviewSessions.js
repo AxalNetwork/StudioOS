@@ -39,7 +39,7 @@
 //   discardPlacement POST   /placements/:id/discard
 // D757 (#1925), Accept all:
 //   acceptAll        POST   /sessions/:id/placements/accept  { slug } or { ids } (at most 50) → { results: [{ id, ok, error? }], accepted, remaining }
-import { request } from '../api.js';
+import { request, LONG_TIMEOUT_MS } from '../api.js';
 
 const enc = encodeURIComponent;
 const P = '/founder/validate';
@@ -100,6 +100,7 @@ export const interviewSessionsApi = {
   process: (id) => request(`${P}/sessions/${enc(id)}/process`, { method: 'POST', body: JSON.stringify({}) }),
   // D778 part 8: `headers` on summarise, structure and ask is the press's own rail context.
   summarise: (id, model, headers) => request(`${P}/sessions/${enc(id)}/summarise`, {
+    timeoutMs: LONG_TIMEOUT_MS,
     ...(headers ? { headers } : {}),
     method: 'POST', body: JSON.stringify(model ? { model } : {}),
   }),
@@ -126,10 +127,12 @@ export const interviewSessionsApi = {
   removeAudio: (id) => request(`${P}/sessions/${enc(id)}/audio`, { method: 'DELETE' }),
   placements: (id) => request(`${P}/sessions/${enc(id)}/placements`),
   structure: (id, model, headers) => request(`${P}/sessions/${enc(id)}/structure`, {
+    timeoutMs: LONG_TIMEOUT_MS,
     ...(headers ? { headers } : {}),
     method: 'POST', body: JSON.stringify(model ? { model } : {}),
   }),
   ask: (id, question, headers) => request(`${P}/sessions/${enc(id)}/ask`, {
+    timeoutMs: LONG_TIMEOUT_MS,
     ...(headers ? { headers } : {}),
     method: 'POST', body: JSON.stringify({ question }),
   }),
