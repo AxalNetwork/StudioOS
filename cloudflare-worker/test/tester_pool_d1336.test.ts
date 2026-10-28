@@ -305,3 +305,22 @@ test('closing a programme tells each picked tester, linking Inbox; nobody else a
   const firm = w.db.prepare("SELECT link FROM notifications_inbox WHERE user_id = ? AND type = 'testing_programme_closed'").get(ACME) as any;
   assert.equal(firm.link, null, 'the firm\'s notice keeps no member link');
 });
+
+// D1337 (#3542, PT-M3, PT-M4): what the member's application sheet and the Inbox read.
+test('D1337: each application names the firm that runs it ("Axal VC" for HQ) and its questions; each member notice names its programme', async () => {
+  const w = world();
+  setTester(w, FRAN, 'active');
+  const uid = await openPartnerProgramme(w);
+  const appUid = (await applyAs(w, FRAN, uid)).body.application.uid;
+  const mine = async () => (await call(w, FRAN, 'GET', '/testing/applications/mine')).body.items[0];
+  const a = await mine();
+  // Mutation checked: drop the join → owner_name reads null.
+  assert.deepEqual([a.uid, a.owner_name, a.questions, a.answers], [appUid, 'Acme Labs', ['What do you use today?'], ['Spreadsheets']]);
+  noEmail(a);
+  w.db.prepare("UPDATE testing_programmes SET owner_kind = 'hq', owner_partner_id = NULL WHERE uid = ?").run(uid);
+  assert.equal((await mine()).owner_name, 'Axal VC');
+  // The Inbox opens the matching sheet from the notice's payload.
+  const told = w.db.prepare("SELECT type, link, payload FROM notifications_inbox WHERE user_id = ? AND type = 'testing_applied'").get(FRAN) as any;
+  assert.equal(told.link, '/inbox');
+  assert.deepEqual(JSON.parse(told.payload), { programme_uid: uid, application_uid: appUid });
+});
