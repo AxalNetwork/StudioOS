@@ -15,6 +15,8 @@ import AdminStudioHome from './admin/AdminStudioHome';
 // the page already surfaces the Personal Advisor, so the checklist
 // duplicated guidance the user already had).
 import ProductTour from '../components/ProductTour';
+// D1337 (#3542): Product testing's card and lists, under each member's Studio home. An Admin sees none.
+import ProductTestingStudio from './testing/member/ProductTestingStudio';
 
 export default function Dashboard({ activeRole, authUser }) {
   const location = useLocation();
@@ -213,6 +215,7 @@ export default function Dashboard({ activeRole, authUser }) {
         )}
         <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <FounderStudioHome user={user} />
+        <ProductTestingStudio user={authUser || user} />
       </div>
     );
   }
@@ -240,6 +243,7 @@ export default function Dashboard({ activeRole, authUser }) {
               .catch((e) => { setInvestorLC(null); reportError('Dashboard:investorLifecycle', e); });
           }}
         />
+        <ProductTestingStudio user={authUser || user} />
       </div>
     );
   }
@@ -260,6 +264,7 @@ export default function Dashboard({ activeRole, authUser }) {
           previewing={previewingAdvisor}
           onRetryDashboard={() => { setLoading(true); load(); }}
         />
+        <ProductTestingStudio user={authUser || user} />
       </div>
     );
   }
@@ -280,6 +285,7 @@ export default function Dashboard({ activeRole, authUser }) {
           previewing={previewingPartner}
           onRetryDashboard={() => { setLoading(true); load(); }}
         />
+        <ProductTestingStudio user={authUser || user} />
       </div>
     );
   }
@@ -303,6 +309,7 @@ export default function Dashboard({ activeRole, authUser }) {
         )}
         <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <FounderStudioHome user={user} />
+        <ProductTestingStudio user={authUser || user} />
       </div>
     );
   }

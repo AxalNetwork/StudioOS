@@ -22,6 +22,12 @@ import { request } from '../api.js';
 //   get(uid)                       GET    /mail/drafts/:uid → { draft }
 //   remove(uid)                    DELETE /mail/drafts/:uid → { ok }
 // A draft costs AI tokens; the estimate runs nothing. A ref the member cannot read is 404.
+// D1342 (#3550, part 3) — Network members' address shares, on
+// cloudflare-worker/src/routes/mail_shares.ts (migration 649).
+//   shares()                       GET    /mail/shares → { items: [{ uid, person, name, role, mine, theirs, ready, address, line, matched_at }] }
+//   share(uid, yes)                POST   /mail/shares/:uid { share: true|false } → { share }; 409 not_matched
+//   unshare(uid)                   DELETE /mail/shares/:uid → { share }; 409 not_shared
+// `address` is the other member's, and only while both have shared; a match's person is `member:<uid>`.
 const id = (v) => encodeURIComponent(String(v));
 const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
 export const mailApi = {
@@ -40,4 +46,7 @@ export const mailApi = {
   drafts: (person) => request(`/mail/drafts${person ? `?person=${id(person)}` : ''}`),
   get: (uid) => request(`/mail/drafts/${id(uid)}`),
   remove: (uid) => request(`/mail/drafts/${id(uid)}`, { method: 'DELETE' }),
+  shares: () => request('/mail/shares'),
+  share: (uid, yes) => post(`/mail/shares/${id(uid)}`, { share: yes === true }),
+  unshare: (uid) => request(`/mail/shares/${id(uid)}`, { method: 'DELETE' }),
 };

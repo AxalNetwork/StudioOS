@@ -11,10 +11,11 @@ and mail never goes out on Axal's house token: `../email.ts` stays for system ma
 | `intents.ts` | D1341: what a draft is for, by relationship: one table, no imports, read by the Worker and by the composer (#3552). |
 | `contextPack.ts` | D1341: the records a draft may quote for one person (`kind:id`), each read through its module's own read (`../records/read.ts`) or the founder's own engagement rule; a ref the member cannot read is "Record not found." |
 | `blocks.ts` | D1341: live update blocks (KPIs, raise status, project progress, interview insights, the one-liner), computed now under each module's gate; nothing recorded is no block. |
+| `shares.ts` | D1342 (#3550): Network members' address shares (`mail_address_shares`, migration 649). A pair opens on a mutual introduction accept (`askBoth`), or lazily when a member lists their matches; each side shares, declines or revokes on its own; the other's address is served only while both have shared (D414 elsewhere). A match is the person kind `member:<share uid>` in `contextPack.ts`. |
 | `drafts.ts` | D1341: the draft request, the prompt (the ticked records and the blocks only), the model's `{subject, body}`, and the member's own `mail_drafts` rows (migration 648). |
 
-The routes are `../../routes/mail_accounts.ts` and `../../routes/mail_drafts.ts`,
-both mounted at `/api/mail`. A new provider adds an adapter in `adapters/` and a
+The routes are `../../routes/mail_accounts.ts`, `../../routes/mail_drafts.ts` and
+`../../routes/mail_shares.ts`, all mounted at `/api/mail`. A new provider adds an adapter in `adapters/` and a
 row in `adapters/index.ts`. A new person kind goes in `MODULES` in
 `contextPack.ts`, with a fixed statement and the module's record spec, and in
 `RELATIONSHIP_OF` in `intents.ts`.
