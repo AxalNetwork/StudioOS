@@ -19,7 +19,8 @@
  * unit-tested (`scripts/lib/assetRetention.test.mjs`). This file is only the
  * filesystem orchestration around it.
  *
- * Tunable: ASSET_RETAIN_BUILDS (default 3).
+ * Policy: 72 hours, at least three deployed builds, and 18,000 asset files.
+ * ASSET_RETAIN_BUILDS can raise the floor, never lower it below three.
  */
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -33,10 +34,10 @@ import {
   RETENTION_LEDGER_FILENAME,
   assetsIgnoreText,
 } from './lib/assetsIgnore.mjs';
-import { planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FLAG } from './lib/assetRetention.mjs';
+import { planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FLAG, ASSET_MIN_BUILDS, ASSET_RETENTION_HOURS, ASSET_MAX_FILES, STATIC_FILE_LIMIT } from './lib/assetRetention.mjs';
 import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
 
-const RETAIN_BUILDS = Number(process.env.ASSET_RETAIN_BUILDS || 3);
+const RETAIN_BUILDS = Math.max(ASSET_MIN_BUILDS, Math.floor(Number(process.env.ASSET_RETAIN_BUILDS) || ASSET_MIN_BUILDS));
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -158,6 +159,13 @@ const plan = planAssetRetention({
   retainBuilds: RETAIN_BUILDS,
 });
 
+if (plan.capExceeded) {
+  fs.rmSync(backupDir, { recursive: true, force: true });
+  throw new Error(`[build] protected asset generations exceed the ${ASSET_MAX_FILES}-file cap; refusing deployment`);
+}
+if (plan.capPrunedBuilds) {
+  console.warn(`[build] asset cap pruned ${plan.capPrunedBuilds} oldest complete build(s); the 72-hour window is shortened`);
+}
 let restored = 0;
 for (const f of plan.restore) {
   const src = path.join(backupDir, f);
@@ -206,6 +214,15 @@ execSync('node scripts/prerender-og.mjs', { cwd: root, stdio: 'inherit' });
 // by its own path to set the static security headers (see lib/assetsIgnore.mjs).
 fs.writeFileSync(ignorePath, assetsIgnoreText());
 
+// D1361: reserve space for all non-asset output, including prerendered shells.
+function fileCount(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).reduce((n, e) => n
+    + (e.isDirectory() ? fileCount(path.join(dir, e.name)) : e.isFile() ? 1 : 0), 0);
+}
+if (fileCount(docsDir) + 1 > STATIC_FILE_LIMIT) {
+  throw new Error(`[build] static output exceeds the ${STATIC_FILE_LIMIT}-file safety limit; refusing deployment`);
+}
+
 // 7. Stamp docs/ with the source this build consumed — LAST, so a stamp only
 //    ever describes a build that finished.
 //
@@ -217,5 +234,5 @@ fs.writeFileSync(stampPath, `${sourceTreeHash(path.join(root, 'frontend', 'src')
 
 console.log(
   `[build] done — ${newFiles.length} fresh asset(s); ${restored} prior hash(es) ` +
-    `retained (window: ${RETAIN_BUILDS} build(s), ${plan.keep.length} total kept).`,
+    `retained (window: ${ASSET_RETENTION_HOURS} hours, floor ${RETAIN_BUILDS} builds, ${plan.keep.length}/${ASSET_MAX_FILES} assets kept).`,
 );

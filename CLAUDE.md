@@ -64,8 +64,9 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    (D529): it is gitignored, and every job that needs it builds it from
    `frontend/src` — CI, the PR preview, branch provisioning and the deploy —
    so reviewers read the source and the deploy ships that source's build. The
-   old-bundle window (the last three builds' hashed assets, so a tab opened
-   before a deploy keeps working) is carried by the deploy itself: it restores
+   old-bundle window (72 hours of deployed hashed assets, at least three
+   builds, within the 18,000-asset safety cap, so a tab opened before a deploy
+   keeps working) is carried by the deploy itself: it restores
    the previous deploy's `docs/assets` and retention ledger from the Actions
    cache before building and saves them after shipping
    (`documentation/operations/DEPLOY.md` §2.1). GitHub Pages and Cloudflare

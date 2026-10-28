@@ -58,7 +58,7 @@ test('a backtick import is followed — the form Rollup emits for a lazy chunk',
 
 test('the no-ledger seed keeps the previous generation and drops the one before it', () => {
   const { reachable } = walk();
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: ON_DISK,
     seedFiles: reachable,
     newFiles: FRESH,
@@ -84,7 +84,7 @@ test('without the narrowed seed the older generation survives — the defect, re
   // The same inputs with the OLD behaviour (seed = everything on disk). If this
   // ever stops keeping the dead generation, the test above has stopped proving
   // anything, because the two paths would no longer differ.
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: ON_DISK,
     newFiles: FRESH,
     ledgerBuilds: [],
@@ -102,7 +102,7 @@ test('an unreadable or absent shell falls back to the old behaviour, not to noth
   // Seeding NOTHING would drop the previous generation outright and blank the
   // page for every client mid-deploy. An empty seed must read as "no
   // generation could be computed", which the planner answers with prevFiles.
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: ON_DISK,
     seedFiles: [],
     newFiles: FRESH,

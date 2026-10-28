@@ -5,7 +5,7 @@ import { planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FL
 test('first run seeds pre-existing assets so the live build is not dropped', () => {
   const prevFiles = ['index-OLD.js', 'vendor-OLD.js', 'style-OLD.css'];
   const newFiles = ['index-NEW.js', 'vendor-NEW.js', 'style-NEW.css'];
-  const plan = planAssetRetention({ prevFiles, newFiles, ledgerBuilds: [], retainBuilds: 3, now: 't1' });
+  const plan = planAssetRetention({ retentionHours: 0, prevFiles, newFiles, ledgerBuilds: [], retainBuilds: 3, now: 't1' });
 
   // Keep is the union of the new build + the seeded pre-existing build.
   assert.deepEqual(new Set(plan.keep), new Set([...prevFiles, ...newFiles]));
@@ -24,7 +24,7 @@ test('steady state keeps the union of the last N builds', () => {
   const N3 = ['index-N3.js', 'chunk-N3.js'];
   // prevFiles before build 3 = everything retained from builds 1 & 2.
   const prevFiles = [...N1, ...N2];
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles,
     newFiles: N3,
     ledgerBuilds: [
@@ -47,7 +47,7 @@ test('builds older than the retention window are aged out (pruned)', () => {
   const N2 = ['index-N2.js'];
   const N3 = ['index-N3.js'];
   const prevFiles = [...P0, ...N1, ...N2]; // on disk before build 3
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles,
     newFiles: N3,
     ledgerBuilds: [
@@ -70,7 +70,7 @@ test('a hash reused across consecutive builds is not treated as missing', () => 
   const shared = 'vendor-STABLE.js';
   const N1 = ['index-N1.js', shared];
   const N2 = ['index-N2.js', shared];
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: N1,
     newFiles: N2,
     ledgerBuilds: [{ ts: 't1', files: N1 }],
@@ -85,7 +85,7 @@ test('a hash reused across consecutive builds is not treated as missing', () => 
 });
 
 test('retainBuilds=1 keeps only the fresh build (no retention)', () => {
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: ['old.js'],
     newFiles: ['new.js'],
     ledgerBuilds: [{ ts: 't1', files: ['old.js'] }],
@@ -107,7 +107,7 @@ test('a rebuild of the same source replaces the newest entry instead of taking a
   const OLD = ['index-OLD.js', 'chunk-OLD.js'];
   const CUR = ['index-CUR.js', 'chunk-CUR.js'];
 
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: [...OLD, ...CUR],
     newFiles: [...CUR].reverse(), // same set, different order — still the same build
     ledgerBuilds: [
@@ -132,7 +132,7 @@ test('a rebuild that changes even one file is a new build and does take a slot',
   const CUR = ['index-CUR.js', 'chunk-CUR.js'];
   const NEXT = ['index-CUR.js', 'chunk-NEXT.js']; // one hash differs
 
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: [...OLD, ...CUR],
     newFiles: NEXT,
     ledgerBuilds: [
@@ -159,7 +159,7 @@ const STALE_LEDGER = [
 
 test('D252: a stale ledger plus seedFiles PREV keeps and restores all of PREV', () => {
   const PREV = ['index-PREV.js', 'chunk-PREV.js'];
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: [...PREV, 'index-L3.js', 'index-DEAD.js'],
     seedFiles: PREV,
     newFiles: ['index-NEW.js'],
@@ -179,7 +179,7 @@ test('D252: a stale ledger plus seedFiles PREV keeps and restores all of PREV', 
 });
 
 test('D252: no seed plus a stale ledger behaves as before, keeping only the window', () => {
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: ['index-PREV.js', 'index-L3.js', 'index-L2.js', 'index-L1.js'],
     newFiles: ['index-NEW.js'],
     ledgerBuilds: STALE_LEDGER,
@@ -206,7 +206,7 @@ test('D252/D529: the deploy flag seeds the restored tree, and its absence does n
     if (savedCI === undefined) delete process.env.CI; else process.env.CI = savedCI;
   }
 
-  const flagged = planAssetRetention({
+  const flagged = planAssetRetention({ retentionHours: 0,
     prevFiles: TREE,
     seedFiles: seedFilesFor({ argv: [SEED_RESTORED_TREE_FLAG], prevGeneration: GEN }),
     newFiles: ['index-NEW.js'],
@@ -214,7 +214,7 @@ test('D252/D529: the deploy flag seeds the restored tree, and its absence does n
   });
   assert.ok(flagged.keep.includes('index-LAST-DEPLOY.js'), 'the flag keeps what the last deploy uploaded');
 
-  const unflagged = planAssetRetention({
+  const unflagged = planAssetRetention({ retentionHours: 0,
     prevFiles: TREE,
     seedFiles: seedFilesFor({ argv: [], prevGeneration: GEN }),
     newFiles: ['index-NEW.js'],
@@ -251,7 +251,7 @@ test('D529: with a saved previous build restored, the kept set is the last three
   const prevFiles = [...B2, ...B1, ...B0];
   assert.equal(retentionStart({ prevFiles, ledgerBuilds }).restarted, false);
 
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles,
     seedFiles: seedFilesFor({ argv: [SEED_RESTORED_TREE_FLAG], prevGeneration: [] }),
     newFiles: B3,
@@ -272,7 +272,7 @@ test('D529: a restored tree with no ledger is kept whole, as one previous build'
   const start = retentionStart({ prevFiles, ledgerBuilds: [] });
   assert.equal(start.restarted, false);
   assert.match(start.line, /no ledger/);
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles,
     seedFiles: seedFilesFor({ argv: [SEED_RESTORED_TREE_FLAG], prevGeneration: [] }),
     newFiles: B2,
@@ -287,7 +287,7 @@ test('D529: an empty store starts over, and says so', () => {
   assert.equal(start.restarted, true);
   assert.match(start.line, /retention restarted/);
 
-  const plan = planAssetRetention({
+  const plan = planAssetRetention({ retentionHours: 0,
     prevFiles: [],
     seedFiles: seedFilesFor({ argv: [SEED_RESTORED_TREE_FLAG], prevGeneration: [] }),
     newFiles: B0,
