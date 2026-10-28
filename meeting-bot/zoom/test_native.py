@@ -132,6 +132,28 @@ class NativeTest(unittest.TestCase):
         self.driver.pcm(data)
         self.assertEqual(base64.b64decode(self.events[0][1]), b'\x03\x00\xfd\xff')
 
+    def test_one_way_audio_is_keyed_and_never_the_bots_own(self):
+        # #2582: the subscription asks for both streams, by the binding's own keyword names.
+        self.driver.command(1, 'startRawRecording', {})
+        kwargs = self.z.ZoomSDKAudioRawDataDelegateCallbacks.call_args.kwargs
+        self.assertEqual(kwargs['onMixedAudioRawDataReceivedCallback'], self.driver.pcm)
+        self.assertEqual(kwargs['onOneWayAudioRawDataReceivedCallback'], self.driver.voice)
+        self.driver.self_key = '42'
+        data = Mock()
+        data.GetSampleRate.return_value, data.GetChannelNum.return_value = 16000, 1
+        data.GetBuffer.return_value = b'\x01\x00'
+        self.driver.voice(data, 7)
+        self.assertEqual(self.events, [], 'no stream before the voice topic is subscribed')
+        self.driver.enabled.add('voice')
+        self.driver.voice(data, 42)
+        self.assertEqual(self.events, [], 'the bot never sends its own stream')
+        self.driver.voice(data, 7)
+        self.assertEqual(self.events, [('voice', {'key': '7', 'pcm': base64.b64encode(b'\x01\x00').decode()})])
+        data.GetSampleRate.return_value = 48000
+        self.driver.enabled.add('ended')
+        self.driver.voice(data, 7)
+        self.assertEqual(self.events[-1], ('ended', None), 'a wrong format ends capture, never mislabels')
+
 
 if __name__ == '__main__':
     unittest.main()

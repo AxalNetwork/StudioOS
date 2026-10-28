@@ -6,7 +6,7 @@
  * `isUploadWav` admits a bot chunk exactly as it admits an uploaded part.
  * `Chunker` cuts the stream into parts of `CHUNK_SAMPLES` as frames arrive.
  */
-import { CHUNK_SAMPLES, SAMPLE_RATE, WAV_HEADER_BYTES } from './constants.ts';
+import { CHUNK_SAMPLES, CHUNK_SEQ_MAX, SAMPLE_RATE, WAV_HEADER_BYTES } from './constants.ts';
 
 /** PCM samples as a WAV: 16 kHz, mono, 16-bit, canonical header. */
 export function encodeWav(samples: Int16Array, sampleRate: number = SAMPLE_RATE): Uint8Array<ArrayBuffer> {
@@ -41,18 +41,32 @@ export interface Chunk {
   /** Where the chunk starts on the recording's audio timeline. */
   readonly start_ms: number;
   readonly wav: Uint8Array<ArrayBuffer>;
+  /** #2582: the participant whose own stream this is; absent for mixed audio. */
+  readonly participant?: string;
+}
+
+/**
+ * #2582: one numbering for every chunk of a run, mixed or per participant,
+ * so B1 sees one contiguous `chunk_seq` from 0. `left` is what B1's range
+ * still admits (0 to `CHUNK_SEQ_MAX`).
+ */
+export class SeqSource {
+  private value = 0;
+  next(): number { return this.value++; }
+  get left(): number { return CHUNK_SEQ_MAX + 1 - this.value; }
 }
 
 /** Collects frames and hands out whole chunks, numbered from 0. */
 export class Chunker {
   private readonly size: number;
+  private readonly seqs: SeqSource;
   private buf: Int16Array;
   private fill = 0;
-  private seq = 0;
   private emitted = 0;
 
-  constructor(size: number = CHUNK_SAMPLES) {
+  constructor(size: number = CHUNK_SAMPLES, seqs: SeqSource = new SeqSource()) {
     this.size = size;
+    this.seqs = seqs;
     this.buf = new Int16Array(size);
   }
 
@@ -76,8 +90,7 @@ export class Chunker {
   }
 
   private cut(): Chunk {
-    const chunk = { seq: this.seq, start_ms: Math.round((this.emitted / SAMPLE_RATE) * 1000), wav: encodeWav(this.buf.subarray(0, this.fill)) };
-    this.seq += 1;
+    const chunk = { seq: this.seqs.next(), start_ms: Math.round((this.emitted / SAMPLE_RATE) * 1000), wav: encodeWav(this.buf.subarray(0, this.fill)) };
     this.emitted += this.fill;
     this.fill = 0;
     this.buf = new Int16Array(this.size);

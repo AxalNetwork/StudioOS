@@ -65,6 +65,8 @@ const grant = (w: World, investor = 5) => seed(w, 'data_room_grants', { id: inve
 const nda = (w: World, investor = 5) => seed(w, 'pairwise_ndas', { party_a_user_id: 1, party_b_user_id: investor, status: 'active' });
 const opens = (w: World) => Number((w.db.prepare("SELECT COUNT(*) n FROM data_room_access_log WHERE action='open_evidence'").get() as any).n);
 const NEVER = /PRIVATE|987654321|123400|private@example|9876|Outside Investor|snapshot_hash|private_reason|source_ref|accepted_by/;
+/** Item ids are random hex. A four-digit last-four can sit inside one, which is not the bank line. */
+const shown = (v: unknown) => JSON.stringify(v).replace(/[0-9a-f]{16,}/gi, '');
 
 async function fullPack(w: World) {
   sources(w); await buildCandidates(w.ctx);
@@ -106,7 +108,7 @@ test('before the NDA an investor reads coverage only: kind, count, source and da
     assert.match(r.before_nda, /NDA/);
     // Mutation checked: return items before the NDA → value_num appears and this fails.
     assert.doesNotMatch(JSON.stringify(r), /value_num|"value/);
-    assert.doesNotMatch(JSON.stringify(r), NEVER);
+    assert.doesNotMatch(shown(r), NEVER);
     const kinds = r.coverage.groups.map((g: any) => g.kind).sort();
     // The private item never counts; the file gated by the NDA is not counted before it.
     assert.deepEqual(kinds, ['bank-runway', 'consented-quote', 'icp-fit', 'kpi-snapshot', 'typed-commitment']);
@@ -130,7 +132,7 @@ test('after the NDA: After NDA with values, Summary without, and never a private
     const c: any = by.get(p.commitment.uid); assert.equal(c.value_num, null); assert.match(c.value_reason, /One investor/);
     assert.ok(by.has(p.statement.uid) && by.has(p.proof.uid), 'files the grant and the NDA admit');
     assert.equal((by.get(p.statement.uid) as any).value_num, null);
-    assert.doesNotMatch(JSON.stringify(r), NEVER);
+    assert.doesNotMatch(shown(r), NEVER);
   } finally { w.db.close(); }
 });
 
@@ -178,7 +180,7 @@ test('the routes: the room, the deal page and the round call each read the same,
     const tokenFor = async (id: number) => 'Bearer ' + await new SignJWT({ user_id: id }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
     const get = async (who: number, path: string) => { const r = await w.app.request('/api' + path, { headers: { Authorization: await tokenFor(who) } }, w.env).catch((e: any) => e); return { status: r.status, body: await r.json().catch(() => ({})) as any }; };
     const room = await get(5, '/data-room/shared/venture-one/evidence');
-    assert.equal(room.status, 200); assert.equal(room.body.nda_signed, true); assert.doesNotMatch(JSON.stringify(room.body), NEVER);
+    assert.equal(room.status, 200); assert.equal(room.body.nda_signed, true); assert.doesNotMatch(shown(room.body), NEVER);
     // An outsider and a missing venture answer alike.
     assert.deepEqual([(await get(7, '/data-room/shared/venture-one/evidence')).status, (await get(7, '/data-room/shared/nope/evidence')).status], [404, 404]);
     assert.equal((await get(3, '/data-room/shared/venture-one/evidence')).status, 403);

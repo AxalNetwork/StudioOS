@@ -10,6 +10,15 @@ import type { RosterChange, SpeakerChange, Unsubscribe } from './types.ts';
 type Pending = { resolve: (v: any) => void; reject: (e: Error) => void; done: () => void };
 const CHILD_ENV = ['PATH', 'HOME', 'TMPDIR', 'DISPLAY', 'XDG_RUNTIME_DIR', 'PULSE_SERVER', 'LANG', 'LC_ALL', 'LD_LIBRARY_PATH', 'GI_TYPELIB_PATH'] as const;
 const privateEnvironment = () => Object.fromEntries(CHILD_ENV.flatMap(key => process.env[key] === undefined ? [] : [[key, process.env[key]!]]));
+/** A base64 PCM frame from the child, at most 64,000 bytes of 16-bit samples. */
+function pcmOf(value: unknown): Int16Array {
+  if (typeof value !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw 0;
+  const b = Buffer.from(value, 'base64');
+  if (b.length % 2 || b.length > 64000) throw 0;
+  const pcm = new Int16Array(b.length / 2);
+  for (let i = 0; i < pcm.length; i++) pcm[i] = b.readInt16LE(i * 2);
+  return pcm;
+}
 type Start = (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
 export class ZoomSidecar implements ZoomSdkBridge {
   private readonly child: ChildProcess;
@@ -54,13 +63,11 @@ export class ZoomSidecar implements ZoomSdkBridge {
         const m = JSON.parse(line);
         if (m.event) {
           let value = m.value;
-          if (m.event === 'audio') {
-            if (typeof value !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw 0;
-            const b = Buffer.from(value, 'base64');
-            if (b.length % 2 || b.length > 64000) throw 0;
-            const pcm = new Int16Array(b.length / 2);
-            for (let i = 0; i < pcm.length; i++) pcm[i] = b.readInt16LE(i * 2);
-            value = pcm;
+          if (m.event === 'audio') value = pcmOf(value);
+          else if (m.event === 'voice') {
+            // #2582: one participant's own stream, keyed as the roster is.
+            if (!value || typeof value.key !== 'string' || !value.key || value.key.length > 128) throw 0;
+            value = { key: value.key, samples: pcmOf(value.pcm) };
           } else if (m.event === 'roster') {
             if (!value || !['join', 'leave'].includes(value.kind) || typeof value.key !== 'string' || value.key.length > 128 || typeof value.name !== 'string' || value.name.length > 160) throw 0;
             if (value.kind === 'join') this.people.set(value.key, value); else this.people.delete(value.key);
@@ -120,6 +127,7 @@ export class ZoomSidecar implements ZoomSdkBridge {
   async requestRecordingPrivilege(signal: AbortSignal): Promise<boolean> { return await this.rpc('requestRecordingPrivilege', {}, signal) === true; }
   async startRawRecording(signal: AbortSignal): Promise<void> { await this.rpc('startRawRecording', {}, signal); }
   mixedAudio(on: (s: Int16Array) => void): Unsubscribe { return this.subscribe('audio', on); }
+  participantAudio(on: (key: string, s: Int16Array) => void): Unsubscribe { return this.subscribe('voice', (v: { key: string; samples: Int16Array }) => on(v.key, v.samples)); }
   roster(on: (c: RosterChange) => void): Unsubscribe { return this.subscribe('roster', on); }
   speakers(on: (c: SpeakerChange) => void): Unsubscribe { return this.subscribe('speakers', on); }
   ended(on: () => void): Unsubscribe { return this.subscribe('ended', on); }

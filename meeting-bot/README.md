@@ -34,7 +34,8 @@ folder's lockfile. No TypeScript compilation step is needed in the image.
 | `src/types.ts` | `MeetingAdapter`, the contract B3 (Meet), B4 (Zoom) and B5 (Teams) each implement: `join`, `admitted`, `sendChat`, `audio`, `roster`, `speakers`, `ended`, `leave`. Also `RunConfig` (what B1's Durable Object hands the runtime), the event and status shapes, `CallbackTransport` and D886's failure codes. |
 | `src/constants.ts` | The bot's name, D872's audio format, ~30-second chunks, two minutes alone, the plan limits (30 minutes free, 2 hours paid), the admission wait, batching and retry. |
 | `src/lifecycle.ts` | `runBot`: joining → waiting room → notice → recording → local completion, reported to B1 as processing; B6 alone reports done. |
-| `src/wav.ts` | `encodeWav` (D872's canonical 44-byte header, byte for byte), `Chunker` (~30 s parts with `seq` and `start_ms`) and `toPcm16k` for browser audio. |
+| `src/wav.ts` | `encodeWav` (D872's canonical 44-byte header, byte for byte), `Chunker` (~30 s parts with `seq` and `start_ms`), `SeqSource` (one `chunk_seq` per run, inside B1's 0–3599) and `toPcm16k` for browser audio. |
+| `src/voiced.ts` | #2582: `VoicedStreams`, Zoom's per-participant streams cut into voiced-only parts (D886 §4's energy gate), each keyed by its participant and placed on the recording's timeline by the clock. |
 | `src/uploader.ts` | `ChunkUploader`: chunks sent as they complete, in order, retried with backoff, idempotent by `seq`; `drain` at the end. |
 | `src/events.ts` | `EventBatcher`: roster changes turned into snapshots and explicit speaker/silence events. Internal `n` dedupes a retried batch; the callback owns the global wire `seq`. |
 | `src/callback.ts` | `httpTransport`: B1's single signed `events` route, shared monotonic sequence, and same-origin one-use chunk PUT. Retries replay the same payload/seq before later events. Status, roster, speaker, chunk manifests and heartbeats share the queue. Errors contain a status only. |
@@ -165,7 +166,8 @@ arguments; the native bridge must discard them after each attempt.
 
 The bridge contract maps Linux SDK join/admission, chat, audio join,
 `CanStartRawRecording`, host recording privilege, `StartRawRecording`, mixed
-raw audio, participant/active-speaker callbacks and meeting end. It must:
+raw audio, per-participant raw audio (`participantAudio`, optional),
+participant/active-speaker callbacks and meeting end. It must:
 
 - honor every AbortSignal, including a Stop during a pending mint or join;
 - emit current roster on subscription, updates and renames under stable keys;
@@ -178,9 +180,13 @@ raw audio, participant/active-speaker callbacks and meeting end. It must:
 
 The adapter requests a fresh single-use OBF on every join attempt. Only the
 explicit authorizing-user-absent error retries, every 3 seconds, at most 120
-attempts. `waitingForHost` is an explicit B1 integration hook, for the sentence
-"Join the call first; Eadwyn AI follows." It must report that state through the
-control plane. B2's current `BotState` does not yet contain it.
+attempts. B1's OBF mint shipped with #2671 (`POST /api/meeting-bots/:uid/zoom-credentials`).
+**Waiting for the founder (#2582).** While Zoom refuses the OBF because the
+founder is not in the call, B1's answer says `waitingForHost`. The run's
+Durable Object keeps that answer and the founder's read carries
+`waiting_for: 'founder'`, so the panel says "Join the call first; Eadwyn AI
+follows." The D1 status stays `waiting_room`. The runtime reports
+`waiting_room` once, not on every retry.
 
 After admission the core posts the notice. Only then does the adapter join
 audio, check/request the host's recording permission and start raw recording.
@@ -188,14 +194,20 @@ Refusal prevents audio subscriptions. The adapter copies borrowed PCM memory,
 filters the bot's own roster entry, maps its speaker indicator to silence and
 makes leave idempotent.
 
-**Mixed audio only in this revision.** B2's `AudioFrame`/`putChunk` has no
-participant key. Do not feed individual participant streams into it: sequential
-concatenation would corrupt time and attribution. B2/B6 must add an agreed
-stream-key contract before Zoom per-participant audio can be supported. Mixed
-capture plus the platform indicator is the explicitly limited fake-tested path.
-M3/M4/M6 on a free Zoom account, native SDK packaging/version selection, the
-owner's app feature and credentials, and B1 wiring remain outstanding. This
-library is not enabled for live dispatch by this change.
+**Per-participant audio (#2582, D886 §1 Q5 and §4).** `AudioFrame` carries an
+optional `participant` key and `putChunk` sends it as B1's `participant_id`,
+which B6 names a passage by. The adapter uses each participant's own stream
+when the SDK delivers it and mixed audio otherwise, never both for the same
+stretch: from the first participant frame on, mixed frames are dropped and the
+mixed part in progress ends there. The bot's own stream is never sent.
+`VoicedStreams` keeps only voiced audio per stream, and every part, mixed or
+not, shares one `chunk_seq` inside B1's range; a part past it is counted
+(`voiced_dropped`), never sent. The run's last log line, `audio_paths`, gives
+counts only (`mixed_chunks`, `participant_chunks`, `participant_streams`,
+`voiced_dropped`), so the live check can see which path ran. The gate's
+figures and the clock-placed timeline are first settings for M4 to measure.
+M3/M4/M6 on a free Zoom account and the owner's first deployment remain
+outstanding. This library is not enabled for live dispatch by this change.
 
 
 ## B1 contract and funded runtime (#2580 follow-up)
