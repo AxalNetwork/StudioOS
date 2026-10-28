@@ -14,6 +14,8 @@ const CODES: ReadonlySet<string> = new Set([
   'zoom', 'google_meet', 'teams',
   // states
   'joining', 'waiting_room', 'recording', 'left', 'failed',
+  // Meet page classifications; never page text or browser exception messages.
+  'prejoin', 'lobby', 'in_call', 'ended', 'removed', 'unknown',
   // failure codes
   'not_admitted', 'meeting_ended', 'link_invalid', 'platform_blocked', 'obf_unavailable', 'notice_failed', 'processing_failed',
   // leave reasons

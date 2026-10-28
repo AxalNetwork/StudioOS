@@ -14,12 +14,12 @@
  * per hook) and is fixed on one line here, never inside the adapter.
  *
  * Every hook is a Playwright selector. The `text=` hooks match Meet's own
- * English words, so the bot's browser runs with `--lang=en-US`.
+ * English words, so the packaged browser context explicitly uses `en-US`.
  */
 
 /** The fixture states a hook can belong to: one page of `test/fixtures/meet.html` each. */
 export type MeetPageName =
-  | 'prejoin' | 'prejoin_open' | 'lobby' | 'denied' | 'blocked' | 'link_invalid' | 'in_call' | 'ended' | 'removed';
+  | 'media_prompt' | 'prejoin' | 'prejoin_open' | 'lobby' | 'denied' | 'blocked' | 'link_invalid' | 'in_call' | 'ended' | 'removed';
 
 export interface Hook {
   readonly selector: string;
@@ -30,6 +30,8 @@ export interface Hook {
 }
 
 export const HOOKS = {
+  // Observed on the live Meet pre-join screen, 2026-10-29 (#3667).
+  continue_without_media: { selector: 'button:has-text("Continue without microphone and camera")', purpose: 'dismisses media onboarding without granting microphone or camera access', page: 'media_prompt' },
   // ── the pre-join screen ──
   name_input: { selector: 'input[aria-label="Your name"]', purpose: 'the guest name field, shown to a visitor who is not signed in', page: 'prejoin' },
   mic_on: { selector: '[role="button"][aria-label^="Turn off microphone"]', purpose: 'the microphone is on; pressing it turns it off', page: 'prejoin' },
