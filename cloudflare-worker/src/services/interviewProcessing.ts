@@ -48,7 +48,9 @@ import {
   sessionHasAudio, listChunks, loadSession, recordReceipt, replaceWithFinal, type ChunkRow, type SessionRow, type StoredSegment,
 } from './interviewSessions';
 import { DEFAULT_FINAL_MODEL } from './sttModels';
-import { appendSegments } from './interviewIntake';
+import { activeMember, appendSegments, IntakeError, writableSession } from './interviewIntake';
+import { hydrateSuperAdmin, isSuperAdmin } from '../auth';
+import { logAdminAction } from './adminAudit';
 import type { ChannelProvider } from './channels/types';
 import type { DigestOutcome } from './validateEngine';
 import { NOVA_3 } from './sttFormats';
@@ -559,8 +561,20 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
   if (!Number.isSafeInteger(sessionId) || sessionId <= 0 || !Number.isSafeInteger(userId) || userId <= 0) return null;
   let session = await loadSession(env, sessionId);
   if (!session || !session.processing_stage || session.processing_stage === 'done' || session.processing_stage === 'failed') return null;
-  // Only the member who recorded it processes it.
-  if (session.created_by_user_id !== userId) return null;
+  // #3612: the retry route queues the authenticated actor. A Super Admin
+  // may recover another member's recording; recheck that elevation and the
+  // session's project here, because the grant may change while queued.
+  const administrativeRetry = session.created_by_user_id !== userId;
+  if (administrativeRetry) {
+    try {
+      const actor = await activeMember(env, userId);
+      if (!isSuperAdmin(await hydrateSuperAdmin(env, actor))) return null;
+      await writableSession(env, userId, sessionId);
+    } catch (e) {
+      if (e instanceof IntakeError) return null;
+      throw e;
+    }
+  }
   // #1470: no consent, no AI over the recording.
   if (consentBlocks(session.channel, session.consent_status, {
     hasAudio: await sessionHasAudio(env, session.id), submittedVia: session.submitted_via ?? null,
@@ -568,6 +582,7 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
     await failProcessing(env, session, NO_CONSENT_SENTENCE);
     return 'failed';
   }
+  if (administrativeRetry) await logAdminAction(env, userId, '', 'interview_processing_retry', { session_id: session.id });
   const interview = await env.DB.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?')
     .bind(session.interview_id).first<{ interviewee_name: string | null }>();
   try {
