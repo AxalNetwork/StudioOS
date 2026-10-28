@@ -202,6 +202,15 @@ export interface Env {
   MICROSOFT_CLIENT_SECRET?: string;
   MICROSOFT_TENANT_ID?: string;
   MICROSOFT_CALENDAR_REDIRECT_URI?: string;
+  // D1340 (#3548): the member's own mailboxes. Outlook's own app falls back to
+  // MICROSOFT_CLIENT_*; Gmail's is never the house token (GMAIL_CLIENT_*) and
+  // is offered only when MAIL_GMAIL_ENABLED is 'true' (#3547 Q1).
+  MAIL_MICROSOFT_CLIENT_ID?: string;
+  MAIL_MICROSOFT_CLIENT_SECRET?: string;
+  MAIL_GMAIL_CLIENT_ID?: string;
+  MAIL_GMAIL_CLIENT_SECRET?: string;
+  MAIL_GMAIL_ENABLED?: string;
+  MAIL_OAUTH_REDIRECT_URI?: string;
   OPENAI_API_KEY?: string;
   // Task #5 — Anthropic API key powers the Dashboard personal assistant
   // (cloudflare-worker/src/routes/assistant.ts). When unset the route

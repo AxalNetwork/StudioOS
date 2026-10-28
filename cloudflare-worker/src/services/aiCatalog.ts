@@ -53,6 +53,7 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   image_screen: 'Screen an image',
   image_alt_text: 'Describe an image',
   brand_logo: 'Draw a logo',
+  mail_draft: 'Draft an email',
   // D764 (#2089) — the rail's kinds of work, in the canvas's words.
   rail_chat: 'Chat on a page',
   rail_synth: 'Group notes into themes',
