@@ -112,13 +112,23 @@ test('#3590: capture CLI preserves entry identity and distinguishes an absent ca
       0, { entries: ['/assets/index-new.js'], reason: null }, 0, { entries: ['/assets/index-old.js'], reason: null },
       0, { entries: [], reason: 'cache-miss' },
     ]);
+    writeFileSync(join(dir, 'docs/index.html'), '<script type="module" src="/assets/exact-entry.js"></script>');
+    const withShell = command();
+    const shellManifest = JSON.parse(readFileSync(output, 'utf8'));
+    const oldGeneration = command('--previous-generation');
+    assert.deepEqual([withShell.status, shellManifest, oldGeneration.status, JSON.parse(readFileSync(output, 'utf8'))], [
+      0, { entries: ['/assets/index-new.js', '/assets/exact-entry.js'], reason: null },
+      0, { entries: ['/assets/index-old.js'], reason: null },
+    ]);
     writeFileSync(join(dir, 'docs/.asset-retention.json'), '{}');
-    assert.equal(command().status, 1);
+    const corrupt = command();
+    assert.deepEqual([corrupt.status, JSON.parse(readFileSync(output, 'utf8'))], [0, { entries: [], reason: 'capture-failed' }]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 const FAKE_FETCH = `
 import {appendFileSync} from 'node:fs';
+const attempts=new Map();
 const map=refs=>'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f='+JSON.stringify(refs)+'))) => i.map(i=>d[i]);';
 globalThis.fetch=async(input,init={})=>{
  const u=new URL(typeof input==='string'?input:input.url), p=u.pathname;
@@ -128,6 +138,10 @@ globalThis.fetch=async(input,init={})=>{
  if(p==='/api/health') return Response.json({connectors_oauth:{github:true}});
  if(p.startsWith('/api/')) return Response.json({}, {status:503});
  if(p.startsWith('/assets/')) {
+  if(process.env.FAULT==='retry' && ['/assets/index-current.js','/assets/lazy-current.js'].includes(p)) {
+   const key=u.origin+p, n=(attempts.get(key)||0)+1; attempts.set(key,n);
+   if(n===1) return new Response('',{status:404});
+  }
   if(process.env.FAULT==='entry-mime' && p==='/assets/index-current.js') return new Response(map(['assets/lazy-current.js']),{headers:{'content-type':'text/html'}});
   if(p==='/assets/nested-current.js') return new Response(map(['assets/nested-leaf.js']),{headers:{'content-type':js}});
   if(process.env.FAULT==='timeout' && u.host==='app.test' && p==='/assets/lazy-current.js') return new Promise((resolve,reject)=>{
@@ -149,7 +163,7 @@ globalThis.fetch=async(input,init={})=>{
  return new Response('<html><div id="root"></div><script type="module" src="/assets/index-'+entry+'.js"></script><link href="/assets/style.css"></html>',{headers:{...headers,'content-type':'text/html'}});
 };`;
 
-function smoke(fault = '', stale = false, malformed = false, absent = false, nested = false) {
+function smoke(fault = '', stale = false, malformed = false, absent = false, nested = false, artifact = false) {
   const dir = mkdtempSync(join(tmpdir(), 'spa-live-3590-'));
   try {
     writeFileSync(join(dir, 'fake.mjs'), FAKE_FETCH);
@@ -163,11 +177,14 @@ function smoke(fault = '', stale = false, malformed = false, absent = false, nes
     }
     writeFileSync(join(dir, '.asset-retention.json'), JSON.stringify({ builds: [{ files }] }));
     writeFileSync(join(dir, 'previous.json'), malformed ? '{}' : JSON.stringify(absent ? { entries: [], reason: 'cache-miss' } : { entries: ['/assets/index-previous.js'], reason: null }));
+    writeFileSync(join(dir, 'current.json'), fault === 'current-input' ? '{}' : JSON.stringify({ entries: files.map(f => '/assets/'+f), reason: null }));
+    if (fault === 'capture-failed') writeFileSync(join(dir, 'previous.json'), JSON.stringify({ entries: [], reason: 'capture-failed' }));
     writeFileSync(join(dir, 'requests.jsonl'), '');
     writeFileSync(join(dir, 'summary.md'), '');
     const result = run('scripts/check-spa-live.mjs', ROOT, {
-      SMOKE_HOSTS: 'https://apex.test https://app.test', SMOKE_RETRIES: '1', SMOKE_RETRY_MS: '0',
+      SMOKE_HOSTS: 'https://apex.test https://app.test', SMOKE_RETRIES: fault === 'retry' ? '2' : '1', SMOKE_RETRY_MS: '1',
       SMOKE_TIMEOUT_MS: '100', SKIP_LIVE_SMOKE: '0', SMOKE_BUILD_DIR: dir, SMOKE_PREVIOUS_BUILD: join(dir, 'previous.json'),
+      SMOKE_CURRENT_BUILD: artifact || ['current-input', 'missing-current'].includes(fault) ? join(dir, fault === 'missing-current' ? 'missing.json' : 'current.json') : '',
       SMOKE_API_PROBE: '', SMOKE_API_PROBE_LIMITED: '', SMOKE_CONNECTORS_STRICT: '',
       GITHUB_STEP_SUMMARY: join(dir, 'summary.md'),
       REQUEST_LOG: join(dir, 'requests.jsonl'), FAULT: fault, STALE_SHELL: stale ? '1' : '',
@@ -194,7 +211,7 @@ test('#3590: a missing JS on only the second host, wrong CSS MIME, lost old entr
 });
 
 test('#3590: a stale live shell cannot hide the just-built entry', () => {
-  const result = smoke('missing', true);
+  const result = smoke('missing', true, false, false, false, true);
   assert.deepEqual({ status: result.status, current: result.requests.some(([host,p]) => host==='https://app.test' && p==='/assets/lazy-current.js') }, { status: 1, current: true });
 });
 
@@ -210,9 +227,24 @@ test('#3590: all failed lazy files are fetched but only the first five per build
     printed: (result.stderr.match(/\[spa-live\] FAIL  current build /g) || []).length }, { status: 1, requested: 60, printed: 10 });
 });
 
-test('#3590: a malformed previous manifest cannot silently pass', () => {
-  const result = smoke('', false, true);
-  assert.deepEqual({ status: result.status, requests: result.requests }, { status: 1, requests: [] });
+test('#3590: unreadable manifests fail without suppressing existing live probes', () => {
+  for (const fault of ['', 'capture-failed', 'current-input', 'missing-current']) {
+    const result = smoke(fault, false, fault === '');
+    assert.deepEqual({ status: result.status,
+      probes: result.requests.filter(([,p]) => ['/hq', '/api/health', '/api/__smoke/rate-limited', '/api/auth/google/config'].includes(p)),
+      liveGraph: result.requests.filter(([,p]) => p==='/assets/lazy-current.js').length,
+      reported: result.stderr.includes('input is unreadable'),
+    }, { status: 1,
+      probes: ['https://apex.test','https://app.test'].flatMap(host => ['/api/health', '/api/__smoke/rate-limited', '/api/auth/google/config', '/api/health', '/hq'].map(p => [host,p])),
+      liveGraph: 2, reported: true });
+  }
+});
+
+test('#3590: transient entry and lazy-leaf misses recover within the retry budget', () => {
+  const result = smoke('retry');
+  assert.deepEqual({ status: result.status,
+    attempts: result.requests.filter(([,p]) => ['/assets/index-current.js','/assets/lazy-current.js'].includes(p)).length,
+  }, { status: 0, attempts: 8 });
 });
 
 test('#3590: a cache miss reports unavailable coverage instead of a previous-build pass', () => {
@@ -222,27 +254,42 @@ test('#3590: a cache miss reports unavailable coverage instead of a previous-bui
   { status: 0, warning: true, claimed: false, oldRequested: false });
 });
 
-test('#3590: the deploy captures before building, checks after publishing/saving and keeps the scheduled check', () => {
-  const deploy = readFileSync(join(ROOT,'.github/workflows/cloudflare-worker-deploy.yml'),'utf8').split('\n  schema-drift:')[0];
+test('#3590: deploy verification cannot gate publishing or skip sibling jobs; the schedule stays', () => {
+  const source = readFileSync(join(ROOT,'.github/workflows/cloudflare-worker-deploy.yml'),'utf8');
+  const deploy = source.split('\n  spa-smoke:')[0];
+  const job = source.split('\n  spa-smoke:')[1].split('\n  schema-drift:')[0];
   const schedule = readFileSync(join(ROOT,'.github/workflows/post-deploy-smoke.yml'),'utf8');
   const restore = deploy.indexOf('uses: actions/cache/restore@');
   const capture = deploy.indexOf('run: node scripts/capture-spa-previous.mjs');
   const build = deploy.indexOf('run: npm run build -- --seed-restored-tree');
+  const current = deploy.indexOf('run: node scripts/capture-spa-previous.mjs', capture+1);
+  const transfer = deploy.indexOf('uses: actions/upload-artifact@');
   const publish = deploy.indexOf('npx --no-install wrangler deploy --config');
   const save = deploy.indexOf('uses: actions/cache/save@');
-  const live = deploy.indexOf('run: node scripts/check-spa-live.mjs');
-  const step = deploy.slice(deploy.lastIndexOf('      - name:',live),live);
-  assert.deepEqual({ order: restore>=0 && restore<capture && capture<build && build<publish && publish<save && save<live,
-    realPublish: /id: publish/.test(deploy), gate: /!cancelled\(\) && steps\.publish\.outcome == 'success'/.test(step),
-    bothHosts: /SMOKE_HOSTS: 'https:\/\/axal.vc https:\/\/app.axal.vc'/.test(step), current: /SMOKE_BUILD_DIR: docs/.test(step),
-    previous: /SMOKE_PREVIOUS_BUILD: \$\{\{ runner.temp \}\}\/spa-smoke-previous.json/.test(step), noSoftFailure: !/continue-on-error/.test(step),
+  const live = job.indexOf('run: node scripts/check-spa-live.mjs');
+  const stepAt = (text,at) => text.slice(text.lastIndexOf('      - name:',at),at);
+  const step = stepAt(job,live);
+  assert.deepEqual({ order: restore>=0 && restore<capture && capture<build && build<current && current<transfer && transfer<publish && publish<save,
+    noPrePublishSmoke: !deploy.includes('run: node scripts/check-spa-live.mjs'),
+    independent: /needs: deploy/.test(job) && /schema-drift:[\s\S]*?needs: deploy/.test(source) && /branches:[\s\S]*?needs: deploy/.test(source),
+    captureSoft: /continue-on-error: true/.test(stepAt(deploy,capture)) && /continue-on-error: true/.test(stepAt(deploy,current)),
+    currentInput: /SMOKE_CACHE_RESTORED: 'built'/.test(stepAt(deploy,current)),
+    transferSoft: /continue-on-error: true/.test(stepAt(deploy,transfer)) && /spa-smoke-current.json[\s\S]*spa-smoke-previous.json/.test(deploy.slice(transfer,publish)),
+    exactRun: /name: spa-smoke-inputs-\$\{\{ github.run_attempt \}\}/.test(deploy) && /name: spa-smoke-inputs-\$\{\{ github.run_attempt \}\}/.test(job),
+    download: /uses: actions\/download-artifact@[a-f0-9]{40}/.test(job) && /continue-on-error: true/.test(stepAt(job,job.indexOf('uses: actions/download-artifact@'))),
+    bothHosts: /SMOKE_HOSTS: 'https:\/\/axal.vc https:\/\/app.axal.vc'/.test(step),
+    current: /SMOKE_CURRENT_BUILD: \$\{\{ runner.temp \}\}\/spa-smoke\/spa-smoke-current.json/.test(step),
+    previous: /SMOKE_PREVIOUS_BUILD: \$\{\{ runner.temp \}\}\/spa-smoke\/spa-smoke-previous.json/.test(step),
+    noSoftFailure: !/continue-on-error/.test(step),
     schedule: /cron: '0 \*\/6 \* \* \*'/.test(schedule), scheduledCache: /restore-keys: \|\s*spa-assets-/.test(schedule),
     generation: /capture-spa-previous.mjs "\$RUNNER_TEMP\/spa-smoke-previous.json" --previous-generation/.test(schedule),
     captureInput: /SMOKE_CACHE_RESTORED: \$\{\{ steps.retention.outputs.cache-matched-key \}\}/.test(deploy),
     scheduledInput: /SMOKE_CACHE_RESTORED: \$\{\{ steps.retention.outputs.cache-matched-key \}\}/.test(schedule),
+    scheduledSoftCapture: /Capture the retained previous lazy entry\n        continue-on-error: true/.test(schedule),
     scheduledManifest: /SMOKE_PREVIOUS_BUILD: \$\{\{ runner.temp \}\}\/spa-smoke-previous.json/.test(schedule),
     scheduledRun: /run: node scripts\/check-spa-live.mjs/.test(schedule),
     scheduledCurrent: /SMOKE_BUILD_DIR: \$\{\{ steps.retention.outputs.cache-matched-key != '' && 'docs' \|\| '' \}\}/.test(schedule),
-  }, { order:true,realPublish:true,gate:true,bothHosts:true,current:true,previous:true,noSoftFailure:true,schedule:true,scheduledCache:true,generation:true,
-    captureInput:true,scheduledInput:true,scheduledManifest:true,scheduledRun:true,scheduledCurrent:true });
+  }, { order:true,noPrePublishSmoke:true,independent:true,captureSoft:true,currentInput:true,transferSoft:true,exactRun:true,download:true,
+    bothHosts:true,current:true,previous:true,noSoftFailure:true,schedule:true,scheduledCache:true,generation:true,
+    captureInput:true,scheduledInput:true,scheduledSoftCapture:true,scheduledManifest:true,scheduledRun:true,scheduledCurrent:true });
 });

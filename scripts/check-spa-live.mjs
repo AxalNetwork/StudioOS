@@ -79,7 +79,7 @@
  * #3590: read each entry's __vite__mapDeps and fetch every lazy JS/CSS on
  * both hosts. The deploy captures the restored previous entry before Vite
  * runs; the schedule reads the preceding generation from the deployed cache.
- * Leaf requests use 16 workers and at most a 1s retry delay. Report counts
+ * Leaf requests use 16 workers and the normal retry delay. Report counts
  * and the first five failures per build, never a line per healthy chunk.
  * This verifies HTTP delivery, not authenticated rendering or JS execution.
  *
@@ -113,6 +113,8 @@
  *                    one WARN line per host and never a failure (D751 T9)
  *   SMOKE_BUILD_DIR local deployed build (its entry is checked even if a
  *                    live shell is stale); set by the deploy workflow
+ *   SMOKE_CURRENT_BUILD captured current-entry JSON transferred from the
+ *                    publishing job to its independent smoke job
  *   SMOKE_PREVIOUS_BUILD captured previous-entry JSON outside docs/; the
  *                    deploy/schedule both set it. An absent cache is explicit,
  *                    never reported as a verified previous build.
@@ -427,7 +429,7 @@ async function checkAsset(base, ref, quiet = false) {
       if (!quiet) console.log(
         `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
       );
-      await sleep(quiet ? Math.min(RETRY_MS, 1000) : RETRY_MS);
+      await sleep(RETRY_MS);
     }
   }
   return lastErr;
@@ -643,31 +645,42 @@ async function checkConnectorReadiness(base) {
 }
 
 function lazyBuildInputs() {
+  const problems = [];
   let current = [];
-  if (process.env.SMOKE_BUILD_DIR) {
-    const dir = process.env.SMOKE_BUILD_DIR;
-    current = entriesFromLedger({
-      ledger: JSON.parse(readFileSync(join(dir, '.asset-retention.json'), 'utf8')),
-      readAsset: file => readFileSync(join(dir, 'assets', file), 'utf8'),
-    }).entries;
-    // A cached generation has no shell. A fresh build does: include its
-    // precise entry too, even if a format change made it unrecognisable above.
-    if (existsSync(join(dir, 'index.html'))) {
-      const shellEntries = entryRefsFromHtml(readFileSync(join(dir, 'index.html'), 'utf8'));
-      if (shellEntries.length === 0) throw new Error('The built shell has no module entry');
-      current = [...new Set([...current, ...shellEntries])];
-    }
+  function manifestAt(file) {
+    const manifest = JSON.parse(readFileSync(file, 'utf8'));
+    if (!Array.isArray(manifest?.entries) || manifest.reason === 'capture-failed') throw new Error('Unreadable captured build');
+    manifest.entries = [...new Set(manifest.entries.map(assetPath))];
+    if (manifest.entries.length === 0 && !['cache-miss', 'no-previous-build'].includes(manifest.reason)) throw new Error('Missing captured entry');
+    return manifest;
   }
+  try {
+    if (process.env.SMOKE_CURRENT_BUILD) {
+      current = manifestAt(process.env.SMOKE_CURRENT_BUILD).entries;
+      if (current.length === 0) throw new Error('Missing current entry');
+    } else if (process.env.SMOKE_BUILD_DIR) {
+      const dir = process.env.SMOKE_BUILD_DIR;
+      current = entriesFromLedger({
+        ledger: JSON.parse(readFileSync(join(dir, '.asset-retention.json'), 'utf8')),
+        readAsset: file => readFileSync(join(dir, 'assets', file), 'utf8'),
+      }).entries;
+      // A cached generation has no shell. A fresh build does: include its
+      // precise entry too, even if a format change made it unrecognisable above.
+      if (existsSync(join(dir, 'index.html'))) {
+        const shellEntries = entryRefsFromHtml(readFileSync(join(dir, 'index.html'), 'utf8'));
+        if (shellEntries.length === 0) throw new Error('The built shell has no module entry');
+        current = [...new Set([...current, ...shellEntries])];
+      }
+    }
+  } catch { problems.push('Current lazy-build input is unreadable; live shell checks continue.'); }
   let previous = { entries: [], reason: 'no-retained-build-input' };
-  if (process.env.SMOKE_PREVIOUS_BUILD) {
-    previous = JSON.parse(readFileSync(process.env.SMOKE_PREVIOUS_BUILD, 'utf8'));
-    if (!Array.isArray(previous?.entries)) throw new Error('Unreadable previous-build manifest');
-    previous.entries = [...new Set(previous.entries.map(assetPath))];
-    if (previous.entries.length === 0 && !['cache-miss', 'no-previous-build'].includes(previous.reason)) {
-      throw new Error('The previous-build manifest has no entry or absence reason');
-    }
+  try {
+    if (process.env.SMOKE_PREVIOUS_BUILD) previous = manifestAt(process.env.SMOKE_PREVIOUS_BUILD);
+  } catch {
+    problems.push('Previous lazy-build input is unreadable; live shell checks continue.');
+    previous = { entries: [], reason: 'unreadable-input' };
   }
-  return { current, previous };
+  return { current, previous, problems };
 }
 
 // Read the entry body (unlike the leaf metadata checks), then fetch every
@@ -694,7 +707,7 @@ async function checkLazyBuild(base, label, entries, assetChecks, entryChecks) {
           if (reason) throw new Error(reason);
           return { refs: parseViteMapDeps(res.body) };
         } catch (error) { lastErr = error.message; }
-        if (attempt < RETRIES) await sleep(Math.min(RETRY_MS, 1000));
+        if (attempt < RETRIES) await sleep(RETRY_MS);
       }
       return { reason: lastErr };
     })());
@@ -728,6 +741,10 @@ async function main() {
   );
   const failures = [];
   const builds = lazyBuildInputs();
+  for (const problem of builds.problems) {
+    console.error(`[spa-live] FAIL  ${problem}`);
+    failures.push(problem);
+  }
   if (builds.previous.entries.length === 0) {
     console.warn(`[spa-live] WARN  Previous build not verified: ${builds.previous.reason}.`);
     if (process.env.GITHUB_STEP_SUMMARY) {

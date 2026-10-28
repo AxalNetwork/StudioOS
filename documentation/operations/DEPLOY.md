@@ -172,11 +172,16 @@ The deploy workflow also checks every lazy JS/CSS dependency after publishing
 (#3590), including `/hq`'s shell on both hosts. Before the build wipes `docs/`,
 `capture-spa-previous.mjs` records the restored generation's entry paths in
 `$RUNNER_TEMP/spa-smoke-previous.json`. After deploying and saving the actual
-deployed assets, `check-spa-live.mjs` reads both live entry bodies' Vite maps
-and fetches every named JS/CSS file on `axal.vc` and `app.axal.vc`. It also
-targets the newly built entry from `SMOKE_BUILD_DIR=docs`, so stale live HTML
-cannot hide the new build. Requests are bounded to 16 leaf checks at a time;
-logs give counts and at most five failures per build and host.
+deployed assets, a separate `spa-smoke` job reads both live entry bodies'
+Vite maps and fetches every named JS/CSS file on `axal.vc` and `app.axal.vc`.
+Tiny current/previous entry manifests are transferred from this exact deploy
+run via an artifact. `SMOKE_CURRENT_BUILD` targets the newly built entry even
+if live HTML is stale. Requests are bounded to 16 leaf checks at a time with
+the normal retry delay; logs give counts and at most five failures per build
+and host. Capture/transfer errors never gate publication: the smoke reports
+them after deploy and still runs the existing route, API and header probes.
+The sibling branch-redeploy and schema-drift jobs depend on `deploy` alone,
+so smoke failure does not skip them.
 
 The six-hour schedule remains. It restores the newest deployed cache and
 selects generation 1 (the previous build), whereas the pre-build deploy

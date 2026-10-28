@@ -85,6 +85,7 @@ jobs:
           restore-keys: |
             spa-assets-
       - name: Capture the retained previous lazy entry
+        continue-on-error: true
         env:
           SMOKE_CACHE_RESTORED: ${{ steps.retention.outputs.cache-matched-key }}
         run: node scripts/capture-spa-previous.mjs "$RUNNER_TEMP/spa-smoke-previous.json" --previous-generation
