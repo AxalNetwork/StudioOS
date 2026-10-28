@@ -159,7 +159,9 @@ opened before a deploy still asks for the previous build's hashed chunks, so
 `scripts/build-frontend.mjs` keeps complete deployed generations from the last
 72 hours in `docs/assets`, with at least the last three builds (including the
 new build) and an
-18,000-asset cap (D1361). It prunes the oldest optional generations first,
+18,000-asset cap (D1361). It also retains the build that was serving before
+the first deployment in that window: tabs opened just before a long-lived
+build was superseded need its chunks for 72 hours too. It prunes the oldest optional generations first,
 never individual chunks. If the protected floor itself exceeds the cap, it
 fails the build rather than deleting the newest build's assets. A cap warning
 means the time window was shortened. The full static output must also stay

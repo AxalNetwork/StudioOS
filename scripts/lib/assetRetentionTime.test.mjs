@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { planAssetRetention, recordAssetDeployment, ASSET_RETENTION_HOURS, ASSET_MIN_BUILDS, ASSET_MAX_FILES } from './assetRetention.mjs';
+import { planAssetRetention, recordAssetDeployment, ASSET_RETENTION_HOURS, ASSET_MIN_BUILDS, ASSET_MAX_FILES, STATIC_FILE_LIMIT } from './assetRetention.mjs';
 const now = '2026-10-28T12:00:00.000Z';
 const ago = hours => new Date(Date.parse(now) - hours * 3_600_000).toISOString();
 const build = (name, hours, files = [name]) => ({ ts: ago(hours + 1), deployedAt: ago(hours), files });
@@ -16,11 +16,11 @@ test('D1361: every deployment inside 72 hours survives, including the boundary a
   const p = plan([build('one.js', 1), build('two.js', 2), build('three.js', 71), build('boundary.js', 72)]);
   assert.deepEqual(p.keep, ['current.js','one.js','two.js','three.js','boundary.js']);
   assert.deepEqual(p.restore, ['one.js','two.js','three.js','boundary.js']);
-  assert.deepEqual([ASSET_RETENTION_HOURS,ASSET_MIN_BUILDS,ASSET_MAX_FILES], [72,3,18000]);
+  assert.deepEqual([ASSET_RETENTION_HOURS,ASSET_MIN_BUILDS,ASSET_MAX_FILES,STATIC_FILE_LIMIT], [72,3,18000,20000]);
 });
 
-test('D1361: past-window builds are pruned while the latest three remain even on a quiet site', () => {
-  assert.deepEqual(plan([build('one.js', 1),build('two.js',2),build('expired.js',72.001)]).keep,['current.js','one.js','two.js']);
+test('D1361: builds past their last-served window are pruned while the latest three remain', () => {
+  assert.deepEqual(plan([build('one.js', 1),build('two.js',2),build('boundary.js',72.001),build('expired.js',100)]).keep,['current.js','one.js','two.js','boundary.js']);
   assert.deepEqual(plan([build('one.js',73),build('two.js',74),build('expired.js',75)]).keep,['current.js','one.js','two.js']);
 });
 
@@ -109,4 +109,13 @@ test('D1361: an identical rebuild keeps the served timestamp even if it is not d
   assert.equal(p.nextLedger.builds[0].deployedAt,ago(1));
   const retried=planAssetRetention({now,newFiles:['changed.js'],prevFiles:p.keep,ledgerBuilds:p.nextLedger.builds});
   assert.deepEqual(retried.keep,['changed.js','current.js','prior.js']);
+});
+
+test('D1361: a quiet-site build survives 72 hours after supersession despite many rapid deploys',()=>{
+  const p=plan([build('recent-a.js',1),build('recent-b.js',2),build('long-lived.js',200),build('expired.js',201)]);
+  assert.deepEqual(p.keep,['current.js','recent-a.js','recent-b.js','long-lived.js']);
+  const boundary=plan([build('a.js',1),build('b.js',2),build('c.js',72),build('old.js',200),build('expired.js',201)]);
+  assert.deepEqual(boundary.keep,['current.js','a.js','b.js','c.js','old.js']);
+  const expired=plan([build('a.js',1),build('b.js',2),build('c.js',72.001),build('old.js',200)]);
+  assert.deepEqual(expired.keep,['current.js','a.js','b.js','c.js']);
 });

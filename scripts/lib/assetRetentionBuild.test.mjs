@@ -4,18 +4,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { ASSET_MAX_FILES, STATIC_FILE_LIMIT } from './assetRetention.mjs';
 
 // The production wrapper runs unchanged. Only the external Vite/prerender
 // commands are fixture writers, so its destructive rebuild and restore use
 // real files without compiling the SPA thousands of times in mutation checks.
-function fixture({ assets=2, publicFiles=0, history=false }={}) {
+function fixture({ assets=2, publicFiles=0, history=false, smallCaps=false }={}) {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'asset-wrapper-test-'));
   fs.mkdirSync(path.join(dir,'scripts/lib'),{recursive:true});
   fs.mkdirSync(path.join(dir,'frontend/src'),{recursive:true});
   fs.mkdirSync(path.join(dir,'bin'));
   for(const name of ['build-frontend.mjs','check-docs-assets-closure.mjs','lib/assetRetention.mjs','lib/assetGeneration.mjs','lib/assetsIgnore.mjs','lib/sourceTreeHash.mjs']) {
     fs.copyFileSync(new URL('../'+name,import.meta.url),path.join(dir,'scripts',name));
+  }
+  // Bound the failure fixtures to 16 assets / 32 total files. The real
+  // wrapper still runs unchanged; the pure policy test pins production's
+  // 18,000 / 20,000 defaults. This avoids 40,000 writes per mutation run.
+  if(smallCaps) {
+    const helper=path.join(dir,'scripts/lib/assetRetention.mjs');
+    fs.writeFileSync(helper,fs.readFileSync(helper,'utf8')
+      .replace(/export const ASSET_MAX_FILES = [\d_]+;/,'export const ASSET_MAX_FILES = 16;')
+      .replace(/export const STATIC_FILE_LIMIT = [\d_]+;/,'export const STATIC_FILE_LIMIT = 32;'));
   }
   const fake=path.join(dir,'bin/npm');
   fs.writeFileSync(fake,`#!/usr/bin/env node
@@ -51,7 +59,7 @@ test('D1361: real wrapper restores every chunk of recent generations across the 
 });
 
 test('D1361: wrapper rejects over-cap output and preserves the last deployed tree for retry',()=>{
-  const f=fixture({assets:ASSET_MAX_FILES+1,history:true});
+  const f=fixture({assets:17,history:true,smallCaps:true});
   try {
     const result=f.run();
     assert.equal(result.status,1);
@@ -63,7 +71,7 @@ test('D1361: wrapper rejects over-cap output and preserves the last deployed tre
 });
 
 test('D1361: wrapper counts non-asset files against the full static upload limit',()=>{
-  const f=fixture({publicFiles:STATIC_FILE_LIMIT,history:true});
+  const f=fixture({publicFiles:32,history:true,smallCaps:true});
   try {
     const result=f.run();
     assert.equal(result.status,1);

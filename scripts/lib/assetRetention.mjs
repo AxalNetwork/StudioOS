@@ -77,7 +77,11 @@ export function planAssetRetention({
   const cutoff = Date.parse(now) - retentionHours * 3_600_000;
   const withinWindow = b => retentionHours > 0
     && Date.parse(b.deployedAt ?? (b.legacy ? b.firstSeenAt : b.ts)) >= cutoff;
-  const selected = new Set(builds.flatMap((b, i) => protectedBuilds.has(i) || withinWindow(b) ? [i] : []));
+  // A tab can open just before a long-lived build is superseded. Keep the
+  // predecessor of every in-window deployment too: that next deploy is when
+  // the predecessor stopped serving, even if it first shipped days earlier.
+  const selected = new Set(builds.flatMap((b, i) => protectedBuilds.has(i)
+    || withinWindow(b) || (i > 0 && withinWindow(builds[i - 1])) ? [i] : []));
   const expiredBuilds = builds.length - selected.size;
   const refs = new Map();
   const add = files => { for (const f of files) refs.set(f, (refs.get(f) ?? 0) + 1); };
