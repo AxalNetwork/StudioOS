@@ -26,6 +26,8 @@ import { fillsApi } from '../../lib/api/fills.js';
 import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { reportError } from '../../lib/log.js';
 import { placeValues, placedProposals, savedId, stillPlaced } from '../../lib/fillForms.js';
+import { activeSupportSession } from '../../lib/supportSession.js';
+import { SUPPORT_OFF } from '../../lib/fillScoped.js';
 
 const INPUT = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-[9px] text-[13px] text-axal-ink outline-none focus:border-axal-violet disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 max-lg:rounded-xl';
 const LABEL = 'text-[10px] font-extrabold uppercase tracking-[0.09em] text-axal-muted dark:text-gray-400';
@@ -343,6 +345,9 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
           Unreadable: Fill with Eadwyn could not be read for this form. Type the values, or
           <button type="button" onClick={() => setFillTick((n) => n + 1)} className="font-semibold text-axal-violet underline dark:text-violet-300" data-testid="fill-form-retry">Try again</button>
         </p> : null}
+        {/* D1329 (#3490, AF15): a support session reads the form, its marks and no trigger, and says why. */}
+        {loaded && fill && fillRead?.status === 'ready' && fillRead.data?.can_fill === false && activeSupportSession()
+          ? <p role="status" data-testid="fill-form-support" className="m-0 rounded-[10px] border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">{SUPPORT_OFF}</p> : null}
         {loaded && fillCtl && (fillable || placedCount > 0) ? <div className="flex flex-wrap items-center justify-between gap-2" data-testid="fill-form-bar">
           <span className="text-xs text-axal-muted dark:text-gray-400" data-testid="fill-form-placed">{placedCount
             ? `${placedCount} ${placedCount === 1 ? 'value' : 'values'} placed. Nothing is saved until you press ${cleanFormCopy(base.cta || base.button || 'Save')}.`

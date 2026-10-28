@@ -13,6 +13,8 @@ import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
+import { FillFormBar, useScopedFill } from '../../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 
 /**
@@ -170,6 +172,20 @@ function Composer({ engagements, busy, onSaved, onError, note }) {
   const [shipped, setShipped] = useState('');
   const [nextUp, setNextUp] = useState('');
   const [loadError, setLoadError] = useState('');
+  // D1329 (#3490, AF19): Fill with Eadwyn on Shipped and Next, from the
+  // engagement record at no AI tokens. A saved draft is its record; a new one
+  // hangs under its engagement, for this month only (the record's month is the
+  // one the Worker reads). A sent report reads its marks only.
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const reportId = draft.existing?.id ?? null;
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.statusReport,
+    record: reportId,
+    parent: reportId ? null : (engagementId && draft.period === thisMonth ? Number(engagementId) : null),
+    enabled: composed && (reportId != null || (engagementId && draft.period === thisMonth)),
+    values: { shipped, next_up: nextUp },
+    onValues: (v) => { if (v.shipped != null) setShipped(v.shipped); if (v.next_up != null) setNextUp(v.next_up); },
+  });
 
   const compose = useCallback(async () => {
     if (!engagementId) return;
@@ -293,12 +309,13 @@ function Composer({ engagements, busy, onSaved, onError, note }) {
             </div>
           </div>
 
+          <FillFormBar fill={fill} />
           <div className="grid gap-3">
-            <Field label="Shipped" hint="Yours to write. The log above is what the record says was sent.">
+            <Field label="Shipped" hint="Yours to write. The log above is what the record says was sent." fill={{ ctl: fill, name: 'shipped', value: shipped }}>
               <textarea className={inputClass} rows={3} value={shipped} maxLength={4000}
                 onChange={(e) => setShipped(e.target.value)} />
             </Field>
-            <Field label="Next" hint="Yours to write. The milestones above are what is open.">
+            <Field label="Next" hint="Yours to write. The milestones above are what is open." fill={{ ctl: fill, name: 'next_up', value: nextUp }}>
               <textarea className={inputClass} rows={3} value={nextUp} maxLength={4000}
                 onChange={(e) => setNextUp(e.target.value)} />
             </Field>
@@ -309,9 +326,10 @@ function Composer({ engagements, busy, onSaved, onError, note }) {
             disabled={busy || draft.existing?.state === 'sent' || (!shipped.trim() && !nextUp.trim())}
             onClick={async () => {
               try {
-                await api.savePartnerStatusReport(engagementId, draft.period, {
+                const saved = await api.savePartnerStatusReport(engagementId, draft.period, {
                   shipped, next_up: nextUp,
                 });
+                await fill.afterSave(saved?.id);
                 await onSaved();
               } catch (e) { onError(e); }
             }}
