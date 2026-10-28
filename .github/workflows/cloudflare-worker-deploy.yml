@@ -189,6 +189,12 @@ jobs:
           echo "::error::wrangler deploy failed three times with Cloudflare error 10013; see the attempts above"
           exit 1
 
+      # D1364 (#3591): stamp the build that just shipped, from the repo root,
+      # before it is cached. Without it the next deploy's build refuses the
+      # restored ledger ("restored deployment ledger is unstamped").
+      - name: Record the successful deployment
+        run: node scripts/record-asset-deploy.mjs
+
       # D529 — only after the deploy above succeeded (a failed step skips
       # this one), save what production now serves for the next deploy to
       # restore. One entry per run; the restore takes the newest by prefix.

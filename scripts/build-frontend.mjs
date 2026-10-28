@@ -34,7 +34,7 @@ import {
   RETENTION_LEDGER_FILENAME,
   assetsIgnoreText,
 } from './lib/assetsIgnore.mjs';
-import { planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FLAG, ASSET_MIN_BUILDS, ASSET_RETENTION_HOURS, ASSET_MAX_FILES, STATIC_FILE_LIMIT } from './lib/assetRetention.mjs';
+import { adoptUnstampedDeployments, planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FLAG, ASSET_MIN_BUILDS, ASSET_RETENTION_HOURS, ASSET_MAX_FILES, STATIC_FILE_LIMIT } from './lib/assetRetention.mjs';
 import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
 
 const RETAIN_BUILDS = Math.max(ASSET_MIN_BUILDS, Math.floor(Number(process.env.ASSET_RETAIN_BUILDS) || ASSET_MIN_BUILDS));
@@ -77,7 +77,12 @@ function readLedgerBuilds(p) {
 
 // 1. Snapshot the pre-build assets — they must survive Vite's emptyOutDir wipe.
 const prevFiles = listAssetFiles(assetsDir);
-const ledgerBuilds = readLedgerBuilds(ledgerPath);
+const restored = readLedgerBuilds(ledgerPath);
+// #3591: the deploy that shipped before the stamp step existed left one
+// unstamped entry in the cache. It shipped, so it gets the legacy grace.
+const { builds: ledgerBuilds, adopted } = process.argv.includes(SEED_RESTORED_TREE_FLAG)
+  ? adoptUnstampedDeployments(restored) : { builds: restored, adopted: 0 };
+if (adopted) console.log(`[build] ${adopted} deployment(s) recorded before the stamp step kept as legacy history.`);
 // A deployment cache is saved only after shipping. An unstamped v2 record there
 // means the post-deploy clock did not run; abort BEFORE Vite can discard it.
 // Legacy entries retain their explicit one-time grace without inventing a time.
