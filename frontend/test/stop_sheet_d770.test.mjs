@@ -1,6 +1,6 @@
 /**
  * D770 (#2095, D720 F3 §6), PR 1 — a recording's Stop asks first. The Stop
- * sheet offers "Summarise and place with Eadwyn", off by default, with its
+ * sheet offers "Summarise and place with Eadwyn", on by default, with its
  * quote; `auto` comes only from that choice, never from the page's mode; off,
  * Stop saves the recording and its transcript only. The Worker's side (finish
  * reads only `auto: true`, a retry with no recorded choice is manual) is
@@ -47,19 +47,19 @@ async function mountSheet(props) {
 
 const SPEND = (rows) => ({ loading: false, spend: { recorded: true, by_task_recorded: true, by_task: rows }, reload() {} });
 
-test('the choice is off by default: Stop saves the recording and its transcript, and sends no auto', async () => {
+test('the choice is on by default: Stop saves and analyses the transcript', async () => {
   const stops = [];
   const m = await mountSheet({ onStop: (o) => stops.push(o) });
   try {
     assert.ok(m.text(m.by('stop-choice')).includes(STOP_CHOICE));
     assert.equal(STOP_CHOICE, 'Summarise and place with Eadwyn');
-    assert.equal(m.pr(m.by('switch-stop-process')).checked, false, 'off by default');
+    assert.equal(m.pr(m.by('switch-stop-process')).checked, true, 'on by default');
     assert.equal(m.pr(m.by('switch-stop-process')).role, 'switch');
-    assert.ok(m.text().includes(stopWords(false).body), m.text());
-    assert.ok(m.text().includes('the recording and its transcript are saved'));
-    assert.equal(m.text(m.by('button-confirm-stop')), 'Stop and save');
+    assert.ok(m.text().includes(stopWords(true).body), m.text());
+    assert.ok(m.text().includes('writes the summary and proposes placements for you to review'));
+    assert.equal(m.text(m.by('button-confirm-stop')), 'Stop and process');
     await m.press('button-confirm-stop');
-    assert.deepEqual(stops, [{ auto: false }], 'no summary is asked for');
+    assert.deepEqual(stops, [{ auto: true }], 'summary and placements are requested');
   } finally { await m.unmount(); }
 });
 

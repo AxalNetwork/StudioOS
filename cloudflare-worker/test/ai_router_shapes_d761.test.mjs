@@ -738,3 +738,15 @@ test('image: priced at the catalogue\'s figure in each model\'s unit; a member i
   assert.equal(ai.calls.length, 2, 'the second image is drawn again');
   assert.equal(again.usage.cached, false);
 });
+
+
+test('interview analysis allows complete output on primary and fallback; ordinary chat keeps its deadline', async () => {
+  for (const task of ['summarise_interview', 'structure_interview', 'extract_conversation_items', 'sentiment']) {
+    __resetForTest();
+    const ai = makeAI((_model, _payload, n) => n === 1 ? failWith('unavailable', 503) : ok());
+    const result = await run(envWith(ai), { task, userId: 0, messages: ask });
+    assert.equal(result.ok, true, task);
+    assert.equal(result.attempts.length, 2, task);
+    assert.deepEqual(result.attempts.map(a => a.timeout_ms), task === 'sentiment' ? [8000, 8000] : [30000, 30000], task);
+  }
+});
