@@ -14,6 +14,7 @@ import { searchIndexAccepts, parseEmbed } from '../src/services/ai/shapes.ts';
 import { unitPrice } from '../src/services/ai/pricing.ts';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
+import { RAIL_PAGES, RAIL_BOARD_ALIASES } from '../../frontend/src/lib/railPages.js';
 
 const SECRET = 'module-connections-fixture-secret-no-production-value';
 const switches = { AI_PARTNER_MODELS: 'on', AI_PAID_MODELS: 'on' };
@@ -22,6 +23,10 @@ const pcm = btoa('\0'.repeat(32_000)); // exactly one second, measured on the se
 const questions = { urgent: { type: 'noul' as const, instructions: 'Does this evidence describe an urgent problem?' } };
 const rows = railRows();
 const pageFor = (id: string) => rows.find(r => moduleConnections(r, switches).some(m => m.id === id))!;
+const surfaceFor = (page: string) => {
+  const key = RAIL_BOARD_ALIASES.find(x => x.board === page)?.to ?? page;
+  return RAIL_PAGES[key.split(' · ')[0]]?.find(x => x.key === key)?.route?.split(/[?#]/)[0] ?? '/studio';
+};
 
 function fixture(handler: (id: string, input: any) => any = () => ({ response: 'Result.', usage: { prompt_tokens: 12, completion_tokens: 3 } })) {
   const f = aiBudgetFixture();
@@ -74,7 +79,7 @@ app.route('/api/ai/modules', modules);
 app.onError((e, c) => c.json({ error: e.message }, e.message === 'Unauthorized' ? 401 : 500));
 async function post(f: ReturnType<typeof fixture>, body: any, action = 'run', user: number | null = 2) {
   const token = user == null ? null : await new SignJWT({ user_id: user, role: 'ignored-claim' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
-  const res = await app.request(`/api/ai/modules/${action}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }, f.env);
+  const res = await app.request(`/api/ai/modules/${action}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ surface: surfaceFor(body.page), ...body }) }, f.env);
   return { status: res.status, body: await res.json() as any };
 }
 const decisionBody = { page: pageFor('@cf/cloudflare/clef').pageKey, model: '@cf/cloudflare/clef', text: 'Customers say checkout is failing.', questions };
@@ -118,8 +123,8 @@ test('decision quote/run uses authenticated ownership, typed questions, guard an
     const result = await post(f, decisionBody);
     assert.deepEqual([result.status, result.body.ok, result.body.output, result.body.usage.model, result.body.units], [200, true, '{"urgent":0.8}', '@cf/cloudflare/clef', { tokens_in: 21, tokens_out: 0 }]);
     assert.deepEqual(f.calls, [{ id: '@cf/cloudflare/clef', input: { model: 'clef', state: decisionBody.text, questions } }]);
-    const logs = f.db.prepare("SELECT user_id,rail_page,charged_microusd FROM ai_usage_logs WHERE task = 'module_decision'").all();
-    assert.deepEqual(logs.map((x: any) => [x.user_id, x.rail_page, x.charged_microusd > 0]), [[2, decisionBody.page, true]]);
+    const logs = f.db.prepare("SELECT user_id,rail_page,surface,charged_microusd FROM ai_usage_logs WHERE task = 'module_decision'").all();
+    assert.deepEqual(logs.map((x: any) => [x.user_id, x.rail_page, x.surface, x.charged_microusd > 0]), [[2, decisionBody.page, surfaceFor(decisionBody.page), true]]);
     assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM ai_usage_logs WHERE task = 'safety'").get().n > 0, true);
   } finally { f.db.close(); }
 });
@@ -127,10 +132,10 @@ test('decision quote/run uses authenticated ownership, typed questions, guard an
 test('wrong roles, arbitrary member ids, unknown options and unrelated models never run', async () => {
   const f = fixture();
   try {
-    const bad = [null, { ...decisionBody, page: 'Super Admin · Platform' }, { ...decisionBody, page: 'Advisor · Home' }, { ...decisionBody, userId: 1 }, { ...decisionBody, option: 'unknown:option' }, { ...decisionBody, model: '@cf/microsoft/resnet-50' }];
+    const bad = [null, { ...decisionBody, page: 'Super Admin · Platform' }, { ...decisionBody, page: 'Advisor · Home' }, { ...decisionBody, userId: 1 }, { ...decisionBody, option: 'unknown:option' }, { ...decisionBody, model: '@cf/microsoft/resnet-50' }, { ...decisionBody, surface: null }, { ...decisionBody, surface: 'https://example.test/page' }];
     const statuses = [];
     for (const body of bad) statuses.push((await post(f, body ?? decisionBody, 'run', body === null ? null : 2)).status);
-    assert.deepEqual({ statuses, calls: f.calls, holds: f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n }, { statuses: [401, 403, 403, 400, 400, 400], calls: [], holds: 0 });
+    assert.deepEqual({ statuses, calls: f.calls, holds: f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n }, { statuses: [401, 403, 403, 400, 400, 400, 400, 400], calls: [], holds: 0 });
   } finally { f.db.close(); }
 });
 

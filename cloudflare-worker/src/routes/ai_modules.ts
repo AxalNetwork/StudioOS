@@ -12,8 +12,7 @@ import { resolveRail, resolveRailOption } from '../services/ai/railMatrix';
 import { moduleConnections } from '../services/ai/moduleConnections';
 import { pcmBytes, pcmMinutes, pcmWave, questionsValid } from '../services/ai/moduleShapes';
 import { INDIC_FLORES, INDIC_TRANSLATION_MODEL, imagesRefusal } from '../services/ai/shapes';
-import { run as runModuleModel, quoteRun, type RunOptions, type TaskClass } from '../services/aiRouter';
-import { AI_SURFACE } from '../services/aiSurfaces';
+import { run as runModuleModel, quoteRun, normaliseSurface, type RunOptions, type TaskClass } from '../services/aiRouter';
 
 const modules = new Hono<{ Bindings: Env }>();
 modules.use('*', bodyLimit({ maxSize: 7_000_000, onError: c => refuse(c, 413, { code: 'payload_too_large', message: 'That material is too large for one run.' }) }));
@@ -53,12 +52,16 @@ for (const action of ['run', 'quote'] as const) modules.post(`/${action}`, async
   if (!on) return invalid(c, 'That option is not registered on this module.');
   const connection = moduleConnections(on, c.env).find(m => m.id === body.model);
   if (!connection) return refuse(c, 400, { code: 'model_not_offered', message: 'That model is not connected to this module.' });
+  // Like the rail composer, retain the browser's page path for the spend view.
+  // It is provenance only: role, member id and module access never come from it.
+  const surface = normaliseSurface(body.surface);
+  if (!surface) return invalid(c, 'Send the page address this material was selected on.');
   if (typeof body.text !== 'string' || body.text.length > 24_000) return invalid(c, 'Send up to 24,000 characters of material.');
   const images = body.images;
   if (images != null && (!Array.isArray(images) || imagesRefusal(images))) return invalid(c, 'Send bounded embedded images.');
   const operation = connection.operation;
   // Each operation has one input shape. An ignored field must not pretend it ran.
-  const allowed = ['page', 'option', 'model', 'text', ...(operation === 'chat' || operation === 'vision' || operation === 'image_labels' ? ['images'] : []),
+  const allowed = ['page', 'surface', 'option', 'model', 'text', ...(operation === 'chat' || operation === 'vision' || operation === 'image_labels' ? ['images'] : []),
     ...(operation === 'decision' ? ['questions'] : []), ...(operation === 'turn' || operation === 'transcribe' ? ['audio_pcm16'] : []),
     ...(operation === 'translate' ? ['source_language', 'target_language'] : []), ...(operation === 'rerank' ? ['contexts'] : []),
     ...(operation === 'voice' ? ['voice', 'language'] : [])];
@@ -66,7 +69,7 @@ for (const action of ['run', 'quote'] as const) modules.post(`/${action}`, async
   const opts: RunOptions = {
     task: `module_${operation}` as TaskClass,
     userId: user.id, model: connection.id, text: body.text, maxTokens: 1024, role: user.role,
-    surface: AI_SURFACE.moduleOperations, rail: { page: row.pageKey, option: body.option ?? undefined },
+    surface, rail: { page: row.pageKey, option: body.option ?? undefined },
     ...(images?.length ? { images } : {}),
   };
   if (operation === 'decision') {
@@ -86,8 +89,8 @@ for (const action of ['run', 'quote'] as const) modules.post(`/${action}`, async
   else if (operation === 'voice') opts.speak = { voice: body.voice, lang: body.language };
   else if (operation === 'draw') opts.draw = {};
   else if (operation === 'vision' && images?.length !== 1) return invalid(c, 'Send one image and a question.');
-  const result = action === 'quote' ? await quoteRun(c.env, { ...opts, surface: AI_SURFACE.moduleOperations })
-    : await runModuleModel(c.env, { ...opts, surface: AI_SURFACE.moduleOperations, rail: opts.rail });
+  const result = action === 'quote' ? await quoteRun(c.env, { ...opts, surface })
+    : await runModuleModel(c.env, { ...opts, surface, rail: opts.rail });
   if (action === 'quote' || !result.ok) return c.json(result as any, result.ok ? 200 : 422);
   const r = result as Awaited<ReturnType<typeof runModuleModel>>;
   return c.json({ ok: true, output: r.output ?? null, embedding: r.embedding ?? null, ranking: r.ranking ?? null,

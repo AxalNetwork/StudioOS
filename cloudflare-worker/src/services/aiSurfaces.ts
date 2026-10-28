@@ -32,8 +32,6 @@
  * callers and the spend route, never by the router.
  */
 export const AI_SURFACE = {
-  /** #3626: self-scoped specialist operations on a registered module. Rail fields retain the originating page/option. */
-  moduleOperations: '/ai/modules',
   /** Validate · fill proposals (`/api/founder/validate/propose`) and the citations they fetch. */
   validate: '/validate',
   /** Validate · Customer research's Interviews — transcribing an interview recording (D704: the page became the module). */
