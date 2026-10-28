@@ -42,8 +42,10 @@ export function getRecorder() {
 }
 export function setRecorder(r) {
   recorder = r;
-  // The inactivity logout and the reloads ask this probe (lib/captureGuard.js).
-  setCaptureProbe(() => !!recorder && recorder.isCapturing());
+  // The reloads ask this probe (lib/captureGuard.js). An adopted, paused
+  // session with no capture here does not hold them (`holdsReload`).
+  setCaptureProbe(() => !!recorder
+    && (typeof recorder.holdsReload === 'function' ? recorder.holdsReload() : recorder.isCapturing()));
 }
 
 /** Is audio being taken, or still leaving this device? (D685 §5.6.8) */

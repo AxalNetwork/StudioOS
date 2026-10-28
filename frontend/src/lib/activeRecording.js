@@ -409,6 +409,15 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
      */
     isCapturing: () => opening || ['share', 'recording', 'paused'].includes(state.phase)
       || (state.phase === 'stopping' && (state.stopStep !== 'finished' || state.processing?.stage === 'uploading')),
+    /**
+     * Would a reload or the inactivity logout lose anything from THIS tab?
+     * `isCapturing`, less a session the tab only adopted (`recover`: paused,
+     * no capture here, nothing opening). Its audio is on the Worker or in the
+     * device's queue, and the next load re-adopts it (§5.6.7). Counted as a
+     * capture, it held the stale-chunk and service-worker reloads off for as
+     * long as the tab lived, which stranded /hq on a deleted chunk.
+     */
+    holdsReload: () => api_.isCapturing() && !(state.phase === 'paused' && !capture && !opening),
 
     /**
      * Inside the Start click (D685 §5.6.5): the microphone and the AudioContext
