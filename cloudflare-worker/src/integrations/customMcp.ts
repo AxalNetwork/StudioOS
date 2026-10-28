@@ -52,7 +52,7 @@ import type { Env } from '../types';
 import type { IntegrationRow } from './registry';
 import { mcpProvider, type McpProvider } from './mcpProviders';
 import {
-  authorizeMcpUrl, discoverMcp, exchangeMcpCode, mcpAccessFor, mcpClientFor, mcpCredentialsOf, McpClientError, openMcpSession,
+  authorizeMcpUrl, discoverMcp, exchangeMcpCode, mcpAccessFor, mcpClientFor, mcpCredentialsOf, McpClientError, mintMcpSetupTicket, openMcpSession,
   resolveMcpClient, revokeMcpConnection, toolFingerprint, MCP_AUTH_TYPE, MCP_DEADLINE_MS, MCP_MAX_BODY_BYTES,
   type McpAuthServer, type McpCredentials, type McpFetch, type McpRegisteredClient, type McpSession, type McpToolDrift,
 } from './mcpClient';
@@ -76,7 +76,9 @@ export function customMcpEnabled(env: Pick<Env, 'CUSTOM_MCP_ENABLED'> | Record<s
 
 export type CustomMcpErrorCode =
   | 'url_refused' | 'host_private' | 'host_unresolved' | 'discovery_failed' | 'not_found' | 'tool_not_listed'
-  | 'tool_writes' | 'tool_not_approved' | 'too_many_tools' | 'unreachable' | 'unauthorized';
+  | 'tool_writes' | 'tool_not_approved' | 'too_many_tools' | 'unreachable' | 'unauthorized'
+  // D1343: a mail send tool the server calls destructive, or whose input is not `{ to, subject, body }`.
+  | 'tool_destructive' | 'tool_shape';
 
 /** A refusal with a fixed code; never a URL, a body or a token. */
 export class CustomMcpError extends Error {
@@ -283,14 +285,27 @@ export interface CustomConfig {
   era?: 'legacy' | 'modern';
   drift?: McpToolDrift[];
   checked_at?: string;
+  /**
+   * D1343 (#3551): the one tool the member approved to send their email, a
+   * write, pinned to the schema they approved. It is the provider's only
+   * setup tool (D856's narrower lock): never a read tool, listed only while
+   * its schema matches, and callable once per ticket that the mail send mints
+   * after the composer's confirmation nonce is spent.
+   */
+  mail_send?: { tool: string; pin: string };
 }
 
 export const customKey = (uid: string) => `custom:${uid}`;
 export const isConnectionUid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{32}$/.test(v);
 
-/** A connection's record: its URL, its hosts, its approved read tools pinned, and no write tool. */
-export function customProvider(uid: string, cfg: Pick<CustomConfig, 'url' | 'hosts' | 'accepted_scopes' | 'approved' | 'era'>): McpProvider {
+/**
+ * A connection's record: its URL, its hosts, its approved read tools pinned,
+ * and no write tool. D1343: a mail send tool, when the member designated one,
+ * is its only setup tool, pinned too.
+ */
+export function customProvider(uid: string, cfg: Pick<CustomConfig, 'url' | 'hosts' | 'accepted_scopes' | 'approved' | 'era' | 'mail_send'>): McpProvider {
   const approved = cfg.approved ?? {};
+  const send = cfg.mail_send && !Object.hasOwn(approved, cfg.mail_send.tool) ? cfg.mail_send : null;
   return mcpProvider({
     key: customKey(uid),
     resources: [cfg.url],
@@ -299,6 +314,7 @@ export function customProvider(uid: string, cfg: Pick<CustomConfig, 'url' | 'hos
     accepted_scopes: cfg.accepted_scopes,
     read_tools: Object.keys(approved),
     write_tools: [],
+    setup_tools: send ? [send.tool] : [],
     publish_issue: null,
     registration: ['dcr'],
     cimd_url: null,
@@ -306,7 +322,7 @@ export function customProvider(uid: string, cfg: Pick<CustomConfig, 'url' | 'hos
     budget: CUSTOM_LIMITS.budget,
     headers: {},
     session: 'per_request',
-    tool_pins: { ...approved },
+    tool_pins: { ...approved, ...(send ? { [send.tool]: send.pin } : {}) },
     lease: CUSTOM_STATE_PROVIDER,
     state_provider: CUSTOM_STATE_PROVIDER,
     client_key_prefix: `custom_mcp_client:${uid}:`,
@@ -328,6 +344,8 @@ export function configOf(row: Pick<IntegrationRow, 'config_json'>): CustomConfig
     era: o.era === 'legacy' || o.era === 'modern' ? o.era : undefined,
     drift: Array.isArray(o.drift) ? o.drift as McpToolDrift[] : undefined,
     checked_at: typeof o.checked_at === 'string' ? o.checked_at : undefined,
+    mail_send: obj(o.mail_send) && typeof obj(o.mail_send)!.tool === 'string' && typeof obj(o.mail_send)!.pin === 'string'
+      ? { tool: String(obj(o.mail_send)!.tool), pin: String(obj(o.mail_send)!.pin) } : undefined,
   };
 }
 
@@ -496,6 +514,9 @@ export interface CustomTool {
   approved: boolean;
   /** Approved, but its schema has changed since: approve it again to use it. */
   changed: boolean;
+  /** D1343: the tool designated to send the member's email (a write), and whether its schema changed since. */
+  mail_send: boolean;
+  mail_send_changed: boolean;
 }
 
 /** What the server lists, for the member to approve, each tool marked approved, changed or read-only. */
@@ -519,6 +540,8 @@ export async function listCustomTools(env: Env, row: IntegrationRow, deps: Custo
       fingerprint,
       approved,
       changed: approved && cfg.approved[name] !== fingerprint,
+      mail_send: cfg.mail_send?.tool === name,
+      mail_send_changed: cfg.mail_send?.tool === name && cfg.mail_send.pin !== fingerprint,
     });
   }
   return { tools, drift: session.drift, untrusted: true };
@@ -545,6 +568,73 @@ export async function unapproveCustomTool(env: Env, row: IntegrationRow, name: s
   cfg.approved = rest;
   await saveConfig(env, row, cfg);
   return cfg;
+}
+
+// ─────────────────────────────────────────────────────────── D1343: the mail send tool
+
+/** The fields a mail send tool takes, each a string; it may take no other required field. */
+export const MAIL_SEND_FIELDS = Object.freeze(['to', 'subject', 'body'] as const);
+
+/** Whether an input schema is `{ to, subject, body }`, each a string, and nothing else required. */
+export function mailSendShape(schema: unknown): boolean {
+  const o = obj(schema);
+  const props = obj(o?.properties);
+  if (!o || !props) return false;
+  if (!MAIL_SEND_FIELDS.every((f) => obj(props[f])?.type === 'string')) return false;
+  const required = Array.isArray(o.required) ? (o.required as unknown[]) : [];
+  return required.every((r) => (MAIL_SEND_FIELDS as readonly unknown[]).includes(r));
+}
+
+/**
+ * Designate one tool to send the member's email, pinned to the schema they
+ * saw. It writes, so it is never a read tool; one the server calls destructive
+ * is refused, and so is one that does not take `{ to, subject, body }`. One
+ * per connection: designating another replaces it.
+ */
+export async function approveMailSendTool(env: Env, row: IntegrationRow, name: string, deps: CustomDeps = {}): Promise<CustomConfig> {
+  if (Object.hasOwn(configOf(row)?.approved ?? {}, name)) throw new CustomMcpError('tool_shape', 'read_tool');
+  const { listed } = await openCustom(env, row, deps, true);
+  const tool = listed.find((t) => t.name === name && typeof t.name === 'string' && PRINTABLE_NAME.test(t.name));
+  if (!tool) throw new CustomMcpError('tool_not_listed');
+  if (obj(tool.annotations)?.destructiveHint === true) throw new CustomMcpError('tool_destructive');
+  if (!mailSendShape(tool.inputSchema)) throw new CustomMcpError('tool_shape');
+  const cfg = configOf(row)!;
+  cfg.mail_send = { tool: name, pin: await toolFingerprint(tool as { inputSchema?: unknown; outputSchema?: unknown }) };
+  await saveConfig(env, row, cfg);
+  return cfg;
+}
+
+/** Withdraw the designation. No request is made; a mailbox on it stops sending. */
+export async function clearMailSendTool(env: Env, row: IntegrationRow): Promise<CustomConfig> {
+  const cfg = configOf(row);
+  if (!cfg) throw new CustomMcpError('not_found');
+  delete cfg.mail_send;
+  await saveConfig(env, row, cfg);
+  return cfg;
+}
+
+/**
+ * Send one email through the member's designated tool. The caller has spent
+ * the composer's confirmation nonce: this mints the one-use ticket, in this
+ * request only, and the client refuses the tool without it, when its schema
+ * changed, or when the server now calls it destructive. Only a short message
+ * id is kept from the answer, which is data.
+ */
+export async function sendThroughCustom(env: Env, row: IntegrationRow, msg: { to: string; subject: string; body: string }, deps: CustomDeps = {}): Promise<{ messageId: string | null }> {
+  if (!customMcpEnabled(env)) throw new CustomMcpError('not_found');
+  const cfg = configOf(row);
+  if (!cfg?.mail_send) throw new CustomMcpError('tool_not_approved');
+  const { provider, session } = await openCustom(env, row, deps, false);
+  const tool = cfg.mail_send.tool;
+  if (!session.setup_offered.includes(tool)) throw new CustomMcpError('tool_not_approved', 'changed');
+  try {
+    const data = await session.callTool(tool, { to: msg.to, subject: msg.subject, body: msg.body }, mintMcpSetupTicket(provider, [tool]));
+    const o = obj(data);
+    const id = o && (typeof o.id === 'string' ? o.id : typeof o.message_id === 'string' ? o.message_id : null);
+    return { messageId: id && PRINTABLE_NAME.test(id.slice(0, 64)) ? id.slice(0, 64) : null };
+  } catch (e) {
+    throw e instanceof McpClientError ? new CustomMcpError(e.code === 'path_not_allowed' ? 'tool_not_approved' : 'unreachable', e.code) : e;
+  }
 }
 
 /**

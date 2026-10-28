@@ -41,6 +41,9 @@ export const SCOPE_LABELS: Readonly<Record<string, { label: string; write: boole
   'build:read': { label: 'Read your Build progress, from the records your connected tools fed', write: false },
   'raise:read': { label: 'Read your Raise context', write: false },
   'connectors:read': { label: 'See which tools you have connected, their status and last sync. Never their tokens.', write: false },
+  // D1343 (#3551): Email's MCP tools.
+  'mail:read': { label: 'Read the records Eadwyn may quote in an email to someone, with their dates. Never sends.', write: false },
+  'mail:write': { label: 'Draft emails with Eadwyn, charged to your AI tokens. Drafts are kept in Axal VC; nothing is sent.', write: true },
 });
 /** A scope with no label here is shown by name and counted as a write, so a new scope is never under-described. */
 export const scopeOptions = () => keyScopes().map((name) => ({ name, label: SCOPE_LABELS[name]?.label ?? name, write: SCOPE_LABELS[name]?.write ?? true }));

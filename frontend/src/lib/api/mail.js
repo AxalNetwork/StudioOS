@@ -6,6 +6,8 @@ import { request } from '../api.js';
 //   accounts()                     GET    /mail/accounts → { accounts, providers }
 //   connect(provider, read?)       POST   /mail/accounts/start/:provider { read? } → { authorize_url }
 //   connectImap(body)              POST   /mail/accounts/imap { address, display_name?, username, password, smtp_*, imap_* } → 201 { account }
+//   connectMcp(body)               POST   /mail/accounts/mcp { connection_uid, address, display_name? } → 201 { account } (D1343:
+//                                  a member's own MCP mail server; its send tool is approved on the custom connector first)
 //   verifyAccount(uid)             POST   /mail/accounts/:uid/verify → { account }
 //   disconnect(uid)                DELETE /mail/accounts/:uid → { ok }
 //   confirmSend(accountUid)        POST   /mail/send/confirm { account_uid } → { nonce, expires_at }
@@ -28,12 +30,18 @@ import { request } from '../api.js';
 //   share(uid, yes)                POST   /mail/shares/:uid { share: true|false } → { share }; 409 not_matched
 //   unshare(uid)                   DELETE /mail/shares/:uid → { share }; 409 not_shared
 // `address` is the other member's, and only while both have shared; a match's person is `member:<uid>`.
+// D1344 (#3552, part 5) — the sent log, on cloudflare-worker/src/routes/mail_accounts.ts.
+//   sent(page?, person?)           GET    /mail/sent?page=&person= → { page, per_page, total, items: [{ uid, to, subject, sent_at, status, error, draft_uid, person, quoted }] }
+// D1348 (#3555, part 7) — the People pane, on cloudflare-worker/src/routes/mail_people.ts.
+//   people()                       GET    /mail/people → { profile, groups: [{ key, label, people: [{ ref, name, role, source, last_contact, marker, marker_label }], empty, error }], note, empty }
+// Each group is the member's profile's; a person's ref opens `context(ref)`. Markers are derived, never stored.
 const id = (v) => encodeURIComponent(String(v));
 const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
 export const mailApi = {
   accounts: () => request('/mail/accounts'),
   connect: (provider, read = false) => post(`/mail/accounts/start/${id(provider)}`, { read }),
   connectImap: (body) => post('/mail/accounts/imap', body),
+  connectMcp: (body) => post('/mail/accounts/mcp', body),
   verifyAccount: (uid) => post(`/mail/accounts/${id(uid)}/verify`),
   disconnect: (uid) => request(`/mail/accounts/${id(uid)}`, { method: 'DELETE' }),
   confirmSend: (accountUid) => post('/mail/send/confirm', { account_uid: accountUid }),
@@ -49,4 +57,6 @@ export const mailApi = {
   shares: () => request('/mail/shares'),
   share: (uid, yes) => post(`/mail/shares/${id(uid)}`, { share: yes === true }),
   unshare: (uid) => request(`/mail/shares/${id(uid)}`, { method: 'DELETE' }),
+  sent: (page = 1, person = null) => request(`/mail/sent?page=${id(page)}${person ? `&person=${id(person)}` : ''}`),
+  people: () => request('/mail/people'),
 };

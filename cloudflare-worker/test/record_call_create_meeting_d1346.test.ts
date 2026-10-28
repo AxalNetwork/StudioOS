@@ -13,7 +13,7 @@
  *   · Google Meet: a Calendar event with a Meet createRequest starting now;
  *     the reply is the Meet link only;
  *   · 409 when the member has not connected, 503 when the provider is not set
- *     up here, 400 for any other provider (Teams is paste only);
+ *     up here, 400 for any other provider (Teams: D1359);
  *   · GET /meetings/bot is false on every platform while the bot is not
  *     deployed, with no price; once it is, true with the per-minute prices
  *     and the plan's limit, and still false for a member it is not enabled for.
@@ -171,9 +171,12 @@ test('not connected is 409, not set up is 503, and any other provider is 400', a
   r = await call(f.env, 'POST', '/meetings/instant', { provider: 'google_meet' });
   assert.equal(r.status, 409);
   assert.match(r.body.message, /Connect Google/);
-  r = await call(f.env, 'POST', '/meetings/instant', { provider: 'teams' });
+  r = await call(f.env, 'POST', '/meetings/instant', { provider: 'webex' });
   assert.equal(r.status, 400);
   assert.equal(r.body.error, 'provider_invalid');
+  // D1359: Teams is created on the Microsoft calendar connection; without its client here it is not set up.
+  r = await call(f.env, 'POST', '/meetings/instant', { provider: 'teams' });
+  assert.deepEqual([r.status, r.body.error], [503, 'provider_unavailable']);
   r = await call(f.env, 'POST', '/meetings/instant', { provider: 'zoom', duration_min: 2 });
   assert.equal(r.status, 400);
   const bare = world({ ZOOM_CLIENT_ID: undefined });
