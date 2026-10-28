@@ -30,8 +30,10 @@ export function AiBudgetUsage({reading}) {
     {dayCapped(b) && <p>Today · <span title={money(b.day_spend_microusd)}>{usageMoney(b.day_spend_microusd)}</span> of {money(b.daily_microusd)}</p>}
     {noPlan(b)
       ? <p data-testid="ai-budget-no-plan">{NO_PLAN_LINE}</p>
-      : <p>This month · <span title={money(b.month_spend_microusd)}>{usageMoney(b.month_spend_microusd)}</span> of {money(b.monthly_microusd)}</p>}
-    {b.monthly_microusd>0 && <div className="h-1 rounded-full bg-gray-200 dark:bg-gray-700" role="presentation">
+      : b.unlimited === true
+        ? <p data-testid="ai-budget-unlimited">This month · <span title={money(b.month_spend_microusd)}>{usageMoney(b.month_spend_microusd)}</span> · No limit (Super Admin)</p>
+        : <p>This month · <span title={money(b.month_spend_microusd)}>{usageMoney(b.month_spend_microusd)}</span> of {money(b.monthly_microusd)}</p>}
+    {b.monthly_microusd>0 && b.unlimited !== true && <div className="h-1 rounded-full bg-gray-200 dark:bg-gray-700" role="presentation">
       <div className="h-1 rounded-full bg-violet-600 dark:bg-violet-400" style={{width:`${Math.min(100,b.month_spend_microusd/b.monthly_microusd*100)}%`}} />
     </div>}
     <p className="font-semibold">Top-up balance · {money(b.balance_microusd)}</p>

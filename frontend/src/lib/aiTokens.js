@@ -76,6 +76,35 @@ export function openAddTokens({ from = null, pack_uid = null } = {}) {
   return true;
 }
 
+/**
+ * D1363: the tokens a member bought have reached their balance. The Add tokens
+ * sheet says so once, at its "credited" landing, so the run that was refused
+ * for tokens continues where the member is, with no second press.
+ */
+export const TOKENS_ADDED_EVENT = 'studioos:tokens_added';
+export function notifyTokensAdded() {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return false;
+  window.dispatchEvent(new CustomEvent(TOKENS_ADDED_EVENT));
+  return true;
+}
+/** Calls `fn` once when tokens are added; returns the unsubscribe. */
+export function onTokensAdded(fn) {
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function' || typeof fn !== 'function') return () => {};
+  const once = () => { window.removeEventListener(TOKENS_ADDED_EVENT, once); fn(); };
+  window.addEventListener(TOKENS_ADDED_EVENT, once);
+  return () => window.removeEventListener(TOKENS_ADDED_EVENT, once);
+}
+/**
+ * D1363: a refusal that buying tokens fixes: the allowance and balance cannot
+ * cover the run. A pause, a run held for review and the member's own spend
+ * limit are not: tokens would not lift them.
+ */
+export const TOKEN_REFUSALS = Object.freeze(['budget_user_day', 'budget_user_month', 'tokens']);
+export function tokenRefusal(error) {
+  const code = error?.code || error?.data?.code || (typeof error?.data?.error === 'string' ? error.data.error : null);
+  return TOKEN_REFUSALS.includes(code);
+}
+
 const integer = (n) => Number.isSafeInteger(n) && n >= 0;
 /** A price the checkout can sell: a Stripe price ID, USD, a whole positive amount in cents. */
 export function sellableLine(line) {
