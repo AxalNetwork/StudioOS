@@ -77,6 +77,26 @@ D752 (#1890): `GET /api/admin/capital-attestations` with `?purpose&target_id`, `
 D749 (#1838): `POST /api/admin/mercury/transactions/:uid/not-ours` `{ reason, note }` marks a posted credit Not ours (201), and `POST /api/admin/mercury/not-ours/:uid/withdraw` `{ reason }` withdraws the mark. Both are an Admin's on HQ, under the `mercury.reconcile` act.
 `GET /api/admin/mercury/transactions?match=none` leaves out a line with an active mark (and `direction=credit|debit`, D717 #1856, keeps only credits or debits), `match=not_ours` lists the marked lines, and each item carries `not_ours`. The monthly cash summary and the quarterly report's `unmatched_count` leave active marks out.
 
+### LinkedIn connector page and Your contacts (D1352, #3567)
+
+`/account/connectors/linkedin` claims no API: its tagline is "Sign in with
+LinkedIn, then import your connections from LinkedIn's data download.", and
+its tools are `read_identity` and `import_connections`. Connected, the page's
+provider slot mounts `pages/account/LinkedInSection.jsx`: the granted scopes in
+words, what Axal can and cannot do, LinkedIn's download link, the upload with a
+preview that writes nothing (`POST /api/contacts/import/linkedin-csv?preview=1`),
+Import, and the pending duplicates with Merge (only where `can_merge`), Keep
+both and Dismiss. `GET /api/linkedin/status` carries `imported: { linkedin_only,
+kept }`; the Disconnect dialog's "Also delete" says both counts before it is
+pressed, and `POST /api/linkedin/disconnect` `{ delete_imported }` answers
+`kept_imported` (null without `delete_imported`).
+`GET /api/contacts/book?q=&page=` (`routes/contact_imports.ts`): the member's
+own `network_connections`, 50 a page, each row with its distinct `sources`, its
+note count and its open follow-ups; `q` matches name or company with `%` and
+`_` literal. Network › Relationships lazy-mounts `pages/NetworkContacts.jsx`
+("Your contacts": search, "From LinkedIn" / "From a spreadsheet" / "Added by
+hand" chips, notes and follow-ups) under the relationship requests.
+
 ### Fund admin layouts (D1165, #3072)
 
 Fees uses the existing terms, period, admission and statement reads. Reports
@@ -400,6 +420,20 @@ Worker routes in `routes/mail_drafts.ts`, mounted at `/api/mail`, backed by `ser
 | `POST /api/mail/drafts` | signed in | Takes `{ person, intent, tone, length, refs[], blocks[], project?, estimate? }`. With `estimate: true` it answers `{ estimate: { hold_microusd, model }, sources, blocks }` and runs nothing. Otherwise it runs one `mail_draft` run, charged in AI tokens by the router, and answers 201 `{ draft }`, with the draft's sources and its `cost.charged_microusd`. A short balance is 402 in the top-up sentence. An answer that is not an email is 503 `draft_unreadable`. |
 | `POST /api/mail/drafts/:uid/revise` | the draft's author | Takes `{ instruction: 'shorter' \| 'warmer' \| free text, project?, estimate? }`. It reads the parent's records again and answers 201 with a new row whose `parent_uid` is the parent. |
 | `GET /api/mail/drafts[?person=]`, `GET /api/mail/drafts/:uid`, `DELETE /api/mail/drafts/:uid` | the draft's author | The member's own drafts, newest first. Another member's draft is 404. |
+
+### Team relationships Worker contract (D1356, #3571)
+
+Worker routes in `routes/relationships.ts`, mounted at `/api/relationships`, backed by `services/relationships.ts` and migration 653 (`team_memberships` and `shared_relationships` views; `relationship_shares`, `relationship_interactions`). The client is `lib/api/relationships.js`. There is no page yet. Every route needs sign-in, and a support session is refused 403 `support_session_refused`. Relationships are private by default: the access rule (my team, the teammate's membership of it, their share effective now) is inside each statement. A shared reply carries a name, company and title, never an email, phone, notes or URL. Every share, withdrawal, read and request is audited in `integration_audit_log`.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/relationships/sharing` | signed in | `{ opted_in, teams: [{ key, kind, label, shared }] }`. Teams are derived: a venture's founder and accepted co-founders, an investor firm and its accepted seats, HQ admins. |
+| `PUT /api/relationships/sharing` | signed in | Takes `{ share }`: the one opt-in, for every team I belong to. Withdrawal takes effect on the next read. |
+| `PUT /api/relationships/sharing/teams/:key` | a member of that team | Takes `{ share }`: on or off for one team. Another team is 404. |
+| `GET /api/relationships/who-knows?person=…\|company=…\|fund=…` | signed in | `{ query, people: [{ ref, teammate, team, person: { name, company, title }, how: { source, source_label, connected_since } }] }`, at most 50. A person is an exact profile URL or email; a name alone is 400 `person_unmatchable`. Only eligible sources (`Connections.csv`, a spreadsheet, typed) are shared. |
+| `POST /api/relationships/intro-request` | signed in | Takes `{ teammate, ref, note? }`. A row I cannot see is 404 "Not found.". Answers 201 `{ request }`, notifies the teammate and sends nothing to the contact; 20 a day (429 `intro_rate_limited`). |
+| `GET /api/relationships/intro-requests` | signed in | `{ sent, received }`, my own only. |
+| `POST /api/relationships/intro-requests/:uid/decide` | the teammate asked | Takes `{ decision: made \| declined }`, once (409 `decided`), and notifies the requester. |
 
 ### Annual licence-fee invoices Worker contract (D802, #2238)
 

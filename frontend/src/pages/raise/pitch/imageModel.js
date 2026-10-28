@@ -52,7 +52,13 @@ export function defaultDescription(card) {
   const blocks = Array.isArray(card?.blocks) ? card.blocks : [];
   const heading = blocks.find((b) => b?.kind === 'text' && b.style === 'heading')?.text || card?.title || '';
   const para = blocks.find((b) => b?.kind === 'text' && b.style !== 'heading')?.text || '';
-  const sentences = `${heading}. ${para}`.split(/(?<=[.!?])\s+/).map((s) => s.trim().replace(/[.!?]+$/, '')).filter((s) => s && !/\d/.test(s));
+  // Retain the separator punctuation before trimming, just as the old split did.
+  const parts = `${heading}. ${para}`.split(/([.!?])\s+/);
+  const sentences = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const sentence = (parts[i] + (parts[i + 1] || '')).trim().replace(/[.!?]+$/, '');
+    if (sentence && !/\d/.test(sentence)) sentences.push(sentence);
+  }
   return sentences.join('. ').slice(0, 400);
 }
 

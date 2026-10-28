@@ -53,6 +53,7 @@ export * from './api/companyActions.js';
 export * from './api/companyEin.js';
 export * from './api/companyReceivingAccounts.js';
 export * from './api/companySheet.js';
+export * from './api/connectorClients.js';
 export * from './api/connectors.js';
 export * from './api/contacts.js';
 export * from './api/contracts.js';
@@ -141,6 +142,7 @@ export * from './api/railPrefs.js';
 export * from './api/railProposals.js';
 export * from './api/raiseEvidence.js';
 export * from './api/referralPartners.js';
+export * from './api/relationships.js';
 export * from './api/reporting.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
@@ -3392,7 +3394,8 @@ export const api = {
   linkedinStatus: () => request('/linkedin/status'),
   linkedinOAuthStart: ({ return_to, project_id } = {}) =>
     request('/linkedin/oauth/start', { method: 'POST', body: JSON.stringify(return_to ? { return_to, ...(project_id ? { project_id } : {}) } : {}) }),
-  linkedinDisconnect: () => request('/linkedin/disconnect', { method: 'POST', body: JSON.stringify({}) }),
+  // D1352 (#3567): `{ delete_imported: true }` also deletes the contacts only LinkedIn gave; the reply says how many were deleted and kept.
+  linkedinDisconnect: (opts = {}) => request('/linkedin/disconnect', { method: 'POST', body: JSON.stringify(opts?.delete_imported ? { delete_imported: true } : {}) }),
 
   // Task #67 — Autopopulate profile from LinkedIn (connected account OR a
   // LinkedIn PDF export). preview() never writes; apply() persists the

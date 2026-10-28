@@ -139,8 +139,10 @@ test('disconnect without deleting keeps the book; with delete_imported it delete
     const status = await call(f, 2, '/api/linkedin/status');
     assert.equal(status.body.last_import.uid, book.job.uid);
     assert.deepEqual([status.body.last_import.rows_created, status.body.last_import.rows_matched, status.body.last_import.status], [2, 1, 'done']);
+    // D1352 (#3567): the page says, before Disconnect, what "Also delete" deletes and keeps.
+    assert.deepEqual(status.body.imported, { linkedin_only: 1, kept: 2 });
     const keep = await call(f, 2, '/api/linkedin/disconnect', { json: {} });
-    assert.deepEqual(keep.body, { ok: true, deleted_imported: 0 });
+    assert.deepEqual(keep.body, { ok: true, deleted_imported: 0, kept_imported: null });
     assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM network_connections WHERE user_id = 2').get() as any).n, 3);
     const conn = f.db.prepare('SELECT status, disconnected_at, token_enc FROM linkedin_connections WHERE user_id = 2').get() as any;
     assert.equal(conn.status, 'revoked'); assert.ok(conn.disconnected_at); assert.equal(conn.token_enc, null);
@@ -148,7 +150,7 @@ test('disconnect without deleting keeps the book; with delete_imported it delete
     // Sign in again and disconnect, deleting.
     await signIn(f);
     const del = await call(f, 2, '/api/linkedin/disconnect', { json: { delete_imported: true } });
-    assert.deepEqual(del.body, { ok: true, deleted_imported: 1 });
+    assert.deepEqual(del.body, { ok: true, deleted_imported: 1, kept_imported: 2 });
     const left = (f.db.prepare('SELECT id FROM network_connections WHERE user_id = 2 ORDER BY id').all() as any[]).map((r) => r.id);
     assert.deepEqual(left, [book.typed, book.both], 'the typed row and the two-source row stay');
     const prov = (f.db.prepare('SELECT contact_id, source FROM contact_sources ORDER BY id').all() as any[]).map((r) => `${r.contact_id}:${r.source}`);

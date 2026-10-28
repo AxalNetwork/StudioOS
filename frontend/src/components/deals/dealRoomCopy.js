@@ -19,7 +19,7 @@ export const ROOM_LEAVE_CONFIRM = 'This removes your room request. It does not w
 
 export const JOIN_NOTE = 'Requesting an invitation records your interest. It does not grant access to the deal or diligence. Only an invited or committed investor can read them.';
 
-const PLAN_LABEL = { free: 'Free', professional: 'Professional', institutional: 'Institutional' };
+const PLAN_LABEL = { free: 'Free', plus: 'Plus', professional: 'Professional', institutional: 'Institutional' };
 
 /**
  * The quota line: "3 of 5 deal rooms", or "Unlimited". Null for a quota that
@@ -40,6 +40,10 @@ export function quotaFullLine(q) {
   if (!q || q.unlimited) return null;
   const plan = PLAN_LABEL[q.tier] || 'your';
   const head = `Your ${plan} plan is full: you are in ${q.used} of ${q.cap} deal room${q.cap === 1 ? '' : 's'}. Leave one, or change plan.`;
+  // D1334: Free's next plan is Plus.
+  if (q.upgrade_to === 'plus' && q.upgrade_cap) {
+    return `${head} Plus raises this to ${q.upgrade_cap}. Professional raises it further; Institutional is unlimited.`;
+  }
   if (q.upgrade_to === 'professional' && q.upgrade_cap) {
     return `${head} Professional raises this to ${q.upgrade_cap}. Institutional is unlimited.`;
   }

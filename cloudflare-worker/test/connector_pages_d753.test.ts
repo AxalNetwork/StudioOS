@@ -99,7 +99,8 @@ const SOURCES: Record<string, string[]> = {
   google_workspace: ['services/google/workspace.ts', 'routes/google_workspace.ts'],
   google_calendar: ['services/calendar.ts', 'services/channels/googleMeet.ts'],
   microsoft_365: ['services/calendar.ts'],
-  linkedin: ['routes/linkedin.ts'],
+  // D1352 (#3567): the connections import is the member's file, parsed in contact_imports.ts.
+  linkedin: ['routes/linkedin.ts', 'routes/contact_imports.ts'],
   hubspot: ['integrations/providers/hubspot.ts'],
   calendly: ['integrations/providers/calendly.ts'],
   salesforce: ['integrations/providers/salesforce.ts'],

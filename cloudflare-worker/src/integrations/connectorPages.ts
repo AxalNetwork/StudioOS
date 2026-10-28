@@ -705,13 +705,16 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
 /** Connectors with a page but no registry row (D753 decision 2). */
 export const FIRST_PARTY_PAGES: { linkedin: ConnectorPage } = {
   linkedin: {
-    tagline: 'Sign in with LinkedIn to confirm who you are. Connections come by CSV.',
+    // D1352 (#3567): true, and no more. No line claims API access; part 5 (#3569) adds one only when it is live.
+    tagline: 'Sign in with LinkedIn, then import your connections from LinkedIn\'s data download.',
     long_description: [
-      'Sign in with LinkedIn to confirm who you are.',
-      'Axal VC reads your LinkedIn identity once, at sign-in, and then discards the token. LinkedIn offers no API for your connections, so they come by CSV import.',
+      'Sign in with LinkedIn to confirm who you are. Axal VC reads your identity once, at sign-in, and then discards the token.',
+      'Your connections come from a file you download from LinkedIn yourself (Settings → Data privacy → Get a copy of your data → Connections). You upload it here, see what it would add, and then import it into your Network.',
+      'Axal VC cannot read your LinkedIn messages, post for you, or see your connections without your file.',
     ],
     tools: [
-      tool('read_identity', 'your identity', 'read', 'Reads your name and email address, once, at sign-in.', null, ['fetch(LINKEDIN_USERINFO_URL']),
+      tool('read_identity', 'your identity', 'read', 'Confirms who you are: your name and email address, once, at sign-in.', null, ['fetch(LINKEDIN_USERINFO_URL']),
+      tool('import_connections', 'your connections file', 'read', 'Imports the Connections.csv you download from LinkedIn and upload. Nothing is read from LinkedIn without your file. They land in your Network.', null, ['parseConnectionsCsv(']),
     ],
     prompts: [],
     prompts_reason: notRead('LinkedIn'),

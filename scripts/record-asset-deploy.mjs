@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// D1361: invoked only after a successful deploy, before its assets are cached.
+// D1364: invoked only after a successful deploy, before its assets are cached.
 import fs from 'node:fs';
 import { recordAssetDeployment } from './lib/assetRetention.mjs';
 import { RETENTION_LEDGER_FILENAME } from './lib/assetsIgnore.mjs';

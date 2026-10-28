@@ -22,6 +22,7 @@ import GithubRepositoriesSection from './GithubRepositoriesSection';
 import NotionSourcesSection from './NotionSourcesSection';
 import GoogleWorkspaceFiles from './GoogleWorkspaceFiles';
 import VercelProjectsSection from './VercelProjectsSection';
+import LinkedInSection, { LinkedInDisconnectChoice } from './LinkedInSection';
 import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -183,6 +184,8 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   // A return opens on what happened. GitHub's lands on its Repositories section instead (`pageLanding`, #1957).
   const [view, setView] = useState(() => (ret ? ret.view : 'idle'));
   const [flowRet, setFlowRet] = useState(ret || {});
+  // D1352 (#3567): LinkedIn's Disconnect may also delete the contacts only LinkedIn gave.
+  const [deleteImported, setDeleteImported] = useState(false);
   const setFlowView = (v) => { setFlowRet({}); setView(v); };
   const flow = useConnectFlow(p, { setView: setFlowView, onChanged });
   const name = p.display_name;
@@ -237,10 +240,11 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           footer={(
             <>
               <button type="button" className={BTN.ghost} onClick={() => flow.setConfirming(false)}>Cancel</button>
-              <button type="button" className={BTN.dangerSolid} disabled={flow.busy} onClick={flow.doDisconnect} data-testid="connector-page-confirm-disconnect">{flow.busy ? 'Disconnecting…' : 'Disconnect'}</button>
+              <button type="button" className={BTN.dangerSolid} disabled={flow.busy} onClick={() => flow.doDisconnect(p.key === 'linkedin' ? { delete_imported: deleteImported } : undefined)} data-testid="connector-page-confirm-disconnect">{flow.busy ? 'Disconnecting…' : 'Disconnect'}</button>
             </>
           )}>
           <p className="px-5 py-4 text-[13px] text-axal-ink dark:text-gray-200" data-testid="connector-page-disconnect-note">{disconnectNote(p, role)}</p>
+          {p.key === 'linkedin' && <LinkedInDisconnectChoice checked={deleteImported} onChange={setDeleteImported} />}
           {flow.message && <p role="alert" className="px-5 pb-4 text-[12.5px] text-red-700 dark:text-red-300">{flow.message}</p>}
         </Lightbox>
       )}
@@ -293,6 +297,8 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false,
       {p.key === 'notion' && <NotionSourcesSection p={p} phone={phone} />}
       {/* D1096 (#2961): Vercel's Choose projects. */}
       {p.key === 'vercel' && <VercelProjectsSection p={p} onChanged={onChanged} />}
+      {/* D1352 (#3567): what LinkedIn granted, and the Connections.csv import. */}
+      {p.key === 'linkedin' && <LinkedInSection onChanged={onChanged} />}
       <div className="-mx-5">
         {mercury ? (
           <div data-testid="connector-page-mercury">

@@ -12,40 +12,40 @@ function plan(builds, options = {}) {
   return planAssetRetention({ now, newFiles: ['current.js'], prevFiles: builds.flatMap(b => b.files), ledgerBuilds: builds, ...options });
 }
 
-test('D1361: every deployment inside 72 hours survives, including the boundary and more than three builds', () => {
+test('D1364: every deployment inside 72 hours survives, including the boundary and more than three builds', () => {
   const p = plan([build('one.js', 1), build('two.js', 2), build('three.js', 71), build('boundary.js', 72)]);
   assert.deepEqual(p.keep, ['current.js','one.js','two.js','three.js','boundary.js']);
   assert.deepEqual(p.restore, ['one.js','two.js','three.js','boundary.js']);
   assert.deepEqual([ASSET_RETENTION_HOURS,ASSET_MIN_BUILDS,ASSET_MAX_FILES,STATIC_FILE_LIMIT], [72,3,18000,20000]);
 });
 
-test('D1361: builds past their last-served window are pruned while the latest three remain', () => {
+test('D1364: builds past their last-served window are pruned while the latest three remain', () => {
   assert.deepEqual(plan([build('one.js', 1),build('two.js',2),build('boundary.js',72.001),build('expired.js',100)]).keep,['current.js','one.js','two.js','boundary.js']);
   assert.deepEqual(plan([build('one.js',73),build('two.js',74),build('expired.js',75)]).keep,['current.js','one.js','two.js']);
 });
 
-test('D1361: cap removes oldest complete builds by deploy time, not incoming ledger order', () => {
+test('D1364: cap removes oldest complete builds by deploy time, not incoming ledger order', () => {
   const p = plan([build('older.js',3),build('oldest.js',4),build('newest.js',1),build('second.js',2)], {maxFiles:4});
   assert.deepEqual(p.keep,['current.js','newest.js','second.js','older.js']);
   assert.deepEqual([p.capPrunedBuilds,p.capExceeded],[1,false]);
   assert.deepEqual(p.nextLedger.builds.slice(1).map(b=>b.deployedAt),[ago(1),ago(2),ago(3)]);
 });
 
-test('D1361: shared chunks survive whole-build eviction without falsely consuming the cap twice', () => {
+test('D1364: shared chunks survive whole-build eviction without falsely consuming the cap twice', () => {
   const p=plan([build('a',1,['a.js','shared.js']),build('b',2,['b.js','shared.js']),build('c',3,['c.js','shared.js']),build('d',4,['d.js','shared.js'])],{newFiles:['current.js','shared.js'],maxFiles:4});
   assert.deepEqual(p.keep,['current.js','shared.js','a.js','b.js']);
   assert.deepEqual(p.restore,['a.js','b.js']);
   assert.deepEqual([p.capPrunedBuilds,p.capExceeded],[2,false]);
 });
 
-test('D1361: newest output and the protected floor are never deleted to hide an over-cap build', () => {
+test('D1364: newest output and the protected floor are never deleted to hide an over-cap build', () => {
   const p=plan([build('a.js',1),build('b.js',2),build('c.js',3)],{newFiles:['current.js','current.css'],maxFiles:1});
   assert.deepEqual(p.keep,['current.js','current.css','a.js','b.js']);
   assert.equal(p.capExceeded,true);
   assert.deepEqual(p.nextLedger.builds[0].files,['current.js','current.css']);
 });
 
-test('D1361: legacy ledger gets one conservative grace period, without inventing a deploy time', () => {
+test('D1364: legacy ledger gets one conservative grace period, without inventing a deploy time', () => {
   const p=plan([{ts:ago(200),files:['old-a.js']},{ts:ago(201),files:['old-b.js']},{ts:'pre-retention',files:['unknown.js']}]);
   assert.deepEqual(p.keep,['current.js','old-a.js','old-b.js','unknown.js']);
   assert.deepEqual(p.nextLedger.builds.slice(1).map(b=>[b.deployedAt,b.firstSeenAt]),[[null,now],[null,now],[null,now]]);
@@ -53,12 +53,12 @@ test('D1361: legacy ledger gets one conservative grace period, without inventing
   assert.deepEqual(later.keep,['later.js','current.js','old-a.js']);
 });
 
-test('D1361: an undeployed build neither displaces a deployed build nor crowds out the window', () => {
+test('D1364: an undeployed build neither displaces a deployed build nor crowds out the window', () => {
   const p=plan([{ts:now,deployedAt:null,files:['never-shipped.js']},build('live-a.js',1),build('live-b.js',2)]);
   assert.deepEqual(p.keep,['current.js','live-a.js','live-b.js']);
 });
 
-test('D1361: real deployment time controls expiry, not an earlier build time', () => {
+test('D1364: real deployment time controls expiry, not an earlier build time', () => {
   const p=plan([{ts:ago(200),deployedAt:ago(1),files:['late-deploy.js']},build('a.js',2),build('b.js',3)]);
   assert.deepEqual(p.keep,['current.js','late-deploy.js','a.js','b.js']);
   assert.equal(p.nextLedger.builds[0].deployedAt,null);
@@ -69,19 +69,19 @@ test('D1361: real deployment time controls expiry, not an earlier build time', (
   assert.equal(stamped.builds[1].deployedAt,ago(1));
 });
 
-test('D1361: identical redeployment refreshes its timestamp without consuming another generation', () => {
+test('D1364: identical redeployment refreshes its timestamp without consuming another generation', () => {
   const p=plan([build('current.js',1),build('prior.js',2)]);
   assert.deepEqual(recordAssetDeployment(p.nextLedger,now).builds.map(b=>[b.files,b.deployedAt]),[[['current.js'],now],[['prior.js'],ago(2)]]);
 });
 
-test('D1361: invalid policy and deployment records fail instead of inventing a timestamp', () => {
+test('D1364: invalid policy and deployment records fail instead of inventing a timestamp', () => {
   assert.throws(()=>plan([],{maxFiles:0}),/Invalid asset file cap/);
   assert.throws(()=>plan([],{retentionHours:NaN}),/Invalid asset retention window/);
   assert.throws(()=>recordAssetDeployment({builds:[]},now),/valid build ledger/);
   assert.throws(()=>recordAssetDeployment({builds:[{files:[]}]},'bad-time'),/valid build ledger/);
 });
 
-test('D1361: the post-deploy CLI records the real timestamp and refuses a missing ledger', () => {
+test('D1364: the post-deploy CLI records the real timestamp and refuses a missing ledger', () => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'asset-deploy-test-'));
   try {
     fs.mkdirSync(path.join(dir,'scripts/lib'),{recursive:true}); fs.mkdirSync(path.join(dir,'docs'));
@@ -99,19 +99,19 @@ test('D1361: the post-deploy CLI records the real timestamp and refuses a missin
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
-test('D1361: manual deployment records success before its live-check postdeploy', () => {
+test('D1364: manual deployment records success before its live-check postdeploy', () => {
   const pkg=JSON.parse(fs.readFileSync(new URL('../../package.json',import.meta.url),'utf8'));
   assert.equal(pkg.scripts.postdeploy,'node scripts/record-asset-deploy.mjs && node scripts/check-spa-live.mjs');
 });
 
-test('D1361: an identical rebuild keeps the served timestamp even if it is not deployed',()=>{
+test('D1364: an identical rebuild keeps the served timestamp even if it is not deployed',()=>{
   const p=plan([build('current.js',1),build('prior.js',2)]);
   assert.equal(p.nextLedger.builds[0].deployedAt,ago(1));
   const retried=planAssetRetention({now,newFiles:['changed.js'],prevFiles:p.keep,ledgerBuilds:p.nextLedger.builds});
   assert.deepEqual(retried.keep,['changed.js','current.js','prior.js']);
 });
 
-test('D1361: a quiet-site build survives 72 hours after supersession despite many rapid deploys',()=>{
+test('D1364: a quiet-site build survives 72 hours after supersession despite many rapid deploys',()=>{
   const p=plan([build('recent-a.js',1),build('recent-b.js',2),build('long-lived.js',200),build('expired.js',201)]);
   assert.deepEqual(p.keep,['current.js','recent-a.js','recent-b.js','long-lived.js']);
   const boundary=plan([build('a.js',1),build('b.js',2),build('c.js',72),build('old.js',200),build('expired.js',201)]);

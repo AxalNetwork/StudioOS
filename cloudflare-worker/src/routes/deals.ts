@@ -571,7 +571,8 @@ deals.get('/dealroom/quota', async (c) => {
     : await c.env.DB.prepare(`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ? AND (company_id = ? OR company_id IS NULL)`).bind(user.id, companyId).all();
   const tier = effectiveInvestorTier(user);
   const unlimited = !(cap < DEALROOM_UNLIMITED_AT);
-  const upgradeTo: 'professional' | 'institutional' | null = unlimited ? null : (tier === 'free' ? 'professional' : 'institutional');
+  // D1334: the next tier up (Free → Plus → Pro → Institutional).
+  const upgradeTo = unlimited ? null : nextInvestorTier(tier);
   return c.json({
     used,
     cap: unlimited ? null : cap,
@@ -1644,6 +1645,7 @@ import {
   ensureInvestorPaywallSchema,
   effectiveInvestorTier,
   INVESTOR_QUOTAS,
+  nextInvestorTier,
   type InvestorUser,
 } from '../middleware/requireInvestorTier';
 
@@ -1728,7 +1730,7 @@ deals.post('/:id/dealroom/join', async (c) => {
   const quotaRefusal = (count: number) => c.json({
     error: 'quota_exceeded', code: 'quota_dealrooms_exhausted',
     message: `You have requested the maximum of ${cap} dealroom${cap === 1 ? '' : 's'} on the ${tier} plan.`,
-    used: count, cap, tier, upgrade_to: tier === 'free' ? 'professional' : 'institutional',
+    used: count, cap, tier, upgrade_to: nextInvestorTier(tier),
     checkout_path: '/api/billing/investor/checkout',
   }, 402);
   if (used >= cap) return quotaRefusal(used);

@@ -220,7 +220,7 @@ try {
   // by its own path to set the static security headers (see lib/assetsIgnore.mjs).
   fs.writeFileSync(ignorePath, assetsIgnoreText());
 
-  // D1361: reserve space for all non-asset output, including prerendered shells.
+  // D1364: reserve space for all non-asset output, including prerendered shells.
   function fileCount(dir) {
     return fs.readdirSync(dir, { withFileTypes: true }).reduce((n, e) => n
       + (e.isDirectory() ? fileCount(path.join(dir, e.name)) : e.isFile() ? 1 : 0), 0);

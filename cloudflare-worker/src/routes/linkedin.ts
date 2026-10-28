@@ -39,7 +39,7 @@ import { parseReturn, returnFromNonce, returnTag } from '../util/oauthReturn';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
-import { connect, connectionOf, deleteLinkedinOnly, grantedScopes, importJobOf, importJobs, lastImportJob, revoke } from '../services/linkedinConnections';
+import { connect, connectionOf, deleteLinkedinOnly, grantedScopes, importedCounts, importJobOf, importJobs, lastImportJob, revoke } from '../services/linkedinConnections';
 
 const linkedin = new Hono<{ Bindings: Env }>();
 
@@ -403,8 +403,10 @@ linkedin.post('/disconnect', async (c) => {
     // contacts only LinkedIn gave are deleted, and any the member also typed or
     // got elsewhere stay.
     await revoke(c.env, user.id);
+    // D1352 (#3567): the page says how many contacts stay because another source has them.
+    const kept = deleteImported ? (await importedCounts(c.env, user.id)).kept : null;
     const deleted = deleteImported ? await deleteLinkedinOnly(c.env, user.id) : 0;
-    return c.json({ ok: true, deleted_imported: deleted });
+    return c.json({ ok: true, deleted_imported: deleted, kept_imported: kept });
   } catch (e: any) {
     console.error('[LINKEDIN] disconnect failed:', e?.message || e);
     return c.json({
@@ -433,6 +435,8 @@ linkedin.get('/status', async (c) => {
     // D1350: the connection's status and scopes, and the member's last import job.
     const conn = await connectionOf(c.env, user.id).catch(() => null);
     const last = await lastImportJob(c.env, user.id).catch(() => null);
+    // D1352 (#3567): what Disconnect with "Also delete" would delete and keep.
+    const imported = await importedCounts(c.env, user.id).catch(() => null);
     return c.json({
       configured: !!(await loadLinkedinCreds(c.env)),
       connected: !!r.linkedin_sub,
@@ -442,6 +446,7 @@ linkedin.get('/status', async (c) => {
       status: conn?.status ?? (r.linkedin_sub ? 'active' : null),
       scopes: conn?.scopes ?? [],
       last_import: last,
+      imported,
     });
   } catch (e: any) {
     console.error('[LINKEDIN] status failed:', e?.message || e);
@@ -454,6 +459,7 @@ linkedin.get('/status', async (c) => {
       status: null,
       scopes: [],
       last_import: null,
+      imported: null,
     });
   }
 });

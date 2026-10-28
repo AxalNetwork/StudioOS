@@ -12,8 +12,8 @@ name: Cloudflare Worker deploy
 # "Production" rows for commits whose run here had failed in the migration
 # step. Who serves a host is settled by this job's closing "Deployed studioos
 # triggers" lines. The static security headers on SPA responses come from
-# docs/_headers, built with the SPA below and asserted live by
-# post-deploy-smoke.yml. docs/ is not committed (D529): this job builds it,
+# docs/_headers, built with the SPA below and asserted after this deploy and
+# by post-deploy-smoke.yml. docs/ is not committed (D529): this job builds it,
 # over the previous deploy's assets restored from the actions cache.
 #
 # Migrations run FIRST, through the same runner `npm run deploy`'s predeploy
@@ -92,6 +92,14 @@ jobs:
         if: steps.retention.outputs.cache-matched-key == ''
         run: echo "::warning::No saved build to restore (first deploy, or the cache entry was evicted). Retention restarted - tabs opened before this deploy may need a reload."
 
+      # #3590: capture generation 0 BEFORE the build replaces the ledger.
+      # The manifest stays outside docs/, so Vite cannot wipe or publish it.
+      - name: Capture the previous deploy's lazy entry
+        continue-on-error: true
+        env:
+          SMOKE_CACHE_RESTORED: ${{ steps.retention.outputs.cache-matched-key }}
+        run: node scripts/capture-spa-previous.mjs "$RUNNER_TEMP/spa-smoke-previous.json"
+
       # --seed-restored-tree (D252, D529): seed everything restored above, not
       # only one generation, because production serves the LAST deploy's
       # build. Only this workflow passes it; CI and previews do not.
@@ -113,6 +121,28 @@ jobs:
         env:
           VITE_AXAL_RELEASE: ${{ steps.release.outputs.tag }}
         run: npm run build -- --seed-restored-tree
+
+      # Capture/upload failures belong to the later smoke job, never the
+      # publication gate. Transfer identities from THIS run, not a newer cache.
+      - name: Capture the current build's lazy entry
+        continue-on-error: true
+        env:
+          SMOKE_CACHE_RESTORED: 'built'
+        run: node scripts/capture-spa-previous.mjs "$RUNNER_TEMP/spa-smoke-current.json"
+
+      # Stable within this run so re-running only smoke still finds the inputs;
+      # a full deploy retry replaces them with what that attempt will publish.
+      - name: Transfer this deploy's smoke inputs
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spa-smoke-inputs
+          path: |
+            ${{ runner.temp }}/spa-smoke-current.json
+            ${{ runner.temp }}/spa-smoke-previous.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 3
 
       # A failure here fails the deploy: the new worker must never start
       # against an old schema. The runner refuses a ledger it cannot read and
@@ -169,6 +199,34 @@ jobs:
             docs/assets
             docs/.asset-retention.json
           key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}
+
+  # Sibling of schema-drift and branches: smoke must make the run red without
+  # skipping their work or rolling back the production version already shipped.
+  spa-smoke:
+    name: live current and previous lazy chunks
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Restore this deploy's smoke inputs
+        continue-on-error: true
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: spa-smoke-inputs
+          path: ${{ runner.temp }}/spa-smoke
+      # Even a failed input transfer must run the existing public probes.
+      # Missing/corrupt manifests fail this check; no failure is softened here.
+      - name: Check current and previous lazy chunks on both hosts
+        env:
+          SMOKE_HOSTS: 'https://axal.vc https://app.axal.vc'
+          SMOKE_CURRENT_BUILD: ${{ runner.temp }}/spa-smoke/spa-smoke-current.json
+          SMOKE_PREVIOUS_BUILD: ${{ runner.temp }}/spa-smoke/spa-smoke-previous.json
+          SKIP_LIVE_SMOKE: '0'
+        run: node scripts/check-spa-live.mjs
 
   # Step 9 as its own job (D253). It still runs only after HQ's deploy, and it
   # still turns the workflow red on a disagreement, but it no longer shares a

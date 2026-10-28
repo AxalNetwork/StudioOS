@@ -42,10 +42,10 @@ export async function startFirstParty(key, returnTo = 'integrations', client = a
 }
 
 /** Disconnect a connector through its own route: the first-party three, or the registry's. */
-export async function disconnect(p) {
+export async function disconnect(p, opts = {}) {
   if (p.key === 'google') return api.googleCalDisconnect();
   if (p.key === 'microsoft') return api.microsoftCalDisconnect();
-  if (p.key === 'linkedin') return api.linkedinDisconnect();
+  if (p.key === 'linkedin') return api.linkedinDisconnect(opts);
   return connectorsApi.disconnect(p.connection.uid);
 }
 
@@ -141,9 +141,9 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
     finally { setSyncing(false); }
   };
 
-  const doDisconnect = async () => {
+  const doDisconnect = async (opts) => {
     setBusy(true); setMessage('');
-    try { await disconnect(p); onChanged?.(); onClose?.(); }
+    try { await disconnect(p, opts); onChanged?.(); onClose?.(); }
     catch (e) { setMessage(e?.message || 'The connector could not be disconnected.'); }
     finally { setBusy(false); setConfirming(false); }
   };

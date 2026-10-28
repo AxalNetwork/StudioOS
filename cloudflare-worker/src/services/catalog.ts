@@ -14,6 +14,7 @@
  * product/price metadata via the read endpoint, not hardcoded ids.
  */
 import type { Env } from '../types';
+import { paidInvestorTier } from './investorTiers';
 import { stripeCall } from '../routes/billing';
 import { bindingKey } from '../util/schemaBootstrap';
 
@@ -93,7 +94,7 @@ export function deriveCategories(
   }
   if (kind === 'subscription') {
     if (metadata.tier === 'growth' || metadata.tier === 'studio') cats.add('founders');
-    if (metadata.investor_tier === 'professional' || metadata.investor_tier === 'institutional') {
+    if (paidInvestorTier(metadata.investor_tier)) {
       cats.add('investors_lps');
     }
     if (metadata.plan === 'mi_pro') cats.add('investors_lps');
@@ -708,13 +709,12 @@ export function validateProductMetadata(
   if (kind === 'subscription') {
     const hasPlan = metadata.plan === 'mi_pro';
     const hasTier = metadata.tier === 'growth' || metadata.tier === 'studio';
-    const hasInv =
-      metadata.investor_tier === 'professional' || metadata.investor_tier === 'institutional';
+    const hasInv = paidInvestorTier(metadata.investor_tier) !== null;
     const hasGroup = metadata.plan_group === 'advisor' || metadata.plan_group === 'partner';
     if (!hasPlan && !hasTier && !hasInv && !hasGroup) {
       errs.push(
         'subscription requires metadata.plan=mi_pro, metadata.tier=growth|studio, ' +
-          'metadata.investor_tier=professional|institutional, or metadata.plan_group=advisor|partner',
+          'metadata.investor_tier=plus|professional|institutional, or metadata.plan_group=advisor|partner',
       );
     }
   } else if (kind === 'incorporation') {

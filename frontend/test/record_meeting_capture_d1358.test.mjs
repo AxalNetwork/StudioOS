@@ -74,3 +74,11 @@ test('the clients: saveZoomCall posts the attach with consent and no session; me
   assert.match(seen[1][0], /\/founder\/validate\/meetings\/capabilities$/);
   assert.equal(seen[1][1], 'GET');
 });
+
+test('D1360: Eadwyn AI is the default — a connected call waits for the bot read instead of saving for import', () => {
+  assert.deepEqual(cap({ bot: BOT_LOADING }), { kind: 'none', reason: 'Checking whether Eadwyn AI can join…' });
+  assert.deepEqual(cap({ bot: BOT_LOADING, provider: 'google_meet', link: MEET }), { kind: 'none', reason: 'Checking whether Eadwyn AI can join…' });
+  assert.deepEqual(cap({ bot: BOT_LOADING, botLink: false }), { kind: 'import', note: IMPORT_NOTE.zoom }, 'a link the bot cannot join does not wait');
+  assert.deepEqual(cap({ bot: BOT_ON }), { kind: 'bot' }, 'once read, the bot');
+  assert.deepEqual(cap({ bot: BOT_OFF }), { kind: 'import', note: IMPORT_NOTE.zoom }, 'and the import only when the bot cannot join');
+});

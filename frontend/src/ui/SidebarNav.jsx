@@ -220,6 +220,7 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                 const lockTier = investorLocked ? requiredInvestorTier : requiredTier;
                 const lockLabel = lockTier === 'institutional' ? 'Institutional'
                   : lockTier === 'professional' ? 'Professional'
+                  : lockTier === 'plus' ? 'Plus'
                   : lockTier === 'studio' ? 'Raise + Grow'
                   : 'Validate + Build';
                 return (

@@ -21,12 +21,13 @@
 import type { Env } from '../types';
 import { stripeCall } from '../routes/billing';
 import { INVESTOR_QUOTAS, type InvestorTier } from '../middleware/requireInvestorTier';
+import { paidInvestorTier } from './investorTiers';
 import { classifyStripeError } from '../util/stripeError';
 import { findCatalogProductByPriceId } from './catalog';
 
 export type PlanMeta =
   | { kind: 'tier'; tier: 'growth' | 'studio' }
-  | { kind: 'investor'; investor_tier: 'professional' | 'institutional' }
+  | { kind: 'investor'; investor_tier: 'plus' | 'professional' | 'institutional' }
   | { kind: 'plan'; plan_group: string }
   | { kind: 'mi'; plan: 'mi_pro_monthly' | 'mi_pro_annual' };
 
@@ -37,9 +38,8 @@ export function planMetaForProduct(
 ): PlanMeta | null {
   const m = product?.metadata || {};
   if (m.tier === 'growth' || m.tier === 'studio') return { kind: 'tier', tier: m.tier };
-  if (m.investor_tier === 'professional' || m.investor_tier === 'institutional') {
-    return { kind: 'investor', investor_tier: m.investor_tier };
-  }
+  const investorTier = paidInvestorTier(m.investor_tier);
+  if (investorTier) return { kind: 'investor', investor_tier: investorTier };
   if (typeof m.plan_group === 'string' && m.plan_group.trim()) return { kind: 'plan', plan_group: m.plan_group.trim() };
   if (m.plan === 'mi_pro') return { kind: 'mi', plan: price?.interval === 'year' ? 'mi_pro_annual' : 'mi_pro_monthly' };
   return null;
@@ -166,7 +166,7 @@ export async function heldPlanSubscription(env: Env, userId: number, meta: PlanM
       const paid = u.subscription_tier === 'growth' || u.subscription_tier === 'studio';
       return paid && held(u.subscription_status) && u.stripe_subscription_id ? u.stripe_subscription_id : null;
     }
-    const paid = u.investor_tier === 'professional' || u.investor_tier === 'institutional';
+    const paid = paidInvestorTier(u.investor_tier) !== null;
     return paid && held(u.investor_subscription_status) && u.investor_stripe_subscription_id ? u.investor_stripe_subscription_id : null;
   }
   try {
@@ -325,7 +325,7 @@ function incompleteRowsOf(u: IncompleteUser, only?: string): IncompleteRow[] {
 async function tierOfSubscription(env: Env, sub: Record<string, unknown>, family: 'tier' | 'investor'): Promise<string | null> {
   const m = (sub.metadata as Record<string, string> | undefined) ?? {};
   if (family === 'tier' && (m.tier === 'growth' || m.tier === 'studio')) return m.tier;
-  if (family === 'investor' && (m.investor_tier === 'professional' || m.investor_tier === 'institutional')) return m.investor_tier;
+  if (family === 'investor' && paidInvestorTier(m.investor_tier)) return m.investor_tier;
   const plan = await catalogPlanOf(env, sub);
   if (plan?.kind === 'tier' && family === 'tier') return plan.tier;
   if (plan?.kind === 'investor' && family === 'investor') return plan.investor_tier;

@@ -46,7 +46,7 @@ fs.writeFileSync(path.join(docs,'index.html'),'<script src="/assets/current.js">
   return {dir,run,remove:()=>fs.rmSync(dir,{recursive:true,force:true})};
 }
 
-test('D1361: real wrapper restores every chunk of recent generations across the Vite wipe',()=>{
+test('D1364: real wrapper restores every chunk of recent generations across the Vite wipe',()=>{
   const f=fixture({history:true});
   try {
     const result=f.run();
@@ -58,7 +58,7 @@ test('D1361: real wrapper restores every chunk of recent generations across the 
   } finally {f.remove();}
 });
 
-test('D1361: wrapper rejects over-cap output and preserves the last deployed tree for retry',()=>{
+test('D1364: wrapper rejects over-cap output and preserves the last deployed tree for retry',()=>{
   const f=fixture({assets:17,history:true,smallCaps:true});
   try {
     const result=f.run();
@@ -70,7 +70,7 @@ test('D1361: wrapper rejects over-cap output and preserves the last deployed tre
   } finally {f.remove();}
 });
 
-test('D1361: wrapper counts non-asset files against the full static upload limit',()=>{
+test('D1364: wrapper counts non-asset files against the full static upload limit',()=>{
   const f=fixture({publicFiles:32,history:true,smallCaps:true});
   try {
     const result=f.run();
@@ -81,7 +81,7 @@ test('D1361: wrapper counts non-asset files against the full static upload limit
   } finally {f.remove();}
 });
 
-test('D1361: a configured one-build floor cannot delete the two previous deployments',()=>{
+test('D1364: a configured one-build floor cannot delete the two previous deployments',()=>{
   const f=fixture({history:[73,74,75]});
   try {
     assert.equal(f.run({ASSET_RETAIN_BUILDS:'1'}).status,0);
@@ -89,7 +89,7 @@ test('D1361: a configured one-build floor cannot delete the two previous deploym
   } finally {f.remove();}
 });
 
-test('D1361: a failed external build restores the previous shell, chunks and deployment ledger',()=>{
+test('D1364: a failed external build restores the previous shell, chunks and deployment ledger',()=>{
   const f=fixture({history:true});
   try {
     fs.writeFileSync(path.join(f.dir,'bin/npm'),`#!/usr/bin/env node
@@ -105,7 +105,7 @@ process.exit(7);
   } finally {f.remove();}
 });
 
-test('D1361: an unstamped deployed cache stops before Vite can discard live history',()=>{
+test('D1364: an unstamped deployed cache stops before Vite can discard live history',()=>{
   const f=fixture({history:true});
   try {
     const ledgerFile=path.join(f.dir,'docs/.asset-retention.json');
@@ -121,7 +121,7 @@ test('D1361: an unstamped deployed cache stops before Vite can discard live hist
   } finally {f.remove();}
 });
 
-test('D1361: explicitly legacy timestamps retain their grace in a restored deployment cache',()=>{
+test('D1364: explicitly legacy timestamps retain their grace in a restored deployment cache',()=>{
   const f=fixture({history:true});
   try {
     const ledgerFile=path.join(f.dir,'docs/.asset-retention.json');

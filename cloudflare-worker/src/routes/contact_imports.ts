@@ -8,6 +8,7 @@
  *   POST  /import/linkedin-csv[?preview=1]     multipart `file`; preview writes nothing
  *   GET   /import/reviews                       the member's pending suggestions
  *   POST  /import/reviews/:uid/:decision        merge | keep | dismiss
+ *   GET   /book[?q=&page=]                         the member's own book, with each row's sources (D1352)
  *   GET   /book/:id/notes, POST /book/:id/notes        { body }
  *   GET   /book/:id/tasks, POST /book/:id/tasks        { title, due_on? }
  *   PATCH /book/:id/tasks/:uid                         { done }
@@ -22,7 +23,7 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { isSupportSession } from '../integrations/providers/mercury';
 import {
-  MAX_CSV_BYTES, ReviewRefusal, addNote, addTask, commitPlan, decideReview, notesOf, ownContact, ownRecords, parseConnectionsCsv,
+  MAX_CSV_BYTES, ReviewRefusal, addNote, addTask, bookOf, commitPlan, decideReview, notesOf, ownContact, ownRecords, parseConnectionsCsv,
   pendingReviews, planRows, previewOf, setTaskDone, tasksOf,
 } from '../services/linkedinCsvImport';
 
@@ -83,6 +84,11 @@ async function contactOr404(c: any, ctx: Ctx) {
 const missing = (c: any) => no(c, 404, 'not_found', 'That contact is not in your book.');
 const body = async (c: any): Promise<Record<string, any>> => { const b = await c.req.json().catch(() => ({})); return b && typeof b === 'object' && !Array.isArray(b) ? b : {}; };
 
+// D1352 (#3567): the book itself, for Network › Relationships.
+r.get('/book', handle(async (c, ctx) => {
+  const page = idOf(c.req.query('page')) ?? 1;
+  return c.json(await bookOf(c.env, Number(ctx.user.id), String(c.req.query('q') ?? ''), page));
+}));
 r.get('/book/:id/notes', handle(async (c, ctx) => {
   const k = await contactOr404(c, ctx); if (!k) return missing(c);
   return c.json({ notes: await notesOf(c.env, Number(ctx.user.id), k.id) });
