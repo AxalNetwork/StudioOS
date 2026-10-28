@@ -14,6 +14,7 @@ import RelationshipRequests from '../components/RelationshipRequests';
 import { relationshipLogPath } from '../lib/partnerEarnings';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
+const NetworkContacts = lazy(() => import('../pages/NetworkContacts'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
 const FounderNetworkOrganizations = lazy(() => import('../pages/founder/FounderNetworkOrganizations'));
 const InvestorNetworkWorkspace = lazy(() => import('../pages/investor/InvestorNetworkWorkspace'));
@@ -333,6 +334,8 @@ export default function NetworkWorkspace({ role = 'founder' }) {
           licence's Relationships zone. Draws nothing when none are open.
           D569 — on the partner shell each accepted record links to its log. */}
       {slug === 'relationships' && <RelationshipRequests logPath={role === 'partner' ? relationshipLogPath : undefined} />}
+      {/* D1352 (#3567): the member's own contacts, with their source chips, notes and follow-ups. */}
+      {slug === 'relationships' && <Suspense fallback={null}><NetworkContacts /></Suspense>}
       {body}
     </WorkspaceShell>
   );
