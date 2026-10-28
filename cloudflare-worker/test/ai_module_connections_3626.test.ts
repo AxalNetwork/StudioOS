@@ -173,6 +173,10 @@ test('rerank quote and run reject malformed or oversized contexts before inferen
     const short = await quoteRun(f.env, { task: 'module_rerank', userId: 2, model: id, guardText: 'Same safety input.', rerank: { query: 'query', contexts: ['x'] } });
     const long = await quoteRun(f.env, { task: 'module_rerank', userId: 2, model: id, guardText: 'Same safety input.', rerank: { query: 'query', contexts: ['x'.repeat(10_000)] } });
     assert.equal(short.ok && long.ok && long.hold_microusd > short.hold_microusd, true);
+    const query = 'q'.repeat(24_000);
+    const one = await quoteRun(f.env, { task: 'module_rerank', userId: 2, model: id, guardText: 'Same safety input.', rerank: { query, contexts: ['x'] } });
+    const many = await quoteRun(f.env, { task: 'module_rerank', userId: 2, model: id, guardText: 'Same safety input.', rerank: { query, contexts: Array(100).fill('x') } });
+    assert.equal(one.ok && many.ok && many.hold_microusd > one.hold_microusd + 1000, true);
   } finally { f.db.close(); }
 });
 
@@ -246,7 +250,7 @@ test('standalone transcription quote and run obey the page assistance switch', a
 test('sentiment, image labels and turn detection use their own requests and billing units', async () => {
   const captured = [];
   for (const [model, text, extra, answer, expected] of [
-    ['@cf/huggingface/distilbert-sst-2-int8', 'Good.', {}, [{ label: 'POSITIVE', score: 0.9 }], { tokens_in: 5, tokens_out: 0 }],
+    ['@cf/huggingface/distilbert-sst-2-int8', 'Good.', {}, [{ label: 'POSITIVE', score: 0.9 }], { tokens_in: 2, tokens_out: 0 }],
     ['@cf/microsoft/resnet-50', '', { images: [png] }, [{ label: 'object', score: 0.7 }], { images: 1 }],
     ['@cf/pipecat-ai/smart-turn-v2', '', { audio_pcm16: pcm }, { is_complete: true, probability: 0.9 }, { audio_minutes: 1 / 60 }],
   ] as const) {
@@ -261,6 +265,18 @@ test('sentiment, image labels and turn detection use their own requests and bill
   }
   assert.deepEqual(captured.map(x => [x[0], x[1], x[3], x[4]]), [[true, true, ['text'], true], [true, true, ['image'], true], [true, true, ['audio', 'dtype'], true]]);
   assert.deepEqual([pcmMinutes(pcmBytes(pcm)!), pcmBytes('bad')], [1 / 60, null]);
+});
+
+test('specialist settlement uses reported tokens or the common estimate, never byte counts', () => {
+  const s = { operation: 'decision' as const, questions: { x: { type: 'noul' as const, instructions: 'x' } } };
+  const answer = { answers: { x: 0.8 } };
+  assert.deepEqual([
+    specialistOutput(answer, s, 'Test')?.units,
+    specialistOutput({ ...answer, usage: { input_tokens: 7 } }, s, 'Test')?.units,
+    specialistOutput({ ...answer, usage: { input_tokens: 0 } }, s, 'Test')?.units,
+    specialistOutput({ ...answer, usage: { input_tokens: -1 } }, s, 'Test'),
+    specialistOutput({ ...answer, usage: { input_tokens: '7' } }, s, 'Test'),
+  ], [{ tokens_in: 11, tokens_out: 0 }, { tokens_in: 7, tokens_out: 0 }, { tokens_in: 0, tokens_out: 0 }, null, null]);
 });
 
 test('standalone embeddings never write axal-search; each model bills its catalogue rate', async () => {

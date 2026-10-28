@@ -1736,7 +1736,8 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
 function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], guardOn: boolean, guardInput: string, multiplier: number): number {
   // UTF-8 bytes bound input tokenization; include chat/system overhead.
   // Reserve the most expensive offered fallback, refund to the actual logged estimate.
-  const material = opts.rerank ? [opts.rerank.query, ...opts.rerank.contexts].join('\n') : defaultContentBlob(opts);
+  // Reranking pairs the query with every context; settlement counts each pair.
+  const material = opts.rerank ? opts.rerank.contexts.map(text => opts.rerank!.query + '\n' + text).join('\n') : defaultContentBlob(opts);
   const inputBytes = new TextEncoder().encode(material + (opts.systemPrompt || '') + (opts.specialist?.operation === 'decision' ? JSON.stringify(opts.specialist.questions) : '')).byteLength;
   const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64 + (opts.images?.length ?? 0) * 1024;
   // D761: a reasoning model's output budget is its task's, not 512.

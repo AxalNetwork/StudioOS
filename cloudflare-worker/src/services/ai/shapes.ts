@@ -271,7 +271,7 @@ export interface Units {
   subsequent_megapixels?: number;
 }
 
-const estTokens = (s: string): number => (s ? Math.max(1, Math.ceil(s.length / 4)) : 0);
+export const estTokens = (s: string): number => (s ? Math.max(1, Math.ceil(s.length / 4)) : 0);
 const count = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : null);
 
 // ─────────────────────────────────────────────────────────── text and reasoning

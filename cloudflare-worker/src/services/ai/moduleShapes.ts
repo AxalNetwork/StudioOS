@@ -1,7 +1,7 @@
 /** #3626: bounded specialist inputs and model-specific wire formats.
  * Decisions and labels are observations/proposals; this module takes no action.
  */
-import type { Units } from './shapes';
+import { estTokens, type Units } from './shapes';
 
 export type DecisionQuestion = { type: 'noul' | 'choice' | 'score'; instructions: string; criteria?: Record<string, string> | string[] };
 export type SpecialistInput =
@@ -83,7 +83,8 @@ export function specialistOutput(raw: unknown, s: SpecialistInput, text: string)
     if (Object.entries(s.questions).some(([key, q]) => q.type === 'noul' && !probability(r.answers[key]))) return null;
     answer = r.answers;
     const input = r.usage?.input_tokens ?? r.usage?.prompt_tokens;
-    units = { tokens_in: typeof input === 'number' && Number.isSafeInteger(input) && input > 0 ? input : new TextEncoder().encode(text + JSON.stringify(s.questions)).byteLength, tokens_out: 0 };
+    if (input != null && (typeof input !== 'number' || !Number.isSafeInteger(input) || input < 0)) return null;
+    units = { tokens_in: input ?? estTokens(text + JSON.stringify(s.questions)), tokens_out: 0 };
   } else if (s.operation === 'turn') {
     if (typeof r?.is_complete !== 'boolean' || !probability(r.probability)) return null;
     answer = { is_complete: r.is_complete, probability: r.probability };
@@ -92,7 +93,7 @@ export function specialistOutput(raw: unknown, s: SpecialistInput, text: string)
     if (!Array.isArray(raw) || raw.length < 1 || raw.length > (s.operation === 'image_labels' ? 1000 : 64) || !raw.every(x => plain(x) && short(x.label, 200) && probability(x.score))) return null;
     const labels = s.operation === 'image_labels' ? [...raw].sort((a, b) => b.score - a.score).slice(0, 5) : raw;
     answer = labels.map(x => ({ label: x.label, score: x.score }));
-    units = s.operation === 'image_labels' ? { images: 1 } : { tokens_in: new TextEncoder().encode(text).byteLength, tokens_out: 0 };
+    units = s.operation === 'image_labels' ? { images: 1 } : { tokens_in: estTokens(text), tokens_out: 0 };
   }
   const output = JSON.stringify(answer);
   return output.length <= 8_192 ? { output, units } : null;
