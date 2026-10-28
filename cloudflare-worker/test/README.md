@@ -173,4 +173,5 @@ D1231 concurrency tests cover displayed If-Match tokens, source edits during a r
 | --- | --- |
 | `deal_insights_d1151.test.ts` | Real SQLite tests of D1151 deal access, NDA masks, publication, aggregates and sourced sharing. |
 | `messages_retirement_d1345.test.ts` | Phase 1: real mounted 410s and own-LP / own-advisor Email recipient scopes on migrated SQLite. |
+| `messages_drop_d1345.test.ts` | Phase 2: migration 650 asserts every retired Messages store is empty before any DROP, and removes the four stores without removing Email. Runs only after the phase 1 Worker rollout is confirmed. |
 D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.
