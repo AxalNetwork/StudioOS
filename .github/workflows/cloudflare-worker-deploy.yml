@@ -190,8 +190,10 @@ jobs:
           echo "::error::wrangler deploy failed three times with Cloudflare error 10013; see the attempts above"
           exit 1
 
-      # D1364 — stamp the actual successful deployment before saving its ledger.
-      # A failed publish skips this step; building alone never advances the clock.
+      # D1364 (#3591): stamp the build that just shipped, from the repo root,
+      # before it is cached. Without it the next deploy's build refuses the
+      # restored ledger ("restored deployment ledger is unstamped"). A failed
+      # publish skips this step; building alone never advances the clock.
       - name: Record successful asset deployment
         run: node scripts/record-asset-deploy.mjs
 
