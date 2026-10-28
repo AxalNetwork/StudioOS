@@ -197,7 +197,7 @@ test('sentiment, image labels and turn detection use their own requests and bill
 
 test('standalone embeddings never write axal-search; each model bills its catalogue rate', async () => {
   const results = [];
-  for (const [id, c] of Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'embed')) {
+  for (const [id] of Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'embed')) {
     const f = fixture(() => ({ data: [[0.2, 0.8]], usage: { prompt_tokens: 10 } }));
     try {
       const r = await post(f, { page: pageFor(id).pageKey, model: id, text: 'Relevant research.' });
@@ -210,7 +210,7 @@ test('standalone embeddings never write axal-search; each model bills its catalo
 
 test('every newly connected text model actually dispatches through its persona module', async () => {
   const results = [];
-  for (const [id, c] of Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'chat')) {
+  for (const [id] of Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'chat')) {
     const f = fixture();
     try {
       const page = pageFor(id), image = CATALOGUE.find(m => m.id === id)!.capabilities.includes('Vision') && page.kind === 'vision';
