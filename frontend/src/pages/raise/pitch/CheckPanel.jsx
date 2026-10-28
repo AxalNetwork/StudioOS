@@ -7,7 +7,7 @@ import { reportError } from '../../../lib/log';
 import { Lightbox, Pill } from '../../../ui';
 import {
   CHECK_INTRO, DIRTY_FIRST, NEITHER_RIGHT, NOTE_MAX, STATE_LABELS, STATE_TONE, checkNote, checkPills, claimLine, lastChecked, recordSource,
-  refusalText, sortClaims, summaryLine, useRecordLabel,
+  isFounderOnly, mayRunCheck, refusalText, sortClaims, summaryLine, useRecordLabel,
 } from './checkModel';
 
 /**
@@ -16,6 +16,12 @@ import {
  * For the venture's founder it runs the check on this version when it opens
  * (`POST /api/decks/:id/check`, D1264's claim check: patterns, never a model),
  * and again on Run the check. Anyone else reads the last check's states.
+ *
+ * #3657: who is the founder is the check read's answer. The panel reads first
+ * (`GET`, whose `can_check` is the Worker's), and runs only on `can_check:
+ * true`. Editing a deck (HQ may, #3637) never makes a reader the founder: no
+ * POST, no Run the check, and a `founder_only` refusal turns the panel to the
+ * read view instead of offering Try again.
  *
  *   the counts      "12 figures: 9 Backed, 1 Mismatch …" and "Last checked"
  *   each figure     its card, its state and what that means; a Mismatch shows
@@ -45,13 +51,26 @@ export default function CheckPanel({ deck, projectId, readOnly, dirty, onReplace
       setState({ status: 'ok', data, error: null });
     } catch (e) {
       reportError('pitch-editor:check', e);
+      if (write && isFounderOnly(e)) { setState((s) => ({ status: 'ok', data: { ...(s.data || {}), can_check: false }, error: null })); return; }
       setState((s) => ({ status: 'error', data: s.data, error: refusalText(e, 'The check could not be run.') }));
     }
   }, [deck.id]);
-  useEffect(() => { run(!readOnly); }, [run, readOnly]);
+  // Read first; the founder's check runs only when the read says so.
+  const open = useCallback(async () => {
+    setState({ status: 'loading', data: null, error: null });
+    let data;
+    try { data = await deckCheckApi.read(deck.id); } catch (e) {
+      reportError('pitch-editor:check', e);
+      setState({ status: 'error', data: null, error: refusalText(e, 'The check could not be read.') });
+      return;
+    }
+    if (mayRunCheck(data, readOnly)) { setState({ status: 'loading', data, error: null }); await run(true); return; }
+    setState({ status: 'ok', data, error: null });
+  }, [deck.id, readOnly, run]);
+  useEffect(() => { open(); }, [open]);
 
   const data = state.data;
-  const canCheck = !readOnly && data?.can_check !== false;
+  const canCheck = mayRunCheck(data, readOnly);
   const claims = sortClaims(data?.claims);
   return (
     <div className="flex flex-col gap-3" data-testid="pitch-check">
@@ -68,7 +87,7 @@ export default function CheckPanel({ deck, projectId, readOnly, dirty, onReplace
       {state.status === 'error' ? (
         <div role="alert" className="flex flex-col gap-2" data-testid="pitch-check-error">
           <span className="text-[12.5px] text-red-700 dark:text-red-300">{state.error}</span>
-          <button type="button" className={`${GHOST} self-start`} onClick={() => run(canCheck)}>Try again</button>
+          <button type="button" className={`${GHOST} self-start`} onClick={() => (data ? run(canCheck) : open())} data-testid="pitch-check-retry">Try again</button>
         </div>
       ) : null}
       {data && data.checked === false && !canCheck ? <span className={MUTED} data-testid="pitch-check-never">This version has not been checked yet. The venture’s founder runs the check.</span> : null}

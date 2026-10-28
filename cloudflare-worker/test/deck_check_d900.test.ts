@@ -309,3 +309,21 @@ test('deckCheckView: Stale is drawn over the stored state, and counted as Stale'
   assert.deepEqual(view.claims.map((c: any) => [c.uid, c.state, c.display_state, c.stale]), [['a', 'backed', 'stale', true], ['b', 'mismatch', 'mismatch', false]]);
   assert.deepEqual(view.counts, { backed: 0, founders_figure: 0, mismatch: 1, not_backed: 0, stale: 1 });
 });
+
+test('#3657: the read\'s can_check is what the run allows, for every identity, Super Admin (HQ) included', async () => {
+  // Mutation checked: can_check true for a Super Admin → the agreement fails for HQ; the run let an admin through → the 403 fails.
+  const db = fixture();
+  const HQ = 6;
+  db.exec(`INSERT INTO users (id, email, name, role, founder_id) VALUES (${HQ}, 'hq@example.test', 'Synthetic HQ', 'admin', NULL);
+    INSERT INTO super_admins (user_id) VALUES (${HQ});`);
+  for (const [who, name, runs] of [[OWNER, 'the venture founder', true], [COFOUNDER, 'a co-founder member', false], [ADMIN, 'an ordinary Admin', false], [HQ, 'a Super Admin (HQ)', false]] as const) {
+    const read = await call(db, who, 'GET', '/api/decks/21/check');
+    assert.equal(read.status, 200, `${name} reads`);
+    assert.equal(read.body.can_check, runs, `${name}: the read says ${runs ? 'run' : 'read only'}`);
+    const run = await call(db, who, 'POST', '/api/decks/21/check');
+    assert.equal(run.status, runs ? 200 : 403, `${name}: the run agrees with the read`);
+    if (!runs) assert.equal(run.body.error, 'founder_only');
+  }
+  const other = await call(db, OTHER, 'GET', '/api/decks/21/check');
+  assert.equal(other.status, 403, 'another venture\'s founder reads nothing');
+});
