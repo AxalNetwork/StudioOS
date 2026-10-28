@@ -475,7 +475,7 @@ test('#1692 test 5: each record has its title, four facts, its sections in the c
   assert.deepEqual(theme.pills.map((p: any) => p.text), ['Severe', 'Frequent']);
   const iv = (await real(db, 10, 'GET', rec('customer-research', '1'))).body;
   assert.equal(iv.sub, 'Ops lead at Northwind Example · 12 Oct · 2 min');
-  assert.deepEqual(iv.facts.map((f: any) => f.value), ['Recorded in StudioOS', 'Said yes out loud', 'Strong · Fleet ops leads', 'Yes']);
+  assert.deepEqual(iv.facts.map((f: any) => f.value), ['Recorded in Axal VC', 'Said yes out loud', 'Strong · Fleet ops leads', 'Yes']);
   const seg = (await real(db, 10, 'GET', rec('ideal-customer-profile', '3'))).body;
   assert.deepEqual(seg.main[0].rows.map((r: any) => r.c), ['Done', 'Missing', 'Missing', 'Done', 'Needs a source']);
   // The next step is the row and its status (nextFor, CO:263-269).

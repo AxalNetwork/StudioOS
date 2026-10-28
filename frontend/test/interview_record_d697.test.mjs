@@ -188,7 +188,7 @@ const FED = { key: 'fed', title: 'What it fed', gate: 'read', side: true, rows: 
 const WRITER = {
   cycle: 'validate', module: 'customer-research', id: '5', title: 'Rowan Vale', sub: 'Ops lead at Kestrel · 7 Oct · 34 min',
   pills: [{ text: 'Strong fit', tone: 'ok' }, 'Transcribed'],
-  facts: [{ label: 'Captured', value: 'Recorded in StudioOS' }, { label: 'Consent', value: 'Said yes out loud' },
+  facts: [{ label: 'Captured', value: 'Recorded in Axal VC' }, { label: 'Consent', value: 'Said yes out loud' },
     { label: 'ICP fit', value: 'Strong · Segment A' }, { label: 'Need-to-have', value: null, reason: 'No pain is judged yet.' }],
   main: [{ key: 'transcript', title: 'Transcript', gate: 'write', rows: [] }, { key: 'placements', title: 'Eadwyn’s placements', gate: 'write', rows: [] }],
   side: [FED, { key: 'cost', title: 'Cost', gate: 'write', side: true, rows: [] },
@@ -314,7 +314,7 @@ test('7: a writer\'s record shows the facts (a null one as Not recorded with its
   const m = await recordMount(f);
   try {
     const facts = m.text(m.by('record-facts'));
-    for (const v of ['Recorded in StudioOS', 'Said yes out loud', 'Strong · Segment A', 'Not recorded', 'No pain is judged yet.']) assert.ok(facts.includes(v), v);
+    for (const v of ['Recorded in Axal VC', 'Said yes out loud', 'Strong · Segment A', 'Not recorded', 'No pain is judged yet.']) assert.ok(facts.includes(v), v);
     assert.ok(m.text().includes('Strong fit'), 'a pill');
     assert.deepEqual(f.calls.filter((c) => c[0] === 'get'), [['get', 7]], 'the newest reviewable session, not the draft');
     assert.ok(m.by('session-switcher'));
@@ -469,7 +469,7 @@ test('9: a partner\'s read draws no transcript, placements, cost, session, tool 
     const all = m.text();
     for (const absent of ['record-transcript', 'interview-review-findings', 'record-cost', 'interview-tools']) assert.equal(m.by(absent), undefined, absent);
     assert.doesNotMatch(all, /Waiting for messages|Edit details|Open recording|Delete/);
-    assert.match(m.text(m.by('record-facts')), /Recorded in StudioOS/);
+    assert.match(m.text(m.by('record-facts')), /Recorded in Axal VC/);
     assert.match(all, /Manual reconciliation/);
     assert.deepEqual(f.calls, [], 'no call to the session routes and none to listInterviews');
   } finally { await m.close(); }
