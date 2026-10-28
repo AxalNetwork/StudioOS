@@ -90,7 +90,7 @@ function fixture({ monthMicro = 500_000_000 } = {}) {
   const AI = withGuard({
     async run(model: string, input: any) {
       if (/whisper|nova/.test(model)) {
-        whisper.push({ bytes: Array.isArray(input?.audio) ? input.audio.length : 0 });
+        whisper.push({ bytes: typeof input?.audio === 'string' ? Buffer.from(input.audio, 'base64').length : Array.isArray(input?.audio) ? input.audio.length : 0 });
         return { text: 'We reconcile by hand every Friday.', transcription_info: { language: 'en' }, segments: [{ start: 0, end: 3, text: 'We reconcile by hand every Friday.' }] };
       }
       return { response: JSON.stringify({ sentences: [], placements: [] }) };
