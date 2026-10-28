@@ -38,7 +38,7 @@ test('the four channels, their notes and their Start labels; How offers three, a
   assert.deepEqual(MODES.map((m) => m.note), [
     'Put the phone on the table between you. It records this device’s microphone.',
     // D1358: a meeting is captured by Eadwyn AI or imported after it ends, never by this browser.
-    'Paste the meeting link. Eadwyn AI joins the call where it can, or Axal imports the call’s own transcript from your connected account after it ends. This device’s microphone is not used.',
+    'Paste the meeting link or create a meeting. Eadwyn AI joins as a visible participant and records after being admitted. When the call ends, Axal VC transcribes the recording. This device’s microphone is not used.',
     'Put the call on speaker. It records this device’s microphone.',
     'No audio. Import the conversation from the app it happened in, or paste it.',
   ]);
