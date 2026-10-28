@@ -41,3 +41,4 @@ and citations by number keep working.
 | File | Purpose |
 | --- | --- |
 | `D1151.md` | Deal Team, Market and Traction read contracts and verification. |
+| `D1364.md` | Time-based deployed asset retention, capacity limits and verification. |

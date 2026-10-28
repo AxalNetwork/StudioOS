@@ -14,119 +14,112 @@
  * apex root `/`; that is where this module came from.)
  *
  * This module computes which prior hashes to keep so the deployed `docs/assets`
- * is the UNION of the last `retainBuilds` builds. It is a PURE function over
+ * keeps the 72-hour window plus a minimum build floor, within a file cap.
+ * It is a PURE function over
  * file-name lists (no filesystem access) so it can be unit-tested in isolation,
  * mirroring `scripts/lib/migrationPlan.mjs`.
  */
 
+export const ASSET_RETENTION_HOURS = 72;
+export const ASSET_MIN_BUILDS = 3;
+// Below even the Free plan's 20,000 total files; leave room for shells/public files.
+export const ASSET_MAX_FILES = 18_000;
+export const STATIC_FILE_LIMIT = 20_000;
+
 /**
- * @param {object} opts
- * @param {string[]} opts.prevFiles   asset filenames present BEFORE the build (backed up)
- * @param {string[]} [opts.seedFiles] what the no-ledger synthetic seed holds
- *                                    (defaults to prevFiles; see below)
- * @param {string[]} opts.newFiles    asset filenames the fresh build produced
- * @param {Array<{ts:string,files:string[]}>} [opts.ledgerBuilds] prior ledger, newest-first
- * @param {number} [opts.retainBuilds] how many builds' assets to keep (default 3)
- * @param {string} [opts.now]         ISO timestamp for the new build entry
- * @returns {{
- *   nextLedger: { builds: Array<{ts:string,files:string[]}> },
- *   keep: string[],
- *   restore: string[],
- *   missing: string[],
- * }}
+ * Plan complete generations, newest first. `ts` is build time; `deployedAt`
+ * is set ONLY after a successful deploy. Legacy ledgers get a one-time grace
+ * (`firstSeenAt`), rather than inventing an unknown deployment timestamp.
+ * A protected floor that exceeds the cap is returned intact with capExceeded;
+ * the build wrapper refuses to deploy it rather than deleting current chunks.
  */
 export function planAssetRetention({
-  prevFiles = [],
-  seedFiles = null,
-  newFiles = [],
-  ledgerBuilds = [],
-  retainBuilds = 3,
-  now = new Date().toISOString(),
+  prevFiles = [], seedFiles = null, newFiles = [], ledgerBuilds = [],
+  retainBuilds = ASSET_MIN_BUILDS, retentionHours = ASSET_RETENTION_HOURS,
+  maxFiles = ASSET_MAX_FILES, now = new Date().toISOString(),
 } = {}) {
-  const uniq = (arr) => [...new Set(arr)];
-  const builds = Array.isArray(ledgerBuilds)
-    ? ledgerBuilds
-        .filter((b) => b && Array.isArray(b.files))
-        .map((b) => ({ ts: String(b.ts ?? ''), files: uniq(b.files) }))
-    : [];
-
-  // No ledger yet (a fresh clone, and CI on EVERY run): seed a synthetic prior
-  // build so the assets a client on the previous shell still asks for are not
-  // dropped on the first retention build.
-  //
-  // WHAT IT SEEDS IS THE FIX. This used `prevFiles` — everything on disk — and
-  // `.gitignore` recorded the trade in its own words: "with no ledger it seeds
-  // the committed `docs/assets` as a synthetic prior build … That is the safe
-  // direction (it prunes less, never more)." Pruning less, never more, is
-  // precisely how the committed set became a high-water mark that only grows:
-  // CI has no ledger, so every deploy re-seeded the whole accumulated tree as
-  // one build worth keeping. Measured on `main`: 964 committed assets against a
-  // clean build's 597.
-  //
-  // `seedFiles` is the PREVIOUS GENERATION instead — the transitive closure of
-  // the previous `index.html` over the chunk graph (`lib/assetGeneration.mjs`),
-  // derivable from `docs/` alone with no ledger. It keeps exactly what a client
-  // holding that shell can ask for and drops generations older than it, which
-  // no reachable shell references. The no-ledger window becomes two builds
-  // rather than unbounded. It defaults to `prevFiles` so a caller that cannot
-  // compute a generation gets the old, over-broad behaviour rather than an
-  // under-broad one.
+  if (!Number.isInteger(maxFiles) || maxFiles < 1) throw new Error('Invalid asset file cap');
+  if (!Number.isFinite(retentionHours) || retentionHours < 0) throw new Error('Invalid asset retention window');
+  const uniq = arr => [...new Set(arr)];
+  const validTime = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
+  const builds = (Array.isArray(ledgerBuilds) ? ledgerBuilds : [])
+    .filter(b => b && Array.isArray(b.files))
+    .map(b => {
+      const legacy = b.legacy === true || !Object.hasOwn(b, 'deployedAt')
+        || (b.deployedAt !== null && !validTime(b.deployedAt));
+      return { ts: String(b.ts ?? ''), files: uniq(b.files),
+        deployedAt: validTime(b.deployedAt) ? b.deployedAt : null,
+        ...(legacy ? { legacy: true, firstSeenAt: validTime(b.firstSeenAt) ? b.firstSeenAt : now } : {}) };
+    })
+    .filter(b => b.deployedAt !== null || b.legacy);
   const seed = Array.isArray(seedFiles) && seedFiles.length > 0 ? seedFiles : prevFiles;
-  if (builds.length === 0 && seed.length > 0) {
-    builds.push({ ts: 'pre-retention', files: uniq(seed) });
+  if (!builds.length && seed.length) {
+    builds.push({ ts: 'pre-retention', files: uniq(seed), deployedAt: null, legacy: true, firstSeenAt: now });
   }
-
-  // A rebuild that produces the SAME file set as the newest entry REPLACES it
-  // rather than taking a slot of its own. Content-hashed names mean an
-  // identical set is an identical build — rebuilding the same source locally,
-  // then again in CI, then again on a docs-only branch, is routine. Counting
-  // each one shrank the window to a single distinct build, and the assets the
-  // window existed to keep were deleted from `docs/` on the next build.
-  //
-  // That is not hypothetical: on 2026-09-03 a docs-only rebuild pushed the
-  // `pre-retention` entry (1478 files) out of a three-slot ledger whose other
-  // two entries were already the same 569 files, dropping 1202 hashes that a
-  // client on the previous shell would still ask for. The timestamp still
-  // advances, so the entry records the latest build of that content.
-  const [newest] = builds;
+  // Sort recorded deployments by their real time, preserving ledger order on ties.
+  const orderTime = b => Date.parse(b.deployedAt ?? b.ts) || 0;
+  builds.sort((a, b) => orderTime(b) - orderTime(a));
   const freshFiles = uniq(newFiles);
-  const sameAsNewest =
-    newest &&
-    newest.files.length === freshFiles.length &&
-    new Set(newest.files).size === new Set([...newest.files, ...freshFiles]).size;
+  const newest = builds[0];
+  const sameAsNewest = newest && newest.files.length === freshFiles.length
+    && new Set([...newest.files, ...freshFiles]).size === freshFiles.length;
+  if (sameAsNewest) builds.shift();
+  builds.unshift(sameAsNewest
+    ? { ...newest, ts: now, files: freshFiles }
+    : { ts: now, deployedAt: null, files: freshFiles });
 
-  if (sameAsNewest) {
-    builds[0] = { ts: now, files: freshFiles };
-  } else {
-    builds.unshift({ ts: now, files: freshFiles });
+  const floor = Math.max(1, Math.floor(Number(retainBuilds) || 1));
+  const protectedBuilds = new Set([0]);
+  // Failed/local-only builds never displace actual deployments from the floor.
+  for (let i = 1; i < builds.length && protectedBuilds.size < floor; i++) {
+    if (builds[i].deployedAt !== null || builds[i].legacy) protectedBuilds.add(i);
   }
-
-  const window = Math.max(1, Number(retainBuilds) || 1);
-  const trimmed = builds.slice(0, window);
-
-  const keep = new Set();
-  for (const b of trimmed) for (const f of b.files) keep.add(f);
-
-  // AN EXPLICIT SEED IS KEPT WHATEVER THE LEDGER SAYS (task 333, D252). With a
-  // ledger the seed above never runs, so a ledger whose newest entries are
-  // other rebuilds pushed the generation production is serving out of the
-  // window: the seed was computed, then dropped. It joins the kept set after
-  // the trim. Only an explicitly passed, non-empty seed does: the prevFiles
-  // fallback is the whole tree on disk, and keeping that on every build is
-  // D183's high-water mark again.
-  if (Array.isArray(seedFiles) && seedFiles.length > 0) {
-    for (const f of seedFiles) keep.add(f);
+  const cutoff = Date.parse(now) - retentionHours * 3_600_000;
+  const withinWindow = b => retentionHours > 0
+    && Date.parse(b.deployedAt ?? (b.legacy ? b.firstSeenAt : b.ts)) >= cutoff;
+  // A tab can open just before a long-lived build is superseded. Keep the
+  // predecessor of every in-window deployment too: that next deploy is when
+  // the predecessor stopped serving, even if it first shipped days earlier.
+  const selected = new Set(builds.flatMap((b, i) => protectedBuilds.has(i)
+    || withinWindow(b) || (i > 0 && withinWindow(builds[i - 1])) ? [i] : []));
+  const expiredBuilds = builds.length - selected.size;
+  const refs = new Map();
+  const add = files => { for (const f of files) refs.set(f, (refs.get(f) ?? 0) + 1); };
+  // D252: a known previous shell remains protected even with a stale ledger.
+  const explicitSeed = Array.isArray(seedFiles) ? uniq(seedFiles) : [];
+  add(explicitSeed);
+  for (const i of selected) add(builds[i].files);
+  const removable = [...selected].filter(i => !protectedBuilds.has(i))
+    .sort((a, b) => orderTime(builds[a]) - orderTime(builds[b]) || b - a);
+  let capPrunedBuilds = 0;
+  for (const i of removable) {
+    if (refs.size <= maxFiles) break;
+    selected.delete(i);
+    capPrunedBuilds++;
+    for (const f of builds[i].files) {
+      const count = refs.get(f) - 1;
+      if (count) refs.set(f, count); else refs.delete(f);
+    }
   }
+  const trimmed = builds.filter((_, i) => selected.has(i));
+  const keep = uniq([...trimmed.flatMap(b => b.files), ...explicitSeed]);
+  const newSet = new Set(newFiles), prevSet = new Set(prevFiles);
+  return {
+    nextLedger: { version: 2, builds: trimmed }, keep,
+    restore: keep.filter(f => !newSet.has(f) && prevSet.has(f)),
+    missing: keep.filter(f => !newSet.has(f) && !prevSet.has(f)),
+    capExceeded: keep.length > maxFiles, capPrunedBuilds, expiredBuilds,
+  };
+}
 
-  const newSet = new Set(newFiles);
-  const prevSet = new Set(prevFiles);
-
-  // Files to copy back from the backup: kept, not freshly built, and available.
-  const restore = [...keep].filter((f) => !newSet.has(f) && prevSet.has(f));
-  // Kept but neither freshly built nor on disk to restore (aged past history).
-  const missing = [...keep].filter((f) => !newSet.has(f) && !prevSet.has(f));
-
-  return { nextLedger: { builds: trimmed }, keep: [...keep], restore, missing };
+/** Mark only what actually shipped, after the deploy command succeeded. */
+export function recordAssetDeployment(ledger, now = new Date().toISOString()) {
+  if (!Number.isFinite(Date.parse(now)) || !Array.isArray(ledger?.builds)
+      || !ledger.builds.length || !Array.isArray(ledger.builds[0]?.files)) {
+    throw new Error('Cannot record asset deployment without a valid build ledger');
+  }
+  return { ...ledger, version: 2, builds: ledger.builds.map((b, i) => i === 0
+    ? { ...b, deployedAt: now } : b) };
 }
 
 /**
@@ -139,7 +132,7 @@ export function planAssetRetention({
  * its `actions/cache` entry, and builds over them. What it restored is what
  * production is serving now, so with no ledger to say which build each file
  * came from, all of it is seeded as one prior build. With a ledger (the normal
- * case) the ledger decides, and the window is the last `retainBuilds` builds.
+ * case) the timestamped ledger decides the window and the minimum build floor.
  *
  * It is a flag the workflow passes, never `CI`: every CI job and the PR
  * preview set `CI`, and none of them uploads to production.

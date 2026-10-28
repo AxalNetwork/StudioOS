@@ -24,7 +24,7 @@ npm expands that into three scripts, in order:
 | ------------ | ------------------------------------------------------------------------------------------- |
 | `predeploy`  | `node scripts/migrate-d1.mjs --remote`                                                        |
 | `deploy`     | `npm run build && cd cloudflare-worker && npx wrangler deploy --config ../wrangler.toml --env production` |
-| `postdeploy` | `node scripts/check-spa-live.mjs`                                                             |
+| `postdeploy` | `node scripts/record-asset-deploy.mjs && node scripts/check-spa-live.mjs` |
 
 So one invocation applies pending D1 migrations, builds the frontend into
 `docs/`, uploads the worker, and then probes the live site.
@@ -156,17 +156,77 @@ is that source's build, so there is no second copy to drift from it, and
 
 The old-bundle window rides on a cache instead of a committed tree. A tab
 opened before a deploy still asks for the previous build's hashed chunks, so
-`scripts/build-frontend.mjs` keeps the last three builds' assets in
-`docs/assets`. `cloudflare-worker-deploy.yml` restores the previous successful
+`scripts/build-frontend.mjs` keeps complete deployed generations from the last
+72 hours in `docs/assets`, with at least the last three builds (including the
+new build) and an
+18,000-asset cap (D1364). It also retains the build that was serving before
+the first deployment in that window: tabs opened just before a long-lived
+build was superseded need its chunks for 72 hours too. It prunes the oldest optional generations first,
+never individual chunks. If the protected floor itself exceeds the cap, it
+fails the build rather than deleting the newest build's assets. A cap warning
+means the time window was shortened. The full static output must also stay
+under 20,000 files, including non-asset public files and prerendered shells.
+If any build step fails, the wrapper restores the full previous output and
+ledger, so a local retry still knows which assets were deployed.
+
+`cloudflare-worker-deploy.yml` restores the previous successful
 deploy's `docs/assets` and retention ledger from the `spa-assets-` entry in the
 Actions cache before it builds, and saves them after `wrangler deploy`
-succeeds. When there is nothing to restore (the first deploy, or an entry
+succeeds. The post-deploy `record-asset-deploy.mjs` hook records the actual
+successful deploy time in each new ledger entry's `deployedAt`; `ts` remains
+its build time. Old ledgers receive a single conservative 72-hour grace
+(`firstSeenAt`) without inventing a deployment time. Local or failed builds
+do not displace deployed builds from the minimum floor. An unstamped non-legacy
+entry in the restored deployment cache aborts the build before Vite runs; check
+the successful-deploy timestamp hook instead of losing live history.
+
+When there is nothing to restore (the first deploy, or an entry
 GitHub evicted after seven days unused) the deploy still ships, the build log
 says `retention restarted`, and the run carries a warning: a tab opened before
 that deploy may need one reload.
 
 A hand deploy with `npm run deploy` builds over whatever `docs/` holds on your
-machine. With no previous build there it restarts retention the same way.
+machine. Its postdeploy hook records successful deployment before running
+the live check. With no previous build there it restarts retention the same
+way. Retention still depends on restoring the previous successful cache; a
+cache miss or missing saved files cannot recreate deleted chunks. See D1364
+for the measured cache budget and platform limits.
+
+The deploy workflow also checks every lazy JS/CSS dependency after publishing
+(#3590), including `/hq`'s shell on both hosts. Before the build wipes `docs/`,
+`capture-spa-previous.mjs` records the restored generation's entry paths in
+`$RUNNER_TEMP/spa-smoke-previous.json`. After deploying and saving the actual
+deployed assets, a separate `spa-smoke` job reads both live entry bodies'
+Vite maps and fetches every named JS/CSS file on `axal.vc` and `app.axal.vc`.
+Tiny current/previous entry manifests are transferred from this exact deploy
+run via an artifact. `SMOKE_CURRENT_BUILD` targets the newly built entry even
+if live HTML is stale. Requests are bounded to 16 leaf checks at a time with
+the normal retry delay between bounded waves (a mass 404 does not hold a
+worker in backoff while other files wait); logs give counts and at most five failures per build
+and host. Capture/transfer errors never gate publication: the smoke reports
+them after deploy and still runs the existing route, API and header probes.
+The sibling branch-redeploy and schema-drift jobs depend on `deploy` alone,
+so smoke failure does not skip them.
+
+The six-hour schedule remains. It restores the newest deployed cache and
+selects generation 1 (the previous build), whereas the pre-build deploy
+capture selects generation 0. A cache miss or a single-generation first build
+is reported as previous-build coverage unavailable, never as a successful
+retention check. A matched but unreadable cache fails instead of silently
+dropping the previous generation. No cache or build metadata is published.
+A smoke-only retry reuses this run's artifact; a full deploy retry replaces
+it. Custom dispatch hosts check their live graph without production cache
+hashes. The scheduled retention proof assumes CI deploys: a hand deployment
+via `npm run deploy` does not update Actions' cache and can leave the schedule
+red against stale generation identities until the next CI deploy. Such a
+run cannot establish previous-deploy retention; inspect the deployed version
+and cache provenance before treating it as asset loss.
+
+The smoke fails the deploy run on a missing file, wrong content type or
+unreadable dependency map. It never rolls production back. The owner checks
+the new step on the first merged deploy; PR/local tests cannot prove that a
+workflow step has already run in production. These are delivery checks, not
+proof that authenticated routes render or that their JavaScript executes.
 
 ### 2.2 New bindings go in both tables
 
