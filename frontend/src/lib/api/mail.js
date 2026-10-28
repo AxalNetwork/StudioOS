@@ -28,6 +28,9 @@ import { request } from '../api.js';
 //   share(uid, yes)                POST   /mail/shares/:uid { share: true|false } → { share }; 409 not_matched
 //   unshare(uid)                   DELETE /mail/shares/:uid → { share }; 409 not_shared
 // `address` is the other member's, and only while both have shared; a match's person is `member:<uid>`.
+// D1348 (#3555, part 7) — the People pane, on cloudflare-worker/src/routes/mail_people.ts.
+//   people()                       GET    /mail/people → { profile, groups: [{ key, label, people: [{ ref, name, role, source, last_contact, marker, marker_label }], empty, error }], note, empty }
+// Each group is the member's profile's; a person's ref opens `context(ref)`. Markers are derived, never stored.
 const id = (v) => encodeURIComponent(String(v));
 const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
 export const mailApi = {
@@ -49,4 +52,5 @@ export const mailApi = {
   shares: () => request('/mail/shares'),
   share: (uid, yes) => post(`/mail/shares/${id(uid)}`, { share: yes === true }),
   unshare: (uid) => request(`/mail/shares/${id(uid)}`, { method: 'DELETE' }),
+  people: () => request('/mail/people'),
 };
