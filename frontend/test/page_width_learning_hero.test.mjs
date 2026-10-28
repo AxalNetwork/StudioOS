@@ -36,3 +36,23 @@ test('Learning has one image-backed hero in desktop and phone layouts, including
     assert.equal((html.match(/<h1\b/g) || []).length, 1);
   }
 });
+
+test('Help guide pages fill the shell so their right rail reaches the edge', () => {
+  const expression = read('frontend/src/App.jsx').match(/const fullWidthSurface =([\s\S]*?);\n/)[1];
+  const check = expression => {
+    const width = new Function('fullBleedSurface', 'activeRole', 'location', `return (${expression});`);
+    for (const role of ['founder', 'partner', 'investor', 'admin', 'exploring']) {
+      for (const path of ['/help/spinout-lab/week-1', '/help/core/projects/']) {
+        assert.equal(width(false, role, { pathname: path }), true, `${role} ${path}`);
+      }
+      for (const path of ['/help/tickets/123', '/help/tickets', '/helpdesk/core/projects']) {
+        assert.equal(width(false, role, { pathname: path }), false, `${role} ${path}`);
+      }
+    }
+  };
+  check(expression);
+  const fault = expression.replace(/\|\| \/\^.*help.*\.test\(location\.pathname\)/, '');
+  assert.notEqual(fault, expression);
+  assert.throws(() => check(fault), { code: 'ERR_ASSERTION' });
+  check(expression);
+});
