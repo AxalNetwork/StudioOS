@@ -17,13 +17,23 @@ export function parseViteMapDeps(source) {
   return [...new Set(refs.map(assetPath))];
 }
 
-export function entryRefsFromHtml(html) {
+export function entryRefsFromHtml(html, base) {
   const refs = [];
   for (const match of String(html).matchAll(/<script\b[^>]*>/gi)) {
     const tag = match[0];
     if (!/\btype\s*=\s*["']module["']/i.test(tag)) continue;
-    const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
-    if (src) refs.push(assetPath(src));
+    let src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (!src) continue;
+    // Only this build's Vite assets seed its graph. Another module script is
+    // not a network failure, and absolute same-host URLs are legitimate HTML.
+    if (/^(?:https?:)?\/\//i.test(src)) {
+      if (!base) continue;
+      const url = new URL(src, base);
+      if (url.origin !== new URL(base).origin) continue;
+      src = url.pathname;
+    }
+    if (!/^(?:\/|\.\/)?assets\//.test(src)) continue;
+    refs.push(assetPath(src.split(/[?#]/, 1)[0]));
   }
   return [...new Set(refs)];
 }

@@ -413,10 +413,10 @@ async function fetchAssetMeta(url) {
 // `text/html` from the SPA fallback serving index.html in place of the real
 // file) means this host is missing the hash or its HTML and assets came from
 // different deployments. Both render a blank page.
-async function checkAsset(base, ref, quiet = false) {
+async function checkAsset(base, ref, quiet = false, attempts = RETRIES) {
   const url = base.replace(/\/$/, '') + ref;
   let lastErr = '';
-  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const { status, ctype } = await fetchAssetMeta(url);
       const problem = assetProblem({ status, ctype }, ref);
@@ -425,7 +425,7 @@ async function checkAsset(base, ref, quiet = false) {
     } catch (err) {
       lastErr = `request failed: ${err?.message || err}`;
     }
-    if (attempt < RETRIES) {
+    if (attempt < attempts) {
       if (!quiet) console.log(
         `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
       );
@@ -493,7 +493,7 @@ async function checkRoute(base, route, assetSink, entrySink) {
         // asset checks, so the split is kept.
         if (route.shell) {
           for (const ref of extractAssetRefs(body)) sink.add(ref);
-          for (const ref of entryRefsFromHtml(body)) entrySink?.add(ref);
+          for (const ref of entryRefsFromHtml(body, base)) entrySink?.add(ref);
         }
         return null;
       }
@@ -683,6 +683,27 @@ function lazyBuildInputs() {
   return { current, previous, problems };
 }
 
+// Retry in waves so a missing generation does not tie up every worker with
+// backoff sleeps. Each failed request still gets the normal retry spacing;
+// untouched files are attempted before any retry, at most 16 at a time.
+async function checkPool(refs, checks, probe, failed) {
+  let pending = refs.filter(ref => !checks.has(ref));
+  for (let attempt = 1; attempt <= RETRIES && pending.length > 0; attempt++) {
+    if (attempt > 1) await sleep(RETRY_MS);
+    const work = pending;
+    pending = [];
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(16, work.length) }, async () => {
+      while (next < work.length) {
+        const ref = work[next++];
+        const result = await probe(ref);
+        if (failed(result) && attempt < RETRIES) pending.push(ref);
+        else checks.set(ref, Promise.resolve(result));
+      }
+    }));
+  }
+}
+
 // Read the entry body (unlike the leaf metadata checks), then fetch every
 // JS/CSS in its Vite map. All callbacks stay in this CLI, not in the parser.
 async function checkLazyBuild(base, label, entries, assetChecks, entryChecks) {
@@ -697,34 +718,25 @@ async function checkLazyBuild(base, label, entries, assetChecks, entryChecks) {
       console.error(`[spa-live] FAIL  ${label} ${line}`);
     }
   }
+  await checkPool(entries, entryChecks, async entry => {
+    try {
+      const res = await fetchOnce(base.replace(/\/$/, '') + entry);
+      const reason = assetProblem(res, entry);
+      if (reason) throw new Error(reason);
+      return { refs: parseViteMapDeps(res.body) };
+    } catch (error) { return { reason: error.message }; }
+  }, result => Boolean(result.reason));
   for (const entry of entries) {
-    if (!entryChecks.has(entry)) entryChecks.set(entry, (async () => {
-      let lastErr = 'entry unavailable';
-      for (let attempt = 1; attempt <= RETRIES; attempt++) {
-        try {
-          const res = await fetchOnce(base.replace(/\/$/, '') + entry);
-          const reason = assetProblem(res, entry);
-          if (reason) throw new Error(reason);
-          return { refs: parseViteMapDeps(res.body) };
-        } catch (error) { lastErr = error.message; }
-        if (attempt < RETRIES) await sleep(RETRY_MS);
-      }
-      return { reason: lastErr };
-    })());
     const result = await entryChecks.get(entry);
     if (result.reason) problem(entry, result.reason);
     else for (const ref of result.refs) refs.add(ref);
   }
   const work = [...refs];
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(16, work.length) }, async () => {
-    while (next < work.length) {
-      const ref = work[next++];
-      if (!assetChecks.has(ref)) assetChecks.set(ref, checkAsset(base, ref, true));
-      const reason = await assetChecks.get(ref);
-      if (reason) problem(ref, reason);
-    }
-  }));
+  await checkPool(work, assetChecks, ref => checkAsset(base, ref, true, 1), Boolean);
+  for (const ref of work) {
+    const reason = await assetChecks.get(ref);
+    if (reason) problem(ref, reason);
+  }
   console.log(`[spa-live] ${failed ? 'FAIL' : 'PASS'}  ${base} ${label}: ${entries.length} entry chunk(s), ${refs.size} lazy JS/CSS file(s), ${failed} failure(s).`);
   if (process.env.GITHUB_STEP_SUMMARY) {
     try {

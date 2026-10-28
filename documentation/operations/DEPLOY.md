@@ -177,7 +177,8 @@ Vite maps and fetches every named JS/CSS file on `axal.vc` and `app.axal.vc`.
 Tiny current/previous entry manifests are transferred from this exact deploy
 run via an artifact. `SMOKE_CURRENT_BUILD` targets the newly built entry even
 if live HTML is stale. Requests are bounded to 16 leaf checks at a time with
-the normal retry delay; logs give counts and at most five failures per build
+the normal retry delay between bounded waves (a mass 404 does not hold a
+worker in backoff while other files wait); logs give counts and at most five failures per build
 and host. Capture/transfer errors never gate publication: the smoke reports
 them after deploy and still runs the existing route, API and header probes.
 The sibling branch-redeploy and schema-drift jobs depend on `deploy` alone,

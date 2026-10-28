@@ -39,7 +39,9 @@ test('#3590: only module-script entries, in either attribute order, seed the gra
   assert.deepEqual(entryRefsFromHtml(`<link rel="modulepreload" href="/assets/shared.js"><link href="/assets/style.css">
     <script src='/assets/current.js' type='module'></script><script type="module" src="/assets/current.js"></script>
     <script src="/assets/legacy.js"></script>`), ['/assets/current.js']);
-  assert.throws(() => entryRefsFromHtml('<script type="module" src="https://other.test/entry.js">'), /Invalid/);
+  assert.deepEqual(entryRefsFromHtml(`<script type="module" src="https://apex.test/assets/current.js?version=2"></script>
+    <script type="module" src="/assets/current.js#module"></script><script type="module" src="https://other.test/assets/vendor.js"></script>
+    <script type="module" src="/telemetry.js"></script>`, 'https://apex.test'), ['/assets/current.js']);
 });
 
 const ledger = { builds: [
@@ -129,6 +131,11 @@ test('#3590: capture CLI preserves entry identity and distinguishes an absent ca
 const FAKE_FETCH = `
 import {appendFileSync} from 'node:fs';
 const attempts=new Map();
+const realTimeout=globalThis.setTimeout;
+globalThis.setTimeout=(fn,ms,...args)=>{
+ if(ms===7) appendFileSync(process.env.REQUEST_LOG, JSON.stringify(['sleep',String(ms)])+'\\n');
+ return realTimeout(fn,ms,...args);
+};
 const map=refs=>'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f='+JSON.stringify(refs)+'))) => i.map(i=>d[i]);';
 globalThis.fetch=async(input,init={})=>{
  const u=new URL(typeof input==='string'?input:input.url), p=u.pathname;
@@ -151,10 +158,10 @@ globalThis.fetch=async(input,init={})=>{
   if(process.env.FAULT==='missing' && u.host==='app.test' && p==='/assets/lazy-current.js') return new Response('',{status:404});
   if(process.env.FAULT==='css-mime' && p==='/assets/lazy-previous.css') return new Response('html',{headers:{'content-type':'text/html'}});
   if(process.env.FAULT==='previous-entry' && p==='/assets/index-previous.js') return new Response('',{status:404});
-  if(process.env.FAULT==='many' && p.startsWith('/assets/missing-')) return new Response('',{status:404});
+  if(['many','many-retry'].includes(process.env.FAULT) && p.startsWith('/assets/missing-')) return new Response('',{status:404});
   if(p==='/assets/index-current.js' || p==='/assets/index-previous.js') {
    const kind=p.includes('current')?'current':'previous';
-   const refs=process.env.FAULT==='many' && kind==='current'?Array.from({length:30},(_,i)=>'assets/missing-'+i+'.js'):['assets/lazy-'+kind+'.js','assets/lazy-'+kind+'.css','assets/shared.js'];
+   const refs=['many','many-retry'].includes(process.env.FAULT) && kind==='current'?Array.from({length:30},(_,i)=>'assets/missing-'+i+'.js'):['assets/lazy-'+kind+'.js','assets/lazy-'+kind+'.css','assets/shared.js'];
    return new Response(process.env.FAULT==='map' && kind==='current'?'export const noMap=1;':map(refs),{headers:{'content-type':js}});
   }
   return new Response('fixture',{headers:{'content-type':p.endsWith('.css')?'text/css':js}});
@@ -182,7 +189,7 @@ function smoke(fault = '', stale = false, malformed = false, absent = false, nes
     writeFileSync(join(dir, 'requests.jsonl'), '');
     writeFileSync(join(dir, 'summary.md'), '');
     const result = run('scripts/check-spa-live.mjs', ROOT, {
-      SMOKE_HOSTS: 'https://apex.test https://app.test', SMOKE_RETRIES: fault === 'retry' ? '2' : '1', SMOKE_RETRY_MS: '1',
+      SMOKE_HOSTS: 'https://apex.test https://app.test', SMOKE_RETRIES: fault === 'many-retry' ? '3' : fault === 'retry' ? '2' : '1', SMOKE_RETRY_MS: fault === 'retry' ? '7' : '1',
       SMOKE_TIMEOUT_MS: '100', SKIP_LIVE_SMOKE: '0', SMOKE_BUILD_DIR: dir, SMOKE_PREVIOUS_BUILD: join(dir, 'previous.json'),
       SMOKE_CURRENT_BUILD: artifact || ['current-input', 'missing-current'].includes(fault) ? join(dir, fault === 'missing-current' ? 'missing.json' : 'current.json') : '',
       SMOKE_API_PROBE: '', SMOKE_API_PROBE_LIMITED: '', SMOKE_CONNECTORS_STRICT: '',
@@ -227,6 +234,14 @@ test('#3590: all failed lazy files are fetched but only the first five per build
     printed: (result.stderr.match(/\[spa-live\] FAIL  current build /g) || []).length }, { status: 1, requested: 60, printed: 10 });
 });
 
+test('#3590: widespread missing leaves are attempted in waves before retries', () => {
+  const result = smoke('many-retry');
+  const requested = result.requests.filter(([,p]) => p.startsWith('/assets/missing-'));
+  const wave = Array.from({length:30}, (_,i) => '/assets/missing-'+i+'.js');
+  assert.deepEqual({ status: result.status, requested }, { status: 1,
+    requested: ['https://apex.test','https://app.test'].flatMap(host => [...wave,...wave,...wave].map(p => [host,p])) });
+});
+
 test('#3590: unreadable manifests fail without suppressing existing live probes', () => {
   for (const fault of ['', 'capture-failed', 'current-input', 'missing-current']) {
     const result = smoke(fault, false, fault === '');
@@ -244,7 +259,8 @@ test('#3590: transient entry and lazy-leaf misses recover within the retry budge
   const result = smoke('retry');
   assert.deepEqual({ status: result.status,
     attempts: result.requests.filter(([,p]) => ['/assets/index-current.js','/assets/lazy-current.js'].includes(p)).length,
-  }, { status: 0, attempts: 8 });
+    backoffs: result.requests.filter(([host,p]) => host === 'sleep' && p === '7').length,
+  }, { status: 0, attempts: 8, backoffs: 4 });
 });
 
 test('#3590: a cache miss reports unavailable coverage instead of a previous-build pass', () => {
