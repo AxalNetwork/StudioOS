@@ -182,6 +182,9 @@ test('an introduction request reaches the teammate alone, sends nothing to the c
   const f = fixture();
   try {
     await share(f, 2, true);
+    await share(f, 1, true);
+    assert.equal((await call(f, 4, 'POST', '/api/relationships/intro-request', { teammate: 1, ref: 21 })).status, 404, 'the contact is 2\'s: asking someone else for it is not found');
+    assert.equal((await call(f, 4, 'POST', '/api/relationships/intro-request', { teammate: 4, ref: 21 })).status, 404, 'nor asking myself');
     const ask = await call(f, 4, 'POST', '/api/relationships/intro-request', { teammate: 2, ref: 21, note: 'Met at the demo day.' });
     assert.equal(ask.status, 201, JSON.stringify(ask.body));
     assert.deepEqual([ask.body.request.kind, ask.body.request.status, ask.body.request.person], ['intro_requested', 'pending', { name: 'Synthetic Ada', company: 'Acme' }]);
