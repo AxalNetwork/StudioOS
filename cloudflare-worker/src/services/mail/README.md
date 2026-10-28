@@ -11,7 +11,7 @@ and mail never goes out on Axal's house token: `../email.ts` stays for system ma
 | `intents.ts` | D1341: what a draft is for, by relationship: one table, no imports, read by the Worker and by the composer (#3552). |
 | `contextPack.ts` | D1341: the records a draft may quote for one person (`kind:id`), each read through its module's own read (`../records/read.ts`) or the founder's own engagement rule; a ref the member cannot read is "Record not found." |
 | `blocks.ts` | D1341: live update blocks (KPIs, raise status, project progress, interview insights, the one-liner), computed now under each module's gate; nothing recorded is no block. |
-| `drafts.ts` | D1341: the draft request, the prompt (the ticked records and the blocks only), the model's `{subject, body}`, and the member's own `mail_drafts` rows (migration 648). |
+| `drafts.ts` | D1341: the draft request, the prompt (the ticked records and the blocks only), the model's `{subject, body}`, and the member's own `mail_drafts` rows (migration 648). `runDraft` runs and stores one draft for the route and for D1343's `mail_draft` MCP tool (`../../mcp/tools/mail.ts`). |
 
 The routes are `../../routes/mail_accounts.ts` and `../../routes/mail_drafts.ts`,
 both mounted at `/api/mail`. A new provider adds an adapter in `adapters/` and a

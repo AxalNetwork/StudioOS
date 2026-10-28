@@ -136,7 +136,7 @@ test('overview: 404 with the flag off, 401 signed out; the server, scopes, tools
   const r = await asUser(env, FOUNDER, 'GET', '/api/developer/assistants/overview');
   assert.equal(r.status, 200);
   assert.equal(r.body.server_url, 'https://axal.vc/mcp');
-  assert.deepEqual(r.body.scopes.map((s: any) => s.scope), ['validate:read', 'validate:write', 'build:read', 'raise:read', 'connectors:read']);
+  assert.deepEqual(r.body.scopes.map((s: any) => s.scope), ['validate:read', 'validate:write', 'build:read', 'raise:read', 'connectors:read', 'mail:read', 'mail:write']);
   assert.ok(r.body.scopes.every((s: any) => typeof s.label === 'string' && s.label.length > 0));
   const names = r.body.tools.map((t: any) => t.name);
   assert.deepEqual(names, registeredTools().map((t) => t.name));
