@@ -3,6 +3,9 @@
  *
  * Tiers (rank order):
  *   free          — read-only browse, hard caps on intros/dealrooms/exports
+ *   plus          — D1334: the research workspace (watchlists, AI-assisted
+ *                   research, notes, comparisons) at standard limits: 2
+ *                   dealrooms, 10 intros / quarter. No Professional gate opens.
  *   professional  — pipeline browse, full deals/intros, calendar bookings,
  *                   MI exports, up to 5 dealrooms, 25 intros / quarter
  *   institutional — unlimited dealrooms, Carta sync write, co-invest,
@@ -23,17 +26,23 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
-export type InvestorTier = 'free' | 'professional' | 'institutional';
+import type { InvestorTier } from '../services/investorTiers';
+export type { InvestorTier } from '../services/investorTiers';
+export { paidInvestorTier } from '../services/investorTiers';
 
+/** D1334: Plus sits above free and below professional, so no Professional gate passes it. */
 const TIER_RANK: Record<InvestorTier, number> = {
   free: 0,
-  professional: 1,
-  institutional: 2,
+  plus: 1,
+  professional: 2,
+  institutional: 3,
 };
 
 const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'advisor']);
 
 const TIER_COPY: Record<Exclude<InvestorTier, 'free'>, string> = {
+  plus:
+    'This is an Investor Plus feature. Upgrade for the research workspace, watchlists, and AI-assisted research.',
   professional:
     'This is an Investor Professional feature. Upgrade for full deal flow, intros, and exports.',
   institutional:
@@ -46,12 +55,14 @@ const TIER_COPY: Record<Exclude<InvestorTier, 'free'>, string> = {
  * `GET /api/public/plans-and-packs`.
  */
 const PLAN_KEY: Record<Exclude<InvestorTier, 'free'>, string> = {
+  plus: 'investor:plus',
   professional: 'investor:professional',
   institutional: 'investor:institutional',
 };
 
 export const INVESTOR_QUOTAS: Record<InvestorTier, { intros_per_quarter: number; dealroom_max: number; seats: number }> = {
   free:          { intros_per_quarter: 3,   dealroom_max: 1,        seats: 0 },
+  plus:          { intros_per_quarter: 10,  dealroom_max: 2,        seats: 0 },
   professional:  { intros_per_quarter: 25,  dealroom_max: 5,        seats: 0 },
   institutional: { intros_per_quarter: 100, dealroom_max: 1_000_000, seats: 4 },
 };
@@ -70,6 +81,18 @@ export interface InvestorTierUserCols {
   investor_seat_primary_user_id?: number | null;
 }
 export type InvestorUser = User & InvestorTierUserCols;
+
+/**
+ * D1334: the next paid tier up from `tier`, the one an upsell names. Free
+ * goes to Plus, Plus to Professional, Professional to Institutional; null at
+ * the top.
+ */
+export function nextInvestorTier(tier: InvestorTier): Exclude<InvestorTier, 'free'> | null {
+  if (tier === 'free') return 'plus';
+  if (tier === 'plus') return 'professional';
+  if (tier === 'professional') return 'institutional';
+  return null;
+}
 
 /** True when `userTier` covers `required`. */
 export function investorTierCovers(userTier: string | null | undefined, required: InvestorTier): boolean {

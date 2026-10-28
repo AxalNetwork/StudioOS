@@ -166,6 +166,8 @@ export function monthlyAllowanceFor(user: AllowanceUser): number {
     const tier = lapsed || unpaid ? 'free' : String(user?.investor_tier || 'free').toLowerCase();
     if (tier === 'institutional') return 25;
     if (tier === 'professional') return 10;
+    // D1334: Investor Plus, between Basic and Pro.
+    if (tier === 'plus') return 5;
     return 3;
   }
   const status = user.subscription_status ?? 'active';

@@ -44,7 +44,8 @@ const STUDIO = {
   catalogue: { key: 'founder:studio', label: 'Raise + Grow', sellable: true, sellable_reason: null, included: ['Cap table scenarios and the dilution simulator'] },
 };
 const CATALOGUE = [
-  { key: 'investor:plus', family: 'investor', licence_key: 'investor:plus', matches: null, label: 'Investor Plus', tagline: 'For angel investors.', sellable: false, sellable_reason: 'Investor Plus is not sold yet (D786).', included: ['Investment research workspace'] },
+  // D1334 (#3540): Investor Plus is sold; with no Stripe product mirrored yet it has no price.
+  { key: 'investor:plus', family: 'investor', licence_key: 'investor:plus', matches: { investor_tier: 'plus' }, label: 'Investor Plus', tagline: 'For angel investors.', sellable: true, sellable_reason: null, included: ['Investment research workspace'] },
   { key: 'investor:institutional', family: 'investor', licence_key: 'investor:institutional', matches: { investor_tier: 'institutional' }, label: 'Institutional', tagline: 'For institutional investors.', sellable: false, sellable_reason: 'Priced by our sales team: Contact Sales.', included: ['Shared research workspaces'] },
   { key: 'founder:studio', family: 'founder', licence_key: 'founder:studio', matches: { tier: 'studio' }, label: 'Raise + Grow', sellable: true, sellable_reason: null, included: [] },
 ];
@@ -110,7 +111,7 @@ test('openCheckout: one event with the plan key, the interval, where it came fro
 test('planForKey: the priced row by catalogue key, or the catalogue entry with no price; never a free row', () => {
   assert.equal(planForKey(READ, 'founder:studio'), STUDIO);
   const plus = planForKey(READ, 'investor:plus');
-  assert.deepEqual([plus.family, plus.plan_name, plus.prices, plus.catalogue.key, plus.catalogue.sellable], ['investor', 'Investor Plus', [], 'investor:plus', false]);
+  assert.deepEqual([plus.family, plus.plan_name, plus.prices, plus.catalogue.key, plus.catalogue.sellable], ['investor', 'Investor Plus', [], 'investor:plus', true]);
   assert.equal(planForKey(READ, 'founder:free'), null);
   assert.equal(planForKey(READ, 'founder:nothing'), null);
   assert.equal(planForKey(null, 'founder:studio'), null);
@@ -118,7 +119,8 @@ test('planForKey: the priced row by catalogue key, or the catalogue entry with n
 
 test('the plan an Upgrade or Change plan offers, by profile and what is held', () => {
   assert.deepEqual(['free', 'growth', 'studio', null].map((t) => nextPlanKey('founder', t)), ['founder:growth', 'founder:studio', null, null]);
-  assert.deepEqual(['free', 'professional', 'institutional'].map((t) => nextPlanKey('investor', t)), ['investor:professional', null, null]);
+  // D1334: Free → Plus → Pro; Institutional is sales'.
+  assert.deepEqual(['free', 'plus', 'professional', 'institutional'].map((t) => nextPlanKey('investor', t)), ['investor:plus', 'investor:professional', null, null]);
   assert.deepEqual([nextPlanKey('advisor', 'free'), nextPlanKey('partner', 'free'), nextPlanKey('partner', 'pro'), nextPlanKey('admin', 'free'), nextPlanKey('exploring', 'free')],
     ['advisor:pro', 'partner:pro', null, null, null]);
   assert.equal(changePlanKey('founder', 'studio'), 'founder:growth', 'the top Founder plan changes down');
@@ -126,8 +128,8 @@ test('the plan an Upgrade or Change plan offers, by profile and what is held', (
   assert.deepEqual([heldOfStatus('founder', { tier: 'growth' }), heldOfStatus('investor', {}), heldOfStatus('advisor', { plan_group: 'advisor', status: 'past_due' }),
     heldOfStatus('partner', { plan_group: 'partner', status: 'canceled' }), heldOfStatus('advisor', { plan_group: 'partner', status: 'active' }), heldOfStatus('admin', {})],
   ['growth', 'free', 'pro', 'free', 'free', null]);
-  assert.deepEqual(['growth', 'studio', 'professional', 'investor_institutional', 'free', ''].map(planKeyOfTier),
-    ['founder:growth', 'founder:studio', 'investor:professional', 'investor:institutional', null, null]);
+  assert.deepEqual(['growth', 'studio', 'plus', 'professional', 'investor_institutional', 'free', ''].map(planKeyOfTier),
+    ['founder:growth', 'founder:studio', 'investor:plus', 'investor:professional', 'investor:institutional', null, null]);
   assert.deepEqual([familyOfKey('partner:pro'), familyOfKey('lp_access'), familyOfKey(null)], ['partner', null, null]);
 });
 
@@ -136,10 +138,11 @@ test('PAYX13–16: who pays here — a licence administrator is staff, and a pla
   assert.ok(STAFF_ROLES.has('branch_admin'));
   const plus = planForKey(READ, 'investor:plus');
   const inst = { ...planForKey(READ, 'investor:institutional'), prices: [price(90000, 'month')] };
-  assert.equal(sheetMode({ role: 'investor', plan: plus }), 'notsold');
+  // D1334: Plus is sold. With no price mirrored it cannot be paid yet; with one, it pays.
+  assert.equal(sheetMode({ role: 'investor', plan: plus }), 'unsellable');
+  assert.equal(sheetMode({ role: 'investor', plan: { ...plus, prices: [price(5000, 'month')] }, held: 'free' }), 'pay');
   assert.equal(sheetMode({ role: 'investor', plan: inst }), 'notsold', 'a Stripe price does not make Institutional sold here');
   assert.equal(sheetMode({ role: 'founder', plan: plus }), 'other', 'another profile’s plan says so first');
-  assert.deepEqual(notSoldView(plus), { title: 'Not offered yet', line: 'Investor Plus is not sold yet (D786).', contact: false });
   assert.equal(notSoldView(inst).title, 'Contact sales');
   assert.equal(notSoldView(inst).contact, true);
   assert.equal(sheetMode({ role: 'founder', plan: STUDIO, held: 'free' }), 'pay', 'a sold plan pays as before');
@@ -210,12 +213,12 @@ async function sheet(props, routes = {}) {
   return { ...v, calls, async close() { await v.close(); Object.assign(checkoutApi, saved); } };
 }
 
-test('PAYX13: Investor Plus is Not offered yet and Institutional is Contact sales, each with no price, no quote and no Pay', async () => {
+test('PAYX13: Investor Plus with no price mirrored yet is not on sale (D1334), and Institutional is Contact sales, each with no price, no quote and no Pay', async () => {
   const user = { role: 'investor', investor_tier: 'free' };
   const plus = await sheet({ user, role: 'investor', plan: planForKey(READ, 'investor:plus') });
   try {
-    assert.match(plus.text('checkout-mode-notsold'), /Not offered yetInvestor Plus is not sold yet \(D786\)\./);
-    assert.match(plus.text('checkout-summary'), /Investor Plus.*Investment research workspace/s);
+    assert.ok(!plus.has('checkout-mode-notsold'), 'Plus is no longer "not offered" (D786 replaced by D1334)');
+    assert.match(plus.text('checkout-sheet'), /Not read here yet/, 'no price is on sale until Stripe\'s product is mirrored');
     assert.ok(!plus.has('checkout-pay') && !plus.has('checkout-price'), 'no price and no Pay');
     assert.deepEqual(plus.calls, [], 'nothing is quoted');
   } finally { await plus.close(); }

@@ -77,7 +77,8 @@ for (const [fields, expected] of [
   [{ role: 'investor', investor_tier: 'professional', investor_subscription_status: 'active' }, 'investor:professional'],
   [{ role: 'investor', investor_tier: 'institutional', investor_subscription_status: 'active' }, 'investor:institutional'],
   [{ role: 'investor', investor_tier: 'professional', investor_subscription_status: 'unpaid' }, 'investor:free'],
-  [{ role: 'investor', investor_tier: 'plus', investor_subscription_status: 'active' }, 'investor:free'],
+  // D1334 (#3540): Plus is a held plan now.
+  [{ role: 'investor', investor_tier: 'plus', investor_subscription_status: 'active' }, 'investor:plus'],
   [{ role: 'advisor' }, 'advisor:free'], [{ role: 'partner' }, 'partner:free'], [{ role: 'exploring' }, 'other'],
 ] as const) test(`effective licence → ${expected}: ${JSON.stringify(fields)}`, async () => {
   const f = world();
@@ -225,7 +226,7 @@ async function publicWorld() {
     ['growth', { tier: 'growth' }], ['studio', { tier: 'studio' }],
     ['professional', { investor_tier: 'professional' }], ['institutional', { investor_tier: 'institutional' }],
     ['advisor', { plan_group: 'advisor' }], ['partner', { plan_group: 'partner' }], ['mi', { plan: 'mi_pro' }],
-    ['plus-not-sold', { investor_tier: 'plus' }],
+    ['plus', { investor_tier: 'plus' }],
   ] as const;
   for (const [id, meta] of products) f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES(?,?,?,?,?,?)')
     .run(id, id, 'subscription', 1, JSON.stringify(meta), JSON.stringify([{ id: `price_${id}`, active: true, unit_amount: 2000, currency: 'usd', interval: 'month', interval_count: 1 }]));
@@ -260,9 +261,9 @@ test('mounted public read, existing catalogue and resolver accessor agree; no pr
       assert.equal(row.free, true, key); assert.equal(row.product_id, null); assert.deepEqual(row.prices, []);
     }
     const plus = body.plans.filter((p: any) => p.licence_key === 'investor:plus');
-    assert.equal(plus.length, 1); assert.equal(plus[0].catalogue.sellable, false);
-    assert.match(plus[0].catalogue.sellable_reason, /not sold yet/); assert.deepEqual(plus[0].prices, []); assert.equal(plus[0].free, false);
-    assert.equal(body.plans.some((p: any) => p.product_id === 'plus-not-sold'), false);
+    // D1334 (#3540): the mirrored Plus product is the one Plus row, sold, with its price; no placeholder beside it.
+    assert.equal(plus.length, 1); assert.equal(plus[0].catalogue.sellable, true); assert.equal(plus[0].catalogue.sellable_reason, null);
+    assert.equal(plus[0].product_id, 'plus'); assert.equal(plus[0].prices.length, 1); assert.equal(plus[0].free, false);
     const mi = body.plans.find((p: any) => p.product_id === 'mi');
     assert.equal(mi.storage_bytes, null); assert.equal(mi.storage_plan_key, null); assert.match(mi.storage_reason, /profile plan/);
     assert.equal(body.plans.find((p: any) => p.product_id === 'studio').storage_bytes, storagePlan('founder:studio')!.allowance_bytes);

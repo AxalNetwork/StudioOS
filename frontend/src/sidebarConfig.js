@@ -57,7 +57,8 @@ export function hasTier(user, requiredTier) {
 // `userMeetsInvestorTier`. Bypass roles (admin/partner/advisor) always pass.
 // Trialing/active are honoured via the `investor_subscription_status` column;
 // past_due/unpaid/cancelled drop the user to free.
-const INVESTOR_RANK = { free: 0, professional: 1, institutional: 2 };
+// D1334: Plus sits between Basic and Pro, so a Professional row stays locked for it.
+const INVESTOR_RANK = { free: 0, plus: 1, professional: 2, institutional: 3 };
 const INVESTOR_BYPASS_ROLES = new Set(['admin', 'partner', 'advisor']);
 export function hasInvestorTier(user, required) {
   if (!required || required === 'free') return true;

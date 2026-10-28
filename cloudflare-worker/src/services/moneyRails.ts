@@ -18,6 +18,7 @@
  * `test/fund_modules_no_stripe_d707.test.ts` walks `FUND_MODULES` to prove it.
  */
 import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
+import { paidInvestorTier } from './investorTiers';
 
 const N = (key: AxalEntityKey) => AXAL_ENTITIES[key].name;
 
@@ -136,7 +137,7 @@ export function moneyKindForCatalogPrice(
 ): StripeMoneyKind {
   if (price?.type === 'recurring') {
     const tier = product?.metadata?.investor_tier;
-    return tier === 'professional' || tier === 'institutional' ? 'investor_tier' : 'platform_plan';
+    return paidInvestorTier(tier) ? 'investor_tier' : 'platform_plan';
   }
   return 'marketplace';
 }

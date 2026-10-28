@@ -9,7 +9,7 @@ import { limitRefusal, noteSpendThresholds } from './aiSpendLimit';
 export const AI_USD_SCALE = 1_000_000;
 export const AI_CAP_DEFAULTS = { day: 5, month: 50, orgMonth: 5000 } as const;
 export const AI_CAP_VARS = { day: 'WORKERS_AI_BUDGET_USD_DAY', month: 'WORKERS_AI_BUDGET_USD_MONTH' } as const;
-export const AI_LICENCE_KEYS = ['founder:free','founder:growth','founder:studio','investor:free','investor:professional','investor:institutional','advisor','partner','admin','other'] as const;
+export const AI_LICENCE_KEYS = ['founder:free','founder:growth','founder:studio','investor:free','investor:plus','investor:professional','investor:institutional','advisor','partner','admin','other'] as const;
 export type AiLicenceKey = typeof AI_LICENCE_KEYS[number];
 /**
  * D762: the multiplier a member's runs are settled at (`chargeMultiplier`), from

@@ -29,12 +29,13 @@ export const KINDS = [
 /**
  * The plan families and their levels. Each level is a /pricing card
  * (`PLAN_CARDS`) or Market Intelligence, with the metadata `planOf` reads.
- * A level no checkout sells (Investor Plus: no `investor_tier` names it) has
- * no metadata, and the dialog says so instead of creating it.
+ * A level no checkout sells has no metadata, and the dialog says so instead
+ * of creating it. Investor Plus is sold since D1334 (`investor_tier: plus`).
  */
 const LEVEL_META = {
   'founder:growth': { tier: 'growth' },
   'founder:studio': { tier: 'studio' },
+  'investor:plus': { investor_tier: 'plus' },
   'investor:professional': { investor_tier: 'professional' },
   advisor: { plan_group: 'advisor' },
   partner: { plan_group: 'partner' },
@@ -65,7 +66,7 @@ export const PLAN_FAMILIES = [
 export function planKeyOf(metadata) {
   const m = metadata || {};
   if (m.tier === 'growth' || m.tier === 'studio') return `founder:${m.tier}`;
-  if (m.investor_tier === 'professional' || m.investor_tier === 'institutional') return `investor:${m.investor_tier}`;
+  if (m.investor_tier === 'plus' || m.investor_tier === 'professional' || m.investor_tier === 'institutional') return `investor:${m.investor_tier}`;
   if (m.plan_group === 'advisor' || m.plan_group === 'partner') return m.plan_group;
   if (m.plan === 'mi_pro') return 'market_intelligence';
   return null;

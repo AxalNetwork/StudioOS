@@ -152,6 +152,18 @@ export const BUNDLE_CONTENT = {
       'Dedicated partnerships desk',
     ],
   },
+  // D1334: the /pricing card's own lines (`lib/sitePricing.js`).
+  'Investor — Plus': {
+    persona: 'Angel investors, independent investors and investment professionals.',
+    features: [
+      'Investment research workspace',
+      'Watchlists and opportunity tracking',
+      'AI-assisted investment research',
+      'Personal investment notes',
+      'Deal comparisons',
+      'Standard research usage limits',
+    ],
+  },
   'Investor — Professional': {
     persona: 'Angels and emerging managers deploying $250K–$2M annually across direct deals and syndicates.',
     features: [
@@ -203,6 +215,7 @@ export const MOST_POPULAR_BUNDLE = 'Investor — Professional';
 const CONTENT_BY_METADATA = [
   [(m) => m.tier === 'growth', 'Founder — Growth'],
   [(m) => m.tier === 'studio', 'Founder — Studio'],
+  [(m) => m.investor_tier === 'plus', 'Investor — Plus'],
   [(m) => m.investor_tier === 'professional', 'Investor — Professional'],
   [(m) => m.investor_tier === 'institutional', 'Investor — Institutional'],
   [(m) => m.plan_group === 'advisor', 'Advisor'],

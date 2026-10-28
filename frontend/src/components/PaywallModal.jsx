@@ -46,6 +46,14 @@ export const TIER_PLANS = {
     lead: 'Everything in Validate + Build, plus:',
     features: ['Pitch decks: every template, share links, your branding', 'Cap table scenarios and the dilution simulator', 'Capital, funds and the data room', 'Legal, compliance and the 83(b)', 'Advisor booking and partner office hours', 'Accept up to 25 introductions a month'],
   },
+  // D1334: Investor Plus, sold monthly between Basic and Pro.
+  plus: {
+    key: 'investor:plus',
+    label: 'Investor Plus',
+    blurb: 'For angel investors, independent investors and investment professionals.',
+    plan: 'investor_plus_monthly',
+    features: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
+  },
   professional: {
     key: 'investor:professional',
     label: 'Investor Pro',
@@ -63,8 +71,8 @@ export const TIER_PLANS = {
 };
 
 const FOUNDER_RANK = { free: 0, growth: 1, studio: 2 };
-const INVESTOR_RANK = { free: 0, professional: 1, institutional: 2 };
-const INVESTOR_TIERS = new Set(['professional', 'institutional']);
+const INVESTOR_RANK = { free: 0, plus: 1, professional: 2, institutional: 3 };
+const INVESTOR_TIERS = new Set(['plus', 'professional', 'institutional']);
 
 export function openPaywall(required = 'growth', message = '', feature = '') {
   if (typeof window === 'undefined') return;
@@ -113,7 +121,7 @@ export default function PaywallModal({ user }) {
       const r = raw === 'investor_professional' ? 'professional'
         : raw === 'investor_institutional' ? 'institutional'
         : raw;
-      const norm = (r === 'studio' || r === 'professional' || r === 'institutional') ? r : 'growth';
+      const norm = (r === 'studio' || INVESTOR_TIERS.has(r)) ? r : 'growth';
       // Auto-fires (background 402 from api.js, fired by data fetches on
       // page load) are gated to once-per-session per tier so refreshing the
       // page doesn't keep re-opening the same upsell. Explicit user actions
@@ -158,7 +166,9 @@ export default function PaywallModal({ user }) {
   if (isInvestorMode) {
     const userTier = String(user?.investor_tier || 'free').toLowerCase();
     const userRank = INVESTOR_RANK[userTier] ?? 0;
-    tiersToShow = ['professional', 'institutional'].filter((t) => INVESTOR_RANK[t] > userRank);
+    // D1334: only the plans that unlock what was asked for; Plus never opens a Pro feature.
+    tiersToShow = ['plus', 'professional', 'institutional']
+      .filter((t) => INVESTOR_RANK[t] >= INVESTOR_RANK[required] && INVESTOR_RANK[t] > userRank);
     if (tiersToShow.length === 0) tiersToShow = [required];
   } else {
     const userTier = String(user?.subscription_tier || 'free').toLowerCase();

@@ -19,7 +19,7 @@
  *   - `licence_key` and `matches`: the Stripe product metadata the plan is
  *     sold under, as `planOf` (`services/aiCredits.ts`) reads it. Null for a
  *     plan with no product (a free plan, LP access, staff);
- *   - `sellable` and `sellable_reason`. Investor Plus is not sold (D786);
+ *   - `sellable` and `sellable_reason`. Investor Plus is sold since D1334;
  *   - `storage` and `best_suited_for`: D1167's projection of storagePlans.ts,
  *     the owner's table on #2449, with a reason for negotiated/staff values;
  *   - `included`: the lines the plan includes, the Pricing card's own
@@ -50,7 +50,6 @@ export type CatalogueEntry = {
 
 export const NOT_SOLD = {
   free: 'A free plan: nothing to buy.',
-  plus: 'Investor Plus is not sold yet (D786).',
   custom: 'Priced by our sales team: Contact Sales.',
   lp: 'Free with an investment in an Axal VC fund.',
   staff: 'Staff accounts hold no plan.',
@@ -88,9 +87,9 @@ const SPECS: Spec[] = [
     included: ['Public deal index', 'Watchlists', 'Read-only market pulses', TOP_UP],
   },
   {
-    // D786: on the Pricing page, and not sold. `planOf` maps no product to it.
-    key: 'investor:plus', family: 'investor', name: 'Investor Plus', tagline: 'For angel investors, independent investors and investment professionals.', licence_key: 'investor:plus', matches: null,
-    sellable: false, sellable_reason: NOT_SOLD.plus,
+    // D1334 (#3540): sold monthly, between Basic and Pro. `planOf` maps `investor_tier=plus` to it.
+    key: 'investor:plus', family: 'investor', name: 'Investor Plus', tagline: 'For angel investors, independent investors and investment professionals.', licence_key: 'investor:plus', matches: { investor_tier: 'plus' },
+    sellable: true,
     included: ['Investment research workspace', 'Watchlists and opportunity tracking', 'AI-assisted investment research', 'Personal investment notes', 'Deal comparisons', 'Standard research usage limits'],
   },
   {

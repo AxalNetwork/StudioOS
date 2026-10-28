@@ -139,13 +139,13 @@ test('D630: a full quota reads full, and the join it predicts is refused with th
   assert.equal(logs(db, 'deal_invitation_requested').length, 0, 'a refused join records no join');
 });
 
-test('D630: a Free plan names Professional and its cap; Institutional and a partner read Unlimited', async () => {
+test('D630: a Free plan names Plus (D1334) and its cap; Institutional and a partner read Unlimited', async () => {
   const db = freshDb();
   db.prepare(`UPDATE users SET investor_tier = 'free', investor_subscription_status = 'free', investor_dealroom_max = 1 WHERE id = ?`).run(STRANGER);
   const free = await call(db, STRANGER, '/api/deals/dealroom/quota');
   assert.equal(free.body.cap, 1);
-  assert.equal(free.body.upgrade_to, 'professional');
-  assert.equal(free.body.upgrade_cap, 5, 'the next plan’s cap comes from INVESTOR_QUOTAS');
+  assert.equal(free.body.upgrade_to, 'plus', 'D1334: Free\'s next plan is Plus');
+  assert.equal(free.body.upgrade_cap, 2, 'the next plan’s cap comes from INVESTOR_QUOTAS');
   for (const who of [INST, PARTNER]) {
     const r = await call(db, who, '/api/deals/dealroom/quota');
     assert.equal(r.status, 200);

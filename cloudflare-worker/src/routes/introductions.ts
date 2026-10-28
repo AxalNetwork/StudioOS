@@ -32,6 +32,7 @@ import {
   ensureInvestorPaywallSchema,
   getIntroQuotaState,
   effectiveInvestorTier,
+  nextInvestorTier,
   type InvestorUser,
 } from '../middleware/requireInvestorTier';
 import {
@@ -96,7 +97,7 @@ introductions.post('/request', async (c) => {
     return c.json({ error: 'target_required', message: 'Provide founder_user_id, founder_id, or project_id' }, 400);
   }
 
-  // Quota check — paywall gate. Free investors get 3/quarter, Pro 25, Inst 100.
+  // Quota check — paywall gate. Free investors get 3/quarter, Plus 10 (D1334), Pro 25, Inst 100.
   const state = await getIntroQuotaState(c.env, user.id);
   if (state.used >= state.cap) {
     return c.json(
@@ -107,7 +108,7 @@ introductions.post('/request', async (c) => {
         used: state.used,
         cap: state.cap,
         tier: state.tier,
-        upgrade_to: state.tier === 'free' ? 'professional' : 'institutional',
+        upgrade_to: nextInvestorTier(state.tier),
         checkout_path: '/api/billing/investor/checkout',
       },
       402,

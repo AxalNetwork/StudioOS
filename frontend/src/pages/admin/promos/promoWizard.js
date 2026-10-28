@@ -24,7 +24,7 @@ export const MONTHS_MAX = 36;
 export function planKeyOfProduct(p) {
   const m = p?.metadata || {};
   if (m.tier === 'growth' || m.tier === 'studio') return `tier:${m.tier}`;
-  if (m.investor_tier === 'professional' || m.investor_tier === 'institutional') return `investor:${m.investor_tier}`;
+  if (m.investor_tier === 'plus' || m.investor_tier === 'professional' || m.investor_tier === 'institutional') return `investor:${m.investor_tier}`;
   if (typeof m.plan_group === 'string' && m.plan_group.trim()) return `plan:${m.plan_group.trim()}`;
   if (m.plan === 'mi_pro') return 'mi:mi_pro';
   return null;
