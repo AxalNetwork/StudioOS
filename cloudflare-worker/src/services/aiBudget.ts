@@ -5,6 +5,7 @@ import { effectiveInvestorTier } from '../middleware/requireInvestorTier';
 import { planAllowanceFor, type PlanAllowance } from './planAllowance';
 import { chargeMultiplier } from './ai/pricing';
 import { limitRefusal, noteSpendThresholds } from './aiSpendLimit';
+import { hydrateSuperAdmin, isSuperAdmin } from '../auth';
 
 export const AI_USD_SCALE = 1_000_000;
 export const AI_CAP_DEFAULTS = { day: 5, month: 50, orgMonth: 5000 } as const;
@@ -72,6 +73,15 @@ export async function memberAiCap(env: Env, userId: number): Promise<number | nu
     throw e;
   }
 }
+/**
+ * D1363: a Super Admin's AI is never refused for its allowance or balance.
+ * Their caps are this figure ($1 billion a day and a month in micro-USD, a
+ * number no run meets), so every hold is taken from the included allowance and
+ * the top-up balance is never touched. Spend is still counted and every run is
+ * still recorded: HQ › AI usage shows it like anyone's. A pause (D791) and the
+ * member's own spend limit (D788) still apply, as both are set on purpose.
+ */
+export const SUPER_ADMIN_AI_MICROUSD = 1_000_000_000_000_000;
 /** D783: the one licence whose caps are still typed on HQ. It is staff, not revenue. */
 export const TYPED_CAP_LICENCES: ReadonlySet<AiLicenceKey> = new Set<AiLicenceKey>(['admin']);
 /**
@@ -90,6 +100,10 @@ export async function resolveAiCaps(env: Env, userId:number) {
   const own = await memberAiCap(env, userId);
   const capped = (monthly: number) => (own !== null && own < monthly ? own : monthly);
   const ownCap = own !== null ? { member_cap_microusd: own } : {};
+  if (licence === 'admin' && isSuperAdmin(await hydrateSuperAdmin(env, user))) {
+    return { licence, source: 'super_admin', unlimited: true, daily_capped: false,
+      daily_microusd: SUPER_ADMIN_AI_MICROUSD, monthly_microusd: SUPER_ADMIN_AI_MICROUSD, plan: null };
+  }
   if (!TYPED_CAP_LICENCES.has(licence)) {
     const plan = await planAllowanceFor(env, user);
     const monthly = capped(amount(plan.monthly_microusd));

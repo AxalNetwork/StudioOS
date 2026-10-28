@@ -388,7 +388,10 @@ export function RailUsage({ reading }) {
   // D783: a member has no daily limit, so the box shows the month only; with no plan, the no-plan line.
   const rows = [
     ...(dayCapped(b) ? [{ t: 'Today', spent: b.day_spend_microusd, cap: b.daily_microusd, reset: 'Resets at 00:00 UTC', id: 'today' }] : []),
-    ...(noPlan(b) ? [] : [{ t: 'This month', spent: b.month_spend_microusd, cap: b.monthly_microusd, reset: 'Resets on the 1st', id: 'month' }]),
+    // D1363: a Super Admin's month has no limit: the spend, never a billion-dollar cap.
+    ...(noPlan(b) ? [] : [b.unlimited === true
+      ? { t: 'This month', spent: b.month_spend_microusd, cap: null, reset: 'No limit (Super Admin)', id: 'month' }
+      : { t: 'This month', spent: b.month_spend_microusd, cap: b.monthly_microusd, reset: 'Resets on the 1st', id: 'month' }]),
   ];
   const topUp = topUpState(reading.product, reading.productError);
   return (
@@ -404,7 +407,9 @@ export function RailUsage({ reading }) {
         const meter = r.cap > 0 ? spendMeter(r.spent, r.cap) : null;
         return (
           <div key={r.id} className="fwr-usage-row" data-testid={`text-worker-rail-usage-${r.id}`}>
-            <div className="fwr-usage-line"><span>{r.t}</span><b title={`${microMoney(r.spent)} of ${microMoney(r.cap)}`}>{`${usageMoney(r.spent)} of ${microMoney(r.cap)}`}</b></div>
+            <div className="fwr-usage-line"><span>{r.t}</span>{r.cap === null
+              ? <b title={microMoney(r.spent)}>{`${usageMoney(r.spent)} · No limit`}</b>
+              : <b title={`${microMoney(r.spent)} of ${microMoney(r.cap)}`}>{`${usageMoney(r.spent)} of ${microMoney(r.cap)}`}</b>}</div>
             {meter && (
               <div className="fwr-meter" role="presentation">
                 <i className={meter.over ? 'fwr-over' : undefined} style={{ width: `${meter.fraction * 100}%` }} />

@@ -140,7 +140,10 @@ export function allowanceView(b, now = new Date()) {
       used: microUsd(b.day_spend_microusd), of: microUsd(b.daily_microusd),
       pct: pct(dayTaken, b.daily_microusd), reset: `Resets at 00:00 UTC · ${resetIn}`,
     },
-    month: noMonthly ? null : {
+    // D1363: a Super Admin's AI has no limit; the spend is still shown.
+    month: noMonthly ? null : b.unlimited === true ? {
+      used: microUsd(b.month_spend_microusd), of: 'No limit', pct: 0, reset: 'Super Admin: AI runs are never refused for the allowance', unlimited: true,
+    } : {
       used: microUsd(b.month_spend_microusd), of: microUsd(b.monthly_microusd),
       pct: pct(monthTaken, b.monthly_microusd), reset: 'Resets on the 1st at 00:00 UTC',
     },

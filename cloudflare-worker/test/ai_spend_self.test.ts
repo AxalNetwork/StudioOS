@@ -185,15 +185,24 @@ test('the task breakdown covers the month and sums to the month total', async ()
 // ---------- caps ----------
 
 test('the admin licence\'s caps come from the env vars the router enforces, with its defaults', async () => {
-  const { env: e } = env();
+  const { env: e, db } = env();
+  db.exec('DELETE FROM super_admins'); // a plain admin: a Super Admin has no cap (D1363)
   const d = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
   assert.equal(d.month.cap_usd, SPEND_CAP_DEFAULTS.month);
   assert.equal(d.today.cap_usd, SPEND_CAP_DEFAULTS.day);
 
-  const { env: e2 } = env({ [SPEND_CAP_VARS.month]: '250', [SPEND_CAP_VARS.day]: '12' });
+  const { env: e2, db: db2 } = env({ [SPEND_CAP_VARS.month]: '250', [SPEND_CAP_VARS.day]: '12' });
+  db2.exec('DELETE FROM super_admins');
   const o = await loadMyAiSpend(e2, { id: 1, role: 'admin' }, AT);
   assert.equal(o.month.cap_usd, 250);
   assert.equal(o.today.cap_usd, 12);
+});
+
+test('D1363: a Super Admin\'s meter has no cap, never a billion-dollar one', async () => {
+  // Mutation checked: keep monthly_microusd / 1e6 for a Super Admin → cap 1000000000.
+  const { env: e } = env();
+  const d = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
+  assert.deepEqual([d.month.cap_usd, d.today.cap_usd], [null, null]);
 });
 
 test('D783: a member\'s cap is their plan\'s share each month, with no day cap and no env var', async () => {
@@ -207,7 +216,8 @@ test('D783: a member\'s cap is their plan\'s share each month, with no day cap a
 test('a nonsense cap falls back to the default rather than to zero', async () => {
   // A zero cap would make the meter read "over plan" for every user at once.
   for (const bad of ['', 'abc', '0', '-5', 'NaN']) {
-    const { env: e } = env({ [SPEND_CAP_VARS.month]: bad });
+    const { env: e, db } = env({ [SPEND_CAP_VARS.month]: bad });
+    db.exec('DELETE FROM super_admins');
     const r = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
     assert.equal(r.month.cap_usd, SPEND_CAP_DEFAULTS.month, `cap ${JSON.stringify(bad)}`);
   }
