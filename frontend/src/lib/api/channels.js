@@ -42,6 +42,9 @@
 //   calls            GET    /founder/validate/meetings           D878 (#2525): { calls, uploads, audio, retention }
 //   botAvailability  GET    /founder/validate/meetings/bot       D1346 (#3554): { available, platforms, limit_minutes, price }
 //   instantMeeting   POST   /founder/validate/meetings/instant   D1346 (#3554): { provider, duration_min? } → { provider, join_url }
+//   meetingCapabilities GET /founder/validate/meetings/capabilities  D1358: per provider, what Axal can really do for this member
+//   saveZoomCall     POST   /founder/validate/interviews/:id/meetings  D1358: { attach: { join_url }, consent, provider: 'zoom' } with no
+//                                                       session: a hosted Zoom call saved for import after it ends
 //   googleStatus     GET    /calendar/google/status        → { connected, meet_transcripts: 'granted' | 'available' | 'not_set_up', … } (D757, #1926)
 //   allowMeetTranscripts POST /calendar/google/meet-transcripts/connect?return_to=  then the page goes to Google's consent (D757, #1926)
 //
@@ -196,6 +199,16 @@ export const channelsApi = {
       method: 'POST', body: JSON.stringify({ attach, consent, provider: 'google_meet' }),
     });
   },
+  /**
+   * D1358: a Zoom call the member hosts, saved for import after it ends. The
+   * Worker opens the call's own session; nothing is recorded in the browser.
+   * A retry answers the first save (`existing: true`).
+   */
+  saveZoomCall: (interviewId, { join_url, consent }) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings`, {
+    method: 'POST', body: JSON.stringify({ attach: { join_url }, consent, provider: 'zoom' }),
+  }),
+  /** D1358: what each meeting platform can really do for this member (bot, import, create). Flags and sentences only. */
+  meetingCapabilities: () => request('/founder/validate/meetings/capabilities'),
   /** D871: a Meet call's Drive recordings, for "Download it, then upload it here". Never the file itself. */
   meetingRecording: (interviewId, refUid) =>
     request(`/founder/validate/interviews/${enc(interviewId)}/meetings/${enc(refUid)}/recording`),

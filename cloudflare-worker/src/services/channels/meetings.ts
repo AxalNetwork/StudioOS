@@ -170,9 +170,17 @@ export async function setRefStatus(env: Env, refId: number, status: MeetingStatu
 
 /** Zoom said the call ended. Only a call still waiting to happen moves. */
 export async function markEnded(env: Env, refId: number): Promise<boolean> {
+  // D1358: a call saved for import with no end (attached without a recording,
+  // its session opened for the call itself) takes the provider's end now, so
+  // the sweep can find it if the transcript event is lost. A link pasted for a
+  // recording in progress keeps waiting for Stop (closeAttachedRefs).
   const res = await env.DB.prepare(
-    `UPDATE interview_channel_refs SET status = 'ended', updated_at = datetime('now') WHERE id = ? AND status = 'scheduled'`,
-  ).bind(refId).run();
+    `UPDATE interview_channel_refs SET status = 'ended', updated_at = datetime('now'),
+       ends_at = CASE WHEN ends_at IS NULL AND EXISTS (
+         SELECT 1 FROM interview_sessions s WHERE s.id = interview_channel_refs.session_id
+            AND s.submitted_via = interview_channel_refs.provider) THEN ? ELSE ends_at END
+     WHERE id = ? AND status = 'scheduled'`,
+  ).bind(new Date().toISOString(), refId).run();
   return Number(res.meta?.changes ?? 0) > 0;
 }
 

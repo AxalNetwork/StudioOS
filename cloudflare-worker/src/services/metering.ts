@@ -79,6 +79,10 @@ export const METERING_POLICY: MeteringPolicy = Object.freeze({
     [toolOperation('get_meeting_transcript')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('summarize_meeting')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('extract_action_items')]: { price_microusd: 0, unit: 'call' },
+    // D1343's Email tools. mail_draft's model run holds and settles its own AI
+    // tokens through aiRouter (runDraft), so its tool fee is 0 (the composite rule).
+    [toolOperation('mail_context')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('mail_draft')]: { price_microusd: 0, unit: 'call' },
   }) as Record<string, MeteredOperation>,
 });
 
@@ -107,6 +111,8 @@ export const OPERATION_INFO: Readonly<Record<string, { label: string; source: Pr
   [toolOperation('get_meeting_transcript')]: { label: 'Read a meeting transcript', source: 'axal', ai: false },
   [toolOperation('summarize_meeting')]: { label: 'Summarize a meeting', source: 'axal', ai: true },
   [toolOperation('extract_action_items')]: { label: 'Extract action items', source: 'axal', ai: true },
+  [toolOperation('mail_context')]: { label: 'Read an email’s context', source: 'axal', ai: false },
+  [toolOperation('mail_draft')]: { label: 'Draft an email with Eadwyn', source: 'axal', ai: true },
 });
 
 /**

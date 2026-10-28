@@ -29,7 +29,8 @@ function remote(source){
 test('site bindings target the separate production and preview host, never a local class',()=>{
   const configured=withMeetingBotBinding(site);
   assert.equal(withMeetingBotBinding(configured),configured);
-  assert.doesNotMatch(site,/MEETING_BOT_CONTAINER/);
+  // Provisioned (2026-10-28, after both bot hosts deployed): the site carries exactly the configured bindings.
+  assert.equal(site,configured);
   remote(configured);assert.throws(()=>remote(configured.replace('script_name = "studioos-meeting-bot"','script_name = "studioos"')));remote(configured);
   const sections=parseSections(bot),root=bindings(sections,''),preview=bindings(sections,'env.preview.');
   assert.deepEqual(preview,root);

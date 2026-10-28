@@ -13,6 +13,9 @@
  *                                          descriptions are the server's words, marked untrusted
  *   POST   /:uid/tools/:name/approve       approve one read tool, pinned to the schema shown
  *   DELETE /:uid/tools/:name/approve       withdraw it
+ *   POST   /:uid/tools/:name/mail-send     D1343: designate the one tool that sends the member's email (a write,
+ *                                          never destructive, taking { to, subject, body }), pinned to the schema shown
+ *   DELETE /:uid/tools/:name/mail-send     withdraw it; a mailbox on it stops sending
  *   POST   /:uid/health                    one session: reachable, signed in, and drift
  *   DELETE /:uid                           revoke: the server's endpoint when it has one, then everything deleted
  *
@@ -38,7 +41,7 @@ import { ensureIntegrationsSchema, type IntegrationRow } from '../integrations/r
 import { encryptCredentials, type CredentialBlob } from '../integrations/secrets';
 import { isSupportSession } from '../integrations/providers/mercury';
 import {
-  approveCustomTool, authorizeMcpUrl, checkCustomHealth, completeCustomSignIn, configOf, customCount, customKey, customMcpEnabled,
+  approveCustomTool, approveMailSendTool, authorizeMcpUrl, clearMailSendTool, checkCustomHealth, completeCustomSignIn, configOf, customCount, customKey, customMcpEnabled,
   CustomMcpError, customRowFor, CUSTOM_CALLBACK_PATH, CUSTOM_LIMITS, CUSTOM_STATE_PROVIDER, listCustomTools, prepareCustomSignIn,
   revokeCustomConnection, unapproveCustomTool, MCP_AUTH_TYPE, type CustomConfig, type CustomDeps,
 } from '../integrations/customMcp';
@@ -101,6 +104,8 @@ const SENTENCES: Record<string, [number, string]> = {
   tool_not_listed: [404, 'That server does not list that tool now.'],
   tool_writes: [409, 'Only tools the server marks read-only can be approved.'],
   tool_not_approved: [409, 'That tool is not approved, or it changed since it was approved.'],
+  tool_destructive: [409, 'That server marks this tool destructive, so it cannot send your email.'],
+  tool_shape: [409, 'Only a tool that takes a recipient, a subject and a body, and is not one of your approved read tools, can send your email.'],
   too_many_tools: [409, `At most ${CUSTOM_LIMITS.approved} tools can be approved on one server.`],
   unreachable: [502, 'That server could not be reached. Try again in a minute.'],
   unauthorized: [409, 'The sign-in to that server has expired. Connect it again.'],
@@ -260,6 +265,35 @@ router.delete('/:uid/tools/:name/approve', async (c) => {
     const cfg = await unapproveCustomTool(c.env, row, name);
     await activity(c.env, user, 'custom_mcp_tool_withdrawn', { host: hostOf(cfg.url), tool: name });
     return c.json({ ok: true, approved: Object.keys(cfg.approved) });
+  } catch (e) { return refusal(c, e); }
+});
+
+// D1343 (#3551): the one tool that sends the member's email from this server, as a mailbox (`/api/mail/accounts/mcp`).
+router.post('/:uid/tools/:name/mail-send', async (c) => {
+  const user = await requireAuth(c);
+  const blocked = await gate(c, user);
+  if (blocked) return blocked;
+  const row = await ownRow(c, user);
+  if (row instanceof Response) return row;
+  const name = c.req.param('name') || '';
+  if (!TOOL_NAME.test(name)) return refusal(c, new CustomMcpError('tool_not_listed'));
+  try {
+    const cfg = await approveMailSendTool(c.env, row, name, deps(c));
+    await activity(c.env, user, 'custom_mcp_mail_send_approved', { host: hostOf(cfg.url), tool: name });
+    return c.json({ ok: true, mail_send: cfg.mail_send?.tool ?? null });
+  } catch (e) { return refusal(c, e); }
+});
+
+router.delete('/:uid/tools/:name/mail-send', async (c) => {
+  const user = await requireAuth(c);
+  const blocked = await gate(c, user);
+  if (blocked) return blocked;
+  const row = await ownRow(c, user);
+  if (row instanceof Response) return row;
+  try {
+    const cfg = await clearMailSendTool(c.env, row);
+    await activity(c.env, user, 'custom_mcp_mail_send_withdrawn', { host: hostOf(cfg.url) });
+    return c.json({ ok: true, mail_send: null });
   } catch (e) { return refusal(c, e); }
 });
 

@@ -16,13 +16,13 @@
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
-import { quoteRun, run, type RunOptions } from '../services/aiRouter';
+import { quoteRun, type RunOptions } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { computeBlock, isBlockKind } from '../services/mail/blocks';
 import { contextPack, MailError, NOT_FOUND, parseRef, personRecord } from '../services/mail/contextPack';
 import {
-  blocksNow, deleteDraft, draftAsk, draftMessages, draftOf, insertDraft, listDrafts, MAX_TOKENS, parentAsk, parseDraft,
-  projectParam, revisionInstruction, ticked, type DraftAsk, type Revision,
+  blocksNow, deleteDraft, draftAsk, draftMessages, draftOf, listDrafts, MAX_TOKENS, parentAsk,
+  projectParam, revisionInstruction, runDraft, ticked, type DraftAsk, type Revision,
 } from '../services/mail/drafts';
 import type { Block } from '../services/mail/blocks';
 import type { Pack, PackItem } from '../services/mail/contextPack';
@@ -53,12 +53,6 @@ function failure(c: Context<any>, e: unknown): Response {
   return refuse(c, 503, { code: 'mail_unreadable', message: 'The records for this email could not be read. Try again.', raw: e });
 }
 
-async function chargedOf(env: Env, usageLogId: number | null | undefined, userId: number): Promise<number | null> {
-  if (!usageLogId) return null;
-  const row = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(usageLogId, userId).first<any>().catch(() => null);
-  return row?.charged_microusd == null ? null : Number(row.charged_microusd);
-}
-
 function runOptions(c: Context<any>, user: User, pack: Pack, ask: DraftAsk, sources: PackItem[], blocks: Block[], revision: Revision | null): RunOptions {
   return {
     task: 'mail_draft', userId: Number(user.id), messages: draftMessages(pack, ask, sources, blocks, revision), maxTokens: MAX_TOKENS[ask.length],
@@ -77,18 +71,11 @@ async function press(c: Context<any>, user: User, b: Record<string, unknown>, pa
     if (!q.ok) return refuseRun(c, { refusal: q.refusal, error: q.error }) ?? refuse(c, 503, { code: 'estimate_unreadable', message: 'The cost of this draft could not be worked out. Try again.' });
     return c.json({ estimate: { hold_microusd: q.hold_microusd, model: q.model }, sources: sources.map(({ ref, label, as_of, link }) => ({ ref, label, as_of, link })), blocks: blocks.map(({ kind, as_of, link }) => ({ kind, as_of, link })) });
   }
-  const out = await run(c.env, { ...opts, surface: AI_SURFACE.mailDraft, rail: opts.rail });
-  const refused = refuseRun(c, { refusal: out.refusal, error: out.refusal === 'guard_unavailable' ? 'The draft could not be checked. A started run may still be charged.' : undefined });
-  if (refused) return refused;
-  if (!out.ok) return refuse(c, 503, { code: 'draft_unreadable', message: 'Eadwyn could not draft this email. Try again.' });
-  const drafted = parseDraft(out.output);
-  if (!drafted) return refuse(c, 503, { code: 'draft_unreadable', message: 'Eadwyn’s answer was not an email. Try again; the run may still be charged.' });
-  const draft = await insertDraft(c.env, user, {
-    ask, sources, blocks, ...drafted, parentUid: parent?.uid ?? null, instruction: parent?.revision.instruction ?? null,
-    model: out.usage?.model ?? null, promptTokens: out.usage?.prompt_tokens ?? null, completionTokens: out.usage?.completion_tokens ?? null,
-    chargedMicro: await chargedOf(c.env, out.usageLogId, Number(user.id)),
-  });
-  return c.json({ draft }, 201);
+  // D1343: the run and the store are `runDraft`'s, shared with the MCP tool `mail_draft`.
+  const out = await runDraft(c.env, user, { ask, pack, sources, blocks, parent, rail: opts.rail });
+  if (out.ok) return c.json({ draft: out.draft }, 201);
+  if (out.refusal !== null) return refuseRun(c, { refusal: out.refusal, error: out.error }) ?? refuse(c, 503, { code: 'draft_unreadable', message: 'Eadwyn could not draft this email. Try again.' });
+  return refuse(c, 503, { code: out.code, message: out.message });
 }
 
 mail.get('/context', async (c) => {

@@ -171,6 +171,8 @@ test('every request in the module is written as a literal path the drift check c
     // D1346 (#3554): whether Eadwyn AI can join, read when Record a Session opens.
     'GET /founder/validate/meetings/bot',
     'GET /founder/validate/meetings/calls',
+    // D1358: what each meeting platform can really do for this member.
+    'GET /founder/validate/meetings/capabilities',
     'GET /founder/validate/meetings/setup',
     'GET /founder/validate/meetings/upcoming',
     'POST /admin/channels/telegram/webhook',
@@ -182,6 +184,8 @@ test('every request in the module is written as a literal path the drift check c
     // #1588: attach by link posts to the same route as scheduling (D685 §5.3.2).
     'POST /founder/validate/interviews/:p/meetings',
     // D871 (#2518): attach a Meet call from the member's Calendar posts to the same route again.
+    'POST /founder/validate/interviews/:p/meetings',
+    // D1358: a hosted Zoom call saved for import after it ends posts to the same route again.
     'POST /founder/validate/interviews/:p/meetings',
     'POST /founder/validate/interviews/:p/meetings/:p/import',
     // D1346 (#3554): "Create the meeting for me".

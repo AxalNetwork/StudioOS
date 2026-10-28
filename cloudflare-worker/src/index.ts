@@ -88,6 +88,7 @@ import mailAccounts from './routes/mail_accounts';
 import mailDrafts from './routes/mail_drafts';
 import mailShares from './routes/mail_shares';
 import mailPeople from './routes/mail_people';
+import { bindMailTools } from './services/mail/mcpTools';
 import dealContext from './routes/deal_context';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
@@ -474,10 +475,14 @@ import portfolioUpdates from './routes/portfolio_updates';
 import portfolioSupport from './routes/portfolio_support';
 import positions from './routes/positions';
 import contacts from './routes/contacts';
+import contactImports from './routes/contact_imports';
 import roundCalls from './routes/round_calls';
 import track from './routes/track';
 
 const app = new Hono<{ Bindings: Env }>();
+// D1343: the MCP mail tools run the mail services the entry hands them (services/mail/mcpTools.ts),
+// so the MCP server, which `auth.ts` reaches, imports none of them.
+bindMailTools();
 
 // D811: service HMAC only, before browser CORS/session/CSRF middleware.
 app.use('/api/mail-link/*', securityHeadersMiddleware());
@@ -1301,6 +1306,9 @@ app.route('/api/portfolio-support', portfolioSupport);
 app.route('/api/positions', positions);
 // Contacts — unified inbound relationship hub (founder CRM). Role-gated
 // in-route (founder/admin); no paywall prefix so it's core-available.
+// D1351 (#3566): the member's own book — LinkedIn's Connections.csv, suggested
+// duplicates, notes and follow-ups — on /import/* and /book/*, ahead of the CRM.
+app.route('/api/contacts', contactImports);
 app.route('/api/contacts', contacts);
 app.route('/api/round-calls', roundCalls);
 app.route('/api/funds', funds);

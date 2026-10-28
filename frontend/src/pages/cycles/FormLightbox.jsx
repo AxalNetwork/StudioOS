@@ -3,12 +3,29 @@
  * at a module's `/new` address or for `state.editing` (a page below 1024px).
  * The parent owns navigation, API writes and per-row keys. Legacy forms are
  * adapted here until their registry owners merge; no registry is changed early.
+ *
+ * D1328 (#3489, part 5 of #2431): `fill` (`{ page, form, project, aiOff,
+ * edited? }`) mounts Fill with Eadwyn on a form FILL_FIELDS lists. The form
+ * reads `GET /api/fills/sheet` once: a blank field the read gives a trigger
+ * draws "Fill [field] with Eadwyn" beside its label, and the form draws its
+ * "Fill" (AF3). Both open the one `FillSheet`. Accept places the values in
+ * this form, each marked "Not saved" until the member types over it (AF7).
+ * Nothing is written until Save: the form's own route writes, then
+ * `POST /api/fills/record` keeps only the placed values that still equal
+ * Eadwyn's proposal. `edited` is a waiting row opened by its Edit (AF16): its
+ * values open the form, and Save decides the proposal as edited.
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Lightbox from '../../ui/Lightbox.jsx';
 import { MODULES } from './modules.js';
 import { CYCLES, safeHref } from './cycleModel.js';
 import { validate } from './forms.js';
+import FillSheet from '../../ui/FillSheet.jsx';
+import { FillFormTrigger, FillMark, FillTrigger } from '../../ui/FillMark.jsx';
+import { fillsApi } from '../../lib/api/fills.js';
+import { railProposalsApi } from '../../lib/api/railProposals.js';
+import { reportError } from '../../lib/log.js';
+import { placeValues, placedProposals, savedId, stillPlaced } from '../../lib/fillForms.js';
 
 const INPUT = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-[9px] text-[13px] text-axal-ink outline-none focus:border-axal-violet disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 max-lg:rounded-xl';
 const LABEL = 'text-[10px] font-extrabold uppercase tracking-[0.09em] text-axal-muted dark:text-gray-400';
@@ -20,6 +37,7 @@ export function cleanFormCopy(value, { money = false } = {}) {
   return money ? copy.replace(/€/g, '$') : copy;
 }
 const own = (value, key) => value != null && Object.hasOwn(value, key);
+const blankValue = (v) => v == null || String(v).trim() === '';
 const linkOf = (href) => typeof href === 'string' && !/[\\\u0000-\u001f\u007f]/.test(href) ? safeHref(href) : null;
 
 /** The single boundary for canvas/Worker fields and today's legacy fields. */
@@ -99,7 +117,7 @@ function Note({ note, values, id, name }) {
   </p>;
 }
 
-function Field({ field, values, errors, setValue, prefix, busy, compact = false, search = null }) {
+function Field({ field, values, errors, setValue, prefix, busy, compact = false, search = null, fill = null }) {
   if (!fieldVisible(field, values)) return null;
   const id = prefix + '-' + field.name;
   const error = errors[field.name];
@@ -136,7 +154,9 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
     else input = <input {...props} type={['date', 'email', 'number'].includes(field.input) ? field.input : field.input === 'score' ? 'number' : 'text'} inputMode={field.input === 'money' ? 'decimal' : undefined} min={field.input === 'score' ? 0 : undefined} max={field.input === 'score' ? 10 : undefined} step={field.input === 'score' ? 1 : undefined} />;
   }
   return <div className="flex min-w-0 flex-col gap-1.5">
-    {group ? <span id={id + '-label'} className={LABEL}>{field.label}</span> : <label htmlFor={id} className={compact ? 'sr-only' : LABEL}>{field.label}</label>}
+    <FieldHead fill={compact ? null : fill} name={field.name} label={field.label} value={value} busy={busy}>
+      {group ? <span id={id + '-label'} className={LABEL}>{field.label}</span> : <label htmlFor={id} className={compact ? 'sr-only' : LABEL}>{field.label}</label>}
+    </FieldHead>
     {input}
     {field.search && search?.found[field.name]?.length > 0 && <div data-testid={'cycle-form-found-' + field.name} className="space-y-1.5">
       {groupsOf(search.found[field.name]).map(([group, options]) => <div key={group || 'found'} className="space-y-1">
@@ -149,11 +169,31 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
   </div>;
 }
 
-export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant }) {
+/**
+ * D1328: a field's label row with its Fill controls. The trigger is drawn only
+ * where the sheet read gives one (`field.trigger`: never a typed, never-fill
+ * or decision field, never a reader) and while the box is still blank; a
+ * placed value reads "Not saved" until it is typed over.
+ */
+function FieldHead({ fill, name, label, value, busy, children }) {
+  if (!fill) return children;
+  const view = fill.field(name);
+  const placed = stillPlaced(fill.placed, name, value);
+  const trigger = view && view.trigger && blankValue(value) && !placed;
+  if (!trigger && !placed) return children;
+  return <div className="flex min-h-8 items-center justify-between gap-2">
+    <span className="flex min-w-0 items-center">{children}{placed ? <FillMark mark={null} placed /> : null}</span>
+    {trigger ? <FillTrigger field={view} label={label} aiOff={fill.aiOff} busyElsewhere={busy} onOpen={fill.open} /> : null}
+  </div>;
+}
+
+export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null }) {
   const id = useId();
   const initialFields = useMemo(() => formFields(base, {}, current), [base, current]);
   const queryValues = useMemo(() => typeof base?.fromQuery === 'function' ? base.fromQuery(new URLSearchParams(search)) : {}, [base, search]);
-  const [values, setValues] = useState(() => formValues(initialFields, current, queryValues));
+  // D1328: a waiting row opened by its Edit seeds the form as a record's values would.
+  const seed = current ?? fill?.edited?.row ?? null;
+  const [values, setValues] = useState(() => formValues(initialFields, seed, queryValues));
   const [errors, setErrors] = useState({});
   // `refused`: a sentence the form opens with and nothing to save (a record that refused its read).
   const [refusal, setRefusal] = useState(refused);
@@ -203,12 +243,55 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
       if (!live) return;
       const result = read ?? {};
       setLoaded(result); setReadFailed(false);
-      setValues(formValues(formFields(base, result, current), current, queryValues));
+      setValues(formValues(formFields(base, result, current), seed, queryValues));
     }, (error) => { if (live) { setLoaded(null); setReadFailed(true); setRefusal(error?.message || 'The choices could not be read.'); } });
     return () => { live = false; };
     // The caller keys a mounted form per row; a new callback does not re-read. Try again does (`attempt`).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt]);
+  // D1328 (#3489): Fill with Eadwyn's read for this form, once; a failure is "Unreadable" with Try again.
+  const [fillRead, setFillRead] = useState(fill && !refused ? { status: 'loading', data: null } : null);
+  const [fillTick, setFillTick] = useState(0);
+  const [fillOpen, setFillOpen] = useState(false);
+  const [placed, setPlaced] = useState(() => (fill?.edited?.row ? placeValues(Object.entries(fill.edited.row).map(([field, value]) => ({ field, value, source_kind: 'eadwyn' })), Object.keys(fill.edited.row)).placed : {}));
+  useEffect(() => {
+    if (!fill || refused) return undefined;
+    let live = true;
+    setFillRead({ status: 'loading', data: null });
+    Promise.resolve().then(() => fillsApi.sheet({ page: fill.page, form: fill.form, project: fill.project }))
+      .then((data) => { if (live) setFillRead({ status: 'ready', data }); },
+        (error) => { if (live) { reportError('fill-form:read', error); setFillRead({ status: 'unreadable', data: null }); } });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fill?.page, fill?.form, fill?.project, fillTick]);
+  const fillFields = fillRead?.status === 'ready' && Array.isArray(fillRead.data?.fields) ? fillRead.data.fields : [];
+  const fillNames = fillFields.map((f) => f.field);
+  const fillCtl = fill && fillRead?.status === 'ready' ? {
+    field: (name) => fillFields.find((f) => f.field === name) || null,
+    placed, aiOff: !!fill.aiOff, open: () => setFillOpen(true),
+  } : null;
+  const fillable = fillFields.some((f) => f.trigger && blankValue(values[f.field]) && !stillPlaced(placed, f.field, values[f.field]));
+  const placedCount = fillNames.filter((n) => stillPlaced(placed, n, values[n])).length;
+  const place = (list) => {
+    const out = placeValues(list, fillNames);
+    setValues((old) => ({ ...old, ...out.values }));
+    setPlaced((old) => ({ ...old, ...out.placed }));
+  };
+  /** After the form's own Save: the record step (D1326 §2), and a waiting row's Edit decided. Neither undoes the Save. */
+  const afterSave = async (result, sent) => {
+    if (!fill) return;
+    const uids = placedProposals(placed);
+    const id = savedId(result);
+    if (uids.length && id) {
+      try { await fillsApi.record({ page: fill.page, form: fill.form, project: fill.project, record: id, proposals: uids }); }
+      catch (error) { reportError('fill-form:record', error); }
+    }
+    if (fill.edited?.uid) {
+      const row = Object.fromEntries(Object.keys(fill.edited.row || {}).filter((k) => Object.hasOwn(sent, k)).map((k) => [k, sent[k]]));
+      try { await railProposalsApi.decide(fill.edited.uid, 'edit', { row }); }
+      catch (error) { reportError('fill-form:edited-row', error); }
+    }
+  };
   const readAgain = () => { setLoaded(undefined); setReadFailed(false); setRefusal(''); setAttempt((n) => n + 1); };
   if (!base) return null;
   const cycleKey = String(cycle ?? '').toLowerCase();
@@ -222,7 +305,9 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     if (Object.keys(found).length) return;
     saving.current = true; setBusy(true);
     try {
-      const result = await onSubmit({ ...submittedValues(fields, values), ...picked() });
+      const sent = { ...submittedValues(fields, values), ...picked() };
+      const result = await onSubmit(sent);
+      await afterSave(result, sent);
       const completion = base.done?.(result);
       if (completion) setDone(completion);
       onSaved?.(result);
@@ -254,9 +339,21 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
         }} className="font-bold text-axal-violet dark:text-violet-300">{copied ? 'Copied' : 'Copy link'}</button></>}
       </div> : <>
         {loaded === undefined && <p data-testid="cycle-form-loading" className="m-0 text-xs text-axal-muted dark:text-gray-400">Reading the choices…</p>}
-        {loaded && fields.map((field) => <Field key={field.name} field={field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy} search={finder} />)}
+        {loaded && fill && fillRead?.status === 'unreadable' ? <p role="status" data-testid="fill-form-unreadable" className="m-0 flex flex-wrap items-center gap-2 text-xs text-axal-muted dark:text-gray-400">
+          Unreadable: Fill with Eadwyn could not be read for this form. Type the values, or
+          <button type="button" onClick={() => setFillTick((n) => n + 1)} className="font-semibold text-axal-violet underline dark:text-violet-300" data-testid="fill-form-retry">Try again</button>
+        </p> : null}
+        {loaded && fillCtl && (fillable || placedCount > 0) ? <div className="flex flex-wrap items-center justify-between gap-2" data-testid="fill-form-bar">
+          <span className="text-xs text-axal-muted dark:text-gray-400" data-testid="fill-form-placed">{placedCount
+            ? `${placedCount} ${placedCount === 1 ? 'value' : 'values'} placed. Nothing is saved until you press ${cleanFormCopy(base.cta || base.button || 'Save')}.`
+            : fill.aiOff ? 'Fill from your sources.' : 'Fill the blank fields from your sources or with Eadwyn.'}</span>
+          {fillable ? <FillFormTrigger aiOff={!!fill.aiOff} disabled={busy} onOpen={() => setFillOpen(true)} /> : null}
+        </div> : null}
+        {loaded && fields.map((field) => <Field key={field.name} field={field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy} search={finder} fill={fillCtl} />)}
         {loaded && renderAssistant?.({ fields, values, setValue, busy })}
       </>}
     </form>
+    {fillOpen && fill ? <FillSheet page={fill.page} form={fill.form} project={fill.project} title={cleanFormCopy(base.title || 'this form').toLowerCase()}
+      values={Object.fromEntries(fillNames.map((n) => [n, values[n]]))} aiOff={!!fill.aiOff} onPlace={place} onClose={() => setFillOpen(false)} /> : null}
   </Lightbox>;
 }

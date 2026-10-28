@@ -7,6 +7,8 @@
  *   POST   /accounts/start/:provider       outlook | gmail → { authorize_url }; Gmail only behind MAIL_GMAIL_ENABLED
  *   GET    /accounts/oauth/callback        the provider's redirect: the one-use state, the code, the sealed refresh token
  *   POST   /accounts/imap                  verify (SMTP AUTH, IMAP LOGIN; nothing sent), then store. Port 25 is refused
+ *   POST   /accounts/mcp                   D1343: { connection_uid, address, display_name? } a member's own MCP mail server
+ *                                          (a D852 custom connector with an approved send tool); verified, nothing sent
  *   POST   /accounts/:uid/verify           checks the mailbox again; an expired token turns the row `expired`
  *   DELETE /accounts/:uid                  revoke at the provider where it can, forget the credentials; sent rows stay
  *   POST   /send/confirm                   { account_uid } → a one-use nonce for the composer's pressed Send
@@ -30,6 +32,7 @@ import {
   spendOauthState, spendSendNonce, type AccountRow,
 } from '../services/mail/accounts';
 import { indexHmac } from '../services/columnCipher';
+import { configOf, customMcpEnabled, customRowFor, isConnectionUid } from '../integrations/customMcp';
 import { refuse } from '../util/refusal';
 
 const mailAccounts = new Hono<{ Bindings: Env }>();
@@ -73,7 +76,8 @@ mailAccounts.get('/accounts', async (c) => {
   if (user instanceof Response) return user;
   return c.json({
     accounts: await listAccounts(c.env, user),
-    providers: { outlook: configured(c.env, 'outlook'), gmail: configured(c.env, 'gmail'), imap: true },
+    // D1343: `mcp` is offered where custom connectors are (a member's own MCP mail server).
+    providers: { outlook: configured(c.env, 'outlook'), gmail: configured(c.env, 'gmail'), imap: true, mcp: customMcpEnabled(c.env) },
   });
 });
 
@@ -125,6 +129,29 @@ mailAccounts.post('/accounts/imap', async (c) => {
     const creds = checkSettings(b as any);
     await ADAPTERS.imap!.verify(c.env, creds);
     const account = await saveAccount(c.env, user, { provider: 'imap', address, display_name: name, scopes: '', can_read: false, creds });
+    return c.json({ account }, 201);
+  } catch (e) { return adapterRefusal(c, e); }
+});
+
+// D1343 (#3551): a member's own MCP mail server, chosen as a mailbox. Its send tool is the one the
+// member approved on the connector (D852), pinned to its schema; every send still spends the composer's nonce.
+mailAccounts.post('/accounts/mcp', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  if (!customMcpEnabled(c.env)) return refuse(c, 404, { code: 'provider_unknown', message: 'That mailbox provider is not offered.' });
+  const b = await body(c);
+  const address = String(b.address ?? '').trim().toLowerCase();
+  if (!EMAIL.test(address) || address.length > 320) return refuse(c, 400, { code: 'address_invalid', message: 'Give the address your mail server sends from.' });
+  const name = typeof b.display_name === 'string' && b.display_name.trim() && headerSafe(b.display_name) ? b.display_name.trim().slice(0, 120) : null;
+  const uid = String(b.connection_uid ?? '');
+  // Another member's connector is the same 404 as none.
+  const row = isConnectionUid(uid) ? await customRowFor(c.env, user.id, uid) : null;
+  if (!row) return refuse(c, 404, { code: 'connector_not_found', message: 'That connector was not found.' });
+  if (!configOf(row)?.mail_send) return refuse(c, 409, { code: 'send_tool_not_approved', message: 'Choose the tool that sends your email on that connector first.' });
+  const creds = { kind: 'mcp' as const, connection_uid: uid, user_id: Number(user.id) };
+  try {
+    await ADAPTERS.mcp!.verify(c.env, creds);
+    const account = await saveAccount(c.env, user, { provider: 'mcp', address, display_name: name, scopes: '', can_read: false, creds });
     return c.json({ account }, 201);
   } catch (e) { return adapterRefusal(c, e); }
 });

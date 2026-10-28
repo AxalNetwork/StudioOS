@@ -265,7 +265,8 @@ test('D900: one raise.pitch-deck cycle row per write, never a figure or the note
   assert.deepEqual(rows.map((r) => r.action), ['deck_checked', 'claim_kept_with_note', 'deck_figure_replaced']);
   for (const r of rows) {
     assert.match(String(r.entity_type), /pitch/);
-    assert.doesNotMatch(String(r.details), /\b42\b|\b38\b|secret/);
+    // A written-at clock can read 42 or 38. The figure is what remains once the clock is gone.
+    assert.doesNotMatch(String(r.details).replace(/\d{2}:\d{2}:\d{2}/g, ''), /\b42\b|\b38\b|secret/);
   }
   assert.ok(logs(db).length >= 3);
 });

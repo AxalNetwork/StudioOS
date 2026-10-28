@@ -15,7 +15,7 @@ missing, every path answers 404.
 
 | Folder | What it holds |
 | --- | --- |
-| `tools/` | The tools, one file per group. `context.ts` holds the reads, `interviews.ts` the three interview tools, and `build.ts` and `connections.ts` D846's connector-backed reads |
+| `tools/` | The tools, one file per group. `context.ts` holds the reads, `interviews.ts` the three interview tools, and `build.ts` and `connections.ts` D846's connector-backed reads, and `mail.ts` D1343's `mail_context` and `mail_draft` (neither sends) |
 
 ## Rules
 

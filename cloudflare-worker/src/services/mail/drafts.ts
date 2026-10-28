@@ -15,6 +15,8 @@ import { contextPack, MailError, notFound, type Pack, type PackItem } from './co
 import { computeBlock, isBlockKind, type Block, type BlockKind } from './blocks';
 import { intentFor, LENGTHS, TONES, type Intent } from './intents';
 import { caseOnly } from './profileRecords';
+import { run, type RailContext, type RunOptions } from '../aiRouter';
+import { AI_SURFACE } from '../aiSurfaces';
 
 export type Tone = typeof TONES[number];
 export type Length = typeof LENGTHS[number];
@@ -193,4 +195,45 @@ export async function parentAsk(env: Env, user: User, uid: string): Promise<{ ro
     body: { person: row.person_ref, intent: row.intent, tone: row.tone, length: row.length,
       refs: json(row.refs_json).map((s: any) => s?.ref).filter(Boolean), blocks: json(row.blocks_json).map((b: any) => b?.kind).filter(Boolean) },
   };
+}
+
+/** The router's options for one draft: the prompt carries the ticked records and the blocks only. */
+export function draftRunOptions(user: User, pack: Pack, ask: DraftAsk, sources: PackItem[], blocks: Block[], revision: Revision | null, rail: RailContext | undefined): RunOptions {
+  return { task: 'mail_draft', userId: Number(user.id), messages: draftMessages(pack, ask, sources, blocks, revision), maxTokens: MAX_TOKENS[ask.length], rail, surface: AI_SURFACE.mailDraft };
+}
+
+async function chargedOf(env: Env, usageLogId: number | null | undefined, userId: number): Promise<number | null> {
+  if (!usageLogId) return null;
+  const row = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(usageLogId, userId).first<any>().catch(() => null);
+  return row?.charged_microusd == null ? null : Number(row.charged_microusd);
+}
+
+/** What one draft run came to: the stored draft, the router's refusal, or no usable answer. */
+export type DraftOutcome =
+  | { ok: true; draft: DraftView }
+  | { ok: false; refusal: string; error?: string }
+  | { ok: false; refusal: null; code: 'draft_unreadable'; message: string };
+
+/**
+ * D1343 (#3551): one draft, run and stored, shared by `POST /api/mail/drafts`
+ * and the MCP tool `mail_draft`, so either is charged once, by the router, and
+ * stores one `mail_drafts` row with its sources and that charge.
+ */
+export async function runDraft(env: Env, user: User, input: { ask: DraftAsk; pack: Pack; sources: PackItem[]; blocks: Block[]; parent: { uid: string; revision: Revision } | null; rail?: RailContext }): Promise<DraftOutcome> {
+  const { ask, pack, sources, blocks, parent } = input;
+  const opts = draftRunOptions(user, pack, ask, sources, blocks, parent?.revision ?? null, input.rail);
+  // The page and the rail are named at the call, where D552's and D765's scans read them.
+  const out = await run(env, { ...opts, surface: AI_SURFACE.mailDraft, rail: opts.rail });
+  if (out.refusal) {
+    return { ok: false, refusal: out.refusal, error: out.refusal === 'guard_unavailable' ? 'The draft could not be checked. A started run may still be charged.' : undefined };
+  }
+  if (!out.ok) return { ok: false, refusal: null, code: 'draft_unreadable', message: 'Eadwyn could not draft this email. Try again.' };
+  const drafted = parseDraft(out.output);
+  if (!drafted) return { ok: false, refusal: null, code: 'draft_unreadable', message: 'Eadwyn’s answer was not an email. Try again; the run may still be charged.' };
+  const draft = await insertDraft(env, user, {
+    ask, sources, blocks, ...drafted, parentUid: parent?.uid ?? null, instruction: parent?.revision.instruction ?? null,
+    model: out.usage?.model ?? null, promptTokens: out.usage?.prompt_tokens ?? null, completionTokens: out.usage?.completion_tokens ?? null,
+    chargedMicro: await chargedOf(env, out.usageLogId, Number(user.id)),
+  });
+  return { ok: true, draft };
 }

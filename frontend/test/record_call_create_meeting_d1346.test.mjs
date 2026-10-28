@@ -28,6 +28,7 @@ function setup({ bot = BOT_OFF, channels = CONNECTED, instant, botAvailability }
   const made = [], sent = [], device = [], reads = [];
   const channelsSource = {
     async overview() { return channels; },
+    async saveZoomCall(id, body) { device.push(['saveZoomCall', id, body]); return { session_id: 16 }; },
     async instantMeeting(provider, minutes) { made.push([provider, minutes]); return instant ? instant(provider) : { provider, join_url: provider === 'zoom' ? ZOOM_LINK : MEET_LINK }; },
     ...(botAvailability ? { async botAvailability() { reads.push(1); return botAvailability(reads.length); } } : {}),
   };
@@ -63,12 +64,13 @@ test('the rules: what is offered per platform, which link fills, and the bot sta
   assert.deepEqual(botState(BOT_OFF, 'zoom'), { state: 'unavailable', canSend: false, sentence: BOT_UNAVAILABLE });
   assert.equal(botState({ ...BOT_ON, platforms: { ...BOT_ON.platforms, zoom: false } }, 'zoom').canSend, false, 'per platform');
   assert.equal(botState(BOT_ON, 'google_meet').canSend, true);
-  assert.equal(BOT_UNAVAILABLE, 'Eadwyn AI can’t join calls yet on Axal. Record this device instead, or paste the link to keep it for later.');
+  // D1358: no "Record this device" for a meeting.
+  assert.equal(BOT_UNAVAILABLE, 'Eadwyn AI can’t join calls yet on Axal.');
   assert.match(botTranscriptLine(BOT_ON).price, /\$0\.0028 a minute.*\$0\.0065 a minute.*120 minutes/);
   assert.match(botTranscriptLine(BOT_OFF).price, /not priced yet.*not priced yet/, 'never $0 for an unmeasured price');
 });
 
-test('bot not deployed: Send Eadwyn AI is disabled up front with the sentence, and Start records this device', async () => {
+test('bot not deployed: Send Eadwyn AI is disabled up front with the sentence, and Start saves the call for import, never this device (D1358)', async () => {
   const s = setup();
   const m = await mountContracts(h(RecordLightbox, s.props));
   try {
@@ -77,13 +79,15 @@ test('bot not deployed: Send Eadwyn AI is disabled up front with the sentence, a
     assert.ok(off, 'drawn before any press');
     assert.equal(m.props(off).disabled, true);
     assert.equal(m.props(off)['aria-describedby'], 'record-bot-state');
-    assert.match(m.text(), /Eadwyn AI can’t join calls yet on Axal\. Record this device instead, or paste the link to keep it for later\./);
+    assert.match(m.text(), /Eadwyn AI can’t join calls yet on Axal\./);
+    assert.doesNotMatch(m.text(), /Record this device/);
     await change(m, 'record-link', ZOOM_LINK);
-    assert.equal(by(m, 'record-device'), undefined, 'no second device button: Start is the device');
-    assert.ok(by(m, 'record-live'), 'the device options are shown, since this device records');
+    assert.equal(by(m, 'record-device'), undefined, 'no device button for a meeting');
+    assert.equal(by(m, 'record-live'), undefined, 'no device options: this device does not record a meeting');
+    assert.ok(by(m, 'record-import-note'));
     await press(m, 'record-start');
     assert.deepEqual(s.sent, [], 'no bot is sent');
-    assert.deepEqual(s.device, ['begin']);
+    assert.deepEqual(s.device, [['saveZoomCall', 1, { join_url: ZOOM_LINK, consent: { status: 'given', method: 'written' } }]], 'saved for import; the recorder never begins');
   } finally { await m.unmount(); }
 });
 
