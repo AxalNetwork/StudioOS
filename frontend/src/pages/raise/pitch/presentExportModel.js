@@ -74,6 +74,30 @@ export function sourceOf(binding) {
  * nothing else. A field the template left unfilled reads "Not recorded";
  * an empty figure is "Not recorded", never 0.
  */
+/**
+ * #3656: the fields a slide may show, and nothing else. A template also keeps
+ * its configuration in fields (the cover's `brandkit_*` brand choices, the
+ * Demo Day deck's `meta_*`, raw asset URLs, SVG and JSON): those are read by
+ * the renderer for colour and logo, and drawing them printed "false" and
+ * "accent_only" on title cards (#3654). A field shows when it is a figure (a
+ * binding), or one of the kinds below without a configuration key; any other
+ * kind (`auto` without a binding, `chart` specs) is never drawn as text.
+ */
+export const RENDERABLE_KINDS = Object.freeze(['title', 'subtitle', 'text', 'paragraph', 'quote', 'bullets', 'metric_grid', 'metric', 'image']);
+const CONFIG_KEY = /^(brandkit_|meta_)|_(url|svg|asset_id|json)$/;
+const FLAG = /^(true|false)$/i;
+
+export function renderableField(f) {
+  if (!f || typeof f !== 'object') return false;
+  if (str(f.binding?.source_key)) return true;
+  if (!RENDERABLE_KINDS.includes(f.kind)) return false;
+  // An image field's own value is its URL; any other kind with a configuration key, or a bare flag, configures.
+  if (f.kind === 'image') return true;
+  if (typeof f.key === 'string' && CONFIG_KEY.test(f.key)) return false;
+  return !(typeof f.value === 'string' && FLAG.test(f.value.trim()));
+}
+export const renderableFields = (slide) => (Array.isArray(slide?.fields) ? slide.fields.filter(renderableField) : []);
+
 export function cardOf(slide, i) {
   const s = slide && typeof slide === 'object' ? slide : {};
   const card = {
@@ -88,7 +112,7 @@ export function cardOf(slide, i) {
     appendix: Boolean(s.appendix),
   };
   if (Array.isArray(s.fields) && s.fields.length) {
-    for (const f of s.fields) {
+    for (const f of renderableFields(s)) {
       const unfilled = f?.source === 'placeholder';
       if (f?.kind === 'title') continue;
       if (f?.kind === 'subtitle') { if (!unfilled && str(f.value)) card.sub = str(f.value); continue; }
@@ -131,6 +155,85 @@ export function cardOf(slide, i) {
   card.blocks = gridBlocks(s);
   card.empty = !card.blocks.length && !card.sub && !card.lines.length && !card.bullets.length && !card.figures.length && !card.image;
   return card;
+}
+
+const TEXT_MAX = 4000;
+
+/**
+ * #3656: a field-based card's content as blocks on the 12 × 6 grid, so a card
+ * that gains its first block (or a layout) keeps everything it showed. The
+ * conversion is deterministic and lossless for what the card face draws:
+ *
+ *   row 1        the title, as a heading
+ *   below it     the subtitle, the paragraphs and the bullets, each a text block
+ *   bottom rows  every figure as a metric tile, keeping its binding (and so its
+ *                source and date); an unrecorded figure stays `value: null`
+ *   right side   the image, when there is one (columns 8–12)
+ *
+ * A placeholder with nothing in it is not content and is not converted. The
+ * stored fields are never touched: brand choices and configuration stay where
+ * the renderer reads them, and an old version reads as it always did. When the
+ * content cannot fit the grid, nothing is converted and the reason is given,
+ * so no part of a card is ever hidden.
+ */
+export function fieldBlocks(slide, model = null) {
+  const C = model?.grid?.cols ?? 12;
+  const R = model?.grid?.rows ?? 6;
+  const fields = renderableFields(slide);
+  const title = str(slide?.title) || str(fields.find((f) => f.kind === 'title')?.value);
+  let sub = '';
+  let image = typeof slide?.image_url === 'string' && /^https:\/\//.test(slide.image_url) ? slide.image_url : null;
+  const paras = [];
+  const bullets = [];
+  const metrics = [];
+  for (const f of fields) {
+    const unfilled = f.source === 'placeholder';
+    if (f.kind === 'title') continue;
+    if (f.binding?.source_key && f.kind !== 'metric_grid') {
+      const label = str(f.label);
+      const value = str(f.value);
+      metrics.push({ label: label || 'Figure', value: unfilled || !value ? null : label && value.startsWith(`${label} · `) ? value.slice(label.length + 3) : value, binding: f.binding });
+      continue;
+    }
+    if (unfilled) continue;
+    if (f.kind === 'subtitle') { if (str(f.value)) sub = str(f.value); continue; }
+    if (f.kind === 'image') { if (/^https:\/\//.test(str(f.value))) image = image || str(f.value); continue; }
+    if (f.kind === 'bullets') { if (Array.isArray(f.value)) bullets.push(...f.value.map(str).filter(Boolean)); continue; }
+    if (f.kind === 'metric_grid') {
+      for (const c of Array.isArray(f.value) ? f.value : []) metrics.push({ label: str(c?.label) || 'Figure', value: str(c?.value) || null, ...(c?.binding || f.binding ? { binding: c?.binding || f.binding } : {}) });
+      continue;
+    }
+    if (str(f.value)) paras.push(str(f.value));
+  }
+  // Each text block takes only the rows its words need, so a converted card keeps room for the block being added.
+  const pieces = [
+    ...(sub ? [{ style: 'paragraph', text: sub, rows: 1 }] : []),
+    ...(paras.length ? [{ style: 'paragraph', text: paras.join('\n\n'), rows: paras.join(' ').length > 240 ? 2 : 1 }] : []),
+    ...(bullets.length ? [{ style: 'list', text: bullets.join('\n'), rows: Math.min(3, Math.ceil(bullets.length / 3)) }] : []),
+  ];
+  if (pieces.some((p) => p.text.length > TEXT_MAX)) return { error: `This card says more than one text block holds (${TEXT_MAX} characters). Shorten it before adding blocks.` };
+  const blocks = [];
+  const top = title ? 2 : 1;
+  const textC2 = image ? C - 5 : C;
+  const perRow = Math.max(1, Math.floor(textC2 / 3));
+  const metricRows = Math.ceil(metrics.length / perRow);
+  const free = R - top + 1 - metricRows;
+  if (metricRows > 2 || pieces.reduce((n, p) => n + p.rows, 0) > Math.max(0, free) || (image && top > R)) {
+    return { error: 'This card holds more than fits on the 12 × 6 grid. Use a layout with room for each part, or split the card, before adding blocks.' };
+  }
+  if (title) blocks.push({ kind: 'text', style: 'heading', text: title, grid: { c1: 1, c2: C, r1: 1, r2: 1 } });
+  let row = top;
+  for (const p of pieces) {
+    blocks.push({ kind: 'text', style: p.style, text: p.text, grid: { c1: 1, c2: textC2, r1: row, r2: row + p.rows - 1 } });
+    row += p.rows;
+  }
+  metrics.forEach((m, i) => {
+    const r = R - metricRows + 1 + Math.floor(i / perRow);
+    const c1 = 1 + (i % perRow) * 3;
+    blocks.push({ kind: 'metric', label: m.label, value: m.value, ...(m.binding ? { binding: m.binding } : {}), grid: { c1, c2: c1 + 2, r1: r, r2: r } });
+  });
+  if (image) blocks.push({ kind: 'image', image_url: image, alt: '', tag: 'photo', grid: { c1: textC2 + 1, c2: C, r1: top, r2: R } });
+  return { blocks: blocks.map((b, i) => ({ id: `f${i + 1}`, ...b })) };
 }
 
 export const cardsOf = (deck) => (Array.isArray(deck?.slides) ? deck.slides.map(cardOf) : []);
