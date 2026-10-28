@@ -1,6 +1,6 @@
 import React from 'react';
 import { NOT_RECORDED, blockLabel, tileValue } from './editorModel';
-import { SOURCE_NOT_RECORDED, chartLabel, sourceOf } from './presentExportModel';
+import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './presentExportModel';
 
 export { gridBlocks } from './presentExportModel';
 
@@ -43,7 +43,8 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
     );
   }
   if (b.kind === 'image') {
-    if (b.image_url) return <img src={b.image_url} alt={b.alt || ''} className="h-full w-full rounded object-cover" />;
+    // D903: the image keeps its fit and its crop (the point that stays in view); its alt text travels everywhere it is drawn.
+    if (b.image_url) return <img src={b.image_url} alt={b.alt || ''} className={`h-full w-full rounded ${b.fit === 'contain' ? 'object-contain' : 'object-cover'}`} style={{ objectPosition: objectPosition(b.crop) }} />;
     return live ? null : <span className="text-[11px] italic">Image · none chosen</span>;
   }
   if (b.kind === 'video') {

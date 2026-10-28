@@ -235,12 +235,13 @@ export async function memberProgrammes(env: Env, user: { id: number; role: strin
 // D1336: the actor of the event that ended a withdrawn application, the
 // member's own `withdrawn`, HQ's `withdrawn_by_hq`, or HQ's removal ending the
 // place (`place_ended`, D1132); the newest one, should there be several.
+// D1337 (#3542, PT-M3): the firm that runs it and the programme's questions, for the member's application sheet.
 const SELECT_APPLICATION = `SELECT a.*, p.uid AS programme_uid, p.product_name, p.testing_starts, p.testing_ends, p.status AS programme_status,
-       p.closes_at AS programme_closes_at,
+       p.closes_at AS programme_closes_at, p.questions AS programme_questions, ${OWNER_NAME} AS owner_name,
        (SELECT e.actor_user_id FROM testing_events e
          WHERE e.application_id = a.id AND e.action IN ('withdrawn', 'withdrawn_by_hq', 'place_ended')
          ORDER BY e.id DESC LIMIT 1) AS withdrawn_actor
-  FROM testing_applications a JOIN testing_programmes p ON p.id = a.programme_id`;
+  FROM testing_applications a JOIN testing_programmes p ON p.id = a.programme_id LEFT JOIN partners pt ON pt.id = p.owner_partner_id`;
 
 /** D1336: who withdrew an application, the member or HQ; null when it is not withdrawn or no event says. */
 export function withdrawnBy(r: { status: string; user_id: unknown; withdrawn_actor: unknown }): 'member' | 'hq' | null {
@@ -253,6 +254,9 @@ function applicationDto(r: any) {
     uid: r.uid,
     programme_uid: r.programme_uid,
     product_name: r.product_name,
+    // D1337: who runs the programme ("Axal VC" for HQ's own) and the questions the answers reply to.
+    owner_name: r.owner_name ?? null,
+    questions: parse<string[]>(r.programme_questions, []),
     programme_status: r.programme_status,
     testing_starts: r.testing_starts ?? null,
     testing_ends: r.testing_ends ?? null,

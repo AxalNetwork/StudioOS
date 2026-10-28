@@ -13,9 +13,11 @@ and mail never goes out on Axal's house token: `../email.ts` stays for system ma
 | `blocks.ts` | D1341: live update blocks (KPIs, raise status, project progress, interview insights, the one-liner), computed now under each module's gate; nothing recorded is no block. |
 | `drafts.ts` | D1341: the draft request, the prompt (the ticked records and the blocks only), the model's `{subject, body}`, and the member's own `mail_drafts` rows (migration 648). `runDraft` runs and stores one draft for the route and for D1343's `mail_draft` MCP tool (`../../mcp/tools/mail.ts`). |
 | `mcpTools.ts` | D1343: the services the MCP tools `mail_context` and `mail_draft` run, handed to `../../mcp/tools/mail.ts` by `index.ts` (`bindMailTools`), so the MCP server, which `auth.ts` reaches, imports none of `services/mail/` (D707's and D714's import guards). |
+| `shares.ts` | D1342 (#3550): Network members' address shares (`mail_address_shares`, migration 649). A pair opens on a mutual introduction accept (`askBoth`), or lazily when a member lists their matches; each side shares, declines or revokes on its own; the other's address is served only while both have shared (D414 elsewhere). A match is the person kind `member:<share uid>` in `contextPack.ts`. |
+| `drafts.ts` | D1341: the draft request, the prompt (the ticked records and the blocks only), the model's `{subject, body}`, and the member's own `mail_drafts` rows (migration 648). |
 
-The routes are `../../routes/mail_accounts.ts` and `../../routes/mail_drafts.ts`,
-both mounted at `/api/mail`. A new provider adds an adapter in `adapters/` and a
+The routes are `../../routes/mail_accounts.ts`, `../../routes/mail_drafts.ts` and
+`../../routes/mail_shares.ts`, all mounted at `/api/mail`. A new provider adds an adapter in `adapters/` and a
 row in `adapters/index.ts`. A new person kind goes in `MODULES` in
 `contextPack.ts`, with a fixed statement and the module's record spec, and in
 `RELATIONSHIP_OF` in `intents.ts`.

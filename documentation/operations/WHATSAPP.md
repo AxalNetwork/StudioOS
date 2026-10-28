@@ -348,8 +348,10 @@ gates. No live call capture is advertised.
    transcript/recording stays until the member deletes the session; the
    pending-copy purge is not deletion of an interview.
 5. The guided setup's switch is a readiness gate (D861 §7). In every
-   environment `whatsappMcpSetupOn` is true only for `"on"`: unset, empty,
-   `"off"`, `"canary"` and any other spelling stay closed. The channel's
+   environment `whatsappMcpSetupOn` is true only for `"on"`, compared after
+   trimming and lowercasing, so `"On"` and `" ON "` also open it (D861 §7).
+   Unset, empty, `"off"`, `"canary"`, `"true"`, `"yes"` and every other word
+   stay closed. The channel's
    rollout and the setup's switch do not open each other. Two mutations
    (the setup opening for anything but `"off"`, and never opening) must fail.
 6. Pending text and media references use the column cipher. D857's stored

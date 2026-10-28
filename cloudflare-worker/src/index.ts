@@ -86,6 +86,7 @@ import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import mailAccounts from './routes/mail_accounts';
 import mailDrafts from './routes/mail_drafts';
+import mailShares from './routes/mail_shares';
 import { bindMailTools } from './services/mail/mcpTools';
 import dealContext from './routes/deal_context';
 import dealInsights from './routes/deal_insights';
@@ -239,6 +240,7 @@ import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
+import deckImages from './routes/deck_images';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -984,6 +986,8 @@ app.route('/api/deals/flow', dealFlow);
 app.route('/api/mail', mailAccounts);
 // D1341 (#3549): Eadwyn's email drafts — the context pack, live update blocks and the member's own drafts.
 app.route('/api/mail', mailDrafts);
+// D1342 (#3550): Network members' address shares — the other's address only while both have shared.
+app.route('/api/mail', mailShares);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);
@@ -1359,6 +1363,8 @@ app.route('/api/decks', deckSources);
 app.route('/api/decks', deckNew);
 // D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
 app.route('/api/decks', deckAssist);
+// D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
+app.route('/api/decks', deckImages);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are
