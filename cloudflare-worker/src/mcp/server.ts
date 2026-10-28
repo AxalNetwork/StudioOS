@@ -218,7 +218,7 @@ export async function toolAvailable(env: Env, user: { id: number; role: string |
 }
 
 /** The granted companies the user can still read. */
-async function liveCompanies(env: Env, props: GrantProps, user: Awaited<ReturnType<typeof grantUser>>) {
+export async function liveCompanies(env: Env, props: GrantProps, user: Awaited<ReturnType<typeof grantUser>>) {
   return (await Promise.all(props.companies.map(async (id) => {
     try { return await grantCompany(env, props, user, id); } catch { return null; }
   }))).filter((c): c is { id: number; name: string } => c !== null);

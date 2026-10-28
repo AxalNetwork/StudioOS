@@ -53,6 +53,7 @@ export * from './api/companyActions.js';
 export * from './api/companyEin.js';
 export * from './api/companyReceivingAccounts.js';
 export * from './api/companySheet.js';
+export * from './api/connectorClients.js';
 export * from './api/connectors.js';
 export * from './api/contacts.js';
 export * from './api/contracts.js';
