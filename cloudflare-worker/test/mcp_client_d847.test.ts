@@ -160,8 +160,9 @@ test('2. the client\'s callers are named; the client, the records and src/mcp/ n
   // D1080 (#2945): the generic sign-in (its route and its helpers) is the third.
   // D1085 (#2950): Notion's provider (its disconnect and revoke) and its typed reads are the fourth.
   assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]|from\s+['"]\.\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
-  // D856 (#2501): the setup route is the only minter of a setup ticket, and mints one only after the founder's confirm.
-  assert.deepEqual(importers(/\bmintMcpSetupTicket\(/), ['cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/routes/channels.ts']);
+  // D856 (#2501): the setup route mints a setup ticket only after the founder's confirm.
+  // D1343 (#3551): `sendThroughCustom` mints one for a member's own mail-send tool, only after the composer's send nonce is spent.
+  assert.deepEqual(importers(/\bmintMcpSetupTicket\(/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/routes/channels.ts']);
   // #2549: public status reads provider metadata only. The transport importer
   // assertion above still permits only the two actual client callers.
   assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]|from\s+['"]\.\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);

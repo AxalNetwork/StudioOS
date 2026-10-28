@@ -15,7 +15,9 @@ export type ImapCreds = {
   smtp_host: string; smtp_port: number; smtp_tls: Tls;
   imap_host: string; imap_port: number; imap_tls: Tls;
 };
-export type Creds = OAuthCreds | ImapCreds;
+/** D1343: a member's own MCP mail server: the custom connector and its owner; its tokens stay the connector's. */
+export type McpCreds = { kind: 'mcp'; connection_uid: string; user_id: number };
+export type Creds = OAuthCreds | ImapCreds | McpCreds;
 
 export type Outgoing = { from: string; fromName: string | null; to: string; subject: string; body: string };
 export type SendResult = { messageId: string | null; creds?: Creds };

@@ -196,7 +196,7 @@ test('IMAP: port 25 is refused before any socket opens; a good mailbox is verifi
     assert.equal((await openCreds(f.env, row) as any).password, PASSWORD, 'it opens for its own row');
     assert.equal(await openCreds(f.env, { ...row, uid: 'f'.repeat(32) }), null, 'and for no other');
     const list = await call(f, 2, 'GET', '/api/mail/accounts');
-    assert.deepEqual(list.body.providers, { outlook: true, gmail: false, imap: true });
+    assert.deepEqual(list.body.providers, { outlook: true, gmail: false, imap: true, mcp: false });
     noSecrets(f, 'the list', list.text);
     const wrong = await call(f, 2, 'POST', '/api/mail/accounts/imap', { ...IMAP, address: 'other@example.invalid', password: 'not-the-password' });
     assert.deepEqual([wrong.status, wrong.body.error], [400, 'mailbox_auth_failed']);
