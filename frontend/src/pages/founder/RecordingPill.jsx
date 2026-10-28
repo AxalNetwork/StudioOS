@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
 import { elapsedMs, finishLine, pillLabel, pillVariant, reviewPath } from '../../lib/activeRecording';
@@ -42,7 +42,14 @@ export default function RecordingPill() {
   const variant = pillVariant(state);
   const now = useNow(variant === 'recording' || variant === 'offline');
   const self = useRef(null);
-  const shown = !!variant && location.pathname !== '/validate/record/live';
+  const [dismissedSession, setDismissedSession] = useState(null);
+  // Hide only this pending overlay. The recorder keeps uploading and polling;
+  // completion, failure and a different session remain visible.
+  useEffect(() => {
+    if (variant !== 'processing') setDismissedSession(null);
+  }, [variant]);
+  const dismissed = variant === 'processing' && dismissedSession === state.session?.id;
+  const shown = !dismissed && !!variant && location.pathname !== '/validate/record/live';
   useEffect(() => {
     if (!shown || !focusOnShow || !self.current) return;
     focusOnShow = false;
@@ -69,8 +76,8 @@ export default function RecordingPill() {
       </Link>
     );
   }
-  return (
-    <button ref={self} type="button" onClick={() => navigate(`/validate/record/live?session=${encodeURIComponent(state.session.id)}`)} aria-label={label} data-testid="recording-pill" data-variant={variant} className={box}>
+  const content = (
+    <button ref={self} type="button" onClick={() => navigate(`/validate/record/live?session=${encodeURIComponent(state.session.id)}`)} aria-label={label} data-testid="recording-pill" data-variant={variant} className={variant === 'processing' ? "flex min-w-0 flex-1 items-center gap-3 text-left rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600" : box}>
       {ring}
       <span className="flex flex-col">
         {TIMED.has(variant) && <span className="font-mono text-[15px] font-semibold tabular-nums" data-testid="recording-pill-clock">{t}</span>}
@@ -80,5 +87,14 @@ export default function RecordingPill() {
         </span>
       </span>
     </button>
+  );
+  if (variant !== 'processing') return content;
+  return (
+    <div className={box}>
+      {content}
+      <button type="button" aria-label="Dismiss processing notification" title="Hide this notification; processing continues" data-testid="dismiss-recording-pill" onClick={() => setDismissedSession(state.session.id)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl text-gray-500 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:text-gray-300 dark:hover:bg-white/10">
+        <span aria-hidden="true">×</span>
+      </button>
+    </div>
   );
 }
