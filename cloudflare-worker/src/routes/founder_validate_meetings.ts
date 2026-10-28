@@ -356,6 +356,32 @@ function meetTarget(attach: Record<string, unknown> | null): meet.MeetTarget | n
  * times, is organised by their account, ended no more than 30 days ago (Meet's
  * retention), and is not already a call on an interview.
  */
+/**
+ * D1360: Eadwyn AI joins by default. A call saved here for import also sends
+ * the bot when it is deployed for this platform and enabled for the member,
+ * unless the member said no (`auto_send_bot: false`). The bot is the only
+ * capture that works on every plan; the import stays as the second path.
+ * Never a refusal of the save: a bot that cannot be queued is reported beside
+ * the saved call. A call already over gets no bot.
+ */
+async function sendBotByDefault(c: C, user: User, session: Parameters<typeof dispatchBot>[2], provider: MeetingProvider,
+  call: { joinUrl: string; startsAt: string; endsAt?: string | null }, body: Record<string, unknown>) {
+  if (body?.auto_send_bot === false) return { bot: null, bot_error: null };
+  const now = Date.now();
+  if (call.endsAt && Date.parse(call.endsAt) <= now) return { bot: null, bot_error: null };
+  const read = await botAvailability(c.env, user).catch(() => null);
+  if (read?.platforms?.[provider] !== true) return { bot: null, bot_error: null };
+  const start = Date.parse(call.startsAt);
+  try {
+    const bot = await dispatchBot(c.env, user, session, {
+      meeting_url: call.joinUrl, ...(Number.isFinite(start) && start > now ? { scheduled_at: new Date(start).toISOString() } : {}),
+    });
+    return { bot, bot_error: null };
+  } catch (e) {
+    return { bot: null, bot_error: e instanceof BotError ? e.body() : { code: 'bot_unavailable', message: 'Eadwyn AI could not be queued. Open the session to check its status.' } };
+  }
+}
+
 async function attachCalendarMeet(c: C, s: { user: User; scoped: ScopedInterview }, body: Record<string, unknown>, target: meet.MeetTarget) {
   const consentMethod = consentOf(body);
   if (!consentMethod) {
@@ -417,7 +443,8 @@ async function attachCalendarMeet(c: C, s: { user: User; scoped: ScopedInterview
     ).bind(uid, call.eventId, session.id, s.scoped.interview.id, s.user.id, call.joinUrl, call.startsAt, call.endsAt,
       Date.parse(call.endsAt) > Date.now() ? 'scheduled' : 'ended', notice ? MEETING_ERRORS[notice] : null).run();
     const ref = await loadRef(c.env, uid);
-    return c.json({ meeting: ref ? view(ref) : null, session_id: session.id,
+    const sent = await sendBotByDefault(c, s.user, session, 'google_meet', { joinUrl: call.joinUrl, startsAt: call.startsAt, endsAt: call.endsAt }, body);
+    return c.json({ ...sent, meeting: ref ? view(ref) : null, session_id: session.id,
       notice: notice ? { code: notice, message: MEETING_ERRORS[notice] } : null }, 201);
   } catch (x) {
     if (sessionId) {
@@ -491,7 +518,8 @@ async function attachHostedZoom(c: C, s: { user: User; scoped: ScopedInterview }
        VALUES (?, 'zoom', ?, ?, ?, ?, ?, ?, NULL, 'scheduled')`,
     ).bind(uid, link.externalRef, session.id, s.scoped.interview.id, s.user.id, link.joinUrl, new Date().toISOString()).run();
     const ref = await loadRef(c.env, uid);
-    return c.json({ meeting: ref ? view(ref) : null, session_id: session.id, notice: ZOOM_IMPORT_NOTICE }, 201);
+    const sent = await sendBotByDefault(c, s.user, session, 'zoom', { joinUrl: link.joinUrl, startsAt: new Date().toISOString() }, body);
+    return c.json({ ...sent, meeting: ref ? view(ref) : null, session_id: session.id, notice: ZOOM_IMPORT_NOTICE }, 201);
   } catch (x) {
     if (sessionId) {
       await c.env.DB.prepare(

@@ -351,3 +351,76 @@ test('a retried Calendar Meet attach answers the first one', async (t) => {
   assert.equal(again.body.session_id, first.body.session_id);
   assert.equal(sessionCount(f), 1);
 });
+
+// D1360: Eadwyn AI joins by default. A call saved for import also sends the bot
+// when it is deployed for that platform, unless the member said no.
+function botDeployed(f: World) {
+  f.db.exec(migration('531_meeting_bots.sql'));
+  const commands: string[] = [];
+  Object.assign(f.env, DEPLOYED, {
+    MEETING_BOT_RUN: { idFromName: (s: string) => s, get: () => ({ fetch: async (req: Request) => { commands.push(new URL(req.url).pathname); return json({ status: 'queued' }); } }) },
+  });
+  return commands;
+}
+
+test('D1360: a saved Zoom call sends Eadwyn AI by default when the bot is deployed; auto_send_bot false keeps it out', async (t) => {
+  const f = world();
+  await zoomConnected(f);
+  const commands = botDeployed(f);
+  mockFetch(t, ZOOM_HOSTED);
+  const made = await saveZoom(f);
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  assert.equal(made.body.bot.status, 'queued');
+  assert.equal(made.body.bot_error, null);
+  assert.deepEqual(commands, ['/init']);
+  const ref = (await loadRef(f.env, made.body.meeting.uid))!;
+  assert.deepEqual([ref.status, Number(ref.session_id)], ['scheduled', made.body.session_id], 'the import stays as the second path');
+  const bots = f.db.prepare('SELECT session_id, status FROM meeting_bots').all();
+  assert.deepEqual(bots.map((b: any) => Number(b.session_id)), [made.body.session_id]);
+  assert.ok(!JSON.stringify(made.body).includes('d1358-'), 'no bot secret in the reply');
+
+  f.db.prepare("INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (103, 7, 'Opted out')").run();
+  f.db.prepare('DELETE FROM interview_channel_refs').run();
+  const out = await saveZoom(f, { consent: CONSENT, auto_send_bot: false }, 103);
+  assert.equal(out.status, 201, JSON.stringify(out.body));
+  assert.deepEqual([out.body.bot, out.body.bot_error], [null, null]);
+  assert.deepEqual(commands, ['/init'], 'no second bot');
+});
+
+test('D1360: with no bot deployed a saved call is only saved for import, with no bot error', async (t) => {
+  const f = world();
+  await zoomConnected(f);
+  mockFetch(t, ZOOM_HOSTED);
+  const made = await saveZoom(f);
+  assert.equal(made.status, 201);
+  assert.deepEqual([made.body.bot, made.body.bot_error], [null, null]);
+});
+
+test('D1360: a Calendar Meet call under way sends Eadwyn AI now; one already over sends none', async (t) => {
+  const f = world();
+  await meetConnected(f);
+  const commands = botDeployed(f);
+  const slot = (from: number, to: number) => ({ start: new Date(Date.now() + from * 60_000).toISOString(), end: new Date(Date.now() + to * 60_000).toISOString() });
+  let when = slot(-10, 30);
+  mockFetch(t, {
+    'POST https://oauth2.googleapis.com/token': () => json({ access_token: 'fixture-access' }),
+    'GET https://www.googleapis.com/calendar/v3/calendars/primary/events': () => json({ items: [{
+      id: 'evt0001fixture', organizer: { self: true }, hangoutLink: `https://meet.google.com/${MEET_CODE}`,
+      conferenceData: { conferenceId: MEET_CODE, entryPoints: [{ entryPointType: 'video', uri: `https://meet.google.com/${MEET_CODE}` }] },
+      start: { dateTime: when.start }, end: { dateTime: when.end },
+    }] }),
+  });
+  const body = { attach: { join_url: `https://meet.google.com/${MEET_CODE}` }, consent: CONSENT };
+  const live = await request(f, 'POST', `/interviews/${INTERVIEW}/meetings`, body);
+  assert.equal(live.status, 201, JSON.stringify(live.body));
+  assert.equal(live.body.bot.status, 'queued');
+  assert.deepEqual(commands, ['/init']);
+
+  f.db.prepare('DELETE FROM interview_channel_refs').run();
+  f.db.prepare("INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (104, 7, 'Past call')").run();
+  when = slot(-90, -30);
+  const past = await request(f, 'POST', `/interviews/104/meetings`, body);
+  assert.equal(past.status, 201, JSON.stringify(past.body));
+  assert.deepEqual([past.body.bot, past.body.bot_error], [null, null]);
+  assert.deepEqual(commands, ['/init'], 'a call already over gets no bot');
+});

@@ -393,7 +393,8 @@ export default function RecordLightbox({
         ? await channelsSource.saveZoomCall(target.id, { join_url: link.trim(), consent: given })
         : await channelsSource.attachCalendarMeet(target.id, { join_url: link.trim(), consent: given });
       if (r?.session_id == null) throw new Error('The call could not be saved. Try again.');
-      onStarted?.({ id: r.session_id, submitted_via: provider }, {
+      // D1360: the Worker also sends Eadwyn AI when it can join (`r.bot`).
+      onStarted?.({ id: r.session_id, submitted_via: r.bot ? 'meeting_bot' : provider }, {
         id: target.id, interviewee_name: target.interviewee_name ?? named, interviewee_company: target.interviewee_company ?? null,
       });
     } catch (e) {
