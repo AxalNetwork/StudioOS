@@ -634,7 +634,11 @@ export default function RecordLightbox({
             <Radios label="Provider" testId="record-provider" value={provider} onChange={pickProvider}
               options={chips.map((c) => { const st = chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined,
                 // D687 step 10: the bare 16px mark, real marks only (fallback none), as Schedule a call's chips draw it.
-                icon: <BrandIcon provider={c.value} size={16} variant="bare" fallback="none" /> }; })} />
+                // Owner-requested Teams mark: official Teams favicon, saved locally (2026-10-28).
+                // Source: https://teams.public.onecdn.static.microsoft/evergreen-assets/icons/microsoft_teams_logo_refresh_v2025.ico
+                icon: c.value === 'teams'
+                  ? <img src="/microsoft-teams.ico" width={16} height={16} alt="" aria-hidden="true" className="shrink-0" />
+                  : <BrandIcon provider={c.value} size={16} variant="bare" fallback="none" /> }; })} />
           )}
           {status?.connectHref && (
             <Link to={status.connectHref} className="w-fit text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-connect-link">Connect {chosen.label} in Connectors</Link>
