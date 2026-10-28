@@ -439,7 +439,7 @@ function capturedWord(d: InterviewData): string {
   if (via) return `Imported from ${IMPORTED[via] ?? s.submitted_via_name ?? 'an assistant'}`;
   if (s.channel === 'text') return 'Pasted in StudioOS';
   if (s.channel === 'manual') return 'Entered by hand';
-  return 'Recorded in StudioOS';
+  return 'Recorded in Axal VC';
 }
 
 /** Yes when a pain was judged Severe or Real, No when every judged pain is Mild. */

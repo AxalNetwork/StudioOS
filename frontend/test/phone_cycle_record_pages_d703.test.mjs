@@ -75,7 +75,7 @@ const FED = { key: 'fed', title: 'What it fed', gate: 'read', side: true, rows: 
 const INTERVIEW = {
   cycle: 'validate', module: 'customer-research', id: '5', title: 'Rowan Vale', sub: 'Ops lead at Kestrel · 7 Oct · 34 min',
   pills: [{ text: 'Strong fit', tone: 'ok' }],
-  facts: [{ label: 'Captured', value: 'Recorded in StudioOS' }, { label: 'Consent', value: 'Said yes out loud' },
+  facts: [{ label: 'Captured', value: 'Recorded in Axal VC' }, { label: 'Consent', value: 'Said yes out loud' },
     { label: 'ICP fit', value: 'Strong · Segment A' }, { label: 'Need-to-have', value: null, reason: 'No pain is judged yet.' }],
   main: [{ key: 'transcript', title: 'Transcript', gate: 'write', rows: [] }, { key: 'placements', title: 'Eadwyn’s placements', gate: 'write', rows: [] }],
   side: [FED, { key: 'cost', title: 'Cost', gate: 'write', side: true, rows: [] }],
