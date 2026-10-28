@@ -16,6 +16,7 @@ import { ReviewStep, makeReviewActions, REVIEW_INITIAL } from '../src/pages/foun
 import { clearRailPage, setRailPage } from '../src/lib/railPage.js';
 import { mountContracts } from './_contracts_dom.mjs';
 import * as F from './_interview_review_fixtures.mjs';
+import { interviewSessionsApi } from '../src/lib/api/interviewSessions.js';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -145,10 +146,27 @@ test('both Summarise presses send their option and answer only the session they 
   assert.match(review, /openSession\.current = chosenId;/);
 });
 
-test('the three API methods carry the press\'s headers', () => {
-  // Mutation checked: any of the three dropping `headers`.
-  const client = read('src/lib/api/interviewSessions.js');
-  for (const [name, args] of [['summarise', 'id, model, headers'], ['structure', 'id, model, headers'], ['ask', 'id, question, headers']]) {
-    assert.match(client, new RegExp(`${name}: \\(${args}\\) => request\\(\`\\$\\{P\\}/sessions/\\$\\{enc\\(id\\)\\}/${name}\`, \\{\\s*\\.\\.\\.\\(headers \\? \\{ headers \\} : \\{\\}\\),`), name);
-  }
+test('the three API methods carry the press\'s headers', async () => {
+  // Observe the real request so extra options (such as the model timeout)
+  // do not change this contract. Dropping any method's headers must fail.
+  const before = globalThis.fetch;
+  const storage = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => null };
+  const calls = [];
+  const methods = ['summarise', 'structure', 'ask'];
+  globalThis.fetch = async (url, options) => {
+    const headers = new Headers(options.headers);
+    calls.push({ path: new URL(url, 'https://example.test').pathname, method: options.method,
+      page: headers.get('X-AI-Page'), option: headers.get('X-AI-Option') });
+    return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    for (const name of methods) await interviewSessionsApi[name](91, 'Synthetic input', {
+      'X-AI-Page': 'Founder - Validate', 'X-AI-Option': `${name}:fixture`,
+    });
+    assert.deepEqual(calls, methods.map((name) => ({
+      path: `/api/founder/validate/sessions/91/${name}`, method: 'POST',
+      page: 'Founder - Validate', option: `${name}:fixture`,
+    })));
+  } finally { globalThis.fetch = before; globalThis.localStorage = storage; }
 });
