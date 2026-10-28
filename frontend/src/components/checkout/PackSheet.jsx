@@ -6,7 +6,7 @@ import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { topUpRows } from '../../pages/account/usageModel';
 import { notifyTokensAdded } from '../../lib/aiTokens';
 import { SECURE_LINE, SELLER_LINE, declineFamily, newNonce, refusalView } from './checkoutModel';
-import { CardFormBoundary, STRIPE_BRIDGE, useDialog } from './CheckoutSheet';
+import { CardFormBoundary, SHEET_BAR, SHEET_SCROLL_PAD, STRIPE_BRIDGE, backdropClose, useDialog } from './CheckoutSheet';
 import {
   HISTORY_EMPTY, HISTORY_EMPTY_LINE, HISTORY_MORE, HISTORY_TITLE, NOTHING_ON_SALE, PACK_PROMO, PACK_RATE, PACK_TITLE, PACKS_UNREADABLE,
   CUSTOM_KEY, CUSTOM_LABEL, PICK_ANOTHER, RUNS_TOGGLE, autoReloadView, backLabel, balanceLine, countFrames, customPack, customRangeLine, holdRule, intentBody, keepsReading, landingView,
@@ -283,10 +283,11 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
   const paid = intent ? totals.find((t) => t.key === 'due')?.value : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center" data-testid="pack-backdrop">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center" data-testid="pack-backdrop" {...backdropClose(close, locked)}>
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="pack-title" tabIndex={-1}
-        className="relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px]"
+        className={`relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px] ${SHEET_SCROLL_PAD}`}
         data-testid="pack-sheet">
+        <div className={SHEET_BAR} data-testid="pack-bar">
         <div className="flex items-center justify-between border-b border-axal-hairline px-5 py-2 dark:border-gray-700">
           <div className="flex items-center gap-1" role="tablist" aria-label="Add tokens">
             {[['add', PACK_TITLE], ['history', HISTORY_TITLE]].map(([k, t]) => (
@@ -294,7 +295,8 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
                 className={`min-h-[44px] rounded-[8px] px-3 text-[15px] font-extrabold tracking-[-.02em] ${tab === k ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>{t}</button>
             ))}
           </div>
-          <button type="button" aria-label="Close" onClick={close} className="grid h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"><X size={18} aria-hidden="true" /></button>
+          <button type="button" aria-label="Close" onClick={close} data-testid="pack-close" className="grid h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"><X size={18} aria-hidden="true" /></button>
+        </div>
         </div>
         {tab === 'history' ? <History reads={reads} onClose={close} />
           : phase === 'landing' ? <Landing order={order} view={landing} fromMicro={balanceMicro} paid={paid} from={from} onClose={close} onHistory={() => setTab('history')} />
@@ -395,6 +397,8 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
                     <button type="button" className={PRIMARY} onClick={pay} disabled={locked || !pack || !!rule || !card} data-testid="pack-pay">
                       {locked ? 'Processing…' : pack ? `Pay ${totals.find((t) => t.key === 'due')?.value ?? pack.price}` : 'Pay'}
                     </button>
+                    {/* D1365: a way out beside Pay, on every screen size; none while a payment is taken. */}
+                    {!locked && <button type="button" className={`${LINK} self-center`} onClick={close} data-testid="pack-cancel">Cancel</button>}
                     {rule && <p className={`m-0 ${SUB}`} data-testid="pack-pay-blocked">{PICK_ANOTHER}</p>}
                     {locked && <p className="m-0 text-[12.5px] font-bold text-axal-ink dark:text-gray-100" data-testid="pack-processing">Don’t close this window.</p>}
                   </div>

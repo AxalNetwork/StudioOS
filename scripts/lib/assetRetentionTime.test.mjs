@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { planAssetRetention, recordAssetDeployment, ASSET_RETENTION_HOURS, ASSET_MIN_BUILDS, ASSET_MAX_FILES, STATIC_FILE_LIMIT } from './assetRetention.mjs';
+import { adoptUnstampedDeployments, DEPLOY_STAMP_SINCE, planAssetRetention, recordAssetDeployment, ASSET_RETENTION_HOURS, ASSET_MIN_BUILDS, ASSET_MAX_FILES, STATIC_FILE_LIMIT } from './assetRetention.mjs';
 const now = '2026-10-28T12:00:00.000Z';
 const ago = hours => new Date(Date.parse(now) - hours * 3_600_000).toISOString();
 const build = (name, hours, files = [name]) => ({ ts: ago(hours + 1), deployedAt: ago(hours), files });
@@ -97,6 +97,33 @@ test('D1364: the post-deploy CLI records the real timestamp and refuses a missin
     assert.equal(spawnSync(process.execPath,[path.join(dir,'scripts/record-asset-deploy.mjs')]).status,1);
     assert.equal(fs.existsSync(ledger),false);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('#3591: only an unstamped entry built before the stamp step is adopted, as legacy', () => {
+  const since='2026-10-29T00:00:00.000Z';
+  assert.equal(DEPLOY_STAMP_SINCE,since);
+  const shipped={ts:'2026-10-28T17:30:00.000Z',deployedAt:null,files:['shipped.js'],firstSeenAt:'x'};
+  const later={ts:'2026-10-29T01:00:00.000Z',deployedAt:null,files:['later.js']};
+  const stamped={ts:'2026-10-28T10:00:00.000Z',deployedAt:'2026-10-28T10:05:00.000Z',files:['stamped.js']};
+  const legacy={ts:'pre-retention',deployedAt:null,legacy:true,firstSeenAt:'2026-10-27T00:00:00.000Z',files:['legacy.js']};
+  const {builds,adopted}=adoptUnstampedDeployments([shipped,later,stamped,legacy]);
+  assert.equal(adopted,1);
+  assert.deepEqual(builds,[{ts:shipped.ts,deployedAt:null,files:['shipped.js'],legacy:true},later,stamped,legacy]);
+  assert.equal(shipped.legacy,undefined,'the restored record is not mutated');
+  assert.deepEqual(adoptUnstampedDeployments([{ts:'pre-retention',deployedAt:null,files:['a.js']}]).adopted,0,'no build time, no adoption');
+  assert.deepEqual(adoptUnstampedDeployments(null),{builds:[],adopted:0});
+});
+
+test('#3591: the deploy workflow stamps the shipped build after wrangler deploy and before caching it', () => {
+  // Mutation checked: move the step after the cache save → the order assertion fails.
+  const yml=fs.readFileSync(new URL('../../.github/workflows/cloudflare-worker-deploy.yml',import.meta.url),'utf8');
+  const deploy=yml.slice(yml.indexOf('\n  deploy:'),yml.indexOf('\n  schema-drift:'));
+  const ship=deploy.indexOf('wrangler deploy --config ../wrangler.toml --env production');
+  const step=deploy.indexOf('- name: Record successful asset deployment');
+  const stamp=deploy.indexOf('run: node scripts/record-asset-deploy.mjs');
+  const save=deploy.indexOf('actions/cache/save@');
+  assert.ok(ship>0 && ship<step && step<stamp && stamp<save, 'deploy, then stamp, then cache');
+  assert.doesNotMatch(deploy.slice(step,stamp),/working-directory|if:|continue-on-error/,'from the repo root, and a failed stamp stops the cache save');
 });
 
 test('D1364: manual deployment records success before its live-check postdeploy', () => {

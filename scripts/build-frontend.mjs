@@ -34,7 +34,7 @@ import {
   RETENTION_LEDGER_FILENAME,
   assetsIgnoreText,
 } from './lib/assetsIgnore.mjs';
-import { planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FLAG, ASSET_MIN_BUILDS, ASSET_RETENTION_HOURS, ASSET_MAX_FILES, STATIC_FILE_LIMIT } from './lib/assetRetention.mjs';
+import { adoptUnstampedDeployments, planAssetRetention, retentionStart, seedFilesFor, SEED_RESTORED_TREE_FLAG, ASSET_MIN_BUILDS, ASSET_RETENTION_HOURS, ASSET_MAX_FILES, STATIC_FILE_LIMIT } from './lib/assetRetention.mjs';
 import { sourceTreeHash } from './lib/sourceTreeHash.mjs';
 
 const RETAIN_BUILDS = Math.max(ASSET_MIN_BUILDS, Math.floor(Number(process.env.ASSET_RETAIN_BUILDS) || ASSET_MIN_BUILDS));
@@ -77,10 +77,15 @@ function readLedgerBuilds(p) {
 
 // 1. Snapshot the pre-build assets — they must survive Vite's emptyOutDir wipe.
 const prevFiles = listAssetFiles(assetsDir);
-const ledgerBuilds = readLedgerBuilds(ledgerPath);
-// This cache was saved only after a successful publish. Older CI runs omitted
-// the stamp: preserve their known-served files under an explicit unknown-time
-// grace, never invent a deployedAt and never treat local candidates as deployed.
+const restoredLedger = readLedgerBuilds(ledgerPath);
+// #3591: the deploy that shipped before the stamp step existed left one
+// unstamped entry in the cache. It shipped, so it gets the legacy grace.
+// A later unstamped entry can also be restored when the timestamp step failed
+// after a successful publish. Keep those files under an explicit unknown-time
+// grace: never invent a deployedAt, and never treat a local candidate as deployed.
+const { builds: ledgerBuilds, adopted } = process.argv.includes(SEED_RESTORED_TREE_FLAG)
+  ? adoptUnstampedDeployments(restoredLedger) : { builds: restoredLedger, adopted: 0 };
+if (adopted) console.log(`[build] ${adopted} deployment(s) recorded before the stamp step kept as legacy history.`);
 if (process.argv.includes(SEED_RESTORED_TREE_FLAG)
     && ledgerBuilds.some(b => b?.deployedAt === null && b.legacy !== true)) {
   console.warn('::warning::[build] restored deployment ledger is unstamped; preserving saved history under a one-time per-entry grace until a successful deploy records its timestamp.');

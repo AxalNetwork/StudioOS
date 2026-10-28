@@ -19,7 +19,7 @@
 import { Hono, type Context } from 'hono';
 import { getOAuthApi } from '@cloudflare/workers-oauth-provider';
 import type { Env } from '../types';
-import { requireSuperAdmin } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { OAUTH_PATHS, mcpEnabled, providerOptions, publicOrigin } from '../mcp/oauth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
@@ -88,7 +88,7 @@ adminConnectorClients.get('/lovable', async (c) => {
 });
 
 adminConnectorClients.post('/lovable', async (c) => {
-  const actor = await requireSuperAdmin(c);
+  const actor = await requireSuperAdminWriteBar(c);
   try {
     const row = await stateRow(c.env);
     const before: State = row ? decodeState(row.value) : { state: 'ready', current: await legacyCurrent(c.env) };

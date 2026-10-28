@@ -68,9 +68,10 @@ jobs:
 
       # D529 — docs/ IS NOT COMMITTED, SO THE OLD-BUNDLE WINDOW COMES FROM
       # HERE. A tab opened before this deploy still asks for the previous
-      # build's hashed chunks; scripts/build-frontend.mjs keeps 72 hours plus
-      # a three-build floor within its cap, but only if prior assets are on
-      # disk when it runs. This restores what the last successful deploy saved
+      # build's hashed chunks; scripts/build-frontend.mjs keeps the last 72
+      # hours of deployed assets, at least three builds, within its file cap
+      # (D1364), provided the previous tree is on disk when the build runs.
+      # This restores what the last successful deploy saved
       # (its docs/assets and retention ledger) into the empty docs/ the
       # checkout leaves. `restore-keys` picks the newest `spa-assets-` entry.
       #
@@ -190,13 +191,21 @@ jobs:
           echo "::error::wrangler deploy failed three times with Cloudflare error 10013; see the attempts above"
           exit 1
 
+      # D1364 (#3591): stamp the build that just shipped, from the repo root,
+      # before it is cached. The stamp step itself has no if, so a failed
+      # stamp stays red. The save below still runs when publish succeeded,
+      # so a failed timestamp does not drop the tree already serving.
+      # A failed or skipped publish never saves. Building alone never
+      # advances the clock.
       - name: Record successful asset deployment
         run: node scripts/record-asset-deploy.mjs
 
-      # D529 — save what actually shipped even if the timestamp step failed.
-      # Keep that failure visible, but preserve the served tree for recovery.
-      # A failed/skipped publication never saves. One entry per run; newest
-      # by prefix is restored next time.
+      # D529 — save what production now serves for the next deploy to restore.
+      # always() plus the publish outcome: a failed stamp does not skip this,
+      # and a failed publish does. Smoke runs afterward as a dependent job,
+      # so a failed probe cannot lose the tree that shipped. One entry per
+      # run; the restore takes the newest by prefix.
+
       - name: Save the deployed assets for the next deploy
         if: always() && steps.publish.outcome == 'success'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

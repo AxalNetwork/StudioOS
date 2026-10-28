@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { DEPLOY_STAMP_SINCE } from './assetRetention.mjs';
 
 // The production wrapper runs unchanged. Only the external Vite/prerender
 // commands are fixture writers, so its destructive rebuild and restore use
@@ -111,6 +112,8 @@ test('D1364: an unstamped deployed cache preserves known-served history with an 
     const ledgerFile=path.join(f.dir,'docs/.asset-retention.json');
     const ledger=JSON.parse(fs.readFileSync(ledgerFile,'utf8'));
     ledger.builds[0].deployedAt=null;
+    // Built after the workflow began stamping (#3591), so a missing stamp is a bug.
+    ledger.builds[0].ts=new Date(Date.parse(DEPLOY_STAMP_SINCE)+3_600_000).toISOString();
     fs.writeFileSync(ledgerFile,JSON.stringify(ledger));
     const result=f.run();
     assert.equal(result.status,0);
@@ -120,6 +123,26 @@ test('D1364: an unstamped deployed cache preserves known-served history with an 
     assert.deepEqual({deployedAt:recovered?.deployedAt,legacy:recovered?.legacy,hasGrace:Number.isFinite(Date.parse(recovered?.firstSeenAt))},{deployedAt:null,legacy:true,hasGrace:true});
     assert.deepEqual(fs.readdirSync(path.join(f.dir,'docs/assets')).sort(),['current.js','fresh-1.js','lazy-1.js','lazy-2.js','lazy-3.js','old-1.js','old-2.js','old-3.js']);
     assert.equal(f.run({},[]).status,0);
+  } finally {f.remove();}
+});
+
+test('#3591: the deploy that shipped before the stamp step is kept as legacy history, not refused',()=>{
+  // Mutation checked: drop the adoption from the wrapper → status 1, "unstamped".
+  const f=fixture({history:true});
+  try {
+    const ledgerFile=path.join(f.dir,'docs/.asset-retention.json');
+    const ledger=JSON.parse(fs.readFileSync(ledgerFile,'utf8'));
+    ledger.builds[0].deployedAt=null;
+    ledger.builds[0].ts=new Date(Date.parse(DEPLOY_STAMP_SINCE)-6*3_600_000).toISOString();
+    fs.writeFileSync(ledgerFile,JSON.stringify(ledger));
+    const result=f.run();
+    assert.equal(result.status,0,result.stderr);
+    assert.match(result.stdout,/1 deployment\(s\) recorded before the stamp step kept as legacy history/);
+    for(const f2 of ['old-1.js','lazy-1.js','old-2.js','old-3.js']) assert.equal(fs.existsSync(path.join(f.dir,'docs/assets',f2)),true,f2);
+    const next=JSON.parse(fs.readFileSync(ledgerFile,'utf8'));
+    const kept=next.builds.find(b=>b.files.includes('old-1.js'));
+    assert.deepEqual([kept.deployedAt,kept.legacy,typeof kept.firstSeenAt],[null,true,'string']);
+    assert.equal(next.builds[0].deployedAt,null,'the new build is stamped only after it ships');
   } finally {f.remove();}
 });
 

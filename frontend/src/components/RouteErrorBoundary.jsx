@@ -1,10 +1,10 @@
 import React from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { AlertTriangle, RefreshCcw, Home } from 'lucide-react';
 import { reportError } from '../lib/log';
 import { isChunkLoadError } from '../lib/chunkLoadError';
 import { readAttempts, reloadWithinBudget } from '../lib/reloadGuard';
-import { whenIdle } from '../lib/captureGuard';
+import { isCapturing, whenIdle } from '../lib/captureGuard';
 
 /**
  * Page-level error boundary that wraps the lazy `<Routes>` tree.
@@ -38,7 +38,7 @@ const RELOAD_GUARD_KEY = 'axal:chunk-reload-boundary';
 const RELOAD_GUARD_PARAM = '__boundary';
 const MAX_BOUNDARY_RELOADS = 1;
 
-class RouteErrorBoundary extends React.Component {
+export class RouteErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
     this.state = { error: null, reloading: false, caughtAt: 0 };
@@ -74,6 +74,7 @@ class RouteErrorBoundary extends React.Component {
     if (isChunkLoadError(error)) {
       // A running recording is never reloaded away (D685 §5.6.8): the reload waits for it.
       const reloaded = reloadWithinBudget(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM, MAX_BOUNDARY_RELOADS, whenIdle);
+      this._reloadQueued = this._reloadQueued || reloaded;
       if (!reloaded) {
         // Budget spent or storage refused with no URL marker — show the actionable card.
         this.setState({ reloading: false });
@@ -117,13 +118,17 @@ class RouteErrorBoundary extends React.Component {
   };
 
   handleChunkReload = () => {
-    try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch {}
-    try {
-      const u = new URL(window.location.href);
-      u.searchParams.delete(RELOAD_GUARD_PARAM);
-      window.history.replaceState(null, '', u.pathname + u.search + u.hash);
-    } catch { /* ignore */ }
-    window.location.reload();
+    if (this._reloadQueued) return;
+    this._reloadQueued = true;
+    whenIdle(() => {
+      try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch {}
+      try {
+        const u = new URL(window.location.href);
+        u.searchParams.delete(RELOAD_GUARD_PARAM);
+        window.history.replaceState(null, '', u.pathname + u.search + u.hash);
+      } catch { /* ignore */ }
+      window.location.reload();
+    });
   };
 
   render() {
@@ -135,7 +140,8 @@ class RouteErrorBoundary extends React.Component {
     // reloads a beat later. The red card is reserved for failures we can't
     // silently recover from (a real render error, or a chunk error where the
     // one-shot reload guard is already spent / sessionStorage is blocked).
-    if (this.state.reloading) {
+    const capturingChunk = isChunkLoadError(this.state.error) && isCapturing();
+    if (this.state.reloading && !capturingChunk) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-white dark:bg-gray-950 px-4 text-gray-500 dark:text-gray-400">
           <RefreshCcw size={22} className="animate-spin" aria-hidden="true" />
@@ -164,7 +170,7 @@ class RouteErrorBoundary extends React.Component {
           </h1>
           <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
             {isChunk
-              ? 'A new version of the app was just deployed. Reload to pick it up.'
+              ? (capturingChunk ? 'A new version is ready. This page reloads when your recording ends.' : 'A new version of the app was just deployed. Reload to pick it up.')
               : 'The page failed to render. The team has been notified. You can try again, or head back to Studio.'}
           </p>
           <pre className="text-xs font-mono text-red-700 dark:text-red-300 bg-white/60 dark:bg-black/30 border border-red-200 dark:border-red-900/40 rounded-md p-3 mb-5 whitespace-pre-wrap break-words max-h-40 overflow-auto">
@@ -179,13 +185,14 @@ class RouteErrorBoundary extends React.Component {
               <RefreshCcw size={15} aria-hidden="true" />
               {isChunk ? 'Reload' : 'Try again'}
             </button>
-            <a
-              href="/studio"
+            <Link
+              to="/studio"
               className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               <Home size={15} aria-hidden="true" />
               Back to Studio
-            </a>
+            </Link>
+            {capturingChunk && <Link to="/validate/record/live" className="text-sm text-gray-900 dark:text-gray-100 underline">Return to recording</Link>}
           </div>
         </div>
       </div>
