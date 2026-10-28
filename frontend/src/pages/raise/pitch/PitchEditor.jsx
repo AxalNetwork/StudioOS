@@ -13,6 +13,10 @@ import { SlideEvidence } from '../../cycles/evidence/EvidencePart';
 import { SOURCES_TITLE } from '../../cycles/evidence/moduleEvidence';
 import AddMenu from './AddMenu';
 import CardAssistBar from './CardAssistBar';
+import ImageLightbox from './ImageLightbox';
+import ImageToolbar from './ImageToolbar';
+import { deckImagesApi } from '../../../lib/api/deckImages';
+import { overlayStyle } from './imageModel';
 import { BlockGrid } from './BlockGrid';
 import { ChartBlock, ChartLibrary, ChartToolbar } from './ChartTools';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
@@ -227,6 +231,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
   const card = cards[sel] || null;
   const kitData = kit.status === 'ok' ? kit.data?.kit ?? null : null;
   const colours = cardColours(theme, kitData);
+  // D903: a background's overlay is in the brand ink, never the dark theme's light text colour.
+  const ink = theme?.kind === 'neutral_dark' ? undefined : colours.ink;
+  const [images, setImages] = useState([]);
+  const loadImages = useCallback(() => {
+    if (readOnly) return;
+    deckImagesApi.list(base.deck.id).then((r) => setImages(r?.images || []), (e) => reportError('pitch-images:list', e));
+  }, [base.deck.id, readOnly]);
+  useEffect(() => { loadImages(); }, [loadImages]);
 
   const setCard = (i, c) => setCards((cs) => cs.map((x, j) => (j === i ? c : x)));
   const move = (from, to) => { setCards((cs) => moveCard(cs, from, to)); setSel(to); setSelBlock(null); };
@@ -283,7 +295,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
             }} />
           <div className="flex min-w-0 flex-col gap-3">
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
-              <CenterCard card={card} index={sel} colours={colours} theme={theme} kit={kit} selBlock={selBlock} readOnly={readOnly} charts={charts}
+              <CenterCard card={card} index={sel} colours={colours} ink={ink} theme={theme} kit={kit} selBlock={selBlock} readOnly={readOnly} charts={charts}
                 onSelectBlock={setSelBlock} onChartLibrary={() => setDialog({ kind: 'charts' })}
                 onRemoveBlock={(id) => setDialog({ kind: 'remove-block', id })}
                 onAddBlock={() => setDialog({ kind: 'add-block' })} />
@@ -292,6 +304,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
               <>
                 <AddMenu deckId={base.deck.id} cardIndex={sel} card={card} model={model} items={sources.data?.items || []}
                   onBlock={(kind) => setDialog({ kind: 'add-block', initial: kind })}
+                  onImage={(use) => setDialog({ kind: 'image', use })}
                   onDesign={() => setPanel('design')}
                   onPlace={(c) => setCard(sel, c)}
                   onAddCard={(c) => { setCards((cs) => [...cs, c]); setSel(cards.length); setSelBlock(null); }} />
@@ -300,7 +313,17 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
                     onPatch={(patch) => setCard(sel, updateBlock(card, selBlock, patch))}
                     onLibrary={() => setDialog({ kind: 'charts', edit: selBlock })}
                     onRemove={() => setDialog({ kind: 'remove-block', id: selBlock })} />
-                ) : (
+                ) : (card.blocks || []).find((b) => b.id === selBlock)?.kind === 'image' ? (() => {
+                  const block = card.blocks.find((b) => b.id === selBlock);
+                  return (
+                    <ImageToolbar block={block} image={images.find((x) => x.uid === block.image_id) || null}
+                      onPatch={(patch) => setCard(sel, updateBlock(card, selBlock, patch))}
+                      onReplace={() => setDialog({ kind: 'image', use: 'content', replace: selBlock })}
+                      onUpload={() => setDialog({ kind: 'image', use: 'content', replace: selBlock })}
+                      onRegenerate={() => setDialog({ kind: 'image', use: 'content', replace: selBlock })}
+                      onRemove={() => setDialog({ kind: 'remove-block', id: selBlock })} />
+                  );
+                })() : (
                   <CardAssistBar deckId={base.deck.id} cardIndex={sel} items={sources.data?.items || []}
                     block={(card.blocks || []).find((b) => b.id === selBlock) || null}
                     onPlace={(id, text) => setCard(sel, updateBlock(card, id, { text }))} />
@@ -372,6 +395,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
             setCard(sel, r.card); setSelBlock(r.card.blocks[r.card.blocks.length - 1].id); setDialog(null);
           }} />
       ) : null}
+      {dialog?.kind === 'image' && card ? (
+        <ImageLightbox deckId={base.deck.id} cardIndex={sel} card={dialog.replace ? removeBlock(card, dialog.replace) : card} theme={theme} model={model}
+          items={sources.data?.items || []} colours={{ ...colours, ink }} initialUse={dialog.use} onClose={() => setDialog(null)}
+          onPlace={(placed) => {
+            setCard(sel, placed.card); if (placed.theme !== theme) setTheme(placed.theme);
+            setSelBlock(placed.block?.id ?? null); setDialog(null); loadImages();
+          }} />
+      ) : null}
       {dialog?.kind === 'add-block' && card ? (
         <AddBlockDialog card={card} model={model} sources={sources} initialKind={dialog.initial} onClose={() => setDialog(null)}
           onAdd={(c) => { setCard(sel, c); setDialog(null); }} />
@@ -428,10 +459,11 @@ function Rail({ cards, sel, stale, readOnly, onSelect, move, onAdd }) {
 // The centre card (PD1, PD8b)
 // ---------------------------------------------------------------------------
 
-function CenterCard({ card, index, colours, theme, kit, selBlock, readOnly, charts, onSelectBlock, onRemoveBlock, onAddBlock, onChartLibrary }) {
+function CenterCard({ card, index, colours, ink, theme, kit, selBlock, readOnly, charts, onSelectBlock, onRemoveBlock, onAddBlock, onChartLibrary }) {
   const blocks = Array.isArray(card?.blocks) ? card.blocks : null;
   const bg = card?.background?.color || theme?.background?.color || colours.bg;
   const bgImage = card?.background?.image_url || theme?.background?.image_url || null;
+  const veil = bgImage ? overlayStyle((card?.background?.image_url ? card.background : theme?.background)?.overlay, ink) : null;
   return (
     <div className="flex flex-col gap-2">
       {kit.status === 'error' ? <div className={`${MUTED} text-amber-700 dark:text-amber-300`} role="status">{KIT_FAILED} <button type="button" className="font-bold underline" onClick={kit.retry}>Try again</button></div> : null}
@@ -439,6 +471,7 @@ function CenterCard({ card, index, colours, theme, kit, selBlock, readOnly, char
       <div className="relative w-full overflow-hidden rounded-[12px] border border-axal-hairline shadow-sm dark:border-gray-700"
         style={{ aspectRatio: '16 / 9', background: bg, color: colours.ink, backgroundImage: bgImage ? `url("${bgImage}")` : undefined, backgroundSize: 'cover' }}
         data-testid="pitch-editor-card">
+        {veil ? <span className="absolute inset-0" style={{ background: veil }} aria-hidden="true" data-testid="pitch-editor-overlay" /> : null}
         {blocks && blocks.length ? (
           <BlockGrid blocks={blocks} colours={colours} selected={selBlock} onSelect={onSelectBlock}
             renderChart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} testId="pitch-editor-blocks" />
