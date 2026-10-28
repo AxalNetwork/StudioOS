@@ -16,8 +16,14 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { BASE_THEMES, SLIDE, TYPE_SCALE, boxOf, fitProblems, themeProblems, typeRoleOf } from '../cloudflare-worker/src/services/decks/designSystem.ts';
 import { fullReferenceDeck, sparseReferenceDeck, SYNTHETIC_VENTURE } from '../cloudflare-worker/test/fixtures/pitchReferenceDecks.ts';
+// D897 §9 (#3659): `--story` draws decks the composer generated from synthetic records instead of the hand-composed ones.
+import { buildCards, standardOutline } from '../cloudflare-worker/src/services/decks/newDeck.ts';
+import { conflictingRecords, fullRecords, sparseRecords, wordsFor } from '../cloudflare-worker/test/fixtures/pitchStoryFixtures.ts';
 
-const OUT = resolve(process.argv[2] || 'pitch-reference-preview');
+const STORY = process.argv.includes('--story');
+const OUT = resolve(process.argv.slice(2).find((a) => !a.startsWith('--')) || 'pitch-reference-preview');
+/** A bound series' points, as the editor reads them from `GET /api/decks/chart-series`; here, from the fixture. */
+const SERIES_POINTS = new Map();
 mkdirSync(OUT, { recursive: true });
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -48,7 +54,7 @@ function chartSvg(b, t, w, h) {
         ${sourceChip(b.series[0]?.binding, t)}
       </div>`).join('')}</div>`;
   }
-  const pts = b.series[0]?.points || [];
+  const pts = b.series[0]?.points || SERIES_POINTS.get(b.series[0]?.binding?.source_key) || [];
   if (!pts.length) return '';
   const pad = { l: 120, r: 40, t: 40, b: 80 };
   const max = Math.max(...pts.map((p) => p.y)) * 1.15;
@@ -159,11 +165,18 @@ function phonePage(name, slides, t) {
     </div></body></html>`;
 }
 
-const decks = { full: fullReferenceDeck(), sparse: sparseReferenceDeck() };
+function storyDeck(rec, audience) {
+  for (const x of rec.series) SERIES_POINTS.set(x.key, x.points);
+  const rows = standardOutline('standard', audience);
+  return buildCards(rows, rec.items, wordsFor(rows), SYNTHETIC_VENTURE, new Set(), { series: rec.series }).slides;
+}
+const decks = STORY
+  ? { 'story-full': storyDeck(fullRecords(), 'seed_fund'), 'story-sparse': storyDeck(sparseRecords(), 'pre_seed_fund'), 'story-conflicting': storyDeck(conflictingRecords(), 'series_a_fund') }
+  : { full: fullReferenceDeck(), sparse: sparseReferenceDeck() };
 const report = { themes: {}, fit: {}, files: [] };
 for (const [kind, t] of Object.entries(BASE_THEMES)) report.themes[kind] = themeProblems(t);
 for (const [name, slides] of Object.entries(decks)) {
-  report.fit[name] = fitProblems(slides);
+  report.fit[name] = fitProblems(slides.filter((x) => !x.appendix));
   for (const t of Object.values(BASE_THEMES)) {
     const f = join(OUT, `${name}-${t.kind}.html`);
     writeFileSync(f, deckPage(`${name} deck`, slides, t));
