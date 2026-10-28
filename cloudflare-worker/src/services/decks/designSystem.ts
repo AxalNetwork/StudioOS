@@ -291,13 +291,14 @@ export function meets(layout: string, evidence: Partial<Evidence>): boolean {
  */
 export const ROLE_LAYOUTS: Record<string, LayoutId[]> = {
   title: ['title'],
-  problem: ['quote', 'metric_tiles', 'statement'],
+  // A problem is a sentence a customer would say, with its evidence under it, not a row of tiles.
+  problem: ['quote', 'statement'],
   why_now: ['statement'],
   solution: ['image_text', 'two_columns', 'statement'],
   product: ['image_text', 'metric_tiles', 'two_columns'],
   traction: ['chart_text', 'metric_tiles', 'statement'],
-  validation: ['metric_tiles', 'chart_text', 'statement'],
-  market: ['comparison_table', 'metric_tiles', 'statement'],
+  validation: ['chart_text', 'metric_tiles', 'statement'],
+  market: ['comparison_table', 'statement'],
   competition: ['comparison_table', 'two_columns', 'statement'],
   business_model: ['two_columns', 'metric_tiles', 'statement'],
   unit_economics: ['metric_tiles', 'chart_text', 'statement'],
