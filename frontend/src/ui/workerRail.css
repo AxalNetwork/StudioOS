@@ -461,7 +461,7 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
 
   .fwr-fab {
     position: fixed; right: 16px; z-index: 40;
-    display: flex; align-items: center; justify-content: center;
+    display: none; align-items: center; justify-content: center;
     width: 56px; height: 56px; border-radius: 18px; border: 0;
     color: #fff; background: var(--fwr-accent-light, #6d28d9);
     box-shadow: 0 5px 18px rgba(24, 24, 27, .24);
