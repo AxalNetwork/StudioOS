@@ -333,7 +333,8 @@ export const embedRequest = (text: string): Record<string, unknown> => ({ text }
 
 export function parseEmbed(raw: unknown, text: string): { vector: number[] | null; units: Units } {
   const data = (raw as { data?: unknown })?.data;
-  const vector = Array.isArray(data) && Array.isArray(data[0]) ? (data[0] as number[]) : null;
+  const candidate = Array.isArray(data) && Array.isArray(data[0]) ? data[0] : null;
+  const vector = candidate && candidate.length > 0 && candidate.length <= 32768 && candidate.every(v => typeof v === 'number' && Number.isFinite(v)) ? candidate as number[] : null;
   const usage = (raw as { usage?: { prompt_tokens?: unknown } })?.usage;
   return { vector, units: { tokens_in: count(usage?.prompt_tokens) ?? estTokens(text) } };
 }

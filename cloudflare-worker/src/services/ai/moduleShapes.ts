@@ -89,8 +89,9 @@ export function specialistOutput(raw: unknown, s: SpecialistInput, text: string)
     answer = { is_complete: r.is_complete, probability: r.probability };
     units = { audio_minutes: pcmMinutes(pcmBytes(s.pcm16)!) };
   } else {
-    if (!Array.isArray(raw) || raw.length < 1 || raw.length > 64 || !raw.every(x => plain(x) && short(x.label, 200) && probability(x.score))) return null;
-    answer = raw.map(x => ({ label: x.label, score: x.score }));
+    if (!Array.isArray(raw) || raw.length < 1 || raw.length > (s.operation === 'image_labels' ? 1000 : 64) || !raw.every(x => plain(x) && short(x.label, 200) && probability(x.score))) return null;
+    const labels = s.operation === 'image_labels' ? [...raw].sort((a, b) => b.score - a.score).slice(0, 5) : raw;
+    answer = labels.map(x => ({ label: x.label, score: x.score }));
     units = s.operation === 'image_labels' ? { images: 1 } : { tokens_in: new TextEncoder().encode(text).byteLength, tokens_out: 0 };
   }
   const output = JSON.stringify(answer);

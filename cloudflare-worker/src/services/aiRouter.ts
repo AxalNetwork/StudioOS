@@ -1351,6 +1351,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       if (opts.images?.length !== 1) return { ok: false, status: 400, error: 'Moondream needs one image' };
       const raw = await ai.run(model, { task: 'query', image: opts.images[0], question: defaultContentBlob(opts), max_tokens: opts.maxTokens ?? 512 }, runOpt) as any;
       if (typeof raw?.answer !== 'string' || !raw.answer.trim()) return { ok: false, status: 502, error: 'Unreadable image answer' };
+      if (['input_tokens', 'output_tokens'].some(key => raw.metrics?.[key] != null && (typeof raw.metrics[key] !== 'number' || !Number.isSafeInteger(raw.metrics[key]) || raw.metrics[key] < 0))) return { ok: false, status: 502, error: 'Unreadable image usage' };
       const units = { tokens_in: raw.metrics?.input_tokens ?? estTokens(defaultContentBlob(opts)) + 1024, tokens_out: raw.metrics?.output_tokens ?? estTokens(raw.answer), images_in: 1 };
       return { ok: true, output: raw.answer, prompt_tokens: units.tokens_in, completion_tokens: units.tokens_out, units };
     }

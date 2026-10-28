@@ -10,7 +10,7 @@ import { pcmBytes, pcmMinutes, questionsValid, specialistOutput } from '../src/s
 import { railRows, railOptionRows, resolveRailChain } from '../src/services/ai/railMatrix.ts';
 import { publicModels } from '../src/services/ai/publicModels.ts';
 import { run, __resetForTest } from '../src/services/aiRouter.ts';
-import { searchIndexAccepts } from '../src/services/ai/shapes.ts';
+import { searchIndexAccepts, parseEmbed } from '../src/services/ai/shapes.ts';
 import { unitPrice } from '../src/services/ai/pricing.ts';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
@@ -200,6 +200,7 @@ test('standalone embeddings never write axal-search; each model bills its catalo
     } finally { f.db.close(); }
   }
   assert.deepEqual(results, Array(6).fill([true, [0.2, 0.8], true, false]));
+  assert.deepEqual([parseEmbed({ data: [[]] }, 'text').vector, parseEmbed({ data: [[NaN]] }, 'text').vector, parseEmbed({ data: [['0.2']] }, 'text').vector], [null, null, null]);
 });
 
 test('every newly connected text model actually dispatches through its persona module', async () => {
@@ -222,6 +223,17 @@ test('Moondream uses image-query shape; no reasoning trace is returned as the an
     const id = '@cf/moondream/moondream3.1-9B-A2B';
     const r = await post(f, { page: pageFor(id).pageKey, model: id, text: 'What is shown?', images: [png] });
     assert.deepEqual([r.body.ok, r.body.output, f.calls[0].input], [true, 'A chart.', { task: 'query', image: png, question: 'What is shown?', max_tokens: 1024 }]);
+  } finally { f.db.close(); }
+});
+
+test('image specialists bound legitimate classifier output and refuse malformed usage', async () => {
+  const labels = Array.from({ length: 1000 }, (_, i) => ({ label: `class-${i}`, score: i / 1000 }));
+  const output = specialistOutput(labels, { operation: 'image_labels' }, '')!;
+  assert.deepEqual(JSON.parse(output.output).map((x: any) => x.label), ['class-999', 'class-998', 'class-997', 'class-996', 'class-995']);
+  const f = fixture(() => ({ answer: 'A chart.', metrics: { input_tokens: 'invalid', output_tokens: 3 } }));
+  try {
+    const result = await run(f.env, { task: 'module_vision', userId: 2, model: '@cf/moondream/moondream3.1-9B-A2B', text: 'Read this chart.', images: [png] }).catch((error: Error) => ({ ok: 'threw', refusal: error.message }));
+    assert.deepEqual([result.ok, result.refusal], [false, 'all_models_failed']);
   } finally { f.db.close(); }
 });
 
