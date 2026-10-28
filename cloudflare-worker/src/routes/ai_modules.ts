@@ -20,7 +20,9 @@ modules.use('*', bodyLimit({ maxSize: 7_000_000, onError: c => refuse(c, 413, { 
 export function modulePageAllowed(user: { role: string; is_super_admin?: number | null }, page: string): boolean {
   const profile = page.split(' · ')[0];
   if (profile === 'Super Admin') return user.role === 'admin' && user.is_super_admin === 1;
-  return ({ founder: 'Founder', investor: 'Investor', advisor: 'Advisor', partner: 'Operating Partner', admin: 'Admin' } as Record<string, string>)[user.role] === profile;
+  const profiles: Record<string, string> = { founder: 'Founder', investor: 'Investor', advisor: 'Advisor', partner: 'Operating Partner', admin: 'Admin' };
+  // Match requireRole: admins may use View as; the charged id stays their own.
+  return user.role === 'admin' ? Object.values(profiles).includes(profile) : profiles[user.role] === profile;
 }
 function bytes64(bytes: Uint8Array): string {
   let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s);
