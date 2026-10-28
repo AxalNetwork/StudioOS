@@ -10,5 +10,6 @@ The Email page, `/email` and `/email/settings`, in every profile's shell. It is 
 | `ComposeSheet.jsx` | "Compose with Eadwyn" (EM3) in the one right Sheet: intent, tone, length and live blocks; the estimate before Draft; versions, Regenerate and Shorter; Send behind a confirmation. |
 | `ConnectPanel.jsx` | Connect your mailbox (EM1), the consent sheet before Google or Microsoft, the IMAP and SMTP form, and the OAuth outcome (`?mail=`). |
 | `EmailSettings.jsx` | Email › Settings (EM7): each mailbox (check again, or disconnect behind a confirmation) and the sent log, 20 a page. |
+| `MessagesRedirect.jsx` | D1345 / EM10: `/messages` moves to `/email`; the notice is acknowledged once per account and browser, and both actions enter Email. |
 
 A new person kind goes in `RECORD_PEOPLE` in `emailModel.js` and in the Worker's `contextPack.ts`. A write (send, share, disconnect) always opens a confirmation first.

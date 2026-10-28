@@ -17,10 +17,10 @@ export const KIND_ORDER = ['page', 'action', 'article', 'activity', 'doc'];
 
 export const ADMIN_SHELLS = ['admin', 'super_admin'];
 
-// The roles `/messages` admits, in App.jsx's own order. The top-bar Messages
+// The roles `/email` admits, in App.jsx's own order. The top-bar Email
 // button is offered to exactly these, and the guard reads the route line to
 // keep the two lists one.
-export const MESSAGES_ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'];
+export const EMAIL_ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'];
 
 const pageItem = (to, label, hint) => ({ id: `page:${to}`, kind: 'page', label, hint, to });
 

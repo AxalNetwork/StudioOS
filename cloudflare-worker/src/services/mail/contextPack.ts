@@ -21,6 +21,7 @@ import { INTENTS, RELATIONSHIP_OF, type Intent, type Relationship } from './inte
 import { computeBlock, type BlockKind } from './blocks';
 import { shareOf } from './shares';
 import { caseOnly, profileRecord, RecordMissing } from './profileRecords';
+import { moduleRecipient } from './moduleRecipients';
 
 export const NOT_FOUND = 'Record not found.';
 
@@ -210,6 +211,8 @@ export async function personRecord(env: Env, user: User, raw: unknown): Promise<
   if (!ref) throw notFound();
   // D1348 (#3555): the other profiles' kinds, each under its module's rule. An admin reads the case only.
   try {
+    const recipient = await moduleRecipient(env, user, ref.kind, ref.id);
+    if (recipient) return recipient;
     const other = await profileRecord(env, user, ref.kind, ref.id);
     if (other) return other;
   } catch (e) {

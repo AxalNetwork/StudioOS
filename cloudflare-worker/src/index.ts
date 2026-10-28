@@ -268,7 +268,6 @@ import captableRoutes from './routes/captable';
 import captableAccessRoutes from './routes/captable_access';
 import dataRoomRoutes from './routes/data_room';
 import advisorGrantRoutes from './routes/advisor_grants';
-import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminProgramGrants from './routes/admin_program_grants';
@@ -1549,7 +1548,10 @@ app.route('/api/data-room', dataRoomRoutes);
 // scope. The shape is `data_room_grants`; the gate is the grant AND the
 // advisor's current role, re-checked on every read.
 app.route('/api/advisor-grants', advisorGrantRoutes);
-app.route('/api/messages', messagesRoutes);
+// D1345: old clients get an explicit move after the Messages router and stores retire.
+const messagesRetired = (c: any) => c.json({ code: 'messages_retired', detail: 'Messages is now Email.', moved_to: '/email' }, 410);
+app.all('/api/messages', messagesRetired);
+app.all('/api/messages/*', messagesRetired);
 app.route('/api/perks', perksRoutes);
 // D545 — the approved community tasks the chat's Tasks panel lists.
 app.route('/api/community-tasks', communityTasksRoutes);

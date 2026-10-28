@@ -331,7 +331,7 @@ test('STG4: the refusal from its own figures, yours or the company owner\'s, and
   assert.equal(storageRefusal(null), null);
 });
 
-test('STG4: the data room upload, the message composer and Record a Session draw the same sentence and links', () => {
+test('STG4: the data room upload and Record a Session draw the same sentence and links', () => {
   const allow = ALLOW('founder:growth');
   const e = refused({ used_bytes: allow - 3 * MB, allowance_bytes: allow, incoming_bytes: 24 * MB, counts_to: 'you' });
   const want = storageRefusal(e);
@@ -340,9 +340,6 @@ test('STG4: the data room upload, the message composer and Record a Session draw
   assert.equal(uploadRefusal({ status: 413 }), `Refused: larger than ${MAX_UPLOAD_MB} MB`, 'the size limit keeps its own words');
   const room = read('frontend/src/pages/raise/dataroom/DataRoomUpload.jsx');
   assert.match(room, /storage: storageRefusal\(e\)/); assert.match(room, /<StorageRefusal refusal=\{x\.storage\} \/>/);
-  const composer = read('frontend/src/pages/MessagesPage.jsx');
-  assert.match(composer, /const full = file \? storageRefusal\(ex\) : null;/); assert.match(composer, /<StorageRefusal refusal=\{storage\} \/>/);
-  assert.match(composer, /Send without the file/);
   const rec = startRefusal(e);
   assert.deepEqual(rec.storage, want); assert.equal(rec.text, want.text);
   assert.match(read('frontend/src/pages/founder/RecordLightbox.jsx'), /<StorageRefusal refusal=\{refusal\.storage\} recording testId="record-storage-full" \/>/);
