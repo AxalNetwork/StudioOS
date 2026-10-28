@@ -51,7 +51,7 @@ test('the dialog: named, modal, 560px, and the five sections in the canvas\'s or
   const at = ['Who', 'How', 'Talking points', 'Transcript', 'Consent'].map((t) => out.indexOf(`>${t}</h3>`));
   assert.ok(at.every((i) => i > 0), 'every section is drawn');
   assert.deepEqual([...at].sort((a, b) => a - b), at, 'in order');
-  assert.match(text, /Runs on Cloudflare Workers AI/);
+  assert.doesNotMatch(text, /Runs on Cloudflare Workers AI/);
   assert.match(out, /data-testid="record-cancel"/);
 });
 

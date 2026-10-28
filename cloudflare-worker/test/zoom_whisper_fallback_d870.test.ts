@@ -169,7 +169,7 @@ function world(over: Record<string, unknown> = {}) {
     AI: withGuard({
       async run(model: string, input: any) {
         const n = aiCalls.length;
-        aiCalls.push({ model, language: input?.language ?? null, bytes: Array.isArray(input?.audio) ? input.audio.length : 0 });
+        aiCalls.push({ model, language: input?.language ?? null, bytes: typeof input?.audio === 'string' ? Buffer.from(input.audio, 'base64').length : Array.isArray(input?.audio) ? input.audio.length : 0 });
         if (ai.fail?.(n)) throw new Error('fixture model down');
         return {
           text: `Words of part ${n + 1}.`,

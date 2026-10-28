@@ -893,7 +893,7 @@ test('D685 §5.9: a failed chunk fails the run with a sentence; a retry resumes 
   f.setAi((model: string, input: any) => {
     if (model.includes('whisper')) {
       whisperCalls += 1;
-      if (failSeq1 && Array.isArray(input?.audio) && input.audio.length === 65) throw new Error('upstream down');
+      if (failSeq1 && (typeof input?.audio === 'string' ? Buffer.from(input.audio, 'base64').length : input?.audio?.length) === 65) throw new Error('upstream down');
       return { text: 'ok', segments: [{ start: 0, end: 1, text: 'ok' }] };
     }
     return { response: JSON.stringify({ sentences: [], placements: [] }) };
@@ -1347,4 +1347,17 @@ test('D778: the processing job (Stop and process) names transcribe:session on th
   await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 1, auto: false });
   assert.equal(await job(f, sid), 'done');
   assert.deepEqual(transcribeRuns(f), [[CR, 'transcribe:session', `session:${sid}`], [CR, 'transcribe:session', `session:${sid}`]]);
+});
+
+
+test('S33: Turbo sends byte-exact base64 for large clips and subarrays; legacy Whisper stays numeric', async () => {
+  const { audioInputFor, WHISPER_TURBO, WHISPER } = await import('../src/services/sttFormats.ts');
+  const storage = Uint8Array.from({ length: 300003 }, (_, i) => i % 256);
+  for (const bytes of [new Uint8Array([0, 128, 255, 1]), storage.subarray(1, 300001)]) {
+    for (const language of [null, 'fr']) {
+      const input = audioInputFor(WHISPER_TURBO, bytes, 'audio/webm', language);
+      assert.deepEqual(input, { audio: Buffer.from(bytes).toString('base64'), ...(language ? { language } : {}) });
+    }
+  }
+  assert.deepEqual(audioInputFor(WHISPER, new Uint8Array([0, 128, 255]), 'audio/webm', 'fr'), { audio: [0, 128, 255] });
 });
