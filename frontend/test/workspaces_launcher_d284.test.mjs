@@ -1,5 +1,5 @@
 /**
- * One Messages button, and a palette that indexes what the map places (D284,
+ * One Email button, and a palette that indexes what the map places (D284,
  * tasks 420 and 408), with the Workspaces launcher retired (D563).
  *
  * The 29 working pages (26 since AI Matches went, and Market Intelligence and
@@ -7,7 +7,7 @@
  * #2324, #2341, #2337 and #2338 removed five more) left
  * `SIDEBAR_GROUPS.admin`
  * for a top-bar launcher (D284); D563 retired that launcher, and each page now
- * lights a profile sidebar row (`workspaces_retired_d563.test.mjs`). Messages
+ * lights a profile sidebar row (`workspaces_retired_d563.test.mjs`). Email
  * left the admin sidebar for a top-bar button on both admin shells; and ⌘K for
  * an admin shell indexes the shell's own rows, the consoles H35 places and the
  * 18 — never the old 50-row sidebar, never an `hqOnly` route for someone
@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { WORKSPACES, WORKSPACE_GROUP_ORDER, ADMIN_PLACEMENT } from '../src/lib/adminPlacement.js';
 import {
-  pageItemsFor, sidebarPageItems, groupByKind, KIND_ORDER, ADMIN_SHELLS, MESSAGES_ROLES,
+  pageItemsFor, sidebarPageItems, groupByKind, KIND_ORDER, ADMIN_SHELLS, EMAIL_ROLES,
 } from '../src/lib/paletteIndex.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -114,10 +114,10 @@ test('no page is labelled as an AI advisor, and the three founder redirects stil
  * The sidebar and the top bar
  * ------------------------------------------------------------------ */
 
-test('the 29 rows and Messages have left the admin sidebar, and a workspace page lights no row', () => {
+test('the 29 rows and Email have left the admin sidebar, and a workspace page lights no row', () => {
   const rows = SIDEBAR_GROUPS.admin.flatMap((g) => g.items || []);
   const routes = new Set(WORKSPACES.map((w) => w.route));
-  const still = rows.filter((r) => routes.has(r.to) || r.to === '/messages').map((r) => r.to);
+  const still = rows.filter((r) => routes.has(r.to) || r.to === '/email').map((r) => r.to);
   assert.deepEqual(still, [], 'these rows are back in SIDEBAR_GROUPS.admin');
   const keys = SIDEBAR_GROUPS.admin.map((g) => g.key);
   for (const k of ['studio', 'capital', 'network', 'more']) assert.ok(!keys.includes(k), `the ${k} group is back`);
@@ -125,16 +125,16 @@ test('the 29 rows and Messages have left the admin sidebar, and a workspace page
   assert.deepEqual(lit, [], 'these admin rows light on a workspace page');
 });
 
-test('no Workspaces launcher is mounted (D563), and Messages is offered to exactly the roles /messages admits', () => {
+test('no Workspaces launcher is mounted (D563), and Email is offered to exactly the roles /email admits', () => {
   assert.deepEqual(ADMIN_SHELLS, ['admin', 'super_admin']);
   assert.doesNotMatch(CHROME, /WorkspacesLauncher/, 'App.jsx mounts the Workspaces launcher again');
   assert.doesNotMatch(APP, /from '\.\/components\/WorkspacesLauncher'/, 'App.jsx imports the launcher again');
   assert.ok(!existsSync(resolve(root, 'frontend/src/components/WorkspacesLauncher.jsx')), 'the launcher component is back');
-  assert.match(CHROME, /MESSAGES_ROLES\.includes\(activeRole\) && \(\s*<Link\s+to="\/messages"/,
-    'App.jsx no longer offers the Messages button by role');
-  const route = APP.split('\n').find((l) => l.includes('path="/messages"'));
+  assert.match(CHROME, /EMAIL_ROLES\.includes\(activeRole\) && \(\s*<Link\s+to="\/email"/,
+    'App.jsx no longer offers the Email button by role');
+  const route = APP.split('\n').find((l) => l.includes('path="/email"'));
   const admits = /guard\(\[([^\]]+)\]/.exec(route)[1].match(/'([^']+)'/g).map((s) => s.replace(/'/g, ''));
-  assert.deepEqual(MESSAGES_ROLES, admits, 'the Messages button and the /messages guard name different roles');
+  assert.deepEqual(EMAIL_ROLES, admits, 'the Email button and the /email guard name different roles');
 });
 
 /* ------------------------------------------------------------------ *

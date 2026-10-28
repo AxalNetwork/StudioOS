@@ -69,8 +69,6 @@ function fixture() {
       ('p-other','headshots/22/a.png',22,'headshot',5000);
     INSERT INTO data_imports(user_id,source,target,raw_file_r2_key,size_bytes) VALUES (11,'spreadsheet','contacts','imports/11/a.csv',45),(22,'spreadsheet','contacts','imports/22/a.csv',5000);
     INSERT INTO research_documents(uid,owner_user_id,title,r2_key,size_bytes) VALUES ('r-own',11,'Market sizing','research/11/a',600),('r-other',22,'Theirs','research/22/a',5000),('r-lp',55,'Sector notes','research/55/a',64);
-    INSERT INTO message_attachments(uid,thread_id,message_id,uploader_user_id,r2_key,filename,content_type,size_bytes,sha256) VALUES
-      ('a-own',1,1,11,'messages/11/a','Term sheet.pdf','application/pdf',700,'hash'),('a-other',1,1,22,'messages/22/a','Theirs.pdf','application/pdf',5000,'hash');
     INSERT INTO dd_attachments(case_id,file_key,filename,size_bytes,uploaded_by_user_id) VALUES (1,'dd/11/a','NDA.pdf',800,11),(1,'dd/22/a','Theirs.pdf',5000,22);
   `);
   const native = d1Over(db);
@@ -91,7 +89,7 @@ const kind = (body: any, key: string) => body.kinds.find((r: any) => r.key === k
 const ok = (files: number, bytes: number) => ({ files, bytes, measured_bytes: bytes, unknown_size_files: 0, recorded: true });
 
 const OWNER_AREAS = {
-  data_room: ok(3, 600), diligence_files: ok(1, 800), research_library: ok(1, 600), message_attachments: ok(1, 700),
+  data_room: ok(3, 600), diligence_files: ok(1, 800), research_library: ok(1, 600),
   interview_recordings: ok(2, 900), data_room_versions: ok(1, 50), session_audio: ok(2, 220), deck_reviews: ok(2, 2100),
   validate_evidence: ok(1, 210), build_proofs: ok(2, 450), grow_minutes: ok(1, 240), brand_files: ok(2, 60), csv_imports: ok(1, 45),
 };
@@ -105,10 +103,10 @@ test('D1169: every member store counts, company files count to the company owner
     const { kind: _k, key: _key, ...got } = area(body, key);
     assert.deepEqual(got, want, key);
   }
-  assert.equal(body.areas.length, 13);
-  assert.deepEqual(body.areas.slice(0, 5).map((a: any) => a.key), ['data_room', 'diligence_files', 'research_library', 'message_attachments', 'interview_recordings']);
-  assert.equal(body.total_bytes, 6975); assert.equal(body.measured_bytes, 6975);
-  assert.equal(body.files, 20); assert.equal(body.unknown_size_files, 0);
+  assert.equal(body.areas.length, 12);
+  assert.deepEqual(body.areas.slice(0, 4).map((a: any) => a.key), ['data_room', 'diligence_files', 'research_library', 'interview_recordings']);
+  assert.equal(body.total_bytes, 6275); assert.equal(body.measured_bytes, 6275);
+  assert.equal(body.files, 19); assert.equal(body.unknown_size_files, 0);
   // The other member: their venture's files, a file the owner uploaded into
   // their room, and their own deck review filed against Acme Field.
   const other = (await f.call(22)).body;
@@ -124,11 +122,11 @@ test('D1169: kinds group the areas in the canvas order and sum exactly', async (
   const { body } = await fixture().call(11);
   assert.deepEqual(body.kinds.map((k: any) => k.key), [...STORAGE_KINDS]);
   assert.deepEqual(STORAGE_KINDS, ['data_room', 'documents', 'recordings', 'decks_exports', 'brand', 'other']);
-  const want: Record<string, [number, number]> = { data_room: [4, 650], documents: [6, 2300], recordings: [4, 1120], decks_exports: [2, 2100], brand: [2, 60], other: [2, 745] };
+  const want: Record<string, [number, number]> = { data_room: [4, 650], documents: [6, 2300], recordings: [4, 1120], decks_exports: [2, 2100], brand: [2, 60], other: [1, 45] };
   for (const [key, [files, bytes]] of Object.entries(want)) assert.deepEqual(kind(body, key), { key, ...ok(files, bytes) }, key);
   const kindOf: Record<string, string> = { data_room: 'data_room', data_room_versions: 'data_room', research_library: 'documents', validate_evidence: 'documents',
     build_proofs: 'documents', grow_minutes: 'documents', diligence_files: 'documents', interview_recordings: 'recordings', session_audio: 'recordings',
-    deck_reviews: 'decks_exports', brand_files: 'brand', message_attachments: 'other', csv_imports: 'other' };
+    deck_reviews: 'decks_exports', brand_files: 'brand', csv_imports: 'other' };
   for (const a of body.areas) assert.equal(a.kind, kindOf[a.key], a.key);
 });
 
@@ -139,7 +137,7 @@ test('D1169: companies list every company with its ventures, then files tied to 
       { uid: 'v-field', name: 'Acme Field', files: 10, bytes: 2880, measured_bytes: 2880, unknown_size_files: 0 },
       { uid: 'v-labs', name: 'Acme Labs', files: 2, bytes: 700, measured_bytes: 700, unknown_size_files: 0 },
     ] },
-    { uid: null, name: null, personal: true, files: 8, bytes: 3395, measured_bytes: 3395, unknown_size_files: 0, ventures: [
+    { uid: null, name: null, personal: true, files: 7, bytes: 2695, measured_bytes: 2695, unknown_size_files: 0, ventures: [
       { uid: 'v-solo', name: 'Solo venture', files: 1, bytes: 90, measured_bytes: 90, unknown_size_files: 0 },
     ] },
   ]);
@@ -151,8 +149,8 @@ test('D1169: companies list every company with its ventures, then files tied to 
 test('D1169: the ten largest files are the caller’s own, across every area, with where each lives', async () => {
   const { body } = await fixture().call(11);
   assert.deepEqual(body.largest.map((r: any) => [r.area, r.bytes]), [
-    ['deck_reviews', 1100], ['deck_reviews', 1000], ['diligence_files', 800], ['message_attachments', 700], ['research_library', 600],
-    ['interview_recordings', 500], ['interview_recordings', 400], ['data_room', 300], ['grow_minutes', 240], ['build_proofs', 230],
+    ['deck_reviews', 1100], ['deck_reviews', 1000], ['diligence_files', 800], ['research_library', 600],
+    ['interview_recordings', 500], ['interview_recordings', 400], ['data_room', 300], ['grow_minutes', 240], ['build_proofs', 230], ['build_proofs', 220],
   ]);
   assert.equal(body.largest_complete, true);
   const forged = body.largest[0];
@@ -164,7 +162,7 @@ test('D1169: the ten largest files are the caller’s own, across every area, wi
   for (const secret of ['Theirs', 'Their deck', 'Signed SAFE', 'Not kept']) assert.ok(!JSON.stringify(body.largest).includes(secret), secret);
   // A smaller list still reaches versions, sessions and profile files.
   const f = fixture();
-  f.db.exec("DELETE FROM deck_reviews; DELETE FROM dd_attachments; DELETE FROM message_attachments; DELETE FROM research_documents; DELETE FROM discovery_interviews WHERE recording_size_bytes IS NOT NULL; DELETE FROM data_room_files WHERE id <> 1; DELETE FROM formation_steps");
+  f.db.exec("DELETE FROM deck_reviews; DELETE FROM dd_attachments; DELETE FROM research_documents; DELETE FROM discovery_interviews WHERE recording_size_bytes IS NOT NULL; DELETE FROM data_room_files WHERE id <> 1; DELETE FROM formation_steps");
   const small = (await f.call(11)).body.largest;
   const session = small.find((r: any) => r.area === 'session_audio');
   assert.deepEqual([session.bytes, session.ref, session.venture_uid], [130, 's-one', 'v-field']);
@@ -188,15 +186,15 @@ test('D1169: a missing size is unknown, never 0, in every new store; a missing o
     assert.equal(area(body, key).unknown_size_files, 1, key);
     assert.equal(area(body, key).recorded, true, key);
     assert.ok(area(body, key).measured_bytes < OWNER_AREAS[key].bytes, key);
-    assert.equal(body.total_bytes, null, key); assert.equal(body.unknown_size_files, 1, key); assert.equal(body.files, 20, key);
+    assert.equal(body.total_bytes, null, key); assert.equal(body.unknown_size_files, 1, key); assert.equal(body.files, 19, key);
     assert.equal(kind(body, area(body, key).kind).bytes, null, key);
-    assert.ok(body.measured_bytes < 6975, key);
+    assert.ok(body.measured_bytes < 6275, key);
   }
   for (const sql of ["UPDATE member_files SET size_bytes=NULL, size_missing_at='2026-01-01' WHERE uid='p-photo'",
     "UPDATE data_imports SET size_bytes=NULL, size_missing_at='2026-01-01' WHERE user_id=11"]) {
     const f = fixture(); f.db.exec(sql);
     const body = (await f.call(11)).body;
-    assert.equal(body.files, 19, sql); assert.equal(body.unknown_size_files, 0, sql); assert.equal(body.total_bytes, body.measured_bytes, sql);
+    assert.equal(body.files, 18, sql); assert.equal(body.unknown_size_files, 0, sql); assert.equal(body.total_bytes, body.measured_bytes, sql);
   }
 });
 
@@ -228,12 +226,12 @@ test('D1169: an unreadable area blanks only itself and its kind; no total, compa
   const body = (await f.call(11)).body;
   assert.equal(body.companies, null);
   for (const key of ['data_room', 'data_room_versions', 'interview_recordings', 'session_audio', 'validate_evidence', 'build_proofs', 'grow_minutes']) assert.equal(area(body, key).recorded, false, key);
-  for (const key of ['research_library', 'message_attachments', 'diligence_files', 'brand_files', 'csv_imports', 'deck_reviews']) assert.equal(area(body, key).recorded, true, key);
+  for (const key of ['research_library', 'diligence_files', 'brand_files', 'csv_imports', 'deck_reviews']) assert.equal(area(body, key).recorded, true, key);
   // A failed largest-files query keeps the area's figures and says the list is incomplete.
   const g = fixture(); g.fail(/FROM research_documents WHERE owner_user_id = \? AND size_bytes IS NOT NULL/);
   const partial = (await g.call(11)).body;
   assert.deepEqual(area(partial, 'research_library').bytes, 600);
-  assert.equal(partial.total_bytes, 6975);
+  assert.equal(partial.total_bytes, 6275);
   assert.equal(partial.largest_complete, false);
   assert.ok(!partial.largest.some((r: any) => r.area === 'research_library'));
 });
@@ -253,7 +251,7 @@ test('D1169: the allowance is the catalogue’s, and the state follows it; staff
   const blind = (await f.call(11)).body;
   assert.deepEqual([blind.plan_key, blind.allowance_bytes, blind.state, blind.plan_recorded], [null, null, null, false]);
   assert.equal(blind.allowance_reason, 'Storage plan unreadable');
-  assert.equal(blind.total_bytes, 6975);
+  assert.equal(blind.total_bytes, 6275);
 });
 
 test('D1169: the state thresholds are 80%, 95%, exactly full and over; unknown, negotiated or unread is no state', () => {
@@ -284,7 +282,7 @@ test('D1169: the read touches only member stores; fund, legal, identity, 83(b) a
   assert.deepEqual([...tables].sort(), [
     'company_profiles', 'compliance_events', 'data_imports', 'data_room_file_versions', 'data_room_files', 'dd_attachments', 'deck_reviews',
     'demand_signals', 'discovery_interviews', 'entity_obligations', 'formation_steps', 'interview_session_chunks', 'interview_sessions',
-    'member_files', 'message_attachments', 'obligation_occurrences', 'projects', 'research_documents', 'user_company_links', 'users',
+    'member_files', 'obligation_occurrences', 'projects', 'research_documents', 'user_company_links', 'users',
   ]);
   for (const never of ['legal_notice_files', 'legal_document_files', 'documents', 'kyc', 'fund', 'publications', 'articles']) assert.ok(!tables.has(never), never);
   // Four D1169 queries (each data room area's groups and largest) and D1170's two per-owner statements.
@@ -295,7 +293,7 @@ test('D1169: each owner column the read filters on has an index, except the two 
   const db = migratedTemplate();
   const src = readFileSync(new URL('../src/services/storageUsage.ts', import.meta.url), 'utf8');
   const queries = [...src.matchAll(/(?:groups:|largest:|const OWNED =) `([\s\S]*?)`/g)].map((m) => m[1]);
-  assert.equal(queries.length, 27);
+  assert.equal(queries.length, 25);
   const scans = new Set<string>();
   for (const q of queries) {
     for (const row of db.prepare('EXPLAIN QUERY PLAN ' + q).all(...Array(q.split('?').length - 1).fill('[]')) as any[]) {

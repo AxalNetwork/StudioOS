@@ -246,11 +246,9 @@ test('the nudge body names the work product and the version, and nothing is sent
   }));
   assert.match(body, /Board brief · Aug/);
   assert.match(body, /\(v1\)/);
-  // The channel is the inbox that already exists (migration 185), keyed on the
-  // client's address, with the engagement as the subject.
-  assert.match(P, /api\.messageStartThread\(/);
-  assert.match(P, /subject_type: 'engagement'/);
-  assert.match(P, /to_email: item\.client_user_email/);
+  // D1345: opening a client draft sends nothing; the Email composer owns review and send.
+  assert.match(P, /<EmailAction person=\{`work_product:\$\{i.id\}`\}/);
+  assert.doesNotMatch(P, /messageStartThread/);
 });
 
 // ---------------------------------------------------------------------------

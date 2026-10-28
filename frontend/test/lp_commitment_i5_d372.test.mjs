@@ -177,13 +177,6 @@ test('a failed portal read is Unreadable, and a failed calls read is too', () =>
   assert.doesNotMatch(html, /\$0\.00(?:<!-- -->)? called/);
 });
 
-test('Message the GP writes to the GP of record\'s account, and /help only when there is none', () => {
-  const src = codeOnly(read('frontend/src/pages/SpinoutLabLpCommitment.jsx'));
-  assert.match(src, /api\.messageStartThread\(\{\s*to_email: target\.gp\.contact_email,/);
-  const page = codeOnly(read('frontend/src/pages/SpinoutLabLpWorkspacePage.jsx'));
-  assert.match(page, /<MessageGp portal=\{portal\} \/>/);
-  assert.doesNotMatch(page, /<Link to="\/help"[^>]*>\s*<MessageSquare/);
-});
 
 // ── The retirements ─────────────────────────────────────────────────────
 

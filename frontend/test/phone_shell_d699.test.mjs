@@ -94,8 +94,8 @@ test('D699 company row descriptions are honest and dated in en-GB', () => {
   assert.equal(companyRowDescription({ cycles_active: [], last_opened: { cycle: 'grow', at: '2025-10-12T00:00:00Z' } }, false, now), 'Grow · last opened 12 Oct 2025');
 });
 
-test('#2297: the More page is gone; More opens the drawer, and Messages is an account-sheet row', () => {
-  // Mutations checked: the /more route kept; More's button without onMore; Messages dropped from the sheet.
+test('#2297: the More page is gone; More opens the drawer, and Email is an account-sheet row', () => {
+  // Mutations checked: the /more route kept; More's button without onMore; Email dropped from the sheet.
   assert.ok(!existsSync(resolve('frontend/src/pages/MorePage.jsx')), 'MorePage.jsx is back');
   const app = read('frontend/src/App.jsx');
   assert.doesNotMatch(app, /path="\/more"/);
@@ -104,9 +104,9 @@ test('#2297: the More page is gone; More opens the drawer, and Messages is an ac
   assert.match(app, /<SidebarNav groups=\{sidebarGroups\}/);
   const plan = mobilePlan('founder');
   const sidebar = new Set(SIDEBAR_GROUPS.founder.flatMap(group => group.items.map(row => row.to)));
-  for (const row of plan.more.filter(r => r.to !== '/messages')) assert.ok(sidebar.has(row.to), `${row.to} is in More but not the drawer`);
-  // Messages was More's one row that is not a sidebar row.
-  assert.match(read('frontend/src/ui/phone/AccountSheet.jsx'), /\['Messages', '\/messages'\]/);
+  for (const row of plan.more.filter(r => r.to !== '/email')) assert.ok(sidebar.has(row.to), `${row.to} is in More but not the drawer`);
+  // Email was More's one row that is not a sidebar row.
+  assert.match(read('frontend/src/ui/phone/AccountSheet.jsx'), /\['Email', '\/email'\]/);
 });
 
 test('D699 one switch writer and account sheet member routes', () => {
@@ -216,7 +216,7 @@ test('D699 a cycle page is a visit, sent once an hour per company and cycle (tes
   assert.deepEqual(visitToRecord('/raise', 4, last, now), { companyId: 4, cycle: 'raise' }, 'another company is a new pair');
   assert.deepEqual(visitToRecord('/grow', 3, last, now), { companyId: 3, cycle: 'grow' });
   assert.deepEqual(visitToRecord('/validate/problem-discovery/12', 3, null, now), { companyId: 3, cycle: 'validate' });
-  for (const path of ['/network', '/studio', '/messages', '/validate/interviews', '/raise/capital/cap-table']) {
+  for (const path of ['/network', '/studio', '/email', '/validate/interviews', '/raise/capital/cap-table']) {
     assert.equal(visitToRecord(path, 3, null, now), null, path);
   }
   for (const id of [null, undefined, 0, -1, '3']) assert.equal(visitToRecord('/grow', id, null, now), null, String(id));
@@ -335,7 +335,7 @@ test('D699 census: every destination a founder\'s phone had keeps a phone home (
   const dropdownLinks = [...dropdown.matchAll(/to="([^"]+)"/g)].map(match => match[1]);
   assert.ok(dropdownLinks.length >= 10, 'the census no longer reads UserDropdown');
   for (const to of dropdownLinks) want(to, 'UserDropdown');
-  for (const to of ['/messages', '/referrals']) { assert.match(header, new RegExp(`to="${to}"`)); want(to, 'header'); }
+  for (const to of ['/email', '/referrals']) { assert.match(header, new RegExp(`to="${to}"`)); want(to, 'header'); }
   assert.match(read('frontend/src/components/FounderWellbeingMenu.jsx'), /to="\/wellbeing"/);
   want('/wellbeing', 'FounderWellbeingMenu');
 

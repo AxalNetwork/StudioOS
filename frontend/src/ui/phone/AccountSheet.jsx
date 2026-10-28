@@ -10,7 +10,7 @@ import { PhoneSheet, SheetRow } from './PhoneSheet.jsx';
 // that carries the Messages door (D284); the More page that carried it was
 // removed (#2297).
 const ACCOUNT_ROWS = [
-  ['Messages', '/messages'], ['Your profile', '/profile'], ['Account', '/account'], ['Usage', '/account/usage'],
+  ['Email', '/email'], ['Your profile', '/profile'], ['Account', '/account'], ['Usage', '/account/usage'],
   ['Connectors', '/account/connectors'], ['Trust Center', '/trust/me'], ['Perks', '/perks'],
   ['Calendar', '/calendar'], ['Events', '/my/events'], ['Learning', '/learning'],
   ['Help Center', '/help'], ['Pricing', '/pricing'],

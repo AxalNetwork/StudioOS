@@ -312,7 +312,6 @@ export const STORAGE_AREAS = [
   ['data_room', 'Data room'],
   ['diligence_files', 'Diligence files'],
   ['research_library', 'Research library'],
-  ['message_attachments', 'Message attachments'],
   ['interview_recordings', 'Interview recordings'],
   // D1169 (#3082): the read counts every member store. Part 5 draws them by kind.
   ['data_room_versions', 'Earlier data room versions'],

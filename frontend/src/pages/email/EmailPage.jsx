@@ -25,11 +25,12 @@ import { BODY, BTN, CARD, ERROR, EYEBROW, H3, MUTED, PRIMARY, StateCard } from '
 import ComposeSheet from './ComposeSheet.jsx';
 import ConnectPanel, { ConnectOutcome } from './ConnectPanel.jsx';
 import EmailSettings from './EmailSettings.jsx';
+import { MessagesMovedNotice } from './MessagesRedirect.jsx';
 
-export default function EmailPage({ api = mailApi }) {
+export default function EmailPage({ api = mailApi, userId }) {
   const { pathname } = useLocation();
-  if (pathname.startsWith('/email/settings')) return <Frame><EmailSettings api={api} /></Frame>;
-  return <Frame><EmailHome api={api} /></Frame>;
+  return <Frame><MessagesMovedNotice userId={userId}>{pathname.startsWith('/email/settings')
+    ? <EmailSettings api={api} /> : <EmailHome api={api} />}</MessagesMovedNotice></Frame>;
 }
 
 function Frame({ children }) {

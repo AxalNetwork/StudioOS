@@ -538,3 +538,11 @@ The complete list — three call sites in two files:
 The active company is effectively a sidebar-widget + settings-page concern;
 `/studio` scopes itself server-side via `GET /api/dashboard`'s `role_view`
 payload instead.
+
+D1345 (#3553) retires the peer Messages inbox in favour of Email. `/messages`
+redirects through `pages/email/MessagesRedirect.jsx` (EM10). The Worker entry
+keeps only 410 tombstones at `/api/messages` and descendants; the old router,
+page, client helpers and storage area are removed. Migration 650 asserts the
+four stores are empty before dropping them. `services/mail/moduleRecipients.ts`
+resolves the two former starters under the LP self-view and advisor engagement
+scopes. See [D1345](decisions/D1345.md).
