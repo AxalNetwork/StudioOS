@@ -86,6 +86,7 @@ import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import mailAccounts from './routes/mail_accounts';
 import mailDrafts from './routes/mail_drafts';
+import mailShares from './routes/mail_shares';
 import dealContext from './routes/deal_context';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
@@ -981,6 +982,8 @@ app.route('/api/deals/flow', dealFlow);
 app.route('/api/mail', mailAccounts);
 // D1341 (#3549): Eadwyn's email drafts — the context pack, live update blocks and the member's own drafts.
 app.route('/api/mail', mailDrafts);
+// D1342 (#3550): Network members' address shares — the other's address only while both have shared.
+app.route('/api/mail', mailShares);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);

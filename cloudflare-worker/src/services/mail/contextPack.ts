@@ -19,6 +19,7 @@ import type { ProjectRef } from '../../routes/_founder_validate_helpers';
 import { readableRecord } from '../records/read';
 import { INTENTS, RELATIONSHIP_OF, type Intent, type Relationship } from './intents';
 import { computeBlock, type BlockKind } from './blocks';
+import { shareOf } from './shares';
 
 export const NOT_FOUND = 'Record not found.';
 
@@ -31,7 +32,8 @@ export class MailError extends Error {
 export const notFound = () => new MailError(404, 'not_found', NOT_FOUND);
 
 export type PackItem = { ref: string; kind: string; label: string; as_of: string | null; link: string; selected: boolean; text: string };
-export type Person = { ref: string; kind: string; relationship: Relationship; name: string; project_id: number | null };
+// `email_ready` (D1342): a Network match's Email opens only when both members have shared an address.
+export type Person = { ref: string; kind: string; relationship: Relationship; name: string; project_id: number | null; email_ready?: boolean };
 export type Pack = { person: Person; intents: readonly Intent[]; items: PackItem[] };
 
 const REF = /^([a-z_]{3,20}):([a-z0-9][a-z0-9_-]{0,63})$/;
@@ -175,13 +177,30 @@ async function partnerEngagement(env: Env, user: User, id: string): Promise<Read
   };
 }
 
-/** The person's own record. `member` is part 3's (#3550); any other kind does not exist. */
+/**
+ * D1342 (#3550): a Network match, named by its share uid. The record is the
+ * match itself: who they are and how they were matched. Never their address,
+ * which only the shares read serves, and only once both have shared.
+ */
+async function networkMatch(env: Env, user: User, id: string): Promise<Read> {
+  let m;
+  try { m = await shareOf(env, user, id); } catch { throw notFound(); }
+  const ref = `member:${id}`;
+  const text = [m.name, `Role: ${m.role ?? 'Not recorded'}`, `Matched through an introduction you both accepted on ${day(m.matched_at) ?? 'a day not recorded'}.`].join('\n');
+  return {
+    person: { ref, kind: 'member', relationship: 'network', name: m.name, project_id: null, email_ready: m.ready },
+    item: { ref, kind: 'member', label: `Network match · ${m.name}`, as_of: day(m.matched_at), link: '/email', selected: true, text },
+  };
+}
+
+/** The person's own record. `member` is a Network match (D1342); any other kind does not exist. */
 export async function personRecord(env: Env, user: User, raw: unknown): Promise<Read> {
   const ref = parseRef(raw);
   if (!ref) throw notFound();
   if (MODULES[ref.kind]) return moduleRecord(env, user, ref.kind, ref.id);
   if (ref.kind === 'advisor') return advisorEngagement(env, user, ref.id);
   if (ref.kind === 'partner') return partnerEngagement(env, user, ref.id);
+  if (ref.kind === 'member') return networkMatch(env, user, ref.id);
   throw notFound();
 }
 
