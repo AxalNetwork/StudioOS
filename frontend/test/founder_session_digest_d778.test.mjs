@@ -145,10 +145,29 @@ test('both Summarise presses send their option and answer only the session they 
   assert.match(review, /openSession\.current = chosenId;/);
 });
 
-test('the three API methods carry the press\'s headers', () => {
-  // Mutation checked: any of the three dropping `headers`.
+test('the three API methods carry the press\'s headers', async () => {
   const client = read('src/lib/api/interviewSessions.js');
-  for (const [name, args] of [['summarise', 'id, model, headers'], ['structure', 'id, model, headers'], ['ask', 'id, question, headers']]) {
-    assert.match(client, new RegExp(`${name}: \\(${args}\\) => request\\(\`\\$\\{P\\}/sessions/\\$\\{enc\\(id\\)\\}/${name}\`, \\{\\s*\\.\\.\\.\\(headers \\? \\{ headers \\} : \\{\\}\\),`), name);
+  const headerSpread = '...(headers ? { headers } : {}),';
+  async function check(source) {
+    // Exercise the real methods; timeout options and property order must not
+    // change whether a press's own rail context reaches the request.
+    const code = source.replace("import { request, LONG_TIMEOUT_MS } from '../api.js';",
+      "const LONG_TIMEOUT_MS = 180000; const request = (path, options) => ({ path, ...options });");
+    const { interviewSessionsApi: api } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+    for (const name of ['summarise', 'structure', 'ask']) {
+      const headers = { 'X-Rail-Page': 'validate', 'X-Rail-Option': `${name}:session`, 'X-Rail-Record': 'session:7' };
+      const reply = await api[name](7, name === 'ask' ? 'What changed?' : undefined, headers);
+      assert.deepEqual(reply.headers, headers, name);
+    }
+  }
+  await check(client);
+  for (const name of ['summarise', 'structure', 'ask']) {
+    const start = client.indexOf(`  ${name}:`);
+    const end = client.indexOf('\n  }),', start);
+    const method = client.slice(start, end);
+    assert.ok(method.includes(headerSpread), `${name} mutation target`);
+    const mutant = client.slice(0, start) + method.replace(headerSpread, '') + client.slice(end);
+    await assert.rejects(() => check(mutant), { code: 'ERR_ASSERTION' }, `${name} must forward headers`);
+    await check(client);
   }
 });
