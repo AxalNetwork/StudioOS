@@ -11,4 +11,6 @@ A testing programme is owned by HQ or by a partner firm (D812). Its owner writes
 | `ProgrammeForm.jsx` | "New programme" and editing a draft. The caller passes `onSave` and its accent classes. |
 | `ProgrammeApplicants.jsx` | One programme's applicants with their answers, Pick and Decline, the "[n] of [n] places filled" counter, and the Mail note. It shows no email address. |
 
+**`member/`** is the member's side (D1337, #3542): Product testing on Studio and in Inbox. See its README.
+
 **The rule for adding here:** only what both owners use. A page's own layout stays in its page. The data comes from `lib/api/productTesting.js`; add no `/api/*` method here.

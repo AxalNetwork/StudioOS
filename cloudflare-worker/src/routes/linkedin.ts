@@ -7,11 +7,21 @@
  * companion CSV-import flow on the frontend handles connections — this
  * worker route only handles OAuth identity.
  *
- * Three endpoints:
+ * Endpoints:
  *   POST /api/linkedin/oauth/start      → returns { authorize_url }
  *   GET  /api/linkedin/oauth/callback   → exchanges code, attaches identity,
  *                                          redirects back to /refer
- *   POST /api/linkedin/disconnect       → clears LinkedIn fields on user
+ *   POST /api/linkedin/disconnect       → clears LinkedIn fields on user;
+ *                                          { delete_imported: true } also deletes
+ *                                          the contacts only LinkedIn gave
+ *   GET  /api/linkedin/status           → the connection, its scopes and the last import
+ *   GET  /api/linkedin/imports[/:uid]   → the member's own contact import jobs
+ *
+ * D1350 (#3565): the connection is also `linkedin_connections` (one row per
+ * member, with the scopes LinkedIn granted), every connector event is a row of
+ * `integration_audit_log`, and imports are `contact_import_jobs` with each
+ * contact's `contact_sources` (`services/linkedinConnections.ts`, migration
+ * 651). The `users.linkedin_*` columns stay for Refer & Earn's badge.
  *
  * Security:
  *   - State token is HMAC-SHA256 signed with JWT_SECRET (same key the rest
@@ -29,6 +39,7 @@ import { parseReturn, returnFromNonce, returnTag } from '../util/oauthReturn';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { connect, connectionOf, deleteLinkedinOnly, grantedScopes, importJobOf, importJobs, lastImportJob, revoke } from '../services/linkedinConnections';
 
 const linkedin = new Hono<{ Bindings: Env }>();
 
@@ -273,6 +284,7 @@ linkedin.get('/oauth/callback', async (c) => {
 
   // Exchange code for an access_token. Body is form-encoded per OAuth 2 spec.
   let accessToken = '';
+  let scopes = '';
   try {
     const tokenRes = await fetch(LINKEDIN_TOKEN_URL, {
       method: 'POST',
@@ -292,6 +304,7 @@ linkedin.get('/oauth/callback', async (c) => {
     }
     const tokenJson: any = await tokenRes.json();
     accessToken = String(tokenJson?.access_token || '');
+    scopes = grantedScopes(tokenJson?.scope);
     if (!accessToken) return redirectBack(c.env, 'error', returnTo, 'token_unavailable' satisfies LinkedInCallbackCode);
   } catch (e: any) {
     console.error('[LINKEDIN] token exchange threw:', e?.message || e);
@@ -347,6 +360,8 @@ linkedin.get('/oauth/callback', async (c) => {
     } catch (e: any) {
       console.warn('[LINKEDIN] picture upsert skipped:', e?.message || e);
     }
+    // D1350: the member's connection, with the scopes LinkedIn granted; never the token.
+    await connect(c.env, userId, sub, scopes);
     await sql`INSERT INTO activity_logs (action, details, actor, user_id)
               VALUES ('linkedin_connected',
                       ${`User #${userId} linked LinkedIn identity sub=${sub}`},
@@ -366,6 +381,8 @@ linkedin.get('/oauth/callback', async (c) => {
 // ---------------------------------------------------------------------------
 linkedin.post('/disconnect', async (c) => {
   const user = await requireAuth(c);
+  const body: any = await c.req.json().catch(() => null);
+  const deleteImported = body?.delete_imported === true;
   try {
     const sql = getSQL(c.env);
     await sql`UPDATE users
@@ -382,7 +399,12 @@ linkedin.post('/disconnect', async (c) => {
     await sql`INSERT INTO activity_logs (action, details, actor, user_id)
               VALUES ('linkedin_disconnected', ${`User #${user.id} disconnected LinkedIn`}, ${user.email}, ${user.id})`;
     await sql.end();
-    return c.json({ ok: true });
+    // D1350: the connection revoked and audited; with `delete_imported`, the
+    // contacts only LinkedIn gave are deleted, and any the member also typed or
+    // got elsewhere stay.
+    await revoke(c.env, user.id);
+    const deleted = deleteImported ? await deleteLinkedinOnly(c.env, user.id) : 0;
+    return c.json({ ok: true, deleted_imported: deleted });
   } catch (e: any) {
     console.error('[LINKEDIN] disconnect failed:', e?.message || e);
     return c.json({
@@ -408,12 +430,18 @@ linkedin.get('/status', async (c) => {
                            FROM users WHERE id = ${user.id}`;
     await sql.end();
     const r = rows[0] || {};
+    // D1350: the connection's status and scopes, and the member's last import job.
+    const conn = await connectionOf(c.env, user.id).catch(() => null);
+    const last = await lastImportJob(c.env, user.id).catch(() => null);
     return c.json({
       configured: !!(await loadLinkedinCreds(c.env)),
       connected: !!r.linkedin_sub,
       linkedin_email: r.linkedin_email || null,
       linkedin_name: r.linkedin_name || null,
       connected_at: r.linkedin_connected_at || null,
+      status: conn?.status ?? (r.linkedin_sub ? 'active' : null),
+      scopes: conn?.scopes ?? [],
+      last_import: last,
     });
   } catch (e: any) {
     console.error('[LINKEDIN] status failed:', e?.message || e);
@@ -423,8 +451,25 @@ linkedin.get('/status', async (c) => {
       linkedin_email: null,
       linkedin_name: null,
       connected_at: null,
+      status: null,
+      scopes: [],
+      last_import: null,
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// D1350 — the member's own contact import jobs. Another member's job reads as
+// one that does not exist (404).
+// ---------------------------------------------------------------------------
+linkedin.get('/imports', async (c) => {
+  const user = await requireAuth(c);
+  return c.json({ jobs: await importJobs(c.env, user.id) });
+});
+linkedin.get('/imports/:uid', async (c) => {
+  const user = await requireAuth(c);
+  const job = await importJobOf(c.env, user.id, String(c.req.param('uid') || ''));
+  return job ? c.json({ job }) : c.json({ error: 'not found' }, 404);
 });
 
 export default linkedin;

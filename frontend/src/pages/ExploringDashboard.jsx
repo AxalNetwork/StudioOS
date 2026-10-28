@@ -8,6 +8,8 @@ import { Compass, Lock, Rocket, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 import ProfileFitSection from '../components/profile/ProfileFitSection';
+// D1337 (#3542): any member with a profile may join the tester pool, Explorers included (D1335 §3).
+import ProductTestingStudio from './testing/member/ProductTestingStudio';
 
 const LANE_COPY = {
   founder: {
@@ -124,6 +126,8 @@ export default function ExploringDashboard() {
           <Rocket size={15} /> {lane.cta.label}
         </Link>
       )}
+
+      <ProductTestingStudio user={user} />
 
       <PersonalAdvisor disablePersistedFullscreen />
       <ProfileFitSection />

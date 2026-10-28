@@ -18,6 +18,10 @@ and mail never goes out on Axal's house token: `../email.ts` stays for system ma
 
 The routes are `../../routes/mail_accounts.ts`, `../../routes/mail_drafts.ts`,
 `../../routes/mail_shares.ts` and `../../routes/mail_people.ts` (D1348), all mounted at `/api/mail`. A new provider adds an adapter in `adapters/` and a
+| `drafts.ts` | D1341: the draft request, the prompt (the ticked records and the blocks only), the model's `{subject, body}`, and the member's own `mail_drafts` rows (migration 648). |
+
+The routes are `../../routes/mail_accounts.ts`, `../../routes/mail_drafts.ts` and
+`../../routes/mail_shares.ts`, all mounted at `/api/mail`. A new provider adds an adapter in `adapters/` and a
 row in `adapters/index.ts`. A new person kind goes in `MODULES` in
 `contextPack.ts`, with a fixed statement and the module's record spec, and in
 `RELATIONSHIP_OF` in `intents.ts`.

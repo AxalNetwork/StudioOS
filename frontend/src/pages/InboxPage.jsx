@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCheck, Settings as SettingsIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import NotificationList from '../components/NotificationList';
+import { useInboxTesting } from './testing/member/InboxTesting';
 
 /**
  * `/inbox` — the notifications the bell shows, at an address (D144).
@@ -31,6 +32,8 @@ export default function InboxPage() {
   const [unreadable, setUnreadable] = useState(false);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
+  // D1337 (#3542, PT-M4): a Product testing notice opens its Sheet here.
+  const testing = useInboxTesting(items);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,6 +57,7 @@ export default function InboxPage() {
       try { await api.markNotificationsRead({ ids: [n.id] }); } catch {}
       setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)));
     }
+    if (testing.openFor(n)) return;
     if (n.link) navigate(n.link);
   };
 
@@ -100,8 +104,11 @@ export default function InboxPage() {
           loading={loading}
           unreadable={unreadable}
           onItemClick={onItemClick}
+          actionFor={testing.actionFor}
         />
       </div>
+
+      {testing.sheet}
 
       {unreadable && (
         <button
