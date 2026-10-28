@@ -30,6 +30,10 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 | `CardAssistBar.jsx` | D899 (#2678), PD7: Eadwyn's bar under the selected text block — Rewrite, Shorten, Expand, Change tone, Translate and Ask, each with its cost. A press shows its cost first; the result is a proposal (the before struck, the after on lavender) that Accept places on the card. A bound figure takes no tool; AI off greys it. Mounted by `PitchEditor.jsx`. |
 | `AddMenu.jsx` | D899, PD7 and PD28: the Add menu — Text and Image open Add a block (PD8c), Background and Layout open Design, Chart proposes a chart, table or timeline whose series are bindings, From a connector opens `ConnectorLightbox.jsx`; the rail row's models with their catalogue prices. Mounted by `PitchEditor.jsx`. |
 | `ConnectorLightbox.jsx` | D899, PD9d: each connector with its state and last sync (`GET /api/integrations`), the recorded figures it feeds, and a new card of bound tiles (free) under a headline that is the founder's or Eadwyn's with its cost. |
+| `ImageLightbox.jsx` | D903 (#2682), PD12, PD12b, PD12c and PD12e: the image lightbox, opened from the Add menu's Image (a content image) and Background (a card background). Use as, the description prefilled from the card, style, palette, aspect, count, the cost line (the model, the price per image, the AI token balance, read before anything runs) and Generate; Keep and Discard; a background's overlay in the brand ink, with "Keep as background" waiting until the contrast reads 4.5:1; the refusal for a real person; an upload with the person's agreement; Options' data points (labels only) and model column. |
+| `ImageToolbar.jsx` | D903, PD12d: a placed image's toolbar in place of the AI bar (Replace, Upload, Regenerate, Crop, Fit, Alt text, Remove), with the model, day and cost and the alt text under it. |
+| `imageModel.js` | D903: pure words and derivations of the lightbox and the toolbar: the options, the contrast line, the description from the card without its figures, the cost line, the placed line, and where Keep places an image (`placeImage`). |
+| `imageContrast.js` | D903: the overlay's worst-case contrast rule, with no imports, so the Worker's test holds it to `cloudflare-worker/src/services/decks/images.ts` figure for figure. |
 | `AssistParts.jsx` | D899: what the card tools share — the press dialog with the cost, the tokens dialog (PD25), a text proposal. |
 | `deckAssistModel.js` | D899: pure words and derivations of the card tools — the tools and their options, the cost line, what a press sends, why a figure takes no tool, the connector groups and their card, the rail row's models. |
 | `BlockGrid.jsx` | D1112 (#2992): D898's blocks on the 12 × 6 grid, drawn one way for the editor, Present and the print page (`BlockView`, `BlockGrid`). `live` makes video, audio and link blocks real links; `sources` adds each metric tile's source line. |
@@ -67,7 +71,7 @@ founder saves the cards they kept.
 - **A board waits for its store.** The canvas draws boards whose Worker reads do
   not exist yet: the coverage meter and source chips, the generate flow, the
   editor, card AI tools, present mode and export, the share dialog, images and
-  Google Slides (D904 built it). Each is a slot task on #2434. Build a board in the PR that
+  Google Slides (D904 built it) and images (D903 built them). Each is a slot task on #2434. Build a board in the PR that
   builds its read, and add its derivation to `pitchStudioModel.js` with a test
   in `frontend/test/pitch_studio_d894.test.mjs` or its own file.
 - **An admin reads, and changes nothing** (PD21). `isReadOnly` is true for an

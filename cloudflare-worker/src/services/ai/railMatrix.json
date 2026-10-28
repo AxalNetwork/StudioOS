@@ -5475,6 +5475,31 @@
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:image",
+   "optionLabel": "Generate",
+   "kind": "vision",
+   "handler": "draft",
+   "routeTask": "rail_vision",
+   "models": [
+    {
+     "id": "@cf/google/gemma-4-26b-a4b-it",
+     "role": "Default",
+     "line": "Reads slides, charts and scans"
+    },
+    {
+     "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+     "role": "Alternative",
+     "line": "Mixed text and images"
+    },
+    {
+     "id": "@cf/moondream/moondream3.1-9B-A2B",
+     "role": "Extract",
+     "line": "Pulls figures out of images"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "review:deck-file",
    "optionLabel": "Drop your deck here or click to browse",
    "kind": "vision",

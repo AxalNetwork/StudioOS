@@ -19,17 +19,19 @@ const ICONS = { text: Type, chart: BarChart3, image: ImageIcon, background: Pale
  * D899 (#2678, part 5 of #2434) — PD7's Add menu on the card: Text, Chart,
  * Image, Background, From a connector and Layout.
  *
- *   Text, Image          the existing Add a block dialog (PD8c), on that kind
+ *   Text                 the existing Add a block dialog (PD8c)
+ *   Image, Background    D903's image lightbox (`ImageLightbox.jsx`), as a
+ *                        content image or a card background
  *   Chart                Eadwyn picks which recorded figures to show as a
  *                        chart, a table or a timeline; code binds each series
  *                        to its source, so no number is typed. Cost first.
- *   Background, Layout   the Design panel (PD8)
+ *   Layout               the Design panel (PD8)
  *   From a connector     PD9d's lightbox (`ConnectorLightbox`)
  *
  * The rail row (PD28) lists this page's models with their catalogue prices.
  * Mounted by `PitchEditor.jsx`.
  */
-export default function AddMenu({ deckId, cardIndex, card, model, items, onBlock, onDesign, onPlace, onAddCard }) {
+export default function AddMenu({ deckId, cardIndex, card, model, items, onBlock, onDesign, onImage, onPlace, onAddCard }) {
   const [on] = useAssistMode('raise');
   const [open, setOpen] = useState(false);
   const [charts, setCharts] = useState(false);
@@ -68,7 +70,10 @@ export default function AddMenu({ deckId, cardIndex, card, model, items, onBlock
 
   const pick = (id) => {
     setOpen(false);
-    if (id === 'text' || id === 'image') onBlock(id);
+    // D903: Image opens the image lightbox as a content image, Background as a card background (PD12, PD12b).
+    if (id === 'image' && onImage) onImage('content');
+    else if (id === 'background' && onImage) onImage('card');
+    else if (id === 'text' || id === 'image') onBlock(id);
     else if (id === 'background' || id === 'layout') onDesign();
     else if (id === 'chart') setCharts(true);
     else if (id === 'connector') setConnector(true);

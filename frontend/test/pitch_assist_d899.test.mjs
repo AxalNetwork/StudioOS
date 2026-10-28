@@ -9,8 +9,9 @@
  *     proposal is the before struck and the after, Accept places it and Save
  *     writes it; a metric tile takes no tool; AI off greys the bar; a 402
  *     opens the tokens dialog;
- *   · the Add menu: Text and Image open Add a block on that kind, Background
- *     opens Design, Chart proposes a block whose series are bindings;
+ *   · the Add menu: Text opens Add a block, Image and Background open D903's
+ *     image lightbox, Layout opens Design, Chart proposes a block whose series
+ *     are bindings;
  *   · PD9d: connectors with their last sync, figures grouped by connector, a
  *     headline from Eadwyn with its cost, a typed figure refused, and a new
  *     card of bound tiles.
@@ -30,6 +31,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { api } from '../src/lib/api.js';
 import { deckAssistApi } from '../src/lib/api/deckAssist.js';
 import { deckEditorApi } from '../src/lib/api/deckEditor.js';
+import { deckImagesApi } from '../src/lib/api/deckImages.js';
 import { deckSourcesApi } from '../src/lib/api/deckSources.js';
 import { publicPricingApi } from '../src/lib/api/publicPricing.js';
 import { railProposalsApi } from '../src/lib/api/railProposals.js';
@@ -167,9 +169,11 @@ async function mount(answers = {}, { aiOff = false } = {}) {
     'assist.run': async () => { throw new Error('no run stubbed'); },
     'proposals.decide': async () => ({ ok: true }),
     'pricing.aiModels': async () => CATALOGUE,
+    'images.list': async () => ({ images: [] }),
+    'images.quote': async () => ({ ai: true, model_label: 'FLUX.1 Schnell', per_image_microusd: 1880, count: 2, total_microusd: 3760, balance: { ok: true } }),
     ...answers,
   };
-  const homes = { editor: deckEditorApi, sources: deckSourcesApi, assist: deckAssistApi, proposals: railProposalsApi, pricing: publicPricingApi };
+  const homes = { editor: deckEditorApi, sources: deckSourcesApi, assist: deckAssistApi, proposals: railProposalsApi, pricing: publicPricingApi, images: deckImagesApi };
   for (const [name, fn] of Object.entries(reads)) {
     const [home, key] = name.includes('.') ? name.split('.') : [null, name];
     (home ? homes[home] : api)[key] = stub(name, fn);
@@ -302,14 +306,15 @@ test('AI off: the bar is greyed with the sentence, and the records still fill', 
   } finally { await m.unmount(); }
 });
 
-test('the Add menu: Text and Image open Add a block on that kind, Background opens Design', async () => {
+// D903 (#2682): Image and Background open the image lightbox, as a content image and as a card background.
+test('the Add menu: Text opens Add a block, Image and Background open the image lightbox, Layout opens Design', async () => {
   const m = await mount();
   try {
     await m.press(m.by('pitch-add-menu-open'));
     assert.deepEqual(['text', 'chart', 'image', 'background', 'connector', 'layout'].map((id) => Boolean(m.by(`pitch-add-${id}`))), [true, true, true, true, true, true]);
     await m.press(m.by('pitch-add-image'));
-    assert.ok(m.by('pitch-editor-add-dialog'), 'the existing dialog (PD8c)');
-    assert.equal(m.pr(m.by('pitch-editor-kind-image'))['aria-checked'], true);
+    assert.ok(m.by('pitch-image-lightbox'), 'PD12');
+    assert.equal(m.pr(m.by('pitch-image-use-content'))['aria-checked'], true);
   } finally { await m.unmount(); }
   const n = await mount();
   try {
@@ -319,11 +324,17 @@ test('the Add menu: Text and Image open Add a block on that kind, Background ope
   } finally { await n.unmount(); }
   const o = await mount();
   try {
-    assert.equal(o.pr(o.by('pitch-editor-tab-design'))['aria-selected'], false);
     await o.press(o.by('pitch-add-menu-open'));
     await o.press(o.by('pitch-add-background'));
-    assert.equal(o.pr(o.by('pitch-editor-tab-design'))['aria-selected'], true);
+    assert.equal(o.pr(o.by('pitch-image-use-card'))['aria-checked'], true, 'PD12b: set to Card background');
   } finally { await o.unmount(); }
+  const p = await mount();
+  try {
+    assert.equal(p.pr(p.by('pitch-editor-tab-design'))['aria-selected'], false);
+    await p.press(p.by('pitch-add-menu-open'));
+    await p.press(p.by('pitch-add-layout'));
+    assert.equal(p.pr(p.by('pitch-editor-tab-design'))['aria-selected'], true);
+  } finally { await p.unmount(); }
 });
 
 test('the Add menu\'s Chart: costs and the rail row first, then a block whose series are bindings', async () => {

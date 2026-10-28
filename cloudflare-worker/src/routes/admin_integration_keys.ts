@@ -30,6 +30,12 @@
  *                                       a generated value is returned once, to the caller only
  *  DELETE /channels/:channel          → delete every one of that channel's Worker secrets
  *
+ * D851 (#2474) · D848 — THE MODEL PROVIDERS. `GET /` also carries
+ * `model_providers`: each provider Axal calls with its own platform key
+ * (pattern C), with its switch's value and whether its key secret is set.
+ * Read only: no write path for the key, no call to the provider, never the
+ * key's value. Not a member connection, so not on `/api/connectors/health`.
+ *
  * The same bar and audit as the provider keys: `requireSuperAdminWriteBar`,
  * one `logAdminAction` row per request naming the secrets, never a value.
  *
@@ -58,6 +64,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
+import { modelProviderRows } from '../services/aiProviders';
 import {
   MANAGED_PROVIDERS,
   PROVIDER_ENV_VARS,
@@ -371,6 +378,8 @@ r.get('/', async (c) => {
     providers: status.items.map((item) => ({ ...item, ...setupFields(c.env, item.provider_key as ManagedProviderKey) })),
     other_oauth: otherOauthClients(c.env),
     channels: channelRows(c.env),
+    // D851 · D848: the model providers (pattern C), read only: the switch and whether the key is set.
+    model_providers: modelProviderRows(c.env),
     db_readable: status.db_readable,
     ...(status.db_readable ? {} : {
       unreadable_reason:
