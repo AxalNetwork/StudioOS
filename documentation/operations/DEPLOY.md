@@ -157,7 +157,8 @@ is that source's build, so there is no second copy to drift from it, and
 The old-bundle window rides on a cache instead of a committed tree. A tab
 opened before a deploy still asks for the previous build's hashed chunks, so
 `scripts/build-frontend.mjs` keeps complete deployed generations from the last
-72 hours in `docs/assets`, with at least the last three builds and an
+72 hours in `docs/assets`, with at least the last three builds (including the
+new build) and an
 18,000-asset cap (D1361). It prunes the oldest optional generations first,
 never individual chunks. If the protected floor itself exceeds the cap, it
 fails the build rather than deleting the newest build's assets. A cap warning
@@ -173,7 +174,9 @@ succeeds. The post-deploy `record-asset-deploy.mjs` hook records the actual
 successful deploy time in each new ledger entry's `deployedAt`; `ts` remains
 its build time. Old ledgers receive a single conservative 72-hour grace
 (`firstSeenAt`) without inventing a deployment time. Local or failed builds
-do not displace deployed builds from the minimum floor.
+do not displace deployed builds from the minimum floor. An unstamped non-legacy
+entry in the restored deployment cache aborts the build before Vite runs; check
+the successful-deploy timestamp hook instead of losing live history.
 
 When there is nothing to restore (the first deploy, or an entry
 GitHub evicted after seven days unused) the deploy still ships, the build log

@@ -34,7 +34,7 @@ fs.writeFileSync(path.join(docs,'index.html'),'<script src="/assets/current.js">
     fs.writeFileSync(path.join(dir,'docs/index.html'),`<script src="/assets/${builds[0].files[0]}"></script>`);
     fs.writeFileSync(path.join(dir,'docs/.build-source'),'last-successful-source');
   }
-  const run=(env={})=>spawnSync(process.execPath,[path.join(dir,'scripts/build-frontend.mjs'),'--seed-restored-tree'],{cwd:dir,encoding:'utf8',env:{...process.env,...env,PATH:path.join(dir,'bin')+path.delimiter+path.dirname(process.execPath)+path.delimiter+process.env.PATH},timeout:60000});
+  const run=(env={},argv=['--seed-restored-tree'])=>spawnSync(process.execPath,[path.join(dir,'scripts/build-frontend.mjs'),...argv],{cwd:dir,encoding:'utf8',env:{...process.env,...env,PATH:path.join(dir,'bin')+path.delimiter+path.dirname(process.execPath)+path.delimiter+process.env.PATH},timeout:60000});
   return {dir,run,remove:()=>fs.rmSync(dir,{recursive:true,force:true})};
 }
 
@@ -94,5 +94,33 @@ process.exit(7);
     assert.equal(JSON.parse(fs.readFileSync(path.join(f.dir,'docs/.asset-retention.json'),'utf8')).builds[0].files[0],'old-1.js');
     assert.equal(fs.readFileSync(path.join(f.dir,'docs/index.html'),'utf8'),'<script src="/assets/old-1.js"></script>');
     assert.equal(fs.existsSync(path.join(f.dir,'docs/assets/lazy-1.js')),true);
+  } finally {f.remove();}
+});
+
+test('D1361: an unstamped deployed cache stops before Vite can discard live history',()=>{
+  const f=fixture({history:true});
+  try {
+    const ledgerFile=path.join(f.dir,'docs/.asset-retention.json');
+    const ledger=JSON.parse(fs.readFileSync(ledgerFile,'utf8'));
+    ledger.builds[0].deployedAt=null;
+    fs.writeFileSync(ledgerFile,JSON.stringify(ledger));
+    const result=f.run();
+    assert.equal(result.status,1);
+    assert.match(result.stderr,/restored deployment ledger is unstamped/);
+    assert.deepEqual(JSON.parse(fs.readFileSync(ledgerFile,'utf8')),ledger);
+    assert.equal(fs.existsSync(path.join(f.dir,'docs/assets/current.js')),false);
+    assert.equal(f.run({},[]).status,0);
+  } finally {f.remove();}
+});
+
+test('D1361: explicitly legacy timestamps retain their grace in a restored deployment cache',()=>{
+  const f=fixture({history:true});
+  try {
+    const ledgerFile=path.join(f.dir,'docs/.asset-retention.json');
+    const ledger=JSON.parse(fs.readFileSync(ledgerFile,'utf8'));
+    for(const b of ledger.builds) { b.deployedAt=null; b.legacy=true; b.firstSeenAt=new Date().toISOString(); }
+    fs.writeFileSync(ledgerFile,JSON.stringify(ledger));
+    assert.equal(f.run().status,0);
+    assert.deepEqual(JSON.parse(fs.readFileSync(ledgerFile,'utf8')).builds.map(b=>b.deployedAt),[null,null,null,null]);
   } finally {f.remove();}
 });

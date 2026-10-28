@@ -19,7 +19,7 @@
  * unit-tested (`scripts/lib/assetRetention.test.mjs`). This file is only the
  * filesystem orchestration around it.
  *
- * Policy: 72 hours, at least three deployed builds, and 18,000 asset files.
+ * Policy: 72 hours, a three-build floor including this candidate, and 18,000 asset files.
  * ASSET_RETAIN_BUILDS can raise the floor, never lower it below three.
  */
 import { execSync } from 'node:child_process';
@@ -78,6 +78,13 @@ function readLedgerBuilds(p) {
 // 1. Snapshot the pre-build assets — they must survive Vite's emptyOutDir wipe.
 const prevFiles = listAssetFiles(assetsDir);
 const ledgerBuilds = readLedgerBuilds(ledgerPath);
+// A deployment cache is saved only after shipping. An unstamped v2 record there
+// means the post-deploy clock did not run; abort BEFORE Vite can discard it.
+// Legacy entries retain their explicit one-time grace without inventing a time.
+if (process.argv.includes(SEED_RESTORED_TREE_FLAG)
+    && ledgerBuilds.some(b => b?.deployedAt === null && b.legacy !== true)) {
+  throw new Error('[build] restored deployment ledger is unstamped; refusing to discard live history. Check the successful-deploy timestamp hook.');
+}
 // D529: docs/ is not committed, so what is on disk here is whatever the job
 // restored (the production deploy) or nothing (every other job). Say which.
 console.log(retentionStart({ prevFiles, ledgerBuilds }).line);
