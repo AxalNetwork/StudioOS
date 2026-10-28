@@ -2,9 +2,10 @@
 export const MEETING_BOT_NAME = 'Eadwyn AI';
 export const MEETING_BOT_NOTICE_VERSION = 2;
 export const MEETING_BOT_NOTICE_PATH = '/privacy/interviews';
-// Set the actual approval date only with B1/B2/B6 safeguard verification.
+// Restricted release candidate for #3623 / #3588. Keep draft until live verification.
+// This is the wording approval date, not a claim of production verification.
 // Publication and the public page's date derive from this one setting.
-export const MEETING_BOT_NOTICE_APPROVED_AT = null;
+export const MEETING_BOT_NOTICE_APPROVED_AT = '2026-10-22';
 const approvalMs = typeof MEETING_BOT_NOTICE_APPROVED_AT === 'string'
   ? Date.parse(`${MEETING_BOT_NOTICE_APPROVED_AT}T00:00:00Z`) : NaN;
 export const MEETING_BOT_NOTICE_PUBLISHED = Number.isFinite(approvalMs)

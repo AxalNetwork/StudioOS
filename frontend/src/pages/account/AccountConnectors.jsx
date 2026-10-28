@@ -121,7 +121,7 @@ export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = 
   if (act === 'unavailable') corner = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</span>;
   return (
     <article className={`${TONE_CLS} relative flex h-full flex-col gap-2 p-3.5 focus-within:ring-2 focus-within:ring-axal-violet/40`} data-testid={`connector-card-${p.key}`} data-action={act}>
-      <div className="flex items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{corner}</div>
+      <div className="flex min-h-[46px] items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{corner}</div>
       <h4 className="flex items-center gap-1.5 text-sm font-bold text-axal-ink dark:text-gray-100">
         <Link to={to} state={state} data-testid={`connector-open-${p.key}`} className="after:absolute after:inset-0 after:rounded-axal-sm focus:outline-none focus-visible:underline">
           {p.display_name}{act === 'connected' && <span className="sr-only"> · Connected</span>}

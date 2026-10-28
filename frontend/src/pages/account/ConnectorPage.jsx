@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { connectorsApi } from '../../lib/api/connectors';
 import { ChevronDown, Info } from 'lucide-react';
-import { BrandIcon, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
+import { BrandIcon, LinkedInSignInButton, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
   ActivityGroup, CompaniesGroup, FedGroup, Group, KeyFields, PermissionsGroup, Row, SettingsGroup, ToolModals,
@@ -208,7 +208,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
           {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}
         </div>
-        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} manage={manageItems(p)} />
+        <BandAction p={p} action={action} flow={flow} opening={view === 'signin'} phone={phone} superAdmin={superAdmin} onChanged={onChanged} manage={manageItems(p)} />
       </header>
 
       {notice && (
@@ -399,7 +399,7 @@ function Notice({ notice, name, adminHref }) {
  * The band's one action (`pageAction`, decision 6), and its split chevron:
  * a menu on desktop, radios and links on a phone.
  */
-function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = [] }) {
+function BandAction({ p, action, flow, opening = false, phone, superAdmin, onChanged, manage = [] }) {
   const choices = pageChoices(p);
   const connects = action.kind === 'oauth' || action.kind === 'key' || action.kind === 'starting';
   const hasChoices = connects && (choices.env || choices.alt.length > 0);
@@ -438,12 +438,16 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
       </div>
     );
   }
+  // Reconnect retains its connection row and action kind while sign-in opens.
   const starting = action.kind === 'starting';
   return (
     <div className="flex min-w-0 flex-col items-start gap-2 max-sm:w-full sm:items-end" data-testid="connector-page-action" data-kind={action.kind}>
       {/* D753 F8 (#1992): on a phone the one action takes the band's full width. */}
-      <div className="flex items-stretch max-sm:w-full">
+      <div className={`flex items-stretch max-sm:w-full ${p.key === 'linkedin' && action.kind === 'reconnect' ? 'max-sm:flex-col max-sm:gap-2' : ''}`}>
         {action.kind === 'reconnect' && <span className="mr-2 self-center"><Pill tone={action.pill.tone}>{action.pill.label}</Pill></span>}
+        {p.key === 'linkedin' ? (
+          <LinkedInSignInButton busy={opening} disabled={flow.busy && !opening} disabledReason="Please wait…" onClick={press} context={action.kind === 'reconnect' ? action.label : undefined} aria-description={action.aria} title={action.title} className="max-sm:flex-1" data-testid="connector-page-connect-button" />
+        ) : (
         <button
           type="button"
           className={`${BTN.primary} max-sm:flex-1 ${hasChoices && !phone ? 'rounded-r-none' : ''}`}
@@ -456,6 +460,7 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
         >
           {action.label}
         </button>
+        )}
         {hasChoices && !phone && <ChoicesMenu p={p} choices={choices} flow={flow} disabled={starting} />}
         {action.kind === 'reconnect' && manage.length > 0 && !phone && <span className="ml-2"><ManageMenu p={p} items={manage} flow={flow} /></span>}
       </div>

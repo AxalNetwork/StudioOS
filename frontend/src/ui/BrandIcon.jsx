@@ -1,4 +1,5 @@
 import React, { useId } from 'react';
+import { LINKEDIN_MARK } from './linkedinBrand';
 import { Bot, ClipboardPaste, Globe, Mail, MessageSquare, Phone } from 'lucide-react';
 
 /**
@@ -28,7 +29,7 @@ import { Bot, ClipboardPaste, Globe, Mail, MessageSquare, Phone } from 'lucide-r
  * source, licence, colour and every monogram's reason, is D687.md.
  *
  * Additional artwork records a pinned source blob and the vendor's guidelines.
- * SVGL mirrors are MIT licensed (notice below); the LinkedIn mirror is CC0.
+ * SVGL mirrors are MIT licensed (notice below); LinkedIn uses its own downloads (D1355).
  * Microsoft artwork comes from its identity-platform documentation.
  *
  * Nothing is fetched: Carta’s official plugin icon and DocuSign’s vendor favicon are embedded PNGs; no icon font or CDN, so a member's
@@ -1102,37 +1103,7 @@ export const VENDOR_MARKS = Object.freeze({
     "licence": "https://api.slack.com/media-kit",
     "guidelines": "https://api.slack.com/media-kit"
   },
-  "linkedin": {
-    "name": "LinkedIn",
-    "viewBox": "0 0 256 256",
-    "hex": "#0A66C2",
-    "dark": "#ffffff",
-    "multicolour": false,
-    "artwork": [
-      {
-        "tag": "g",
-        "attrs": {},
-        "children": [
-          {
-            "tag": "path",
-            "attrs": {
-              "d": "M218.123122,218.127392 L180.191928,218.127392 L180.191928,158.724263 C180.191928,144.559023 179.939053,126.323993 160.463756,126.323993 C140.707926,126.323993 137.685284,141.757585 137.685284,157.692986 L137.685284,218.123441 L99.7540894,218.123441 L99.7540894,95.9665207 L136.168036,95.9665207 L136.168036,112.660562 L136.677736,112.660562 C144.102746,99.9650027 157.908637,92.3824528 172.605689,92.9280076 C211.050535,92.9280076 218.138927,118.216023 218.138927,151.114151 L218.123122,218.127392 Z M56.9550587,79.2685282 C44.7981969,79.2707099 34.9413443,69.4171797 34.9391618,57.260052 C34.93698,45.1029244 44.7902948,35.2458562 56.9471566,35.2436736 C69.1040185,35.2414916 78.9608713,45.0950217 78.963054,57.2521493 C78.9641017,63.090208 76.6459976,68.6895714 72.5186979,72.8184433 C68.3913982,76.9473153 62.7929898,79.26748 56.9550587,79.2685282 M75.9206558,218.127392 L37.94995,218.127392 L37.94995,95.9665207 L75.9206558,95.9665207 L75.9206558,218.127392 Z M237.033403,0.0182577091 L18.8895249,0.0182577091 C8.57959469,-0.0980923971 0.124827038,8.16056231 -0.001,18.4706066 L-0.001,237.524091 C0.120519052,247.839103 8.57460631,256.105934 18.8895249,255.9977 L237.033403,255.9977 C247.368728,256.125818 255.855922,247.859464 255.999,237.524091 L255.999,18.4548016 C255.851624,8.12438979 247.363742,-0.133792868 237.033403,0.000790807055",
-              "fill": "currentColor"
-            },
-            "children": []
-          }
-        ]
-      }
-    ],
-    "rootProps": {
-      "fill": "currentColor"
-    },
-    "source": "https://github.com/gilbarbara/logos/blob/4a5b550414be64d5c007574cd395d910d50e8950/logos/linkedin-icon.svg",
-    "sourceBlob": "76611ba4995417d1ced806ed3de0fcd377e4a31b",
-    "version": "2026-10-16",
-    "licence": "https://brand.linkedin.com/in-logo",
-    "guidelines": "https://brand.linkedin.com/in-logo"
-  },
+  linkedin: LINKEDIN_MARK,
   "chatgpt": {
     "name": "ChatGPT",
     "viewBox": "0 0 611 611",
@@ -1346,7 +1317,7 @@ function Svg({ mark, k, px, brand, className = '' }) {
   // React useId keeps repeated Google gradients independent and hydration-stable.
   const prefix = useId().replace(/[^A-Za-z0-9_-]/g, '');
   const multicolour = !!(mark.multicolour || mark.paths);
-  const style = brand && !multicolour ? { '--brand': mark.hex, '--brand-dark': mark.dark } : undefined;
+  const style = { ...(brand && !multicolour ? { '--brand': mark.hex, '--brand-dark': mark.dark } : {}), ...(mark.minGlyph ? { minWidth: px, minHeight: px } : {}) };
   return (
     <svg {...mark.rootProps} viewBox={mark.viewBox || '0 0 24 24'} width={px} height={px} aria-hidden="true" focusable="false" data-provider={k}
       fill="currentColor" style={style} className={`shrink-0 ${brand && !multicolour ? BRAND_COLOUR_CLASS : ''} ${className}`.trim()}>
@@ -1363,7 +1334,8 @@ function Svg({ mark, k, px, brand, className = '' }) {
  *   name      the visible name, for the monogram
  *   size      34 or 24 for a tile; for `bare`, the glyph's own pixel size
  *   variant   'tile' | 'bare'
- *   tone      'brand' (its own colour) | 'current' (currentColor, no tile)
+ *   tone      'brand' | 'current'; LinkedIn keeps approved pixels and also
+ *             accepts 'inverse' (white) or 'blue' on bare, known backings
  *   fallback  'monogram' | 'none' (draw only a real mark)
  */
 export default function BrandIcon({ provider, name = '', size = 34, variant = 'tile', tone = 'brand', fallback = 'monogram', className = '' }) {
@@ -1371,6 +1343,18 @@ export default function BrandIcon({ provider, name = '', size = 34, variant = 't
   if (fallback === 'none' && r.kind !== 'mark') return null;
   const bare = variant === 'bare' || tone === 'current';
   const px = bare ? size : glyphFor(size);
+  if (r.kind === 'mark' && r.mark.minGlyph) {
+    const glyph = Math.max(r.mark.minGlyph, px);
+    const space = Math.ceil(glyph * r.mark.clearSpace / r.mark.minGlyph);
+    const frame = Math.max(bare ? 0 : size, glyph + space * 2 + (bare ? 0 : 2));
+    const artwork = tone === 'inverse' ? r.mark.inverseArtwork : tone === 'blue' ? r.mark.lightArtwork : r.mark.artwork;
+    const mark = { ...r.mark, artwork };
+    return <span aria-hidden="true" data-brand="mark" data-linkedin-frame="true"
+      style={{ width: frame, height: frame, minWidth: frame, minHeight: frame, padding: space }}
+      className={`${bare ? 'inline-grid shrink-0 place-items-center align-middle' : TILE_CLASS} ${className}`.trim()}>
+      <Svg mark={mark} k={r.key} px={glyph} brand={false} />
+    </span>;
+  }
   if (r.kind === 'mark') {
     const svg = <Svg mark={r.mark} k={r.key} px={px} brand={tone !== 'current'} className={bare ? className : ''} />;
     if (bare) {

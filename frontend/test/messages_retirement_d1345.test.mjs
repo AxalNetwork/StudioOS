@@ -1,11 +1,12 @@
 /** D1345: the old address moves to Email once; former starters open scoped drafts. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React from 'react';
+import React, { act } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { mountContracts } from './_contracts_dom.mjs';
 import MessagesRedirect, { MessagesMovedNotice } from '../src/pages/email/MessagesRedirect.jsx';
+import ComposeSheet from '../src/pages/email/ComposeSheet.jsx';
 import { EmailGp } from '../src/pages/SpinoutLabLpCommitment.jsx';
 import { recipientFor } from '../src/pages/email/emailModel.js';
 const h = React.createElement;
@@ -76,4 +77,67 @@ test('the shipped shell and both starters retire the old page and client', () =>
   assert.match(delivery, /<EmailAction person=\{`work_product:\$\{i.id\}`\}/);
   const walk = (url) => readdirSync(url, { withFileTypes: true }).flatMap((d) => d.isDirectory() ? walk(new URL(d.name + '/', url)) : /\.[jt]sx?$/.test(d.name) ? [new URL(d.name, url)] : []);
   for (const url of walk(new URL('../src/', import.meta.url))) assert.doesNotMatch(readFileSync(url, 'utf8'), /\bapi\.message(?:Threads|Thread|StartThread|Send|MarkRead|Archive|Attach|AttachmentLink)\(/, url.pathname);
+});
+
+
+test('a GP question starts with an opening and cannot send until the member edits the body', async () => {
+  const opening = 'Hello GP,\nI have a question about Synthetic Fund.';
+  const sent = [];
+  let drafts = 0;
+  const api = {
+    estimate: async () => ({ estimate: { hold_microusd: 1000000 } }),
+    draft: async () => ({ draft: { uid: `draft-${++drafts}`, subject: 'Synthetic Fund question', body: opening, sources: [] } }),
+    confirmSend: async () => ({ nonce: 'synthetic-once' }),
+    send: async (request) => { sent.push(request); return { sent: true }; },
+  };
+  const view = await mountContracts(h(ComposeSheet, {
+    pack: { person: { ref: 'fund_gp:1', kind: 'fund_gp', relationship: 'fund_gp', name: 'Synthetic GP' }, items: [] },
+    refs: ['fund_gp:1'], to: 'gp@example.invalid', account: { uid: 'own-mail', address: 'lp@example.invalid' }, api, onClose() {},
+  }), '/email');
+  const find = (id) => view.nodes().find((n) => view.props(n)?.['data-testid'] === id);
+  const change = async (label, value) => {
+    const node = view.nodes().find((n) => view.props(n)?.['aria-label'] === label);
+    await act(async () => view.props(node).onChange({ target: { value } }));
+  };
+  try {
+    await view.flush();
+    assert.match(view.text(), /Start a fund question/);
+    assert.match(view.text(), /Add your question to the draft body before sending/);
+    await view.click('Draft with Eadwyn'); await view.flush();
+    assert.equal(view.props(find('compose-send')).disabled, true, 'the generated opening is incomplete');
+    await change('Subject', 'My actual fund question');
+    assert.equal(view.props(find('compose-send')).disabled, true, 'a subject edit is not a question in the body');
+    await change('Body', `  ${opening.replace(/\n/g, ' \r\n\t')}  \n`);
+    assert.equal(view.props(find('compose-send')).disabled, true, 'whitespace and line-ending changes are not a question');
+    const question = opening + '\n\nWhen is the next capital call due?';
+    await change('Body', question);
+    assert.equal(view.props(find('compose-send')).disabled, false);
+    assert.equal(sent.length, 0, 'editing never sends');
+    await view.click('Regenerate'); await view.flush();
+    assert.equal(view.props(find('compose-send')).disabled, true, 'a regenerated opening needs the member’s question again');
+    await change('Body', question);
+    await view.click('Send from lp@example.invalid');
+    assert.equal(sent.length, 0, 'confirmation is required');
+    await view.click('Send now'); await view.flush();
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].body, question);
+    assert.equal(sent[0].to, 'gp@example.invalid');
+    assert.equal(sent[0].nonce, 'synthetic-once');
+  } finally { await view.unmount(); }
+});
+
+test('the GP update purpose keeps ordinary draft sending and shows no question-opening guidance', async () => {
+  const view = await mountContracts(h(ComposeSheet, {
+    pack: { person: { ref: 'fund_gp:1', kind: 'fund_gp', relationship: 'fund_gp', name: 'Synthetic GP' }, items: [] },
+    refs: ['fund_gp:1'], to: 'gp@example.invalid', account: { uid: 'own-mail', address: 'lp@example.invalid' }, onClose() {},
+    api: { estimate: async () => ({ estimate: { hold_microusd: 1000000 } }),
+      draft: async () => ({ draft: { uid: 'update', subject: 'Fund update', body: 'Could you share an update on Synthetic Fund?', sources: [] } }) },
+  }), '/email');
+  try {
+    await view.click('Ask for an update'); await view.flush();
+    assert.doesNotMatch(view.text(), /Add your question to the draft body/);
+    await view.click('Draft with Eadwyn'); await view.flush();
+    const button = view.nodes().find((n) => view.props(n)?.['data-testid'] === 'compose-send');
+    assert.equal(view.props(button).disabled, false, 'a complete update draft needs no artificial edit');
+  } finally { await view.unmount(); }
 });

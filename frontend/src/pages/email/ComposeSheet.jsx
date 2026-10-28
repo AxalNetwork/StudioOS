@@ -26,6 +26,7 @@ const BLOCKS = [
   { value: 'interview_insights', label: 'Interview insights' }, { value: 'one_liner', label: 'Company one-liner' },
 ];
 const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+const bodyText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 
 export default function ComposeSheet({ pack, refs, project = null, to, account, from = null, onClose, onSent, onAddAddress, api = mailApi }) {
   const person = pack.person;
@@ -79,7 +80,9 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
   };
 
   const line = estimateLine(estimate);
-  const sendable = !!(draft && edit?.subject?.trim() && edit?.body?.trim() && account && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address.trim()));
+  const questionOpening = person.kind === 'fund_gp' && intent === 'ask_question';
+  const questionNeedsEdit = !!(questionOpening && draft && bodyText(edit?.body) === bodyText(draft.body));
+  const sendable = !!(draft && edit?.subject?.trim() && edit?.body?.trim() && account && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address.trim()) && !questionNeedsEdit);
   const footer = draft
     ? <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={PRIMARY} disabled={!sendable || busy} onClick={() => setConfirm(true)} data-testid="compose-send">
@@ -102,6 +105,7 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
         {!to && <span id="compose-no-address" className={`text-[12px] ${MUTED}`}>No address is recorded for {person.name}. Type the one to send to{onAddAddress ? ', or add it to their record' : ''}.</span>}
       </label>
       <p className={`text-[12.5px] ${MUTED}`} data-testid="compose-from">From {account ? account.address : 'no mailbox yet'}</p>
+      {questionOpening && <p className={`text-[12.5px] ${BODY}`} id="compose-fund-question" data-testid="compose-fund-question">Eadwyn writes an opening. Add your question to the draft body before sending.</p>}
 
       {!draft && <>
         <section className="flex flex-col gap-1.5"><span className={EYEBROW}>What is it for</span>
@@ -131,7 +135,7 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
           </span>
         </div>
         <input className={INPUT} aria-label="Subject" value={edit.subject} onChange={(e) => setEdit({ ...edit, subject: e.target.value })} />
-        <textarea className={`${INPUT} min-h-[220px] py-2`} aria-label="Body" value={edit.body} onChange={(e) => setEdit({ ...edit, body: e.target.value })} />
+        <textarea className={`${INPUT} min-h-[220px] py-2`} aria-label="Body" aria-describedby={questionOpening ? 'compose-fund-question' : undefined} value={edit.body} onChange={(e) => setEdit({ ...edit, body: e.target.value })} />
         <p className={`text-[12px] ${MUTED}`} data-testid="compose-used">Used: {(draft.sources ?? []).map((s) => s.label).join(', ') || 'nothing'}. Nothing else was read.</p>
         <div className="flex flex-wrap gap-1.5">
           <button type="button" className={BTN} disabled={!canDraft({ estimate, intent, busy })} onClick={press}>Regenerate{line ? '' : ' (reading the estimate…)'}</button>

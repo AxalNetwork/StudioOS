@@ -65,7 +65,7 @@ export default function ShareButtons({ url, title, size = 'md', className = '' }
           rel={key === 'email' ? undefined : 'noopener noreferrer'}
           aria-label={label}
           title={label}
-          className={btn}
+          className={`${btn} ${key === 'linkedin' ? 'min-h-[46px] min-w-[46px]' : ''}`}
           data-testid={`share-${key}`}
         >
           {Icon ? <Icon className={glyph} /> : <BrandIcon provider={key} size={sm ? 12 : 14} variant="bare" tone="current" className={glyph} />}

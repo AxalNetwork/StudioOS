@@ -396,6 +396,40 @@ test('pressing the pill opens the live view for its session; the recording is un
   await act(async () => root.unmount()); restore();
 });
 
+test('processing notification dismisses without clearing the session and resurfaces for outcomes and other sessions', async () => {
+  const pending = ST({ phase: 'stopping', processing: { stage: 'transcribing' } });
+  const rec = stubRecorder(pending);
+  setRecorder(rec);
+  const restore = installDocument();
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  try {
+    await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/grow'] }, h(RecordingPill))));
+    assert.equal(by('dismiss-recording-pill').tagName, 'BUTTON');
+    await act(async () => pr(by('dismiss-recording-pill')).onClick());
+    assert.equal(by('recording-pill'), undefined);
+    assert.equal(rec.cleared, 0);
+    assert.equal(rec.getSnapshot(), pending);
+    await act(async () => rec.set({ ...pending, processing: { stage: 'summarizing' } }));
+    assert.equal(by('recording-pill'), undefined, 'polling does not restore the dismissed overlay');
+    await act(async () => rec.set({ ...pending, processing: { stage: 'failed' } }));
+    assert.equal(pr(by('recording-pill'))['data-variant'], 'failed');
+    await act(async () => rec.set(pending));
+    await act(async () => pr(by('dismiss-recording-pill')).onClick());
+    await act(async () => rec.set({ ...pending, phase: 'ready' }));
+    assert.equal(pr(by('recording-pill'))['data-variant'], 'ready');
+    await act(async () => rec.set(pending));
+    await act(async () => pr(by('dismiss-recording-pill')).onClick());
+    await act(async () => rec.set({ ...pending, session: { ...SESSION, id: 8 } }));
+    assert.ok(by('recording-pill'), 'a different pending session is visible');
+    await act(async () => rec.set(ST()));
+    assert.equal(by('dismiss-recording-pill'), undefined, 'an active recording cannot be hidden');
+  } finally { await act(async () => root.unmount()); restore(); }
+});
+
 test('after a reload the session page hands a run under way to the recorder and opens the live view; a finished one stays', async () => {
   const followed = [];
   const rec = stubRecorder({ phase: 'idle', session: null });

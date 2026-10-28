@@ -202,6 +202,7 @@ test('6. a mark is decoration: aria-hidden, unfocusable, no title, with its key;
       assert.match(svg, new RegExp(`data-provider="${k}"`), k);
       assert.doesNotMatch(out, /<title/, k);
       if (props.tone === 'current') assert.doesNotMatch(svg, /--brand/, `${k}: currentColor, no brand colour`);
+      else if (k === 'linkedin') assert.match(svg, /width="28" height="28"/, 'D1355: the mark cannot shrink below its official-size viewport');
       else if (BRAND_MARKS[k].multicolour) {
         assert.match(out, /dark:bg-white/, `${k}: retain the brand palette on white`);
       } else assert.match(svg, /text-\[color:var\(--brand\)\] dark:text-\[color:var\(--brand-dark\)\]/, k);
@@ -334,7 +335,7 @@ test('10. the LinkedIn CSV import draws LinkedIn\'s recorded treatment, through 
   assert.match(src, /<BrandIcon provider="linkedin" name="LinkedIn" size=\{16\} variant="bare" \/>/);
   // The follow-up records LinkedIn's blue mark, so the import keeps its brand colour.
   const out = html(h(BrandIcon, { provider: 'linkedin', name: 'LinkedIn', size: 16, variant: 'bare' }));
-  if (Object.hasOwn(BRAND_MARKS, 'linkedin')) assert.match(out, /--brand:#0A66C2/i);
+  if (Object.hasOwn(BRAND_MARKS, 'linkedin')) assert.match(out, /href="\/site\/linkedin-in-blue.png"/);
   else assert.match(out, /data-brand="monogram"[^>]*data-provider="linkedin"[^>]*>L</);
 });
 
@@ -349,6 +350,7 @@ test('vendor follow-up: all recovered brands draw artwork, including catalogue a
     assert.match(out, /<(path|rect|image)\b/, provider);
     assert.doesNotMatch(out, /<script|<foreignObject|<img|https?:\/\//i, provider);
     if (['carta', 'docusign'].includes(provider)) assert.match(out, /<image[^>]*href="data:image\/png;base64,[A-Za-z0-9+/=]+"/);
+    else if (provider === 'linkedin') assert.match(out, /<image[^>]*href="\/site\/linkedin-in-(blue|white).png"/);
     else assert.doesNotMatch(out, /<image/i, provider);
     assert.ok(out.includes(`viewBox="${resolved.mark.viewBox}"`), provider);
   }
@@ -398,7 +400,7 @@ test('step 10. Record a session\'s Provider chips draw the bare 16px mark before
     options: chips.map((k) => ({ value: k, label: `${k} · Ready`, disabled: k === 'slack',
       icon: h(BrandIcon, { provider: k, size: 16, variant: 'bare', fallback: 'none' }) })) }));
   for (const k of ['zoom', 'google_meet', 'slack', 'linkedin']) {
-    assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*>(<span[^>]*>)?<svg[^>]*width="16"[^>]*data-provider="${k}"[\\s\\S]*?<span>${k} · Ready</span></button>`), `${k}: the mark, then its label`);
+    assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*>(<span[^>]*>)?<svg[^>]*width="${k === 'linkedin' ? 28 : 16}"[^>]*data-provider="${k}"[\\s\\S]*?<span>${k} · Ready</span></button>`), `${k}: the mark, then its label`);
   }
   for (const k of ['teams', 'phone_speaker', 'paste']) {
     assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*><span>${k} · Ready</span></button>`), `${k}: text only (fallback none)`);
@@ -419,27 +421,27 @@ test('step 10. Record a session\'s Provider chips draw the bare 16px mark before
 test('step 11. the footer, share buttons, author card and Referrals draw BrandIcon\'s marks, each surface in its own colour', () => {
   const footer = html(h(MemoryRouter, null, h(PublicFooter)));
   for (const { key, label } of SOCIAL_LINKS) {
-    assert.match(footer, new RegExp(`aria-label="${label}" title="${label}"><svg[^>]*data-provider="${key}"`), `footer: ${label}`);
+    assert.match(footer, new RegExp(`aria-label="${label}" title="${label}"[^>]*>[\\s\\S]*?<svg[^>]*data-provider="${key}"`), `footer: ${label}`);
   }
   assert.doesNotMatch(footer, /lucide-send/, 'Telegram is its own mark, not lucide Send');
   assert.doesNotMatch(footer, /--brand:/, 'the footer stays monochrome (tone="current")');
 
   const share = html(h(ShareButtons, { url: 'https://axal.vc/a', title: 'A' }));
   for (const [k, label] of [['x', 'Share on X'], ['linkedin', 'Share on LinkedIn'], ['facebook', 'Share on Facebook'], ['whatsapp', 'Share on WhatsApp']]) {
-    assert.match(share, new RegExp(`aria-label="${label}" title="${label}"[^>]*><svg[^>]*data-provider="${k}"`), label);
+    assert.match(share, new RegExp(`aria-label="${label}" title="${label}"[^>]*>[\\s\\S]*?<svg[^>]*data-provider="${k}"`), label);
   }
   assert.doesNotMatch(share, /--brand:/);
 
   for (const { key, Icon } of SOCIALS.filter((s) => s.key !== 'website')) {
-    assert.match(html(h(Icon, { size: 14 })), new RegExp(`width="14"[^>]*data-provider="${canon(key)}"`), `AuthorCard: ${key}`);
+    assert.match(html(h(Icon, { size: 14 })), new RegExp(`width="${canon(key) === 'linkedin' ? 28 : 14}"[^>]*data-provider="${canon(key)}"`), `AuthorCard: ${key}`);
   }
 
   const referrals = read('frontend/src/pages/ReferralsPage.jsx');
   for (const k of ['linkedin', 'x', 'whatsapp', 'facebook', 'telegram']) {
-    assert.match(referrals, new RegExp(`icon: <BrandIcon provider="${k}" size=\\{16\\} variant="bare" tone="current" \\/>`), `Referrals: ${k}`);
+    assert.match(referrals, new RegExp(`icon: <BrandIcon provider="${k}" size=\\{16\\} variant="bare" tone="${k === 'linkedin' ? 'inverse' : 'current'}" \\/>`), `Referrals: ${k}`);
   }
   assert.doesNotMatch(codeOnly(referrals), /𝕏|>WA<|>TG</, 'the text stand-ins screen readers read aloud are gone');
-  assert.match(referrals, /<BrandIcon provider="linkedin" size=\{14\} variant="bare" tone="current" \/> Import from LinkedIn/);
+  assert.match(referrals, /<BrandIcon provider="linkedin" size=\{14\} variant="bare" tone="inverse" \/> Import from LinkedIn/);
 
   const wrappers = [
     ['frontend/src/pages/ArticleReaderPage.jsx', ['x', 'linkedin', 'facebook']],
@@ -464,9 +466,9 @@ test('9. one copy of every mark: each BRAND_MARKS path lives only in ui/BrandIco
   const firstFill = (nodes) => { for (const n of nodes || []) { if (n.attrs?.fill?.startsWith('#')) return n.attrs.fill; const f = firstFill(n.children); if (f) return f; } return null; };
   for (const [k, m] of Object.entries(BRAND_MARKS)) {
     // A mark drawn only from shapes (Microsoft's four squares) has no path; its first fill is its fingerprint.
-    const print = firstPath(m)?.slice(0, 16) || firstFill(m.artwork) || m.artwork?.find(n => n.tag === 'image')?.attrs.href;
+    const print = k === 'linkedin' ? m.sourceBlob : firstPath(m)?.slice(0, 16) || firstFill(m.artwork) || m.artwork?.find(n => n.tag === 'image')?.attrs.href;
     assert.ok(print, `${k} has a path or a coloured shape`);
-    assert.deepEqual(srcFilesWith(new RegExp(print.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')), ['frontend/src/ui/BrandIcon.jsx'], `${k}'s mark is copied outside BrandIcon.jsx`);
+    assert.deepEqual(srcFilesWith(new RegExp(print.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')), [k === 'linkedin' ? 'frontend/src/ui/linkedinBrand.js' : 'frontend/src/ui/BrandIcon.jsx'], `${k}'s mark is copied outside its registry`);
   }
   for (const old of ['M20.447 20.452', 'M4.98 3.5', 'M16 8a6 6', 'M18.244 2.25', 'M18.244 2H21', 'M24 12.073', 'M14 9V6.8', 'M12 2.163c3.204', 'M12 .5C5.73', 'M16.6 5.82']) {
     assert.deepEqual(srcFilesWith(old), [], `an old copy (${old}) survives`);
