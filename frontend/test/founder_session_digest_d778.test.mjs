@@ -149,6 +149,6 @@ test('the three API methods carry the press\'s headers', () => {
   // Mutation checked: any of the three dropping `headers`.
   const client = read('src/lib/api/interviewSessions.js');
   for (const [name, args] of [['summarise', 'id, model, headers'], ['structure', 'id, model, headers'], ['ask', 'id, question, headers']]) {
-    assert.match(client, new RegExp(`${name}: \\(${args}\\) => request\\(\`\\$\\{P\\}/sessions/\\$\\{enc\\(id\\)\\}/${name}\`, \\{\\s*\\.\\.\\.\\(headers \\? \\{ headers \\} : \\{\\}\\),`), name);
+    assert.match(client, new RegExp(`${name}: \\(${args}\\) => request\\(\`\\$\\{P\\}/sessions/\\$\\{enc\\(id\\)\\}/${name}\`, \\{\\s*(?:timeoutMs: LONG_TIMEOUT_MS,\\s*)?\\.\\.\\.\\(headers \\? \\{ headers \\} : \\{\\}\\),`), name);
   }
 });
