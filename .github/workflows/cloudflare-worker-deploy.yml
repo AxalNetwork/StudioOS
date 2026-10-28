@@ -12,8 +12,8 @@ name: Cloudflare Worker deploy
 # "Production" rows for commits whose run here had failed in the migration
 # step. Who serves a host is settled by this job's closing "Deployed studioos
 # triggers" lines. The static security headers on SPA responses come from
-# docs/_headers, built with the SPA below and asserted live by
-# post-deploy-smoke.yml. docs/ is not committed (D529): this job builds it,
+# docs/_headers, built with the SPA below and asserted after this deploy and
+# by post-deploy-smoke.yml. docs/ is not committed (D529): this job builds it,
 # over the previous deploy's assets restored from the actions cache.
 #
 # Migrations run FIRST, through the same runner `npm run deploy`'s predeploy
@@ -48,7 +48,7 @@ jobs:
   deploy:
     name: build and deploy studioos Worker
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -91,6 +91,13 @@ jobs:
       - name: Say when retention restarted
         if: steps.retention.outputs.cache-matched-key == ''
         run: echo "::warning::No saved build to restore (first deploy, or the cache entry was evicted). Retention restarted - tabs opened before this deploy may need a reload."
+
+      # #3590: capture generation 0 BEFORE the build replaces the ledger.
+      # The manifest stays outside docs/, so Vite cannot wipe or publish it.
+      - name: Capture the previous deploy's lazy entry
+        env:
+          SMOKE_CACHE_RESTORED: ${{ steps.retention.outputs.cache-matched-key }}
+        run: node scripts/capture-spa-previous.mjs "$RUNNER_TEMP/spa-smoke-previous.json"
 
       # --seed-restored-tree (D252, D529): seed everything restored above, not
       # only one generation, because production serves the LAST deploy's
@@ -137,6 +144,7 @@ jobs:
       # to the pattern only with a run that shows it. `set -o pipefail` keeps
       # `tee` from turning a failed deploy into a green step.
       - name: Deploy to Cloudflare Worker
+        id: publish
         working-directory: cloudflare-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -169,6 +177,18 @@ jobs:
             docs/assets
             docs/.asset-retention.json
           key: spa-assets-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # Save first: a smoke failure must not discard what actually shipped.
+      # A failed smoke makes this run red; it never rolls the Worker back.
+      - name: Check current and previous lazy chunks on both hosts
+        if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
+        timeout-minutes: 10
+        env:
+          SMOKE_HOSTS: 'https://axal.vc https://app.axal.vc'
+          SMOKE_BUILD_DIR: docs
+          SMOKE_PREVIOUS_BUILD: ${{ runner.temp }}/spa-smoke-previous.json
+          SKIP_LIVE_SMOKE: '0'
+        run: node scripts/check-spa-live.mjs
 
   # Step 9 as its own job (D253). It still runs only after HQ's deploy, and it
   # still turns the workflow red on a disagreement, but it no longer shares a

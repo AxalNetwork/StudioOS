@@ -10,7 +10,7 @@ name: post-deploy SPA smoke
 # from its [assets] copy of docs/ (wrangler.toml), and ship together on every
 # `wrangler deploy`: by hand via `npm run deploy` (which runs
 # scripts/check-spa-live.mjs as its `postdeploy` hook) or from CI via
-# cloudflare-worker-deploy.yml, which does NOT run it. So this workflow is the
+# cloudflare-worker-deploy.yml, which runs it after every deploy. This is the
 # synthetic/on-demand layer:
 # - workflow_dispatch: re-run by hand right after a deploy. This probe is the
 #   evidence a host updated — the deploy run's closing "Deployed studioos
@@ -66,18 +66,37 @@ jobs:
   smoke:
     name: live SPA smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      # The newest deployed cache holds [current, previous, ...]. Unlike the
+      # pre-build capture in the deploy job, select generation 1 here.
+      - name: Restore the deployed retention window
+        id: retention
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            docs/assets
+            docs/.asset-retention.json
+          key: spa-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            spa-assets-
+      - name: Capture the retained previous lazy entry
+        env:
+          SMOKE_CACHE_RESTORED: ${{ steps.retention.outputs.cache-matched-key }}
+        run: node scripts/capture-spa-previous.mjs "$RUNNER_TEMP/spa-smoke-previous.json" --previous-generation
       - name: Live SPA smoke check
         env:
           SMOKE_HOSTS: ${{ github.event.inputs.hosts }}
           SMOKE_API_PROBE: ${{ github.event.inputs.api_probe }}
           SMOKE_API_PROBE_LIMITED: ${{ github.event.inputs.api_probe_limited }}
           SMOKE_CONNECTORS_STRICT: ${{ github.event.inputs.connectors_strict == 'true' && '1' || '' }}
+          SMOKE_BUILD_DIR: ${{ steps.retention.outputs.cache-matched-key != '' && 'docs' || '' }}
+          SMOKE_PREVIOUS_BUILD: ${{ runner.temp }}/spa-smoke-previous.json
+          SKIP_LIVE_SMOKE: '0'
         run: node scripts/check-spa-live.mjs
       # D755 (#1987): the public plans-and-packs read and /plans-and-pricing,
       # read-only (no sign-in, no purchase, no Stripe). A warning step: a red

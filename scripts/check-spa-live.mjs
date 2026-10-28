@@ -76,8 +76,14 @@
  *   from an authed probe) counts as HEALTHY — it proves the request reached
  *   the Worker; auth state is irrelevant here.
  *
- * Exit 0 when every check passes; exit 1 (loud) on the first host with any
- * failure, after reporting ALL failures.
+ * #3590: read each entry's __vite__mapDeps and fetch every lazy JS/CSS on
+ * both hosts. The deploy captures the restored previous entry before Vite
+ * runs; the schedule reads the preceding generation from the deployed cache.
+ * Leaf requests use 16 workers and at most a 1s retry delay. Report counts
+ * and the first five failures per build, never a line per healthy chunk.
+ * This verifies HTTP delivery, not authenticated rendering or JS execution.
+ *
+ * Exit 0 when every check passes; exit 1 after checking both hosts.
  *
  * Invocation:
  *   node scripts/check-spa-live.mjs                  # both prod hosts
@@ -105,10 +111,17 @@
  *                    `1` fails the run when a catalogue OAuth connector has no
  *                    client or its readiness is unreadable; otherwise that is
  *                    one WARN line per host and never a failure (D751 T9)
+ *   SMOKE_BUILD_DIR local deployed build (its entry is checked even if a
+ *                    live shell is stale); set by the deploy workflow
+ *   SMOKE_PREVIOUS_BUILD captured previous-entry JSON outside docs/; the
+ *                    deploy/schedule both set it. An absent cache is explicit,
+ *                    never reported as a verified previous build.
  */
 
 import { probeUnsignedWebhook } from './lib/webhookGuard.mjs';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { assetPath, assetProblem, entriesFromLedger, entryRefsFromHtml, parseViteMapDeps } from './lib/spaChunks.mjs';
 import { CONNECTOR_READINESS_PATH, connectorReadinessVerdict, summaryMarkdown, warnLine } from './lib/connectorReadiness.mjs';
 
 const DEFAULT_HOSTS = ['https://axal.vc', 'https://app.axal.vc'];
@@ -211,6 +224,7 @@ function routesForHost(base) {
   const appRoutes = [
     { path: '/about', shell: true },
     { path: '/dashboard', shell: true },
+    { path: '/hq', shell: true },
     { path: '/studio', shell: true },
     { path: '/studio/archetype', shell: true },
     { path: '/login', shell: true },
@@ -397,47 +411,23 @@ async function fetchAssetMeta(url) {
 // `text/html` from the SPA fallback serving index.html in place of the real
 // file) means this host is missing the hash or its HTML and assets came from
 // different deployments. Both render a blank page.
-async function checkAsset(base, assetPath) {
-  const url = base.replace(/\/$/, '') + assetPath;
-  const isCss = /\.css(?:$|\?)/i.test(assetPath);
+async function checkAsset(base, ref, quiet = false) {
+  const url = base.replace(/\/$/, '') + ref;
   let lastErr = '';
   for (let attempt = 1; attempt <= RETRIES; attempt++) {
     try {
       const { status, ctype } = await fetchAssetMeta(url);
-      const problems = [];
-      if (status !== 200) {
-        problems.push(
-          `HTTP ${status} (expected 200 — file missing on this host; ` +
-            'the shell and asset origins may be serving different builds)',
-        );
-      }
-      if (/text\/html/i.test(ctype)) {
-        problems.push(
-          'served as text/html (SPA-fallback/404 page, not the real asset — ' +
-            'the shell and its assets came from different builds)',
-        );
-      } else if (status === 200) {
-        const want = isCss ? /css/i : /(javascript|ecmascript)/i;
-        if (!ctype) {
-          problems.push(
-            `200 but missing Content-Type (expected ${isCss ? 'text/css' : 'a JS type'})`,
-          );
-        } else if (!want.test(ctype)) {
-          problems.push(
-            `unexpected Content-Type "${ctype}" (expected ${isCss ? 'text/css' : 'a JS type'})`,
-          );
-        }
-      }
-      if (problems.length === 0) return null;
-      lastErr = problems.join('; ');
+      const problem = assetProblem({ status, ctype }, ref);
+      if (!problem) return null;
+      lastErr = problem;
     } catch (err) {
       lastErr = `request failed: ${err?.message || err}`;
     }
     if (attempt < RETRIES) {
-      console.log(
+      if (!quiet) console.log(
         `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
       );
-      await sleep(RETRY_MS);
+      await sleep(quiet ? Math.min(RETRY_MS, 1000) : RETRY_MS);
     }
   }
   return lastErr;
@@ -467,7 +457,7 @@ async function fetchOnce(url) {
 // Returns null on success, or a human-readable failure reason string. On
 // success, any hashed `/assets/*.{js,css}` the document references are added to
 // `assetSink` so the caller can verify they actually resolve on this host.
-async function checkRoute(base, route, assetSink) {
+async function checkRoute(base, route, assetSink, entrySink) {
   const url = base.replace(/\/$/, '') + route.path;
   let lastErr = '';
   for (let attempt = 1; attempt <= RETRIES; attempt++) {
@@ -501,6 +491,7 @@ async function checkRoute(base, route, assetSink) {
         // asset checks, so the split is kept.
         if (route.shell) {
           for (const ref of extractAssetRefs(body)) sink.add(ref);
+          for (const ref of entryRefsFromHtml(body)) entrySink?.add(ref);
         }
         return null;
       }
@@ -651,11 +642,98 @@ async function checkConnectorReadiness(base) {
   return { url, ...verdict };
 }
 
+function lazyBuildInputs() {
+  let current = [];
+  if (process.env.SMOKE_BUILD_DIR) {
+    const dir = process.env.SMOKE_BUILD_DIR;
+    current = entriesFromLedger({
+      ledger: JSON.parse(readFileSync(join(dir, '.asset-retention.json'), 'utf8')),
+      readAsset: file => readFileSync(join(dir, 'assets', file), 'utf8'),
+    }).entries;
+    // A cached generation has no shell. A fresh build does: include its
+    // precise entry too, even if a format change made it unrecognisable above.
+    if (existsSync(join(dir, 'index.html'))) {
+      const shellEntries = entryRefsFromHtml(readFileSync(join(dir, 'index.html'), 'utf8'));
+      if (shellEntries.length === 0) throw new Error('The built shell has no module entry');
+      current = [...new Set([...current, ...shellEntries])];
+    }
+  }
+  let previous = { entries: [], reason: 'no-retained-build-input' };
+  if (process.env.SMOKE_PREVIOUS_BUILD) {
+    previous = JSON.parse(readFileSync(process.env.SMOKE_PREVIOUS_BUILD, 'utf8'));
+    if (!Array.isArray(previous?.entries)) throw new Error('Unreadable previous-build manifest');
+    previous.entries = [...new Set(previous.entries.map(assetPath))];
+    if (previous.entries.length === 0 && !['cache-miss', 'no-previous-build'].includes(previous.reason)) {
+      throw new Error('The previous-build manifest has no entry or absence reason');
+    }
+  }
+  return { current, previous };
+}
+
+// Read the entry body (unlike the leaf metadata checks), then fetch every
+// JS/CSS in its Vite map. All callbacks stay in this CLI, not in the parser.
+async function checkLazyBuild(base, label, entries, assetChecks, entryChecks) {
+  const refs = new Set();
+  const firstFailures = [];
+  let failed = 0;
+  function problem(ref, reason) {
+    failed++;
+    if (firstFailures.length < 5) {
+      const line = `${base.replace(/\/$/, '')}${ref} — ${reason}`;
+      firstFailures.push(line);
+      console.error(`[spa-live] FAIL  ${label} ${line}`);
+    }
+  }
+  for (const entry of entries) {
+    if (!entryChecks.has(entry)) entryChecks.set(entry, (async () => {
+      let lastErr = 'entry unavailable';
+      for (let attempt = 1; attempt <= RETRIES; attempt++) {
+        try {
+          const res = await fetchOnce(base.replace(/\/$/, '') + entry);
+          const reason = assetProblem(res, entry);
+          if (reason) throw new Error(reason);
+          return { refs: parseViteMapDeps(res.body) };
+        } catch (error) { lastErr = error.message; }
+        if (attempt < RETRIES) await sleep(Math.min(RETRY_MS, 1000));
+      }
+      return { reason: lastErr };
+    })());
+    const result = await entryChecks.get(entry);
+    if (result.reason) problem(entry, result.reason);
+    else for (const ref of result.refs) refs.add(ref);
+  }
+  const work = [...refs];
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(16, work.length) }, async () => {
+    while (next < work.length) {
+      const ref = work[next++];
+      if (!assetChecks.has(ref)) assetChecks.set(ref, checkAsset(base, ref, true));
+      const reason = await assetChecks.get(ref);
+      if (reason) problem(ref, reason);
+    }
+  }));
+  console.log(`[spa-live] ${failed ? 'FAIL' : 'PASS'}  ${base} ${label}: ${entries.length} entry chunk(s), ${refs.size} lazy JS/CSS file(s), ${failed} failure(s).`);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    try {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Lazy chunks — ${base} — ${label}\n\n${entries.length} entry chunk(s), ${refs.size} lazy JS/CSS file(s), ${failed} failure(s).\n\n`
+        + firstFailures.map(line => `- ${line}\n`).join('') + '\n');
+    } catch { /* reporting convenience, never the verdict */ }
+  }
+  return failed ? `${base} ${label}: ${failed} failure(s); first failures: ${firstFailures.join('; ')}` : null;
+}
+
 async function main() {
   console.log(
     `[spa-live] Checking ${HOSTS.length} host(s): ${HOSTS.join(', ')}`,
   );
   const failures = [];
+  const builds = lazyBuildInputs();
+  if (builds.previous.entries.length === 0) {
+    console.warn(`[spa-live] WARN  Previous build not verified: ${builds.previous.reason}.`);
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Previous build not verified\n\n${builds.previous.reason}. No retention claim is made.\n\n`); } catch { /* convenience */ }
+    }
+  }
   let apexApiRoutingFailed = false;
   let securityHeadersFailed = false;
   // The exempt probe's verdict per host, and the hosts where the exempt one
@@ -739,9 +817,12 @@ async function main() {
 
     const routes = routesForHost(base);
     const assetSink = new Set();
+    const entrySink = new Set(builds.current);
+    const assetChecks = new Map();
+    const entryChecks = new Map();
     for (const route of routes) {
       const url = base.replace(/\/$/, '') + route.path;
-      const reason = await checkRoute(base, route, assetSink);
+      const reason = await checkRoute(base, route, assetSink, entrySink);
       if (reason) {
         console.error(`[spa-live] FAIL  ${url} — ${reason}`);
         failures.push(`${url} — ${reason}`);
@@ -759,14 +840,25 @@ async function main() {
     // means the deploy itself is skewed. Verify every referenced asset
     // actually resolves on this host.
     for (const assetPath of assetSink) {
+      if (entrySink.has(assetPath)) continue; // entry bodies are checked below
       const url = base.replace(/\/$/, '') + assetPath;
-      const reason = await checkAsset(base, assetPath);
+      assetChecks.set(assetPath, checkAsset(base, assetPath));
+      const reason = await assetChecks.get(assetPath);
       if (reason) {
         console.error(`[spa-live] FAIL  ${url} — ${reason}`);
         failures.push(`${url} — ${reason}`);
       } else {
         console.log(`[spa-live] PASS  ${url} (asset resolves)`);
       }
+    }
+    if (entrySink.size === 0) failures.push(`${base} — no current lazy entry found`);
+    else {
+      const reason = await checkLazyBuild(base, 'current build', [...entrySink], assetChecks, entryChecks);
+      if (reason) failures.push(reason);
+    }
+    if (builds.previous.entries.length > 0) {
+      const reason = await checkLazyBuild(base, 'previous build', builds.previous.entries, assetChecks, entryChecks);
+      if (reason) failures.push(reason);
     }
   }
 
