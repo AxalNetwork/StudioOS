@@ -8,9 +8,10 @@
  *     --test cloudflare-worker/test/ai_provider_adapter_d851.test.ts
  */
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
-import { runProviderModel, providerQuoteMicro, PROVIDER_KEY_SECRET } from '../src/services/aiProviders.ts';
+import { runProviderModel, providerQuoteMicro, modelProviderRows, PROVIDER_KEY_SECRET, PROVIDER_SWITCH_VAR } from '../src/services/aiProviders.ts';
 import { CATALOGUE, PROVIDER_MODELS, PROVIDER_PRICING_VERSION, providerModelById } from '../src/services/ai/catalogue.ts';
 import { anthropic, ANTHROPIC_MESSAGES_URL, ANTHROPIC_VERSION } from '../src/services/ai/providers/anthropic.ts';
 import { ROUTE } from '../src/services/aiRouter.ts';
@@ -21,8 +22,12 @@ const MODEL = 'anthropic/claude-sonnet-5-5';
 const ME = 2;
 const REQUEST = { system: 'Be brief.', messages: [{ role: 'user' as const, content: 'Summarise the call in one line.' }], maxTokens: 2000 };
 
+const migration = (n: string) => readFileSync(new URL(`../sql/migrations/${n}`, import.meta.url), 'utf8');
+
 function world(env: Record<string, unknown> = {}) {
   const { DB, db } = aiBudgetFixture();
+  // D844's hold key (525), D791's pause (510) and D1278's hold context (632), which meteredCall reads and writes.
+  db.exec(migration('510_member_ai_pauses.sql') + migration('525_ai_reservation_idempotency.sql') + migration('632_ai_hold_context.sql'));
   return { db, env: { DB, AI_PROVIDER_ANTHROPIC: 'on', [PROVIDER_KEY_SECRET.anthropic]: KEY, ...env } as any };
 }
 
@@ -47,8 +52,10 @@ const USAGE = { input_tokens: 1000, output_tokens: 500, cache_creation_input_tok
 
 const rows = (db: any) => db.prepare('SELECT * FROM ai_usage_logs ORDER BY id').all().map((r: any) => ({ ...r }));
 const holds = (db: any) => db.prepare('SELECT * FROM ai_budget_reservations ORDER BY created_at').all().map((r: any) => ({ ...r }));
-const run = (env: any, fetch: typeof globalThis.fetch) =>
-  runProviderModel(env, { userId: ME, model: MODEL, task: 'explain', request: REQUEST }, { fetch, timeoutMs: 1000 });
+// D844: every run is one execution; a fresh id unless a test retries one on purpose.
+let runs = 0;
+const run = (env: any, fetch: typeof globalThis.fetch, executionId = `exec-test-${++runs}`) =>
+  runProviderModel(env, { userId: ME, model: MODEL, task: 'explain', request: REQUEST, executionId }, { fetch, timeoutMs: 1000 });
 
 // ── the inventory ─────────────────────────────────────────────────────────────
 
@@ -78,7 +85,7 @@ test('D851: off unless AI_PROVIDER_ANTHROPIC is exactly "on": no hold, no call, 
     assert.equal(rows(w.db).length, 0);
   }
   const unknown = world();
-  assert.deepEqual(await runProviderModel(unknown.env, { userId: ME, model: 'anthropic/not-a-model', task: 'explain', request: REQUEST }, stubFetch(answered(USAGE))),
+  assert.deepEqual(await runProviderModel(unknown.env, { userId: ME, model: 'anthropic/not-a-model', task: 'explain', request: REQUEST, executionId: `exec-test-${++runs}` }, stubFetch(answered(USAGE))),
     { ok: false, refusal: 'model_not_offered' });
 });
 
@@ -98,7 +105,7 @@ test('D851: the page\'s AI switch refuses before the hold, as run() does', async
   w.db.exec("CREATE TABLE ai_rail_preferences(uid TEXT, user_id INTEGER, section TEXT, task TEXT, model TEXT, mode TEXT)");
   w.db.prepare("INSERT INTO ai_rail_preferences(uid, user_id, section, task, mode) VALUES ('off', ?, 'validate', '', 'manual')").run(ME);
   const f = stubFetch(answered(USAGE));
-  const r = await runProviderModel(w.env, { userId: ME, model: MODEL, task: 'explain', request: REQUEST, railPage: 'Validate' }, { fetch: f.fetch });
+  const r = await runProviderModel(w.env, { userId: ME, model: MODEL, task: 'explain', request: REQUEST, railPage: 'Validate', executionId: `exec-test-${++runs}` }, { fetch: f.fetch });
   assert.deepEqual(r, { ok: false, refusal: 'assist_off' });
   assert.equal(f.calls.length, 0);
   assert.equal(holds(w.db).length, 0);
@@ -161,7 +168,7 @@ test('D851: with billing charged, a member pays the reported cost times the mark
   assert.ok(r.ok);
   assert.equal(r.charged, 9413);
   const admin = world({ AI_BILLING: 'charged' });
-  const a = await runProviderModel(admin.env, { userId: 1, model: MODEL, task: 'explain', request: REQUEST }, stubFetch(answered(USAGE)));
+  const a = await runProviderModel(admin.env, { userId: 1, model: MODEL, task: 'explain', request: REQUEST, executionId: `exec-test-${++runs}` }, stubFetch(answered(USAGE)));
   assert.ok(a.ok);
   assert.equal(a.charged, 7530);
 });
@@ -256,3 +263,94 @@ test('D851: the adapter reads Anthropic\'s answer as the study records it', () =
   const bad = anthropic.read(429, { error: { details: { error_code: 'other' } } }, h({ 'retry-after': 'soon' }));
   assert.deepEqual(bad, { ok: false, error: 'rate_limited', status: 429, retryAfterSec: null, requestId: null });
 });
+
+// ── D844: one meteredCall (S1's release of 2026-10-27) ───────────────────────
+
+test('D851 · D844: the hold is one meteredCall under exec:<execution id>:model.anthropic, at the provider pricing version', async () => {
+  const w = world();
+  const r = await run(w.env, stubFetch(answered(USAGE)).fetch, 'exec-key-1');
+  assert.ok(r.ok);
+  const [hold] = holds(w.db);
+  assert.equal(hold.idempotency_key, 'exec:exec-key-1:model.anthropic');
+  assert.equal(hold.status, 'settled');
+  assert.equal(JSON.parse(rows(w.db)[0].units_json).pricing_version, PROVIDER_PRICING_VERSION);
+});
+
+test('D851 · D844: a retry with the same execution id holds once and calls once; the settled replay is refused with execution_closed', async () => {
+  const w = world();
+  const f = stubFetch(answered(USAGE));
+  const first = await run(w.env, f.fetch, 'exec-retry');
+  assert.ok(first.ok);
+  const again = await run(w.env, f.fetch, 'exec-retry');
+  assert.deepEqual(again, { ok: false, refusal: 'execution_closed' });
+  assert.equal(f.calls.length, 1, 'the replay makes no call');
+  assert.equal(holds(w.db).length, 1, 'one hold for the execution');
+  const r = rows(w.db);
+  assert.equal(r.length, 2);
+  assert.equal(r[1].refusal, 'execution_closed');
+  assert.equal(r[1].charged_microusd, 0, 'the refused replay charges nothing');
+  // A different execution is a new hold and a new call.
+  assert.ok((await run(w.env, f.fetch, 'exec-retry-2')).ok);
+  assert.equal(f.calls.length, 2);
+  assert.equal(holds(w.db).length, 2);
+});
+
+test('D851 · D844: a failure still releases the execution\'s hold, and its retry under the same id is closed, not called again', async () => {
+  const w = world();
+  const fail = stubFetch({ status: 529, body: { type: 'error', error: { type: 'overloaded_error', message: 'x' } } });
+  const r = await run(w.env, fail.fetch, 'exec-fail');
+  assert.equal((r as any).error, 'overloaded');
+  const [hold] = holds(w.db);
+  assert.equal(hold.idempotency_key, 'exec:exec-fail:model.anthropic');
+  assert.equal(hold.status, 'refunded');
+  assert.equal(rows(w.db)[0].reservation_uid, hold.uid);
+  const ok = stubFetch(answered(USAGE));
+  assert.deepEqual(await run(w.env, ok.fetch, 'exec-fail'), { ok: false, refusal: 'execution_closed' });
+  assert.equal(ok.calls.length, 0);
+});
+
+test('D851 · D844: a run past its timeout is stopped and released, never charged', async () => {
+  const w = world();
+  const hang = (() => new Promise(() => {})) as unknown as typeof globalThis.fetch;
+  const r = await runProviderModel(w.env, { userId: ME, model: MODEL, task: 'explain', request: REQUEST, executionId: 'exec-slow' }, { fetch: hang, timeoutMs: 20 });
+  assert.deepEqual(r, { ok: false, refusal: 'all_models_failed', error: 'server', retryAfterSec: null });
+  assert.equal(holds(w.db)[0].status, 'refunded');
+  assert.equal(rows(w.db)[0].charged_microusd, 0);
+});
+
+test('D851 · D844: the hold\'s refusals are the result\'s and the row\'s, in D844\'s words, and nothing is called', async () => {
+  const cases: Array<[string, (db: any) => void]> = [
+    ['insufficient_tokens', (db) => setFixtureAllowance(db, 0)],
+    ['monthly_limit', (db) => db.prepare('INSERT INTO member_ai_spend_limits(user_id, monthly_limit_microusd) VALUES (2, 1)').run()],
+    ['ai_paused', (db) => db.prepare("INSERT INTO member_ai_pauses(user_id, reason, paused_by) VALUES (2, 'paused for this test case', 1)").run()],
+  ];
+  for (const [refusal, setUp] of cases) {
+    const w = world();
+    setUp(w.db);
+    const f = stubFetch(answered(USAGE));
+    assert.deepEqual(await run(w.env, f.fetch), { ok: false, refusal }, refusal);
+    assert.equal(f.calls.length, 0, refusal);
+    assert.equal(rows(w.db)[0].refusal, refusal);
+  }
+});
+
+test('D851 · D848: the Integration keys read lists Anthropic as pattern C with its switch and whether the key is set, never the key', () => {
+  const on = modelProviderRows({ AI_PROVIDER_ANTHROPIC: 'on', AI_PROVIDER_ANTHROPIC_KEY: KEY } as any);
+  assert.deepEqual(on, [{
+    provider: 'anthropic', label: 'Anthropic · Claude models (the platform’s key)', pattern: 'api', member_connection: false,
+    switch: { var: 'AI_PROVIDER_ANTHROPIC', value: 'on', on: true },
+    secret: { name: 'AI_PROVIDER_ANTHROPIC_KEY', set: true }, decision: 'D851',
+  }]);
+  assert.ok(!JSON.stringify(on).includes(KEY), 'the key never appears');
+  const off = modelProviderRows({ AI_PROVIDER_ANTHROPIC: 'ON' } as any)[0];
+  assert.deepEqual([off.switch.value, off.switch.on, off.secret.set], ['ON', false, false], 'only exactly "on" is on');
+  assert.deepEqual(modelProviderRows({} as any)[0].switch, { var: 'AI_PROVIDER_ANTHROPIC', value: null, on: false });
+  assert.deepEqual(Object.keys(PROVIDER_SWITCH_VAR), Object.keys(PROVIDER_KEY_SECRET));
+  // The route carries it, reads only, and never as a member connection.
+  const route = readFileSync(new URL('../src/routes/admin_integration_keys.ts', import.meta.url), 'utf8');
+  assert.match(route, /model_providers: modelProviderRows\(c\.env\),/);
+  assert.doesNotMatch(route, /\.(put|post|delete)\(['"]\/model/);
+  const health = readFileSync(new URL('../src/routes/integrations.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(health, /modelProviderRows|AI_PROVIDER_ANTHROPIC/);
+});
+
