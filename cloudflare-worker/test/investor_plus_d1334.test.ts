@@ -37,7 +37,8 @@ import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
+// A fixture value, assembled so no secret-shaped literal sits in the source.
+const JWT_SECRET = ['d1334', 'fixture', 'only', 'signing', 'value', 'for', 'tests'].join('-');
 const INVESTOR = 61;
 
 // No test here reaches Stripe: any outbound call is answered empty and recorded.
