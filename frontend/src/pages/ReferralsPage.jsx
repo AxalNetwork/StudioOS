@@ -162,7 +162,7 @@ function sharePlatforms(link, code) {
     {
       key: 'linkedin', label: 'LinkedIn', preview: m.linkedin.slice(0, 72) + '…', iconBg: '#0A66C2',
       go: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${enc(m.shareUrl)}`, '_blank'),
-      icon: <BrandIcon provider="linkedin" size={16} variant="bare" tone="current" />,
+      icon: <BrandIcon provider="linkedin" size={16} variant="bare" tone="inverse" />,
     },
     {
       key: 'x', label: 'X / Twitter', preview: m.x.slice(0, 72) + '…', iconBg: '#000000',
@@ -916,7 +916,7 @@ export default function ReferralsPage({ embedded = false }) {
                 </div>
                 <div className="flex flex-none flex-wrap gap-2">
                   <button type="button" className="rf-btn inline-flex items-center gap-1.5 rounded-lg bg-[#0a66c2] px-4 py-2 text-[12.5px] font-bold text-white" onClick={importLinkedin}>
-                    <BrandIcon provider="linkedin" size={14} variant="bare" tone="current" /> Import from LinkedIn
+                    <BrandIcon provider="linkedin" size={14} variant="bare" tone="inverse" /> Import from LinkedIn
                   </button>
                   <button type="button" className="rf-btn inline-flex items-center gap-1.5 rounded-lg bg-violet-700 px-4 py-2 text-[12.5px] font-bold text-white" onClick={() => csvInputRef.current?.click()}>
                     <Upload size={14} /> Upload CSV
@@ -1125,7 +1125,7 @@ export default function ReferralsPage({ embedded = false }) {
                     sp.go();
                   }}
                 >
-                  <div className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-white" style={{ background: sp.iconBg }}>{sp.icon}</div>
+                  <div className={`flex flex-none items-center justify-center rounded-lg text-white ${sp.key === 'linkedin' ? 'h-11 w-11' : 'h-8 w-8'}`} style={{ background: sp.iconBg }}>{sp.icon}</div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-bold">{sp.label}</div>
                     <div className="truncate text-[11px] text-[#8b8798]">{sp.preview}</div>
