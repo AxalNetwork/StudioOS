@@ -11,7 +11,7 @@ const context:RuntimeAdapterContext={uid,secret,callbackOrigin:'https://worker.e
 test('packaged browser selection includes Teams and Meet and closes each owned browser',async()=>{
   for(const platform of ['google_meet','teams'] as const){
     let closed=0;
-    const browser={newPage:async()=>({evaluate:async()=>{}}),close:async()=>{closed++;}};
+    const browser={newPage:async(options:any)=>{assert.equal(options?.locale,'en-US');return {evaluate:async()=>{}};},close:async()=>{closed++;}};
     const adapter=await runtimeAdapter(platform,context,{launch:async()=>browser as any});
     assert.equal(adapter.platform,platform);await adapter.leave();await adapter.leave();assert.equal(closed,1);
   }

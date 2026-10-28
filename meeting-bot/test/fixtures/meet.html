@@ -33,6 +33,20 @@
   <button id="join">Join now</button>
 </template>
 
+<!-- Reconstructed overlay from the observed live media onboarding, #3667.
+     Other fixture screens remain synthetic/unverified. -->
+<template id="media_prompt">
+  <h1>Ready to join?</h1>
+  <input aria-label="Your name" value="">
+  <button id="ask">Ask to join</button>
+  <div id="media-overlay" style="position:fixed;inset:0;z-index:100;background:white">
+    <h2>Do you want people to see and hear you in the meeting?</h2>
+    <button id="allow-media">Use microphone and camera</button>
+    <button id="without-media">Continue without microphone and camera</button>
+  </div>
+</template>
+<template id="unknown"><p>Unrecognised provider screen</p></template>
+
 <template id="lobby">
   <p>Asking to be let in…</p>
 </template>
@@ -80,11 +94,16 @@
   function render(state) {
     app.replaceChildren(document.getElementById(state).content.cloneNode(true));
     app.dataset.state = state;
-    if (state === 'prejoin' || state === 'prejoin_open') wirePrejoin();
+    if (state === 'prejoin' || state === 'prejoin_open' || state === 'media_prompt') wirePrejoin();
     if (state === 'in_call') { wireCall(); draw(); }
   }
 
   function wirePrejoin() {
+    app.querySelector('#allow-media')?.addEventListener('click', () => { log.mediaGranted = true; });
+    app.querySelector('#without-media')?.addEventListener('click', () => {
+      log.mediaDismissed = true; log.mic = 'off'; log.camera = 'off';
+      app.querySelector('#media-overlay').remove();
+    });
     for (const el of app.querySelectorAll('[data-toggle]')) {
       el.addEventListener('click', () => {
         const what = el.dataset.toggle;
