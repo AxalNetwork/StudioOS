@@ -177,15 +177,17 @@ test('not connected: Start waits for a connection and links to it', async () => 
   } finally { await m.unmount(); }
 });
 
-test('Teams stays visible with its logo but cannot be selected until configuration is ready', async () => {
+test('upcoming call providers stay visible but cannot be selected', async () => {
   const s = setup({ bot: BOT_ON });
   const m = await mountContracts(h(RecordLightbox, s.props));
   try {
-    const option = by(m, 'record-provider-teams');
-    assert.equal(m.props(option).disabled, true);
-    assert.match(m.text(), /Microsoft Teams · Coming soon/);
-    await press(m, 'record-provider-teams');
-    assert.equal(m.props(option)['aria-checked'], false);
+    for (const [provider, label] of [['teams', 'Microsoft Teams'], ['signal', 'Signal'], ['whatsapp', 'WhatsApp'], ['telegram', 'Telegram']]) {
+      const option = by(m, `record-provider-${provider}`);
+      assert.equal(m.props(option).disabled, true);
+      assert.ok(m.text().includes(`${label} · Coming soon`));
+      await press(m, `record-provider-${provider}`);
+      assert.equal(m.props(option)['aria-checked'], false);
+    }
     assert.deepEqual([s.made, s.device, s.sent], [[], [], []]);
   } finally { await m.unmount(); }
 });

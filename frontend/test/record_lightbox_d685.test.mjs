@@ -110,7 +110,7 @@ test('provider chips show their status; Connect links to Connectors; importing f
   const text = renderedText(video);
   // D1346 (#3554): Eadwyn AI joins Meet as a guest, so the chip never asks for a connection.
   assert.ok(!text.includes('Google Meet · Connect'), 'no Connect on the Meet chip');
-  for (const t of ['Zoom · Connected', 'Google Meet · Ready', 'Microsoft Teams · Coming soon', 'WhatsApp · Ready', 'Telegram · Ready', 'Signal · Ready', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
+  for (const t of ['Zoom · Connected', 'Google Meet · Ready', 'Microsoft Teams · Coming soon', 'WhatsApp · Coming soon', 'Telegram · Coming soon', 'Signal · Coming soon', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
   const wa = render({ initialMode: 'text', channels: CHANNELS });
   assert.ok(renderedText(tag(wa, 'record-provider-whatsapp') + 'x').length > 0);
   assert.ok(renderedText(wa).includes('WhatsApp · Connect'));
@@ -296,21 +296,21 @@ test('an interview it was opened on (maybe already held) opens on its own route,
   } finally { await m.unmount(); }
 });
 
-test('a Call\'s chip decides its channel: an app call or the phone on speaker is stored as phone, with no meeting link', async () => {
+test('a Call\'s chip decides its channel: the phone on speaker is stored as phone, with no meeting link', async () => {
   // The owner (2026-10-21) merged Video and Audio call. Mutation checked: the chip not moving the channel.
   const s = spies();
   const m = await mount({ ...s.props, interview: { id: 7, interviewee_name: 'Dana Ruiz' } });
   try {
     await m.click('record-mode-call');
     assert.ok(m.by('record-link'), 'Zoom, the first chip, is a meeting: its link is asked for');
-    await m.click('record-provider-whatsapp');
-    assert.equal(m.by('record-link'), undefined, 'a WhatsApp call has no meeting link');
+    await m.click('record-provider-phone_speaker');
+    assert.equal(m.by('record-link'), undefined, 'a phone speaker call has no meeting link');
     assert.match(m.text(), /Put the call on speaker\. It records this device’s microphone\./);
     await m.click('record-consents-in_app');
     await m.click('record-start');
     const [[, { client_key: _key, ...body }]] = s.calls.create;
     assert.equal(body.channel, 'phone');
-    assert.equal(body.call_provider, 'whatsapp');
+    assert.equal(body.call_provider, 'phone_speaker');
   } finally { await m.unmount(); }
 });
 
