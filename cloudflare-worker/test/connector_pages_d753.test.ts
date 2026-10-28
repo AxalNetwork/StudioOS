@@ -552,3 +552,25 @@ test('17. WhatsApp translation is stated once, with AI tokens and the original k
   assert.throws(() => check([...description, description.find(line => /translation/i.test(line))!]), assert.AssertionError);
   check(description);
 });
+
+test('18. WhatsApp keeps its reply window without promising an unverified free allowance', () => {
+  const check = (description: string[]) => {
+    const lines = description.filter(line => line.startsWith('Axal sends only'));
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /only within 24 hours of the customer’s last message\./);
+    assert.match(lines[0], /Check Meta’s current messaging rates and your WhatsApp Business Account’s limits\./);
+    assert.doesNotMatch(lines[0], /1[,.]?000|free allowance/i);
+  };
+  const description = CHANNEL_PAGES.whatsapp.long_description;
+  check(description);
+  for (const [before, after] of [
+    ['within 24 hours', 'within 48 hours'],
+    ['Check Meta’s current messaging rates and your WhatsApp Business Account’s limits.', 'Messages are billed by Meta after 1,000 a month.'],
+    ['Check Meta’s current messaging rates and your WhatsApp Business Account’s limits.', ''],
+    ['limits.', 'limits. There is a free allowance.'],
+    ['limits.', 'limits. 1,000 messages a month are free.'],
+  ]) assert.throws(() => check(description.map(line => line.replace(before, after))), assert.AssertionError);
+  assert.throws(() => check(description.filter(line => !line.startsWith('Axal sends only'))), assert.AssertionError);
+  assert.throws(() => check([...description, description.find(line => line.startsWith('Axal sends only'))!]), assert.AssertionError);
+  check(description);
+});

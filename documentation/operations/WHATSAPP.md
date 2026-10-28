@@ -39,8 +39,9 @@ interviewee's consent.
 
 ## 1. Owner steps, in order
 
-Meta requirements and dashboard labels below are **UNVERIFIED** until read
-on Meta's current official pages (D861). The owner completes the dashboard
+App review, Business Verification, messaging limits and dashboard labels below
+remain **UNVERIFIED**. The public reply-window and pricing rules were read on
+Meta's pages on 28 October 2026 (D861 §3). The owner completes the dashboard
 steps and records approval privately; do not paste app/account identifiers or
 credentials into an issue. See §7 before any general-availability PR.
 
@@ -131,8 +132,10 @@ credentials into an issue. See §7 before any general-availability PR.
 10. **The live check**, in canary, on a real device (§3).
 11. **Billing and tier check**, on Meta's current official pages and the
     app's dashboard: record the current message categories, prices, tier
-    definitions and account/number limits. The earlier 1,000-message allowance
-    is UNVERIFIED; do not use it for a cost estimate or a rollout decision.
+    definitions and account/number limits. Meta's public pricing page describes
+    charges by delivered message, category and market, with service replies
+    free (read 28 October 2026; D861 §3). The former blanket 1,000-message
+    allowance claim was removed; do not use it for a cost estimate or rollout.
     Confirm who is billed for member numbers and for Axal's own number.
 
 ## 2. The automatic check
@@ -329,16 +332,23 @@ gates. No live call capture is advertised.
    ```sh
    node --experimental-strip-types --no-warnings \
      --import ./cloudflare-worker/test/_ts-loader.mjs \
-     --test cloudflare-worker/test/whatsapp_readiness_d861.test.ts
+     --test cloudflare-worker/test/whatsapp_readiness_d861.test.ts \
+     cloudflare-worker/test/whatsapp_mcp_setup_d856.test.ts \
+     cloudflare-worker/test/session_translation_d857.test.ts \
+     cloudflare-worker/test/whatsapp_calls_d860.test.ts \
+     cloudflare-worker/test/connector_pages_d753.test.ts \
+     cloudflare-worker/test/whatsapp_switch_on_d754.test.ts \
+     cloudflare-worker/test/channel_consent_d754.test.ts \
+     cloudflare-worker/test/whatsapp_voice_audio_d754.test.ts
    ```
 
    It runs isolated fixtures for development, preview and production, plus
    mutations. No request reaches Meta or production. Passing it proves the
    code gates; it does not prove a deployment has its secrets or approvals.
-   Run the existing `whatsapp_switch_on_d754`,
-   `channel_consent_d754` and `whatsapp_voice_audio_d754`
-   suites as well; they cover webhook/late-job consent ordering and recorder
-   integration. They are already in the full suite.
+   This combined command also checks W1's separate setup switch, W2's
+   translation and retained original, closed calling, and matching connector
+   copy in the Worker and frontend. The D754 suites cover webhook/late-job
+   consent ordering and recorder integration. All are in the full suite.
 3. Review the limits: 120 webhook events per connection per minute, and 50
    transcriptions per connection per UTC day. The event counter fails open
    on a D1 fault to avoid losing incoming messages; the voice counter fails
@@ -369,8 +379,10 @@ gates. No live call capture is advertised.
    Validate without
    the founder's Accept.
 8. S1 records runbook review and the remaining decisions on #2506. The owner
-   verifies the four Meta requirements in D861 §3 from official pages and
-   confirms the app's actual approval state. Every UNVERIFIED requirement is
+   completes the remaining Meta requirements in D861 §3 from official pages
+   and confirms the app's actual approval state. The public 24-hour rule is
+   verified; app review, Business Verification and messaging tiers remain
+   UNVERIFIED. Every UNVERIFIED requirement is
    a remaining release gate.
 
 ### The rollout PR
