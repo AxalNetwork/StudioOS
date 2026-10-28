@@ -39,7 +39,6 @@ import ProfileIdentityCanvas, {
   PersonalDetailsCard, IdentityCard, AddressTaxCard, PublicArchetypeCard, ChangeHistoryCard,
 } from '../src/pages/account/AccountProfile.jsx';
 import { ActiveCompanyContext, mergeCompanyDetails, useUpdateCompanyDetails } from '../src/contexts/ActiveCompanyContext.js';
-import { setReadState } from '../src/ui/CompanySwitcher.jsx';
 import { PushDevicesCard, SessionsCard } from '../src/pages/account/AccountDevices.jsx';
 import { PlanHeader, OrdersCard } from '../src/pages/account/AccountBilling.jsx';
 import { FollowingList } from '../src/pages/account/AccountFollowing.jsx';
