@@ -315,13 +315,13 @@ test('connect: Gmail waits on its switch; Outlook\'s consent asks only Mail.Send
     assert.equal(url.searchParams.get('scope'), 'Mail.Send offline_access User.Read');
     const state = url.searchParams.get('state')!;
     const cb = await f.app.request(`/api/mail/accounts/oauth/callback?code=c1&state=${encodeURIComponent(state)}`, {}, f.env);
-    assert.equal(cb.headers.get('location'), '/connectors?mail=connected');
+    assert.equal(cb.headers.get('location'), '/email?mail=connected');
     const [acct] = (await call(f, 2, 'GET', '/api/mail/accounts')).body.accounts;
     assert.deepEqual([acct.provider, acct.address, acct.display_name, acct.can_read], ['outlook', 'member@example.invalid', 'Synthetic Member', false]);
     const again = await f.app.request(`/api/mail/accounts/oauth/callback?code=c1&state=${encodeURIComponent(state)}`, {}, f.env);
-    assert.equal(again.headers.get('location'), '/connectors?mail=expired', 'a state is spent once');
+    assert.equal(again.headers.get('location'), '/email?mail=expired', 'a state is spent once');
     const forged = await f.app.request('/api/mail/accounts/oauth/callback?code=c1&state=' + 'a'.repeat(43), {}, f.env);
-    assert.equal(forged.headers.get('location'), '/connectors?mail=expired');
+    assert.equal(forged.headers.get('location'), '/email?mail=expired');
     const read = new URL((await call(f, 2, 'POST', '/api/mail/accounts/start/outlook', { read: true })).body.authorize_url);
     assert.equal(read.searchParams.get('scope'), 'Mail.Send offline_access User.Read Mail.Read', 'Mail.Read only when asked');
     noSecrets(f, 'the logs', f.logs.join('\n'));
@@ -336,7 +336,7 @@ test('Gmail behind its switch: gmail.send with openid email, never the house tok
     assert.equal(url.searchParams.get('scope'), 'openid email https://www.googleapis.com/auth/gmail.send');
     assert.equal(url.searchParams.get('client_id'), 'g-client');
     const cb = await f.app.request(`/api/mail/accounts/oauth/callback?code=c1&state=${encodeURIComponent(url.searchParams.get('state')!)}`, {}, f.env);
-    assert.equal(cb.headers.get('location'), '/connectors?mail=connected');
+    assert.equal(cb.headers.get('location'), '/email?mail=connected');
     const [acct] = (await call(f, 2, 'GET', '/api/mail/accounts')).body.accounts;
     assert.deepEqual([acct.provider, acct.address], ['gmail', 'member@example.invalid']);
     const sent = await call(f, 2, 'POST', '/api/mail/send', { account_uid: acct.uid, to: 'x@example.invalid', subject: 'S', body: 'B', nonce: await sendNonce(f, 2, acct.uid) });
