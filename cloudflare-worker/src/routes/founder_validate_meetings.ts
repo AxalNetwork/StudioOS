@@ -391,7 +391,7 @@ async function attachCalendarMeet(c: C, s: { user: User; scoped: ScopedInterview
   // One call, one interview: the event itself, or the same link pasted for a
   // recording during it. Both start in this call's slot; an event whose time
   // moved since is still refused, by the table's UNIQUE (provider, external_ref).
-  const mine = await ownAttach(c.env, s.user.id, s.scoped.interview.id, 'google_meet', [call.eventId]);
+  const mine = await ownAttach(c.env, s.user.id, s.scoped.interview.id, 'google_meet', call.eventId);
   if (mine && withinCallSlot(Date.parse(call.startsAt), mine)) {
     const again: MeetingErrorCode | null = meet.transcriptAccess(googleConn) === 'missing' ? 'meet_transcripts_unavailable' : null;
     return c.json({ meeting: view(mine), session_id: mine.session_id,
@@ -438,14 +438,12 @@ async function attachCalendarMeet(c: C, s: { user: User; scoped: ScopedInterview
  * live. A retried Save (a double press, a dropped reply) answers it again,
  * rather than refusing the member's own call as "already attached".
  */
-async function ownAttach(env: Env, userId: number, interviewId: number, provider: MeetingProvider, refs: string[]): Promise<MeetingRef | null> {
-  if (!refs.length) return null;
+async function ownAttach(env: Env, userId: number, interviewId: number, provider: MeetingProvider, externalRef: string): Promise<MeetingRef | null> {
   return env.DB.prepare(
     `SELECT * FROM interview_channel_refs
-      WHERE provider = ? AND user_id = ? AND interview_id = ? AND status <> 'cancelled'
-        AND external_ref IN (${refs.map(() => '?').join(', ')})
+      WHERE provider = ? AND user_id = ? AND interview_id = ? AND external_ref = ? AND status <> 'cancelled'
       ORDER BY id DESC LIMIT 1`,
-  ).bind(provider, userId, interviewId, ...refs).first<MeetingRef>();
+  ).bind(provider, userId, interviewId, externalRef).first<MeetingRef>();
 }
 
 const ZOOM_IMPORT_NOTICE = {
@@ -469,7 +467,7 @@ async function attachHostedZoom(c: C, s: { user: User; scoped: ScopedInterview }
       extra: { accepted: CONSENT_METHODS } });
   }
   if (!available(c.env, 'zoom')) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE.zoom });
-  const mine = await ownAttach(c.env, s.user.id, s.scoped.interview.id, 'zoom', [link.externalRef]);
+  const mine = await ownAttach(c.env, s.user.id, s.scoped.interview.id, 'zoom', link.externalRef);
   if (mine) return c.json({ meeting: view(mine), session_id: mine.session_id, notice: ZOOM_IMPORT_NOTICE, existing: true }, 200);
   const conn = await zoom.zoomConnection(c.env, s.user.id);
   if (!conn) return refuse(c, 409, { code: 'connect_first', message: 'Connect Zoom in Account › Connectors first, then save the call.' });
