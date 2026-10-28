@@ -58,7 +58,7 @@ export const FILL_FIELDS = Object.freeze([
   { page: COMMIT, form: 'ic-memo', field: 'memo', label: 'Memo', table: 'ic_decisions', column: 'memo', class: 'composition', sources: ['eadwyn'] },
   // AF18: New service. Its price is a money term and the legal name an identity field.
   { page: SERVICES, form: 'service', field: 'title', label: 'Title', table: 'advisor_services', column: 'title', class: 'composition', sources: ['eadwyn'] },
-  { page: SERVICES, form: 'service', field: 'scope', label: 'What you deliver', table: 'advisor_services', column: 'scope', class: 'composition', sources: ['module:advisor/outcomes', 'eadwyn'] },
+  { page: SERVICES, form: 'service', field: 'scope', label: 'What it covers', table: 'advisor_services', column: 'scope', class: 'composition', sources: ['module:advisor/outcomes', 'eadwyn'] },
   // AF19: a status report's Done and Next, from the engagement record at no AI tokens.
   { page: REPORTING, form: 'status-report', field: 'shipped', label: 'Done this week', table: 'engagement_status_reports', column: 'shipped', class: 'restatement', sources: ['module:delivery/engagement'] },
   { page: REPORTING, form: 'status-report', field: 'next_up', label: 'Next week', table: 'engagement_status_reports', column: 'next_up', class: 'restatement', sources: ['module:delivery/engagement'] },

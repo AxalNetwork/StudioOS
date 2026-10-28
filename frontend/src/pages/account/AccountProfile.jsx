@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { normalizePhoneInput, phonePlaceholder, PHONE_ERROR } from '../../lib/phoneNumber';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useAuth } from '../../hooks/useAuthSync';
+import { EXPLORER_OFF } from '../../lib/fillScoped.js';
 import { Pill, Skeleton, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, FieldRow, LoadingRows, Outcome, PanelCard, Switch, useAccountRead } from './AccountCenter';
 import {
@@ -479,6 +481,8 @@ export default function ProfileIdentityCanvas({ data, onAccountChange, onSaved }
   }, [reloadIdentity, reloadDetails, reloadPersonal]);
 
   const wrote = () => { onSaved?.(); announceSaved(); };
+  // D1329 (#3490, AF22): an Explorer holds no venture or profile yet, so no field here has Fill.
+  const explorer = String(useAuth()?.user?.role || '').toLowerCase() === 'exploring';
 
   const savePersonal = async (patch) => {
     const parts = splitPersonalPatch(patch);
@@ -533,6 +537,11 @@ export default function ProfileIdentityCanvas({ data, onAccountChange, onSaved }
 
   return (
     <div className="@container space-y-3" data-testid="account-profile-canvas">
+      {explorer ? (
+        <p className="m-0 flex flex-wrap items-center gap-2 rounded-[10px] border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" data-testid="fill-explorer-line">
+          {EXPLORER_OFF} <Link to="/exploring" className="font-semibold text-axal-violet hover:underline dark:text-violet-300">Choose a profile</Link>
+        </p>
+      ) : null}
       <PersonaFollowUpCheck />
       <div className="grid items-start gap-3 @2xl:grid-cols-2">
         <div className="space-y-3">
