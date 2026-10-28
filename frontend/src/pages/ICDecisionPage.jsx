@@ -3,6 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Gavel, Save, ShieldCheck, PieChart } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../lib/fillScoped.js';
 
 const VOTES = ['yes', 'no', 'abstain'];
 const DECISIONS = ['invest', 'pass', 'defer'];
@@ -22,6 +24,13 @@ export default function ICDecisionPage() {
   const [memo, setMemo] = useState('');
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
+  // D1329 (#3490, AF17, the owner's answer B): Fill with Eadwyn on the memo's
+  // words only, never its terms, decision or outcome. Its author fills it until
+  // it is decided; a voter, a colleague and an admin read its marks.
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.icMemo, record: d?.id ?? null, enabled: !!d?.id,
+    values: { memo }, onValues: (v) => { if (v.memo != null) setMemo(v.memo); },
+  });
 
   const load = () => {
     api.icGet(uid)
@@ -32,7 +41,7 @@ export default function ICDecisionPage() {
 
   const saveMemo = async () => {
     setBusy(true); setErr(null);
-    try { await api.icUpdate(uid, { memo }); load(); }
+    try { await api.icUpdate(uid, { memo }); await fill.afterSave(d?.id); load(); }
     catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   const castVote = async (vote) => {
@@ -76,7 +85,10 @@ export default function ICDecisionPage() {
 
       {/* Memo */}
       <section className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-        <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">IC Memo</h2>
+        <FillLabel fill={fill} name="memo" label="Memo" value={memo}>
+          <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">IC Memo</h2>
+        </FillLabel>
+        <FillFormBar fill={fill} />
         {canWrite ? (
           <>
             <textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows={8}
