@@ -8,7 +8,7 @@ import { REVIEWABLE, afterDelete, findPassages, pickSession, recordParts, sessio
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
 import { useRailOption } from '../../ui/railCrumbs';
 import { railPressHeaders } from '../../lib/railPage.js';
-import { RecordActions, RecordActivity, RecordFacts, RecordSection } from '../cycles/RecordView';
+import { RecordActions, RecordActivity, RecordFacts, RecordSection, useRecordPhone } from '../cycles/RecordView';
 import { declaredActions, pillView, recordActionBody, recordFormFor, toneOf } from '../cycles/recordModel';
 import FormLightbox from '../cycles/FormLightbox';
 import { InterviewEvidenceFields, PainSeverity } from './validatePieces';
@@ -187,6 +187,7 @@ export default function InterviewRecord({
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const theme = useDarkTheme();
+  const phone = useRecordPhone();
   const parts = recordParts(read);
   const declarations = declaredActions(read);
   const [list, setList] = useState(undefined);
@@ -343,16 +344,16 @@ export default function InterviewRecord({
   };
 
   return (
-    <div className="space-y-3" data-testid="interview-record">
+    <div className={phone ? "flex min-w-0 flex-col gap-[18px]" : "space-y-3"} data-testid="interview-record" data-phone={phone ? "true" : undefined}>
       <div className="flex flex-wrap items-center justify-between gap-3.5">
         <div className="flex flex-wrap items-center gap-2">{(read?.pills ?? []).map((pill, index) => {
           const view = pillView(pill);
           return <span key={index} className={`inline-flex rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${PILL[toneOf(view.tone)] || PILL_DEFAULT}`}>{view.text}</span>;
         })}</div>
-        <RecordActions actions={read?.actions} {...handlers} />
+        {!phone && <RecordActions actions={read?.actions} {...handlers} />}
       </div>
       <RecordFacts facts={read?.facts} />
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <div className={phone ? "flex min-w-0 flex-col gap-[18px] [&>div]:w-full" : "grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]"} data-testid="interview-content">
         <div className="min-w-0 space-y-3">
           {(read?.main ?? []).map((section) => sectionOf(section, false))}
           {parts.tools && <InterviewTools projectId={projectId} interviewId={id} api={api} onChanged={reload} />}
@@ -362,6 +363,7 @@ export default function InterviewRecord({
           <RecordActivity rows={activity ?? read?.activity} total={read?.activity_total} cycleName={cycleName} moduleName={moduleName} onShowAll={onShowAll} />
         </div>
       </div>
+      {phone && <RecordActions actions={read?.actions} {...handlers} />}
     </div>
   );
 }

@@ -264,6 +264,11 @@ test('9 (route): #1659\'s Customer research record gets the same bar and groups,
       ['Customer research', `/validate/customer-research${Q}`, 'Rowan Vale', 'Validate · Rowan Vale']);
     assert.match(m.text(m.by('record-facts')), /At a glance.*Not recorded/);
     assert.match(m.text(m.by('record-actions')), /Actions/);
+    const record = m.by('interview-record');
+    assert.equal(pr(record)['data-phone'], 'true');
+    assert.ok(record.childNodes[record.childNodes.length - 1] === m.by('record-actions'), 'phone actions follow content rather than sharing its status header');
+    assert.match(pr(m.by('interview-content')).className, /flex-col/);
+    assert.doesNotMatch(pr(m.by('interview-content')).className, /grid-cols/);
     await m.press('Edit details');
     const page = m.fibers(CycleBar);
     assert.equal(page.length, 1);
