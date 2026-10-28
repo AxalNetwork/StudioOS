@@ -31,7 +31,7 @@ import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { getOAuthApi } from '@cloudflare/workers-oauth-provider';
 import { MCP_PATH, authenticateKey, bearerOf, mcpEnabled, providerOptions, publicOrigin } from '../mcp/oauth';
-import { looksLikeKey, type KeyRow } from '../services/apiKeys';
+import { looksLikeKey, sha256Hex, type KeyRow } from '../services/apiKeys';
 import type { GrantProps } from '../mcp/grants';
 import { callTool, liveCompanies, registeredTools } from '../mcp/server';
 import { grantUser, keyFailuresExceeded, recordKeyFailure, withinGrantLimit, withinUserLimit, ToolRefused } from '../mcp/grants';
@@ -107,11 +107,13 @@ async function oauthPrincipal(env: Env, bearer: string): Promise<Principal | nul
 connectorApi.use('*', async (c, next) => {
   const bearer = bearerOf(c.req.raw);
   if (bearer && !looksLikeKey(bearer)) {
-    const ip = c.req.header('CF-Connecting-IP') || 'unknown';
-    if (await keyFailuresExceeded(c.env, ip)) return rateRefusal(c);
+    // Gateways share egress IPs. A failed credential must never lock out
+    // another member there. Reuse the counter with a separate one-way key.
+    const failureId = `connector_oauth:${await sha256Hex(bearer)}`;
+    if (await keyFailuresExceeded(c.env, failureId)) return rateRefusal(c);
     const who = await oauthPrincipal(c.env, bearer);
     if (!who) {
-      await recordKeyFailure(c.env, ip);
+      await recordKeyFailure(c.env, failureId);
       return tokenRefusal(c);
     }
     c.set('who', who);

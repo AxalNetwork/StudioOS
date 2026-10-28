@@ -477,20 +477,26 @@ test('OAuth client replacement: two stale ready snapshots contend on the real D1
   assert.equal(storedState(f).current.client_id, winner.body.client_id);
 });
 
-test('OAuth connection test: bad bearers are throttled before provider reads, including a valid token from that IP', async () => {
+test('OAuth connection test: bad credentials are throttled by hash while valid credentials on a shared gateway stay usable', async () => {
   const f = fixture();
   const { token } = await lovableToken(f);
   const ip = '192.0.2.81';
   const now = Date.now;
-  Date.now = () => 1793196000000;
+  const fixed = now();
+  Date.now = () => fixed;
   try {
     for (let i = 0; i < 10; i++) assert.equal((await get(f.env, '/me', 'invalid:grant:token', { ip })).status, 401);
     const realGet = f.env.OAUTH_KV.get.bind(f.env.OAUTH_KV);
     let reads = 0;
     f.env.OAUTH_KV.get = async (...args: any[]) => { reads++; return realGet(...args); };
-    const limited = await get(f.env, '/me', token, { ip });
+    const limited = await get(f.env, '/me', 'invalid:grant:token', { ip });
     assert.deepEqual([limited.status, limited.body.error, limited.headers.get('Retry-After')], [429, 'rate_limited', '60']);
-    assert.equal(reads, 0, 'throttled IP never reaches the provider');
+    assert.equal(reads, 0, 'the throttled credential never reaches the provider');
+    assert.equal((await get(f.env, '/me', token, { ip })).status, 200, 'another valid member on that gateway is unaffected');
+    assert.equal((await get(f.env, '/me', 'another:invalid:token', { ip })).status, 401, 'another credential has its own counter');
+    const keys = [...f.env.RATE_LIMITS._map.keys()].join(' ');
+    assert.match(keys, /mcp_keyfail:connector_oauth:[a-f0-9]{64}:/);
+    assert.ok(!keys.includes('invalid:grant:token') && !keys.includes(token), 'no raw bearer in counter keys');
     f.env.RATE_LIMITS.get = async () => { throw new Error('counter unavailable'); };
     assert.equal((await get(f.env, '/me', token, { ip: '192.0.2.82' })).status, 429, 'counter failure closes the gate');
   } finally { Date.now = now; }
