@@ -432,9 +432,7 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
     const keys = keysHref(p, { superAdmin });
     return (
       <div className="flex min-w-0 flex-col items-start gap-1.5 sm:items-end" data-testid="connector-page-action" data-kind="unavailable">
-        {p.key === 'linkedin'
-          ? <LinkedInSignInButton disabled aria-describedby={`${p.key}-unavailable-note`} data-testid="connector-page-unavailable" />
-          : <button type="button" className={BTN.primary} disabled aria-describedby={`${p.key}-unavailable-note`} data-testid="connector-page-unavailable">{action.label}</button>}
+        <button type="button" className={BTN.primary} disabled aria-describedby={`${p.key}-unavailable-note`} data-testid="connector-page-unavailable">{action.label}</button>
         <p id={`${p.key}-unavailable-note`} className="max-w-[18rem] text-[12px] text-axal-muted dark:text-gray-400 sm:text-right">{action.note}</p>
         {keys && <Link to={keys} className={`${BTN.link} text-[12px]`} data-testid={`connector-keys-link-${p.key}`}>Add its keys in Integration keys</Link>}
       </div>
@@ -444,10 +442,10 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
   return (
     <div className="flex min-w-0 flex-col items-start gap-2 max-sm:w-full sm:items-end" data-testid="connector-page-action" data-kind={action.kind}>
       {/* D753 F8 (#1992): on a phone the one action takes the band's full width. */}
-      <div className="flex items-stretch max-sm:w-full">
+      <div className={`flex items-stretch max-sm:w-full ${p.key === 'linkedin' && action.kind === 'reconnect' ? 'max-sm:flex-col max-sm:gap-2' : ''}`}>
         {action.kind === 'reconnect' && <span className="mr-2 self-center"><Pill tone={action.pill.tone}>{action.pill.label}</Pill></span>}
         {p.key === 'linkedin' ? (
-          <LinkedInSignInButton busy={starting || flow.busy} onClick={press} data-testid="connector-page-connect-button" />
+          <LinkedInSignInButton busy={starting || flow.busy} onClick={press} context={action.kind === 'reconnect' ? action.label : undefined} aria-description={action.aria} title={action.title} className="max-sm:flex-1" data-testid="connector-page-connect-button" />
         ) : (
         <button
           type="button"

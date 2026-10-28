@@ -7,6 +7,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import PublicFooter from '../src/components/PublicFooter.jsx';
 import ShareButtons from '../src/components/ShareButtons.jsx';
+import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
+import { buildCatalogue } from '../src/pages/account/connectorsModel.js';
 import BrandIcon, { BRAND_MARKS } from '../src/ui/BrandIcon.jsx';
 import LinkedInSignInButton from '../src/ui/LinkedInSignInButton.jsx';
 import { LINKEDIN_MARK, LINKEDIN_SIGNIN } from '../src/ui/linkedinBrand.js';
@@ -45,7 +47,7 @@ test('D1355: tiny callers and currentColor cannot shrink or recolour the bug; cl
     const svg = out.match(/<svg[^>]*>/)[0];
     const glyph = Number(svg.match(/width="(\d+)"/)[1]);
     const frame = Number(out.match(/width:(\d+)px/)[1]);
-    const space = Number(out.match(/padding:(\d+)px/)[1]);
+    const space = Number(out.match(/padding:(\d+)(?:px)?/)[1]);
     assert.ok(glyph >= 28 && (glyph * 537 / 635) >= 21 && space >= 8 && frame >= glyph+space*2+(variant === 'tile' && tone !== 'current' ? 2 : 0), out);
     assert.match(svg, new RegExp(`min-width:${glyph}px;min-height:${glyph}px`));
     assert.doesNotMatch(out, /<path|<filter|transform=|fill="#[0-9a-f]+"/i);
@@ -69,6 +71,12 @@ test('D1355: the official sign-in wording and all button states survive busy/dis
   const busy = renderToStaticMarkup(h(LinkedInSignInButton, {busy:true}));
   assert.ok(/disabled=""/.test(busy) && /aria-busy="true"/.test(busy) && /Opening LinkedIn…/.test(busy));
   assert.doesNotMatch(out, /opacity-|filter:|scale|rotate/);
+  assert.match(busy, /<span role="status" class="(?![^"]*sr-only)[^"]*">Opening LinkedIn…<\/span>/);
+  const reconnect=renderToStaticMarkup(h(LinkedInSignInButton,{context:'Reconnect', 'aria-description':'Reconnect LinkedIn'}));
+  assert.ok(reconnect.includes('aria-label="Sign in with LinkedIn — Reconnect"') && reconnect.includes('aria-description="Reconnect LinkedIn"') && />Reconnect<\/span>/.test(reconnect));
+  const unavailable=renderToStaticMarkup(h(LinkedInSignInButton,{disabled:true}));
+  assert.ok(unavailable.includes('cursor-not-allowed') && unavailable.includes('Sign-in unavailable') && !unavailable.includes('cursor-wait'));
+
 });
 
 test('D1355: every LinkedIn surface goes through the registry; only actual OAuth uses the sign-in button', () => {
@@ -87,8 +95,27 @@ test('D1355: every LinkedIn surface goes through the registry; only actual OAuth
 test('D1355: real footer and share links reserve space, and the footer stays blue on its white backing', () => {
   const footer=renderToStaticMarkup(h(MemoryRouter,null,h(PublicFooter)));
   const link=footer.match(/<a[^>]*aria-label="LinkedIn"[^>]*>[\s\S]*?<\/a>/)[0];
-  assert.ok(link.includes('min-width:44px;min-height:44px') && link.includes('/site/linkedin-in-blue.png') && !link.includes('/site/linkedin-in-white.png'));
+  const anchor=link.match(/^<a[^>]*>/)[0];
+  assert.ok(anchor.includes('min-width:44px;min-height:44px') && link.includes('/site/linkedin-in-blue.png') && !link.includes('/site/linkedin-in-white.png'));
   const share=renderToStaticMarkup(h(ShareButtons,{url:'https://example.invalid',title:'Synthetic',size:'sm'}));
   const target=share.match(/<a[^>]*data-testid="share-linkedin"[^>]*>[\s\S]*?<\/a>/)[0];
   assert.ok(target.includes('min-h-[44px] min-w-[44px]') && target.includes('min-width:28px;min-height:28px'));
+});
+
+
+test('D1355: the real LinkedIn page retains unavailable and reconnect context', () => {
+  const catalogue=buildCatalogue({firstParty:{linkedin:{configured:false,connected:false}}});
+  const page=()=>renderToStaticMarkup(h(MemoryRouter,null,h(ConnectorPageView,{connectorKey:'linkedin',phone:true,data:{status:'ready',catalogue,reload() {}}})));
+  const unavailable=page();
+  assert.match(unavailable, /<button[^>]*disabled=""[^>]*aria-describedby="linkedin-unavailable-note"[^>]*data-testid="connector-page-unavailable"[^>]*>Not set up here<\/button>/);
+  assert.doesNotMatch(unavailable, /linkedin-signin-/);
+  const row=catalogue.find(p=>p.key === 'linkedin');
+  row.available=true;
+  row.connection={first_party:true,status:'error',last_error:'invalid_grant: expired'};
+  const reconnect=page();
+  assert.match(reconnect, /aria-label="Sign in with LinkedIn — Reconnect"/);
+  assert.match(reconnect, /aria-description="Reconnect LinkedIn"/);
+  assert.match(reconnect, /max-sm:flex-1/);
+  assert.match(reconnect, /max-sm:flex-col max-sm:gap-2/);
+  assert.match(reconnect, />Reconnect<\/span>/);
 });
