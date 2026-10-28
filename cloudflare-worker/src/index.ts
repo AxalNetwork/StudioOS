@@ -87,6 +87,7 @@ import dealFlow from './routes/deal_flow';
 import mailAccounts from './routes/mail_accounts';
 import mailDrafts from './routes/mail_drafts';
 import mailShares from './routes/mail_shares';
+import mailPeople from './routes/mail_people';
 import { bindMailTools } from './services/mail/mcpTools';
 import dealContext from './routes/deal_context';
 import dealInsights from './routes/deal_insights';
@@ -989,6 +990,7 @@ app.route('/api/mail', mailAccounts);
 app.route('/api/mail', mailDrafts);
 // D1342 (#3550): Network members' address shares — the other's address only while both have shared.
 app.route('/api/mail', mailShares);
+app.route('/api/mail', mailPeople);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);

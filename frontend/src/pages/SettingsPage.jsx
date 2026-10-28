@@ -5,7 +5,7 @@ import { EXPLAINERS } from '../lib/explainers';
 import { normalizePhoneInput, phoneCountry, phonePlaceholder, PHONE_COUNTRIES, PHONE_ERROR } from '../lib/phoneNumber';
 import { useToast } from '../components/useToast';
 import {
-  User, ShieldCheck,
+  User,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, Download,
   Plus, X, KeyRound,
   Sun, Moon, Check, Ban, Scale, Loader2,
@@ -486,8 +486,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
             onAccountChange={(delta) => setData((prev) => ({ ...prev, ...delta }))}
             onSaved={() => setProfileRev((n) => n + 1)}
           />
-          <SectionLabel as="h2" className="pt-2">Full profile and account</SectionLabel>
-          <ProfileTabs key={profileRev} data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
+          <ProfileEditors key={profileRev} data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
           <EmailSection data={data} flash={flash} reload={reloadAccount} />
           {/* D1140 (#3020, CMP19b): Your companies moved to Companies and projects; this line says so once. */}
           <ProfileMovedNotice />
@@ -521,7 +520,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
         </>
       )}
       {/* D1140: the companies, each with its entity record, live on Companies and projects' Companies tab. */}
-      {safeActive === 'companies' && <CompaniesProjects role={role} entityRecords={<YourCompaniesSection flash={flash} />} />}
+      {safeActive === 'companies' && <CompaniesProjects role={role} entityRecords={<><YourCompaniesSection flash={flash} /><CorporateEntityCard flash={flash} /></>} />}
       {safeActive === 'following' && <FollowingSection />}
       {safeActive === 'usage' && (usagePage === 'storage' ? <StoragePage role={role} /> : usagePage === 'ai-tokens' ? <AiTokensPage /> : usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
       {safeActive === 'builder' && <BuilderSection view={builderView ?? undefined} />}
@@ -671,204 +670,37 @@ function ProfileCompletionBanner({ onJump }) {
   );
 }
 
-function ProfileTabs({ data, onSaved, flash, patch }) {
-  const [sub, setSub] = useState('personal');
-  const [pct, setPct] = useState(0);
-  const tabs = [
-    { id: 'personal', label: 'Personal' },
-    { id: 'corporate', label: 'Corporate' },
-    { id: 'verification', label: 'Verification' },
-  ];
+/**
+ * The profile editors under Profile and identity, with no sub-tabs (owner,
+ * 2026-10-28). Corporate moved to Companies and projects, beside the account's
+ * companies; Verification is Trust Center's (`/trust/me`). The identity fields
+ * the old Personal tab edited twice are the cards above (AccountProfile.jsx):
+ * Identity, Personal details, and Address and tax ID.
+ */
+function ProfileEditors({ data, onSaved, flash, patch }) {
   return (
     <>
-      <div className="flex flex-wrap gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg w-fit">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setSub(t.id)}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              sub === t.id ? 'bg-white dark:bg-gray-900 text-violet-700 shadow-sm font-medium' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-            }`}>{t.label}</button>
-        ))}
-      </div>
-      {sub === 'personal' && (
-        <>
-          <PersonalIdentityCard flash={flash} onPctChange={setPct} pct={pct} />
-          <LinkedInImportSection flash={flash} />
-          <ProfileSection data={data} onSaved={onSaved} flash={flash} patch={patch} />
-          <ProfileBackgroundSection flash={flash} />
-          <ProfileExtrasCard flash={flash} />
-          <JurisdictionsSection data={data} patch={patch} />
-          <RolePreferencesSection data={data} patch={patch} />
-        </>
-      )}
-      {sub === 'corporate' && <CorporateEntityCard flash={flash} />}
-      {sub === 'verification' && <VerificationStubCard data={data} />}
+      <LinkedInImportSection flash={flash} />
+      <ProfileSection data={data} onSaved={onSaved} flash={flash} patch={patch} />
+      <ProfileBackgroundSection flash={flash} />
+      <ProfileExtrasCard flash={flash} />
+      <JurisdictionsSection data={data} patch={patch} />
+      <RolePreferencesSection data={data} patch={patch} />
     </>
   );
 }
 
-function PersonalIdentityCard({ flash, onPctChange }) {
-  const [row, setRow] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-  const [taxIdInput, setTaxIdInput] = useState('');
-  const [phoneInput, setPhoneInput] = useState('');
-  const [fieldErrors, setFieldErrors] = useState({});
-
-  useEffect(() => {
-    let cancelled = false;
-    api.getPersonalProfile()
-      .then(r => { if (!cancelled) { setRow(r); onPctChange?.(r.profile_completion_pct || 0); } })
-      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load identity'); });
-    return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const save = async (patch) => {
-    setBusy(true);
-    setFieldErrors({});
-    try {
-      const updated = await api.updatePersonalProfile(patch);
-      setRow(updated);
-      onPctChange?.(updated.profile_completion_pct || 0);
-      try { window.dispatchEvent(new CustomEvent('axal:profile_saved')); } catch {}
-      flash('Saved');
-      if ('tax_id_number' in patch) setTaxIdInput('');
-      if ('phone_e164' in patch) setPhoneInput('');
-    } catch (e) {
-      // AE-2: prefer the field-errors map; only flash a toast when the
-      // error is genuinely whole-form (no field metadata).
-      const errsMap = e?.data?.errors;
-      if (errsMap && typeof errsMap === 'object') setFieldErrors(errsMap);
-      else if (e?.field) setFieldErrors({ [e.field]: e.message });
-      if (!e?.field && !errsMap) flash(e.message || 'Failed to save', 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (err) return <Card title="Identity"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!row) return <Card title="Identity"><div className="text-sm text-gray-500">Loading…</div></Card>;
-
-  const r = row;
-  const normalizedPhone = normalizePhoneInput(phoneInput, r.country);
-  const set = (k, v) => setRow({ ...r, [k]: v });
-  const onBlurSave = (k) => {
-    const v = r[k] ?? null;
-    if (v === '' || v === null) save({ [k]: null });
-    else save({ [k]: v });
-  };
-  const fe = (k) => fieldErrors[k] ? <span className="text-[11px] text-red-600 block mt-1">{fieldErrors[k]}</span> : null;
-
-  return (
-    <Card title="Identity"
-      description="Used to auto-fill contracts between you and Axal VC. Sensitive fields are encrypted at rest.">
-      <div className="mb-4">
-        <CompletionRing pct={r.profile_completion_pct}
-          hint="Fill in legal name, DOB, address, country and tax ID to unlock contract auto-fill." />
-      </div>
-      <div className="grid sm:grid-cols-2 gap-3">
-        <Field label="Full legal name">
-          <input value={r.full_legal_name || ''} onChange={e => set('full_legal_name', e.target.value)}
-            onBlur={() => onBlurSave('full_legal_name')} disabled={busy} className={inputCls} />
-        </Field>
-        <Field label="Date of birth" hint="Must be 18 or older.">
-          <input type="date" value={r.date_of_birth || ''} onChange={e => set('date_of_birth', e.target.value)}
-            onBlur={() => onBlurSave('date_of_birth')} disabled={busy} className={inputCls} />
-          {fe('date_of_birth')}
-        </Field>
-        <Field label="Nationality (ISO α-2)">
-          <input value={r.nationality || ''} maxLength={2}
-            onChange={e => set('nationality', e.target.value.toUpperCase())}
-            onBlur={() => onBlurSave('nationality')} disabled={busy} className={inputCls} placeholder="US" />
-          {fe('nationality')}
-        </Field>
-        <Field label="Tax residency (ISO α-2)">
-          <input value={r.tax_residency_country || ''} maxLength={2}
-            onChange={e => set('tax_residency_country', e.target.value.toUpperCase())}
-            onBlur={() => onBlurSave('tax_residency_country')} disabled={busy} className={inputCls} placeholder="US" />
-          {fe('tax_residency_country')}
-        </Field>
-        <Field label={`Tax ID${r.has_tax_id ? ' (saved · ••••' + (r.tax_id_last4 || '••••') + ')' : ''}`}
-          hint="Encrypted at rest. Type a new value to replace.">
-          <div className="flex gap-2">
-            <input value={taxIdInput} onChange={e => setTaxIdInput(e.target.value)}
-              disabled={busy} className={inputCls} placeholder={r.has_tax_id ? 'Replace…' : 'Enter…'} />
-            <button onClick={() => taxIdInput && save({ tax_id_number: taxIdInput })}
-              disabled={busy || !taxIdInput}
-              className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">Save</button>
-            {r.has_tax_id && (
-              <button onClick={() => save({ tax_id_number: null })} disabled={busy}
-                className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg">Clear</button>
-            )}
-          </div>
-          {fe('tax_id_number')}
-        </Field>
-        <Field label={`Phone${r.has_phone ? ' (saved · ••••' + (r.phone_last4 || '••••') + ')' : ''}`}
-          hint="Your mobile number, any country. National numbers use your Country below.">
-          <div className="flex gap-2">
-            <input data-testid="identity-phone-input" type="tel" value={phoneInput} onChange={e => setPhoneInput(e.target.value)}
-              disabled={busy} className={inputCls} placeholder={phonePlaceholder(r.country)} />
-            <button data-testid="identity-phone-save" onClick={() => { if (!normalizedPhone) { setFieldErrors(previous => ({ ...previous, phone_e164: PHONE_ERROR })); return; } save({ phone_e164: normalizedPhone.e164 }); }}
-              disabled={busy || !phoneInput}
-              className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">Save</button>
-            {r.has_phone && (
-              <button onClick={() => save({ phone_e164: null })} disabled={busy}
-                className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg">Clear</button>
-            )}
-          </div>
-          {normalizedPhone && <p className="text-xs text-gray-500 mt-1" role="status">We'll save {normalizedPhone.international}.</p>}
-          {fe('phone_e164')}
-        </Field>
-      </div>
-      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Address</h3>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Address line 1">
-            <input value={r.address_line1 || ''} onChange={e => set('address_line1', e.target.value)}
-              onBlur={() => onBlurSave('address_line1')} disabled={busy} className={inputCls} />
-          </Field>
-          <Field label="Address line 2">
-            <input value={r.address_line2 || ''} onChange={e => set('address_line2', e.target.value)}
-              onBlur={() => onBlurSave('address_line2')} disabled={busy} className={inputCls} />
-          </Field>
-          <Field label="City">
-            <input value={r.city || ''} onChange={e => set('city', e.target.value)}
-              onBlur={() => onBlurSave('city')} disabled={busy} className={inputCls} />
-          </Field>
-          <Field label="State / region">
-            <input value={r.state_or_region || ''} onChange={e => set('state_or_region', e.target.value)}
-              onBlur={() => onBlurSave('state_or_region')} disabled={busy} className={inputCls} />
-          </Field>
-          <Field label="Postal code">
-            <input value={r.postal_code || ''} onChange={e => set('postal_code', e.target.value)}
-              onBlur={() => onBlurSave('postal_code')} disabled={busy} className={inputCls} />
-            {fe('postal_code')}
-          </Field>
-          <Field label="Country (ISO α-2)">
-            <input value={r.country || ''} maxLength={2}
-              onChange={e => set('country', e.target.value.toUpperCase())}
-              onBlur={() => onBlurSave('country')} disabled={busy} className={inputCls} placeholder="US" />
-            {fe('country')}
-          </Field>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-
 // ---------- Corporate / legal entity ---------------------------------------
 //
-// This block is the one named by the sub-tab comment above and promised by
-// VerificationStubCard's footnote ("The Identity and Legal entity blocks
-// above are already used to auto-fill contracts"). Until now it did not
-// exist: ENTITY_TYPE_OPTIONS was written and never read, api.getLegalEntity
-// / api.updateLegalEntity had zero callers, and the server side —
-// validation, encryption, the completeness ring — was complete the whole
-// time. The footnote was describing a card nobody had built.
+// The account's signing entity: the legal entity, its owners and directors,
+// and the screening flags (read-only here). It renders on Companies and
+// projects (owner, 2026-10-28), beside the account's companies, and no longer
+// on Profile and identity.
 //
 // corporate_profiles.user_id is a PRIMARY KEY, so this is ONE entity per
-// account, not one per company. That is why it lives here and not in
-// Company Settings, whose "Legal entity" card would need columns
+// account, not one per company. That is why it is the account's own card,
+// beside the companies list, and not in one company's Company Settings, whose
+// "Legal entity" card would need columns
 // company_profiles does not have (see account_canvas_coverage.test.mjs).
 
 // Small editor for the two JSON array columns (ubos_json, directors_json).
@@ -947,7 +779,7 @@ function CorporateEntityCard({ flash }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Same error contract as PersonalIdentityCard: the worker throws
+  // The profile routes' error contract: the worker throws
   // ProfileValidationError with a `field`, so a rejection lands inline on the
   // input that caused it instead of a toast that names nothing.
   const save = async (patch) => {
@@ -1113,28 +945,6 @@ function CorporateEntityCard({ flash }) {
   );
 }
 
-function VerificationStubCard({ data }) {
-  const kyc = (data.kyc_status || 'not_started').toLowerCase();
-  const tone = kyc === 'approved' ? 'emerald' : kyc === 'pending' ? 'amber' : 'gray';
-  return (
-    <Card title="Verification"
-      description="Government ID and proof of address are managed in the KYC flow.">
-      <div className={`text-sm flex items-center gap-2 text-${tone}-700`}>
-        <ShieldCheck size={16} />
-        <span>KYC status: <span className="font-medium">{kyc.replace(/_/g, ' ')}</span></span>
-      </div>
-      <a href="/kyc" className="mt-3 inline-block text-sm text-violet-700 hover:text-violet-800">
-        Open KYC →
-      </a>
-      <div className="mt-4 text-[11px] text-gray-500 dark:text-gray-400">
-        Document upload and sanctions/PEP rechecks are not run from here. The
-        Personal and Corporate tabs beside this one hold the identity and entity
-        details that auto-fill contracts; Corporate also shows the screening flags
-        read-only, since screening sets them and this page does not.
-      </div>
-    </Card>
-  );
-}
 
 function ProfileSection({ data, onSaved, flash, patch }) {
   const [name, setName] = useState(data.name || '');

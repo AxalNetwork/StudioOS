@@ -14,6 +14,7 @@ import type { Env, User } from '../../types';
 import { contextPack, MailError, notFound, type Pack, type PackItem } from './contextPack';
 import { computeBlock, isBlockKind, type Block, type BlockKind } from './blocks';
 import { intentFor, LENGTHS, TONES, type Intent } from './intents';
+import { caseOnly } from './profileRecords';
 import { run, type RailContext, type RunOptions } from '../aiRouter';
 import { AI_SURFACE } from '../aiSurfaces';
 
@@ -59,7 +60,8 @@ export function ticked(pack: Pack, refs: string[]): PackItem[] {
 /** The asked blocks, computed now; one with nothing to say is left out. */
 export async function blocksNow(env: Env, user: User, pack: Pack, ask: DraftAsk, now = Date.now()): Promise<Block[]> {
   const projectId = pack.person.project_id ?? ask.project;
-  if (projectId == null || !ask.blocks.length) return [];
+  // D1348: an admin's draft quotes the case only, never a venture's live block.
+  if (projectId == null || !ask.blocks.length || caseOnly(user)) return [];
   const project = await env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(projectId).first<{ id: number; founder_id: number | null }>();
   if (!project) return [];
   const out: Block[] = [];
