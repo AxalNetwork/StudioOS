@@ -299,6 +299,9 @@ export function callCapture({ mode, provider, link, channels, bot, botLink }) {
   const text = String(link || '').trim();
   if (text && meetingLinkProblem(provider, text)) return { kind: 'none', reason: null };
   if (bot?.canSend && botLink) return { kind: 'bot' };
+  // D1360: Eadwyn AI is the default. While its read is still out, a link it
+  // can join waits for it rather than falling back to the import.
+  if (botLink && bot?.state === 'loading') return { kind: 'none', reason: bot.sentence };
   if (!text) return { kind: 'none', reason: 'Paste the meeting link, or create the meeting.' };
   if (provider === 'teams') return { kind: 'none', reason: bot?.state === 'loading' ? bot.sentence : TEAMS_NO_CAPTURE };
   if (provider !== 'zoom' && provider !== 'google_meet') return { kind: 'none', reason: 'Choose Zoom, Google Meet or Microsoft Teams.' };

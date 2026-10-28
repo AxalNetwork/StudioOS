@@ -99,6 +99,26 @@ export async function recordSource(env: Env, owner: number, s: { contactId: numb
 }
 
 /**
+ * D1352 (#3567): what disconnect's `delete_imported` would do, said before it
+ * is pressed. `linkedin_only` is what it deletes (a LinkedIn source made the
+ * row and no other source touched it); `kept` is every other row a LinkedIn
+ * source touched, which stays with its provenance.
+ */
+export async function importedCounts(env: Env, owner: number): Promise<{ linkedin_only: number; kept: number }> {
+  const r = await env.DB.prepare(`SELECT
+      SUM(CASE WHEN EXISTS (SELECT 1 FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id
+                 AND s.source IN ('linkedin_csv', 'linkedin_api', 'linkedin_dma') AND s.created_row = 1)
+               AND NOT EXISTS (SELECT 1 FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id
+                 AND s.source NOT IN ('linkedin_csv', 'linkedin_api', 'linkedin_dma')) THEN 1 ELSE 0 END) AS linkedin_only,
+      COUNT(*) AS touched
+    FROM network_connections n WHERE n.user_id = ?
+      AND EXISTS (SELECT 1 FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id
+        AND s.source IN ('linkedin_csv', 'linkedin_api', 'linkedin_dma'))`).bind(owner, owner, owner, owner).first<{ linkedin_only: number | null; touched: number }>();
+  const only = Number(r?.linkedin_only ?? 0);
+  return { linkedin_only: only, kept: Number(r?.touched ?? 0) - only };
+}
+
+/**
  * Disconnect's `delete_imported`: the member's rows that a LinkedIn source
  * made and no other source has touched. A row they typed, or that came from
  * elsewhere, stays, with all its provenance. Returns how many were deleted.

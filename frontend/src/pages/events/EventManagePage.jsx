@@ -12,6 +12,8 @@ import { REGISTRATION_TABS, pageRows, recorded, registrationTab } from './eventO
 import HostHeader from './HostHeader';
 import { onEventDay, pendingCount, screenOf, whenLine } from './hostHeaderModel';
 import './eventOrganiser.css';
+import { FillFormBar, useScopedFill } from '../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../lib/fillScoped.js';
 
 // The Worker's EVENT_ROLES (services/eventOrganiser.ts); D1031 adds advisor.
 const roles = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'];
@@ -55,6 +57,12 @@ export default function EventManagePage() {
   const [reason, setReason] = useState({});
   const [item, setItem] = useState(blankItem);
   const [editing, setEditing] = useState(null);
+  // D1329 (#3490, AF20): Fill with Eadwyn on a new agenda item's title, under
+  // this event, for an admin or its host. Times, speakers and rooms are theirs.
+  const agendaFill = useScopedFill({
+    scope: SCOPED_FORMS.agendaItem, parent: Number(id), enabled: screen === 'agenda' && !editing,
+    values: { title: item.title || '' }, onValues: (v) => { if (v.title != null) setItem((it) => ({ ...it, title: v.title })); },
+  });
   const [invite, setInvite] = useState(false);
   const [scanner, setScanner] = useState(false);
   const [checkedIn, setCheckedIn] = useState('');
@@ -126,7 +134,7 @@ export default function EventManagePage() {
           ? <section className="evo-card" data-testid="event-checkin"><h2>Check in at the door</h2><p>Scan each guest’s code, or type it. A seat that is not confirmed and paid has no code.</p>{counts ? <p>{counts.seats_taken} seats taken</p> : null}<div className="evo-toolbar"><button className="evo-primary" disabled={busy} onClick={() => setScanner(true)}>Open the scanner</button></div>{checkedIn && <p role="status" data-testid="event-checkin-result">{checkedIn}</p>}</section>
           : <section className="evo-card" data-testid="event-checkin-closed"><h2>Check-in opens on the event’s day</h2><p>{whenLine(data.event)}</p></section>)}
         {screen === 'agenda' && <div className="evo-grid"><section className="evo-card"><h2>Agenda items</h2><input aria-label="Search agenda" placeholder="Search titles" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} /><EventReadState empty={agendaPage.total === 0}>{agendaPage.rows.map(a => { const index = agenda.findIndex(v => v.id === a.id); return <article key={a.id} className="evo-agenda-row"><strong>{a.title}</strong><p>{recorded(a.starts_at, 'start time is absent')} · {recorded(a.speaker_name, 'speaker is absent')}</p><p>{recorded(a.location_text, 'room is absent')} {a.location_url && <a href={a.location_url} target="_blank" rel="noreferrer">Join</a>}</p><div className="evo-toolbar"><button disabled={busy || Boolean(search) || index === 0} onClick={() => move(index, -1)}>Move up</button><button disabled={busy || Boolean(search) || index === agenda.length - 1} onClick={() => move(index, 1)}>Move down</button><button disabled={busy} onClick={() => { setItem({ ...blankItem, ...a, starts_at: a.starts_at?.slice(0, 16) || '' }); setEditing(a.id); }}>Edit</button><button disabled={busy} onClick={() => act(() => events.deleteAgendaItem(id, a.id))}>Delete</button></div></article>; })}</EventReadState><Pager data={agendaPage} setPage={setPage} />
-          <form onSubmit={e => { e.preventDefault(); const payload = { ...item, starts_at: item.starts_at ? new Date(item.starts_at).toISOString() : null, display_order: editing ? item.display_order : agenda.length }; act(async () => { if (editing) await events.updateAgendaItem(id, editing, payload); else await events.addAgendaItem(id, payload); setItem(blankItem); setEditing(null); }); }}><h2>{editing ? 'Edit item' : 'Add item'}</h2>{[['title', 'Title'], ['starts_at', 'Start time'], ['speaker_name', 'Speaker'], ['location_text', 'Room'], ['location_url', 'Link']].map(([key, label]) => <label key={key}>{label}<input required={key === 'title'} type={key === 'starts_at' ? 'datetime-local' : key === 'location_url' ? 'url' : 'text'} value={item[key] || ''} onChange={e => setItem(v => ({ ...v, [key]: e.target.value }))} /></label>)}<button className="evo-primary" disabled={busy}>Save item</button>{editing && <button type="button" onClick={() => { setEditing(null); setItem(blankItem); }}>Cancel edit</button>}</form></section>
+          <form onSubmit={e => { e.preventDefault(); const payload = { ...item, starts_at: item.starts_at ? new Date(item.starts_at).toISOString() : null, display_order: editing ? item.display_order : agenda.length }; act(async () => { if (editing) await events.updateAgendaItem(id, editing, payload); else { const made = await events.addAgendaItem(id, payload); await agendaFill.afterSave(made?.item?.id); } setItem(blankItem); setEditing(null); }); }}><h2>{editing ? 'Edit item' : 'Add item'}</h2>{!editing && <FillFormBar fill={agendaFill} />}{[['title', 'Title'], ['starts_at', 'Start time'], ['speaker_name', 'Speaker'], ['location_text', 'Room'], ['location_url', 'Link']].map(([key, label]) => <label key={key}>{label}<input required={key === 'title'} type={key === 'starts_at' ? 'datetime-local' : key === 'location_url' ? 'url' : 'text'} value={item[key] || ''} onChange={e => setItem(v => ({ ...v, [key]: e.target.value }))} /></label>)}<button className="evo-primary" disabled={busy}>Save item</button>{editing && <button type="button" onClick={() => { setEditing(null); setItem(blankItem); }}>Cancel edit</button>}</form></section>
           <section className="evo-card"><h2>Attendee preview</h2><EventReadState empty={agenda.length === 0}>{agenda.map(a => <article key={a.id} className="evo-agenda-row"><strong>{a.title}</strong><p>{recorded(a.starts_at, 'time is absent')} · {recorded(a.speaker_name, 'speaker is absent')}</p><p>{recorded(a.location_text, 'room is absent')}</p>{a.location_url && <a href={a.location_url} target="_blank" rel="noreferrer">Join</a>}</article>)}</EventReadState></section></div>}
       </EventReadState>
       {invite && <InvitePeopleModal eventId={id} audienceRules={rules} onClose={() => setInvite(false)} onInvited={load} />}

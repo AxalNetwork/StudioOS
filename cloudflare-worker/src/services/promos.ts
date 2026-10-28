@@ -20,6 +20,7 @@
  *     the live Stripe counter + our mirror counter against max_redemptions.
  */
 import type { Env } from '../types';
+import { paidInvestorTier } from './investorTiers';
 import { stripeCall } from '../routes/billing';
 import { writeFeatureUnlock } from './featureUnlocks';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -233,7 +234,7 @@ export function readIntervals(json: string | null | undefined): { ok: true; inte
 export function planKeyOf(product: { metadata?: Record<string, string> | null } | null | undefined): string | null {
   const m = product?.metadata || {};
   if (m.tier === 'growth' || m.tier === 'studio') return `tier:${m.tier}`;
-  if (m.investor_tier === 'professional' || m.investor_tier === 'institutional') return `investor:${m.investor_tier}`;
+  if (paidInvestorTier(m.investor_tier)) return `investor:${m.investor_tier}`;
   if (typeof m.plan_group === 'string' && m.plan_group.trim()) return `plan:${m.plan_group.trim()}`;
   if (m.plan === 'mi_pro') return 'mi:mi_pro';
   return null;

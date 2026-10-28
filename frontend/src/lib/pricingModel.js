@@ -135,7 +135,7 @@ export function heldCard(user, role, tab, planRead = null) {
   }
   if (tab === 'investor' && role === 'investor') {
     const t = String(user.investor_tier || 'free').toLowerCase();
-    return ['free', 'professional', 'institutional'].includes(t) ? t : null;
+    return ['free', 'plus', 'professional', 'institutional'].includes(t) ? t : null;
   }
   const g = PLAN_GROUP_TABS[tab];
   if (g && g.role === role) {

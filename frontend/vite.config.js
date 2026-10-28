@@ -19,12 +19,10 @@ const disableRocketLoader = {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), disableRocketLoader],
-  // Transpile dev-served source AND pre-bundled deps down to es2020 so older
-  // Safari doesn't hit a silent parse error (blank white page). Dev-only
-  // concern: prod builds already target lower via build defaults.
-  // Vite 8 (rolldown) uses oxc — the legacy `esbuild` key is silently
-  // IGNORED ("oxc options will be used and esbuild options will be ignored"),
-  // which re-broke the Safari blank page. Set the target on `oxc` instead.
+  // Oxc's es2020 target applies to transformed dev sources, not plain .js.
+  // Production uses Vite 8's baseline-widely-available default (Safari 16.4).
+  // A lower target cannot make unsupported RegExp features work at runtime;
+  // source regexes must remain compatible with older Safari (#3592).
   oxc: { target: 'es2020' },
   resolve: {
     alias: {

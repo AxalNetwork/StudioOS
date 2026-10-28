@@ -38,6 +38,7 @@ import { requireAuth, requireFactor, requireStepUp } from '../auth';
 import { stripeCall } from './billing';
 import { ensurePaymentsCustomer } from './payments';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
+import { paidInvestorTier } from '../services/investorTiers';
 import { getCatalog } from '../services/catalog';
 import { isTokenPackPrice } from '../services/aiCredits';
 import { validatePromoForProduct, computeDiscount, normalizeCode, type PromoRow } from '../services/promos';
@@ -86,7 +87,7 @@ async function heldPlanKey(env: Env, userId: number, family: string): Promise<st
         .bind(userId).first<Record<string, string | null>>();
       if (!u) return null;
       if (family === 'founder') return (u.subscription_tier === 'growth' || u.subscription_tier === 'studio') && ON_STATUSES.has(String(u.subscription_status)) ? `founder:${u.subscription_tier}` : 'founder:free';
-      return (u.investor_tier === 'professional' || u.investor_tier === 'institutional') && ON_STATUSES.has(String(u.investor_subscription_status)) ? `investor:${u.investor_tier}` : 'investor:free';
+      return paidInvestorTier(u.investor_tier) && ON_STATUSES.has(String(u.investor_subscription_status)) ? `investor:${u.investor_tier}` : 'investor:free';
     }
     const row = await env.DB.prepare('SELECT plan_group, status FROM account_subscriptions WHERE user_id = ?').bind(userId).first<{ plan_group: string | null; status: string | null }>();
     return row && row.plan_group === family && ON_STATUSES.has(String(row.status)) ? `${family}:pro` : `${family}:free`;

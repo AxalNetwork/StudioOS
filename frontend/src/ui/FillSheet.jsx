@@ -34,6 +34,11 @@ import {
  * `POST /api/fills/record`. Closing the sheet returns focus to the trigger
  * (D1317's contract). No model name or option key is drawn.
  *
+ * D1329 (#3490): `project` is null for a record that is not a venture's (an
+ * advisor's service, a partner's report, an event, a publication, an IC
+ * memo); the read and the run then name the record, or `parent` for an Add
+ * form under an engagement or an event (`services/fills/scopes.ts`).
+ *
  * D1328 (#3489, AF23): below 640px Sources is a bottom sheet (`phone="sheet"`)
  * and Preview a full-height page, its footer (Accept all) fixed below the
  * scrolling table; every control there is at least 44px.
@@ -55,7 +60,7 @@ const LAVENDER = 'bg-axal-lavender dark:bg-violet-950/40';
 
 const blank = (v) => v == null || String(v).trim() === '';
 
-export default function FillSheet({ page, form, project, record = null, title = 'this form', values = {}, aiOff = false, onPlace, onClose, turnOnHref = null }) {
+export default function FillSheet({ page, form, project = null, record = null, parent = null, title = 'this form', values = {}, aiOff = false, onPlace, onClose, turnOnHref = null }) {
   const [read, setRead] = useState({ status: 'loading', data: null, error: null, ref: null });
   const [step, setStep] = useState('sources');
   const [ticked, setTicked] = useState(new Set());
@@ -67,7 +72,7 @@ export default function FillSheet({ page, form, project, record = null, title = 
   const load = useCallback(async () => {
     setRead({ status: 'loading', data: null, error: null, ref: null });
     try {
-      const data = await fillsApi.sheet({ page, form, project, record: record?.id ?? null });
+      const data = await fillsApi.sheet({ page, form, project, record: record?.id ?? null, parent });
       setRead({ status: 'ready', data, error: null, ref: null });
       const rows = sourceRows(data);
       setTicked(new Set(rows.filter((r) => r.tickable && (r.kind !== 'eadwyn' || !aiOff)).map((r) => r.key)));
@@ -75,7 +80,7 @@ export default function FillSheet({ page, form, project, record = null, title = 
       reportError('fill-sheet:read', e);
       setRead({ status: 'error', data: null, error: typeof e?.message === 'string' ? e.message : '', ref: errorRef() });
     }
-  }, [page, form, project, record?.id, aiOff]);
+  }, [page, form, project, record?.id, parent, aiOff]);
   useEffect(() => { load(); }, [load]);
 
   const data = read.data;
@@ -99,8 +104,10 @@ export default function FillSheet({ page, form, project, record = null, title = 
     setRun({ status: 'running' });
     try {
       const events = await fillsApi.run({
-        page, option: `form:${form}`, project,
-        ...(record?.id ? { record: { type: record.type || fields[0]?.table, id: record.id } } : {}),
+        page, option: `form:${form}`,
+        // D1329: a venture's form names its venture; a record that is not a venture's names itself, or its parent.
+        ...(project != null ? { project } : {}),
+        ...(record?.id ? { record: { type: record.type || fields[0]?.table, id: record.id } } : parent != null ? { parent } : {}),
         input: { values },
       });
       const end = events.find((e) => e.event === 'done')?.data || null;

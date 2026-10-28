@@ -1,5 +1,5 @@
-/** Owner prices: Plus $50, Pro $150, each 15% off yearly. Never sell an
- * unsupported Plus licence merely by creating a Stripe price. */
+/** Owner prices: Plus $50, Pro $150, each 15% off yearly. D1334 (#3540):
+ * Plus is a billing tier, so its prices are planned once its product exists. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { INVESTOR_PRICES, planInvestorPrices } from '../../scripts/plan-investor-prices.mjs';
@@ -26,11 +26,15 @@ test('approved Investor amounts and annual equivalents', () => {
   assert.deepEqual([card.price, card.note, yearly.saving], ['$127.50', '$1,530 billed yearly', 'Save 15%']);
 });
 
-test('Plus remains blocked, even if the input contains an unsupported Plus product', () => {
-  const result = planInvestorPrices({ products: [pro, { ...pro, id: 'prod_plus', metadata: { investor_tier: 'plus' } }] });
-  assert.deepEqual(result.blocked.map(b => [b.licence_key, b.month, b.year]), [['investor:plus', 5000, 51000]]);
-  assert.match(result.blocked[0].reason, /billing tier|licence/);
-  assert.ok(result.create.every(a => a.path.includes('/prod_pro/')));
+test('D1334: with no Plus product the plan asks for one; with one, Plus is priced on it alone', () => {
+  const none = planInvestorPrices({ products: [pro] });
+  assert.deepEqual(none.product_needed.map(b => [b.licence_key, b.month, b.year]), [['investor:plus', 5000, 51000]]);
+  assert.deepEqual(none.product_needed[0].metadata, { investor_tier: 'plus' });
+  assert.ok(none.create.every(a => a.path.includes('/prod_pro/')));
+  const plusProduct = { ...pro, id: 'prod_plus', metadata: { investor_tier: 'plus' }, prices: [] };
+  const result = planInvestorPrices({ products: [pro, plusProduct] });
+  assert.deepEqual(result.product_needed, []);
+  assert.deepEqual(result.create.filter(a => a.path.includes('/prod_plus/')).map(a => [a.body.unit_amount, a.body.interval]), [[5000, 'month'], [51000, 'year']]);
 });
 
 test('existing correct Pro prices are reused and Founder products are ignored', () => {

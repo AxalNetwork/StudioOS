@@ -188,7 +188,7 @@ export function cannotInsert(item, bindings = []) {
 
 /** A typed figure: money, a percentage, a count or a decimal, with its unit. */
 // Not inside a word: "B2B" and "Q3" are names, not figures.
-const NUMBER = /(?<![A-Za-z0-9])(?:[$€£]\s?)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s?(?:%|bn\b|k\b|K\b|m\b|M\b|x\b))?(?![A-Za-z0-9])/g;
+const NUMBER = /(^|[^A-Za-z0-9])((?:[$€£]\s?)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s?(?:%|bn\b|k\b|K\b|m\b|M\b|x\b))?(?![A-Za-z0-9]))/g;
 
 /**
  * The words as segments: plain text, and every typed number as a claim. A
@@ -198,10 +198,17 @@ export function claimSegments(text) {
   const s = String(text ?? '');
   const out = [];
   let at = 0;
-  for (const m of s.matchAll(NUMBER)) {
-    if (m.index > at) out.push({ text: s.slice(at, m.index), claim: false });
-    out.push({ text: m[0], claim: true, state: FOUNDERS_FIGURE });
-    at = m.index + m[0].length;
+  const pattern = new RegExp(NUMBER);
+  let m;
+  while ((m = pattern.exec(s))) {
+    // The boundary is consumed for older Safari, but stays in the plain text.
+    const index = m.index + m[1].length;
+    const figure = m[2];
+    if (index > at) out.push({ text: s.slice(at, index), claim: false });
+    out.push({ text: figure, claim: true, state: FOUNDERS_FIGURE });
+    at = index + figure.length;
+    // Reuse a final separator as the next boundary, as in "1%$2".
+    pattern.lastIndex = Math.max(1, at - 1);
   }
   if (at < s.length) out.push({ text: s.slice(at), claim: false });
   return out;

@@ -147,7 +147,9 @@ test('the rules: a member buys their own profile\'s sold plans; a change goes by
   // Mutation checked: drop the family check → a founder may buy an investor plan.
   assert.equal((plannedEntry('founder', 'investor:professional') as any).refusal.code, 'other_profile');
   assert.equal((plannedEntry('investor', 'investor:institutional') as any).refusal.code, 'not_sellable', 'Institutional is Contact Sales');
-  assert.equal((plannedEntry('investor', 'investor:plus') as any).refusal.code, 'not_sellable', 'Investor Plus is not sold (D786)');
+  // D1334 (#3540): Investor Plus is sold, replacing D786's "not sold" pin.
+  assert.equal((plannedEntry('investor', 'investor:plus') as any).entry.key, 'investor:plus', 'Investor Plus is sold (D1334)');
+  assert.equal((plannedEntry('founder', 'investor:plus') as any).refusal.code, 'other_profile');
   assert.equal((plannedEntry('founder', 'founder:free') as any).refusal.code, 'not_sellable');
   assert.equal((plannedEntry('founder', 'nope') as any).refusal.code, 'unknown_plan');
   assert.equal((plannedEntry('founder', 'founder:studio') as any).entry.key, 'founder:studio');

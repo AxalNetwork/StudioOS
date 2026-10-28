@@ -17,6 +17,7 @@ import { POLL_MS, STAGE_KEYS, createRecorder, elapsedMs, liveRefusal, pillLabel,
 import { layers, ringMode } from '../src/pages/founder/RecordingView.jsx';
 import { BUDGET_CLOSE, LEVEL_MS, NO_SOUND_MS, createCapture, memoryQueue, nextSeq } from '../src/lib/interviewCapture.js';
 import { isCapturing, setCaptureProbe, whenIdle } from '../src/lib/captureGuard.js';
+import { setRecorder } from '../src/contexts/ActiveRecordingContext.jsx';
 import { FLASH_MS, INDETERMINATE_SWEEP, flashLevel, runRing, stoppingArc } from '../src/lib/ringViz.js';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -564,9 +565,53 @@ test('nothing reloads or logs out under a running capture', async () => {
   setCaptureProbe(null);
   assert.equal(isCapturing(), false);
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
-  assert.match(app, /enabled: !!user && !activeRecorder\.isCapturing\(\),/, 'the inactivity logout is suspended');
+  assert.match(app, /enabled: !!user && !activeRecorder\.holdsReload\(\),/, 'the inactivity logout is suspended');
   assert.match(readFileSync('frontend/src/lib/pwa.js', 'utf8'), /reloadWithinBudget\(SW_RELOAD_KEY, SW_RELOAD_PARAM, MAX_SW_RELOADS, whenIdle\)/);
   assert.match(readFileSync('frontend/src/components/RouteErrorBoundary.jsx', 'utf8'), /reloadWithinBudget\(RELOAD_GUARD_KEY, RELOAD_GUARD_PARAM, MAX_BOUNDARY_RELOADS, whenIdle\)/);
+});
+
+test('a session this tab only adopted holds no reload or logout; a capture here, paused or live, and an opening mic do', async () => {
+  // axal.vc/hq, 2026-10-28: a tab that adopted a paused session on load counted
+  // as capturing for its whole life, so the stale-chunk reload waited for ever
+  // and the page stayed on "Importing a module script failed."
+  let open;
+  const gate = new Promise((res) => { open = res; });
+  const b = fakeBrowser();
+  const queue = memoryQueue();
+  const list = queue.list.bind(queue);
+  // Resume reads this device's queue before it makes the capture: hold it there.
+  queue.list = async (...a) => { await gate; return list(...a); };
+  const w = fakeApi();
+  const r = createRecorder({ api: w.api, browser: b.browser, queue, setTimeout: (f, ms) => (ms ? 0 : f()) });
+  assert.equal(await r.adopt({ session: draft({ status: 'paused', active_ms: 90000 }) }), 'paused');
+  assert.equal(r.capture, null);
+  assert.equal(r.isCapturing(), true, 'still one recording at a time: a second Start is refused');
+  assert.equal(r.holdsReload(), false, 'but a reload loses nothing: the next load adopts it again');
+
+  setRecorder(r);
+  assert.equal(isCapturing(), false, 'the reloads\' probe lets them run');
+  const ran = [];
+  whenIdle(() => ran.push('reload'), { every: 10, setTimer: () => assert.fail('the reload must not wait') });
+  assert.deepEqual(ran, ['reload']);
+
+  const resumed = r.resume();
+  await tick();
+  assert.equal(r.capture, null, 'Resume is under way and no capture is made yet');
+  assert.equal(r.getSnapshot().phase, 'paused');
+  assert.equal(r.holdsReload(), true, 'a mic opening in this tab holds the reload');
+  assert.equal(isCapturing(), true);
+  open();
+  assert.equal(await resumed, 'recording');
+  assert.equal(r.holdsReload(), true, 'a live capture holds it');
+  await r.pause();
+  assert.equal(r.getSnapshot().phase, 'paused');
+  assert.ok(r.capture, 'paused here, the capture is kept');
+  assert.equal(r.holdsReload(), true, 'and a capture paused in this tab still holds it');
+
+  setRecorder({ isCapturing: () => true, getSnapshot: () => ({}) });
+  assert.equal(isCapturing(), true, 'a recorder without holdsReload falls back to isCapturing');
+  setRecorder(null);
+  assert.equal(isCapturing(), false);
 });
 
 test('the pill\'s variants and accessible names, and the timer from the Worker\'s fields', () => {

@@ -9,6 +9,8 @@ import {
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import { FillFormBar, useScopedFill } from '../../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 
 /**
  * Expertise · Services — what you sell, and what you charge for it.
@@ -28,6 +30,11 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
  * worth stating: nothing in the schema links a booking to a service. A booking
  * carries free text in `topic`. Counting the bookings whose topic happens to
  * match a service title would render a guess in the shape of a fact.
+ *
+ * D1329 (#3490, AF18): Add a service carries Fill with Eadwyn on its Title and
+ * What it covers, from the advisor's recorded outcomes and Eadwyn. The price
+ * is never filled. Nothing is written until Add service; then the record step
+ * keeps only what still equals each proposal.
  */
 
 const KINDS = [
@@ -45,6 +52,10 @@ export default function ServicesZone() {
   const [note, setNote] = useState(null);
   // D392 — the canvas's chips over `kind`, the column the form above writes.
   const [view, setView] = useState('all');
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.service, values: { title: draft.title, scope: draft.scope },
+    onValues: (v) => setDraft((d) => ({ ...d, ...v })),
+  });
 
   const load = useCallback(async () => {
     setState((c) => ({ ...c, loading: true, error: '' }));
@@ -68,13 +79,14 @@ export default function ServicesZone() {
     if (parsed.error) { setNote({ ok: false, text: parsed.error }); return; }
     setBusy(true);
     try {
-      await api.createMyAdvisorService({
+      const created = await api.createMyAdvisorService({
         title,
         kind: draft.kind,
         duration_note: draft.duration_note.trim() || null,
         price_cents: parsed.cents,
         scope: draft.scope.trim() || null,
       });
+      await fill.afterSave(created?.id);
       setDraft(BLANK);
       setNote({ ok: true, text: 'Service added.' });
       await load();
@@ -182,8 +194,9 @@ export default function ServicesZone() {
           title="Add a service"
           blurb="A price here is what you charge, recorded for your own storefront. No payment runs through this page."
         />
+        <FillFormBar fill={fill} />
         <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Title">
+          <Field label="Title" fill={{ ctl: fill, name: 'title', value: draft.title }}>
             <input className={inputClass} value={draft.title}
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               placeholder="Fractional CTO day" />
@@ -205,7 +218,7 @@ export default function ServicesZone() {
               placeholder="One day, on site" />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="What it covers">
+            <Field label="What it covers" fill={{ ctl: fill, name: 'scope', value: draft.scope }}>
               <textarea rows={2} className={inputClass} value={draft.scope}
                 onChange={(e) => setDraft({ ...draft, scope: e.target.value })} />
             </Field>

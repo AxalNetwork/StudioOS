@@ -196,7 +196,7 @@ async function mirroredPlans(env: Env, user: any): Promise<Array<{ family: PlanF
     out.push({ family: 'founder', match: { tier: user.subscription_tier }, interval: 'month' });
   const inv = effectiveInvestorTier(user);
   // A seat colleague inherits the tier but does not pay for it.
-  if ((inv === 'professional' || inv === 'institutional') && user.investor_stripe_subscription_id
+  if (inv !== 'free' && user.investor_stripe_subscription_id
       && user.investor_subscription_status === PAID_STATUS && user.investor_seat_primary_user_id == null)
     out.push({ family: 'investor', match: { investor_tier: inv }, interval: 'month' });
   try {
