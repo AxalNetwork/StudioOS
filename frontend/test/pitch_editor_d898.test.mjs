@@ -261,6 +261,15 @@ test('an admin reads the deck and writes nothing', async () => {
   } finally { await m.unmount(); }
 });
 
+test('verified HQ Super Admin gets the integrated editor controls', async () => {
+  const m = await mount({}, { ...ADMIN, is_super_admin: 1 });
+  try {
+    assert.ok(m.by('pitch-editor-save'));
+    assert.ok(m.by('pitch-editor-add-block'));
+    assert.equal(m.pr(m.by('pitch-editor-notes')).readOnly, false);
+  } finally { await m.unmount(); }
+});
+
 test('the first-run callouts show once', async () => {
   const m = await mount({}, FOUNDER, { seen: false });
   try {

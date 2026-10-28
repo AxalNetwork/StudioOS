@@ -48,10 +48,16 @@ import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckSh
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
   user = { ...user, role: String(user.role || '').toLowerCase() };
-  if (user.role === 'advisor' || (opts.write && user.role === 'admin')) throw new Error('Forbidden');
+  if (user.role === 'advisor') throw new Error('Forbidden');
+  const adminWrite = opts.write && user.role === 'admin';
+  if (adminWrite && (!isSuperAdmin(await hydrateSuperAdmin(c.env, user)) || await isSupportSession(c))) throw new Error('Forbidden');
   const project = await sharedProjectOwned(c, user, projectId, opts);
   const owner = user.role === 'founder' && user.founder_id != null && user.founder_id === project.founder_id;
   if (!owner && user.role !== 'admin' && await getProjectMembershipRole(c.env, projectId, user.id) === 'advisor') throw new Error('Forbidden');
+  if (adminWrite && opts.audit !== false) {
+    await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)')
+      .bind('deck_write_authorized', JSON.stringify({ method: c.req.method, route: c.req.routePath }), `user:${user.id}`, user.id, project.id).run();
+  }
   return project;
 }
 
