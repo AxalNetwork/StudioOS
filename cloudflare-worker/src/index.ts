@@ -86,6 +86,7 @@ import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import mailAccounts from './routes/mail_accounts';
 import mailDrafts from './routes/mail_drafts';
+import { bindMailTools } from './services/mail/mcpTools';
 import dealContext from './routes/deal_context';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
@@ -475,6 +476,9 @@ import roundCalls from './routes/round_calls';
 import track from './routes/track';
 
 const app = new Hono<{ Bindings: Env }>();
+// D1343: the MCP mail tools run the mail services the entry hands them (services/mail/mcpTools.ts),
+// so the MCP server, which `auth.ts` reaches, imports none of them.
+bindMailTools();
 
 // D811: service HMAC only, before browser CORS/session/CSRF middleware.
 app.use('/api/mail-link/*', securityHeadersMiddleware());

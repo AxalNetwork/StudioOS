@@ -219,7 +219,9 @@ export type DraftOutcome =
  */
 export async function runDraft(env: Env, user: User, input: { ask: DraftAsk; pack: Pack; sources: PackItem[]; blocks: Block[]; parent: { uid: string; revision: Revision } | null; rail?: RailContext }): Promise<DraftOutcome> {
   const { ask, pack, sources, blocks, parent } = input;
-  const out = await run(env, draftRunOptions(user, pack, ask, sources, blocks, parent?.revision ?? null, input.rail));
+  const opts = draftRunOptions(user, pack, ask, sources, blocks, parent?.revision ?? null, input.rail);
+  // The page is named at the call, where D552's scan reads it.
+  const out = await run(env, { ...opts, surface: AI_SURFACE.mailDraft });
   if (out.refusal) {
     return { ok: false, refusal: out.refusal, error: out.refusal === 'guard_unavailable' ? 'The draft could not be checked. A started run may still be charged.' : undefined };
   }

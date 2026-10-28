@@ -20,18 +20,45 @@
  * A RESULT IS DATA: the records' text and the draft, never an instruction.
  */
 import { z } from 'zod';
-import type { User } from '../../types';
+import type { Env, User } from '../../types';
 import type { McpTool, ToolRun } from '../server';
 import { ToolError } from '../../services/assistantInterviews';
 import { REFUSAL_WORDS, refusalFor } from '../../services/metering';
-import { contextPack, MailError, NOT_FOUND, type Pack } from '../../services/mail/contextPack';
-import { blocksNow, draftAsk, runDraft, ticked } from '../../services/mail/drafts';
 import { LENGTHS, TONES } from '../../services/mail/intents';
 
-const notFound = () => new ToolError(404, 'not_found', NOT_FOUND);
+/*
+ * NOTHING HERE IMPORTS THE MAIL SERVICES. `mcp/server.ts` is reached from
+ * `auth.ts` (through `mcp/grants.ts` and `mcp/oauth.ts`), and the context pack
+ * reaches every module's record read, and from there Stripe and Mercury code
+ * that D707's and D714's guards keep out of that graph. So the Worker's entry
+ * hands the services in (`services/mail/mcpTools.ts`, `provideMailServices`),
+ * and a tool called before that answers 503.
+ */
+type PackItemView = { ref: string; kind: string; label: string; as_of: string | null; link: string; selected: boolean; text: string };
+export type PackView = { person: { ref: string; project_id: number | null } & Record<string, unknown>; intents: ReadonlyArray<{ key: string; label: string }>; items: PackItemView[] };
+export type DraftRun =
+  | { ok: true; draft: { uid: string; subject: string; body: string; sources: unknown } }
+  | { ok: false; refusal: string; error?: string }
+  | { ok: false; refusal: null; code: string; message: string };
+export type MailServices = {
+  contextPack(env: Env, user: User, person: unknown, project: number | null): Promise<PackView>;
+  /** The draft request read and its pack, and the run, which charges and stores once (`runDraft`). */
+  prepareDraft(env: Env, user: User, body: Record<string, unknown>): Promise<{ pack: PackView; run(rail: { page: string; option: string; record: string }): Promise<DraftRun> }>;
+  /** A mail service's refusal, as its status, code and sentence; null for anything else. */
+  refusalOf(e: unknown): { status: number; code: string; sentence: string } | null;
+};
+
+let services: MailServices | null = null;
+export function provideMailServices(s: MailServices): void { services = s; }
+function mail(): MailServices {
+  if (!services) throw new ToolError(503, 'unavailable', 'Email is not available right now. Try again.');
+  return services;
+}
+
+const notFound = () => new ToolError(404, 'not_found', 'Record not found.');
 
 /** A pack inside this grant: the project asked for, and the person's own company, must both be granted. */
-function inGrant(r: ToolRun, project: number | null, pack: Pack | null) {
+function inGrant(r: ToolRun, project: number | null, pack: PackView | null) {
   const granted = new Set(r.companies.map((c) => Number(c.id)));
   if (project != null && !granted.has(project)) throw notFound();
   if (pack?.person.project_id != null && !granted.has(Number(pack.person.project_id))) throw notFound();
@@ -41,7 +68,8 @@ const projectOf = (raw: unknown): number | null => (raw == null ? null : Number(
 
 async function asTool<T>(read: () => Promise<T>): Promise<T> {
   try { return await read(); } catch (e) {
-    if (e instanceof MailError) throw new ToolError(e.status, e.code, e.sentence);
+    const refused = mail().refusalOf(e);
+    if (refused) throw new ToolError(refused.status, refused.code, refused.sentence);
     throw e;
   }
 }
@@ -63,7 +91,7 @@ export const MAIL_TOOLS: McpTool[] = [
     run: async (r) => {
       const project = projectOf(r.args.project);
       inGrant(r, project, null);
-      const pack = await asTool(() => contextPack(r.env, r.user as unknown as User, r.args.person, project));
+      const pack = await asTool(() => mail().contextPack(r.env, r.user as unknown as User, r.args.person, project));
       inGrant(r, project, pack);
       return {
         person: pack.person,
@@ -96,11 +124,9 @@ export const MAIL_TOOLS: McpTool[] = [
       const project = projectOf(r.args.project);
       inGrant(r, project, null);
       const body = { ...r.args, tone: r.args.tone ?? 'warm', length: r.args.length ?? 'short' };
-      const { ask, pack } = await asTool(() => draftAsk(r.env, user, body));
-      inGrant(r, project, pack);
-      const sources = ticked(pack, ask.refs);
-      const blocks = await asTool(() => blocksNow(r.env, user, pack, ask));
-      const out = await runDraft(r.env, user, { ask, pack, sources, blocks, parent: null, rail: { page: 'Email', option: 'draft:email', record: pack.person.ref } });
+      const prep = await asTool(() => mail().prepareDraft(r.env, user, body));
+      inGrant(r, project, prep.pack);
+      const out = await asTool(() => prep.run({ page: 'Email', option: 'draft:email', record: prep.pack.person.ref }));
       if (out.ok) {
         const { uid, subject, body: text, sources: quoted } = out.draft;
         return { draft: { uid, subject, body: text, sources: quoted }, sent: false, open_in: '/email' };

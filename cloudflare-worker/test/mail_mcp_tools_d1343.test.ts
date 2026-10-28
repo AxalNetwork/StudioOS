@@ -11,6 +11,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { callTool, listedTools, registeredTools } from '../src/mcp/server.ts';
+import { bindMailTools } from '../src/services/mail/mcpTools.ts';
 import { SCOPES } from '../src/mcp/oauth.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import { METERING_POLICY, toolOperation } from '../src/services/metering.ts';
@@ -67,6 +68,21 @@ test('the two tools, their scopes and their price: neither sends, and no tool se
   // Mutation checked: register a mail_send → this fails.
   assert.deepEqual(registeredTools().filter((t) => /send/i.test(t.name)).map((t) => t.name), [], 'no tool sends: sending stays a press in Axal');
   for (const n of ['mail_context', 'mail_draft']) assert.equal(METERING_POLICY.operations[toolOperation(n)].price_microusd, 0, `${n}: the model run is the router's charge`);
+});
+
+test('before the entry hands the services in, a tool answers 503 and runs nothing; the server imports none of them', async () => {
+  const f = await fixture();
+  try {
+    const early = await call(f, 'mail_context', { person: 'interviewee:11' }, ['mail:read']);
+    assert.equal(early.isError, true);
+    assert.match(JSON.stringify(body(early)), /Email is not available right now/);
+    assert.equal(f.runs.length, 0);
+  } finally { f.close(); }
+  // `auth.ts` reaches the MCP server, so neither the server nor the mail tools import a mail service (D707, D714).
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/mcp/tools/mail.ts', import.meta.url), 'utf8');
+  assert.deepEqual(src.match(/from '\.\.\/\.\.\/services\/mail\/(?!intents')[^']+'/g), null, 'only the import-free intents table');
+  bindMailTools();
 });
 
 test('each tool refuses without its scope, and is not listed without it', async () => {
