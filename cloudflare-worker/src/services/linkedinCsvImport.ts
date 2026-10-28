@@ -387,6 +387,40 @@ export async function ownContact(env: Env, owner: number, id: number) {
   return env.DB.prepare('SELECT id, name, company, title, email, linkedin_url, connected_on, source FROM network_connections WHERE id = ? AND user_id = ?')
     .bind(id, owner).first<any>();
 }
+/**
+ * D1352 (#3567): the member's own book, for Network › Relationships. Each row
+ * carries its sources (so the page can say "From LinkedIn"), its note count
+ * and its open follow-ups. Every statement binds the owner.
+ */
+export const BOOK_PAGE = 50;
+export async function bookOf(env: Env, owner: number, q: string, page: number) {
+  const term = q.trim().toLowerCase().slice(0, 100);
+  const like = `%${term.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  const offset = Math.max(0, page - 1) * BOOK_PAGE;
+  const rows = (await env.DB.prepare(
+    `SELECT n.id, n.name, n.email, n.company, n.title, n.linkedin_url, n.connected_on, n.created_at,
+            (SELECT GROUP_CONCAT(DISTINCT s.source) FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id) AS sources,
+            (SELECT COUNT(*) FROM network_contact_notes x WHERE x.owner_user_id = ? AND x.contact_id = n.id) AS notes,
+            (SELECT COUNT(*) FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id AND t.done_at IS NULL) AS open_tasks
+       FROM network_connections n
+      WHERE n.user_id = ? AND (? = '' OR lower(n.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(n.company, '')) LIKE ? ESCAPE '\\')
+      ORDER BY n.name COLLATE NOCASE, n.id LIMIT ? OFFSET ?`,
+  ).bind(owner, owner, owner, owner, term, like, like, BOOK_PAGE, offset).all<any>()).results || [];
+  const total = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM network_connections n
+      WHERE n.user_id = ? AND (? = '' OR lower(n.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(n.company, '')) LIKE ? ESCAPE '\\')`,
+  ).bind(owner, term, like, like).first<{ n: number }>();
+  return {
+    total: Number(total?.n ?? 0), page: Math.max(1, page), page_size: BOOK_PAGE,
+    contacts: rows.map((r) => ({
+      id: Number(r.id), name: r.name, email: r.email, company: r.company, title: r.title, linkedin_url: r.linkedin_url,
+      connected_on: r.connected_on, created_at: r.created_at,
+      sources: r.sources ? String(r.sources).split(',').sort() : [],
+      notes: Number(r.notes), open_tasks: Number(r.open_tasks),
+    })),
+  };
+}
+
 export async function notesOf(env: Env, owner: number, contactId: number) {
   return ((await env.DB.prepare('SELECT uid, body, created_at FROM network_contact_notes WHERE owner_user_id = ? AND contact_id = ? ORDER BY created_at DESC, id DESC LIMIT 200')
     .bind(owner, contactId).all<any>()).results ?? []);
