@@ -288,6 +288,7 @@ test('OAuth: a forged, revoked or MCP-off token is 401 invalid_token; the client
   assert.deepEqual([again.status, again.body.replaced], [201, true]);
   assert.notEqual(again.body.client_id, client.client_id);
   assert.equal(await f.env.OAUTH_KV.get(`client:${client.client_id}`), null, 'the old client no longer exists');
+  assert.equal((await get(f.env, '/me', token)).status, 401, 'the provider also revokes the old client token');
   // With the OAuth server off, OAuth tokens are refused here too.
   const off = { ...f.env, MCP_SERVER_ENABLED: 'false' };
   assert.deepEqual((await get(off, '/me', token)).body.error, 'invalid_token');
@@ -474,4 +475,42 @@ test('OAuth client replacement: two stale ready snapshots contend on the real D1
   const winner = results.find((r) => r.status === 201)!;
   assert.deepEqual(await clientIds(f.env), [`client:${winner.body.client_id}`], 'the CAS loser never creates a provider client');
   assert.equal(storedState(f).current.client_id, winner.body.client_id);
+});
+
+test('OAuth connection test: bad bearers are throttled before provider reads, including a valid token from that IP', async () => {
+  const f = fixture();
+  const { token } = await lovableToken(f);
+  const ip = '192.0.2.81';
+  const now = Date.now;
+  Date.now = () => 1793196000000;
+  try {
+    for (let i = 0; i < 10; i++) assert.equal((await get(f.env, '/me', 'invalid:grant:token', { ip })).status, 401);
+    const realGet = f.env.OAUTH_KV.get.bind(f.env.OAUTH_KV);
+    let reads = 0;
+    f.env.OAUTH_KV.get = async (...args: any[]) => { reads++; return realGet(...args); };
+    const limited = await get(f.env, '/me', token, { ip });
+    assert.deepEqual([limited.status, limited.body.error, limited.headers.get('Retry-After')], [429, 'rate_limited', '60']);
+    assert.equal(reads, 0, 'throttled IP never reaches the provider');
+    f.env.RATE_LIMITS.get = async () => { throw new Error('counter unavailable'); };
+    assert.equal((await get(f.env, '/me', token, { ip: '192.0.2.82' })).status, 429, 'counter failure closes the gate');
+  } finally { Date.now = now; }
+});
+
+test('OAuth connection test: /me shares the existing grant and member minute limits without double-counting tool reads', async () => {
+  const f = fixture();
+  const { token } = await lovableToken(f);
+  const now = Date.now;
+  const fixed = now();
+  Date.now = () => fixed;
+  try {
+    for (let i = 0; i < 59; i++) assert.equal((await get(f.env, '/me', token)).status, 200);
+    assert.equal((await get(f.env, '/companies', token)).status, 200, 'one tool call consumes the 60th grant call once');
+    const limited = await get(f.env, '/me', token);
+    assert.deepEqual([limited.status, limited.body.error, limited.headers.get('Retry-After')], [429, 'rate_limited', '60']);
+    const [member, grant] = token.split(':');
+    const minute = Math.floor(fixed / 60000);
+    await f.env.RATE_LIMITS.put(`mcp_rl:${grant}:${minute}`, '0');
+    await f.env.RATE_LIMITS.put(`mcp_rl:user:${member}:${minute}`, '120');
+    assert.equal((await get(f.env, '/me', token)).status, 429, 'the member-wide limit also applies');
+  } finally { Date.now = now; }
 });

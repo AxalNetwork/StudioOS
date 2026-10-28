@@ -34,7 +34,7 @@ import { MCP_PATH, authenticateKey, bearerOf, mcpEnabled, providerOptions, publi
 import { looksLikeKey, type KeyRow } from '../services/apiKeys';
 import type { GrantProps } from '../mcp/grants';
 import { callTool, liveCompanies, registeredTools } from '../mcp/server';
-import { grantUser, ToolRefused } from '../mcp/grants';
+import { grantUser, keyFailuresExceeded, recordKeyFailure, withinGrantLimit, withinUserLimit, ToolRefused } from '../mcp/grants';
 import { refuse } from '../util/refusal';
 
 /** Who is calling: a member API key, or an OAuth grant from Axal VC's own authorization server. */
@@ -82,6 +82,10 @@ const tokenRefusal = (c: C) => {
   c.header('WWW-Authenticate', 'Bearer error="invalid_token", error_description="invalid_token"');
   return refuse(c, 401, { code: 'invalid_token', message: 'That sign-in is not valid or has expired. Connect Axal VC again.' });
 };
+const rateRefusal = (c: C) => {
+  c.header('Retry-After', '60');
+  return refuse(c, 429, { code: 'rate_limited', message: 'Too many requests. Wait a minute and try again.' });
+};
 
 /**
  * An OAuth access token from Axal VC's own authorization server (the one
@@ -103,8 +107,13 @@ async function oauthPrincipal(env: Env, bearer: string): Promise<Principal | nul
 connectorApi.use('*', async (c, next) => {
   const bearer = bearerOf(c.req.raw);
   if (bearer && !looksLikeKey(bearer)) {
+    const ip = c.req.header('CF-Connecting-IP') || 'unknown';
+    if (await keyFailuresExceeded(c.env, ip)) return rateRefusal(c);
     const who = await oauthPrincipal(c.env, bearer);
-    if (!who) return tokenRefusal(c);
+    if (!who) {
+      await recordKeyFailure(c.env, ip);
+      return tokenRefusal(c);
+    }
     c.set('who', who);
     return next();
   }
@@ -127,6 +136,9 @@ connectorApi.get('/me', async (c) => {
     if (e instanceof ToolRefused) return who.key ? refuse(c, 401, { code: 'revoked_key', message: 'That API key has been revoked.' }) : tokenRefusal(c);
     throw e;
   }
+  // Tool routes already count these in callTool; the connection test has no tool.
+  if (!who.key && who.grantId && (!(await withinGrantLimit(c.env, who.grantId))
+    || !(await withinUserLimit(c.env, user.id)))) return rateRefusal(c);
   const companies = await liveCompanies(c.env, who.props, user);
   return c.json({
     connected: true,
