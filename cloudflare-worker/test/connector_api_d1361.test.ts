@@ -331,14 +331,15 @@ for (const replacing of [false, true]) test(`OAuth client ${replacing ? 'replace
 });
 
 test('OAuth client writes: fresh TOTP and recently verified TOTP allow writes, but a strong ordinary admin is refused', async () => {
-  const f = fixture();
+  const f = fixture(); superAdmin(f);
+  f.db.prepare('DELETE FROM super_admins WHERE user_id = ?').run(ADMIN);
   const ordinary = await session(f.env, ADMIN, 'admin');
   const post = (token: string) => http(f.env, '/api/admin/connector-clients/lovable', {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}',
   });
   assert.equal((await post(ordinary)).status, 403, 'TOTP never grants Super Admin elevation');
   assert.deepEqual(await clientIds(f.env), [], 'ordinary admin never mints');
-  superAdmin(f);
+  f.db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(ADMIN);
   const first = await post(ordinary);
   assert.equal(first.status, 201, JSON.stringify(first.body));
   assert.equal(first.body.replaced, false);
