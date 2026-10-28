@@ -314,6 +314,6 @@ test('mounted self-read refuses anonymous requests; unconfigured top-up has no p
   const headers={Authorization:`Bearer ${token}`};
   assert.equal((await budgetRoute.request('/me',{headers},f.env)).status,200);
   const p=await budgetRoute.request('/top-up',{headers},f.env);assert.equal(p.status,200);// D755: D750's `configured` stays beside the pack fields; nothing is set up, so the state is unset.
-  assert.deepEqual(await p.json(),{configured:false,state:'unset',packs:[],on_hold:false,latest:null});
+  assert.deepEqual(await p.json(),{configured:false,state:'unset',packs:[],on_hold:false,latest:null,custom:null});
  }finally{f.db.close();}
 });

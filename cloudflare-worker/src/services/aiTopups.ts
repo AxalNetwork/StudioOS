@@ -38,20 +38,47 @@ export function judge(id:string,found:{product:{id:string;name:string;active:boo
 }
 
 export async function readAiTopupProduct(env:Env, now:number=Date.now()):Promise<AiTopupReading> {
-  const raw=(env as any).STRIPE_PRICE_AI_TOPUP;
+  return readTopupPrice(env,(env as any).STRIPE_PRICE_AI_TOPUP,now);
+}
+/** One configured price, judged; a price the mirror lacks is asked of Stripe once per window (decision 2). */
+async function readTopupPrice(env:Env, raw:unknown, now:number):Promise<AiTopupReading> {
   if (raw === undefined || raw === null || raw === '') return {configured:false};
   if (typeof raw !== 'string' || !/^price_[A-Za-z0-9]+$/.test(raw)) return {configured:true,state:'not_ready',reason:'bad_config'};
   const id=raw;
-  const {findCatalogProductByPriceId,fetchAndMirrorPrice}=await import('./catalog');
+  const {findCatalogProductByPriceId}=await import('./catalog');
   const found=await findCatalogProductByPriceId(env,id);
   if (found) return judge(id,found);
-  // Not in the mirror: ask Stripe for this one price, once per window (decision 2).
-  const last=lastMirrorFetch.get(id);
-  if (last !== undefined && now-last < MIRROR_FETCH_WINDOW_MS) return {configured:true,state:'not_ready',reason:'missing_from_catalog'};
-  lastMirrorFetch.set(id,now);
-  const fetched=await fetchAndMirrorPrice(env,id);
+  const fetched=await mirrorPriceOnce(env,id,now);
   if (fetched.state !== 'mirrored') return {configured:true,state:'not_ready',reason:fetched.state==='mode_mismatch'?'mode_mismatch':'missing_from_catalog'};
   return judge(id,fetched);
+}
+/**
+ * D1366: fetch one price the catalog mirror lacks into it, at most once per
+ * window per isolate, so a configured price goes on sale without a Sync from
+ * Stripe. `skipped` inside the window.
+ */
+export async function mirrorPriceOnce(env:Env, id:string, now:number=Date.now()) {
+  const last=lastMirrorFetch.get(id);
+  if (last !== undefined && now-last < MIRROR_FETCH_WINDOW_MS) return {state:'skipped' as const};
+  lastMirrorFetch.set(id,now);
+  const {fetchAndMirrorPrice}=await import('./catalog');
+  return fetchAndMirrorPrice(env,id);
+}
+
+/**
+ * D1366: the custom amount. STRIPE_PRICE_AI_TOPUP_UNIT names a one-time USD
+ * price of exactly $1; a member buys it in any whole quantity from
+ * `AI_TOPUP_UNIT.minDollars` to `maxDollars`, so $N of tokens is N of it.
+ */
+export const AI_TOPUP_UNIT = Object.freeze({ unitCents: 100, minDollars: 5, maxDollars: 500 });
+export async function readAiTopupUnit(env:Env, now:number=Date.now()):Promise<AiTopupReading> {
+  const r=await readTopupPrice(env,(env as any).STRIPE_PRICE_AI_TOPUP_UNIT,now);
+  if (r.configured && r.state==='ready' && r.product.unit_amount !== AI_TOPUP_UNIT.unitCents) return {configured:true,state:'not_ready',reason:'bad_amount'};
+  return r;
+}
+export function aiTopupUnitPriceId(env:Env):string|null {
+  const raw=(env as any).STRIPE_PRICE_AI_TOPUP_UNIT;
+  return typeof raw === 'string' && /^price_[A-Za-z0-9]+$/.test(raw) ? raw : null;
 }
 
 /** What a member is told: the state, never the reason (decision 3). */

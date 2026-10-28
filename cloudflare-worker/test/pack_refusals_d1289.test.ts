@@ -37,8 +37,10 @@ test('every pack refusal tokenPackQuote can answer has a sentence and a status; 
   const union = /export type TokenPackRefusal = ([^;]+);/.exec(AI_CREDITS);
   assert.ok(union, 'the refusal union is where it was');
   const declared = [...union![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
-  const body = AI_CREDITS.slice(AI_CREDITS.indexOf('export async function tokenPackQuote'));
-  const returned = [...new Set([...body.slice(0, body.indexOf('\n}\n')).matchAll(/return \{ error: '([a-z_]+)' \}/g)].map((m) => m[1]))].sort();
+  // D1366: the quote, its shared limits and the custom amount's quote are where its refusals are returned.
+  const fn = (name: string) => { const body = AI_CREDITS.slice(AI_CREDITS.indexOf(name)); return body.slice(0, body.indexOf('\n}\n')); };
+  const body = ['export async function tokenPackQuote', 'async function accountLimits', 'async function customAmountQuote'].map(fn).join('\n');
+  const returned = [...new Set([...body.matchAll(/return \{ error: '([a-z_]+)' \}/g)].map((m) => m[1]))].sort();
   assert.ok(returned.length >= 7, 'the quote still returns its refusals');
   assert.deepEqual(Object.keys(TOKEN_PACK_REFUSALS).sort(), declared, 'one sentence per declared code');
   for (const code of returned) assert.ok(code in TOKEN_PACK_REFUSALS, `${code} has no sentence`);
