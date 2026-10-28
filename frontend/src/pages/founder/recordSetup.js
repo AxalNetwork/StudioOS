@@ -40,7 +40,7 @@ export const NOT_STORED = 'Not saved yet: the Worker does not store this field.'
  */
 export const MODES = [
   { key: 'in_person', label: 'In person', audio: true, start: 'Start recording', note: 'Put the phone on the table between you. It records this device’s microphone.' },
-  { key: 'video', label: 'Call', audio: true, start: 'Start the call', note: 'Paste the meeting link. Eadwyn AI joins the call where it can, or Axal imports the call’s own transcript from your connected account after it ends. This device’s microphone is not used.' },
+  { key: 'video', label: 'Call', audio: true, start: 'Start the call', note: 'Paste the meeting link or create a meeting. Eadwyn AI joins as a visible participant and records after being admitted. When the call ends, Axal VC transcribes the recording. This device’s microphone is not used.' },
   { key: 'phone', label: 'Call', audio: true, start: 'Start recording', note: 'Put the call on speaker. It records this device’s microphone.' },
   { key: 'text', label: 'Text chat', audio: false, start: 'Import the chat', note: 'No audio. Import the conversation from the app it happened in, or paste it.' },
 ];

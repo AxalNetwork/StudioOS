@@ -570,8 +570,7 @@ export default function RecordLightbox({
     <Lightbox label="Record a session" eyebrow="Validate · Customer research" title="Record a session" sub="It lands in Interviews when you stop."
       onClose={onClose} initialFocus={nameRef} returnFocusTo={returnFocusTo} testId="record-lightbox" {...asPage}
       footer={(
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-[11.5px] text-axal-faint">Runs on Cloudflare Workers AI</span>
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex items-center gap-2">
             <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-cancel">Cancel</button>
             <button type="button" onClick={() => submit()} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : captureReason ? 'record-capture-reason' : 'record-start-reason')}

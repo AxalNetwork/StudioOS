@@ -77,7 +77,7 @@ export function fixture({ monthMicro = 500_000_000 } = {}) {
   const AI = withGuard({
     async run(model: string, input: any) {
       if (/whisper|nova/.test(model)) {
-        stt.push(Array.isArray(input?.audio) ? input.audio.length : 0);
+        stt.push(typeof input?.audio === 'string' ? Buffer.from(input.audio, 'base64').length : Array.isArray(input?.audio) ? input.audio.length : 0);
         return { text: SAID, transcription_info: { language: 'en' }, segments: [{ start: 0, end: 3, text: SAID }] };
       }
       return { response: JSON.stringify({ sentences: [], placements: [] }) };

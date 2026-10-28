@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
 import { verdictApi } from '../../lib/api/verdict';
 import { WorkerRail, Unreadable } from '../../ui';
+import { EadwynButton } from '../../ui/EadwynPanel.jsx';
 import RailFrame from '../../ui/RailFrame';
 import { RailCrumbsProvider, useRailOption, useSetRailCrumbs } from '../../ui/railCrumbs';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
@@ -1039,8 +1040,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D703 step 8: the bar every phone page below 1024px draws, as a function
   // of the page's own title, sub and Back (the `Lightbox` page mode calls it).
   // Its back label names where Back goes (decision 5).
-  const phoneBar = (backLabel) => ({ title, sub, onBack }) => (
-    <CycleBar back={{ label: backLabel, onClick: onBack }} title={title} sub={sub} eadwynLabel={`${name} · ${title}`} />
+  const phoneBar = (backLabel, showEadwyn = true) => ({ title, sub, onBack }) => (
+    <CycleBar back={{ label: backLabel, onClick: onBack }} title={title} sub={sub} eadwynLabel={showEadwyn ? `${name} · ${title}` : undefined} />
   );
   // An Add or Edit page's Back returns to the module, or in record mode to the record (step 9).
   const pageBack = record ? (recordState.data?.title || moduleName || name) : (moduleName || name);
@@ -1274,8 +1275,13 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       {record && recordState.confirm}
       {lightbox && Mount && projectId && (
         <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
-          asPage={phone ? { pageBelow: 'lg', bar: phoneBar(moduleName || name), pageClass: PHONE_GUTTER } : undefined}
+          asPage={phone ? { pageBelow: 'lg', bar: phoneBar(moduleName || name, cycle !== 'validate'), pageClass: PHONE_GUTTER } : undefined}
           onChanged={() => { dirty.current = true; }} />
+      )}
+      {actionPage && cycle === 'validate' && (
+        <div className="px-[22px] pb-6" data-testid="record-eadwyn-entry">
+          <EadwynButton label="Validate · Record a session" inline />
+        </div>
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
       <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab ? null : recordId ?? null} />

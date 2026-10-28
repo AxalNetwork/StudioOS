@@ -7,7 +7,7 @@
  *
  *   @cf/openai/whisper                 in  { audio: number[] }
  *                                      out { text, words: [{ word, start, end }] }
- *   @cf/openai/whisper-large-v3-turbo  in  { audio }   (as the router has always sent it)
+ *   @cf/openai/whisper-large-v3-turbo  in  { audio: base64 string }
  *                                      out { text, transcription_info: { language },
  *                                            segments: [{ start, end, text }] }
  *   @cf/deepgram/nova-3                in  { audio: { body, contentType }, diarize,
@@ -58,7 +58,15 @@ export function audioInputFor(model: string, bytes: Uint8Array, mime: string, la
       smart_format: true,
     };
   }
-  if (model === WHISPER_TURBO && language) return { audio: Array.from(bytes), language };
+  if (model === WHISPER_TURBO) {
+    // Turbo's binding schema takes base64 (not Whisper v1's number array).
+    // Bound the spread so a normal recording chunk cannot exceed V8's argument limit.
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 32768) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    }
+    return { audio: btoa(binary), ...(language ? { language } : {}) };
+  }
   return { audio: Array.from(bytes) };
 }
 

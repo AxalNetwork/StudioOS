@@ -103,12 +103,12 @@ test('a server render draws the panel and no floating button: the portal waits f
   assert.doesNotMatch(h, /worker-rail-sheet/);
 });
 
-test('below 1024px the panel gives way to the button; at and above it the button is hidden', () => {
+test('the floating launcher is hidden on mobile and desktop', () => {
   const at = CSS.indexOf('@media (max-width: 1023.98px)');
   assert.ok(at > 0, 'no phone breakpoint in workerRail.css');
   const phone = CSS.slice(at, CSS.indexOf('\n}\n', at));
   assert.match(phone, /aside\.fwr \{ display: none; \}/, 'the panel still draws under the page on a phone');
-  assert.match(phone, /\.fwr-fab \{[^}]*position: fixed/);
+  assert.match(phone, /\.fwr-fab \{[^}]*display: none;/);
   assert.match(phone, /\.fwr-sheet-layer \{ display: block;/);
   const base = CSS.slice(0, at);
   assert.match(base, /\.fwr-fab,\s*\.fwr-sheet-layer \{ display: none; \}/, 'the button shows on desktop');
