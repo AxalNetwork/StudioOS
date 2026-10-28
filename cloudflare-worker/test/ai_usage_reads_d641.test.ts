@@ -22,6 +22,7 @@ import { loadMyAiSpend, lastDays, SPEND_DAYS } from '../src/services/aiSpend.ts'
 import { TASK_LABELS, MODEL_NAMES, RETIRED_MODELS, taskLabel } from '../src/services/aiCatalog.ts';
 import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, IMAGE_PRICED_MODELS } from '../src/services/aiRouter.ts';
 import ai, { rateCard } from '../src/routes/ai.ts';
+import { MODEL_CONNECTIONS } from '../src/services/ai/moduleConnections.ts';
 import { createJWT } from '../src/auth.ts';
 
 const LOG = `
@@ -216,7 +217,7 @@ test('the rate card covers every model ROUTE can use, priced from the router\'s 
   // a model priced only over a WebSocket (Flux) has a row too.
   const wsOnly = Object.keys(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET).filter((id) => !(id in PRICE_USD_PER_AUDIO_MINUTE));
   // D766: and each image model the router prices, by its size and steps.
-  assert.equal(card.length, Object.keys(PRICE_USD_PER_1M_TOKENS).length + Object.keys(PRICE_USD_PER_AUDIO_MINUTE).length + wsOnly.length + IMAGE_PRICED_MODELS.size);
+  assert.deepEqual([...byId.keys()].sort(), [...new Set([...Object.keys(PRICE_USD_PER_1M_TOKENS), ...Object.keys(PRICE_USD_PER_AUDIO_MINUTE), ...wsOnly, ...IMAGE_PRICED_MODELS, ...Object.keys(MODEL_CONNECTIONS)])].sort());
   assert.equal(byId.size, card.length, 'a model is listed twice');
   for (const [id, p] of Object.entries(PRICE_USD_PER_1M_TOKENS)) {
     assert.deepEqual(
@@ -229,16 +230,16 @@ test('the rate card covers every model ROUTE can use, priced from the router\'s 
   }
   // No price is 0: an input rate on every token model, an output rate on every
   // model that produces output (an embedding produces none), a minute rate on audio.
-  const embeds = new Set((Object.values(ROUTE) as any[]).filter((e) => e.isEmbed).map((e) => e.model));
   for (const [id, perMinute] of Object.entries(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET)) {
     assert.equal(byId.get(id).per_audio_minute_websocket_usd, perMinute, id);
   }
   for (const m of card as any[]) {
+    if (m.cost?.images != null || m.cost?.characters != null) { assert.ok(Object.values(m.cost).every((v: any) => v > 0), `${m.id} has an unpriced specialist unit`); continue; }
     if (m.image === true) { assert.ok(Object.values(m.cost).length > 0 && Object.values(m.cost).every((v: any) => v > 0), `${m.id} has an image price of 0`); continue; }
     if (m.per_audio_minute_usd !== undefined) { assert.ok(m.per_audio_minute_usd > 0, m.id); continue; }
     if (m.per_audio_minute_websocket_usd !== undefined) { assert.ok(m.per_audio_minute_websocket_usd > 0, m.id); continue; }
     assert.ok(m.in_per_1m_usd > 0, `${m.id} has an input price of 0`);
-    if (!embeds.has(m.id)) assert.ok(m.out_per_1m_usd > 0, `${m.id} has an output price of 0`);
+    if (m.cost?.tokens_out != null) assert.ok(m.out_per_1m_usd > 0, `${m.id} has an output price of 0`);
   }
   // Names are readable, never the bare id; the deprecated 8b is retired and no other.
   for (const m of card as any[]) {

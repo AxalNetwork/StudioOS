@@ -14,14 +14,15 @@
  */
 import matrix from './railMatrix.json';
 import * as catalogue from './catalogue';
+import { chatCompatible, withModuleModels } from './moduleConnections';
 
-export type RailModel = { id: string; role: string; line: string };
+export type RailModel = { id: string; role: string; line: string; optional?: boolean };
 export type RailRow = { pageKey: string; kind: string; routeTask: string; models: RailModel[] };
 export type RailOptionRow = RailRow & { optionKey: string; optionLabel: string; handler: string };
 
-const ROWS: readonly RailRow[] = matrix.rows;
+const ROWS: readonly RailRow[] = matrix.rows.map(withModuleModels);
 const BY_KEY = new Map(ROWS.map((r) => [r.pageKey.toLowerCase(), r]));
-const OPTIONS: readonly RailOptionRow[] = matrix.options;
+const OPTIONS: readonly RailOptionRow[] = matrix.options.map(withModuleModels);
 const OPTIONS_BY_PAGE = new Map<string, RailOptionRow[]>();
 for (const o of OPTIONS) {
   const k = o.pageKey.toLowerCase();
@@ -89,8 +90,7 @@ export type RailNeed = { vision: boolean };
  */
 export function canRun(id: string, need: RailNeed, env: catalogue.CatalogueSwitches): boolean {
   const m = catalogue.modelById(id);
-  if (!m || m.kind !== 'Text Generation' || !catalogue.isOffered(m, env)) return false;
-  return !need.vision || m.capabilities.includes('Vision');
+  return !!m && catalogue.isOffered(m, env) && chatCompatible(id, need.vision);
 }
 
 /** The row's models a run may use, in the row's order. */
@@ -126,6 +126,6 @@ export function resolveRailChain(
   const fallback = (demoted ? fits.find((id) => !paid(id)) : null) ?? fits[0];
   const primary = picks.caller ?? stored ?? fallback;
   const source = picks.caller ? 'caller' : stored ? 'pick' : 'default';
-  const chain = fits.filter((id) => id !== primary && !(demoted && paid(id)));
+  const chain = fits.filter((id) => id !== primary && !row.models.find(m => m.id === id)?.optional && !(demoted && paid(id)));
   return { ok: true, primary, chain, source };
 }

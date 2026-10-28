@@ -41,6 +41,7 @@ import { run as aiRun, __resetForTest } from '../src/services/aiRouter.ts';
 import { modelById } from '../src/services/ai/catalogue.ts';
 import { billingMode, multiplierFor } from '../src/services/ai/pricing.ts';
 import { unitPrices } from '../src/routes/ai.ts';
+import { withModuleModels } from '../src/services/ai/moduleConnections.ts';
 
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
@@ -362,7 +363,7 @@ test('every option a profile registers that runs a model has a row, with its own
     assert.equal(row!.kind, o.kind);
     assert.equal(row!.routeTask, `rail_${o.kind}`);
     const kindRow = ROWS.find((r) => r.kind === o.kind)!;
-    assert.deepEqual(row!.models, kindRow.models, `${o.key}: an option takes its kind's models`);
+    assert.deepEqual(row!.models, withModuleModels({ ...kindRow, pageKey: page.key }).models, `${o.key}: an option takes its kind's models and connected alternatives`);
   }
   for (const o of registered.filter((x: any) => x.handler === 'none') as any[]) {
     const page = optionPageKey(CANVAS, o.profile, o.page);
@@ -406,7 +407,7 @@ test('a rail run resolves the caller\'s model, then the pick, then the default a
   assert.deepEqual(resolveRailChain(CHAT, text, OFF, { caller: '@cf/qwen/qwq-32b', page: b }), { ok: true, primary: '@cf/qwen/qwq-32b', chain: [a, b, c], source: 'caller' });
   assert.deepEqual(resolveRailChain(CHAT, text, OFF, { caller: '@cf/baai/bge-m3' }), { ok: false, refusal: 'model_not_offered', model: '@cf/baai/bge-m3' });
   // A vision run takes only the row's models that read images.
-  assert.deepEqual(compatibleModels(VISION, { vision: true }, OFF), ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct']);
+  assert.deepEqual(compatibleModels(VISION, { vision: true }, OFF), ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/moondream/moondream3.1-9B-A2B']);
   assert.equal((resolveRailChain(CHAT, { vision: true }, OFF, { caller: '@cf/zai-org/glm-4.7-flash' }) as any).refusal, 'model_not_offered');
   // A row with no model for the run leaves the task's route in charge.
   const searchRow = ROWS.find((r) => r.kind === 'search')!;

@@ -56,6 +56,9 @@ export interface ModelFacts {
  * each model runs at its own default until a task asks for one.
  */
 export const REASONING_CONTROLS: Readonly<Record<string, ReasoningControl>> = Object.freeze({
+  '@cf/zai-org/glm-5.2': { via: 'none' },
+  '@cf/qwen/qwen3-30b-a3b-fp8': { via: 'none' },
+  '@cf/qwen/qwen3.8-27b': { via: 'none' },
   '@cf/openai/gpt-oss-120b': { via: 'reasoning_effort' },
   '@cf/openai/gpt-oss-20b': { via: 'reasoning_effort' },
   '@cf/deepseek-ai/deepseek-v4-flash-0731': { via: 'reasoning_effort' },
@@ -76,6 +79,9 @@ export const REASONING_CONTROLS: Readonly<Record<string, ReasoningControl>> = Ob
  * 2026-10-17, as #2018 names it.
  */
 export const VISION_MODELS: ReadonlySet<string> = new Set([
+  '@cf/moonshotai/kimi-k2.7-code',
+  '@cf/zai-org/glm-5.3-flash',
+  '@cf/qwen/qwen3.8-27b',
   '@cf/google/gemma-4-26b-a4b-it',
   '@cf/meta/llama-4-scout-17b-16e-instruct',
   '@cf/meta/llama-3.2-11b-vision-instruct',
@@ -116,6 +122,7 @@ export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'tr
 const DEFAULT_FACTS: ModelFacts = Object.freeze({ kind: 'text', context_window: null, paid_only: false }) as ModelFacts;
 
 function interimFacts(model: string): ModelFacts | null {
+  if (model === '@cf/moondream/moondream3.1-9B-A2B') return { kind: 'vision', context_window: 32_768, paid_only: false, vision: true };
   const reasoning = REASONING_CONTROLS[model];
   const vision = VISION_MODELS.has(model) ? { vision: true } : {};
   if (reasoning) return { kind: 'reasoning', context_window: null, paid_only: false, reasoning, ...vision };
@@ -148,7 +155,7 @@ export type Need = 'chat' | 'vision' | 'rerank' | 'embedding' | 'translation' | 
 
 export function canServe(facts: ModelFacts, need: Need): boolean {
   switch (need) {
-    case 'vision': return (facts.kind === 'text' || facts.kind === 'reasoning') && facts.vision === true;
+    case 'vision': return (facts.kind === 'text' || facts.kind === 'reasoning' || facts.kind === 'vision') && facts.vision === true;
     case 'rerank': return facts.kind === 'rerank';
     case 'embedding': return facts.kind === 'embedding';
     case 'translation': return facts.kind === 'translation';
@@ -243,6 +250,8 @@ export function sessionAffinity(userId: number | undefined, page: string | null 
  * kind bills by; the rest are absent, never zero-filled.
  */
 export interface Units {
+  /** Number of image classification inferences (not vision input tokens). */
+  images?: number;
   tokens_in?: number;
   tokens_cached?: number;
   tokens_out?: number;

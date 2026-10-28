@@ -33,8 +33,11 @@ import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
 import { railCrumbs, railOptionRows, railOptionsOn, railRows, railSectionOf, resolveRail, resolveRailOption, rowOffers, type RailRow } from '../services/ai/railMatrix';
 import { railFor, refuseAssistOff } from '../util/railContext';
+import moduleRoutes from './ai_modules';
+import { MODEL_CONNECTIONS, moduleConnections } from '../services/ai/moduleConnections';
 
 const ai = new Hono<{ Bindings: Env }>();
+ai.route('/modules', moduleRoutes);
 
 /**
  * A page path exactly as the router records one (see `/me/spend`). Every fixed
@@ -163,6 +166,7 @@ export function unitPrices(id: string, multiplier: number): { cost: Record<strin
 /** Every model the router's three price views hold, priced in every unit it is billed in. */
 export function routerRates(multiplier: number) {
   const ids = new Set([
+    ...Object.keys(MODEL_CONNECTIONS),
     ...Object.keys(PRICE_USD_PER_1M_TOKENS),
     ...Object.keys(PRICE_USD_PER_AUDIO_MINUTE),
     ...Object.keys(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET),
@@ -193,7 +197,7 @@ export function rateCard(licence = '') {
   const row = (id: string) => ({
     id, name: MODEL_NAMES[id] ?? id, ...(RETIRED_MODELS.has(id) ? { retired: true } : {}), ...unitPrices(id, multiplier),
   });
-  return [
+  const rows = [
     ...Object.entries(PRICE_USD_PER_1M_TOKENS).map(([id, p]) => ({
       ...row(id), in_per_1m_usd: p.in, out_per_1m_usd: p.out,
     })),
@@ -208,6 +212,8 @@ export function rateCard(licence = '') {
     // size and steps (D761 PR 4); its `cost` and `billed` carry each unit.
     ...[...IMAGE_PRICED_MODELS].map((id) => ({ ...row(id), image: true })),
   ];
+  const listed = new Set(rows.map(m => m.id));
+  return [...rows, ...Object.keys(MODEL_CONNECTIONS).filter(id => !listed.has(id)).map(id => row(id))];
 }
 
 ai.get('/rates', async (c) => {
@@ -522,6 +528,7 @@ ai.get('/rail', async (c) => {
     page: row.pageKey,
     crumbs: option ? [...railCrumbs(row), optionRow?.optionLabel ?? option] : railCrumbs(row),
     kind: active.kind,
+    connections: moduleConnections(active, c.env),
     models: view(active),
     options,
     pick,

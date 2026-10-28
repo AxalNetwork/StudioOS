@@ -183,6 +183,7 @@ const FORWARDED: Record<string, string[]> = {
 
 /** Every call site's fixed name, by file — the table D552.md lists. */
 const EXPECTED: Record<string, string[]> = {
+  'routes/ai_modules.ts': ['AI_SURFACE.moduleOperations'],
   'routes/founder_validate.ts': ['AI_SURFACE.validate', 'AI_SURFACE.validateInterviews'],
   // D657 — a session's final transcript, on the same page as the interview log.
   // D685 (#1584) moved the call into the processing service the route and the job share.
