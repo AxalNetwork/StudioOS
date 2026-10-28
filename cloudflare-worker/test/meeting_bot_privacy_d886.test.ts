@@ -9,23 +9,21 @@ import { SignJWT } from 'jose';
 import { world, post, syntheticLink, hmacSecret } from './_meeting_bot_fixture.ts';
 import { call, FOUNDER, OTHER, JWT_SECRET, segmentCount, chunkCount } from './_call_audio_fixture.ts';
 import { tableFromBaseline } from './_baseline.mjs';
-import { MeetingBotRun } from '../src/durable-objects/meeting-bot-run.ts';
 import callbacks from '../src/routes/meeting_bot_callbacks.ts';
 import { botRow } from '../src/services/meetingBots.ts';
 import { purgeExpiredCallAudio } from '../src/services/callAudioRetention.ts';
 import { runInterviewProcessJob } from '../src/services/interviewProcessing.ts';
 import { withGuard } from './_guard_stub.mjs';
-import { RuntimeHost } from '../../meeting-bot/src/runtime.ts';
 import { runBot } from '../../meeting-bot/src/lifecycle.ts';
 import { httpTransport, signRequest } from '../../meeting-bot/src/callback.ts';
 import { FakeAdapter } from '../../meeting-bot/src/fakeAdapter.ts';
 import { FakeClock, StubCallback, tone } from '../../meeting-bot/test/_harness.ts';
-import { MEETING_BOT_NOTICE_PUBLISHED } from '../../meeting-bot/notice.mjs';
 
 let serial=0;
 /** Isolated source variants; the publication date and tracked files never change. */
 async function variant(path:string, replacements:Array<[string,string]>=[], imports:Record<string,string>={}) {
   const file=new URL('../../'+path,import.meta.url);let source=readFileSync(file,'utf8');
+  if(path==='meeting-bot/notice.mjs')source=source.replace(/MEETING_BOT_NOTICE_APPROVED_AT = '[^']+'/, 'MEETING_BOT_NOTICE_APPROVED_AT = null');
   for(const [before,after] of replacements){assert.ok(source.includes(before),'mutation target exists');source=source.replace(before,()=>after);}
   if(path.endsWith('.ts'))source=stripTypeScriptTypes(source,{mode:'strip'});
   const resolve=(spec:string)=>{const url=new URL(/\.[mc]?[jt]s$/.test(spec)?spec:spec+'.ts',file);return imports[url.href]??url.href;};
@@ -36,11 +34,15 @@ async function variant(path:string, replacements:Array<[string,string]>=[], impo
   return {url,module:await import(url)};
 }
 const key=(path:string)=>new URL('../../'+path,import.meta.url).href;
+const unpublishedNotice=await variant('meeting-bot/notice.mjs');
+const unpublishedImports={[key('meeting-bot/notice.mjs')]:unpublishedNotice.url};
+const unapproved=await variant('cloudflare-worker/src/durable-objects/meeting-bot-run.ts',[],unpublishedImports);
+const unapprovedRuntime=await variant('meeting-bot/src/runtime.ts',[],unpublishedImports);
 const published=await variant('meeting-bot/notice.mjs', [['MEETING_BOT_NOTICE_APPROVED_AT = null',"MEETING_BOT_NOTICE_APPROVED_AT = '2000-01-01'"]]);
 const publishedImports={[key('meeting-bot/notice.mjs')]:published.url};
 const approved=await variant('cloudflare-worker/src/durable-objects/meeting-bot-run.ts',[],publishedImports);
 const approvedRuntime=await variant('meeting-bot/src/runtime.ts',[],publishedImports);
-const defaults={Supervisor:approved.module.MeetingBotRun,Unpublished:MeetingBotRun,Runtime:RuntimeHost,PublishedRuntime:approvedRuntime.module.RuntimeHost,runBot,purge:purgeExpiredCallAudio,call};
+const defaults={Supervisor:approved.module.MeetingBotRun,Unpublished:unapproved.module.MeetingBotRun,Runtime:unapprovedRuntime.module.RuntimeHost,PublishedRuntime:approvedRuntime.module.RuntimeHost,runBot,purge:purgeExpiredCallAudio,call};
 type Modules=typeof defaults;
 const platforms=['zoom','google_meet','teams'];
 // Signing uses the real crypto thread pool. A fixed number of event-loop turns
@@ -61,7 +63,7 @@ async function command(host:any,payload:any){
 }
 
 async function unpublished(m:Modules){
-  assert.equal(MEETING_BOT_NOTICE_PUBLISHED,false);
+  assert.equal(unpublishedNotice.module.MEETING_BOT_NOTICE_PUBLISHED,false);
   for(const platform of platforms)for(const scheduled of [false,true]){
     const w=world(500_000_000,m.Unpublished),at=Date.now()+5000;
     const r=await post(w,{meeting_url:syntheticLink(platform),...(scheduled?{scheduled_at:new Date(at).toISOString()}:{})});
@@ -241,11 +243,11 @@ async function routeVariant(service?:{url:string},replacements:Array<[string,str
 }
 test('B9 privacy mutations are caught between restored passing controls',async()=>{
   const mutations:Array<[string,(m:Modules)=>Promise<any>,()=>Promise<Partial<Modules>>]>=[
-    ['Worker publication gate',unpublished,async()=>({Unpublished:(await variant('cloudflare-worker/src/durable-objects/meeting-bot-run.ts',[["if (!MEETING_BOT_NOTICE_PUBLISHED) return this.finish(run,'failed','notice_unpublished');",'']])).module.MeetingBotRun})],
+    ['Worker publication gate',unpublished,async()=>({Unpublished:(await variant('cloudflare-worker/src/durable-objects/meeting-bot-run.ts',[["if (!MEETING_BOT_NOTICE_PUBLISHED) return this.finish(run,'failed','notice_unpublished');",'']],unpublishedImports)).module.MeetingBotRun})],
     ['runtime draft fallback',unpublished,async()=>({Runtime:(await variant('meeting-bot/src/runtime.ts',[
       ['import { meetingBotNotice, MEETING_BOT_NOTICE_PUBLISHED }', 'import { draftMeetingBotNotice, MEETING_BOT_NOTICE_PUBLISHED }'],
       ['meetingBotNotice({ventureName})','draftMeetingBotNotice({ventureName})'],
-    ])).module.RuntimeHost})],
+    ],unpublishedImports)).module.RuntimeHost})],
     ['server notice carried on start',startNotice,async()=>({Supervisor:(await variant('cloudflare-worker/src/durable-objects/meeting-bot-run.ts',[['notice,venture_name:ventureName','notice:undefined,venture_name:ventureName']],publishedImports)).module.MeetingBotRun})],
     ['runtime exact notice',startNotice,async()=>({PublishedRuntime:(await variant('meeting-bot/src/runtime.ts',[["if(typeof command.notice!=='string'||command.notice!==approved)",'if(false)']],publishedImports)).module.RuntimeHost})],
     ['notice before listening',m=>capture(m),async()=>({runBot:(await variant('meeting-bot/src/lifecycle.ts',[["withRetry(()=>adapter.sendChat(cfg.notice),clock,NOTICE_TRIES)",'Promise.resolve(true)']])).module.runBot})],

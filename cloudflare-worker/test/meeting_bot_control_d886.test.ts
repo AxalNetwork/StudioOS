@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { call, FOUNDER, OTHER } from './_call_audio_fixture.ts';
-import { MeetingBotRun as UnpublishedMeetingBotRun, botHmac, BOT_CALLBACK_WINDOW_MS } from '../src/durable-objects/meeting-bot-run.ts';
+import { botHmac, BOT_CALLBACK_WINDOW_MS } from '../src/durable-objects/meeting-bot-run.ts';
 import { world as botWorld, syntheticLink, hmacSecret, event, wav, upload } from './_meeting_bot_fixture.ts';
 import { BOT_COMMISSION_MULTIPLIER, botRate, botLimit, botPlatform, botRow, botSession } from '../src/services/meetingBots.ts';
 import { decryptColumn } from '../src/services/columnCipher.ts';
@@ -12,14 +12,14 @@ import { runInterviewProcessJob } from '../src/services/interviewProcessing.ts';
 import { withGuard } from './_guard_stub.mjs';
 
 // Positive contract tests use the real shared wording with only its approval date
-// changed in memory. Production remains unpublished; no env bypass is introduced.
+// changed in memory. Both publication states are exercised without an environment bypass.
 let variantSerial = 0;
 async function supervisorVariant(before = '', after = '', published = true) {
   const file = new URL('../src/durable-objects/meeting-bot-run.ts', import.meta.url);
   let source = readFileSync(file, 'utf8');
   if (before) { assert.ok(source.includes(before)); source = source.replace(before, () => after); }
   const notice = readFileSync(new URL('../../meeting-bot/notice.mjs', import.meta.url), 'utf8')
-    .replace('MEETING_BOT_NOTICE_APPROVED_AT = null', published ? "MEETING_BOT_NOTICE_APPROVED_AT = '2026-10-23'" : 'MEETING_BOT_NOTICE_APPROVED_AT = null');
+    .replace(/MEETING_BOT_NOTICE_APPROVED_AT = (?:null|'[^']*')/, published ? "MEETING_BOT_NOTICE_APPROVED_AT = '2026-10-23'" : 'MEETING_BOT_NOTICE_APPROVED_AT = null');
   const noticeUrl = 'data:text/javascript;base64,' + Buffer.from(notice).toString('base64');
   let changed = stripTypeScriptTypes(source, {mode:'strip'});
   changed = changed.replace(/(from\s*['"])(\.[^'"]+)(['"])/g, (_m, a, spec, b) =>
@@ -30,6 +30,7 @@ async function supervisorVariant(before = '', after = '', published = true) {
   return import('data:text/javascript;base64,' + Buffer.from(changed+'\n// test variant '+ ++variantSerial).toString('base64'));
 }
 const {MeetingBotRun} = await supervisorVariant();
+const {MeetingBotRun: UnpublishedMeetingBotRun} = await supervisorVariant('', '', false);
 const world = (monthMicro=500_000_000, Supervisor=MeetingBotRun) => botWorld(monthMicro,Supervisor);
 const post = (w:any,args:any={meeting_url:syntheticLink()})=>call(w.env,FOUNDER,'POST',`/sessions/${w.session}/bot`,args);
 
