@@ -322,7 +322,7 @@ it, where in their nav, and how do they get there.*
 | Help Center | `/help` · `/help/:area/:guide` · `/help/tickets` · `/help/tickets/:id` · `/help/admin/*` · `/help/:id` · `/docs` · `/docs/admin/*` · `/support` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | REMOVED | Medium |
 | Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Messages | `/messages` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
+| Messages (retired) | `/email` | — (no nav entry) | Full page | Deep link / in-page action | RETIRED | Medium |
 | Network | `/network` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
 | Notifications | `/account/notifications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Perks & Products | `/perks` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
