@@ -346,3 +346,17 @@ export function filterRows(sends, { q = '' } = {}) {
 export function providerChoices(sends) {
   return [...new Set((sends || []).map((s) => s.provider_key).filter(Boolean))].map((k) => ({ key: k, label: providerOf(k).name }));
 }
+
+/**
+ * D1333's `dropped` counts, as the sheet says them: what the pre-fill left out
+ * and why. A count of none says nothing.
+ */
+export function droppedLines(dropped) {
+  const d = dropped || {};
+  const n = (k) => (Number.isFinite(d[k]) && d[k] > 0 ? d[k] : 0);
+  return [
+    n('team_only') && `${n('team_only')} team-only ${n('team_only') === 1 ? 'figure was' : 'figures were'} left out. They stay in Axal VC.`,
+    n('not_recorded') && `${n('not_recorded')} ${n('not_recorded') === 1 ? 'figure is' : 'figures are'} not recorded, so ${n('not_recorded') === 1 ? 'it was' : 'they were'} left out.`,
+    n('unnamed') && `${n('unnamed')} ${n('unnamed') === 1 ? 'partner is' : 'partners are'} named by type only.`,
+  ].filter(Boolean);
+}

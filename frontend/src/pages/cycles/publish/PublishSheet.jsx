@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Sheet from '../../../ui/Sheet.jsx';
 import { publishApi } from '../../../lib/api/publish.js';
 import {
-  CHECK_PASSED, CHECK_WAITS, NO_OVERRIDE, PREVIEW_WAITS, accountOn, confirmRows, counterOf, dayAndTime, destinationRows, findingRows, footState,
+  CHECK_PASSED, CHECK_WAITS, NO_OVERRIDE, PREVIEW_WAITS, accountOn, confirmRows, counterOf, dayAndTime, destinationRows, droppedLines, findingRows, footState,
   highlightRuns, historyHref, idempotencyKey, mediaLine, moduleLabel, resultSummary, tickedLine, viewLink,
 } from './publishModel.js';
 import {
@@ -38,7 +38,7 @@ import {
  * Who opens it is the Grow page's header (#3482's follow-up, on part 2's
  * gate); the sheet itself refuses nothing the Worker does not.
  */
-export default function PublishSheet({ projectId, module, onClose, api = publishApi, delay = 500 }) {
+export default function PublishSheet({ projectId, module, onClose, api = publishApi, delay = 500, start = null }) {
   const [read, setRead] = useState({ status: 'loading', rows: [], canPublish: false, error: '' });
   const [ticked, setTicked] = useState([]);
   const [text, setText] = useState('');
@@ -52,6 +52,7 @@ export default function PublishSheet({ projectId, module, onClose, api = publish
   const [result, setResult] = useState(null);
   const [retrying, setRetrying] = useState(null);
   const [saved, setSaved] = useState('');
+  const [prefill, setPrefill] = useState(start ? { status: 'loading' } : null);
   const draft = useRef(null);
   const kept = useRef(false);
   const chain = useRef(Promise.resolve());
@@ -82,6 +83,26 @@ export default function PublishSheet({ projectId, module, onClose, api = publish
     chain.current = next.catch(() => {});
     return next;
   }, [api, projectId, module]);
+
+  // D1321 follow-up: opened from a Grow page or a sent update, the draft starts
+  // pre-filled from its records (D1333's builders), each line with its source.
+  // It is still a draft the founder edits; closing without keeping it archives it.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!start || started.current) return;
+    started.current = true;
+    const made = chain.current.then(async () => {
+      const r = start.kind === 'update' ? await api.draftFromUpdate(start.uid) : await api.createDraft({ project_id: projectId, module });
+      const uid = r?.draft?.uid || r?.draft_uid || null;
+      if (!uid) throw new Error('The draft could not be started.');
+      const d = r?.draft?.body ? r.draft : (await api.draft(uid))?.draft;
+      draft.current = d || { uid };
+      setText(String(d?.body?.text || ''));
+      setPrefill({ status: 'ready', chip: r?.prefill?.chip || null, lines: r?.prefill?.lines ?? null, dropped: r?.prefill?.dropped || null });
+      return draft.current;
+    });
+    chain.current = made.catch((e) => { setPrefill({ status: 'error', error: e?.message || 'The draft could not be started. Write your own below.' }); });
+  }, [start, api, projectId, module]);
 
   // The check: after a pause in typing, save the text and preview every ticked place.
   useEffect(() => {
@@ -190,6 +211,7 @@ export default function PublishSheet({ projectId, module, onClose, api = publish
                 : <React.Fragment key={i}>{r.text}</React.Fragment>))}
             </p>
           )}
+          <PrefillNote prefill={prefill} />
           {saved && <p role="status" className={`m-0 text-[12px] ${MUTED}`} data-testid="publish-saved">{saved}</p>}
         </section>
         <Preview text={text} ticked={ticked} mine={mine} open={open} onTab={setTab} />
@@ -198,6 +220,25 @@ export default function PublishSheet({ projectId, module, onClose, api = publish
       </div>
       {asking && <ConfirmSend rows={confirmRows(mine, read.rows)} onCancel={() => setAsking(false)} onSend={send} />}
     </Sheet>
+  );
+}
+
+/** The pre-fill's source chip and what it left out, never a figure it did not have. */
+function PrefillNote({ prefill }) {
+  if (!prefill) return null;
+  if (prefill.status === 'loading') return <p className={`m-0 text-[12px] ${MUTED}`} aria-busy="true" data-testid="publish-prefill-loading">Drafting from your records…</p>;
+  if (prefill.status === 'error') return <p role="alert" className={`m-0 text-[12px] ${MUTED}`} data-testid="publish-prefill-error">{prefill.error}</p>;
+  const left = droppedLines(prefill.dropped);
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="publish-prefill">
+      {prefill.chip && prefill.lines > 0 && (
+        <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-axal-hairline bg-[#f7f6fa] px-2.5 py-0.5 text-[11.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" data-testid="publish-chip">
+          <span aria-hidden="true" className="h-[7px] w-[7px] flex-none rounded-full bg-amber-500" />Recorded · {prefill.chip}
+        </span>
+      )}
+      {prefill.lines === 0 && <p className={`m-0 text-[12px] ${MUTED}`} data-testid="publish-prefill-none">Nothing recorded here yet to draft from. Write your own.</p>}
+      {left.map((l) => <p key={l} className={`m-0 text-[12px] ${MUTED}`}>{l}</p>)}
+    </div>
   );
 }
 
