@@ -163,6 +163,8 @@ never individual chunks. If the protected floor itself exceeds the cap, it
 fails the build rather than deleting the newest build's assets. A cap warning
 means the time window was shortened. The full static output must also stay
 under 20,000 files, including non-asset public files and prerendered shells.
+If any build step fails, the wrapper restores the full previous output and
+ledger, so a local retry still knows which assets were deployed.
 
 `cloudflare-worker-deploy.yml` restores the previous successful
 deploy's `docs/assets` and retention ledger from the `spa-assets-` entry in the

@@ -64,7 +64,9 @@ export function planAssetRetention({
   const sameAsNewest = newest && newest.files.length === freshFiles.length
     && new Set([...newest.files, ...freshFiles]).size === freshFiles.length;
   if (sameAsNewest) builds.shift();
-  builds.unshift({ ts: now, deployedAt: null, files: freshFiles });
+  builds.unshift(sameAsNewest
+    ? { ...newest, ts: now, files: freshFiles }
+    : { ts: now, deployedAt: null, files: freshFiles });
 
   const floor = Math.max(1, Math.floor(Number(retainBuilds) || 1));
   const protectedBuilds = new Set([0]);

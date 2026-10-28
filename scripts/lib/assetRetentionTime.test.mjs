@@ -103,3 +103,10 @@ test('D1361: manual deployment records success before its live-check postdeploy'
   const pkg=JSON.parse(fs.readFileSync(new URL('../../package.json',import.meta.url),'utf8'));
   assert.equal(pkg.scripts.postdeploy,'node scripts/record-asset-deploy.mjs && node scripts/check-spa-live.mjs');
 });
+
+test('D1361: an identical rebuild keeps the served timestamp even if it is not deployed',()=>{
+  const p=plan([build('current.js',1),build('prior.js',2)]);
+  assert.equal(p.nextLedger.builds[0].deployedAt,ago(1));
+  const retried=planAssetRetention({now,newFiles:['changed.js'],prevFiles:p.keep,ledgerBuilds:p.nextLedger.builds});
+  assert.deepEqual(retried.keep,['changed.js','current.js','prior.js']);
+});
