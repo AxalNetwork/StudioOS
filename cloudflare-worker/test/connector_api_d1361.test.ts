@@ -195,7 +195,6 @@ test('invalid input and unknown operations: a bad company id is 400, an unknown 
 // ── OAuth: the Lovable custom connector's own sign-in ───────────────────────
 
 const ADMIN = 30;
-const JWT_SECRET = 'd666-fixture-signing-key-0123456789abcdef';
 const BASELINE_SQL = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const VERIFIER = 'w'.repeat(64);
 
@@ -242,7 +241,6 @@ async function lovableToken(f: any, companies = [P]) {
 
 test('OAuth: a Super Admin mints the Lovable client; a founder signs in, approves a company, and the token reads only that company', async () => {
   const f = fixture({ enabled: false });
-  f.env.JWT_SECRET = f.env.JWT_SECRET || JWT_SECRET;
   const { token, client } = await lovableToken(f);
   assert.equal(client.redirect_uri, LOVABLE_REDIRECT_URI);
   assert.equal(client.authorization_url, 'https://axal.vc/api/oauth/authorize');
@@ -263,7 +261,6 @@ test('OAuth: a Super Admin mints the Lovable client; a founder signs in, approve
 
 test('OAuth: a forged, revoked or MCP-off token is 401 invalid_token; the client route is Super Admin only and never reads back the secret', async () => {
   const f = fixture();
-  f.env.JWT_SECRET = f.env.JWT_SECRET || JWT_SECRET;
   const { token, client } = await lovableToken(f);
   const forged = token.replace(/.$/, (ch) => (ch === 'a' ? 'b' : 'a'));
   const bad = await get(f.env, '/me', forged);
