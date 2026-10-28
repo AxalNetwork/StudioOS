@@ -28,6 +28,7 @@ import type { Block } from '../services/mail/blocks';
 import type { Pack, PackItem } from '../services/mail/contextPack';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
+import { caseOnly } from '../services/mail/profileRecords';
 
 const mail = new Hono<{ Bindings: Env }>();
 const PAGE = 'Email';
@@ -90,6 +91,8 @@ mail.post('/blocks', async (c) => {
   try {
     const b = await body(c);
     if (!isBlockKind(b.kind)) return refuse(c, 400, { code: 'block_invalid', message: 'Choose an update block: KPIs, raise status, project progress, interview insights or the one-liner.' });
+    // D1348 (#3555): an admin's email quotes the case they hold, never a venture's live block.
+    if (caseOnly(user)) return refuse(c, 403, { code: 'case_only', message: 'An admin’s email quotes the case only.' });
     // The venture is the person's when a ref names one, else the one named.
     let projectId = projectParam(b.project);
     if (b.ref != null && b.ref !== '') {
