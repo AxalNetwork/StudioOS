@@ -16,6 +16,7 @@ import type { Env } from '../types';
 import { paidInvestorTier } from './investorTiers';
 import { AI_USD_SCALE, planView } from './aiBudget';
 import type { PricedCart } from './orders';
+import { AI_TOPUP_UNIT, aiTopupUnitPriceId } from './aiTopups';
 
 const usd = (dollars: number) => dollars * AI_USD_SCALE;
 
@@ -120,7 +121,7 @@ export async function tokenPackForPrice(env: Env, priceId: string): Promise<Toke
 /** Any pack price, archived ones included, or the fallback: none is sold anywhere but the order intent. */
 export async function isTokenPackPrice(env: Env, priceId: string): Promise<boolean> {
   if (typeof priceId !== 'string' || !priceId) return false;
-  if (fallbackPriceId(env) === priceId) return true;
+  if (fallbackPriceId(env) === priceId || aiTopupUnitPriceId(env) === priceId) return true;
   return (await packRow(env, priceId)) !== null;
 }
 
@@ -129,10 +130,12 @@ export async function isTokenPackProduct(env: Env, productId: string): Promise<b
   if (typeof productId !== 'string' || !productId) return false;
   const row = await packStore(() => env.DB.prepare('SELECT 1 AS hit FROM ai_token_packs WHERE product_id = ? LIMIT 1').bind(productId).first<any>());
   if (row) return true;
-  const fallback = fallbackPriceId(env);
-  if (!fallback) return false;
   const { findCatalogProductByPriceId } = await import('./catalog');
-  return (await findCatalogProductByPriceId(env, fallback))?.product.id === productId;
+  // The fallback's product and D1366's custom-amount product are token packs too.
+  for (const priceId of [fallbackPriceId(env), aiTopupUnitPriceId(env)]) {
+    if (priceId && (await findCatalogProductByPriceId(env, priceId))?.product.id === productId) return true;
+  }
+  return false;
 }
 
 /**
@@ -168,7 +171,7 @@ export async function packsOnHold(env: Env, userId: number): Promise<boolean> {
 }
 
 export type TokenPackRefusal = 'token_pack_alone' | 'promo_not_for_token_packs' | 'token_pack_not_on_sale'
-  | 'token_pack_daily_limit' | 'token_balance_ceiling' | 'token_packs_on_hold' | 'token_pack_first_purchase_only';
+  | 'token_pack_daily_limit' | 'token_balance_ceiling' | 'token_packs_on_hold' | 'token_pack_first_purchase_only' | 'token_amount_invalid';
 export type TokenPackQuote = { priceId: string; packUid: string | null; creditMicrousd: number; bonusMicrousd: number; firstPurchaseOnly: boolean };
 
 const dollarsOf = (microusd: number) => `$${(microusd / AI_USD_SCALE).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
@@ -187,6 +190,8 @@ export const TOKEN_PACK_REFUSALS: Readonly<Record<TokenPackRefusal, { status: 40
   token_pack_daily_limit: { status: 400, message: `You’ve reached today’s limit of ${TOKEN_PACK_LIMITS.ordersPerDay} pack orders. Try again tomorrow.` },
   token_balance_ceiling: { status: 400, message: `This pack would take your balance over ${dollarsOf(TOKEN_PACK_LIMITS.balanceCeilingMicrousd)}.` },
   token_packs_on_hold: { status: 400, message: 'Buying tokens is paused on this account while a payment is reviewed. Contact support.' },
+  // D1366: the custom amount's bounds.
+  token_amount_invalid: { status: 400, message: `Choose a whole amount from $${AI_TOPUP_UNIT.minDollars} to $${AI_TOPUP_UNIT.maxDollars}.` },
 });
 
 /** A pack refusal's body: its code and its sentence. Never a Stripe code or a figure from the member's account. */
@@ -239,9 +244,12 @@ export async function tokenPackQuote(env: Env, userId: number, cart: PricedCart,
   opts: { excludeOrderRef?: string | null } = {}): Promise<TokenPackQuote | { error: TokenPackRefusal } | null> {
   const flags = await Promise.all(cart.lines.map((l) => isTokenPackPrice(env, l.price_id)));
   if (!flags.some(Boolean)) return null;
-  if (cart.lines.length !== 1 || cart.lines[0].quantity !== 1) return { error: 'token_pack_alone' };
+  if (cart.lines.length !== 1) return { error: 'token_pack_alone' };
   if (promoCode) return { error: 'promo_not_for_token_packs' };
   const line = cart.lines[0];
+  // D1366: a custom amount is N of the $1 unit price, N from the minimum to the maximum.
+  if (aiTopupUnitPriceId(env) === line.price_id) return customAmountQuote(env, userId, cart, opts);
+  if (line.quantity !== 1) return { error: 'token_pack_alone' };
   const pack = await tokenPackForPrice(env, line.price_id);
   const face = pack ? await saleFaceCents(env, pack) : null;
   if (!pack || face === null || line.unit_amount !== face || cart.currency !== 'usd') return { error: 'token_pack_not_on_sale' };
@@ -250,14 +258,75 @@ export async function tokenPackQuote(env: Env, userId: number, cart: PricedCart,
   const creditMicrousd = face * (AI_USD_SCALE / 100);
   // D790: the bonus only while its offer window is open. The one quoted here is stored on the purchase row.
   const bonusMicrousd = offerOpen({ offer_starts_at: pack.offerStartsAt, offer_ends_at: pack.offerEndsAt }) ? pack.bonusMicrousd : 0;
+  const limited = await accountLimits(env, userId, creditMicrousd + bonusMicrousd, opts);
+  if (limited) return limited;
+  return { priceId: line.price_id, packUid: pack.packUid, creditMicrousd, bonusMicrousd, firstPurchaseOnly: pack.firstPurchaseOnly };
+}
+
+/** The daily order limit, the balance ceiling and a hold: every pack and every custom amount meets them. */
+async function accountLimits(env: Env, userId: number, addsMicrousd: number, opts: { excludeOrderRef?: string | null }): Promise<{ error: TokenPackRefusal } | null> {
   const recent = await recentPackOrders(env, userId, opts.excludeOrderRef ?? '');
   if (recent.n >= TOKEN_PACK_LIMITS.ordersPerDay) return { error: 'token_pack_daily_limit' };
   const account = await env.DB.prepare('SELECT balance_microusd FROM ai_topup_accounts WHERE user_id = ?').bind(userId).first<any>();
   const balance = account ? account.balance_microusd : 0;
   if (!Number.isSafeInteger(balance)) throw new Error('AI top-up balance unreadable');
-  if (balance + recent.pending + creditMicrousd + bonusMicrousd > TOKEN_PACK_LIMITS.balanceCeilingMicrousd) return { error: 'token_balance_ceiling' };
+  if (balance + recent.pending + addsMicrousd > TOKEN_PACK_LIMITS.balanceCeilingMicrousd) return { error: 'token_balance_ceiling' };
   if (await packsOnHold(env, userId)) return { error: 'token_packs_on_hold' };
-  return { priceId: line.price_id, packUid: pack.packUid, creditMicrousd, bonusMicrousd, firstPurchaseOnly: pack.firstPurchaseOnly };
+  return null;
+}
+
+/**
+ * D1366: $N of tokens, any whole N from `AI_TOPUP_UNIT.minDollars` to
+ * `maxDollars`, as N of the $1 unit price. Credited at face value, never a
+ * bonus, under the same limits as a pack. The price must be on sale ($1,
+ * one-time, USD, in the mirror) or the amount is refused.
+ */
+async function customAmountQuote(env: Env, userId: number, cart: PricedCart, opts: { excludeOrderRef?: string | null }): Promise<TokenPackQuote | { error: TokenPackRefusal }> {
+  const line = cart.lines[0];
+  const n = line.quantity;
+  if (!Number.isInteger(n) || n < AI_TOPUP_UNIT.minDollars || n > AI_TOPUP_UNIT.maxDollars) return { error: 'token_amount_invalid' };
+  const { readAiTopupUnit } = await import('./aiTopups');
+  const unit = await readAiTopupUnit(env);
+  if (!unit.configured || unit.state !== 'ready' || unit.product.price_id !== line.price_id
+    || line.unit_amount !== AI_TOPUP_UNIT.unitCents || cart.currency !== 'usd') return { error: 'token_pack_not_on_sale' };
+  const creditMicrousd = n * AI_TOPUP_UNIT.unitCents * (AI_USD_SCALE / 100);
+  const limited = await accountLimits(env, userId, creditMicrousd, opts);
+  if (limited) return limited;
+  return { priceId: line.price_id, packUid: null, creditMicrousd, bonusMicrousd: 0, firstPurchaseOnly: false };
+}
+
+/**
+ * D1366: the custom amount a member may type, when its price is on sale; else
+ * null. Reading it may fetch the price into the mirror once per window.
+ */
+export async function customTopUp(env: Env): Promise<{ price_id: string; unit_amount: number; currency: 'usd'; min_cents: number; max_cents: number } | null> {
+  const { readAiTopupUnit } = await import('./aiTopups');
+  const unit = await readAiTopupUnit(env);
+  if (!unit.configured || unit.state !== 'ready') return null;
+  return { price_id: unit.product.price_id, unit_amount: AI_TOPUP_UNIT.unitCents, currency: 'usd',
+    min_cents: AI_TOPUP_UNIT.minDollars * AI_TOPUP_UNIT.unitCents, max_cents: AI_TOPUP_UNIT.maxDollars * AI_TOPUP_UNIT.unitCents };
+}
+
+/**
+ * D1366: a pack whose price the catalog mirror does not hold yet (one seeded by
+ * a migration, or made in Stripe) is fetched into it, once per window per
+ * price, so it goes on sale without a Sync from Stripe. A fetch that fails
+ * leaves the pack `missing_from_catalog`, as before.
+ */
+export async function mirrorPackPrices(env: Env, now = Date.now()): Promise<void> {
+  const rows = await packStore(async () => {
+    const res = await env.DB.prepare('SELECT price_id FROM ai_token_packs WHERE archived_at IS NULL').all<{ price_id: string }>();
+    if (res.success !== true) throw new Error('AI token packs unreadable');
+    return res.results ?? [];
+  }) ?? [];
+  if (!rows.length) return;
+  const mirror = await mirrorIndex(env);
+  const { mirrorPriceOnce } = await import('./aiTopups');
+  for (const { price_id } of rows) {
+    if (mirror.has(price_id)) continue;
+    try { await mirrorPriceOnce(env, price_id, now); }
+    catch (e) { console.warn('[aiCredits] token pack price could not be mirrored', (e as Error).message); }
+  }
 }
 
 // ---------------------------------------------------------------------------

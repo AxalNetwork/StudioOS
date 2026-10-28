@@ -15,7 +15,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import PackSheet from '../src/components/checkout/PackSheet.jsx';
 import {
   PACK_PROMO, PACK_RULES, autoReloadView, backLabel, balanceLine, countFrames, intentBody, keepsReading, landingView, packRows, packRule,
-  packTotals, startingPack,
+  packTotals, startingPack, customOffer, customPack, customRangeLine, CUSTOM_KEY,
 } from '../src/components/checkout/packModel.js';
 
 const HOUR = 60 * 60 * 1000;
@@ -309,5 +309,48 @@ test('D1365: on any screen, Cancel beside Pay and a press on the dimmed page clo
     assert.equal(v.text('pack-cancel'), 'Cancel');
     await v.click('pack-cancel');
     assert.equal(closed, 2);
+  } finally { await v.close(); }
+});
+
+// ---------------------------------------------------------------- D1366: the custom amount
+const CUSTOM = { price_id: 'price_unit', unit_amount: 100, currency: 'usd', min_cents: 500, max_cents: 50_000 };
+
+test('D1366: a custom amount is whole dollars from $5 to $500, quoted and paid as N of the $1 price', () => {
+  // Mutation checked: drop the minimum check → "4" gives a pack.
+  const offer = customOffer(CUSTOM);
+  assert.deepEqual(offer, { priceId: 'price_unit', minDollars: 5, maxDollars: 500 });
+  assert.equal(customRangeLine(offer), 'Any whole amount from $5 to $500.');
+  for (const bad of [null, { ...CUSTOM, unit_amount: 200 }, { ...CUSTOM, price_id: 'nope' }, { ...CUSTOM, min_cents: 450 }]) assert.equal(customOffer(bad), null);
+  assert.deepEqual(customPack(offer, ''), { pack: null, problem: null }, 'nothing typed, nothing said');
+  assert.equal(customPack(offer, '4').problem, 'The minimum top-up is $5.');
+  assert.equal(customPack(offer, '501').problem, 'The most one top-up can add is $500.');
+  assert.equal(customPack(offer, '12.5').problem, 'Enter whole dollars, from $5 to $500.');
+  const p = customPack(offer, '$25').pack;
+  assert.deepEqual([p.key, p.quantity, p.cents, p.price, p.label, p.creditMicro, p.bonusMicro], [CUSTOM_KEY, 25, 2500, '$25.00', '$25 of AI tokens', 25_000_000, 0]);
+  assert.deepEqual(intentBody(p, 'n1'), { items: [{ price_id: 'price_unit', quantity: 25 }], nonce: 'n1' });
+  assert.deepEqual(intentBody(packRows(TOP_UP)[1], 'n2').items, [{ price_id: 'price_k25', quantity: 1 }], 'a pack is still one line of one');
+  assert.equal(startingPack([], null, offer), CUSTOM_KEY, 'with no pack, the custom amount is chosen');
+  assert.equal(startingPack(packRows(TOP_UP), null, offer), 'k10', 'with packs, the first pack');
+});
+
+test('D1366: the sheet offers the packs and a custom amount; a typed $37 pays $37 as 37 of the $1 price', async () => {
+  const log = [];
+  const v = await mount({ bridge: fakeBridge(log) }, { ...ROUTES, topUp: { ...TOP_UP, custom: CUSTOM }, intent: INTENT,
+    order: () => order('waiting', { at: '2099-01-01 00:00:00' }) });
+  try {
+    assert.ok(v.has('pack-row-k25') && v.has('pack-row-custom'), 'packs and the custom amount, side by side');
+    assert.equal(v.text('pack-custom-range'), 'Any whole amount from $5 to $500.');
+    await act(async () => { v.props('pack-custom-amount').onChange({ target: { value: '3' } }); });
+    await v.settle();
+    assert.equal(v.props('pack-pick-custom').checked, true, 'typing an amount chooses it');
+    assert.equal(v.text('pack-custom-problem'), 'The minimum top-up is $5.');
+    assert.equal(v.props('pack-pay').disabled, true, 'nothing to pay below $5');
+    await act(async () => { v.props('pack-custom-amount').onChange({ target: { value: '37' } }); });
+    await v.settle();
+    assert.ok(!v.has('pack-custom-problem'));
+    assert.equal(v.text('pack-pay'), 'Pay $37.00');
+    await v.click('pack-pay');
+    const intents = v.calls.filter(([k]) => k === 'intent');
+    assert.deepEqual(intents[0][1].items, [{ price_id: 'price_unit', quantity: 37 }]);
   } finally { await v.close(); }
 });

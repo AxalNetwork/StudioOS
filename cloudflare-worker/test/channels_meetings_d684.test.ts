@@ -52,7 +52,7 @@ import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import meetingsRouter, { zoomWebhook } from '../src/routes/founder_validate_meetings.ts';
-import { parseVtt, sweepZoom, verifyZoomSignature } from '../src/services/channels/zoom.ts';
+import { parseVtt, sweepZoom, sweepZoomEarly, verifyZoomSignature } from '../src/services/channels/zoom.ts';
 import { meetingCodeOf, sweepMeet, MEET_TRANSCRIPT_SCOPE } from '../src/services/channels/googleMeet.ts';
 import { MEETING_ERRORS, withinCallSlot } from '../src/services/channels/meetings.ts';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
@@ -621,6 +621,34 @@ test('the Zoom sweep asks once about a quiet call a day after it ended, and sett
   assert.equal(refRow(f, quiet.uid).status, 'no_transcript');
   assert.equal(refRow(f, recent.uid).status, 'ended');
   assert.equal(await sweepZoom(world({ ZOOM_CLIENT_ID: undefined }).env, new Date()), 0, 'dark provider: no sweep');
+});
+
+test('D1362: a call reports back soon after it ends — the early look imports a ready recording and never settles one Zoom has not made', async (t) => {
+  const f = world();
+  await connectZoom(f);
+  const call = await seedRef(f, { status: 'scheduled' });
+  const old = await seedRef(f, { status: 'scheduled', external_ref: '11111111111' });
+  f.db.prepare("UPDATE interview_channel_refs SET starts_at = ? WHERE uid = ?").run(iso(-13 * HOUR), old.uid);
+  let ready = false;
+  mockFetch(t, {
+    'GET https://api.zoom.us/v2/meetings/85746065432/recordings': () => (ready ? zoomRecordings([TRANSCRIPT_FILE]) : json({ code: 3301, message: 'This recording does not exist.' }, 404)),
+    'GET https://zoom.us/rec/download/transcript-file': () => new Response(VTT),
+  });
+  // Zoom has not finished the recording: nothing is queued and nothing is settled.
+  assert.equal(await sweepZoomEarly(f.env, new Date()), 0);
+  assert.equal(f.jobs.length, 0);
+  assert.equal(refRow(f, call.uid).status, 'scheduled', 'an early look never marks a call "no transcript"');
+  assert.equal(refRow(f, old.uid).updated_at, '2026-01-01 00:00:00', 'a call that started over twelve hours ago is the day-later sweep\'s');
+  // Touched: not asked again for five minutes.
+  ready = true;
+  assert.equal(await sweepZoomEarly(f.env, new Date()), 0);
+  f.db.prepare("UPDATE interview_channel_refs SET updated_at = '2026-01-01 00:00:00' WHERE uid = ?").run(call.uid);
+  assert.equal(await sweepZoomEarly(f.env, new Date()), 1);
+  assert.deepEqual(f.jobs.map((j) => j.payload.refUid), [call.uid]);
+  await runChannelJob(f.env, 'meeting_import', f.jobs[0].payload);
+  assert.equal(refRow(f, call.uid).status, 'imported', 'the transcript lands in the interview');
+  assert.ok(sessionTexts(f, call.sessionId).length > 0);
+  assert.equal(await sweepZoomEarly(world({ ZOOM_CLIENT_ID: undefined }).env, new Date()), 0, 'dark provider: no early look');
 });
 
 // ── Zoom: the token refresh and the revoke ───────────────────────────────────
