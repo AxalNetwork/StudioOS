@@ -1639,6 +1639,8 @@ function guardReport(
 // ---------------------------------------------------------------------------
 // Public: run()
 // ---------------------------------------------------------------------------
+/** D1363: the one sentence for a run the allowance and balance cannot cover; a top-up continues it. */
+export const NOT_ENOUGH_TOKENS = 'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.';
 /**
  * The D640 budget's own words for a refusal. One function, so a run refused
  * here, a live stream refused mid-way and a session's transcription refused up
@@ -1649,7 +1651,7 @@ export function budgetRefusalMessage(refusal: string, detail?: { limit_microusd?
   if (refusal === 'spend_limit') return spendLimitMessage(detail);
   return refusal === 'budget_review'
     ? 'An AI run is held for review. New runs can start after it is settled.'
-    : 'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.';
+    : NOT_ENOUGH_TOKENS;
 }
 
 /** The models one run may reach, or why it may reach none. `record`: the refusal writes a usage row. */

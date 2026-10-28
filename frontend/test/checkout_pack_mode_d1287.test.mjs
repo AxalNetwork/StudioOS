@@ -190,6 +190,10 @@ test('Pay sends one pack line, confirms the order’s intent, and shows Tokens a
     intent: INTENT,
     order: () => (reads++ < 2 ? order('waiting', { at: '2099-01-01 00:00:00' }) : order('credited')),
   });
+  // D1363: the page refused for tokens hears they landed once, at Tokens added, never while the order waits.
+  const added = [];
+  const keepDispatch = globalThis.dispatchEvent;
+  globalThis.dispatchEvent = (e) => { added.push(e.type); return true; };
   try {
     await v.click('pack-pay');
     const intents = v.calls.filter(([k]) => k === 'intent');
@@ -202,17 +206,22 @@ test('Pay sends one pack line, confirms the order’s intent, and shows Tokens a
     assert.equal(v.text('pack-bonus'), '+$2.50 bonus added');
     assert.match(v.text('pack-balance-final'), /Your token balance is \$30\.90\./, 'screen readers hear the final figure');
     assert.equal(v.text('pack-back'), 'Back to Models');
-  } finally { await v.close(); }
+    assert.deepEqual(added, ['studioos:tokens_added'], 'said once, at Tokens added');
+  } finally { globalThis.dispatchEvent = keepDispatch; await v.close(); }
 });
 
 test('the landing shows Payment received while the order waits, and never Tokens added', async () => {
   const v = await mount({ pack: 'k10', bridge: fakeBridge([]) }, { ...ROUTES, intent: INTENT, order: () => order('waiting', { at: '2099-01-01 00:00:00' }) });
+  const added = [];
+  const keepDispatch = globalThis.dispatchEvent;
+  globalThis.dispatchEvent = (e) => { added.push(e.type); return true; };
   try {
     await v.click('pack-pay');
     assert.ok(v.has('pack-landing'));
     assert.match(v.text('pack-landing'), /Payment received\.Adding \$25\.00 to your balance…/);
     assert.ok(!v.has('pack-accepted'));
-  } finally { await v.close(); }
+    assert.deepEqual(added, [], 'D1363: a refused run is not continued before the tokens land');
+  } finally { globalThis.dispatchEvent = keepDispatch; await v.close(); }
 });
 
 test('CRP5: a pack rule is drawn on the pack’s row with Pay disabled; a decline is D1053’s words', async () => {

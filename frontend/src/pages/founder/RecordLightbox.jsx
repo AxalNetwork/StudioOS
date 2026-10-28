@@ -7,6 +7,7 @@ import { api as defaultApi } from '../../lib/api.js';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { channelsApi } from '../../lib/api/channels.js';
 import { liveRefusal } from '../../lib/activeRecording.js';
+import { onTokensAdded, openAddTokens, tokenRefusal } from '../../lib/aiTokens.js';
 import { cycleValidateApi } from '../../lib/api/cycleValidate.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { AssistantEntry } from './AssistantEntry';
@@ -20,7 +21,7 @@ import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlo
 import {
   CONSENTS, DURATIONS, HOW_OPTIONS, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callChannel, callLabel, chipStatus, consentNote, howOf,
   defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
-  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref, callCapture, callStartPlan, callStartNote, IMPORT_NOTE,
+  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref, callCapture, callStartPlan, callStartNote, IMPORT_NOTE, TOKENS_ADDED_START,
 } from './recordSetup.js';
 
 /**
@@ -236,6 +237,16 @@ export default function RecordLightbox({
   const [refusal, setRefusal] = useState(null);
   const [assigned, setAssigned] = useState(null);
   const { company: active } = useActiveCompany() || {};
+  // D1363: a Start refused for AI tokens is topped up here, never on another page. Once the
+  // tokens land, a refused Eadwyn AI send is made again on the same session; any other Start
+  // is ready to press again.
+  useEffect(() => {
+    if (!refusal?.topUp) return undefined;
+    return onTokensAdded(() => {
+      if (typeof refusal.resume === 'function') { refusal.resume(); return; }
+      setRefusal(null); setAssigned(TOKENS_ADDED_START);
+    });
+  }, [refusal]);
 
   useEffect(() => {
     if (initialModels !== undefined) return undefined;
@@ -446,16 +457,22 @@ export default function RecordLightbox({
       const r = interview
         ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: `${startKey.current}-bot` })
         : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}-bot` }, botFields));
-      try {
-        await sessions.sendBot(r.session.id, { meeting_url: url });
-      } catch (e) {
-        try { tab?.close?.(); } catch { /* already closed */ }
-        setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}` });
-        setBusy(false); sending.current = false;
-        return;
-      }
-      opened();
-      onStarted?.({ ...r.session, submitted_via: 'meeting_bot' }, into(r.interview));
+      // D1363: refused for AI tokens, the member tops up here and the send is made again on
+      // the same session once the tokens land; the meeting then opens (or the session page offers it).
+      const send = async () => {
+        try {
+          await sessions.sendBot(r.session.id, { meeting_url: url });
+        } catch (e) {
+          try { tab?.close?.(); } catch { /* already closed */ }
+          setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}`,
+            ...(tokenRefusal(e) ? { topUp: true, resume: () => { setRefusal(null); setBusy(true); sending.current = true; send(); } } : {}) });
+          setBusy(false); sending.current = false;
+          return;
+        }
+        opened();
+        onStarted?.({ ...r.session, submitted_via: 'meeting_bot' }, into(r.interview));
+      };
+      await send();
     } catch (e) { refuse(e); }
   };
 
@@ -505,13 +522,18 @@ export default function RecordLightbox({
         : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}${useBot ? '-bot' : ''}` }, captureFields));
       const into = person(r.interview);
       if (useBot) {
-        try {
-          await sessions.sendBot(r.session.id, { meeting_url: link.trim() });
-          onStarted?.({ ...r.session, submitted_via: 'meeting_bot' }, into);
-        } catch (e) {
-          setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}` });
-          setBusy(false); sending.current = false;
-        }
+        const url = link.trim();
+        const send = async () => {
+          try {
+            await sessions.sendBot(r.session.id, { meeting_url: url });
+            onStarted?.({ ...r.session, submitted_via: 'meeting_bot' }, into);
+          } catch (e) {
+            setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}`,
+              ...(tokenRefusal(e) ? { topUp: true, resume: () => { setRefusal(null); setBusy(true); sending.current = true; send(); } } : {}) });
+            setBusy(false); sending.current = false;
+          }
+        };
+        await send();
         return;
       }
       if (handsOver) {
@@ -758,8 +780,12 @@ export default function RecordLightbox({
         {refusal && !refusal.storage && (
           <p role="alert" className="m-0 mt-1 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-error">
             {refusal.text}
-            {refusal.sessionHref && <Link to={refusal.sessionHref} className="ml-1 underline">Open the session to check its status</Link>}{refusal.liveHref && <>{' '}<Link to={refusal.liveHref} replace className="underline" data-testid="record-error-live">Return to that recording</Link></>}
+            {refusal.sessionHref && !refusal.topUp && <Link to={refusal.sessionHref} className="ml-1 underline">Open the session to check its status</Link>}{refusal.liveHref && <>{' '}<Link to={refusal.liveHref} replace className="underline" data-testid="record-error-live">Return to that recording</Link></>}
           </p>
+        )}
+        {refusal?.topUp && (
+          <button type="button" onClick={() => openAddTokens({ from: 'Record a session' })} data-testid="record-top-up"
+            className="mt-1 self-start rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800">Top up and continue</button>
         )}
         {assigned && <p role="status" className="m-0 mt-1 text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="record-assigned">{assigned}</p>}
       </div>

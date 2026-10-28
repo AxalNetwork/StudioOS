@@ -3,6 +3,7 @@ import { Pause, Play, Square, Flag, ListChecks, X, Captions, CaptionsOff, MicOff
 import RingViz from '../../components/discovery/RingViz';
 import { NO_SOUND_MS } from '../../lib/interviewCapture';
 import { STAGES, elapsedMs, processingProgress, stageIndex } from '../../lib/activeRecording';
+import { onTokensAdded, openAddTokens } from '../../lib/aiTokens';
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
 import { Unreadable } from '../../ui/Honesty';
 import { STOP_CHOICE, stopQuote, stopWords } from './stopSheet';
@@ -173,6 +174,11 @@ export function PointsDrawer({ points = [], onTick, error = null, onClose, retur
  * the rest outlined; then "Then it lands in Interviews.". A failure prints the
  * Worker's sentence with Retry (§5.9.7).
  */
+/** D1363: retries once when the member's tokens land, so a top-up needs no second press. */
+export function ResumeOnTokens({ onResume }) {
+  useEffect(() => onTokensAdded(() => onResume?.()), [onResume]);
+  return null;
+}
 export function ProcessingStages({ processing = null, stageAt = -1, onRetry }) {
   const failed = processing?.stage === 'failed';
   return (
@@ -193,7 +199,16 @@ export function ProcessingStages({ processing = null, stageAt = -1, onRetry }) {
       {failed && (
         <div role="alert" data-testid="processing-failed" className="mx-auto max-w-[360px] space-y-2">
           <p className="m-0 text-[13.5px] font-semibold text-red-700 dark:text-red-300">{processing?.error || 'Processing stopped. Nothing was lost; try again.'}</p>
-          <button type="button" onClick={onRetry} data-testid="button-retry-processing" className="rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800">Retry</button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {/* D1363: stopped for want of AI tokens: the Add tokens sheet opens over this page, and processing continues by itself once they land. */}
+            {processing?.top_up === true && <>
+              <button type="button" onClick={() => openAddTokens({ from: 'Record a session' })} data-testid="button-top-up-processing" className="rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800">Top up and continue</button>
+              <ResumeOnTokens onResume={onRetry} />
+            </>}
+            <button type="button" onClick={onRetry} data-testid="button-retry-processing" className={processing?.top_up === true
+              ? 'rounded-md border border-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-violet-700 hover:bg-violet-50 dark:border-violet-400 dark:text-violet-200 dark:hover:bg-violet-900/30'
+              : 'rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800'}>Retry</button>
+          </div>
         </div>
       )}
     </div>

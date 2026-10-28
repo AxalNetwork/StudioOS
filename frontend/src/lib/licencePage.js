@@ -297,6 +297,10 @@ export function allowanceCard(budget) {
   // `Number(null)` is 0, and an allowance nobody recorded is not $0.
   const usd = (micro) => (micro !== null && micro !== undefined && Number.isFinite(Number(micro))
     ? `$${(Number(micro) / 1e6).toLocaleString('en-GB', { maximumFractionDigits: 2 })}` : NOT_RECORDED);
+  // D1363: a Super Admin's AI has no limit; the card says so, never "$1,000,000,000".
+  if (budget.unlimited === true) {
+    return { daily: 'No limit', monthly: 'No limit', used: `${usd(budget.month_spend_microusd)} used this month · No limit (Super Admin)`, pct: 0 };
+  }
   const month = Number(budget.monthly_microusd);
   const spent = Number(budget.month_spend_microusd);
   const pct = month > 0 && Number.isFinite(spent) ? Math.min(100, Math.round((100 * spent) / month)) : 0;

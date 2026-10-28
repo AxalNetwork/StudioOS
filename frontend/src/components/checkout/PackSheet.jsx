@@ -4,6 +4,7 @@ import { Check, Lock, X } from 'lucide-react';
 import { api as mainApi } from '../../lib/api';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { topUpRows } from '../../pages/account/usageModel';
+import { notifyTokensAdded } from '../../lib/aiTokens';
 import { SECURE_LINE, SELLER_LINE, declineFamily, newNonce, refusalView } from './checkoutModel';
 import { CardFormBoundary, STRIPE_BRIDGE, useDialog } from './CheckoutSheet';
 import {
@@ -273,6 +274,8 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
   const CardForm = bridge.CardForm;
   const totals = packTotals(pack, intent);
   const landing = landingView(order);
+  // D1363: once the tokens are credited, the page that was refused for them continues.
+  useEffect(() => { if (phase === 'landing' && landing.key === 'credited') notifyTokensAdded(); }, [phase, landing.key]);
   const auto = autoReloadView(reload, view.rows);
   const paid = intent ? totals.find((t) => t.key === 'due')?.value : null;
 

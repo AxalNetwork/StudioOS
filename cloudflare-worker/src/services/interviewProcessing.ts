@@ -39,7 +39,7 @@
  */
 import type { Env } from '../types';
 import type { JobType } from '../models/jobs';
-import { run as aiRun, audioMinutesFromBytes, budgetRefusalMessage, type RailContext } from './aiRouter';
+import { run as aiRun, audioMinutesFromBytes, budgetRefusalMessage, NOT_ENOUGH_TOKENS, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import * as aiBudget from './aiBudget';
 import { enqueueJob } from './queue';
@@ -707,6 +707,8 @@ export function processingOf(session: SessionRow) {
     done: session.processing_done ?? null,
     total: session.processing_total ?? null,
     error: session.processing_error ?? null,
+    // D1363: stopped for want of AI tokens, so the page offers Top up beside Retry.
+    top_up: session.processing_stage === 'failed' && (session.processing_error ?? '').startsWith(NOT_ENOUGH_TOKENS),
     stale: isStale(session),
   };
 }

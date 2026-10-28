@@ -85,29 +85,34 @@ export function availableView(me, now = new Date()) {
   const held = me.month_reserved_microusd + me.topup_reserved_microusd;
   const review = me.held_for_review.reduce((n, r) => n + (isMicro(r?.held_microusd) ? r.held_microusd : 0), 0);
   const available = left + balance;
+  // D1363: a Super Admin's AI has no limit; their figures say so, never $1 billion.
+  const unlimited = me.unlimited === true;
   const resets = dayText(nextMonthStart(now));
   const heldText = microUsd(held);
   const heldLine = held === 0 ? null : review > 0 && review >= held ? `${heldText} is held for review.` : `${heldText} is held by work in progress.`;
   return {
     noAllowance,
-    available: microUsd(available),
+    available: unlimited ? 'No limit' : microUsd(available),
+    unlimited,
     availableMicro: available,
-    left: noAllowance ? null : microUsd(left),
+    left: noAllowance ? null : unlimited ? 'No limit' : microUsd(left),
     balance: microUsd(balance),
     held: heldText,
     heldMicro: held,
     review: review > 0,
     plan: planLabel(me.licence),
     used: noAllowance ? null : microUsd(me.month_spend_microusd),
-    of: noAllowance ? null : microUsd(me.monthly_microusd),
+    of: noAllowance ? null : unlimited ? 'No limit' : microUsd(me.monthly_microusd),
     resets,
     summary: noAllowance
       ? `Token balance ${microUsd(balance)}. ${heldLine ?? 'Nothing is held right now.'}`
-      : `Plan allowance left ${microUsd(left)} + token balance ${microUsd(balance)}.${heldLine ? ` ${heldLine}` : ''}`,
-    srSummary: `${microUsd(available)} available: ${noAllowance ? '' : `${microUsd(left)} allowance and `}${microUsd(balance)} tokens${held ? `; ${heldText} held` : ''}.`,
+      : unlimited ? `No limit: a Super Admin's AI runs are never refused for the allowance. Token balance ${microUsd(balance)}.`
+        : `Plan allowance left ${microUsd(left)} + token balance ${microUsd(balance)}.${heldLine ? ` ${heldLine}` : ''}`,
+    srSummary: unlimited ? `No limit: ${microUsd(balance)} tokens${held ? `; ${heldText} held` : ''}.`
+      : `${microUsd(available)} available: ${noAllowance ? '' : `${microUsd(left)} allowance and `}${microUsd(balance)} tokens${held ? `; ${heldText} held` : ''}.`,
     // The bar's segments, in the canvas's order and colours; a zero segment is left out, never drawn as a sliver.
     segments: [
-      noAllowance ? null : { id: 'allowance', label: 'Plan allowance left', value: microUsd(left), micro: left },
+      noAllowance || unlimited ? null : { id: 'allowance', label: 'Plan allowance left', value: microUsd(left), micro: left },
       { id: 'balance', label: 'Token balance', value: microUsd(balance), micro: balance },
       held ? { id: 'held', label: review > 0 && review >= held ? 'Held for review' : 'Held', value: heldText, micro: held } : null,
     ].filter((x) => x && x.micro > 0),
@@ -145,7 +150,8 @@ export function stopState(me, limit, now = new Date()) {
 export function limitRows(me, limit) {
   const plan = !budgetReadable(me) ? { state: 'unreadable' }
     : me.monthly_microusd === 0 ? { state: 'none', text: 'No plan allowance. Your AI runs use AI tokens.' }
-      : { state: 'ok', perMonth: microUsd(me.monthly_microusd), from: planLabel(me.licence) };
+      : me.unlimited === true ? { state: 'ok', perMonth: 'No limit', from: 'Super Admin' }
+        : { state: 'ok', perMonth: microUsd(me.monthly_microusd), from: planLabel(me.licence) };
   const lv = limit === undefined ? undefined : limit ? limitView(limit) : null;
   const own = lv === undefined ? { state: 'loading' } : !lv ? { state: 'unreadable' }
     : !lv.set ? { state: 'none' } : { state: 'ok', spent: lv.spent, limit: lv.limit, pct: lv.pct };
