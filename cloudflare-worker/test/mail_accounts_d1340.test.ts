@@ -31,7 +31,7 @@ const SECRETS = [PASSWORD, REFRESH, ROTATED, btoa(`\0member@example.invalid\0${P
 
 // ─────────────────────────────────────────────────────────── a scripted mail server
 
-type Server = { connects: Array<{ port: number; secure: string }>; data: string[]; password: string };
+type Server = { connects: Array<{ port: number; secure: string }>; data: string[]; password: string; smtpRejects?: boolean; imapRejects?: boolean };
 
 function fakeConnect(server: Server): Connect {
   return (addr, opts) => {
@@ -51,13 +51,13 @@ function fakeConnect(server: Server): Connect {
         if (imap) {
           const [tag, cmd] = line.split(' ');
           if (cmd === 'STARTTLS') say(`${tag} OK begin`);
-          else if (cmd === 'LOGIN') say(line.includes(`"${server.password}"`) ? `${tag} OK in` : `${tag} NO refused`);
+          else if (cmd === 'LOGIN') say(!server.imapRejects && line.includes(`"${server.password}"`) ? `${tag} OK in` : `${tag} NO refused`);
           else if (cmd === 'LOGOUT') { say('* BYE'); say(`${tag} OK`); }
           return;
         }
         if (line.startsWith('EHLO')) { say('250-hello'); say('250 AUTH PLAIN'); }
         else if (line === 'STARTTLS') say('220 go ahead');
-        else if (line.startsWith('AUTH PLAIN ')) say(atob(line.slice(11)).endsWith(`\0${server.password}`) ? '235 ok' : '535 no');
+        else if (line.startsWith('AUTH PLAIN ')) say(!server.smtpRejects && atob(line.slice(11)).endsWith(`\0${server.password}`) ? '235 ok' : '535 no');
         else if (line.startsWith('MAIL FROM') || line.startsWith('RCPT TO')) say('250 ok');
         else if (line === 'DATA') { inData = true; data = ''; say('354 go'); }
         else if (line === 'QUIT') say('221 bye');
@@ -201,6 +201,15 @@ test('IMAP: port 25 is refused before any socket opens; a good mailbox is verifi
     const wrong = await call(f, 2, 'POST', '/api/mail/accounts/imap', { ...IMAP, address: 'other@example.invalid', password: 'not-the-password' });
     assert.deepEqual([wrong.status, wrong.body.error], [400, 'mailbox_auth_failed']);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM mail_accounts').get()!.n, 1, 'a refused mailbox is not stored');
+    for (const side of ['smtpRejects', 'imapRejects'] as const) {
+      f.server[side] = true;
+      f.server.connects.length = 0;
+      const one = await call(f, 2, 'POST', '/api/mail/accounts/imap', { ...IMAP, address: `${side}@example.invalid` });
+      assert.deepEqual([one.status, one.body.error], [400, 'mailbox_auth_failed'], side);
+      assert.equal(f.server.connects.length, side === 'smtpRejects' ? 1 : 2, `${side}: refused where it was refused`);
+      f.server[side] = false;
+    }
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM mail_accounts').get()!.n, 1);
     noSecrets(f, 'the logs', f.logs.join('\n'));
   } finally { f.close(); }
 });
@@ -268,8 +277,10 @@ test('Outlook: an expired refresh token turns the mailbox expired with a sentenc
     assert.deepEqual([row.status, row.last_error], ['expired', r.body.detail]);
     const [sent] = f.sentRows();
     assert.deepEqual([sent.sent_at, sent.error], [null, r.body.detail]);
+    const tokenCalls = f.calls.length;
     const later = await call(f, 2, 'POST', '/api/mail/send', { account_uid: acct.uid, to: 'x@example.invalid', subject: 'S', body: 'B', nonce: await sendNonce(f, 2, acct.uid) });
     assert.deepEqual([later.status, later.body.detail], [409, r.body.detail], 'an expired mailbox sends nothing until reconnected');
+    assert.equal(f.calls.length, tokenCalls, 'and asks the provider nothing');
     const v = await call(f, 2, 'POST', `/api/mail/accounts/${acct.uid}/verify`);
     assert.deepEqual([v.body.account.status, v.body.account.last_error], ['expired', r.body.detail]);
     noSecrets(f, 'the replies', r.text + later.text + v.text);

@@ -375,6 +375,21 @@ Worker routes in `routes/newsletter.ts`, backed by `services/newsletter.ts` and 
 
 The old `GET /api/insights/newsletter` and `POST /api/insights/newsletter/{subscribe,unsubscribe}` keep answering: the toggle writes the `insights` topic as well, and the GET reads the topic once the member has a subscriber row (D813 retires them).
 
+### Mailboxes and send Worker contract (D1340, #3548)
+
+Worker routes in `routes/mail_accounts.ts`, mounted at `/api/mail`, backed by `services/mail/accounts.ts`, `services/mail/adapters/` and migration 647 (`mail_accounts`, `mail_sent`, `mail_nonces`). The client is `lib/api/mail.js`. There is no page yet: the composer is #3552. Mail goes from the member's own mailbox, never the house token. Every route but the OAuth callback needs sign-in, and a support session is refused 403 `support_session_refused`. Another member's uid is 404 "Mailbox not found." Credentials are sealed (`columnCipher`) and never returned.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/mail/accounts` | signed in | `{ accounts, providers: { outlook, gmail, imap } }`: the member's mailboxes that are not revoked, never a credential. |
+| `POST /api/mail/accounts/start/:provider` | signed in | `outlook` or `gmail`, with `{ read? }` (Outlook's `Mail.Read`). Answers `{ authorize_url }`, its state a one-use nonce. Gmail is 409 `gmail_not_offered` until `MAIL_GMAIL_ENABLED`; an unconfigured app is 503 `mailbox_unconfigured`. |
+| `GET /api/mail/accounts/oauth/callback` | the provider's redirect (the spent state is the authority) | Exchanges the code, reads the address, seals the refresh token and redirects to `/connectors?mail=connected\|declined\|expired\|failed`. |
+| `POST /api/mail/accounts/imap` | signed in | Takes `{ address, display_name?, username, password, smtp_host, smtp_port, smtp_tls, imap_host, imap_port, imap_tls }`. It checks the settings (port 25, plaintext and local hosts are 400 `mailbox_refused`), verifies by SMTP AUTH and IMAP LOGIN with nothing sent, then stores. Answers 201 `{ account }`. A refused login is 400 `mailbox_auth_failed`. |
+| `POST /api/mail/accounts/:uid/verify` | the mailbox's owner | Answers `{ account }`. An expired token turns it `expired`, with its sentence in `last_error`. |
+| `DELETE /api/mail/accounts/:uid` | the mailbox's owner | Revokes at the provider where it can (Gmail), empties the credentials and marks the row `revoked`. Its `mail_sent` rows stay. |
+| `POST /api/mail/send/confirm` | the mailbox's owner | Takes `{ account_uid }`. Answers `{ nonce, expires_at }`: the composer's pressed Send, one use, 5 minutes. |
+| `POST /api/mail/send` | the mailbox's owner | Takes `{ account_uid, to, subject, body, draft_uid?, nonce }`. Answers 201 `{ sent }` and writes one `mail_sent` row with the recipient hashed beside it and the draft's quoted refs. No valid nonce is 403 `confirmation_required`; an expired mailbox is 409 `mailbox_expired`; more than 20 in an hour is 429 `send_rate_limited`; another member's draft is 404. |
+
 ### Annual licence-fee invoices Worker contract (D802, #2238)
 
 HQ invoices a territory licensee's annual fee, one invoice per licence year, the year running from the licence's anniversary (`starts_on`). Backed by `services/licenceFeeInvoices.ts` and migration 513 (`licence_fee_invoices`). The PDF is the generated-document type `territory_licence_fee_invoice`, drawn from the figures frozen at issue; Holdings is the sender, and the payment block is the `territory_licence_fee` purpose, masked.
