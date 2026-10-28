@@ -36,7 +36,7 @@ const kinds = (out) => [...out.matchAll(/data-chart="([a-z]+)"/g)].map((m) => m[
 
 test('the four cycles, each with the canvas question, outcome and primary action', () => {
   assert.deepEqual(Object.keys(CYCLES), ['validate', 'build', 'raise', 'grow']);
-  assert.deepEqual(Object.values(CYCLES).map((c) => c.action), ['Record a session', 'Connect a tool', 'Call for Capital', 'Share an update']);
+  assert.deepEqual(Object.values(CYCLES).map((c) => c.action), ['Record a session', 'Connect a tool', 'Build your deck', 'Share an update']);
   assert.equal(cycleOf('Raise').question, 'What resources does this venture need?');
   assert.equal(cycleOf('nope'), null);
   assert.equal(Object.values(MODULES).flat().length, 26, 'the fixtures carry all 26 modules');

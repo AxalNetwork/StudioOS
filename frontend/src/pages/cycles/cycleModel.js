@@ -26,7 +26,7 @@ export const CYCLES = {
   validate: { key: 'validate', name: 'Validate', question: 'Is this worth building?', outcome: 'Research → Insights → Evidence', action: 'Record a session' },
   build: { key: 'build', name: 'Build', question: 'Can this become a real company?', outcome: 'From Concept → Company', action: 'Connect a tool',
     history: { key: 'tools', name: 'Tools', path: '/build/operating-systems', hash: '#tools', live: true } },
-  raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Call for Capital',
+  raise: { key: 'raise', name: 'Raise', question: 'What resources does this venture need?', outcome: 'From Story → Capital', action: 'Build your deck',
     // D1221 (#2458): Raise's history is Calls for Capital, Capital relationships' Calls tab.
     history: { key: 'calls', name: 'Calls', path: '/raise/capital-relationships/calls', hash: '', live: true },
     // D1261 (#2430): Evidence is Raise's own tab, after Overview and before Calls.
