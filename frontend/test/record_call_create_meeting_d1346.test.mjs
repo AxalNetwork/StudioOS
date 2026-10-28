@@ -283,7 +283,7 @@ test('Google connection refreshes on return, preserves the form, and clears disc
     assert.ok(by(m, 'record-create-connect'), 'initially asks to connect');
     response = CONNECTED;
     await act(async () => listeners.get('window:focus')());
-    assert.equal(by(m, 'record-create-connect'), undefined, 'return recognises completed connection');
+    assert.equal(Boolean(by(m, 'record-create-connect')), false, 'return recognises completed connection');
     assert.match(m.text(), /Start creates the Google Meet meeting on your account/);
     assert.equal(m.props(by(m, 'record-name')).value, 'Unsaved interview', 'refresh preserves entered fields');
     response = UNCONNECTED;
@@ -298,7 +298,7 @@ test('Google connection refreshes on return, preserves the form, and clears disc
     await act(async () => listeners.get('window:focus')());
     response = new Error('offline');
     await act(async () => listeners.get('window:focus')());
-    assert.equal(by(m, 'record-create-connect'), undefined, 'unreadable is not a disconnected claim');
+    assert.equal(Boolean(by(m, 'record-create-connect')), false, 'unreadable is not a disconnected claim');
     assert.doesNotMatch(m.text(), /Google Meet · Connected/);
   } finally { await m.unmount(); }
   assert.equal(listeners.has('window:focus'), false, 'focus listener removed on close');
@@ -317,7 +317,7 @@ test('a late connection read cannot overwrite a newer return read', async () => 
     await act(async () => { listeners.get('window:focus')(); });
     await act(async () => pending[1].resolve(CONNECTED));
     await act(async () => pending[0].resolve(UNCONNECTED));
-    assert.equal(by(m, 'record-create-connect'), undefined, 'older response cannot restore Connect');
+    assert.equal(Boolean(by(m, 'record-create-connect')), false, 'older response cannot restore Connect');
     await act(async () => { listeners.get('window:focus')(); listeners.get('window:focus')(); });
     await act(async () => pending[3].resolve(CONNECTED));
     await act(async () => pending[2].reject(new Error('late failure')));
