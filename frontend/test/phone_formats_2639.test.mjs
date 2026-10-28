@@ -147,29 +147,6 @@ test('#2639: active profile editor normalises before saving and keeps invalid nu
     ['if (!parsed) return { phone_e164: PHONE_ERROR };', ''],
   ]);
 });
-const legacyStart=settings.indexOf('function PersonalIdentityCard(');
-const legacySource = prelude + settings.slice(legacyStart,settings.indexOf('// ---------- Corporate',legacyStart)) + '\nexport { PersonalIdentityCard };';
-async function verifyLegacy(module, invalid = false) {
-  module.api.calls.length=0;
-  const f=await mountForm(h(module.PersonalIdentityCard,{flash(){}}));
-  try {
-    await act(async () => f.props(f.by('identity-phone-input')).onChange({target:{value:invalid?'123':'079 000 00 00'}}));
-    if (!invalid) assert.ok(f.text().includes("We'll save +41 79 000 00 00"));
-    await act(async () => f.props(f.by('identity-phone-save')).onClick());
-    if (invalid) { assert.equal(module.api.calls.length,0); assert.ok(f.text().includes(PHONE_ERROR)); }
-    else assert.deepEqual(module.api.calls,[{phone_e164:CH}]);
-  } finally {await f.unmount();}
-}
-test('#2639: legacy identity editor also previews and sends canonical phone',async()=>{
-  await mutationCheck(legacySource,'pages/SettingsPage.jsx',verifyLegacy,[
-    ['phone_e164: normalizedPhone.e164','phone_e164: phoneInput'],
-    ["We'll save {normalizedPhone.international}.", ''],
-  ]);
-  await mutationCheck(legacySource,'pages/SettingsPage.jsx',module=>verifyLegacy(module,true),[
-    ['if (!normalizedPhone) { setFieldErrors(previous => ({ ...previous, phone_e164: PHONE_ERROR })); return; }', 'if (!normalizedPhone) { save({ phone_e164: phoneInput }); return; }'],
-  ]);
-});
-
 async function verifyStoredCountry(module) {
   for (const country of ['AQ','XX','UK','ch']) {
     const calls=[];
@@ -198,24 +175,6 @@ test('#2639: legacy and unsupported profile countries stay visible and cannot be
   ]);
 });
 
-async function verifyOtherFieldErrors(module) {
-  module.api.updatePersonalProfile = async () => { throw { data: { errors: { tax_residency_country: 'Synthetic tax residency refusal' } } }; };
-  const f=await mountForm(h(module.PersonalIdentityCard,{flash(){}}));
-  try {
-    const tax=f.nodes().find(n=>n.tagName==='INPUT' && f.props(n).maxLength===2 && f.props(n).value==='');
-    await act(async()=>f.props(tax).onBlur());
-    assert.ok(f.text().includes('Synthetic tax residency refusal'));
-    await act(async()=>f.props(f.by('identity-phone-input')).onChange({target:{value:'123'}}));
-    await act(async()=>f.props(f.by('identity-phone-save')).onClick());
-    assert.ok(f.text().includes(PHONE_ERROR));
-    assert.ok(f.text().includes('Synthetic tax residency refusal'),'phone refusal preserves other field errors');
-  } finally {await f.unmount();}
-}
-test('#2639: local phone refusal retains unrelated identity errors',async()=>{
-  await mutationCheck(legacySource,'pages/SettingsPage.jsx',verifyOtherFieldErrors,[
-    ['setFieldErrors(previous => ({ ...previous, phone_e164: PHONE_ERROR }))','setFieldErrors({ phone_e164: PHONE_ERROR })'],
-  ]);
-});
 async function verifySavedMask(module) {
   const f=await mountForm(h(module.PersonalDetailsCard,{account:{name:'Fixture'},identity:{status:'ready',data:{}},details:{status:'ready',data:{country:'CH',has_phone:true,phone_last4:'0000'}},onSave:async()=>({})}));
   try {

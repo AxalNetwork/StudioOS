@@ -36,7 +36,7 @@ import {
 } from '../src/pages/account/accountCenterModel.js';
 import { AccountSectionNav, accountRailCoverage } from '../src/pages/account/AccountCenter.jsx';
 import ProfileIdentityCanvas, {
-  PersonalDetailsCard, IdentityCard, CompanyProfileCard, SigningEntityCard, PublicArchetypeCard, ChangeHistoryCard,
+  PersonalDetailsCard, IdentityCard, AddressTaxCard, PublicArchetypeCard, ChangeHistoryCard,
 } from '../src/pages/account/AccountProfile.jsx';
 import { ActiveCompanyContext, mergeCompanyDetails, useUpdateCompanyDetails } from '../src/contexts/ActiveCompanyContext.js';
 import { setReadState } from '../src/ui/CompanySwitcher.jsx';
@@ -324,52 +324,31 @@ test('Identity: legal name, a birth date that does not shift a day, and countrie
   assert.match(none, /Legal name Not recorded Date of birth Not recorded Nationality Not recorded Tax residence Not recorded/);
 });
 
-test('Signing entity: empty, filled, loading and unreadable are four different cards', () => {
-  const empty = html(h(SigningEntityCard, { corporate: ready(CORP_EMPTY), onSave: noop }));
-  assert.match(empty, /data-testid="signing-entity-empty"/);
-  assert.match(text(h(SigningEntityCard, { corporate: ready(CORP_EMPTY), onSave: noop })), /No signing entity recorded\. Add the legal entity you sign for\. Add signing entity/);
-  assert.doesNotMatch(empty, /button-edit-signing-entity/, 'nothing to edit until one is added');
-  const filled = text(h(SigningEntityCard, { corporate: ready(CORP), onSave: noop }));
-  assert.match(filled, /Company Quintero Labs SA Role CEO Registration CHE-123\.456\.789 Country Switzerland/);
-  assert.match(html(h(SigningEntityCard, { corporate: ready(CORP), onSave: noop })), /data-testid="button-edit-signing-entity"/);
-  assert.match(html(h(SigningEntityCard, { corporate: loading(), onSave: noop })), /data-testid="account-loading"/);
-  const bad = text(h(SigningEntityCard, { corporate: unreadable(''), onSave: noop }));
-  assert.match(bad, /Your signing entity could not be read\. This is not a claim that you have none\./);
-  assert.doesNotMatch(bad, /No company profile yet/);
+const PERSONAL_FULL = { address_line1: '1 Rue Exemple', address_line2: '', city: 'Geneva', state_or_region: 'GE', postal_code: '1201', country: 'CH', has_tax_id: true, tax_id_last4: '4321' };
+const PERSONAL_BLANK = { address_line1: null, address_line2: null, city: null, state_or_region: null, postal_code: null, country: null, has_tax_id: false };
+
+test('Address and tax ID: the saved address on one line, the tax ID masked, and its empty, loading and unreadable states', () => {
+  const filled = text(h(AddressTaxCard, { personal: ready(PERSONAL_FULL), onSave: noop }));
+  assert.match(filled, /Address 1 Rue Exemple, Geneva, GE, 1201, Switzerland/);
+  assert.match(filled, /Tax ID •••• 4321/);
+  assert.doesNotMatch(filled, /4321[0-9]/, 'never more than the last four digits');
+  assert.match(html(h(AddressTaxCard, { personal: ready(PERSONAL_FULL), onSave: noop })), /data-testid="button-edit-address"/);
+  const none = text(h(AddressTaxCard, { personal: ready(PERSONAL_BLANK), onSave: noop }));
+  assert.match(none, /Address Not recorded Tax ID Not recorded/);
+  assert.match(html(h(AddressTaxCard, { personal: loading(), onSave: noop })), /data-testid="account-loading"/);
+  const bad = text(h(AddressTaxCard, { personal: unreadable(''), onSave: noop }));
+  assert.match(bad, /Your address and tax ID could not be read\. This is not a claim that none is saved\./);
+});
+
+test('Profile and identity draws no company or signing entity: Companies and projects owns both', () => {
+  const canvas = html(h(ActiveCompanyContext.Provider, { value: { company: COMPANY_A } }, h(ProfileIdentityCanvas, { data: ACCOUNT })));
+  assert.doesNotMatch(canvas, /card-company-profile|card-signing-entity/);
+  assert.doesNotMatch(canvas, /Example Labs/);
+  assert.match(canvas, /card-address-tax/);
 });
 
 const COMPANY_A = { id: 7, uid: 'company-a', company_name: 'Example Labs', my_role: 'Founder', is_primary_admin: true, stage: 'Seed', website: 'https://example.com', cycles_active: ['build'] };
 const COMPANY_B = { id: 8, uid: 'company-b', company_name: 'Other Labs', my_role: 'Viewer' };
-const companyCard = (company) => h(ActiveCompanyContext.Provider, { value: { company } }, h(CompanyProfileCard));
-
-test('Company profile follows the selected company even when the signing entity is empty', (t) => {
-  t.after(() => setReadState({ loading: true, failed: false }));
-  setReadState({ loading: false, failed: false });
-  const first = html(companyCard(COMPANY_A));
-  assert.match(text(companyCard(COMPANY_A)), /Company Example Labs Role Founder Stage Seed Website https:\/\/example.com/);
-  // D1140 (#3020): the card opens this company's settings at their new address.
-  assert.match(first, /href="\/account\/companies\/company-a\/settings"/);
-  assert.doesNotMatch(first, /No company|Add company profile/);
-  assert.match(text(companyCard(COMPANY_B)), /Company Other Labs Role Viewer/);
-  assert.doesNotMatch(html(companyCard(COMPANY_B)), /Example Labs|https:\/\/example.com/);
-  const canvas = html(h(ActiveCompanyContext.Provider, { value: { company: COMPANY_A } }, h(ProfileIdentityCanvas, { data: ACCOUNT })));
-  assert.match(canvas, /Example Labs/);
-  assert.match(canvas, /card-signing-entity/);
-});
-
-test('Company profile distinguishes an empty membership list, loading and a failed read', (t) => {
-  t.after(() => setReadState({ loading: true, failed: false }));
-  setReadState({ loading: false, failed: false });
-  const empty = html(companyCard(null));
-  assert.match(empty, /No company selected/);
-  assert.match(empty, /href="\/account\/companies"/); // D1140: Companies and projects
-  setReadState({ loading: true, failed: false });
-  assert.match(html(companyCard(null)), /account-loading/);
-  assert.doesNotMatch(html(companyCard(null)), /No company selected/);
-  setReadState({ loading: false, failed: true });
-  assert.match(html(companyCard(null)), /Your company profile could not be read/);
-  assert.doesNotMatch(html(companyCard(null)), /No company selected/);
-});
 
 test('company edits update the selected profile and the dropdown without losing membership metadata', () => {
   let company = COMPANY_A;
@@ -430,7 +409,7 @@ test('Change history: one dated line per snapshot, an empty history, a failed on
 
 test('the profile section renders every card in its loading state before any read lands', () => {
   const markup = html(h(ProfileIdentityCanvas, { data: ACCOUNT, onAccountChange: noop, onSaved: noop }));
-  for (const id of ['card-personal-details', 'card-identity', 'card-company-profile', 'card-public-archetype', 'card-change-history']) {
+  for (const id of ['card-personal-details', 'card-identity', 'card-address-tax', 'card-public-archetype', 'card-change-history']) {
     assert.match(markup, new RegExp(`data-testid="${id}"`), `${id} is drawn`);
   }
   assert.match(markup, /@container/, 'the two-column grids are sized by the pane, not the window');
@@ -596,7 +575,7 @@ test('SettingsPage lists the canvas sections in its order, and mounts each secti
   for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<ConnectorsTab connectorKey={connectorKey} />', '<BuilderSection view={builderView ?? undefined} />']) {
     assert.ok(page.includes(mount), `${mount} is mounted`);
   }
-  assert.match(page, /<ProfileTabs key=\{profileRev\}/, 'the editors below the profile cards remount after a card saves');
+  assert.match(page, /<ProfileEditors key=\{profileRev\}/, 'the editors below the profile cards remount after a card saves');
   assert.doesNotMatch(page, /function SectionDropdown/);
 });
 
