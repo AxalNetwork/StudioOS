@@ -84,6 +84,7 @@ import capital from './routes/capital';
 import tickets from './routes/tickets';
 import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
+import relationships from './routes/relationships';
 import mailAccounts from './routes/mail_accounts';
 import mailDrafts from './routes/mail_drafts';
 import mailShares from './routes/mail_shares';
@@ -1436,6 +1437,8 @@ app.route('/api/trust', trust);
 // `/api/legal` would be cleaner but `legal.ts` is its own router, so we just
 // register esign at the path the UI already uses.
 app.route('/api/legal/esign', esign);
+// D1356 (#3571): who on my teams knows a person — private by default, shared by opt-in.
+app.route('/api/relationships', relationships);
 app.route('/api/network', network);
 // Task #9 — Refer & Earn payouts via Stripe Connect Express (import at top).
 app.route('/api/refer-earn', referEarn);
