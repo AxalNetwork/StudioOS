@@ -38,6 +38,9 @@ async function request(f: any, who: number | null, method: string, path: string,
 async function fixture() {
   __resetForTest();
   const f = aiBudgetFixture();
+  // This matrix exercises an ordinary admin. The shared AI fixture seeds
+  // user 1 as HQ Super Admin, whose deck writes are explicitly allowed by #3635.
+  f.db.exec('DELETE FROM super_admins WHERE user_id = 1; UPDATE users SET is_super_admin = 0 WHERE id = 1;');
   f.db.exec('PRAGMA foreign_keys=OFF; ALTER TABLE users ADD COLUMN founder_id INTEGER; ALTER TABLE activity_logs ADD COLUMN project_id INTEGER; ALTER TABLE activity_logs ADD COLUMN entity_type TEXT; ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;');
   for (const table of ['projects', 'pitch_decks', 'financial_models', 'cap_table_holders', 'landing_pages']) f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, table)));
   f.db.exec(readFileSync(new URL('../sql/migrations/399_landing_brand_voice_dark_logo_archive.sql', import.meta.url), 'utf8'));
