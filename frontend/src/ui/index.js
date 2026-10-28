@@ -35,6 +35,9 @@ export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 export { default as Lightbox, LightboxBarProvider, LightboxPhoneProvider, useLightboxPage } from './Lightbox';
 // D1317 — the one detail sheet: right side, docked beside the Eadwyn rail's spine. See Sheet.jsx.
 export { default as Sheet, SHEET_WIDTHS } from './Sheet';
+// D1327 — Fill with Eadwyn's one mark and one sheet (on Sheet, 520px). See FillMark.jsx and FillSheet.jsx.
+export { FillGlyph, FillTrigger, FillFormTrigger, FillModuleTrigger, FillMark, ConnectorMark, marketFillMark } from './FillMark';
+export { default as FillSheet } from './FillSheet';
 // D686 — Cycle Action's lightbox body: header, step pills, banner, scrolling body, footer; shared button classes. See ActionSheet.jsx.
 // D687 — every service's mark, coded once (Simple Icons 16.35.0, CC0), with initials where no mark is cleared. See BrandIcon.jsx.
 export { default as BrandIcon, BRAND_MARKS, BRAND_GENERIC, BRAND_MONOGRAM, BRAND_ALIAS, resolveBrand, TILE_HEX } from './BrandIcon';

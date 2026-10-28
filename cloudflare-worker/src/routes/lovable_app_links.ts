@@ -5,6 +5,8 @@
  *   PUT    /api/cycles/:cycle/lovable/app-link?project=        { record_id?, app_url }
  *   DELETE /api/cycles/:cycle/lovable/app-link?project=&record_id=
  *   POST   /api/cycles/:cycle/lovable/app-link/:uid/check?project=
+ *   POST   /api/cycles/validate/lovable/signup-token?project=      { record_id }  (D1312: make the experiment's sign-up address)
+ *   DELETE /api/cycles/validate/lovable/signup-token?project=&record_id=          (D1312: turn it off)
  *
  * `:cycle` is `validate` (an experiment: `record_id` is its id) or `build`
  * (the project's Prototype / MVP: no `record_id`), checked against
@@ -27,6 +29,7 @@ import {
   LINK_TARGETS, checkAppUrl, isLinkCycle, linkView, plainTitle, vercelProductionDomains,
   type LinkCycle, type LinkRow,
 } from '../services/lovableAppLinks';
+import { makeAddress, signupViews, turnOffAddress } from '../services/lovable/signups';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -146,6 +149,36 @@ app.post('/:cycle/lovable/app-link/:uid/check', async (c) => {
   await log(c.env, s, entityId, 'lovable_app_checked', status === 'live' ? 'Lovable app checked: Live' : 'Lovable app checked: Not reachable');
   const fresh = await loadLink(c.env, s, { uid });
   return c.json({ link: fresh ? linkView(fresh, await vercelProductionDomains(c.env, Number(s.project.id))) : null });
+});
+
+/**
+ * D1312 (#3432): an experiment's sign-up address. Validate only; the same scope
+ * as the app link (the venture's writers, never a support session). Making an
+ * address turns off the experiment's live one, so one address is live at a time.
+ */
+app.post('/:cycle/lovable/signup-token', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  if (s.cycle !== 'validate') return c.json({ detail: 'A sign-up address belongs to an experiment.', code: 'not_an_experiment' }, 404);
+  const body: any = await c.req.json().catch(() => ({}));
+  const record = await recordFor(c, s, body?.record_id);
+  if (!record) return c.json({ detail: 'That experiment is not on this venture.', code: 'record_not_found' }, 404);
+  await makeAddress(c.env, Number(s.project.id), record.recordId, Number(s.user.id));
+  await log(c.env, s, record.entityId, 'lovable_signup_address_made', 'Sign-up address made for a Lovable page');
+  const view = (await signupViews(c.env, Number(s.project.id), [record.recordId], true)).get(record.recordId) ?? null;
+  return c.json({ signup: view }, 201);
+});
+
+app.delete('/:cycle/lovable/signup-token', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  if (s.cycle !== 'validate') return c.json({ detail: 'A sign-up address belongs to an experiment.', code: 'not_an_experiment' }, 404);
+  const record = await recordFor(c, s, c.req.query('record_id'));
+  if (!record) return c.json({ detail: 'That experiment is not on this venture.', code: 'record_not_found' }, 404);
+  const n = await turnOffAddress(c.env, Number(s.project.id), record.recordId);
+  if (!n) return c.json({ detail: 'This experiment has no sign-up address. Nothing was turned off.', code: 'signup_not_found' }, 404);
+  await log(c.env, s, record.entityId, 'lovable_signup_address_off', 'Sign-up address turned off');
+  return c.json({ signup: null });
 });
 
 export default app;

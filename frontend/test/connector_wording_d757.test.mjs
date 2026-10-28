@@ -18,7 +18,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 
 import {
-  CHANNEL_WORDING, CHAT_ENGINE, DEFAULT_SUGGESTS, RECORD_ENGINE, VALIDATE_MODULE_LABELS, ZOOM_DISCONNECT_NOTE, ZOOM_DISTRIBUTION,
+  BOT_ENGINE, CHANNEL_WORDING, CHAT_ENGINE, DEFAULT_SUGGESTS, RECORD_ENGINE, VALIDATE_MODULE_LABELS, ZOOM_DISCONNECT_NOTE, ZOOM_DISTRIBUTION,
   ZOOM_HOW_STEPS, ZOOM_SECTIONS, ZOOM_UNCONFIGURED, engineSentence, listSentence, recordSourceLine,
   zoomDistributionNotice, zoomHowItWorks, zoomNotices,
 } from '../src/lib/validateSourceWording.js';
@@ -177,7 +177,10 @@ test('a member offered no channel sees no card, except one they are connected on
 // 9 ───────────────────────────────────────────────────────────────────────────
 test('Record a session: the recorder line for In person, Video and Phone; the chat line for an imported chat; none for a paste', () => {
   // Mutations checked: Video left out; the chat line on a paste; the lightbox not drawing it.
-  for (const m of ['in_person', 'video', 'phone']) assert.equal(recordSourceLine(m, 'zoom'), D757.record, m);
+  for (const [m, p] of [['in_person', null], ['video', 'whatsapp'], ['phone', 'phone_speaker'], ['phone', 'whatsapp']]) assert.equal(recordSourceLine(m, p), D757.record, m);
+  // D1346 (#3554): a meeting is Eadwyn AI's to record, not this device's.
+  for (const p of ['zoom', 'google_meet', 'teams']) assert.equal(recordSourceLine('video', p), BOT_ENGINE, p);
+  assert.equal(BOT_ENGINE, 'Eadwyn AI joins the call as a participant. The host admits it, and it posts a recording notice in the meeting chat.');
   assert.equal(recordSourceLine('text', 'whatsapp'), D757.chats);
   assert.equal(recordSourceLine('text', 'telegram'), D757.chats);
   assert.equal(recordSourceLine('text', 'paste'), null);

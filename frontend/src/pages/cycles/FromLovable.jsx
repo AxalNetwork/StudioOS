@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { lovableAppLinksApi } from '../../lib/api/lovableAppLinks.js';
-import { LOVABLE_WORDS as W, slotView } from './lovableAppLink.js';
+import { LOVABLE_WORDS as W, signupView, slotView } from './lovableAppLink.js';
 
 /**
  * D1083 (#2948, Lovable part 3 of #2398) — "From Lovable" (`id="from-lovable"`):
@@ -13,6 +13,10 @@ import { LOVABLE_WORDS as W, slotView } from './lovableAppLink.js';
  * - Check now is the only thing that fetches the address, once per press.
  * - Linking or removing an address asks first, in place, saying what changes.
  * - Unreadable says so and keeps nothing hidden; it is never an empty list.
+ *
+ * D1312 (#3432, Lovable part 4): on an experiment, LV5's "With a sign-up
+ * address": the count, and for the venture's writers the address with Copy and
+ * Turn off…. Making or turning off an address asks first, in place.
  */
 export default function FromLovable({ part, cycle, projectId, onRetry, api = lovableAppLinksApi }) {
   const [slots, setSlots] = useState(() => (part?.state === 'ok' && Array.isArray(part.slots) ? part.slots : []));
@@ -38,13 +42,14 @@ export default function FromLovable({ part, cycle, projectId, onRetry, api = lov
           ? <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="lovable-no-records">No experiment on this claim yet. Add one, then link its app.</p>
           : slots.map((slot) => (
             <Slot key={slot.record_id} slot={slot} labelled={many} cycle={cycle} projectId={projectId} api={api}
-              onLink={(link) => replace(slot.record_id, link)} />
+              onLink={(link) => replace(slot.record_id, link)}
+              writer={!!part.signup_writer} onSignup={(signup) => setSlots((all) => all.map((x) => (x.record_id === slot.record_id ? { ...x, signup, signup_unreadable: undefined } : x)))} />
           ))}
     </section>
   );
 }
 
-function Slot({ slot, labelled, cycle, projectId, api, onLink }) {
+function Slot({ slot, labelled, cycle, projectId, api, onLink, writer = false, onSignup = () => {} }) {
   const view = slotView(slot);
   const recordId = cycle === 'build' ? null : slot.record_id;
   const [draft, setDraft] = useState('');
@@ -110,6 +115,77 @@ function Slot({ slot, labelled, cycle, projectId, api, onLink }) {
         </div>
       )}
       {error && <p role="alert" className="m-0 text-[12px] text-red-700 dark:text-red-300" data-testid={`${id}-error`}>{error}</p>}
+      <Signup slot={slot} writer={writer} projectId={projectId} api={api} onSignup={onSignup} id={id} />
+    </div>
+  );
+}
+
+/** D1312: LV5's "With a sign-up address" on one experiment. */
+function Signup({ slot, writer, projectId, api, onSignup, id }) {
+  const view = signupView(slot, writer);
+  const [ask, setAsk] = useState(null); // 'make' | 'off'
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
+  // "Copied" for two seconds; the timer goes with the block if it unmounts first.
+  useEffect(() => {
+    if (!copied) return undefined;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+  if (view.kind === 'none') return null;
+  const sid = `${id}-signup`;
+  const go = async () => {
+    setBusy(true); setError(null);
+    try {
+      const res = ask === 'make' ? await api.makeSignup(projectId, slot.record_id) : await api.turnOffSignup(projectId, slot.record_id);
+      onSignup(res?.signup ?? null); setAsk(null);
+    } catch (e) { setError(e?.message || 'That could not be saved. Nothing was changed.'); }
+    finally { setBusy(false); }
+  };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(view.address); setCopied(true); }
+    catch { setError('The address could not be copied. Select it and copy it by hand.'); }
+  };
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-axal-hairline px-3 py-2.5 dark:border-gray-800" data-testid={sid}>
+      <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{W.signupTitle}</p>
+      {view.kind === 'unreadable' && <p className="m-0 text-[12px] text-red-700 dark:text-red-300" data-testid={`${sid}-unreadable`}>{W.signupUnreadable}</p>}
+      {view.kind === 'empty' && (
+        <>
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid={`${sid}-none`}>{W.signupNone}</p>
+          {view.canMake && !ask && <button type="button" onClick={() => setAsk('make')} className={`${BUTTON} w-fit`} data-testid={`${sid}-make`}>{W.signupMake}</button>}
+        </>
+      )}
+      {view.kind === 'live' && (
+        <>
+          <p className="m-0 font-mono text-[12px] tabular-nums text-axal-ink dark:text-gray-100" data-testid={`${sid}-count`}>{view.count}</p>
+          {view.address && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="break-all font-mono text-[12px] text-axal-ink dark:text-gray-100" data-testid={`${sid}-address`}>{view.address}</span>
+              <button type="button" onClick={copy} className={BUTTON} data-testid={`${sid}-copy`}>{copied ? W.copied : W.copy}</button>
+              <span className="sr-only" aria-live="polite">{copied ? W.copied : ''}</span>
+            </div>
+          )}
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">{W.signupNote}</p>
+          {view.canChange && !ask && <button type="button" onClick={() => setAsk('off')} className={`${QUIET} w-fit`} data-testid={`${sid}-off`}>{W.signupOff}</button>}
+        </>
+      )}
+      {ask && (
+        <div role="group" aria-label={ask === 'make' ? 'Make a sign-up address?' : 'Turn off the sign-up address?'} className="flex flex-col gap-2 rounded-lg border border-axal-lavender-edge bg-axal-lavender px-3 py-2.5 dark:border-violet-800 dark:bg-violet-950" data-testid={`${sid}-confirm`}>
+          <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{ask === 'make' ? 'Make a sign-up address?' : 'Turn off the sign-up address?'}</p>
+          <p className="m-0 text-[12px] text-axal-ink/80 dark:text-gray-300" data-testid={`${sid}-says`}>
+            {ask === 'make'
+              ? `${slot.label} gets its own address. Each sign-up the app’s form sends there counts in Demand and urgency signals. Only the count is kept, never the names or emails.`
+              : `Sign-ups sent to this address are refused from now on. The sign-ups already counted stay counted. You can make a new address later; the app’s form would need the new one.`}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy} onClick={go} className={PRIMARY} data-testid={`${sid}-confirm-button`}>{ask === 'make' ? W.signupMake : 'Turn off'}</button>
+            <button type="button" disabled={busy} onClick={() => { setAsk(null); setError(null); }} className={QUIET} data-testid={`${sid}-cancel`}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {error && <p role="alert" className="m-0 text-[12px] text-red-700 dark:text-red-300" data-testid={`${sid}-error`}>{error}</p>}
     </div>
   );
 }

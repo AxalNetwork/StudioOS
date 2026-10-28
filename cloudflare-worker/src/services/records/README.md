@@ -9,6 +9,11 @@ checks a record id against its actual store and project before a route reads or
 writes it. Validate's existing stores are listed there; later cycles add their
 stores with fixed, bound SQL statements.
 
+`read.ts` holds the gate check (`allowed`) the record route uses, and
+`readableRecord`, one record read through its module's gate, its store and each
+section's own gate. D1341's mail context pack (`../mail/contextPack.ts`) quotes
+records through it, so a draft never quotes what the record page would hide.
+
 A record supplies four facts, and may carry its row's `uid`. Each returned
 section names its `read` or `write` gate; a section with `when` is drawn only
 for the ids it accepts. A declared action exposes its `form` (with T, CH or CK fields) and optional

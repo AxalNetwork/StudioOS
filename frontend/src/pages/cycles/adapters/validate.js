@@ -317,13 +317,17 @@ const SIGNAL = { loi: 'Letter of intent', pre_sale: 'Pre-sale', waitlist: 'Waitl
 const COUNTS = { confirmed: ['Confirmed', 'ok'], counted: ['Counted', 'v2'], to_confirm: ['To confirm', 'warn'] };
 const KIND = { direct: ['Direct', 'bad'], adjacent: ['Adjacent', 'warn'] };
 const PERIOD = { year: ' / year', month: ' / month', once: '' };
-// Eadwyn's mark (D424), in the retired board's own words (#1523). A founder's
-// own claim has no mark; a provenance read that failed says so per row.
-const PROVENANCE = {
-  eadwyn: ['Proposed by Eadwyn', 'v1'],
-  eadwyn_edited: ['Proposed by Eadwyn · you edited it', 'v2'],
-  unreadable: ['Unreadable', 'muted'],
+// D1327 (#3488): Eadwyn's mark is Fill with Eadwyn's one `FillMark`, which the
+// table's `Cell` draws from `{ fill }`. A founder's own claim has no mark; a
+// provenance read that failed says "Unreadable" per row, never "typed".
+const FILL_OF = {
+  eadwyn: { source_kind: 'eadwyn', edited: false },
+  eadwyn_edited: { source_kind: 'eadwyn', edited: true },
+  unreadable: { state: 'unreadable' },
 };
+// `text` is the mark's own words, for the phone list and exports that read cells as text (`cellView`).
+const FILL_WORDS = { eadwyn: 'Eadwyn', eadwyn_edited: 'Eadwyn · edited', unreadable: 'Unreadable' };
+const fillCell = (v) => (FILL_OF[v] ? { fill: FILL_OF[v], text: FILL_WORDS[v] } : null);
 
 const pill = (map, v) => (map[v] ? { text: map[v][0], tone: map[v][1] } : null);
 const word = (map, v) => (v == null ? null : map[v] || String(v));
@@ -445,7 +449,7 @@ export const RECORDS = {
         : null,
       sprint: r.sprint ?? null,
       owner: r.owner ?? null,
-      source: pill(PROVENANCE, r.provenance),
+      source: fillCell(r.provenance),
     } }),
     filters: [
       // D697: the Worker's options, in its order. Sprint's are the venture's own, so only the read can list them.

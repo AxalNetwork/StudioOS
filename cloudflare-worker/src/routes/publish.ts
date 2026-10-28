@@ -8,10 +8,12 @@
  *   GET    /destinations?project=                  the viewer's publish-capable connections and their places
  *   POST   /destinations/refresh/:integrationUid   { project } re-read the places the adapter lists
  *   PUT    /destinations/:uid?project=             { enabled, daily_cap? } by the connection's owner; logged
- *   POST   /drafts                                 { project_id, module, source_refs?, text? }
+ *   POST   /drafts                                 { project_id, module, source_refs?, text?, team_only_included? }
+ *                                                   no text: pre-filled from the module's records (D1333)
  *   GET    /drafts/:uid                            the venture's team
  *   PUT    /drafts/:uid                            { text?, per_destination?, alt_texts?, team_only_included?, named_consent? }
  *   DELETE /drafts/:uid                            archive
+ *   POST   /drafts/from-proposal/:proposalUid      Use this draft: Eadwyn's `draft:publish` proposal becomes a draft (D1322)
  *   POST   /drafts/:uid/preview                    { destination_uids } previews, check and envelope_hash per place
  *   POST   /drafts/:uid/confirm                    { destination_uid, envelope_hash, idempotency_key }
  *   GET    /sends?project=&module=&provider=&status=, GET /sends/:uid   the history; text for the team only
@@ -19,9 +21,10 @@
  *
  * WHO. Writes and sends: the venture's founder through their own connection,
  * never a support session (`canPublish`). Reads: the venture's team
- * (`isTeamViewer`). Use this draft (Eadwyn's proposal, part 4) and the Grow
- * draft builders (part 2) are not built here: a draft holds the founder's
- * own words.
+ * (`isTeamViewer`). D1333 (part 2): a draft with no text of the founder's own
+ * is pre-filled by its module's builder (`services/publishSources.ts`).
+ * D1322 (part 4): Use this draft copies an Eadwyn proposal the founder chose
+ * to keep; it never sends.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -30,8 +33,10 @@ import { refuse } from '../util/refusal';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { getProviderImpl, type IntegrationRow } from '../integrations/registry';
 import { publishTarget, PUBLISH_DAILY_CAP } from '../integrations/publishTargets';
-import { PUBLISH_MODULES } from '../integrations/publishSources';
+import { PUBLISH_MODULES, type PublishModule } from '../integrations/publishSources';
+import { createDraft } from '../services/publishSources';
 import { isTeamViewer } from '../services/mercury/growFeeds';
+import { decideRail, getRail } from '../services/railProposals';
 import {
   PublishRefusal, canPublish, checkSend, confirmSend, markNotSent, markRemoved, previewFor, refused, releaseStrandedSends,
   retractSend, retrySend, sendView, type DestinationRow, type DraftRow, type SendRow,
@@ -171,14 +176,9 @@ publish.post('/drafts', handle(async (c, ctx) => {
   const projectId = idOf(b.project_id);
   await canPublish(c.env, { user: ctx.user, support: ctx.support, projectId });
   if (!(PUBLISH_MODULES as readonly string[]).includes(String(b.module))) throw refused('invalid');
-  const refs = Array.isArray(b.source_refs) ? b.source_refs.slice(0, 50) : [];
-  const text = typeof b.text === 'string' ? b.text.slice(0, 20_000) : '';
-  const project = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first() as { company_id: number | null } | null;
-  const uid = crypto.randomUUID();
-  await c.env.DB.prepare(
-    `INSERT INTO publish_drafts (uid, project_id, company_id, module, source_refs_json, author_user_id, body_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid, projectId, project?.company_id ?? null, b.module, JSON.stringify(refs), ctx.user.id, JSON.stringify({ text, per_destination: {} })).run();
-  return c.json({ draft: draftView(await draftOf(c.env, uid)) }, 201);
+  // D1333 (#3481): with no text of the founder's own, the module's records pre-fill the draft (`services/publishSources.ts`).
+  const made = await createDraft(c.env, projectId, b.module as PublishModule, ctx.user.id, b);
+  return c.json({ draft: draftView(await draftOf(c.env, made.uid)), prefill: made.prefill }, 201);
 }));
 
 publish.get('/drafts/:uid', handle(async (c, ctx) => {
@@ -212,6 +212,39 @@ publish.delete('/drafts/:uid', handle(async (c, ctx) => {
   await canPublish(c.env, { user: ctx.user, support: ctx.support, projectId: d.project_id });
   await c.env.DB.prepare(`UPDATE publish_drafts SET status = 'archived', updated_at = datetime('now') WHERE id = ?`).bind(d.id).run();
   return c.json({ archived: true });
+}));
+
+/**
+ * D1322 (#3483, part 4 of #2400) — Use this draft. The founder keeps one of
+ * their own `draft:publish` proposals (D780's `ai_rail_proposals`) as a
+ * `publish_drafts` row with `origin = 'eadwyn'`. It copies; it never previews,
+ * confirms or sends. Team-only figures stay out (`team_only_included = 0`):
+ * only the founder ticks them in, and part 1's check blocks them until then.
+ * Discard is D780's own `POST /api/ai/rail/proposals/:uid/decide`.
+ */
+export const PUBLISH_RAIL_OPTION = 'draft:publish';
+publish.post('/drafts/from-proposal/:proposalUid', handle(async (c, ctx) => {
+  const proposal = await getRail(c.env, Number(ctx.user.id), String(c.req.param('proposalUid')));
+  if (!proposal || proposal.rail_option !== PUBLISH_RAIL_OPTION || proposal.kind !== 'draft') throw refused('not_found');
+  if (proposal.status !== 'proposed') throw refused('wrong_state');
+  const p = proposal.payload;
+  if (!(PUBLISH_MODULES as readonly string[]).includes(String(p.module))) throw refused('invalid');
+  const projectId = idOf(typeof p.project === 'number' ? p.project : NaN);
+  await canPublish(c.env, { user: ctx.user, support: ctx.support, projectId });
+  const refs = Array.isArray(p.source_refs) ? p.source_refs.slice(0, 50) : [];
+  const text = typeof p.text === 'string' ? p.text.slice(0, 20_000) : '';
+  const project = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first() as { company_id: number | null } | null;
+  const uid = crypto.randomUUID();
+  // One draft per proposal, even for two presses at once.
+  const res = await c.env.DB.prepare(
+    `INSERT INTO publish_drafts (uid, project_id, company_id, module, source_refs_json, author_user_id, origin, rail_proposal_uid, body_json, team_only_included)
+     SELECT ?, ?, ?, ?, ?, ?, 'eadwyn', ?, ?, 0
+      WHERE NOT EXISTS (SELECT 1 FROM publish_drafts WHERE rail_proposal_uid = ?)`,
+  ).bind(uid, projectId, project?.company_id ?? null, p.module, JSON.stringify(refs), ctx.user.id, proposal.uid,
+    JSON.stringify({ text, per_destination: {} }), proposal.uid).run();
+  if (!res.meta?.changes) throw refused('wrong_state');
+  await decideRail(c.env, Number(ctx.user.id), proposal.uid, 'accept');
+  return c.json({ draft: { ...draftView(await draftOf(c.env, uid)), origin: 'eadwyn', rail_proposal_uid: proposal.uid } }, 201);
 }));
 
 publish.post('/drafts/:uid/preview', handle(async (c, ctx) => {

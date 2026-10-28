@@ -47,6 +47,10 @@ import { ROW_READS } from './fills';
 /** The form fields an Add form needs before a whole row can be proposed (the writer's own rule). */
 export const ROW_REQUIRED: Readonly<Record<string, readonly string[]>> = Object.freeze({
   mvp_features: ['title'],
+  // D1328 (#3489), part one: each Add form's own required field.
+  pain_groups: ['title'],
+  customer_segments: ['name'],
+  hypotheses: ['claim'],
   // D1329 (#3490): a session in an event's agenda, and an advisor's service, each need a title.
   event_agenda_items: ['title'],
   advisor_services: ['title'],

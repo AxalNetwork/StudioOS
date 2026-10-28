@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
+import { FillMark } from '../../ui/FillMark.jsx';
 import { CardBody, CycleHeader } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
@@ -47,6 +48,8 @@ export const NR = 'rounded-full border border-dashed border-gray-300 bg-axal-gro
 const CONTROL = 'rounded-full border border-axal-hairline bg-white px-[11px] py-[5px] text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
 export function Cell({ cell, first = false, linkState = undefined, plain = false }) {
+  // D1327: a provenance cell is Fill with Eadwyn's one mark.
+  if (cell && typeof cell === 'object' && cell.fill) return <FillMark mark={cell.fill} />;
   const v = cellView(cell);
   if (v.nr) return <span className={NR}>Not recorded</span>;
   const text = !plain && v.href ? <Link to={v.href} state={linkState} className="hover:underline">{v.text}</Link> : v.text;
@@ -178,7 +181,7 @@ function RowAction({ action }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -191,7 +194,7 @@ export default function CycleModulePage({
   const recs = records ?? data?.records;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug}>
-      <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} />
+      <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} />
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}
       {status === 'refused' ? (

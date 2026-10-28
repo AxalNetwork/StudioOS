@@ -79,7 +79,7 @@ export class ChunkUploader {
     while (this.queue.length) {
       const chunk = this.queue.shift()!;
       this.inFlight = chunk;
-      const ok = await withRetry(() => this.transport.putChunk(chunk.seq, chunk.wav, chunk.start_ms), this.clock,undefined,this.signal);
+      const ok = await withRetry(() => (chunk.participant === undefined ? this.transport.putChunk(chunk.seq, chunk.wav, chunk.start_ms) : this.transport.putChunk(chunk.seq, chunk.wav, chunk.start_ms, chunk.participant)), this.clock,undefined,this.signal);
       this.inFlight = null;
       if (ok) {
         this.stored.add(chunk.seq);

@@ -84,6 +84,8 @@ function world() {
   app.route('/api/partner/testing', partnerTesting);
   app.route('/api/admin/testing', adminTesting);
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any;
+  // D1336: only an active Product tester reads and applies to programmes, so every member here starts as one.
+  db.exec("INSERT INTO product_testers (user_id, status, decided_at) SELECT id, 'active', '2026-10-01' FROM users WHERE role NOT IN ('partner', 'admin') AND id NOT IN (SELECT user_id FROM super_admins)");
   return { db, app, env };
 }
 
@@ -130,7 +132,8 @@ async function seeded() {
   assert.equal((await call(w, HQ, 'POST', `/admin/testing/programmes/${hq}/open`)).status, 200);
   assert.equal((await applyAs(w, IVY, hq)).status, 201);
   // Finn is an active tester in HQ's pool; Fran's pool application is still waiting.
-  w.db.exec(`INSERT INTO product_testers (user_id, status, decided_at) VALUES (${FINN}, 'active', '2026-10-01'), (${FRAN}, 'applied', NULL)`);
+  // D1336: everyone applied as an active tester; the pool these reads filter on is then just these two.
+  w.db.exec(`DELETE FROM product_testers; INSERT INTO product_testers (user_id, status, decided_at) VALUES (${FINN}, 'active', '2026-10-01'), (${FRAN}, 'applied', NULL)`);
   return { w, acme, hq };
 }
 
@@ -138,6 +141,8 @@ test('scope=open keeps open and testing programmes; all keeps every one; a bad s
   const { w, acme, hq } = await seeded();
   // A closed programme with one applicant.
   const shut = await openPartnerProgramme(w, { product_name: 'Closed beta', eligible_roles: ['investor'] });
+  // D1336: Ivy applies as an active tester; the seeded pool left her out.
+  w.db.exec(`INSERT INTO product_testers (user_id, status, decided_at) VALUES (${IVY}, 'active', '2026-10-01')`);
   assert.equal((await applyAs(w, IVY, shut)).status, 201);
   assert.equal((await call(w, HQ, 'POST', `/admin/testing/programmes/${shut}/close`)).status, 200);
   const all = (await call(w, HQ, 'GET', '/admin/testing/applications')).body.applications;

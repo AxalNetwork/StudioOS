@@ -200,7 +200,7 @@ test('RD12: a failed history read says so with Try again, and a refusal shows th
 
 test('the wiring: the header takes a chip, and the route spells the model read', () => {
   const overview = readFileSync('frontend/src/pages/cycles/CycleOverview.jsx', 'utf8');
-  assert.match(overview, /<CycleHeader cycle=\{meta\.key\} cards=\{cards\} action=\{action\} search=\{search\} chip=\{chip\} \/>/);
+  assert.match(overview, /<CycleHeader cycle=\{meta\.key\} cards=\{cards\} action=\{action\} search=\{search\} chip=\{chip\} more=\{more\} \/>/);
   const route = readFileSync('cloudflare-worker/src/routes/cycle_raise.ts', 'utf8');
   assert.match(route, /cycleRaise\.get\('\/pmf\/model'/);
 });

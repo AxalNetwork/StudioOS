@@ -78,7 +78,9 @@ test('chip statuses: Connected, Connect, Ready, Not available yet; and an unread
   for (const gone of ['signal', 'sms', 'linkedin', 'slack']) assert.deepEqual(chipStatus('text', chip('text', gone), READ), { word: 'Not available yet', disabled: true });
   // Zoom is not set up on this deployment: said so, but a call can still be recorded, so it is not disabled in Video.
   assert.deepEqual(chipStatus('video', chip('video', 'zoom'), READ), { word: 'Not available yet', disabled: false });
-  assert.deepEqual(chipStatus('video', chip('video', 'google_meet'), READ), { word: 'Connect', disabled: false, connectHref: '/account/connectors' });
+  // D1346 (#3554): Meet's chip is Ready unconnected (the bot joins as a guest); Connect is only for "Create the meeting for me".
+  assert.deepEqual(chipStatus('video', chip('video', 'google_meet'), READ), { word: 'Ready', disabled: false });
+  assert.deepEqual(chipStatus('video', chip('video', 'google_meet'), { ...READ, connections: { google_meet: { status: 'active' } } }), { word: 'Connected', disabled: false });
   // No read at all (the router is not mounted here yet, or the read failed): connection-backed chips say so; importing is disabled.
   assert.deepEqual(chipStatus('text', chip('text', 'telegram'), null), { word: 'Not available yet', disabled: true });
   assert.deepEqual(chipStatus('video', chip('video', 'zoom'), null), { word: 'Not available yet', disabled: false });

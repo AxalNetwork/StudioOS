@@ -24,7 +24,8 @@
  * checked again at each step (`recordFill` checks it a third time).
  */
 import type { Env } from '../../types';
-import { featureCreateStatements, createdId } from '../buildCreates';
+import { featureCreateStatements, mustHaveCreateStatements, createdId } from '../buildCreates';
+import { WriterError, createHypothesis, writeSegment, writeTheme } from '../validateWriters';
 import { decideRail, getRail } from '../railProposals';
 import { fieldsOf, offeredToEadwyn, type FillField } from './fields';
 import { neverFillReason } from './neverFill';
@@ -128,6 +129,55 @@ export const ROW_WRITERS: Readonly<Record<string, RowWriter>> = Object.freeze({
     }));
     return createdId(results);
   },
+  // D1328 (#3489), part one: Validate's Add forms, each through its route's own writer.
+  /** New theme: `writeTheme`, the title only (a severity and the quotes are the founder's). */
+  pain_groups: async (env, a) => validateWrite(() => writeTheme(env, { projectId: a.projectId, userId: a.userId, title: a.row.title })),
+  /** New segment: `writeSegment`, which answers an existing name instead of a second row. */
+  customer_segments: async (env, a) => validateWrite(async () => {
+    const out = await writeSegment(env, {
+      projectId: a.projectId, userId: a.userId, name: a.row.name, source: 'manual',
+      who_they_are: a.row.who_they_are, job_to_be_done: a.row.job_to_be_done, value_promised: a.row.value_promised,
+    });
+    return out.created ? out : 'duplicate';
+  }),
+  /** New hypothesis: `createHypothesis`, its claim and its two bars; no pain links, direction or owner. */
+  hypotheses: async (env, a) => validateWrite(() => createHypothesis(env, {
+    projectId: a.projectId, userId: a.userId, claim: a.row.claim, success_bar: a.row.success_bar, disproof: a.row.disproof,
+  })),
+});
+
+/** A Validate writer's row id, or its refusal as a reason: a WriterError is the writer's own "no". */
+async function validateWrite(write: () => Promise<{ id: number } | string>): Promise<number | string> {
+  try {
+    const out = await write();
+    return typeof out === 'string' ? out : out.id;
+  } catch (e) {
+    if (e instanceof WriterError) return e.status === 404 ? 'unmatched' : 'invalid';
+    throw e;
+  }
+}
+
+/**
+ * A writer for one form whose table another form shares, keyed `<page> / <form>`
+ * (`FILL_FORMS`' words). Add must-have writes `mvp_features` as Add feature
+ * does, but as a must-have: `POST /must-haves`' own statements.
+ */
+export const FORM_ROW_WRITERS: Readonly<Record<string, RowWriter>> = Object.freeze({
+  'Founder · Build · Prototype / MVP / must-have': async (env, a) => {
+    const title = typeof a.row.title === 'string' ? a.row.title.trim().slice(0, 200) : '';
+    if (!title) return 'no_title';
+    let hypothesisId: number | null = null;
+    if (a.row.hypothesis_id != null) {
+      const id = Number(a.row.hypothesis_id);
+      if (!Number.isSafeInteger(id) || id <= 0) return 'unmatched';
+      if (!(await env.DB.prepare('SELECT 1 FROM hypotheses WHERE id = ? AND project_id = ? AND retired_at IS NULL').bind(id, a.projectId).first())) return 'unmatched';
+      hypothesisId = id;
+    }
+    const results = await env.DB.batch(mustHaveCreateStatements(env, {
+      projectId: a.projectId, userId: a.userId, title, hypothesisId, status: 'Backlog', owner: null, due: null, links: [],
+    }));
+    return createdId(results);
+  },
 });
 
 /**
@@ -176,7 +226,7 @@ export async function acceptRows(env: Env, a: {
     const scoped = a.scope && table ? SCOPED_ROW_WRITERS[table] : undefined;
     const writer: RowWriter | undefined = a.scope
       ? (scoped ? (e, w) => scoped(e, { parentId: a.scope!.parentId, userId: w.userId, row: w.row }) : undefined)
-      : table ? ROW_WRITERS[table] : undefined;
+      : (FORM_ROW_WRITERS[`${a.page} / ${a.form}`] ?? (table ? ROW_WRITERS[table] : undefined));
     if (!writer) { refuse('no_writer'); continue; }
     // Only the form's own fields that Eadwyn is offered; a never-fill or measured name refuses the whole row.
     const bad = Object.keys(row).find((k) => { const f = fields.find((x) => x.field === k); return !f || neverFillReason(k) || !offeredToEadwyn(f); });
@@ -219,6 +269,14 @@ export const UNDO_WRITES: Readonly<Record<string, { read: string; write: string;
   'mvp_features.effort': { read: 'SELECT project_id, effort AS value FROM mvp_features WHERE id = ?', write: 'UPDATE mvp_features SET effort = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: true },
   'mvp_features.pain_group_id': { read: 'SELECT project_id, pain_group_id AS value FROM mvp_features WHERE id = ?', write: 'UPDATE mvp_features SET pain_group_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: true, required: false },
   'mvp_features.hypothesis_id': { read: 'SELECT project_id, hypothesis_id AS value FROM mvp_features WHERE id = ?', write: 'UPDATE mvp_features SET hypothesis_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: true, required: false },
+  // D1328 (#3489), part one. A segment's name has no undo: its writer keeps `name_norm` beside it, which no literal statement can.
+  'pain_groups.title': { read: 'SELECT project_id, title AS value FROM pain_groups WHERE id = ?', write: 'UPDATE pain_groups SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: true },
+  'customer_segments.who_they_are': { read: 'SELECT project_id, who_they_are AS value FROM customer_segments WHERE id = ?', write: 'UPDATE customer_segments SET who_they_are = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false },
+  'customer_segments.job_to_be_done': { read: 'SELECT project_id, job_to_be_done AS value FROM customer_segments WHERE id = ?', write: 'UPDATE customer_segments SET job_to_be_done = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false },
+  'customer_segments.value_promised': { read: 'SELECT project_id, value_promised AS value FROM customer_segments WHERE id = ?', write: 'UPDATE customer_segments SET value_promised = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false },
+  'hypotheses.claim': { read: 'SELECT project_id, claim AS value FROM hypotheses WHERE id = ?', write: 'UPDATE hypotheses SET claim = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: true },
+  'hypotheses.success_bar': { read: 'SELECT project_id, success_bar AS value FROM hypotheses WHERE id = ?', write: 'UPDATE hypotheses SET success_bar = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false },
+  'hypotheses.disproof': { read: 'SELECT project_id, disproof AS value FROM hypotheses WHERE id = ?', write: 'UPDATE hypotheses SET disproof = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false },
   // D1329 (#3490): records that are not a venture's. `scoped`: the route has checked the record's own scope
   // (`scopes.ts`), so the write is bound on the row and the fill alone.
   'ic_decisions.memo': { read: 'SELECT NULL AS project_id, memo AS value FROM ic_decisions WHERE id = ?', write: 'UPDATE ic_decisions SET memo = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: false, scoped: true },

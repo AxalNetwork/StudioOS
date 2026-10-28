@@ -7,6 +7,8 @@ import { Unreadable } from '../../ui';
 import { CycleHeader } from './CycleOverview';
 import { CycleBar } from './PhoneModulePage';
 import UpdatesHistory from './UpdatesHistory';
+import PublishedOutside from './publish/PublishedOutside.jsx';
+import { PublishUpdate } from './publish/PublishEntry.jsx';
 import { DESK_TABS, DUTIES_LINE, LINE, TITLE, deskHref, deskSearch } from './reportingModel';
 import { EMPTY, NOT_SHARED, dueNext, prepareLabel, readOnlyLine } from './reporting/deskModel.js';
 import { reportHref } from './reporting/builderModel.js';
@@ -60,19 +62,23 @@ export function DeskTabBar({ active, search = '', counts = {} }) {
 
 /** The History: every update the venture sent, from the Durable company-building read. */
 function History({ projectId, onShare }) {
-  const [state, setState] = useState({ status: 'loading', updates: undefined, reason: null });
+  const [state, setState] = useState({ status: 'loading', updates: undefined, reason: null, publish: null });
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
     setState({ status: 'loading', updates: undefined, reason: null });
     cyclesApi.module('grow', projectId, 'durable-company-building', {})
-      .then((data) => { if (alive) setState({ status: 'ready', updates: Array.isArray(data?.parts?.updates) ? data.parts.updates : null, reason: data?.parts?.updates_reason || null }); })
+      .then((data) => { if (alive) setState({ status: 'ready', updates: Array.isArray(data?.parts?.updates) ? data.parts.updates : null, reason: data?.parts?.updates_reason || null, publish: data?.parts?.publish || null }); })
       .catch(() => { if (alive) setState({ status: 'unreadable', updates: undefined, reason: null }); });
     return () => { alive = false; };
   }, [projectId, reload]);
   if (state.status === 'loading') return <section className={CARD} aria-busy="true" data-testid="reporting-history-loading"><h2 className={H2}>History</h2><div className="h-3 w-40 animate-pulse rounded bg-axal-ground dark:bg-gray-800" /></section>;
   if (state.status === 'unreadable') return <Unreadable what="The History" claim="This is not a claim that nothing was sent." onRetry={() => setReload((n) => n + 1)} />;
-  return <div data-testid="reporting-history"><UpdatesHistory updates={state.updates} reason={state.reason} onShare={onShare} /></div>;
+  // D1321 (#3482): Publish to… on each sent update, for the member part 2's gate lets publish (or connect a place first).
+  const gate = state.publish;
+  const mayPublish = gate?.state === 'ok' && (gate.can_publish || gate.empty?.kind === 'connect');
+  const rowAction = mayPublish ? (u) => <PublishUpdate updateUid={u.uid} projectId={projectId} /> : null;
+  return <div data-testid="reporting-history"><UpdatesHistory updates={state.updates} reason={state.reason} onShare={onShare} rowAction={rowAction} /></div>;
 }
 
 /** Part 2's desk read: ready, unreadable, or not shared with this account (the Worker's 404). */
@@ -220,6 +226,8 @@ export default function ReportingDesk({ tab = 'desk', projectId, projectStatus =
             </>
           )}
           <History projectId={projectId} onShare={readOnly ? undefined : action?.onOpen || action?.onClick} />
+          {/* D1321 (#3482, PUB9): the second list, what the founder published outside Axal VC; the venture's team reads it. */}
+          <PublishedOutside projectId={projectId} />
         </div>
       );
     }

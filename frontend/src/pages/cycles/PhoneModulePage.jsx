@@ -73,7 +73,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -91,7 +91,7 @@ export default function PhoneModulePage({
   );
   // A module that is also a tool draws its own tabs here (D906: Investor
   // narrative), in every state: each tab has its own read.
-  const tabs = subnav ? <div className="mb-[14px] min-w-0">{subnav}</div> : null;
+  const tabs = (subnav || more) ? <div className="mb-[14px] flex min-w-0 flex-col gap-2">{more && <div className="flex justify-end">{more}</div>}{subnav}</div> : null;
 
   if (status === 'unreadable') {
     return <div data-testid="phone-module" data-cycle={meta.key} data-module={slug}>{bar}{tabs}

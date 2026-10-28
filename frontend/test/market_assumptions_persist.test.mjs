@@ -140,21 +140,24 @@ test('a figure Eadwyn supplied is marked, and one the founder replaced is not', 
   // wrong the first time Eadwyn fills a field unless the field says so where it
   // sits. Nothing is marked for a figure the founder typed, which is the common
   // case and the point: the ABSENCE of a stamp is the claim that they did it.
-  assert.match(PAGE, /function FilledMark\(\{ fill \}\)/);
-  assert.match(PAGE, /if \(!fill\) return null;/,
+  // D1327: the mark is the shared FillMark; `marketFillMark` turns the page's fill into it.
+  assert.match(PAGE, /import \{ FillMark, marketFillMark \} from '\.\.\/ui\/FillMark\.jsx';/);
+  const MARK = read('../frontend/src/ui/FillMark.jsx');
+  assert.match(MARK, /if \(!fill\) return null;/,
     'a founder-typed figure gets a stamp claiming Eadwyn supplied it');
-  assert.match(PAGE, /'Eadwyn · edited' : 'Eadwyn · sourced'/,
+  const VIEW = read('../frontend/src/lib/fillSheet.js');
+  assert.match(VIEW, /if \(mark\.edited\) return \{ kind: 'eadwyn', text: 'Eadwyn · edited'/,
     'a corrected fill and an untouched one read the same');
   assert.match(PAGE, /setFilled\(saved\?\.filled \|\| \{\}\)/,
     'the page never reads which figures were filled');
 
   // Marked on exactly the fields the market fill can supply, and no others.
   for (const field of ['population', 'acv', 'cagr']) {
-    assert.ok(PAGE.includes(`<FilledMark fill={filled.${field}} />`),
+    assert.ok(PAGE.includes(`<FillMark mark={marketFillMark(filled.${field})} />`),
       `${field} can be filled by Eadwyn and is never marked as such`);
   }
   for (const field of ['samPct', 'winRate', 'tamOverride']) {
-    assert.ok(!PAGE.includes(`<FilledMark fill={filled.${field}} />`),
+    assert.ok(!PAGE.includes(`<FillMark mark={marketFillMark(filled.${field})} />`),
       `${field} is the founder's own judgement and must not carry an Eadwyn stamp`);
   }
 

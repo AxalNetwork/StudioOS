@@ -1,3 +1,4 @@
+import { ConnectorMark } from '../../ui/FillMark.jsx';
 import { Link, useLocation } from 'react-router-dom';
 import { recordHref } from './recordModel';
 import { mustHaveView, releaseCheckView, releaseChecksCount } from './mvpGithub';
@@ -22,7 +23,7 @@ export default function MvpFromGithub({ github }) {
   return (
     <section id="from-github" className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-part-github" aria-labelledby="from-github-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
-        <h2 id="from-github-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From GitHub</h2>
+        <h2 id="from-github-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From GitHub<ConnectorMark provider="github" /></h2>
         <span className="text-[11px] text-axal-faint dark:text-gray-500">Pull requests and releases from the GitHub sync</span>
       </div>
       {github.state !== 'ok'

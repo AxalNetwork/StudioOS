@@ -17,6 +17,9 @@ mutations = [
     ('late audio', 'if not self.ready or "audio" not in self.enabled:', 'if "audio" not in self.enabled:'),
     ('wrong rate', 'data.GetSampleRate() not in (16000, 32000)', 'False'),
     ('no cleanup', 'z.CleanUPSDK()', 'pass'),
+    ('mixed only', 'onOneWayAudioRawDataReceivedCallback=self.voice', 'onShareAudioRawDataReceivedCallback=self.voice'),
+    ('own stream sent', 'if key == self.self_key:', 'if False:'),
+    ('late voice', 'if not self.ready or "voice" not in self.enabled:', 'if not self.ready:'),
 ]
 
 def run(cls):
@@ -31,4 +34,4 @@ for name, before, after in mutations:
     exec(compile(source.replace(before, after, 1), 'native_mutant', 'exec'), module.__dict__)
     assert not run(module.NativeZoom), 'survived: ' + name
     assert run(NativeZoom), 'restore: ' + name
-print('9 native mutations caught; restored implementation passes')
+print(f'{len(mutations)} native mutations caught; restored implementation passes')

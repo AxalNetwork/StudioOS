@@ -11,7 +11,7 @@ import type { MeetPage } from './adapters/meet.ts';
 import { AdapterFailure } from './types.ts';
 import type { MeetingAdapter, Platform } from './types.ts';
 
-export interface RuntimeFactories {launch?:()=>Promise<Browser>;zoom?:(jwt:string)=>ZoomSdkBridge;fetch?:typeof fetch}
+export interface RuntimeFactories {launch?:()=>Promise<Browser>;zoom?:(jwt:string)=>ZoomSdkBridge;fetch?:typeof fetch;zoomWait?:(signal:AbortSignal)=>Promise<void>}
 export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterContext,factories:RuntimeFactories={}):Promise<MeetingAdapter>{
   if(platform==='zoom'){
     const credentials=async(signal?:AbortSignal)=>{
@@ -23,12 +23,14 @@ export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterCon
       if(typeof value?.sdk_jwt!=='string'||value.sdk_jwt.length<32||value.sdk_jwt.length>4096||!(value.waitingForHost===true||typeof value.token==='string'&&value.token.length>0&&value.token.length<=8192))throw new AdapterFailure('obf_unavailable');
       return value;
     };
-    let initial=await credentials();
+    let initial=await credentials(),waitingSent=false;
     const sdk=(factories.zoom??(jwt=>new ZoomSidecar(jwt)))(initial.sdk_jwt);
     return new ZoomAdapter({sdk,mintObf:async(_id,signal):Promise<ZoomObf>=>{
       const value=initial??await credentials(signal);initial=null;
       return value.waitingForHost?{waitingForHost:true}:{token:value.token};
-    },waitingForHost:async()=>{await context.transport.status({state:'waiting_room'});}});
+    // #2582: B1 learns "waiting for the founder" from its own credentials answer; the
+    // runtime reports the waiting state once, not on every three-second retry.
+    },waitingForHost:async()=>{if(waitingSent)return;await context.transport.status({state:'waiting_room'});waitingSent=true;},...(factories.zoomWait?{wait:factories.zoomWait}:{})});
   }
   const browser=await (factories.launch??(()=>chromium.launch({headless:true,chromiumSandbox:true})))();
   try{

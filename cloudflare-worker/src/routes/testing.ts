@@ -19,6 +19,14 @@
  * Lists are `{ items }`; a refusal is `{ error, detail }` with the service's
  * sentence. Another firm's programme or application is 404, as a missing one.
  *
+ * D1336 (#3541): the member's own place in the Product tester pool
+ * (`services/testerPool.ts`, D1042's store). An Admin is refused each one.
+ *   GET    /api/testing/tester          → { tester, consent, can_apply, cannot_apply }
+ *   POST   /api/testing/tester/apply    { consent_version, availability? } → the same, 201
+ *   POST   /api/testing/tester/leave    → the same
+ * `GET /programmes` and `POST /programmes/:uid/apply` are an active tester's
+ * only: anyone else is 403 `not_active_tester`, with the sentence for their status.
+ *
  * D1199 (#3149): the programme's logo (`services/testingLogo.ts`).
  *   PUT    /api/partner/testing/programmes/:uid/logo   multipart `file`: a square PNG or SVG
  *   DELETE /api/partner/testing/programmes/:uid/logo
@@ -35,6 +43,7 @@ import { mapError, requirePartnerProfile } from './_t13t14t15_helpers';
 import { requirePartnerRole } from './_partner_workspace_helpers';
 import { refusalBody } from '../util/refusal';
 import * as svc from '../services/testing';
+import { joinPool, leavePool, memberTester } from '../services/testerPool';
 import { readTestingOverview } from '../services/testingOverview';
 import type { Owner } from '../services/testing';
 import { putLogo, readLogo, removeLogo, uploadedBytes } from '../services/testingLogo';
@@ -85,6 +94,28 @@ testing.post('/applications/:uid/withdraw', async (c) => {
   try {
     const user = await member(c);
     return c.json({ application: await svc.withdraw(c.env, user.id, c.req.param('uid')) });
+  } catch (e) { return fail(c, e); }
+});
+
+// D1336: the member's own place in the tester pool.
+testing.get('/tester', async (c) => {
+  try {
+    const user = await member(c);
+    return c.json(await memberTester(c.env, user.id));
+  } catch (e) { return fail(c, e); }
+});
+
+testing.post('/tester/apply', async (c) => {
+  try {
+    const user = await member(c);
+    return c.json(await joinPool(c.env, user.id, await body(c)), 201);
+  } catch (e) { return fail(c, e); }
+});
+
+testing.post('/tester/leave', async (c) => {
+  try {
+    const user = await member(c);
+    return c.json(await leavePool(c.env, user.id));
   } catch (e) { return fail(c, e); }
 });
 

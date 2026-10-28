@@ -4,23 +4,19 @@ import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
-import { canReadBoard, canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
+import { canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { ADMIN_READ_ONLY, isAdmin, narrativeAdminGate } from '../services/narrative/adminRead';
 import { activityFor } from '../services/cycleActivity';
 import { hasRecords, RECORD_SPECS, specFor } from '../services/records';
 import { ownedRow, RECORD_ID } from '../services/records/owned';
-import type { Gate, ModuleSpec, Next, RecordAction, RecordContext, RecordRegistry, RecordSection } from '../services/records/types';
+import { allowed } from '../services/records/read';
+import type { ModuleSpec, Next, RecordAction, RecordContext, RecordRegistry, RecordSection } from '../services/records/types';
 
 const CYCLES = new Set(['validate', 'build', 'raise', 'grow']);
 // D914 (#2698): an admin reads the Investor narrative's records read only, and only with a reason.
 const isNarrative = (c: any) => c.req.param('cycle') === 'raise' && c.req.param('slug') === 'investor-narrative';
 // The canvas's pattern exactly: unanchored and case-sensitive (CO:265).
 const STATUS_NEXT = /Open|Pending|Missing|Due|Failed|Next|Planned|To confirm|Needs/;
-
-async function allowed(gate: Gate, project: ProjectRef, user: User, env: Env): Promise<boolean> {
-  if (typeof gate === 'function') return gate(project, user, env);
-  return gate === 'write' ? canWrite(project, user) : canReadBoard(project, user);
-}
 
 function declaration(action: RecordAction) {
   const { execute: _execute, references: _references, ...publicAction } = action;

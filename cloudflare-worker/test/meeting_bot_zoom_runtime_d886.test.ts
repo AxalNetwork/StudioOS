@@ -14,6 +14,7 @@ import { zoomRuntimeCredentials } from '../src/services/meetingBotZoom.ts';
 import { MeetingBotRun } from '../src/durable-objects/meeting-bot-run.ts';
 import callbacks from '../src/routes/meeting_bot_callbacks.ts';
 import { runtimeHeaders,runtimeKey } from '../src/services/meetingBotRuntime.ts';
+import { botView as panelView } from '../../frontend/src/pages/founder/meetingBotSession.js';
 const UID='00000000-0000-4000-8000-000000000001',OTHER='00000000-0000-4000-8000-000000000002';
 const MASTER='synthetic-runtime-master-secret-0123456789',SDK='synthetic-sdk-credential-01234567890123456789';
 const ACCESS='synthetic-founder-access',OBF='synthetic-join-token';
@@ -147,6 +148,50 @@ test('B8 bootstrap withholds credentials after late authority, lease or rollout 
       assert.equal(response.status,403);const body=await response.json();assert.equal(body.sdk_jwt,undefined);assert.equal(body.token,undefined);
     }finally{globalThis.fetch=original;w.db.close();}
   }
+});
+
+// #2582: the founder's panel follows the run through a founder wait, admission and recording.
+async function founderWait(Class=MeetingBotRun){
+  const w=await world(Class),original=fetch,printed:string[]=[],quiet={log:console.log,error:console.error,warn:console.warn};
+  let founderIn=false,writes=0;
+  globalThis.fetch=(async()=>founderIn?Response.json({token:OBF}):Response.json({},{status:400})) as typeof fetch;
+  for(const k of ['log','error','warn'] as const)(console as any)[k]=(...a:unknown[])=>printed.push(a.map(String).join(' '));
+  const put=w.rows.set.bind(w.rows);(w.rows as any).set=(k:string,v:unknown)=>{if(k==='waiting_for_host')writes++;return put(k,v);};
+  const app=new Hono();app.route('/api/meeting-bots',callbacks as any);
+  const signed=async(path:string,raw:string)=>app.fetch(new Request('https://worker.example.test'+path,{method:'POST',body:raw,headers:await runtimeHeaders(await runtimeKey(MASTER,UID),path,raw)}),w.env);
+  const mint=async()=>{w.rows.delete('credentials_requested_at');return (await signed(`/api/meeting-bots/${UID}/zoom-credentials`,'{}')).json();};
+  let seq=0;const status=async(value:string)=>(await signed(`/api/meeting-bots/${UID}/events`,JSON.stringify({seq:++seq,type:'status',status:value}))).status;
+  // The founder's own read goes through the run's supervisor, as GET …/sessions/:id/bot does.
+  const read=async()=>({bot:await (await w.env.MEETING_BOT_RUN!.get('' as any).fetch(new Request('https://meeting-bot.internal/init',{method:'POST',headers:{'x-bot-run':UID}}))).json()});
+  try{
+    assert.equal((await mint()).waitingForHost,true);
+    assert.equal(await status('waiting_room'),200);
+    let view=await read();
+    assert.equal(view.bot.status,'waiting_room','D1 keeps waiting_room: no new status value');
+    assert.equal(view.bot.waiting_for,'founder');
+    assert.equal(panelView(view).label,'Join the call first; Eadwyn AI follows.');
+    // A repeated waiting answer changes nothing.
+    assert.equal((await mint()).waitingForHost,true);assert.equal(writes,1);
+    assert.deepEqual(await read(),view);
+    founderIn=true;
+    assert.equal((await mint()).token,OBF);assert.equal(writes,2);
+    assert.equal(await status('waiting_room'),200);
+    view=await read();assert.equal(view.bot.waiting_for,undefined);
+    assert.equal(panelView(view).label,'Waiting to be admitted');
+    assert.equal(await status('recording'),200);
+    view=await read();assert.equal(panelView(view).label,'Recording');assert.equal(view.bot.waiting_for,undefined);
+    assert.doesNotMatch(printed.join('\n'),new RegExp(`${OBF}|111111111|synthetic|${ACCESS}`),'nothing from the meeting is logged');
+  }finally{globalThis.fetch=original;Object.assign(console,quiet);w.db.close();}
+}
+test('#2582 the founder\'s panel: "Join the call first", then "Waiting to be admitted", then Recording, and a repeated wait writes nothing',()=>founderWait());
+test('#2582 dropping the waiting flag from the founder\'s read is caught',async()=>{
+  const file=new URL('../src/durable-objects/meeting-bot-run.ts',import.meta.url),source=readFileSync(file,'utf8');
+  const before="return waiting ? {...botView(run),waiting_for:'founder' as const} : botView(run);";assert.ok(source.includes(before));
+  const js=stripTypeScriptTypes(source.replace(before,'return botView(run);'),{mode:'strip'})
+    .replace(/from '(\.[^']+)'/g,(_m,s)=>`from '${new URL(/\.[cm]?js$/.test(s)?s:s+'.ts',file).href}'`)
+    .replace(/import\('(\.[^']+)'\)/g,(_m,s)=>`import('${new URL(/\.[cm]?js$/.test(s)?s:s+'.ts',file).href}')`);
+  const {MeetingBotRun:Mutant}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+  await assert.rejects(()=>founderWait(Mutant));await founderWait();
 });
 
 const file=new URL('../src/services/meetingBotZoom.ts',import.meta.url),source=readFileSync(file,'utf8');

@@ -166,14 +166,14 @@ export function CycleCard({ cycle, card, slug, onRetry, search = '' }) {
 }
 
 // D693 decision 14: a loading overview draws one placeholder per module of its cycle.
-export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = MODULES[cycle]?.length ?? 6, search = '', chip = null }) {
+export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = MODULES[cycle]?.length ?? 6, search = '', chip = null, more = null }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
   const cards = Array.isArray(data?.cards) ? data.cards : [];
   const figures = Array.isArray(data?.figures) ? data.figures : [];
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-overview" data-cycle={meta.key}>
-      <CycleHeader cycle={meta.key} cards={cards} action={action} search={search} chip={chip} />
+      <CycleHeader cycle={meta.key} cards={cards} action={action} search={search} chip={chip} more={more} />
       {status === 'unreadable' ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="cycle-overview-unreadable">
           <Unreadable what={`The ${meta.name} overview`} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />

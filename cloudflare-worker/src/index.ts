@@ -84,6 +84,8 @@ import capital from './routes/capital';
 import tickets from './routes/tickets';
 import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
+import mailAccounts from './routes/mail_accounts';
+import mailDrafts from './routes/mail_drafts';
 import dealContext from './routes/deal_context';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
@@ -247,6 +249,7 @@ import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
 import lovableAppLinks from './routes/lovable_app_links';
+import lovableSignups from './routes/lovable_signups';
 import buildGoogleRoutes from './routes/build_google';
 import buildPlanRoutes, { buildEvidenceRoutes } from './routes/build_plan';
 import buildPlanStateRoutes from './routes/build_plan_state';
@@ -973,6 +976,10 @@ app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);
 // D1238 (#3251): an investor firm's own deal flow. Before dealContext and deals, so `flow` is never a deal id.
 app.route('/api/deals/flow', dealFlow);
+// D1340 (#3548): the member's own mailboxes and the send — never Axal's house token.
+app.route('/api/mail', mailAccounts);
+// D1341 (#3549): Eadwyn's email drafts — the context pack, live update blocks and the member's own drafts.
+app.route('/api/mail', mailDrafts);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);
@@ -1493,6 +1500,8 @@ app.route('/api/progress', progressRoutes);
 // D1083 (#2948): the Lovable app link on an experiment or on Prototype / MVP,
 // at /api/cycles/{validate,build}/lovable/app-link, before either cycle's router.
 app.route('/api/cycles', lovableAppLinks);
+// D1312 (#3432): the public sign-up address a Lovable landing page's form posts to (the token is the authorisation).
+app.route('/api/validate/lovable-signups', lovableSignups);
 // D1067: pause, resume and "new evidence since" before D1065's plan router.
 app.route('/api/cycles/build/plan', buildPlanStateRoutes);
 app.route('/api/cycles/build/plan', buildPlanRoutes);
