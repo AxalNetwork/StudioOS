@@ -141,6 +141,7 @@ export * from './api/railPrefs.js';
 export * from './api/railProposals.js';
 export * from './api/raiseEvidence.js';
 export * from './api/referralPartners.js';
+export * from './api/relationships.js';
 export * from './api/reporting.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
