@@ -581,6 +581,7 @@ export default function RecordLightbox({
               {offer?.kind === 'create' && offer.connectHref && <Link to={offer.connectHref} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-create-connect">{offer.connectLabel}</Link>}
               {openHref && <a href={openHref} target="_blank" rel="noopener noreferrer" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-open-meeting">Open the meeting</a>}
               {offer && offer.kind !== 'create' && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-note">{offer.sentence}</p>}
+              {offer?.kind === 'create' && offer.note && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-teams-note">{offer.note}</p>}
               {creating.error && <p role="alert" className="m-0 w-full text-[11.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-create-error">{creating.error}</p>}
             </div>
           )}
