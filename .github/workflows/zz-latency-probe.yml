@@ -1,0 +1,21 @@
+name: temporary latency probe
+on:
+  push:
+    branches: [claude/adoring-knuth-ec95nr-probe]
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Time public and auth-gated endpoints on both hosts
+        run: |
+          for round in 1 2 3; do
+            for host in axal.vc app.axal.vc; do
+              for p in /api/health /api/company/memberships /api/auth/me /api/connectors/catalog /; do
+                curl -s -o /dev/null --max-time 60 -w "r$round $host$p %{http_code} connect=%{time_connect}s ttfb=%{time_starttransfer}s total=%{time_total}s\n" "https://$host$p" || echo "r$round $host$p curl-failed"
+              done
+            done
+            sleep 5
+          done
+          curl -s --max-time 60 -D - -o /dev/null https://axal.vc/api/health | grep -iE "^(cf-ray|server-timing|x-|date)" || true
