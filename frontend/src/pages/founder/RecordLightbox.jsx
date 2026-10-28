@@ -632,7 +632,7 @@ export default function RecordLightbox({
           {recordSourceLine(mode, provider) && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-source-note">{recordSourceLine(mode, provider)}</p>}
           {chips.length > 0 && (
             <Radios label="Provider" testId="record-provider" value={provider} onChange={pickProvider}
-              options={chips.map((c) => { const st = chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined,
+              options={chips.map((c) => { const st = c.value === 'teams' ? { word: 'Coming soon', disabled: true } : chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined,
                 // D687 step 10: the bare 16px mark, real marks only (fallback none), as Schedule a call's chips draw it.
                 // Owner-requested Teams mark: official Teams favicon, saved locally (2026-10-28).
                 // Source: https://teams.public.onecdn.static.microsoft/evergreen-assets/icons/microsoft_teams_logo_refresh_v2025.ico

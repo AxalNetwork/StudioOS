@@ -125,7 +125,7 @@ test('bot not deployed: no Send button, the plan says so, and Start saves the ca
   } finally { t.restore(); await m.unmount(); }
 });
 
-test('bot deployed: a Meet call is saved for import and the Worker sends Eadwyn AI; Teams sends the bot itself', async () => {
+test('bot deployed: a Meet call is saved for import and the Worker sends Eadwyn AI', async () => {
   const s = setup({ bot: BOT_ON });
   const t = tabs();
   const m = await mountContracts(h(RecordLightbox, s.props));
@@ -143,17 +143,7 @@ test('bot deployed: a Meet call is saved for import and the Worker sends Eadwyn 
     assert.deepEqual(s.sent, [], 'the Worker sends Eadwyn AI with the save (D1360)');
     assert.equal(t.opened[0].location.href, MEET_LINK);
   } finally { t.restore(); await m.unmount(); }
-  const b = setup({ bot: BOT_ON });
-  const u = tabs();
-  const n = await mountContracts(h(RecordLightbox, b.props));
-  try {
-    await press(n, 'record-provider-teams');
-    await change(n, 'record-link', TEAMS_LINK);
-    assert.equal(n.props(by(n, 'record-start')).children, 'Start Call');
-    await press(n, 'record-start');
-    assert.deepEqual(b.sent, [{ meeting_url: TEAMS_LINK }], 'Teams has no import, so Eadwyn AI is sent');
-    assert.equal(u.opened[0].location.href, TEAMS_LINK);
-  } finally { u.restore(); await n.unmount(); }
+
 });
 
 test('Start with no link creates the meeting, fills the link, saves the call and opens it: Zoom and Meet', async () => {
@@ -173,7 +163,7 @@ test('Start with no link creates the meeting, fills the link, saves the call and
   }
 });
 
-test('not connected: Start waits for a connection and links to it; Teams with no bot says it cannot capture', async () => {
+test('not connected: Start waits for a connection and links to it', async () => {
   const s = setup({ channels: UNCONNECTED });
   const m = await mountContracts(h(RecordLightbox, s.props));
   try {
@@ -182,38 +172,22 @@ test('not connected: Start waits for a connection and links to it; Teams with no
     assert.equal(m.props(by(m, 'record-create-connect')).href, '/account/connectors');
     assert.match(m.text(), /Connect Google to create the meeting here, or paste the meeting link\./);
     assert.equal(by(m, 'record-connect-link'), undefined, 'the Meet chip itself asks for no connection');
-    await press(m, 'record-provider-teams');
-    assert.match(m.text(), /work or school Microsoft 365 account/);
-    assert.equal(m.props(by(m, 'record-start'))['aria-disabled'], true);
-    assert.match(m.text(), /Axal can’t capture a Microsoft Teams call yet/);
     await press(m, 'record-start');
     assert.deepEqual([s.made, s.device, s.sent], [[], [], []], 'a Start that is off does nothing');
   } finally { await m.unmount(); }
 });
 
-test('D1359: Teams — Start creates the meeting on the Microsoft connection and sends Eadwyn AI; a refusal is the Worker\'s words, and nothing is saved', async () => {
+test('Teams stays visible with its logo but cannot be selected until configuration is ready', async () => {
   const s = setup({ bot: BOT_ON });
-  const t = tabs();
   const m = await mountContracts(h(RecordLightbox, s.props));
   try {
+    const option = by(m, 'record-provider-teams');
+    assert.equal(m.props(option).disabled, true);
+    assert.match(m.text(), /Microsoft Teams · Coming soon/);
     await press(m, 'record-provider-teams');
-    await press(m, 'record-start');
-    assert.deepEqual(s.made, [['teams', 30]]);
-    assert.equal(m.props(by(m, 'record-link')).value, TEAMS_LINK);
-    assert.deepEqual(s.sent, [{ meeting_url: TEAMS_LINK }]);
-    assert.equal(t.opened[0].location.href, TEAMS_LINK);
-  } finally { t.restore(); await m.unmount(); }
-  const f = setup({ bot: BOT_ON, instant: () => { throw new Error('This Microsoft account cannot create Teams meetings from Axal: that needs a work or school Microsoft 365 account. Create the meeting in Microsoft Teams and paste its link.'); } });
-  const u = tabs();
-  const n = await mountContracts(h(RecordLightbox, f.props));
-  try {
-    await press(n, 'record-provider-teams');
-    await press(n, 'record-start');
-    assert.equal(n.props(by(n, 'record-link')).value, '');
-    assert.match(n.text(), /cannot create Teams meetings from Axal/);
-    assert.deepEqual(f.sent, [], 'no bot for a meeting that was not made');
-    assert.equal(u.opened[0].closed, true, 'the tab opened for the press is closed again');
-  } finally { u.restore(); await n.unmount(); }
+    assert.equal(m.props(option)['aria-checked'], false);
+    assert.deepEqual([s.made, s.device, s.sent], [[], [], []]);
+  } finally { await m.unmount(); }
 });
 
 test('a refused or odd create fills nothing, saves nothing and says so; the Worker’s sentence is kept', async () => {
@@ -245,7 +219,7 @@ test('the copy per platform: a meeting is Eadwyn AI’s line; the phone on speak
   const s = setup();
   const m = await mountContracts(h(RecordLightbox, s.props));
   try {
-    for (const p of ['zoom', 'google_meet', 'teams']) {
+    for (const p of ['zoom', 'google_meet']) {
       await press(m, `record-provider-${p}`);
       assert.equal(m.props(by(m, 'record-source-note')).children, BOT_ENGINE, p);
     }

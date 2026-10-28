@@ -110,7 +110,7 @@ test('provider chips show their status; Connect links to Connectors; importing f
   const text = renderedText(video);
   // D1346 (#3554): Eadwyn AI joins Meet as a guest, so the chip never asks for a connection.
   assert.ok(!text.includes('Google Meet · Connect'), 'no Connect on the Meet chip');
-  for (const t of ['Zoom · Connected', 'Google Meet · Ready', 'Microsoft Teams · Ready', 'WhatsApp · Ready', 'Telegram · Ready', 'Signal · Ready', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
+  for (const t of ['Zoom · Connected', 'Google Meet · Ready', 'Microsoft Teams · Coming soon', 'WhatsApp · Ready', 'Telegram · Ready', 'Signal · Ready', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
   const wa = render({ initialMode: 'text', channels: CHANNELS });
   assert.ok(renderedText(tag(wa, 'record-provider-whatsapp') + 'x').length > 0);
   assert.ok(renderedText(wa).includes('WhatsApp · Connect'));
@@ -484,7 +484,7 @@ test('D1358: a refused save says the Worker\'s words, removes the interview it m
   } finally { await m.unmount(); }
 });
 
-test('D1358: Google Meet on a connected Google account is attached from Calendar for import; Teams has no capture and says so', async () => {
+test('D1358: Google Meet on a connected Google account is attached from Calendar for import', async () => {
   const s = spies();
   const attached = [];
   s.props.channelsSource = { ...s.props.channelsSource, attachCalendarMeet: async (...a) => { attached.push(a); return { session_id: 778 }; } };
@@ -492,12 +492,6 @@ test('D1358: Google Meet on a connected Google account is attached from Calendar
   const m = await mount({ ...s.props, interview: { id: 7, interviewee_name: 'Dana Ruiz' }, initialMode: 'video', channels });
   try {
     await m.click('record-consents-written');
-    await m.click('record-provider-teams');
-    await m.type('record-link', 'https://teams.microsoft.com/l/meetup-join/abc');
-    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true, 'Teams: nothing can capture it here');
-    assert.match(m.text(m.by('record-capture-reason')), /can’t capture a Microsoft Teams call yet/);
-    await m.click('record-start');
-    assert.equal(s.calls.create.length, 0);
     await m.click('record-provider-google_meet');
     await m.type('record-link', 'https://meet.google.com/abc-defg-hij');
     assert.equal(m.text(m.by('record-start')), 'Start Call', 'D1362: one Start for a meeting');
