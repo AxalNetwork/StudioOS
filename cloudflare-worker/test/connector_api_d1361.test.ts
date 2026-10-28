@@ -34,6 +34,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function fixture({ enabled = true } = {}) {
   const f = d666Fixture();
   f.db.exec(MIGRATION);
+  f.db.exec(tableFromBaseline(BASELINE_SQL, 'user_sessions'));
   f.db.exec(tableFromBaseline(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/241_advisor_money_model.sql'), 'utf8'), 'platform_settings'));
   if (enabled) f.env.API_KEYS_ENABLED = 'true';
   return f;
@@ -202,8 +203,15 @@ const ADMIN = 30;
 const BASELINE_SQL = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const VERIFIER = 'w'.repeat(64);
 
-async function session(env: any, who: number, role: string) {
-  return new SignJWT({ user_id: who, role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+async function session(env: any, who: number, role: string, options: {
+  factor?: string | null; ageMinutes?: number; stepUpAgeMinutes?: number; noJti?: boolean;
+} = {}) {
+  const jti = options.noJti ? undefined : crypto.randomUUID();
+  if (jti) await env.DB.prepare('INSERT INTO user_sessions (user_id, jti, factor, created_at, last_step_up_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(who, jti, options.factor === undefined ? 'totp' : options.factor,
+      new Date(Date.now() - (options.ageMinutes ?? 0) * 60000).toISOString(),
+      options.stepUpAgeMinutes === undefined ? null : new Date(Date.now() - options.stepUpAgeMinutes * 60000).toISOString()).run();
+  return new SignJWT({ user_id: who, role, ...(jti ? { jti } : {}) }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(env.JWT_SECRET));
 }
 async function http(env: any, path: string, init: RequestInit = {}) {
@@ -292,6 +300,55 @@ test('OAuth: a forged, revoked or MCP-off token is 401 invalid_token; the client
   // With the OAuth server off, OAuth tokens are refused here too.
   const off = { ...f.env, MCP_SERVER_ENABLED: 'false' };
   assert.deepEqual((await get(off, '/me', token)).body.error, 'invalid_token');
+});
+
+// Reads need the elevation; writes also need the existing TOTP + recent step-up bar.
+for (const replacing of [false, true]) test(`OAuth client ${replacing ? 'replacement' : 'creation'}: weak or stale Super Admin sessions cannot claim or mint`, async () => {
+  const f = fixture(); superAdmin(f);
+  if (replacing) assert.equal((await adminRequest(f, 'POST')).status, 201);
+  const before = f.db.prepare('SELECT value FROM platform_settings WHERE key = ?').get(LOVABLE_STATE_KEY);
+  const clientsBefore = await clientIds(f.env);
+  const cases = [
+    { name: 'no session record', options: { noJti: true }, error: 'TOTP required' },
+    { name: 'legacy factor', options: { factor: null }, error: 'TOTP required' },
+    { name: 'SMS even with recent verification', options: { factor: 'sms', stepUpAgeMinutes: 0 }, error: 'TOTP required' },
+    { name: 'fresh passkey', options: { factor: 'passkey' }, error: 'TOTP required' },
+    { name: 'stale TOTP', options: { ageMinutes: 30 }, error: 'step_up_required' },
+    { name: 'stale explicit verification', options: { ageMinutes: 60, stepUpAgeMinutes: 30 }, error: 'step_up_required' },
+  ];
+  for (const { name, options, error } of cases) {
+    const token = await session(f.env, ADMIN, 'admin', options);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const read = await http(f.env, '/api/admin/connector-clients/lovable', { headers });
+    assert.equal(read.status, 200, `${name} may read`);
+    const denied = await http(f.env, '/api/admin/connector-clients/lovable', { method: 'POST', headers, body: '{}' });
+    assert.equal(denied.status, 403, `${name}: ${JSON.stringify(denied.body)}`);
+    assert.equal(denied.body.code ?? denied.body.detail, error, name);
+    if (error === 'step_up_required') assert.equal(denied.body.ttl_minutes, 15);
+    assert.deepEqual(f.db.prepare('SELECT value FROM platform_settings WHERE key = ?').get(LOVABLE_STATE_KEY), before, `${name} never claims`);
+    assert.deepEqual(await clientIds(f.env), clientsBefore, `${name} never mints or retires`);
+  }
+});
+
+test('OAuth client writes: fresh TOTP and recently verified TOTP allow writes, but a strong ordinary admin is refused', async () => {
+  const f = fixture(); superAdmin(f);
+  f.db.prepare('DELETE FROM super_admins WHERE user_id = ?').run(ADMIN);
+  const ordinary = await session(f.env, ADMIN, 'admin');
+  const post = (token: string) => http(f.env, '/api/admin/connector-clients/lovable', {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}',
+  });
+  assert.equal((await post(ordinary)).status, 403, 'TOTP never grants Super Admin elevation');
+  assert.deepEqual(await clientIds(f.env), [], 'ordinary admin never mints');
+  f.db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(ADMIN);
+  const first = await post(ordinary);
+  assert.equal(first.status, 201, JSON.stringify(first.body));
+  assert.equal(first.body.replaced, false);
+  const steppedUp = await session(f.env, ADMIN, 'admin', { ageMinutes: 60, stepUpAgeMinutes: 1 });
+  const second = await post(steppedUp);
+  assert.equal(second.status, 201, JSON.stringify(second.body));
+  assert.equal(second.body.replaced, true);
+  assert.notEqual(second.body.client_id, first.body.client_id);
+  assert.deepEqual(await clientIds(f.env), [`client:${second.body.client_id}`], 'only the replacement remains');
 });
 
 // Replacement uses D1's atomic claim, not KV read-after-write or an isolate lock.

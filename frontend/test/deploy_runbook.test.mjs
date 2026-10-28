@@ -199,3 +199,25 @@ test('wrangler.toml keeps its two route tables the same size', () => {
       'a route in only one table is missing in the other environment',
   );
 });
+
+test('D1364: CI stamps successful deployment before caching its assets, then runs smoke separately', () => {
+  const workflow = at('.github/workflows/cloudflare-worker-deploy.yml')
+    .split('\n').filter(line => !/^\s*#/.test(line)).join('\n');
+  const deployAt = workflow.indexOf('\n  deploy:\n');
+  const smokeAt = workflow.indexOf('\n  spa-smoke:\n');
+  assert.ok(deployAt >= 0 && smokeAt > deployAt, 'publication and its later smoke job must exist');
+  const deploy = workflow.slice(deployAt, smokeAt);
+  const steps = deploy.split(/(?=^      - )/m).slice(1);
+  const publish = steps.findIndex(step => /^      - name: Deploy to Cloudflare Worker$/m.test(step));
+  const stamp = steps.findIndex(step => /^      - name: Record successful asset deployment$/m.test(step));
+  const save = steps.findIndex(step => /uses: actions\/cache\/save@/.test(step));
+  assert.ok(publish >= 0 && stamp >= 0 && save >= 0, 'deploy, successful-deploy stamp and cache save must all exist');
+  assert.equal(stamp, publish + 1, 'the stamp must run immediately after successful publication');
+  assert.ok(save > stamp, 'the saved ledger must already contain the successful deployment time');
+  assert.match(steps[stamp], /^        run: node scripts\/record-asset-deploy\.mjs$/m);
+  assert.doesNotMatch(steps[stamp], /^\s*(?:if|continue-on-error|working-directory):/m, 'use the default success gate, fail on stamping errors, and run from the repository root');
+  assert.doesNotMatch(deploy, /^\s*run: node scripts\/check-spa-live\.mjs$/m, 'a probe failure must not prevent saving what shipped');
+  const smoke = workflow.slice(smokeAt).split('\n  schema-drift:')[0];
+  assert.match(smoke, /^    needs: deploy$/m, 'smoke waits for the deploy job, including its cache save');
+  assert.match(smoke, /^\s*run: node scripts\/check-spa-live\.mjs$/m, 'the existing live smoke must remain');
+});
