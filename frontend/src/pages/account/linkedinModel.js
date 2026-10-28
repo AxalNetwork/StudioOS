@@ -56,9 +56,10 @@ export const reviewActions = (review) => REVIEW_ACTIONS.filter((a) => a.decision
 
 /** What "Also delete" deletes and keeps, said before Disconnect is pressed. Counts the status could not read say so. */
 export function deleteChoice(imported) {
-  if (!imported) return { label: 'Also delete the contacts imported from LinkedIn', note: 'How many would be deleted could not be read. Contacts that also came from somewhere else always stay.' };
-  const only = Number(imported.linkedin_only) || 0;
-  const kept = Number(imported.kept) || 0;
+  const read = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+  if (!imported || read(imported.linkedin_only) == null || read(imported.kept) == null) return { label: 'Also delete the contacts imported from LinkedIn', note: 'How many would be deleted could not be read. Contacts that also came from somewhere else always stay.' };
+  const only = read(imported.linkedin_only);
+  const kept = read(imported.kept);
   return {
     label: only ? `Also delete the ${plural(only, 'contact', 'contacts')} imported only from LinkedIn` : 'Also delete the contacts imported from LinkedIn (there are none)',
     note: kept ? `${plural(kept, 'contact', 'contacts')} also came from somewhere else, so ${kept === 1 ? 'it stays' : 'they stay'}.` : 'Every LinkedIn contact came only from LinkedIn.',

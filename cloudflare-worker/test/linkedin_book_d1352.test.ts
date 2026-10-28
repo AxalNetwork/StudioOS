@@ -29,8 +29,9 @@ function fixture() {
   nc.run(22, 2, 'Synthetic Bob', null, '100%_Co', null, 'manual', null, null);
   nc.run(23, 2, 'Synthetic Carl', null, 'Acme', null, 'csv', null, null);
   nc.run(31, 3, 'Their Ada', null, 'Acme', null, 'linkedin_csv', null, null);
+  // Two imports of one file vouch twice for 21 (one chip, once); 23's sources are stored out of order (read back sorted).
   const src = db.prepare("INSERT INTO contact_sources(owner_user_id,contact_table,contact_id,source,created_row) VALUES (?,'network_connections',?,?,?)");
-  src.run(2, 21, 'linkedin_csv', 1); src.run(2, 23, 'csv', 1); src.run(2, 23, 'linkedin_csv', 0); src.run(3, 31, 'linkedin_csv', 1);
+  src.run(2, 21, 'linkedin_csv', 1); src.run(2, 21, 'linkedin_csv', 0); src.run(2, 23, 'linkedin_csv', 0); src.run(2, 23, 'csv', 1); src.run(3, 31, 'linkedin_csv', 1);
   db.exec("INSERT INTO network_contact_notes(uid,owner_user_id,contact_id,body) VALUES ('n1',2,21,'Synthetic note')");
   db.exec("INSERT INTO network_contact_tasks(uid,owner_user_id,contact_id,title,done_at) VALUES ('t1',2,21,'Follow up',NULL),('t2',2,21,'Done one','2026-10-01')");
   const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' };

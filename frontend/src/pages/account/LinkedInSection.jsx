@@ -157,7 +157,7 @@ function ImportFlow({ status, onChanged, books }) {
 function Preview({ preview }) {
   return (
     <div className="mt-2 rounded-axal-sm border border-axal-hairline p-3 dark:border-gray-700" data-testid="linkedin-preview">
-      <div className={LABEL}>Preview of {preview.rows ?? 0} rows{preview.truncated ? ' (only the first 20,000 are read)' : ''}</div>
+      <div className={LABEL}>Preview{Number.isFinite(Number(preview.rows)) && preview.rows != null ? ` of ${preview.rows} rows` : ''}{preview.truncated ? ' (only the first 20,000 are read)' : ''}</div>
       <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1 text-[12.5px] sm:grid-cols-3">
         {previewCounts(preview).map((c) => (
           <div key={c.key} data-testid={`linkedin-preview-${c.key}`}>

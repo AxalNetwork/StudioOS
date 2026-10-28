@@ -85,6 +85,11 @@ test('the counts, the last import, and what Disconnect deletes and keeps, in wor
   assert.deepEqual(deleteChoice({ linkedin_only: 12, kept: 3 }), { label: 'Also delete the 12 contacts imported only from LinkedIn', note: '3 contacts also came from somewhere else, so they stay.' });
   assert.deepEqual(deleteChoice({ linkedin_only: 1, kept: 1 }), { label: 'Also delete the 1 contact imported only from LinkedIn', note: '1 contact also came from somewhere else, so it stays.' });
   assert.match(deleteChoice(null).note, /could not be read/);
+  assert.match(deleteChoice({ linkedin_only: 4 }).note, /could not be read/, 'a half-read count is not drawn as 0');
+  assert.match(deleteChoice({ kept: 2 }).note, /could not be read/);
+  assert.equal(deleteChoice({ linkedin_only: 0, kept: 2 }).label, 'Also delete the contacts imported from LinkedIn (there are none)');
+  assert.equal(deleteChoice({ linkedin_only: 2, kept: 0 }).note, 'Every LinkedIn contact came only from LinkedIn.');
+  assert.deepEqual(sourceChips(['typed', 'linkedin_dma']).map((c) => c.key), ['linkedin', 'typed']);
   assert.equal(disconnectedLine({ deleted_imported: 12, kept_imported: 3 }), 'LinkedIn is disconnected. 12 contacts deleted; 3 contacts kept because another source has them.');
   assert.equal(disconnectedLine({ deleted_imported: 0, kept_imported: null }), 'LinkedIn is disconnected. Your contacts stay in your Network.');
   assert.deepEqual(reviewActions(REVIEWS[0]).map((a) => [a.decision, a.label]), [['merge', 'Merge'], ['keep', 'Keep both'], ['dismiss', 'Dismiss']]);
