@@ -68,8 +68,8 @@ jobs:
 
       # D529 — docs/ IS NOT COMMITTED, SO THE OLD-BUNDLE WINDOW COMES FROM
       # HERE. A tab opened before this deploy still asks for the previous
-      # build's hashed chunks; scripts/build-frontend.mjs keeps the last three
-      # builds' assets in docs/assets, but only if the previous ones are on
+      # build's hashed chunks; scripts/build-frontend.mjs keeps 72 hours plus
+      # a three-build floor within its cap, but only if prior assets are on
       # disk when it runs. This restores what the last successful deploy saved
       # (its docs/assets and retention ledger) into the empty docs/ the
       # checkout leaves. `restore-keys` picks the newest `spa-assets-` entry.
@@ -188,6 +188,9 @@ jobs:
           done
           echo "::error::wrangler deploy failed three times with Cloudflare error 10013; see the attempts above"
           exit 1
+
+      - name: Record successful asset deployment
+        run: node scripts/record-asset-deploy.mjs
 
       # D529 — only after the deploy above succeeded (a failed step skips
       # this one), save what production now serves for the next deploy to

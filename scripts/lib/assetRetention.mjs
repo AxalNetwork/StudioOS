@@ -37,6 +37,7 @@ export function planAssetRetention({
   prevFiles = [], seedFiles = null, newFiles = [], ledgerBuilds = [],
   retainBuilds = ASSET_MIN_BUILDS, retentionHours = ASSET_RETENTION_HOURS,
   maxFiles = ASSET_MAX_FILES, now = new Date().toISOString(),
+  restoredFromDeploy = false,
 } = {}) {
   if (!Number.isInteger(maxFiles) || maxFiles < 1) throw new Error('Invalid asset file cap');
   if (!Number.isFinite(retentionHours) || retentionHours < 0) throw new Error('Invalid asset retention window');
@@ -45,7 +46,8 @@ export function planAssetRetention({
   const builds = (Array.isArray(ledgerBuilds) ? ledgerBuilds : [])
     .filter(b => b && Array.isArray(b.files))
     .map(b => {
-      const legacy = b.legacy === true || !Object.hasOwn(b, 'deployedAt')
+      const legacy = b.legacy === true || (restoredFromDeploy && b.deployedAt === null)
+        || !Object.hasOwn(b, 'deployedAt')
         || (b.deployedAt !== null && !validTime(b.deployedAt));
       return { ts: String(b.ts ?? ''), files: uniq(b.files),
         deployedAt: validTime(b.deployedAt) ? b.deployedAt : null,

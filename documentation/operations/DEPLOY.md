@@ -177,8 +177,9 @@ successful deploy time in each new ledger entry's `deployedAt`; `ts` remains
 its build time. Old ledgers receive a single conservative 72-hour grace
 (`firstSeenAt`) without inventing a deployment time. Local or failed builds
 do not displace deployed builds from the minimum floor. An unstamped non-legacy
-entry in the restored deployment cache aborts the build before Vite runs; check
-the successful-deploy timestamp hook instead of losing live history.
+entry in the successful-deploy cache is preserved under a one-time unknown-time
+grace, with a warning. Its deployedAt stays null until it actually ships again;
+ordinary local candidates do not receive this cache-only recovery.
 
 When there is nothing to restore (the first deploy, or an entry
 GitHub evicted after seven days unused) the deploy still ships, the build log

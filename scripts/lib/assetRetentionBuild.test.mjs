@@ -105,7 +105,7 @@ process.exit(7);
   } finally {f.remove();}
 });
 
-test('D1364: an unstamped deployed cache stops before Vite can discard live history',()=>{
+test('D1364: an unstamped deployed cache preserves known-served history with an unknown-time grace',()=>{
   const f=fixture({history:true});
   try {
     const ledgerFile=path.join(f.dir,'docs/.asset-retention.json');
@@ -113,10 +113,12 @@ test('D1364: an unstamped deployed cache stops before Vite can discard live hist
     ledger.builds[0].deployedAt=null;
     fs.writeFileSync(ledgerFile,JSON.stringify(ledger));
     const result=f.run();
-    assert.equal(result.status,1);
+    assert.equal(result.status,0);
     assert.match(result.stderr,/restored deployment ledger is unstamped/);
-    assert.deepEqual(JSON.parse(fs.readFileSync(ledgerFile,'utf8')),ledger);
-    assert.equal(fs.existsSync(path.join(f.dir,'docs/assets/current.js')),false);
+    const saved=JSON.parse(fs.readFileSync(ledgerFile,'utf8'));
+    const recovered=saved.builds.find(b=>b.files.includes('old-1.js'));
+    assert.deepEqual({deployedAt:recovered?.deployedAt,legacy:recovered?.legacy,hasGrace:Number.isFinite(Date.parse(recovered?.firstSeenAt))},{deployedAt:null,legacy:true,hasGrace:true});
+    assert.deepEqual(fs.readdirSync(path.join(f.dir,'docs/assets')).sort(),['current.js','fresh-1.js','lazy-1.js','lazy-2.js','lazy-3.js','old-1.js','old-2.js','old-3.js']);
     assert.equal(f.run({},[]).status,0);
   } finally {f.remove();}
 });

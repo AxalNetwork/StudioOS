@@ -78,12 +78,12 @@ function readLedgerBuilds(p) {
 // 1. Snapshot the pre-build assets — they must survive Vite's emptyOutDir wipe.
 const prevFiles = listAssetFiles(assetsDir);
 const ledgerBuilds = readLedgerBuilds(ledgerPath);
-// A deployment cache is saved only after shipping. An unstamped v2 record there
-// means the post-deploy clock did not run; abort BEFORE Vite can discard it.
-// Legacy entries retain their explicit one-time grace without inventing a time.
+// This cache was saved only after a successful publish. Older CI runs omitted
+// the stamp: preserve their known-served files under an explicit unknown-time
+// grace, never invent a deployedAt and never treat local candidates as deployed.
 if (process.argv.includes(SEED_RESTORED_TREE_FLAG)
     && ledgerBuilds.some(b => b?.deployedAt === null && b.legacy !== true)) {
-  throw new Error('[build] restored deployment ledger is unstamped; refusing to discard live history. Check the successful-deploy timestamp hook.');
+  console.warn('[build] restored deployment ledger is unstamped; preserving saved history under a one-time legacy grace until a successful deploy records its timestamp.');
 }
 // D529: docs/ is not committed, so what is on disk here is whatever the job
 // restored (the production deploy) or nothing (every other job). Say which.
@@ -165,6 +165,7 @@ try {
     newFiles,
     ledgerBuilds,
     retainBuilds: RETAIN_BUILDS,
+    restoredFromDeploy: process.argv.includes(SEED_RESTORED_TREE_FLAG),
   });
 
   if (plan.capExceeded) {
