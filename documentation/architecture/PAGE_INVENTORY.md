@@ -79,7 +79,7 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Home | Studio | `/exploring` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Email | `/email` | — (no canvas; shipped ahead of the design corpus) |
 | Account | My Profile | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `super_admin` — 14 destinations in 1 group
@@ -135,7 +135,7 @@ rather than merely absent.
 - admin · Admin · Insights (`/admin/insights`)
 - exploring · Home · Studio (`/exploring`)
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
-- exploring · Home · Messages (`/messages`)
+- exploring · Home · Email (`/email`)
 - exploring · Account · My Profile (`/account`)
 - super_admin · HQ · Fund admin (`/admin/fund-admin`)
 - super_admin · HQ · Revenue (`/admin/revenue`)
