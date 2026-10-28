@@ -26,6 +26,7 @@ import {
   run, ROUTE, __resetForTest, estimateCostUsd, modelRefusal,
   PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET,
 } from '../src/services/aiRouter.ts';
+import { MODULE_ROUTES } from '../src/services/ai/moduleConnections.ts';
 import ai, { rateCard } from '../src/routes/ai.ts';
 import { createJWT } from '../src/auth.ts';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
@@ -252,14 +253,14 @@ test('the router\'s price tables are views of the catalogue', () => {
   assert.equal(PRICE_USD_PER_1M_TOKENS['@cf/baai/bge-base-en-v1.5'].in, 0.066638);
 });
 
-test('every model ROUTE can reach is priced and offered with no owner switch set', () => {
-  const routed = new Set();
-  for (const e of Object.values(ROUTE)) {
-    routed.add(e.model);
-    for (const m of e.fallbackChain ?? []) routed.add(m);
-    for (const m of e.alternates ?? []) routed.add(m);
+test('automatic routes work without switches; explicit module choices are priced when their gate is on', () => {
+  for (const [task, e] of Object.entries(ROUTE)) {
+    // Partner module choices are explicit and gated; automatic defaults must
+    // still work with no owner switch, as before the module registry existed.
+    const env = Object.hasOwn(MODULE_ROUTES, task) ? GATE_ON : GATE_OFF;
+    const routed = new Set([e.model, ...(e.fallbackChain ?? []), ...(e.alternates ?? [])]);
+    for (const id of routed) assert.equal(modelRefusal(env, id), null, `${task}: ${id} would be refused`);
   }
-  for (const id of routed) assert.equal(modelRefusal({}, id), null, `${id} would be refused`);
 });
 
 // ── refusals ─────────────────────────────────────────────────────────────────
@@ -292,9 +293,9 @@ test('refusals: model_unpriced, and model_not_offered for a beta model', async (
   assert.equal(refusalFor('@cf/meta/llama-3.1-8b-instruct', GATE_OFF), 'model_not_offered');
   assert.equal(refusalFor('@cf/deepgram/aura-1', GATE_OFF), 'model_not_offered');
   assert.equal(refusalFor('@cf/deepgram/aura-1', GATE_ON), null);
-  // Offered by the catalogue, but in none of the router's price views: unpriced here.
-  // (D857 priced m2m100 for translate_segment; bge-m3 is still in no view.)
-  assert.equal(modelRefusal(GATE_ON, '@cf/baai/bge-m3'), 'model_unpriced');
+  // The module registry now exposes BGE-M3 through its catalogue-priced
+  // embedding path, so it must no longer be treated as unpriced.
+  assert.equal(modelRefusal(GATE_ON, '@cf/baai/bge-m3'), null);
   // D761 PR 3 put Aura in the router's character view, so with the gate on it may run.
   assert.equal(modelRefusal(GATE_ON, '@cf/deepgram/aura-1'), null);
 
