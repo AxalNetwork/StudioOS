@@ -50,7 +50,7 @@ import {
   selectHolding, quarterOf, lastClosedQuarter, fmtDate,
 } from '../lib/quarterlyReportViewModel';
 import { onboardingStatus } from '../lib/lpCommitmentModel';
-import { MyCommitment, MessageGp } from './SpinoutLabLpCommitment';
+import { MyCommitment, EmailGp } from './SpinoutLabLpCommitment';
 import { ProofDoor, ProofOfFundsSheet, SharedProofOfFunds, useProofTargets } from './investor/ProofOfFunds';
 import { showsProof } from './investor/proofOfFundsModel';
 import { SubscriptionBooklet } from './SpinoutLabLpBooklet';
@@ -898,7 +898,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
                 handled directly by the GP.
               </p>
               <div className="mt-3 flex gap-2">
-                <MessageGp portal={portal} />
+                <EmailGp portal={portal} />
                 {derived.holdings > 0 && (
                   <a href="#my-commitment" className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
                     <FileText size={13} /> My commitment

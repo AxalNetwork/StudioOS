@@ -32,7 +32,7 @@ export function meetingBotRuntime(env: Env): BotRuntime {
   const send = async (path: string, body: {uid:string}) => {
     if (!runtimeUid(body.uid)) throw new Error('runtime_unavailable');
     const response = await ns.get(ns.idFromName(body.uid)).fetch(new Request(`https://meeting-bot-container.internal${path}`, {
-      method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(9000),
+      method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(path === '/start' ? 23_000 : 9000),
     }));
     if (!response.ok) throw new Error('runtime_unavailable');
   };

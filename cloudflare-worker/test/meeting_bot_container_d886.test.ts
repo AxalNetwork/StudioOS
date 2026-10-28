@@ -164,3 +164,34 @@ for(const [index,[before,after]] of mutants.entries())test('B8 host mutation '+i
   assert.equal(caught,true);
   for(const scenario of Object.values(cases))await scenario(MeetingBotContainer);
 });
+
+
+test('cold startup can become ready after the old readiness window, but remains bounded', async () => {
+  const realNow=Date.now; let now=realNow(); Date.now=()=>now;
+  try {
+    const h=harness(); let calls=0;
+    h.forward(async()=>{ if(++calls===1) { now+=9000; throw new Error('cold'); } return Response.json({},{status:202}); });
+    assert.equal((await h.call('/start',input())).status,202);
+    assert.equal(calls,2);
+    assert.equal(h.destroys,0);
+    const slow=harness();
+    slow.forward(async()=>{now+=21_000;throw new Error('cold');});
+    assert.equal((await slow.call('/start',input())).status,503);
+    assert.equal(slow.destroys,1);
+  } finally { Date.now=realNow; }
+});
+
+
+test('binding startup waits beyond readiness while heartbeat and Stop retain short deadlines', async()=>{
+  const original=AbortSignal.timeout,limits:number[]=[];
+  AbortSignal.timeout=(ms:number)=>{limits.push(ms);return original(ms);};
+  try {
+    const ns={idFromName:()=>UID,get:()=>({fetch:async()=>Response.json({},{status:202})})};
+    const runtime=meetingBotRuntime({MEETING_BOT_CONTAINER:ns} as unknown as Env);
+    const run=input();
+    await runtime.start(run);
+    await runtime.heartbeat!({uid:UID,deadline_at:run.deadline_at,budget_deadline_at:run.budget_deadline_at});
+    await runtime.stop({uid:UID});
+    assert.deepEqual(limits,[23000,9000,9000]);
+  } finally {AbortSignal.timeout=original;}
+});

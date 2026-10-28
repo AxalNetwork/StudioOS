@@ -133,3 +133,30 @@ test('nothing calls the API yet, and Eadwyn\'s copy never calls itself an adviso
   const copy = txt(React.createElement(InterviewReview, { read: F.PLACEMENTS_ONE_RUN, receiptItems: F.RECEIPT_ITEMS, ask: { result: F.ASK_OK } }));
   assert.doesNotMatch(copy, /advis|recommend|fiduciar/i);
 });
+
+
+test('current Worker finding payloads render their recorded fields, including optional context', () => {
+  const cases = [
+    ['firmographic', { attribute: 'company_size', value: 'Small team' }, 'company size: Small team'],
+    ['job_to_be_done', { job: 'Reconcile invoices' }, 'Reconcile invoices'],
+    ['alternative', { name: 'Spreadsheet', kind: 'in_house' }, 'Spreadsheet · in house'],
+    ['budget', { detail: 'Budget not decided' }, 'Budget not decided'],
+    ['timing', { when: 'Next quarter' }, 'Next quarter'],
+    ['urgency', { level: 'high', reason: 'Deadline' }, 'high urgency · Deadline'],
+    ['urgency', { level: 'low' }, 'low urgency'],
+    ['buying_trigger', { trigger: 'New office' }, 'New office'],
+    ['objection', { about: 'risk', detail: 'Migration' }, 'risk: Migration'],
+    ['follow_up', { detail: 'Send demo', owner_hint: 'Founder', due_hint: 'Friday' }, 'Send demo · Founder · Friday'],
+    ['decision', { statement: 'Try pilot', owner_hint: 'Team' }, 'Try pilot · Team'],
+    ['prototype_ask', { feature: 'Export', workflow: 'Monthly report', pain_ref: 'Manual copying' }, 'Export · Monthly report · Manual copying'],
+    ['hypothesis_new', { claim: 'Teams need exports', disproof: 'No usage' }, 'Teams need exports · No usage'],
+    ['experiment_idea', { title: 'Export pilot', method: 'Trial' }, 'Export pilot · Trial'],
+    ['market_fact', { fact: 'Prices changed', topic: 'pricing' }, 'Prices changed · pricing'],
+    ['market_fact', { fact: 'Legacy fact', source: 'Report' }, 'Legacy fact · source: Report'],
+    ['market_fact', { fact: 'Cited fact' }, 'Cited fact'],
+  ];
+  for (const [kind, payload, expected] of cases) {
+    assert.equal(placementText({ kind, payload }), expected, kind);
+    assert.equal(placementText({ kind, payload: {}, edited_payload: payload }), expected, `edited ${kind}`);
+  }
+});

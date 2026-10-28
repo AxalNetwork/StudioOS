@@ -79,8 +79,8 @@ async function fixture(stub: Stub = {}) {
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
-async function call(f: F, who: number, method: string, path: string, json?: unknown) {
-  const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+async function call(f: F, who: number, method: string, path: string, json?: unknown, claims: Record<string, unknown> = {}) {
+  const jwt = await new SignJWT({ ...claims, user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await f.app.request(path, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, ...(json === undefined ? {} : { body: JSON.stringify(json) }) }, f.env);
   const text = await res.text();
   let body: any; try { body = JSON.parse(text); } catch { body = text; }
@@ -429,5 +429,29 @@ test('PD4: a record the founder unticked is on no card and in no prompt, and the
     for (const bad of ['grow', ['Grow.MRR'], ['grow.mrr', 'grow.mrr'], 'x'.split('')]) {
       assert.equal((await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, exclude: bad })).status, 400, JSON.stringify(bad));
     }
+  } finally { f.close(); }
+});
+
+test('HQ Super Admin can outline, build and keep a deck; branch and ordinary admins cannot', async () => {
+  const f = await fixture();
+  try {
+    aiOff(f, 1);
+    const input = { project_id: 1, audience: 'angel', length: 'short' };
+    assert.equal((await call(f, 1, 'POST', '/api/decks/outline', input)).status, 403);
+    f.db.exec('INSERT INTO super_admins(user_id) VALUES(1)');
+    const outline = await call(f, 1, 'POST', '/api/decks/outline', input);
+    assert.equal(outline.status, 201, JSON.stringify(outline.body));
+    const built = await call(f, 1, 'POST', '/api/decks/generate', { project_id: 1, proposal_id: outline.body.proposal.id });
+    assert.equal(built.status, 201, JSON.stringify(built.body));
+    const kept = await call(f, 1, 'POST', `/api/decks/proposals/${outline.body.proposal.id}/keep-slides`, { all: true });
+    assert.equal(kept.status, 200, JSON.stringify(kept.body));
+    const saved = await call(f, 1, 'POST', `/api/decks/proposals/${outline.body.proposal.id}/keep-slides`, { save: true });
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    const row = f.db.prepare('SELECT created_by FROM pitch_decks WHERE project_id=1 ORDER BY id DESC LIMIT 1').get() as any;
+    assert.equal(row.created_by, 1);
+    assert.ok((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='deck_write_authorized' AND user_id=1 AND project_id=1").get() as any).n > 0);
+    assert.equal((await call(f, 1, 'POST', '/api/decks/outline', input, { impersonated_by: 2 })).status, 403, 'support cannot use elevated writes');
+    f.env.BRANCH_CODE = 'test';
+    assert.equal((await call(f, 1, 'POST', '/api/decks/outline', input)).status, 403);
   } finally { f.close(); }
 });

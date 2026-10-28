@@ -218,14 +218,14 @@ export function ProcessingStages({ processing = null, stageAt = -1, onRetry }) {
 /**
  * "Stop and process this session?" (§5.7.9): modal, Escape keeps recording,
  * focus returns to Stop. D770 (#2095): "Summarise and place with Eadwyn" is
- * off by default and is the only source of `auto` (`stopSheet.js`); off, Stop
+ * on by default at the owner’s request and is the only source of `auto` (`stopSheet.js`); off, Stop
  * saves the recording and its transcript only. `ai` is `useAiSpend()`'s
  * result, for the quote.
  */
 export function StopConfirm({ onKeep, onStop, onDiscard, returnTo, ai = null }) {
   const box = useRef(null);
   const keep = useRef(null);
-  const [process, setProcess] = useState(false);
+  const [process, setProcess] = useState(true);
   const words = stopWords(process);
   const quote = stopQuote(ai);
   useTrap(box, onKeep, true);

@@ -214,7 +214,7 @@ export const SIDEBAR_GROUPS = {
   // WHAT THIS REPLACED, AND WHERE IT WENT. Until D286 this shell was the old
   // admin sidebar: Studio, then an Admin group of nineteen live console rows
   // (twenty with the parked X), after D284 had already moved the 29 working
-  // pages to the Workspaces launcher and Messages to the top bar. The H35
+  // pages to the Workspaces launcher and Email to the top bar. The H35
   // placement map (`lib/adminPlacement.js`, D283) is the record of where each
   // of those rows lives now, and `admin_placement_h35.test.mjs` pins the
   // legacy list by value so the map keeps answering for it. Five rows are
@@ -313,9 +313,9 @@ export const SIDEBAR_GROUPS = {
   // Raise · Grow · Network · Research · Trust · Company Settings). Eight land
   // here; Trust is deliberately absent, pinned out of every sidebar by
   // trust_center_navigation.test.mjs — it is reached from the user dropdown.
-  // Spin-Out Lab keeps a row of its own on top of that, so nine. Messages is
+  // Spin-Out Lab keeps a row of its own on top of that, so nine. Email is
   // not a row here: since D284 it is a top-bar button on every shell the
-  // /messages route admits, and only the exploring group still carries a row.
+  // /email route admits, and only the exploring group still carries a row.
   //
   // The twenty-one items this replaces all keep a door. Five rows own their
   // sections through FounderWorkspaceTabs, which wraps each route in App.jsx:
@@ -329,9 +329,9 @@ export const SIDEBAR_GROUPS = {
   //   Research → Market · Signals
   //
   // Seven destinations had ZERO inbound links anywhere outside this file —
-  // /messages, /execution, /signals, /build/team, /build/metrics,
+  // /email, /execution, /signals, /build/team, /build/metrics,
   // /network-effects and /raise/capital. Six of them are now reachable only
-  // because those bars exist; /messages is reached from the top-bar Messages
+  // because those bars exist; /email is reached from the top-bar Email
   // button (D284), which replaced the row it kept here.
   //
   // As in the investor shell, the Spin-Out Lab row ships verbatim — it is not
@@ -449,10 +449,10 @@ export const SIDEBAR_GROUPS = {
   // TWO DEPARTURES FROM THE CANVAS, both deliberate:
   //   Home → /studio, not a new /home. Per the product owner, and it keeps
   //     /partner from becoming a root.
-  //   Messages is not a row. The canvas's eight rows have nowhere to put it,
+  //   Email is not a row. The canvas's eight rows have nowhere to put it,
   //     and until D284 it sat here as a ninth row so the live surface was not
   //     reachable only by typing the URL — the Wave 4 mistake in reverse.
-  //     D284 put a Messages button in the top bar for every shell /messages
+  //     D284 put a Email button in the top bar for every shell /email
   //     admits, which is where a cross-cutting inbox lives; the row went.
   // ── Partner / Operator — the canonical shell, now complete ─────────────────
   // Canvas ROWS: Home · Pipeline · Delivery · Offers · Network · Research ·
@@ -591,7 +591,7 @@ export const SIDEBAR_GROUPS = {
       // Task #13 — surface the Spin-Out Lab program to explorers so they can
       // see the full 28-day pipeline before committing.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/messages', icon: Mail, label: 'Messages' },
+      { to: '/email', icon: Mail, label: 'Email' },
     ]},
     { key: 'account', label: 'Account', items: [
       // D433 — /profile is a redirect to /account now (the second mount of

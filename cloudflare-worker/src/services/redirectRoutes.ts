@@ -83,6 +83,7 @@ export const FORWARD_REDIRECTS: readonly (RedirectRoute & { forward: true })[] =
 ]);
 
 export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
+  { path: '/messages' }, // D1345: retired inbox → Email (EM10).
   { path: '/for-mentors' },
   { path: '/pricing/investor' },
   { path: '/settings', keep: true },
