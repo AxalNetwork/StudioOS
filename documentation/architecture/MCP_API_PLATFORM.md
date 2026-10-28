@@ -415,7 +415,7 @@ only when that base does.
 | #2471 usage reports | D845 | #2494 | into #2489's branch |
 | #2472 security and limits | D849 | none yet | S14 |
 | #2473 end to end, runbook | D850 | this one | in progress |
-| #2474 model providers | D851 | #2491 | `main` (`87b87a48`) |
+| #2474 model providers | D851 | #2491; part 2 (one `meteredCall`, the Integration keys listing) in its own PR | part 1 `main` (`87b87a48`); part 2 in review. OpenAI and xAI wait on the documentation hosts |
 | #2475 remote MCP servers | D852 | #2492 | into #2487's branch **after** #2487 merged: not on `main` |
 | #2476 multi-connector flows | D853 | #2493 | into #2490's branch |
 | #2477 Eadwyn uses registry tools | D854 | #2486 | `main` (`d0a59a69`) |
@@ -494,6 +494,8 @@ The UI task for API keys, added 2026-10-27 (S22):
 - **2026-10-22 (S13, #2521, D874).** The call tools: `list_meetings`, `get_meeting_transcript` and `summarize_meeting` (§3), priced 0 in `METERING_POLICY`; the summary's model run pays through its own `aiRouter` hold. `extract_action_items` waits on M4.
 
 - **2026-10-22 (S12, #2521 PR 2, D874).** `extract_action_items` (§3), priced 0; its extraction pays through its own `aiRouter` hold. It runs D859's extraction, so M4's kinds need no change here.
+
+- **2026-10-27 (S22, #2474 part 2).** `runProviderModel` holds and settles through one `meteredCall` (D844): the hold key `exec:<executionId>:model.anthropic`, D844's refusals in the result and the row, a retry that holds once and calls once. Anthropic is listed read-only in `GET /api/admin/integration-keys` (`model_providers`, pattern C): its switch and whether its key is set, never the key. Off unless `AI_PROVIDER_ANTHROPIC` is exactly `"on"`; no caller yet. D851 §3.1.
 
 ## 9. Known limitations
 
