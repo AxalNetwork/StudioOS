@@ -29,8 +29,8 @@ function d642Section() {
   return next < 0 ? routeMap.slice(at) : routeMap.slice(at, at + HEADING.length + next);
 }
 
-test('the service names D642’s five storage areas first, then D1169’s eight', () => {
-  assert.deepEqual(AREA_KEYS, ['data_room', 'diligence_files', 'research_library', 'message_attachments', 'interview_recordings',
+test('the service names D642’s four remaining storage areas first, then D1169’s eight', () => {
+  assert.deepEqual(AREA_KEYS, ['data_room', 'diligence_files', 'research_library', 'interview_recordings',
     'data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports']);
 });
 

@@ -72,11 +72,11 @@ test('every founder sidebar row lands exactly once, tab, band or More, in the si
   const sidebarMore = founderRows()
     .filter((r) => !FOUNDER_TAB_PATHS.includes(r.to) && !FOUNDER_BAND_PATHS.includes(r.to)).map((r) => r.to);
   assert.deepEqual(plan.more.map((r) => r.to), [...sidebarMore, ...FOUNDER_MORE_DOORS.map((d) => d.to)]);
-  assert.deepEqual(FOUNDER_MORE_DOORS.map((d) => d.to), ['/messages'], 'Trust and Company Settings moved to the band\'s sheets');
+  assert.deepEqual(FOUNDER_MORE_DOORS.map((d) => d.to), ['/email'], 'Trust and Company Settings moved to the band\'s sheets');
   // The gap map's two: Spin-Out Lab is a live sidebar row the canvas's plan
-  // left out, and Messages had no door on a phone.
+  // left out, and Email had no door on a phone.
   assert.ok(plan.more.some((r) => r.to === '/spinout-lab'), 'Spin-Out Lab is not reachable from More');
-  assert.ok(plan.more.some((r) => r.to === '/messages'), 'a phone still has no Messages door');
+  assert.ok(plan.more.some((r) => r.to === '/email'), 'a phone still has no Email door');
 });
 
 test('a row the sidebar gains reaches More without an edit here', () => {
@@ -119,7 +119,7 @@ test('a tab lights for exactly the pages its sidebar row lights for', () => {
   assert.equal(rowActive(rows.Studio, '/studio'), true);
   assert.equal(rowActive(rows.Studio, '/studio/'), true);
   assert.equal(rowActive(rows.Studio, '/studio/elsewhere'), false);
-  assert.equal(rowActive(FOUNDER_MORE_DOORS[0], '/messages'), true);
+  assert.equal(rowActive(FOUNDER_MORE_DOORS[0], '/email'), true);
 });
 
 test('the bar marks the current tab, and More when the page is one of its rows', () => {

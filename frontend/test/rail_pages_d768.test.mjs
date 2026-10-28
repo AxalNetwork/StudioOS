@@ -151,8 +151,9 @@ test('an admin on a member\'s page gets that page\'s key', () => {
   assert.equal(pageKeyFor('/validate/verdict', 'super_admin'), 'Founder · Validate · Verdict');
   assert.equal(pageKeyFor('/practice/sessions', 'admin'), 'Advisor · Practice · Sessions');
   assert.equal(pageKeyFor('/spinout-lab/discovery', 'admin'), 'Founder · Spin-Out Lab');
-  // Their own pages first: Messages is the admin's own.
-  assert.equal(pageKeyFor('/messages', 'admin'), 'Admin · Messages');
+  // Their own pages first: Email is the admin's own; Messages is a redirect.
+  assert.equal(pageKeyFor('/messages', 'admin'), null);
+  assert.equal(pageKeyFor('/email', 'admin'), 'Admin · Email');
 });
 
 // ── the provider, useRailOption, and the run's rail context ──────────────────

@@ -3576,26 +3576,6 @@ export const api = {
   // reader, so the founder's record of what an advisor opened did not exist.
   advisorClientAccessLog: (projectUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/access-log`),
 
-  // Messages (migration 185 + routes/messages.ts). Membership is the only key:
-  // every one of these 404s for a thread the caller is not in.
-  messageThreads: () => request('/messages'),
-  messageThread: (uid) => request(`/messages/${encodeURIComponent(uid)}`),
-  messageStartThread: (data) => request('/messages', { method: 'POST', body: JSON.stringify(data || {}) }),
-  messageSend: (uid, body) =>
-    request(`/messages/${encodeURIComponent(uid)}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
-  messageMarkRead: (uid) => request(`/messages/${encodeURIComponent(uid)}/read`, { method: 'POST' }),
-  messageArchive: (uid) => request(`/messages/${encodeURIComponent(uid)}/archive`, { method: 'POST' }),
-  // D415 — a file sent as a message (multipart), and a signed, single-use,
-  // five-minute link to one, minted only for a member of the thread.
-  messageAttach: (uid, file, body) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    if (body) fd.append('body', body);
-    return request(`/messages/${encodeURIComponent(uid)}/attachments`, { method: 'POST', body: fd });
-  },
-  messageAttachmentLink: (uid, attUid) =>
-    request(`/messages/${encodeURIComponent(uid)}/attachments/${encodeURIComponent(attUid)}/link`, { method: 'POST' }),
-
   // Perks & Products (migration 186 + routes/perks.ts). `allowance_configured`
   // on the catalogue response is load-bearing: it lets the page say "no credit
   // allowance is set up" instead of "not enough credits", which are very
