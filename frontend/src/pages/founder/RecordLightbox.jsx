@@ -19,8 +19,8 @@ import { recordSourceLine } from '../../lib/validateSourceWording.js';
 import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
 import {
   CONSENTS, DURATIONS, HOW_OPTIONS, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callChannel, callLabel, chipStatus, consentNote, howOf,
-  attachesCall, attachOutcome, defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
-  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref,
+  defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
+  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref, callCapture, IMPORT_START,
 } from './recordSetup.js';
 
 /**
@@ -276,11 +276,16 @@ export default function RecordLightbox({
   const chatBlock = pickedThread ? chatConsentBlock(chatC, chatChoice, chatName, provider) : null;
   const blockedReason = importing && !thread && state.ok ? 'Choose a chat to import.' : state.ok ? chatBlock : null;
   const linkProblem = hasMeetingLink(mode, provider) ? meetingLinkProblem(provider, link) : null;
-  const ready = state.ok && !blockedReason && !linkProblem && !busy;
   const meeting = hasMeetingLink(mode, provider);
   const bot = botState(botRead, botPlatform(link) || (meeting ? provider : null));
-  const botReady = mode === 'video' && !!botPlatform(link) && bot.canSend;
-  const label = botReady ? 'Send Eadwyn AI' : m.start;
+  // D1358: a meeting is captured by Eadwyn AI or imported from the provider after
+  // it ends, never by this browser's microphone or a shared tab.
+  const capture = callCapture({ mode, provider, link, channels, bot, botLink: !!botPlatform(link) });
+  const botReady = capture.kind === 'bot';
+  const importReady = capture.kind === 'import';
+  const captureReason = state.ok && !blockedReason && capture.kind === 'none' ? capture.reason : null;
+  const ready = state.ok && !blockedReason && !linkProblem && capture.kind !== 'none' && !busy;
+  const label = botReady ? 'Send Eadwyn AI' : importReady ? IMPORT_START : m.start;
   const offer = createMeetingOffer(mode, provider, channels);
   const openHref = meeting && !linkProblem ? meetingHref(provider, link) : null;
   useEffect(() => { setCreating({ busy: false, error: '' }); }, [provider]);
@@ -365,10 +370,47 @@ export default function RecordLightbox({
     }
   };
 
-  const submit = async (choice = 'default') => {
-    const useBot = botReady && choice !== 'device';
+  /**
+   * D1358: a Zoom or Google Meet call on the member's connected account, saved
+   * for import after it ends. The call needs an interview, made as "Schedule
+   * the call for later" makes one (and removed if the save is refused). The
+   * Worker opens the call's own session; nothing is recorded here.
+   */
+  const saveForImport = async () => {
+    sending.current = true;
+    setBusy(true); setRefusal(null); setAssigned(null);
+    const named = (who?.interviewee_name || name).trim();
+    let made = null;
+    try {
+      let target = who;
+      if (!target) {
+        made = await api.createInterview(projectId, { interviewee_name: named, interviewee_company: company.trim() || null });
+        await cycle.setInterviewStage(projectId, made.id, 'booked');
+        target = { id: made.id, interviewee_name: made.interviewee_name ?? named, interviewee_company: made.interviewee_company ?? (company.trim() || null) };
+      }
+      const given = { status: 'given', method: consent };
+      const r = provider === 'zoom'
+        ? await channelsSource.saveZoomCall(target.id, { join_url: link.trim(), consent: given })
+        : await channelsSource.attachCalendarMeet(target.id, { join_url: link.trim(), consent: given });
+      if (r?.session_id == null) throw new Error('The call could not be saved. Try again.');
+      onStarted?.({ id: r.session_id, submitted_via: provider }, {
+        id: target.id, interviewee_name: target.interviewee_name ?? named, interviewee_company: target.interviewee_company ?? null,
+      });
+    } catch (e) {
+      // Not left half-made: an interview with no call would count as held.
+      if (made?.id != null) { try { await api.deleteInterview(made.id); } catch { /* the refusal is the message */ } }
+      setRefusal(startRefusal(e));
+      setBusy(false); sending.current = false;
+    }
+  };
+
+  const submit = async () => {
+    const useBot = botReady;
     if (!ready || sending.current) return;
-    const handsOver = !!recorder && m.audio && !useBot;
+    if (importReady) { await saveForImport(); return; }
+    // The browser recorder is for in person and a call on this phone's speaker
+    // only. A meeting never reaches it (D1358).
+    const handsOver = !!recorder && m.audio && mode !== 'video' && !useBot;
     // #1588: while this tab still records (or saves) another session, a second
     // Start is refused before the microphone opens or a session is made, and
     // offers that recording, as the Worker's 409 does.
@@ -380,7 +422,7 @@ export default function RecordLightbox({
     // for inside this click, before anything is awaited, so iOS Safari does not
     // start the context suspended (D685 §5.6.5). A video call asks in its own
     // second click, "Share the call's tab" (§5.8.1).
-    if (handsOver && mode !== 'video') recorder.prepare();
+    if (handsOver) recorder.prepare();
     const person = (r) => ({
       id: r?.id ?? who?.id,
       interviewee_name: r?.interviewee_name ?? who?.interviewee_name ?? name.trim(),
@@ -418,14 +460,6 @@ export default function RecordLightbox({
         return;
       }
       if (handsOver) {
-        // A connected Zoom or Meet: the call is attached too, so its own
-        // transcript can be imported after it. A refusal never stops the
-        // recording; the share step says it in the Worker's words.
-        let attach = null;
-        if (mode === 'video' && typeof channelsSource?.attachMeeting === 'function' && attachesCall(mode, provider, link, channels)) {
-          const interviewId = r.interview?.id ?? r.session?.interview_id ?? into.id;
-          try { attach = attachOutcome(await channelsSource.attachMeeting(interviewId, { session_id: r.session.id, join_url: link.trim(), provider }), null); } catch (e) { attach = attachOutcome(null, e); }
-        }
         // begin()'s own check, read in the same tick it runs: a Start opened
         // meanwhile (the mic still opening elsewhere) is refused here, in words.
         const late = liveRefusal(recorder.getSnapshot?.(), recorder.isCapturing?.());
@@ -436,8 +470,8 @@ export default function RecordLightbox({
           return;
         }
         recorder.begin({
-          attach,
-          session: r.session, interview: into, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: mode === 'video',
+          attach: null,
+          session: r.session, interview: into, callLabel: r.call_label ?? callLabel(mode, provider), points: Array.isArray(r.points) ? r.points : [], video: false,
           // The Worker's link (a pasted one, or a scheduled call's): "Start the call" opens it (§5.8.1).
           meetingUrl: r.meeting_url ?? null,
         });
@@ -463,9 +497,8 @@ export default function RecordLightbox({
           <span className="text-[11.5px] text-axal-faint">Runs on Cloudflare Workers AI</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-cancel">Cancel</button>
-            {botReady && <button type="button" onClick={() => submit('device')} disabled={!ready} className="rounded-[9px] border border-gray-300 px-3 py-2 text-[12.5px] font-bold text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200" data-testid="record-device">Record this device</button>}
             {meeting && !bot.canSend && <button type="button" disabled aria-describedby="record-bot-state" className="cursor-not-allowed rounded-[9px] border border-gray-300 px-3 py-2 text-[12.5px] font-bold text-gray-400 dark:border-gray-700 dark:text-gray-500" data-testid="record-bot-send-off">Send Eadwyn AI</button>}
-            <button type="button" onClick={() => submit()} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : 'record-start-reason')}
+            <button type="button" onClick={() => submit()} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : captureReason ? 'record-capture-reason' : 'record-start-reason')}
               disabled={busy} data-testid="record-start" className={ready ? 'rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep' : 'cursor-not-allowed rounded-[9px] bg-violet-300 px-3.5 py-2 text-[13px] font-bold text-white dark:bg-violet-900/60 dark:text-violet-300'}>{busy ? 'Starting…' : label}</button>
           </div>
         </div>
@@ -519,7 +552,7 @@ export default function RecordLightbox({
         <Section title="How" testId="record-how">
           <Radios label="How" options={HOW_OPTIONS} value={howOf(mode)} onChange={pickMode} testId="record-mode"
             className="grid grid-cols-3 gap-1.5" style={tile} />
-          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-mode-note">{modeNote(mode, recorder ? recorder.canShareTab !== false : true)}</p>
+          <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-mode-note">{modeNote(mode)}</p>
           {recordSourceLine(mode, provider) && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-source-note">{recordSourceLine(mode, provider)}</p>}
           {chips.length > 0 && (
             <Radios label="Provider" testId="record-provider" value={provider} onChange={pickProvider}
@@ -620,10 +653,18 @@ export default function RecordLightbox({
           <Section title="Transcript" testId="record-transcript">
             <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-bot-transcript">{botTranscriptLine(botRead).transcript}</p>
             <p className="m-0 rounded-[9px] bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="record-bot-price">{botTranscriptLine(botRead).price}</p>
-            <p className="m-0 text-[11.5px] text-axal-faint">Live captions and the final-transcript choice are for recording this device.</p>
+            <p className="m-0 text-[11.5px] text-axal-faint">Live captions and the final-transcript choice are for recording in person or a call on this phone’s speaker.</p>
           </Section>
         )}
-        {m.audio && !botReady && (
+        {mode === 'video' && !botReady && (
+          <Section title="Transcript" testId="record-transcript">
+            {importReady
+              ? <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-import-note">{capture.note}</p>
+              : <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="record-capture-none">No capture is set up for this call yet. Axal never records a meeting from this browser.</p>}
+            <p className="m-0 text-[11.5px] text-axal-faint">Live captions and the final-transcript choice are for recording in person or a call on this phone’s speaker.</p>
+          </Section>
+        )}
+        {m.audio && !botReady && mode !== 'video' && (
           <Section title="Transcript" testId="record-transcript">
             {models === undefined ? <p className="m-0 text-[12px] text-axal-faint">Reading models…</p>
               : models === null ? <p className="m-0 text-[12px] text-axal-faint" data-testid="record-models-unreadable">Unreadable: the model list could not be read.</p>
@@ -664,6 +705,7 @@ export default function RecordLightbox({
       </div>
       <div className="px-5 pb-3">
         {!ready && !(m.audio && !consent) && (state.reason || blockedReason) && <p id="record-start-reason" className="m-0 text-[11.5px] text-axal-faint" data-testid="record-start-reason">{state.reason || blockedReason}</p>}
+        {!busy && captureReason && <p id="record-capture-reason" className="m-0 text-[11.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="record-capture-reason">{captureReason}</p>}
         {refusal?.storage && <div className="mt-1"><StorageRefusal refusal={refusal.storage} recording testId="record-storage-full" /></div>}
         {refusal && !refusal.storage && (
           <p role="alert" className="m-0 mt-1 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-error">

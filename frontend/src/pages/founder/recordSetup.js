@@ -39,7 +39,7 @@ export const NOT_STORED = 'Not saved yet: the Worker does not store this field.'
  */
 export const MODES = [
   { key: 'in_person', label: 'In person', audio: true, start: 'Start recording', note: 'Put the phone on the table between you. It records this device’s microphone.' },
-  { key: 'video', label: 'Call', audio: true, start: 'Start the call', note: 'Paste the meeting link. It records the call’s audio.' },
+  { key: 'video', label: 'Call', audio: true, start: 'Start the call', note: 'Paste the meeting link. Eadwyn AI joins the call where it can, or Axal imports the call’s own transcript from your connected account after it ends. This device’s microphone is not used.' },
   { key: 'phone', label: 'Call', audio: true, start: 'Start recording', note: 'Put the call on speaker. It records this device’s microphone.' },
   { key: 'text', label: 'Text chat', audio: false, start: 'Import the chat', note: 'No audio. Import the conversation from the app it happened in, or paste it.' },
 ];
@@ -54,10 +54,13 @@ export const HOW_OPTIONS = Object.freeze([
 /** The How choice a channel is drawn under. */
 export const howOf = (mode) => (mode === 'video' || mode === 'phone' ? 'call' : mode);
 
-/** On a phone a video call records the microphone only: there is no tab to share (§5.8.6). */
-export const PHONE_VIDEO_NOTE = 'On a phone it records this device’s microphone only.';
-/** The mode's note, with the phone sentence on Video where this browser cannot share a tab. */
-export const modeNote = (mode, canShareTab = true) => (mode === 'video' && !canShareTab ? `${modeOf(mode).note} ${PHONE_VIDEO_NOTE}` : modeOf(mode).note);
+/**
+ * The mode's note. D1358: a Zoom, Google Meet or Teams call is never recorded
+ * from this browser, on a computer or a phone, so the note no longer changes
+ * with whether a tab can be shared. "This phone, on speaker" is the call that
+ * records this device's microphone.
+ */
+export const modeNote = (mode) => modeOf(mode).note;
 
 /**
  * A call's chips, one list for both channels since the owner merged them
@@ -263,7 +266,7 @@ export function createdLink(provider, reply) {
  * /founder/validate/meetings/bot`, read when the dialog opens. `undefined` is
  * still reading and `null` unreadable; neither is "available".
  */
-export const BOT_UNAVAILABLE = 'Eadwyn AI can’t join calls yet on Axal. Record this device instead, or paste the link to keep it for later.';
+export const BOT_UNAVAILABLE = 'Eadwyn AI can’t join calls yet on Axal.';
 export const BOT_UNREADABLE = 'Unreadable: Axal could not read whether Eadwyn AI can join. This is not a claim that it cannot.';
 export function botState(read, platform) {
   if (read === undefined) return { state: 'loading', canSend: false, sentence: 'Checking whether Eadwyn AI can join…' };
@@ -271,6 +274,38 @@ export function botState(read, platform) {
   if (platform && read.platforms[platform] === true) return { state: 'available', canSend: true, sentence: null };
   return { state: 'unavailable', canSend: false, sentence: BOT_UNAVAILABLE };
 }
+/**
+ * D1358: how a meeting (Zoom, Google Meet or Teams) is captured, decided once.
+ * A meeting is captured by the platform, never by this browser:
+ *   · `bot`: Eadwyn AI joins it (the bot is deployed here for that platform);
+ *   · `import`: a Zoom or Google Meet call on the member's connected account,
+ *     saved now and imported from the provider's own transcript after it ends;
+ *   · `none`: nothing can capture it yet, with the reason, and Start is off.
+ * Any other mode is `device` (in person, or a call on this phone's speaker).
+ * `botLink` is whether the link is one Eadwyn AI can join (`botPlatform`).
+ */
+export const TEAMS_NO_CAPTURE = 'Axal can’t capture a Microsoft Teams call yet: Eadwyn AI is not available for Teams here, and Axal has no Teams connection. After the call, upload its recording or paste its transcript.';
+export const IMPORT_NOTE = Object.freeze({
+  zoom: 'Axal does not record this call. When it ends, Axal imports the transcript Zoom makes in your connected account’s cloud recording. Turn on cloud recording with audio transcripts in Zoom, and host the call from that account.',
+  google_meet: 'Axal does not record this call. When it ends, Axal imports the transcript Google Meet makes, for a call organised from your connected Google account with transcription turned on in the call.',
+});
+export const IMPORT_START = 'Save for import after the call';
+export function callCapture({ mode, provider, link, channels, bot, botLink }) {
+  if (mode !== 'video') return { kind: 'device' };
+  const text = String(link || '').trim();
+  if (text && meetingLinkProblem(provider, text)) return { kind: 'none', reason: null };
+  if (bot?.canSend && botLink) return { kind: 'bot' };
+  if (!text) return { kind: 'none', reason: 'Paste the meeting link, or create the meeting.' };
+  if (provider === 'teams') return { kind: 'none', reason: bot?.state === 'loading' ? bot.sentence : TEAMS_NO_CAPTURE };
+  if (provider !== 'zoom' && provider !== 'google_meet') return { kind: 'none', reason: 'Choose Zoom, Google Meet or Microsoft Teams.' };
+  if (attachesCall(mode, provider, text, channels)) return { kind: 'import', note: IMPORT_NOTE[provider] };
+  const label = provider === 'zoom' ? 'Zoom' : 'Google';
+  if (bot?.state === 'loading') return { kind: 'none', reason: bot.sentence };
+  return { kind: 'none', reason: channels
+    ? `Connect ${label} in Account › Connectors so Axal can import this call’s transcript after it ends.`
+    : 'Unreadable: Axal could not read your connections, so it cannot tell whether this call can be imported. Try again.' };
+}
+
 const perMinute = (micro) => (Number.isSafeInteger(micro) && micro > 0 ? `$${(micro / 1e6).toFixed(4)} a minute` : 'not priced yet');
 /** The bot's own transcript line and price (D886 §5), in place of the device's options. */
 export function botTranscriptLine(read) {

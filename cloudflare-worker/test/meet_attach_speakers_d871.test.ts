@@ -270,9 +270,11 @@ test('one call attaches once: the same event, or a link already pasted for a rec
   const f = world();
   await meetConnected(f);
   mockFetch(t, { ...TOKEN, [`GET ${CAL}`]: () => json({ items: [event()] }) });
-  assert.equal((await attach(f, { meeting_code: MEET_CODE })).status, 201);
+  const first = await attach(f, { meeting_code: MEET_CODE });
+  assert.equal(first.status, 201);
+  // D1358: the member's own retry answers the first attach, with its session.
   const again = await attach(f, { meeting_code: MEET_CODE });
-  assert.deepEqual([again.status, again.body.error], [409, 'meeting_link_reused']);
+  assert.deepEqual([again.status, again.body.existing, again.body.session_id], [200, true, first.body.session_id]);
   f.db.prepare("UPDATE interview_channel_refs SET starts_at = ?, ends_at = ?").run(iso(-50 * HOUR), iso(-49 * HOUR));
   const moved = await attach(f, { meeting_code: MEET_CODE });
   assert.deepEqual([moved.status, moved.body.error], [409, 'meeting_link_reused'], 'the event moved since: still one call');
@@ -297,7 +299,9 @@ test('consent, a connection and the member\'s own interview come first, before a
   assert.equal((await attach(f, { meeting_code: MEET_CODE }, { consent: CONSENT }, FOREIGN_INTERVIEW)).status, 404);
   assert.equal(calls.length, 0, 'no Google request for a refused caller');
   const zoomLink = await attach(f, { join_url: 'https://zoom.us/j/85746065432' });
-  assert.deepEqual([zoomLink.status, zoomLink.body.error], [400, 'session_required'], 'a Zoom link still needs its recording');
+  // D1358: a Zoom link with no session is saved for import after the call,
+  // which needs the member's own Zoom connection first.
+  assert.deepEqual([zoomLink.status, zoomLink.body.error], [409, 'connect_first'], 'a Zoom link needs a connected Zoom account');
   const mismatch = await attach(f, { join_url: `https://meet.google.com/${MEET_CODE}` }, { consent: CONSENT, provider: 'zoom' });
   assert.deepEqual([mismatch.status, mismatch.body.error], [400, 'meeting_link_invalid'], 'a Meet link named as Zoom is refused');
   assert.equal(refs(f).length, 0);

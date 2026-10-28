@@ -37,7 +37,8 @@ test('the four channels, their notes and their Start labels; How offers three, a
   assert.deepEqual(['in_person', 'video', 'phone', 'text'].map(howOf), ['in_person', 'call', 'call', 'text']);
   assert.deepEqual(MODES.map((m) => m.note), [
     'Put the phone on the table between you. It records this device’s microphone.',
-    'Paste the meeting link. It records the call’s audio.',
+    // D1358: a meeting is captured by Eadwyn AI or imported after it ends, never by this browser.
+    'Paste the meeting link. Eadwyn AI joins the call where it can, or Axal imports the call’s own transcript from your connected account after it ends. This device’s microphone is not used.',
     'Put the call on speaker. It records this device’s microphone.',
     'No audio. Import the conversation from the app it happened in, or paste it.',
   ]);
