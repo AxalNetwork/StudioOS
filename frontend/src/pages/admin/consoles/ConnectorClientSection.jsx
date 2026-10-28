@@ -68,7 +68,7 @@ export default function ConnectorClientSection({ showToast }) {
             <button type="button" onClick={() => setMade(null)} className="mt-2 text-[11px] font-medium underline text-violet-800 dark:text-violet-200">I have copied it</button>
           </div>
         )}
-        {state !== undefined && (
+        {state != null && (
           <button type="button" onClick={create} disabled={busy} data-testid="lovable-client-create"
             className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-gray-900 dark:bg-gray-100 px-3 py-1.5 text-[12px] font-semibold text-white dark:text-gray-900 disabled:opacity-60">
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

@@ -25,9 +25,23 @@ That is the Lovable → Axal VC direction. The Axal VC → Lovable connection
    3. Copy the **Client ID** and **Client secret**. The secret is shown
       once.
    4. If the secret leaks, choose **Create a new client**: the old one stops
-      working.
+      working and members must connect again. The provider revokes its grants.
 3. **Check it.** `curl -s https://axal.vc/api/connector/v1/me` must answer
    `401`.
+
+If a read says **Unreadable**, reload; it does not mean no client exists.
+Create is unavailable until the read succeeds. A concurrent replacement is
+refused before it can create another client.
+
+An interrupted replacement requires owner recovery. Its non-expiring claim
+and previous/candidate client IDs are kept in the existing `platform_settings`
+record `connector_client:lovable`; no secret is in that record. Before
+recovering it, ensure the original request has ended, reconcile the dedicated
+Lovable clients through the OAuth provider (including a possible candidate
+whose journal write failed), and retire any incomplete candidate. Restore a
+confirmed current state only after that reconciliation. Never clear a claim
+just because it is old: a paused request may still resume. Until recovery,
+the console remains unreadable and replacement requests are refused.
 
 ## 2. The Lovable form, field by field
 

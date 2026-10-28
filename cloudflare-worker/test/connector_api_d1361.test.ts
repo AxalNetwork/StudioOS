@@ -14,12 +14,15 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import worker from '../src/index.ts';
+import { getOAuthApi } from '@cloudflare/workers-oauth-provider';
+import { providerOptions } from '../src/mcp/oauth.ts';
+import { d1Over } from './_d1_sqlite.mjs';
 import { createKey, revokeKey } from '../src/services/apiKeys.ts';
 import { bumpJwtMinIat } from '../src/auth.ts';
 import { SignJWT } from 'jose';
 import { fixture as d666Fixture } from './mcp_server_d666.test.ts';
 import { tableFromBaseline } from './_baseline.mjs';
-import { LOVABLE_REDIRECT_URI } from '../src/routes/admin_connector_clients.ts';
+import { adminConnectorClients, LOVABLE_CLIENT_KEY, LOVABLE_STATE_KEY, LOVABLE_REDIRECT_URI } from '../src/routes/admin_connector_clients.ts';
 
 const FOUNDER = 10, OTHER = 20;
 const P = 1, P2 = 2, P_OTHER = 3;
@@ -31,6 +34,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function fixture({ enabled = true } = {}) {
   const f = d666Fixture();
   f.db.exec(MIGRATION);
+  f.db.exec(tableFromBaseline(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/241_advisor_money_model.sql'), 'utf8'), 'platform_settings'));
   if (enabled) f.env.API_KEYS_ENABLED = 'true';
   return f;
 }
@@ -287,4 +291,177 @@ test('OAuth: a forged, revoked or MCP-off token is 401 invalid_token; the client
   // With the OAuth server off, OAuth tokens are refused here too.
   const off = { ...f.env, MCP_SERVER_ENABLED: 'false' };
   assert.deepEqual((await get(off, '/me', token)).body.error, 'invalid_token');
+});
+
+// Replacement uses D1's atomic claim, not KV read-after-write or an isolate lock.
+async function adminRequest(f: any, method = 'GET', env = f.env) {
+  const token = await session(f.env, ADMIN, 'admin');
+  const r = await adminConnectorClients.request('/lovable', { method,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    ...(method === 'POST' ? { body: '{}' } : {}),
+  }, env);
+  return { status: r.status, body: await r.json() as any };
+}
+const clientIds = async (env: any) => (await env.OAUTH_KV.list({ prefix: 'client:' })).keys.map((k: any) => k.name);
+const storedState = (f: any) => JSON.parse(f.db.prepare('SELECT value FROM platform_settings WHERE key = ?').get(LOVABLE_STATE_KEY).value);
+
+for (const replacing of [false, true]) test(`OAuth client replacement: overlapping ${replacing ? 'rotations' : 'first creates'} mint only one client, with D1 authoritative over stale KV`, async () => {
+  const f = fixture(); superAdmin(f);
+  const first = replacing ? await adminRequest(f, 'POST') : null;
+  if (replacing) await f.env.OAUTH_KV.put(LOVABLE_CLIENT_KEY, JSON.stringify({ client_id: 'stale-client', created_at: '2020-01-01' }));
+  const realPut = f.env.OAUTH_KV.put.bind(f.env.OAUTH_KV);
+  let reached!: () => void, release!: () => void;
+  const reachedWrite = new Promise<void>((r) => { reached = r; });
+  const allowWrite = new Promise<void>((r) => { release = r; });
+  let mints = 0;
+  f.env.OAUTH_KV.put = async (k: string, ...args: any[]) => {
+    if (k.startsWith('client:')) { mints++; reached(); await allowWrite; }
+    return realPut(k, ...args);
+  };
+  const one = adminRequest(f, 'POST');
+  let two: any;
+  try {
+    await Promise.race([reachedWrite, one.then(() => { throw new Error('replacement finished before reaching the provider write'); })]);
+    const other = adminRequest(f, 'POST', { ...f.env, DB: d1Over(f.db) });
+    let timer: ReturnType<typeof setTimeout>;
+    try {
+      two = await Promise.race([other, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('overlapping replacement was not refused')), 5000); })]);
+    } finally { clearTimeout(timer!); }
+    assert.deepEqual([two.status, two.body.error], [409, 'connector_client_busy']);
+    assert.equal((await adminRequest(f)).status, 503, 'a partial replacement is unreadable');
+  } finally { release(); }
+  const winner = await one;
+  assert.deepEqual([winner.status, winner.body.replaced], [201, replacing]);
+  assert.equal(mints, 1, 'the loser never mints a client');
+  assert.deepEqual(await clientIds(f.env), [`client:${winner.body.client_id}`]);
+  if (first) assert.equal(await f.env.OAUTH_KV.get(`client:${first.body.client_id}`), null);
+  assert.deepEqual(storedState(f), { state: 'ready', current: { client_id: winner.body.client_id, created_at: winner.body.created_at } });
+  assert.equal((await adminRequest(f)).body.client_id, winner.body.client_id);
+  const row = f.db.prepare('SELECT value, updated_by FROM platform_settings WHERE key = ?').get(LOVABLE_STATE_KEY);
+  assert.equal(row.updated_by, String(ADMIN));
+  assert.ok(!row.value.includes(winner.body.client_secret), 'the journal never stores the secret');
+});
+
+test('OAuth client read: confirmed empty and legacy clients remain readable; D1, KV and provider errors are 503 without a false empty client', async () => {
+  const empty = fixture(); superAdmin(empty);
+  assert.deepEqual((await adminRequest(empty)).body.client_id, null);
+  const made = await getOAuthApi(providerOptions(empty.env), empty.env).createClient({ redirectUris: [LOVABLE_REDIRECT_URI] });
+  await empty.env.OAUTH_KV.put(LOVABLE_CLIENT_KEY, JSON.stringify({ client_id: made.clientId, created_at: '2026-10-28' }));
+  assert.equal((await adminRequest(empty)).body.client_id, made.clientId, 'pre-fix KV client can still be read');
+  const rotated = await adminRequest(empty, 'POST');
+  assert.equal(rotated.status, 201);
+  assert.equal(rotated.body.replaced, true);
+  assert.equal(await empty.env.OAUTH_KV.get(`client:${made.clientId}`), null, 'first D1 rotation retires the legacy client');
+  for (const failure of ['database', 'legacy', 'provider']) {
+    const f = fixture(); superAdmin(f);
+    if (failure === 'provider') assert.equal((await adminRequest(f, 'POST')).status, 201);
+    if (failure === 'database') {
+      const originalDB = f.env.DB;
+      f.env.DB = { ...originalDB, prepare(sql: string) {
+        if (sql.includes('platform_settings')) throw new Error('private-failure-detail');
+        return originalDB.prepare(sql);
+      } };
+    }
+    else {
+      const originalGet = f.env.OAUTH_KV.get.bind(f.env.OAUTH_KV);
+      f.env.OAUTH_KV.get = async (key: string, ...args: any[]) => {
+        if (failure === 'legacy' ? key === LOVABLE_CLIENT_KEY : key.startsWith('client:')) throw new Error('private-failure-detail');
+        return originalGet(key, ...args);
+      };
+    }
+    const read = await adminRequest(f);
+    assert.deepEqual([read.status, read.body.error], [503, 'connector_client_unreadable'], failure);
+    assert.equal('client_id' in read.body, false, 'no false confirmed-empty response');
+    assert.ok(!JSON.stringify(read.body).includes('private-failure-detail'));
+    if (failure !== 'provider') {
+      const write = await adminRequest(f, 'POST');
+      assert.equal(write.status, 503, failure);
+      assert.deepEqual(await clientIds(f.env), [], 'read failures cannot mint credentials');
+    }
+  }
+});
+
+test('OAuth client replacement: failed retirement keeps the journal blocked, returns no secret, and a retry cannot mint again', async () => {
+  const f = fixture(); superAdmin(f);
+  const first = await adminRequest(f, 'POST');
+  const realDelete = f.env.OAUTH_KV.delete.bind(f.env.OAUTH_KV);
+  f.env.OAUTH_KV.delete = async (key: string) => {
+    if (key === `client:${first.body.client_id}`) throw new Error('private-retirement-error');
+    return realDelete(key);
+  };
+  const failed = await adminRequest(f, 'POST');
+  assert.deepEqual([failed.status, failed.body.error], [503, 'connector_client_unreadable']);
+  assert.equal('client_secret' in failed.body, false);
+  assert.ok(!JSON.stringify(failed.body).includes('private-retirement-error'));
+  const pending = storedState(f);
+  assert.equal(pending.state, 'rotating');
+  assert.equal(pending.previous.client_id, first.body.client_id);
+  assert.ok(pending.candidate.client_id && pending.candidate.client_id !== first.body.client_id);
+  assert.ok(!JSON.stringify(pending).includes(first.body.client_secret));
+  assert.equal((await adminRequest(f)).status, 503);
+  const count = (await clientIds(f.env)).length;
+  assert.equal((await adminRequest(f, 'POST')).status, 409);
+  assert.equal((await clientIds(f.env)).length, count, 'blocked retries create no extra client');
+});
+
+test('OAuth client replacement: failed or zero-change claim, journal and commit never return a secret or allow an unsafe retry', async () => {
+  for (const stage of ['claim', 'journal', 'commit']) for (const outcome of ['throw', 'false', 'noop']) {
+    const f = fixture(); superAdmin(f);
+    const original = stage === 'claim' ? null : await adminRequest(f, 'POST');
+    const originalDB = f.env.DB;
+    f.env.DB = { ...originalDB, prepare(sql: string) {
+      const matches = stage === 'claim' ? sql.startsWith('INSERT OR IGNORE INTO platform_settings')
+        : stage === 'journal' ? sql.startsWith('UPDATE platform_settings SET value = ? WHERE')
+        : sql.startsWith('UPDATE platform_settings SET value = ?, updated_at');
+      const stmt = originalDB.prepare(sql);
+      if (!matches) return stmt;
+      return { ...stmt, bind(...args: any[]) {
+        const bound = stmt.bind(...args);
+        if (stage === 'commit' && JSON.parse(args[0]).state !== 'ready') return bound;
+        return { ...bound, async run() {
+          if (outcome === 'throw') throw new Error('private-storage-error');
+          return { success: outcome !== 'false', meta: { changes: outcome === 'noop' ? 0 : 1 } };
+        } };
+      } };
+    } };
+    const r = await adminRequest(f, 'POST');
+    assert.equal(r.status, stage === 'claim' && outcome === 'noop' ? 409 : 503, `${stage}/${outcome}`);
+    assert.equal('client_secret' in r.body, false);
+    assert.ok(!JSON.stringify(r.body).includes('private-storage-error'));
+    if (stage === 'claim') assert.deepEqual(await clientIds(f.env), [], 'failed claim never mints');
+    else {
+      if (stage === 'journal') assert.ok(await f.env.OAUTH_KV.get(`client:${original!.body.client_id}`), 'failed journaling must not retire the existing client');
+      assert.equal(storedState(f).state, 'rotating', 'partial work remains fenced');
+      assert.equal((await adminRequest(f)).status, 503);
+      const count = (await clientIds(f.env)).length;
+      assert.equal((await adminRequest(f, 'POST')).status, 409);
+      assert.equal((await clientIds(f.env)).length, count);
+    }
+  }
+});
+
+test('OAuth client replacement: two stale ready snapshots contend on the real D1 conditional update', async () => {
+  const f = fixture(); superAdmin(f);
+  assert.equal((await adminRequest(f, 'POST')).status, 201);
+  let reads = 0, release!: () => void;
+  const bothRead = new Promise<void>((r) => { release = r; });
+  const originalDB = f.env.DB;
+  const env = { ...f.env, DB: { ...originalDB, prepare(sql: string) {
+    const stmt = originalDB.prepare(sql);
+    if (!sql.startsWith('SELECT value FROM platform_settings')) return stmt;
+    return { ...stmt, bind(...args: any[]) {
+      const bound = stmt.bind(...args);
+      return { ...bound, async first() {
+        const row = await bound.first();
+        if (++reads === 2) release();
+        await bothRead;
+        return row;
+      } };
+    } };
+  } } };
+  const results = await Promise.all([adminRequest(f, 'POST', env), adminRequest(f, 'POST', { ...env })]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
+  const winner = results.find((r) => r.status === 201)!;
+  assert.deepEqual(await clientIds(f.env), [`client:${winner.body.client_id}`], 'the CAS loser never creates a provider client');
+  assert.equal(storedState(f).current.client_id, winner.body.client_id);
 });
