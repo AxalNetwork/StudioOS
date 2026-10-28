@@ -7,13 +7,14 @@ import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
 import RecordLightbox from '../src/pages/founder/RecordLightbox.jsx';
 import {
-  BOT_UNAVAILABLE, BOT_UNREADABLE, TEAMS_PASTE, botState, botTranscriptLine, createMeetingOffer, createdLink, meetingHref,
+  BOT_UNAVAILABLE, BOT_UNREADABLE, TEAMS_CREATE_NOTE, botState, botTranscriptLine, createMeetingOffer, createdLink, meetingHref,
 } from '../src/pages/founder/recordSetup.js';
 import { BOT_ENGINE, RECORD_ENGINE } from '../src/lib/validateSourceWording.js';
 
 const h = React.createElement;
 const ZOOM_LINK = 'https://zoom.us/j/85746065432?pwd=abc';
 const MEET_LINK = 'https://meet.google.com/abc-mnop-xyz';
+const TEAMS_LINK = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_fixture%40thread.v2/0';
 const BOT_OFF = { available: false, platforms: { zoom: false, google_meet: false, teams: false }, limit_minutes: 30, price: { bot_microusd_per_minute: null, transcription_microusd_per_minute: null } };
 const BOT_ON = { available: true, platforms: { zoom: true, google_meet: true, teams: true }, limit_minutes: 120, price: { bot_microusd_per_minute: 2790, transcription_microusd_per_minute: 6500 } };
 const CONNECTED = { providers: [{ provider: 'zoom', available: true }, { provider: 'google_meet', available: true }], connections: { zoom: { status: 'active' }, google_meet: { status: 'active' } } };
@@ -29,7 +30,7 @@ function setup({ bot = BOT_OFF, channels = CONNECTED, instant, botAvailability }
   const channelsSource = {
     async overview() { return channels; },
     async saveZoomCall(id, body) { device.push(['saveZoomCall', id, body]); return { session_id: 16 }; },
-    async instantMeeting(provider, minutes) { made.push([provider, minutes]); return instant ? instant(provider) : { provider, join_url: provider === 'zoom' ? ZOOM_LINK : MEET_LINK }; },
+    async instantMeeting(provider, minutes) { made.push([provider, minutes]); return instant ? instant(provider) : { provider, join_url: provider === 'zoom' ? ZOOM_LINK : provider === 'teams' ? TEAMS_LINK : MEET_LINK }; },
     ...(botAvailability ? { async botAvailability() { reads.push(1); return botAvailability(reads.length); } } : {}),
   };
   const props = {
@@ -46,7 +47,8 @@ test('the rules: what is offered per platform, which link fills, and the bot sta
   assert.deepEqual(createMeetingOffer('video', 'zoom', CONNECTED), { kind: 'create', connected: true, connectHref: null, connectLabel: 'Connect Zoom to create the meeting here' });
   assert.deepEqual(createMeetingOffer('video', 'google_meet', UNCONNECTED), { kind: 'create', connected: false, connectHref: '/account/connectors', connectLabel: 'Connect Google to create the meeting here' });
   assert.equal(createMeetingOffer('video', 'zoom', null).connected, null, 'an unread connection is not "not connected"');
-  assert.deepEqual(createMeetingOffer('video', 'teams', CONNECTED), { kind: 'paste', sentence: TEAMS_PASTE });
+  // D1359: Teams is created on the Microsoft calendar connection; the Worker decides whether it is connected.
+  assert.deepEqual(createMeetingOffer('video', 'teams', CONNECTED), { kind: 'create', connected: null, connectHref: null, connectLabel: 'Connect Microsoft to create the meeting here', note: TEAMS_CREATE_NOTE });
   assert.equal(createMeetingOffer('phone', 'whatsapp', CONNECTED), null);
   assert.equal(createMeetingOffer('video', 'zoom', { providers: [{ provider: 'zoom', available: false }], connections: {} }).kind, 'unavailable');
   assert.equal(createdLink('zoom', { join_url: ZOOM_LINK }), ZOOM_LINK);
@@ -134,10 +136,30 @@ test('not connected: the button waits for a connection and links to it; Teams is
     assert.equal(m.props(by(m, 'record-create-connect')).href, '/account/connectors');
     assert.match(m.text(), /Connect Google to create the meeting here/);
     assert.equal(by(m, 'record-connect-link'), undefined, 'the Meet chip itself asks for no connection');
+    // D1359: Teams offers the button too, and says it needs a work or school account.
     await press(m, 'record-provider-teams');
-    assert.equal(by(m, 'record-create-meeting-button'), undefined);
-    assert.match(m.text(), /Create the meeting in Microsoft Teams and paste its link here\. Axal cannot create a Teams meeting yet\./);
+    assert.equal(m.props(by(m, 'record-create-meeting-button')).disabled, false);
+    assert.match(m.text(), /work or school Microsoft 365 account/);
   } finally { await m.unmount(); }
+});
+
+test('D1359: Teams — "Create the meeting for me" asks the Worker and fills the Teams link; its refusal is the Worker\'s words', async () => {
+  const s = setup();
+  const m = await mountContracts(h(RecordLightbox, s.props));
+  try {
+    await press(m, 'record-provider-teams');
+    await press(m, 'record-create-meeting-button');
+    assert.deepEqual(s.made, [['teams', 30]]);
+    assert.equal(m.props(by(m, 'record-link')).value, TEAMS_LINK);
+  } finally { await m.unmount(); }
+  const f = setup({ instant: () => { throw new Error('This Microsoft account cannot create Teams meetings from Axal: that needs a work or school Microsoft 365 account. Create the meeting in Microsoft Teams and paste its link.'); } });
+  const n = await mountContracts(h(RecordLightbox, f.props));
+  try {
+    await press(n, 'record-provider-teams');
+    await press(n, 'record-create-meeting-button');
+    assert.equal(n.props(by(n, 'record-link')).value, '');
+    assert.match(n.text(), /cannot create Teams meetings from Axal/);
+  } finally { await n.unmount(); }
 });
 
 test('a refused or odd create fills nothing and says so; the Worker’s sentence is kept', async () => {
