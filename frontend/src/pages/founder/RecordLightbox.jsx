@@ -304,7 +304,7 @@ export default function RecordLightbox({
   const captureReason = state.ok && !blockedReason && captureKind === 'none' ? (meeting ? plan?.reason ?? null : capture.reason) : null;
   const ready = state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
     && (!meeting || !!String(link).trim() || (fields.meeting_url && typeof channelsSource?.instantMeeting === 'function'));
-  const label = meeting ? 'Start' : botReady ? 'Send Eadwyn AI' : m.start;
+  const label = howOf(mode) === 'call' ? 'Start Call' : m.start;
   const languages = languageOptions(models, live);
 
   // The chats waiting for this app, read when its chip is chosen.

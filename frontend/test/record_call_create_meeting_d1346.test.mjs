@@ -114,7 +114,7 @@ test('bot not deployed: no Send button, the plan says so, and Start saves the ca
     assert.equal(by(m, 'record-device'), undefined, 'no device button for a meeting');
     assert.equal(by(m, 'record-live'), undefined, 'no device options: this device does not record a meeting');
     assert.ok(by(m, 'record-import-note'));
-    assert.equal(m.props(by(m, 'record-start')).children, 'Start');
+    assert.equal(m.props(by(m, 'record-start')).children, 'Start Call');
     await press(m, 'record-start');
     assert.deepEqual(s.sent, [], 'no bot is sent from here');
     assert.deepEqual(s.made, [], 'a pasted link is not created again');
@@ -132,6 +132,7 @@ test('bot deployed: a Meet call is saved for import and the Worker sends Eadwyn 
   try {
     await press(m, 'record-provider-google_meet');
     await change(m, 'record-link', MEET_LINK);
+    assert.equal(m.props(by(m, 'record-start')).children, 'Start Call');
     assert.equal(by(m, 'record-live'), undefined, 'no live captions for a bot run');
     assert.equal(by(m, 'record-final'), undefined, 'no final-transcript choice for a bot run');
     assert.ok(by(m, 'record-bot-transcript'));
@@ -148,6 +149,7 @@ test('bot deployed: a Meet call is saved for import and the Worker sends Eadwyn 
   try {
     await press(n, 'record-provider-teams');
     await change(n, 'record-link', TEAMS_LINK);
+    assert.equal(n.props(by(n, 'record-start')).children, 'Start Call');
     await press(n, 'record-start');
     assert.deepEqual(b.sent, [{ meeting_url: TEAMS_LINK }], 'Teams has no import, so Eadwyn AI is sent');
     assert.equal(u.opened[0].location.href, TEAMS_LINK);

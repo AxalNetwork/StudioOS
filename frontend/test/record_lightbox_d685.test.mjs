@@ -57,8 +57,8 @@ test('the dialog: named, modal, 560px, and the five sections in the canvas\'s or
 
 test('each mode: its note, its Start label, and Transcript only where there is audio', () => {
   // D1358: a meeting's Transcript says how the call is captured; it has no device estimate.
-  const cases = [['in_person', 'Put the phone on the table between you', 'Start recording', true, true], ['video', 'Paste the meeting link', 'Start', true, false],
-    ['phone', 'Put the call on speaker', 'Start recording', true, true], ['text', 'No audio. Import the conversation', 'Import the chat', false, false]];
+  const cases = [['in_person', 'Put the phone on the table between you', 'Start recording', true, true], ['video', 'Paste the meeting link', 'Start Call', true, false],
+    ['phone', 'Put the call on speaker', 'Start Call', true, true], ['text', 'No audio. Import the conversation', 'Import the chat', false, false]];
   for (const [initialMode, note, start, transcript, estimated] of cases) {
     const out = render({ initialMode });
     assert.ok(renderedText(out).includes(note), `${initialMode}: note`);
@@ -455,7 +455,7 @@ test('an invalid meeting link blocks Start; a valid one on a connected Zoom is s
     assert.ok(m.text().includes('A Zoom link is on zoom.us.'));
     await m.type('record-link', 'https://acme.zoom.us/j/12345678');
     assert.equal(m.pr(m.by('record-start'))['aria-disabled'], undefined);
-    assert.equal(m.text(m.by('record-start')), 'Start', 'D1362: one Start for a meeting');
+    assert.equal(m.text(m.by('record-start')), 'Start Call', 'D1362: one Start for a meeting');
     assert.equal(m.by('record-device'), undefined, 'no "Record this device" for a meeting');
     assert.match(m.text(m.by('record-import-note')), /Axal does not record this call/);
     await m.click('record-start');
@@ -500,7 +500,7 @@ test('D1358: Google Meet on a connected Google account is attached from Calendar
     assert.equal(s.calls.create.length, 0);
     await m.click('record-provider-google_meet');
     await m.type('record-link', 'https://meet.google.com/abc-defg-hij');
-    assert.equal(m.text(m.by('record-start')), 'Start', 'D1362: one Start for a meeting');
+    assert.equal(m.text(m.by('record-start')), 'Start Call', 'D1362: one Start for a meeting');
     await m.click('record-start');
     assert.equal(s.calls.createInterview.length, 0, 'the interview it was opened on is used');
     assert.deepEqual(attached, [[7, { join_url: 'https://meet.google.com/abc-defg-hij', consent: { status: 'given', method: 'written' } }]]);
