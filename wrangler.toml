@@ -378,6 +378,12 @@ max_retries        = 3
 # duration billing. Class registrations live in
 # `cloudflare-worker/src/durable-objects/`; index.ts re-exports them so the
 # Workers runtime can find them at the bound class names.
+# D886: independent private bot host.
+[[durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+script_name = "studioos-meeting-bot"
+
 [[durable_objects.bindings]]
 name       = "PIPELINE_ROOM"
 class_name = "PipelineRoom"
@@ -680,6 +686,12 @@ max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
 
+# D886: independent private bot host.
+[[env.production.durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+script_name = "studioos-meeting-bot"
+
 [[env.production.durable_objects.bindings]]
 name       = "PIPELINE_ROOM"
 class_name = "PipelineRoom"
@@ -851,6 +863,12 @@ queue              = "studioos-job-queue-preview-dlq"
 max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
+
+# D886: independent private bot host.
+[[env.preview.durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+script_name = "studioos-meeting-bot-preview"
 
 [[env.preview.durable_objects.bindings]]
 name       = "PIPELINE_ROOM"
