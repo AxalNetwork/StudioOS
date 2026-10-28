@@ -17,7 +17,8 @@ test('the section is second in Account, at /account/companies, with its phone in
   const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(labels.slice(0, 2), ['Profile and identity', 'Companies and projects']);
   // D1140 (#3020) passes "Your companies" (the KYB entity records) in as entityRecords.
-  assert.ok(page.includes("{safeActive === 'companies' && <CompaniesProjects role={role} entityRecords={<YourCompaniesSection flash={flash} />} />}"));
+  // The account's signing entity sits beside its companies (owner, 2026-10-28).
+  assert.ok(page.includes("{safeActive === 'companies' && <CompaniesProjects role={role} entityRecords={<><YourCompaniesSection flash={flash} /><CorporateEntityCard flash={flash} /></>} />}"));
   assert.equal(PATH_TO_SECTION.companies, 'companies');
   const rows = accountIndexGroups({ role: 'founder' })[0].rows.map((r) => [r.title, r.to]);
   assert.deepEqual(rows.slice(0, 2), [['Profile and identity', '/account/profile'], ['Companies and projects', '/account/companies']]);

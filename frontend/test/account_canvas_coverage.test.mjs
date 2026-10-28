@@ -11,8 +11,9 @@
  *                              <YourCompaniesSection />, which is the canvas's
  *                              "Legal entity" companies list, not its roles pane)
  *   canvas "Documents"       → <DocumentsAgreementsSection />
- *   canvas "Profile"         → ProfileTabs, sub-tab 'personal'
- *   canvas "Identity & tax"  → ProfileTabs, sub-tab 'verification'
+ *   canvas "Profile"         → ProfileEditors, under the Profile and identity cards
+ *   canvas "Identity & tax"  → the Identity and Address and tax ID cards
+ *                              (AccountProfile.jsx); verification is Trust Center's
  *
  * That is a defensible arrangement — four cards on one pane beats four panes
  * with one card each — but it makes those two the easiest things in the file
@@ -27,8 +28,9 @@
  *                encrypted tax id, registered address, signing authority,
  *                UBOs, directors, screening flags. Served by
  *                GET/PUT /settings/profile/legal-entity. This one IS built:
- *                ProfileTabs' `corporate` sub-tab, the tab the comment above
- *                ENTITY_TYPE_OPTIONS has named since Task #16.
+ *                CorporateEntityCard, drawn on Companies and projects beside
+ *                the account's companies (owner, 2026-10-28; it was the
+ *                Profile pane's `corporate` sub-tab before).
  *
  *   PER-COMPANY  `company_kyb_records` — one row per company (migration 220,
  *                task #108), written by POST /trust/companies/kyb. This file
@@ -90,20 +92,21 @@ test('the four cards folded into the account pane are all still rendered', () =>
   // D1140 (#3020): "Your companies" moved to Companies and projects; the
   // account pane keeps a moved notice in its place, and the card renders on
   // the Companies tab, so it is still drawn, one pane over.
-  for (const card of ['<ProfileTabs', '<EmailSection', '<ProfileMovedNotice', '<RolesAccessCard', '<DocumentsAgreementsSection']) {
+  for (const card of ['<ProfileEditors', '<EmailSection', '<ProfileMovedNotice', '<RolesAccessCard', '<DocumentsAgreementsSection']) {
     assert.ok(pane.includes(card), `${card} left the account pane`);
   }
   assert.ok(!pane.includes('<YourCompaniesSection'), 'Your companies is back on Profile and identity');
-  assert.match(settings, /entityRecords=\{<YourCompaniesSection /, 'Your companies is no longer drawn on Companies and projects');
+  assert.match(settings, /entityRecords=\{<><YourCompaniesSection /, 'Your companies is no longer drawn on Companies and projects');
 });
 
-test('Profile, Legal entity and Identity & tax are the three profile sub-tabs', () => {
-  assert.match(settings, /\{ id: 'personal', label: 'Personal' \}/);
-  assert.match(settings, /\{ id: 'corporate', label: 'Corporate' \}/);
-  assert.match(settings, /\{ id: 'verification', label: 'Verification' \}/);
-  // A tab in the list with no body renders an empty pane, which is worse than
-  // no tab: the reader concludes the record is empty rather than unbuilt.
-  assert.match(settings, /sub === 'corporate' && <CorporateEntityCard/);
+test('Profile and identity has no sub-tabs; the signing entity is on Companies and projects', () => {
+  // Owner, 2026-10-28: no Personal / Corporate / Verification switcher.
+  // Corporate is Companies and projects'; verification is Trust Center's.
+  assert.doesNotMatch(settings, /\{ id: 'corporate', label: 'Corporate' \}/);
+  assert.doesNotMatch(settings, /\{ id: 'verification', label: 'Verification' \}/);
+  assert.doesNotMatch(settings, /function ProfileTabs\(/);
+  const companiesPane = settings.slice(settings.indexOf("safeActive === 'companies'"), settings.indexOf("safeActive === 'following'"));
+  assert.match(companiesPane, /<CorporateEntityCard flash=\{flash\} \/>/, 'the signing entity editor is drawn nowhere');
 });
 
 test('Documents lists the caller’s own envelopes, scoped by the server', () => {
@@ -188,7 +191,7 @@ test('the entity-type list the user picks from is the one the worker accepts', (
 test('the corporate card reads and writes the legal-entity route, not a sibling', () => {
   const card = settings.slice(
     settings.indexOf('function CorporateEntityCard'),
-    settings.indexOf('function VerificationStubCard'),
+    settings.indexOf('function ProfileSection('),
   );
   assert.ok(card.length > 500, 'could not read CorporateEntityCard');
   assert.match(card, /api\.getLegalEntity\(\)/);
@@ -205,7 +208,7 @@ test('a rejected save lands on the field the worker names, not in a toast', () =
   // looking accepted.
   const card = settings.slice(
     settings.indexOf('function CorporateEntityCard'),
-    settings.indexOf('function VerificationStubCard'),
+    settings.indexOf('function ProfileSection('),
   );
   assert.match(card, /e\?\.field/, 'the field-scoped error path is gone');
   assert.match(card, /setFieldErrors\(\{ \[e\.field\]: e\.message \}\)/);
@@ -218,7 +221,7 @@ test('a rejected save lands on the field the worker names, not in a toast', () =
 test('the array columns save explicitly, and the derived flag is not a toggle', () => {
   const card = settings.slice(
     settings.indexOf('function CorporateEntityCard'),
-    settings.indexOf('function VerificationStubCard'),
+    settings.indexOf('function ProfileSection('),
   );
   // The worker revalidates and replaces the whole array, so a per-row
   // autosave would race its own siblings against one endpoint.
@@ -235,27 +238,13 @@ test('the array columns save explicitly, and the derived flag is not a toggle', 
 test('insurance carriers are stated as unbuilt rather than drawn empty', () => {
   const card = settings.slice(
     settings.indexOf('function CorporateEntityCard'),
-    settings.indexOf('function VerificationStubCard'),
+    settings.indexOf('function ProfileSection('),
   );
   // The column exists and the worker validates it; there is just no editor.
   // An empty table would read as "you have no carriers", which is a different
   // claim from "this page cannot record them".
   assert.doesNotMatch(codeOnly(card), /onSave=\{\(\) => save\(\{ insurance_carriers \}\)\}/);
   assert.match(card, /no editor here yet/);
-});
-
-test('the verification card no longer cites a block that does not exist', () => {
-  // It used to read "The Identity and Legal entity blocks above are already
-  // used to auto-fill contracts" — naming a Legal entity block that had never
-  // been built, on the very page a reader would look for it.
-  const stub = settings.slice(
-    settings.indexOf('function VerificationStubCard'),
-    settings.indexOf('function ProfileSection'),
-  );
-  assert.ok(stub.length > 200, 'could not read VerificationStubCard');
-  assert.doesNotMatch(stub, /blocks above/,
-    'the footnote points at a block again — check it exists');
-  assert.match(stub, /Personal and Corporate tabs/);
 });
 
 test('Company Settings still owns the company half of the split', () => {
