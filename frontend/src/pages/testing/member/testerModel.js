@@ -13,9 +13,9 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 function parts(value) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ''));
   if (!m) return null;
-  const mo = Number(m[2]);
-  if (mo < 1 || mo > 12) return null;
-  return { d: Number(m[3]), m: MONTHS[mo - 1], y: Number(m[1]) };
+  const name = MONTHS.at(Number(m[2]) - 1);
+  if (Number(m[2]) < 1 || !name) return null;
+  return { d: Number(m[3]), m: name, y: Number(m[1]) };
 }
 
 /** "17 Oct 2026", or null. */

@@ -37,7 +37,7 @@ function Reading() {
   );
 }
 
-function Unreadable({ onRetry, testId }) {
+function ReadFailed({ onRetry, testId }) {
   return (
     <div role="alert" data-testid={testId} className="flex flex-col items-start gap-2.5 rounded-lg border border-dashed border-gray-300 p-4 dark:border-gray-700">
       <p className={P}>{UNREADABLE}</p>
@@ -49,7 +49,7 @@ function Unreadable({ onRetry, testId }) {
 /** PT-M1: the card. */
 export function TesterCard({ state, onOpen, onRetry }) {
   if (state.status === 'loading') return <section className={CARD} data-testid="pt-card"><span className={EYEBROW}>Product testing</span><Reading /></section>;
-  if (state.status === 'error') return <section className={CARD} data-testid="pt-card"><span className={EYEBROW}>Product testing</span><Unreadable testId="pt-card-unreadable" onRetry={onRetry} /></section>;
+  if (state.status === 'error') return <section className={CARD} data-testid="pt-card"><span className={EYEBROW}>Product testing</span><ReadFailed testId="pt-card-unreadable" onRetry={onRetry} /></section>;
   const c = testerCard(state.data);
   return (
     <section className={CARD} data-testid="pt-card" data-kind={c.kind}>
@@ -75,7 +75,7 @@ export function ProgrammesBlock({ state, onOpen, onRetry, headingRef }) {
         {state.status === 'ok' && items.length > 0 && <span className={COUNT}>{items.length}</span>}
       </div>
       {state.status === 'loading' && <Reading />}
-      {state.status === 'error' && <Unreadable testId="pt-programmes-unreadable" onRetry={onRetry} />}
+      {state.status === 'error' && <ReadFailed testId="pt-programmes-unreadable" onRetry={onRetry} />}
       {state.status === 'ok' && !items.length && <p className={P} data-testid="pt-programmes-empty">No programmes are open right now. You’re told in Inbox when one opens.</p>}
       {state.status === 'ok' && items.length > 0 && (
         <>
@@ -114,7 +114,7 @@ export function ApplicationsBlock({ state, onOpen, onRetry }) {
         {state.status === 'ok' && items.length > 0 && <span className={COUNT}>{items.length}</span>}
       </div>
       {state.status === 'loading' && <Reading />}
-      {state.status === 'error' && <Unreadable testId="pt-applications-unreadable" onRetry={onRetry} />}
+      {state.status === 'error' && <ReadFailed testId="pt-applications-unreadable" onRetry={onRetry} />}
       {state.status === 'ok' && !items.length && <p className={P} data-testid="pt-applications-empty">You haven’t applied to a programme yet. Open programmes are listed above.</p>}
       {state.status === 'ok' && items.length > 0 && (
         <ul className="m-0 list-none p-0" aria-label="My applications">
