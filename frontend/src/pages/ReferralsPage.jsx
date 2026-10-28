@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 
 import { api } from '../lib/api';
-import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
+import { readLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
+import LinkedInImportSheet, { NO_EMAIL_LINE } from './referrals/LinkedInImportSheet.jsx';
 import { useToast } from '../components/useToast';
 import ToastMessage from '../components/ToastMessage';
 import { Unreadable } from '../ui';
@@ -387,6 +388,7 @@ export default function ReferralsPage({ embedded = false }) {
   const [invites, setInvites] = useState([]);
   const [invitesUnreadable, setInvitesUnreadable] = useState(false);
   const [pendingContacts, setPendingContacts] = useState([]);
+  const [linkedinSheet, setLinkedinSheet] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -631,13 +633,13 @@ export default function ReferralsPage({ embedded = false }) {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      const parsed = parseLinkedInCsv(String(reader.result || ''));
-      if (!parsed.length) {
-        showToast({ kind: 'warning', msg: 'No contacts found — CSV needs an email column.' });
+      // D1353: a row with no email is counted and said, never dropped without a word.
+      const read = readLinkedInCsv(String(reader.result || ''));
+      if (!read.rows.length) {
+        showToast({ kind: 'warning', msg: read.no_email ? `None of the ${read.no_email} contacts has an email. ${NO_EMAIL_LINE}` : 'No contacts found — CSV needs an email column.' });
         return;
       }
-      setPendingContacts(parsed);
-      showToast({ kind: 'success', msg: `${parsed.length} contacts ready to invite.` });
+      addContacts(read.rows, read.no_email);
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -673,20 +675,14 @@ export default function ReferralsPage({ embedded = false }) {
     }
   };
 
-  const importLinkedin = async () => {
-    try {
-      const st = await api.linkedinStatus();
-      if (!st?.connected) {
-        const start = await api.linkedinOAuthStart({ return_to: '/referrals' });
-        if (start?.url) window.location.href = start.url;
-        else showToast({ kind: 'warning', msg: 'LinkedIn is not configured.' });
-        return;
-      }
-      showToast({ kind: 'info', msg: 'Upload Connections.csv using Upload CSV — or import from Settings → Integrations.' });
-    } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || 'Could not start LinkedIn import.' });
-    }
+  // D1353 (#3568): rows with an email join the invite list, each with its link; the rest are counted.
+  const addContacts = (rows, noEmail = 0) => {
+    setPendingContacts((prev) => [...prev, ...rows]);
+    const without = noEmail ? ` ${noEmail} had no email: share your link on LinkedIn to reach them.` : '';
+    showToast({ kind: 'success', msg: `${rows.length} ${rows.length === 1 ? 'contact' : 'contacts'} ready to invite.${without}` });
   };
+  // D1353: a guided sheet, not a sign-in or a dead-end toast. LinkedIn gives no connections over its API; the export is the import.
+  const importLinkedin = () => setLinkedinSheet(true);
 
   const submitPartner = async () => {
     try {
@@ -709,6 +705,7 @@ export default function ReferralsPage({ embedded = false }) {
   return (
     <div className={`rf-page ${embedded ? 'space-y-6' : ''}`} data-testid="referrals-page">
       <ToastMessage toast={toast} onDismiss={dismissToast} />
+      {linkedinSheet ? <LinkedInImportSheet onClose={() => setLinkedinSheet(false)} onAdd={(rows, noEmail) => { addContacts(rows, noEmail); setLinkedinSheet(false); }} /> : null}
       {!embedded && (
         <div className="rf-header">
           <div className="rf-header-inner">

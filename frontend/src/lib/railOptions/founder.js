@@ -52,6 +52,7 @@ const STUDIO_ACTIONS = 'frontend/src/pages/raise/pitch/StudioActions.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
 const ASSIST_BAR = 'frontend/src/pages/raise/pitch/CardAssistBar.jsx';
 const ADD_MENU = 'frontend/src/pages/raise/pitch/AddMenu.jsx';
+const IMAGE_LIGHTBOX = 'frontend/src/pages/raise/pitch/ImageLightbox.jsx';
 const CONNECTOR_CARD = 'frontend/src/pages/raise/pitch/ConnectorLightbox.jsx';
 const BRAND = 'frontend/src/pages/BrandBuilderPage.jsx';
 const NETWORK_DESK = 'frontend/src/pages/founder/FounderNetworkDesk.jsx';
@@ -243,6 +244,11 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:timeline', route: '/raise/pitch/edit', label: 'Timeline from your records', kind: 'write', handler: 'draft',
     at: [[ADD_MENU, 'deckAssistApi.run(']],
+  },
+  // D903 (#2682): the image lightbox's Generate (PD12), through run() on FLUX.1 Schnell (the `deck_image` task).
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:image', route: '/raise/pitch/edit', label: 'Generate', kind: 'vision', handler: 'draft',
+    at: [[IMAGE_LIGHTBOX, 'deckImagesApi.generate(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-file', route: '/raise/pitch/review', label: 'Drop your deck here or click to browse', kind: 'vision', handler: 'upload',

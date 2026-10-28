@@ -33,13 +33,17 @@ import {
  * (`onPlace`), which marks them "Not saved"; the form's own Save writes, then
  * `POST /api/fills/record`. Closing the sheet returns focus to the trigger
  * (D1317's contract). No model name or option key is drawn.
+ *
+ * D1328 (#3489, AF23): below 640px Sources is a bottom sheet (`phone="sheet"`)
+ * and Preview a full-height page, its footer (Accept all) fixed below the
+ * scrolling table; every control there is at least 44px.
  */
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const MONO = 'font-mono tabular-nums';
 const EYEBROW = 'font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const BTN = 'inline-flex min-h-[36px] items-center justify-center rounded-[9px] bg-axal-violet px-3.5 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-50';
-const GHOST = 'inline-flex min-h-[36px] items-center justify-center rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800 dark:text-gray-100';
+const BTN = 'inline-flex min-h-[36px] items-center justify-center rounded-[9px] bg-axal-violet px-3.5 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-[44px]';
+const GHOST = 'inline-flex min-h-[36px] items-center justify-center rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-semibold text-axal-ink hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800 dark:text-gray-100 max-sm:min-h-[44px]';
 const LINK = 'font-semibold text-axal-violet hover:underline dark:text-violet-300';
 const NOTE = 'rounded-[10px] border px-3 py-2.5 text-[12.5px]';
 const NOTE_TONE = {
@@ -147,7 +151,7 @@ export default function FillSheet({ page, form, project, record = null, title = 
           {sources.map((s) => (
             <li key={s.key} className="flex items-start justify-between gap-3 rounded-[10px] border border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid={`fill-source-${s.key}`}>
               <label className="flex min-w-0 items-start gap-2.5">
-                <input type="checkbox" className="mt-0.5" checked={ticked.has(s.key)} disabled={!s.tickable || (s.kind === 'eadwyn' && aiOff)}
+                <input type="checkbox" className="mt-0.5 max-sm:mt-0 max-sm:h-11 max-sm:w-11" checked={ticked.has(s.key)} disabled={!s.tickable || (s.kind === 'eadwyn' && aiOff)}
                   onChange={() => toggle(s.key)} aria-label={`Use ${s.label}`} />
                 <span className="flex min-w-0 flex-col">
                   <span className={`text-[13px] font-semibold ${INK}`}>{s.kind === 'eadwyn' ? <span className="inline-flex items-center gap-1"><span className="text-axal-violet dark:text-violet-300"><FillGlyph size={12} /></span>Eadwyn</span> : s.label}</span>
@@ -249,7 +253,7 @@ export default function FillSheet({ page, form, project, record = null, title = 
                     <td className="py-2 pr-2">{c ? <span className="whitespace-nowrap rounded-full border border-axal-hairline px-1.5 py-0.5 text-[10.5px] font-semibold dark:border-gray-700">{candidateChip(c, sourceOf(c)?.as_of)}</span> : null}</td>
                     <td className={`py-2 pr-2 ${MONO} text-[11px] ${MUTED}`}>{c ? (fromEadwyn ? (c.ran ? `Part of 1 run · ${money(done?.charged) ?? COST_NOT_RECORDED}` : 'From an earlier run') : NO_TOKENS) : null}</td>
                     <td className="py-2">
-                      {c ? <input type="checkbox" checked={!!accepted(r) && (!r.kept || !!accept[r.field])} aria-label={`Accept ${r.label}`}
+                      {c ? <input type="checkbox" className="max-sm:h-11 max-sm:w-11" checked={!!accepted(r) && (!r.kept || !!accept[r.field])} aria-label={`Accept ${r.label}`}
                         onChange={(e) => { const v = e.target.checked; setAccept((a) => ({ ...a, [r.field]: v })); }} data-testid={`fill-row-accept-${r.field}`} /> : null}
                     </td>
                   </tr>
@@ -279,7 +283,8 @@ export default function FillSheet({ page, form, project, record = null, title = 
   }
 
   return (
-    <Sheet label={`Fill ${title} with Eadwyn`} eyebrow="Fill with Eadwyn" title={`Fill ${title}`} width={520} onClose={onClose} footer={footer} testId="fill-sheet">
+    <Sheet label={`Fill ${title} with Eadwyn`} eyebrow="Fill with Eadwyn" title={`Fill ${title}`} width={520} onClose={onClose} footer={footer} testId="fill-sheet"
+      phone={step === 'sources' && read.status !== 'error' && !nothingToFill ? 'sheet' : 'full'}>
       <div className="flex flex-col gap-3">
         <img src="/eadwyn-ai.png" alt="" width={24} height={24} className="h-6 w-6" />
         {body}

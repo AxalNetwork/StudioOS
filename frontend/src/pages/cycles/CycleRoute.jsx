@@ -57,6 +57,8 @@ import { FromYourInterviews, InterviewsSection, PainThemesSection, HypothesesSec
 import { acceptSuggestions } from './validatePhone';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions';
 import FormLightbox from './FormLightbox';
+import { FillModule } from './FillRowsPanel';
+import { fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
@@ -965,14 +967,23 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const saved = () => { dirty.current = true; };
   const uofAssistant = cycle === 'raise' && slug === USE_OF_FUNDS && user?.role === 'founder'
     ? props => <UseOfFundsMilestoneWording key={projectId} projectId={projectId} {...props} /> : undefined;
+  // D1328 (#3489): Fill with Eadwyn on a founder form FILL_FIELDS lists (AF3, AF7), and a
+  // waiting row's Edit (AF16), which opens its Add form with the row's values.
+  const fillRow = location.state?.fillRow && typeof location.state.fillRow.uid === 'string' ? location.state.fillRow : null;
+  const fillFor = (entry) => {
+    const t = !narrativeAdmin && projectId ? fillTarget(cycle, slug, entry?.key) : null;
+    return t ? { ...t, project: projectId, aiOff: !fillsOn, edited: fillRow && fillRow.form === entry.key ? fillRow : null } : null;
+  };
+  const moduleFill = !narrativeAdmin && projectId && slug ? moduleFillTarget(cycle, slug, forms) : null;
   const openForm = record ? recordState.form
     : !projectId ? null
     // D1106 (#2986): DR4, Data room's Upload is its own sheet, the queue in states.
     : formOpen && cycle === 'raise' && slug === DATA_ROOM ? (
       <DataRoomUpload key="dataroom-upload" projectId={projectId} onSaved={saved} onClose={closeAdd} />
     ) : formOpen ? (
-      <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
+      <FormLightbox key={`add-${formOpen.key}${fillRow ? `-${fillRow.uid}` : ''}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
         renderAssistant={uofAssistant}
+        fill={fillFor(formOpen)}
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
         loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(formWrites, projectId) : null}
         onSearch={formOpen.search ? (_field, q) => formOpen.search(formWrites, projectId, q) : null}
@@ -1179,7 +1190,14 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} /> : undefined}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
-        more={cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} /> : null}
+        more={cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
+          // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).
+          : moduleFill ? <FillModule key={`${slug}-${projectId}`} refresh={reload} target={moduleFill} projectId={projectId} moduleName={moduleName} aiOff={!fillsOn}
+            onChanged={() => setReload((n) => n + 1)}
+            onEdit={(p) => {
+              const i = forms.findIndex((f) => f.key === moduleFill.form);
+              navigate(addHref(forms[i], i), { state: { under: `${location.pathname}${location.search}`, fillRow: { uid: p.uid, row: p.row, form: moduleFill.form } } });
+            }} /> : null}
       >
         {cycle === 'grow' && <PublishedFromHere part={module?.parts?.publish} />}
         {fillKind && projectId && (

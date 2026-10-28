@@ -37,7 +37,7 @@ import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnaly
 import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
 import {
-  AUDIENCES, BLOCK_KINDS, CHART_RANGES, CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX,
+  AUDIENCES, BLOCK_KINDS, CHART_RANGES, CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
   TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
@@ -1094,6 +1094,9 @@ decks.get('/model', async (c) => {
     chart_ranges: CHART_RANGES,
     text_styles: TEXT_STYLES,
     image_tags: IMAGE_TAGS,
+    // D903 (#2682): an image's fit, and a background's overlay in the brand ink.
+    image_fits: IMAGE_FITS,
+    overlays: OVERLAYS,
     video_ratios: VIDEO_RATIOS,
     audiences: AUDIENCES,
     themes: THEME_KINDS,

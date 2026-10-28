@@ -28,7 +28,8 @@ Verified on `origin/main` at `56c2498983` (2026-10-21) by S21.
   RFC 8414 and RFC 9728 metadata.
   - Consent is parked in `OAUTH_KV` and answered by the SPA at
     `/connect/assistant` (`routes/mcp_consent.ts`).
-  - Scopes are `validate:read` and `validate:write` only.
+  - Scopes are `validate:read` and `validate:write` only. (Since then: D841's
+    scopes, and `mail:read` and `mail:write`, D1343.)
 - **Per-call checks** (`callTool`):
   - the grant's user is re-read, so an ended account or a "sign out
     everywhere" (`jwt_min_iat`) refuses the call;
@@ -300,6 +301,20 @@ one updates this section in the same PR.
   - A call already read returns its proposals and runs nothing. `rerun` proposes only what is new.
   - M4's `decision` and `action_item` kinds (#2520, D873) arrive through the same extraction.
 
+### Mail tools (D1343; S17)
+
+`mcp/tools/mail.ts`, over D1341's context pack and drafts (#3551, part 4 of Email, #3547). Neither tool sends, and there is no `mail_send` tool: a send stays a press in Axal VC, behind the composer's one-use confirmation nonce (D1340).
+
+| Tool | Scope | Input | Output |
+|---|---|---|---|
+| `mail_context` | `mail:read` | `{ person: 'kind:id', project? }` | `{ person, intents: [{ key, label }], items: [{ ref, kind, label, as_of, link, selected, text }] }` |
+| `mail_draft` | `mail:write` | `{ person, intent, tone?, length?, refs?, blocks?, project? }` | `{ draft: { uid, subject, body, sources }, sent: false, open_in: '/email' }` |
+
+- **The grant bounds the pack.** A `project`, or a person whose record belongs to a company, outside the companies this connection was approved for is `404 not_found`, "Record not found.", as one that does not exist. A person with no company (an advisor engagement, a Network match) is the member's own, under the scope.
+- **The draft** is run and stored exactly as `POST /api/mail/drafts` runs it (`runDraft` in `services/mail/drafts.ts`): charged once to the member's AI tokens by the router, rail `{ page: 'Email', option: 'draft:email' }`, and kept in `mail_drafts` for the member to read, edit and send in Axal VC. A short balance or a pause answers in the ledger's own words (`refusalFor`).
+- Both are listed in `METERING_POLICY` at 0 (the draft is charged by the router, not per call).
+- **A member's own MCP mail server as a mailbox.** On a D852 custom connector the member may designate one tool that sends their email (`POST /api/connectors/custom/:uid/tools/:name/mail-send`): a write, not marked destructive, taking `{ to, subject, body }`, and not one of their approved read tools. It is pinned to the schema shown, as an approved read tool is, and is the connector's single D856 setup tool, so the D847 client calls it only with a one-use in-process ticket. `POST /api/mail/accounts/mcp` then saves the connector as a mailbox (provider `mcp`), and `services/mail/adapters/memberMcp.ts` mints that ticket only after the composer's nonce is spent. Nothing on Axal's MCP server can reach it.
+
 ### Metering policy (D844; S10)
 
 - `services/metering.ts`, with `METERING_POLICY = { version: 'm1-2026-10', tools: { [operation]: { price_microusd, unit: 'call'|'token'|'second'|'image', ai: boolean } } }`.
@@ -400,7 +415,7 @@ only when that base does.
 | #2471 usage reports | D845 | #2494 | into #2489's branch |
 | #2472 security and limits | D849 | none yet | S14 |
 | #2473 end to end, runbook | D850 | this one | in progress |
-| #2474 model providers | D851 | #2491 | `main` (`87b87a48`) |
+| #2474 model providers | D851 | #2491; part 2 (one `meteredCall`, the Integration keys listing) in its own PR | part 1 `main` (`87b87a48`); part 2 in review. OpenAI and xAI wait on the documentation hosts |
 | #2475 remote MCP servers | D852 | #2492 | into #2487's branch **after** #2487 merged: not on `main` |
 | #2476 multi-connector flows | D853 | #2493 | into #2490's branch |
 | #2477 Eadwyn uses registry tools | D854 | #2486 | `main` (`d0a59a69`) |
@@ -479,6 +494,8 @@ The UI task for API keys, added 2026-10-27 (S22):
 - **2026-10-22 (S13, #2521, D874).** The call tools: `list_meetings`, `get_meeting_transcript` and `summarize_meeting` (§3), priced 0 in `METERING_POLICY`; the summary's model run pays through its own `aiRouter` hold. `extract_action_items` waits on M4.
 
 - **2026-10-22 (S12, #2521 PR 2, D874).** `extract_action_items` (§3), priced 0; its extraction pays through its own `aiRouter` hold. It runs D859's extraction, so M4's kinds need no change here.
+
+- **2026-10-27 (S22, #2474 part 2).** `runProviderModel` holds and settles through one `meteredCall` (D844): the hold key `exec:<executionId>:model.anthropic`, D844's refusals in the result and the row, a retry that holds once and calls once. Anthropic is listed read-only in `GET /api/admin/integration-keys` (`model_providers`, pattern C): its switch and whether its key is set, never the key. Off unless `AI_PROVIDER_ANTHROPIC` is exactly `"on"`; no caller yet. D851 §3.1.
 
 ## 9. Known limitations
 

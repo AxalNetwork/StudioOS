@@ -293,6 +293,7 @@ test('D912: who — an admin with a reason reads states only; no reason, another
   const row = admin.body.claims.find((c: any) => c.figure === 'paying_customers');
   assert.equal(row.state, 'mismatch');
   for (const k of ['stated_value', 'stated_shown', 'record', 'candidates', 'eadwyn', 'note', 'links']) assert.equal(k in row, false, `an admin reads no ${k}`);
+  // checked_at is "YYYY-MM-DD HH:MM:SS". A minute or second of 42 or 38 reads as a JSON figure.
   assert.doesNotMatch(withoutClock(admin.body), FIGURE, 'no figure anywhere');
   assert.equal((await call(db, ADMIN, 'POST', `/narrative/${v}/check`)).status, 403, 'an admin reads and changes nothing');
   // A support session on the founder's account reads, and never checks.

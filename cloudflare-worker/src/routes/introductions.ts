@@ -433,6 +433,9 @@ introductions.post('/propositions/:uid/accept', async (c) => {
           channels: ['in_app'],
         }),
       ]);
+      // D1342 (#3550): both accepted, so each may share their email address with the other.
+      const { askBoth } = await import('../services/mail/shares');
+      await askBoth(c.env, { id: Number(user.id), name: accepterName }, { id: Number(prop.target_user_id), name: targetName }, uid);
     } else {
       await notify(c.env, {
         userId: prop.target_user_id,

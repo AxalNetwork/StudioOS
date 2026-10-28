@@ -86,6 +86,9 @@ import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import mailAccounts from './routes/mail_accounts';
 import mailDrafts from './routes/mail_drafts';
+import mailShares from './routes/mail_shares';
+import mailPeople from './routes/mail_people';
+import { bindMailTools } from './services/mail/mcpTools';
 import dealContext from './routes/deal_context';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
@@ -238,6 +241,7 @@ import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
+import deckImages from './routes/deck_images';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -471,10 +475,14 @@ import portfolioUpdates from './routes/portfolio_updates';
 import portfolioSupport from './routes/portfolio_support';
 import positions from './routes/positions';
 import contacts from './routes/contacts';
+import contactImports from './routes/contact_imports';
 import roundCalls from './routes/round_calls';
 import track from './routes/track';
 
 const app = new Hono<{ Bindings: Env }>();
+// D1343: the MCP mail tools run the mail services the entry hands them (services/mail/mcpTools.ts),
+// so the MCP server, which `auth.ts` reaches, imports none of them.
+bindMailTools();
 
 // D811: service HMAC only, before browser CORS/session/CSRF middleware.
 app.use('/api/mail-link/*', securityHeadersMiddleware());
@@ -980,6 +988,9 @@ app.route('/api/deals/flow', dealFlow);
 app.route('/api/mail', mailAccounts);
 // D1341 (#3549): Eadwyn's email drafts — the context pack, live update blocks and the member's own drafts.
 app.route('/api/mail', mailDrafts);
+// D1342 (#3550): Network members' address shares — the other's address only while both have shared.
+app.route('/api/mail', mailShares);
+app.route('/api/mail', mailPeople);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);
@@ -1295,6 +1306,9 @@ app.route('/api/portfolio-support', portfolioSupport);
 app.route('/api/positions', positions);
 // Contacts — unified inbound relationship hub (founder CRM). Role-gated
 // in-route (founder/admin); no paywall prefix so it's core-available.
+// D1351 (#3566): the member's own book — LinkedIn's Connections.csv, suggested
+// duplicates, notes and follow-ups — on /import/* and /book/*, ahead of the CRM.
+app.route('/api/contacts', contactImports);
 app.route('/api/contacts', contacts);
 app.route('/api/round-calls', roundCalls);
 app.route('/api/funds', funds);
@@ -1355,6 +1369,8 @@ app.route('/api/decks', deckSources);
 app.route('/api/decks', deckNew);
 // D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
 app.route('/api/decks', deckAssist);
+// D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
+app.route('/api/decks', deckImages);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

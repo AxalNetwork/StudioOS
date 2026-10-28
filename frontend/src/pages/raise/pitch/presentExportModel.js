@@ -302,3 +302,6 @@ export function lastExportLine(rows) {
 }
 
 export const exportedLine = (format, v) => `Exported ${formatLabel(format)} of ${versionLabel(v)}. The export is recorded.`;
+
+/** D903 (#2682): a placed image's crop as a CSS object-position, from the point it keeps in view. */
+export const objectPosition = (crop) => (crop && Number.isFinite(crop.x) && Number.isFinite(crop.y) ? `${crop.x}% ${crop.y}%` : '50% 50%');

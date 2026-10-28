@@ -106,7 +106,7 @@ test('real inputs, chips, checks, notes, paired fields and files update and vali
     ['if (!fieldVisible(field, values)) return null;', 'if (false) return null;'],
     ['setValue(field.name, option.value);', "setValue(field.name, 'invented');"],
     ['if (Object.keys(found).length) return;', 'if (false) return;'],
-    ['onSubmit({ ...submittedValues(fields, values), ...picked() })', 'onSubmit({ ...values, ...picked() })'],
+    ['const sent = { ...submittedValues(fields, values), ...picked() };', 'const sent = { ...values, ...picked() };'],
     ['event.target.files?.[0] ?? null', 'null'],
   ]);
 });
@@ -142,7 +142,7 @@ test('options load before fields, supply defaults/notes, and a refusal prevents 
   await mutationCheck(source, path, assertOptions, [
     ["useState(refused ? null : loadOptions ? undefined : {})", 'useState(refused ? null : {})'],
     ['busy || !loaded || blocked} data-testid="cycle-form-save"', 'busy || blocked} data-testid="cycle-form-save"'],
-    ['setValues(formValues(formFields(base, result, current), current, queryValues));', ''],
+    ['setValues(formValues(formFields(base, result, current), seed, queryValues));', ''],
     ['setRefusal(error?.message ||', "setRefusal('Wrong sentence' ||"],
   ]);
 });

@@ -34,7 +34,12 @@ export function timeAgo(iso) {
   return `${d}d`;
 }
 
-export default function NotificationList({ items, loading, onItemClick, unreadable = false }) {
+/**
+ * `actionFor(n)` (D1337, the Inbox only): a control drawn beside one row, such
+ * as Product testing's Withdraw; the bell passes none. The row itself is the
+ * same either way.
+ */
+export default function NotificationList({ items, loading, onItemClick, unreadable = false, actionFor = null }) {
   if (loading) {
     return <div className="px-4 py-6 text-sm text-gray-500 text-center dark:text-gray-400">Loading…</div>;
   }
@@ -56,7 +61,9 @@ export default function NotificationList({ items, loading, onItemClick, unreadab
   }
   return (
     <>
-      {items.map((n) => (
+      {items.map((n) => {
+        const action = actionFor ? actionFor(n) : null;
+        const row = (
         <button
           key={n.id}
           onClick={() => onItemClick(n)}
@@ -73,7 +80,9 @@ export default function NotificationList({ items, loading, onItemClick, unreadab
             </div>
           </div>
         </button>
-      ))}
+        );
+        return action ? <div key={n.id} className="flex items-center border-b border-gray-50 dark:border-gray-800 [&>button:first-child]:border-b-0">{row}{action}</div> : row;
+      })}
     </>
   );
 }
