@@ -359,6 +359,9 @@ test('versions newest first, and a missing date says so', () => {
 test('an admin reads; everyone else the route admits works here', () => {
   assert.equal(isReadOnly({ role: 'admin' }), true, 'an admin reads the studio (PD21)');
   assert.equal(isReadOnly({ role: 'founder' }), false);
+  assert.equal(isReadOnly({ role: 'admin', is_super_admin: 1 }), false, 'verified HQ Super Admin can enter the builder');
+  assert.equal(isReadOnly({ role: 'admin', is_super_admin: 1, branch: { code: 'test' } }), true, 'branch stays read-only');
+  assert.equal(isReadOnly({ role: 'admin', viewMode: 'founder' }), true, 'preview is not permission');
   assert.equal(isReadOnly({ role: 'exploring', spinout_lab_active: 1, founder_id: 9 }), false, 'a Lab member on their own venture is read-only');
   // The drawn page: no New link and no Withdraw for a reader, no New deck on an empty Decks tab.
   const a = analytics(reads(), true);

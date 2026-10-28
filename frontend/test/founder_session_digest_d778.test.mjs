@@ -16,6 +16,7 @@ import { ReviewStep, makeReviewActions, REVIEW_INITIAL } from '../src/pages/foun
 import { clearRailPage, setRailPage } from '../src/lib/railPage.js';
 import { mountContracts } from './_contracts_dom.mjs';
 import * as F from './_interview_review_fixtures.mjs';
+import { interviewSessionsApi } from '../src/lib/api/interviewSessions.js';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
@@ -146,28 +147,26 @@ test('both Summarise presses send their option and answer only the session they 
 });
 
 test('the three API methods carry the press\'s headers', async () => {
-  const client = read('src/lib/api/interviewSessions.js');
-  const headerSpread = '...(headers ? { headers } : {}),';
-  async function check(source) {
-    // Exercise the real methods; timeout options and property order must not
-    // change whether a press's own rail context reaches the request.
-    const code = source.replace("import { request, LONG_TIMEOUT_MS } from '../api.js';",
-      "const LONG_TIMEOUT_MS = 180000; const request = (path, options) => ({ path, ...options });");
-    const { interviewSessionsApi: api } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
-    for (const name of ['summarise', 'structure', 'ask']) {
-      const headers = { 'X-Rail-Page': 'validate', 'X-Rail-Option': `${name}:session`, 'X-Rail-Record': 'session:7' };
-      const reply = await api[name](7, name === 'ask' ? 'What changed?' : undefined, headers);
-      assert.deepEqual(reply.headers, headers, name);
-    }
-  }
-  await check(client);
-  for (const name of ['summarise', 'structure', 'ask']) {
-    const start = client.indexOf(`  ${name}:`);
-    const end = client.indexOf('\n  }),', start);
-    const method = client.slice(start, end);
-    assert.ok(method.includes(headerSpread), `${name} mutation target`);
-    const mutant = client.slice(0, start) + method.replace(headerSpread, '') + client.slice(end);
-    await assert.rejects(() => check(mutant), { code: 'ERR_ASSERTION' }, `${name} must forward headers`);
-    await check(client);
-  }
+  // Observe the real request so extra options (such as the model timeout)
+  // do not change this contract. Dropping any method's headers must fail.
+  const before = globalThis.fetch;
+  const storage = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => null };
+  const calls = [];
+  const methods = ['summarise', 'structure', 'ask'];
+  globalThis.fetch = async (url, options) => {
+    const headers = new Headers(options.headers);
+    calls.push({ path: new URL(url, 'https://example.test').pathname, method: options.method,
+      page: headers.get('X-AI-Page'), option: headers.get('X-AI-Option') });
+    return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    for (const name of methods) await interviewSessionsApi[name](91, 'Synthetic input', {
+      'X-AI-Page': 'Founder - Validate', 'X-AI-Option': `${name}:fixture`,
+    });
+    assert.deepEqual(calls, methods.map((name) => ({
+      path: `/api/founder/validate/sessions/91/${name}`, method: 'POST',
+      page: 'Founder - Validate', option: `${name}:fixture`,
+    })));
+  } finally { globalThis.fetch = before; globalThis.localStorage = storage; }
 });
