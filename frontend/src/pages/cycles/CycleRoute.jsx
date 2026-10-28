@@ -27,6 +27,8 @@ import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView, { RecordPhoneProvider } from './RecordView';
+import { EmailAction } from '../email/emailParts.jsx';
+import { personOfRecord } from '../email/emailModel.js';
 import { prototypeLovable } from './lovable/lovableModel';
 import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
@@ -1114,6 +1116,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           title={recordTitle} sub={recordState.data?.sub || ''} search={q} />
       )}
       <RecordPhoneProvider phone={phone}>
+      {/* D1344 (EM4): the one Email action, on a record with a person; a record with none draws nothing. */}
+      {recordState.data && personOfRecord(cycle, slug, recordId) && <div className="flex justify-end">
+        <EmailAction person={personOfRecord(cycle, slug, recordId)} from={`${recordTitle} · ${moduleName}`} />
+      </div>}
       {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
         : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
         : recordState.status === 'unreadable' ? <Unreadable what="This record" claim={recordState.error} onRetry={() => setReload(n => n + 1)} />

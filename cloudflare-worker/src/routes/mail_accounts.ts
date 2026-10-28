@@ -5,12 +5,16 @@
  *
  *   GET    /accounts                       the member's mailboxes (never a credential) and the providers offered
  *   POST   /accounts/start/:provider       outlook | gmail → { authorize_url }; Gmail only behind MAIL_GMAIL_ENABLED
- *   GET    /accounts/oauth/callback        the provider's redirect: the one-use state, the code, the sealed refresh token
+ *   GET    /accounts/oauth/callback        the provider's redirect: the one-use state, the code, the sealed refresh token; back to /email?mail= (D1344)
  *   POST   /accounts/imap                  verify (SMTP AUTH, IMAP LOGIN; nothing sent), then store. Port 25 is refused
+ *   POST   /accounts/mcp                   D1343: { connection_uid, address, display_name? } a member's own MCP mail server
+ *                                          (a D852 custom connector with an approved send tool); verified, nothing sent
  *   POST   /accounts/:uid/verify           checks the mailbox again; an expired token turns the row `expired`
  *   DELETE /accounts/:uid                  revoke at the provider where it can, forget the credentials; sent rows stay
  *   POST   /send/confirm                   { account_uid } → a one-use nonce for the composer's pressed Send
  *   POST   /send                           { account_uid, to, subject, body, draft_uid?, nonce } → one `mail_sent` row
+ *   GET    /sent?page=&person=             D1344: the member's own sent log, newest first, 20 a page, with the refs each quoted;
+ *                                          `person` keeps the rows sent from that person's drafts
  *
  * Another member's uid is 404, as one that does not exist. A support session
  * is refused: mail goes out in the member's own name. Rate limited per member.
@@ -30,6 +34,7 @@ import {
   spendOauthState, spendSendNonce, type AccountRow,
 } from '../services/mail/accounts';
 import { indexHmac } from '../services/columnCipher';
+import { configOf, customMcpEnabled, customRowFor, isConnectionUid } from '../integrations/customMcp';
 import { refuse } from '../util/refusal';
 
 const mailAccounts = new Hono<{ Bindings: Env }>();
@@ -73,7 +78,8 @@ mailAccounts.get('/accounts', async (c) => {
   if (user instanceof Response) return user;
   return c.json({
     accounts: await listAccounts(c.env, user),
-    providers: { outlook: configured(c.env, 'outlook'), gmail: configured(c.env, 'gmail'), imap: true },
+    // D1343: `mcp` is offered where custom connectors are (a member's own MCP mail server).
+    providers: { outlook: configured(c.env, 'outlook'), gmail: configured(c.env, 'gmail'), imap: true, mcp: customMcpEnabled(c.env) },
   });
 });
 
@@ -92,7 +98,8 @@ mailAccounts.post('/accounts/start/:provider', async (c) => {
 
 // The provider's redirect: no Authorization header, so the one-use state is the authority.
 mailAccounts.get('/accounts/oauth/callback', async (c) => {
-  const back = (status: string) => c.redirect(`/connectors?mail=${status}`, 302);
+  // D1344: the Email page reads the outcome (EM1c, EM1d).
+  const back = (status: string) => c.redirect(`/email?mail=${status}`, 302);
   const spent = await spendOauthState(c.env, c.req.query('state'));
   if (!spent) return back('expired');
   const code = c.req.query('code');
@@ -125,6 +132,29 @@ mailAccounts.post('/accounts/imap', async (c) => {
     const creds = checkSettings(b as any);
     await ADAPTERS.imap!.verify(c.env, creds);
     const account = await saveAccount(c.env, user, { provider: 'imap', address, display_name: name, scopes: '', can_read: false, creds });
+    return c.json({ account }, 201);
+  } catch (e) { return adapterRefusal(c, e); }
+});
+
+// D1343 (#3551): a member's own MCP mail server, chosen as a mailbox. Its send tool is the one the
+// member approved on the connector (D852), pinned to its schema; every send still spends the composer's nonce.
+mailAccounts.post('/accounts/mcp', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  if (!customMcpEnabled(c.env)) return refuse(c, 404, { code: 'provider_unknown', message: 'That mailbox provider is not offered.' });
+  const b = await body(c);
+  const address = String(b.address ?? '').trim().toLowerCase();
+  if (!EMAIL.test(address) || address.length > 320) return refuse(c, 400, { code: 'address_invalid', message: 'Give the address your mail server sends from.' });
+  const name = typeof b.display_name === 'string' && b.display_name.trim() && headerSafe(b.display_name) ? b.display_name.trim().slice(0, 120) : null;
+  const uid = String(b.connection_uid ?? '');
+  // Another member's connector is the same 404 as none.
+  const row = isConnectionUid(uid) ? await customRowFor(c.env, user.id, uid) : null;
+  if (!row) return refuse(c, 404, { code: 'connector_not_found', message: 'That connector was not found.' });
+  if (!configOf(row)?.mail_send) return refuse(c, 409, { code: 'send_tool_not_approved', message: 'Choose the tool that sends your email on that connector first.' });
+  const creds = { kind: 'mcp' as const, connection_uid: uid, user_id: Number(user.id) };
+  try {
+    await ADAPTERS.mcp!.verify(c.env, creds);
+    const account = await saveAccount(c.env, user, { provider: 'mcp', address, display_name: name, scopes: '', can_read: false, creds });
     return c.json({ account }, 201);
   } catch (e) { return adapterRefusal(c, e); }
 });
@@ -224,6 +254,46 @@ mailAccounts.post('/send', async (c) => {
     await log(null, e instanceof AdapterError ? e.sentence : 'The email could not be sent.');
     return adapterRefusal(c, e);
   }
+});
+
+// D1344 (#3552, EM7): the member's own sent log. A row names its recipient to the member who sent it
+// (D1340), the refs it quoted (`refs_json`), and the person of the draft it came from, if any.
+const SENT_PAGE = 20;
+mailAccounts.get('/sent', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  const page = Math.max(1, Math.min(500, Number.parseInt(c.req.query('page') || '1', 10) || 1));
+  const person = (c.req.query('person') || '').trim().slice(0, 90) || null;
+  // Two fixed statements: with and without the person filter. Nothing is assembled.
+  const total = person
+    ? await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM mail_sent s JOIN mail_drafts d ON d.uid = s.draft_uid AND d.user_id = s.user_id
+        WHERE s.user_id = ? AND d.person_ref = ?`,
+    ).bind(user.id, person).first<{ n: number }>()
+    : await c.env.DB.prepare('SELECT COUNT(*) AS n FROM mail_sent WHERE user_id = ?').bind(user.id).first<{ n: number }>();
+  const { results } = person
+    ? await c.env.DB.prepare(
+      `SELECT s.uid, s.recipient, s.subject, s.sent_at, s.error, s.draft_uid, s.refs_json, s.created_at, d.person_ref
+         FROM mail_sent s JOIN mail_drafts d ON d.uid = s.draft_uid AND d.user_id = s.user_id
+        WHERE s.user_id = ? AND d.person_ref = ? ORDER BY s.created_at DESC, s.id DESC LIMIT ? OFFSET ?`,
+    ).bind(user.id, person, SENT_PAGE, (page - 1) * SENT_PAGE).all<any>()
+    : await c.env.DB.prepare(
+      `SELECT s.uid, s.recipient, s.subject, s.sent_at, s.error, s.draft_uid, s.refs_json, s.created_at, d.person_ref
+         FROM mail_sent s LEFT JOIN mail_drafts d ON d.uid = s.draft_uid AND d.user_id = s.user_id
+        WHERE s.user_id = ? ORDER BY s.created_at DESC, s.id DESC LIMIT ? OFFSET ?`,
+    ).bind(user.id, SENT_PAGE, (page - 1) * SENT_PAGE).all<any>();
+  const quoted = (raw: unknown): string[] => {
+    try { const v = JSON.parse(String(raw ?? '[]')); return Array.isArray(v) ? v.map(String).slice(0, 20) : []; } catch { return []; }
+  };
+  return c.json({
+    page, per_page: SENT_PAGE, total: Number(total?.n ?? 0),
+    items: (results || []).map((r: any) => ({
+      uid: r.uid, to: r.recipient, subject: r.subject, sent_at: r.sent_at, created_at: r.created_at,
+      // A row with no `sent_at` failed; its sentence is ours (D1340), never the provider's text.
+      status: r.sent_at ? 'sent' : 'failed', error: r.sent_at ? null : r.error,
+      draft_uid: r.draft_uid, person: r.person_ref ?? null, quoted: quoted(r.refs_json),
+    })),
+  });
 });
 
 export default mailAccounts;

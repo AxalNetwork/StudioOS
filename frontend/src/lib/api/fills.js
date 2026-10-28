@@ -11,9 +11,12 @@ import { parseStream } from '../fillSheet.js';
 const enc = encodeURIComponent;
 
 export const fillsApi = {
-  /** `{ page, form, project, record? }` → each field's value, mark, waiting values and trigger, the sources and Eadwyn's quote. */
-  sheet: ({ page, form, project, record = null }) => request(
-    `/fills/sheet?page=${enc(page)}&form=${enc(form)}&project=${enc(project)}${record != null ? `&record=${enc(record)}` : ''}`,
+  /**
+   * `{ page, form, project, record? }` → each field's value, mark, waiting values and trigger, the sources and Eadwyn's quote.
+   * D1329 (#3490): a record that is not a venture's sends no `project`, and an Add form under a parent sends `parent`.
+   */
+  sheet: ({ page, form, project = null, record = null, parent = null }) => request(
+    `/fills/sheet?page=${enc(page)}&form=${enc(form)}${project != null ? `&project=${enc(project)}` : ''}${record != null ? `&record=${enc(record)}` : ''}${parent != null ? `&parent=${enc(parent)}` : ''}`,
   ),
   /** `{ page, form, project, record, proposals: [uid] }` → `{ record, outcomes: [{ uid, field, outcome, why?, provenance_id? }] }`. */
   record: (body) => request('/fills/record', { method: 'POST', body: JSON.stringify(body) }),

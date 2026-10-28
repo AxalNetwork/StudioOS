@@ -67,6 +67,8 @@ D1081: Lovable uses the existing initials tile, explicitly classified in `BRAND_
 
 `FillMark.jsx` and `FillSheet.jsx` (D1327, #3488) are Fill with Eadwyn's one mark and one sheet, for every profile. `FillMark` draws the glyph, the 20px field trigger ("Fill [field] with Eadwyn", drawn only where `GET /api/fills/sheet` says `trigger`, never on a typed, never-fill or decision field and never for a reader), the form's "Fill" and the module's "Fill with Eadwyn" with its waiting count, and the provenance pill ("Eadwyn", "Eadwyn · edited", "Eadwyn · sourced", "Connector · Mercury · 12 Oct", "Recorded · From Validate", "Not saved", a reader's "Typed", "Unreadable"), whose card carries Undo behind a dialog. `FillSheet` is `Sheet` at 520px: Sources, then a Preview table, with Running, Partial, Refused, Out of tokens, Empty and Error. It writes nothing: Accept hands values to the form, whose Save writes. Their words are `../lib/fillSheet.js`. No model name or option key is drawn.
 
+`useScopedFill.jsx` (D1329, #3490) mounts them on a record that is not a venture's (an IC memo, an advisor's service, a status report, an event and its agenda, a publication): `useScopedFill` reads the sheet by `record` or `parent`, never `project`, and records the fill after the page's own Save; `FillLabel` draws a field's trigger, "Not saved" and mark; `FillFormBar` draws the form's Fill, the off line and "Not filled here". Its words are `../lib/fillScoped.js`.
+
 D1165: `LightboxPhoneProvider` scopes the phone form to a page. Fund admin
 uses `phone="sheet"` for its nested drawers, including reused connection
 sheets. An explicit `phone` on a Lightbox wins; other pages keep `full`.

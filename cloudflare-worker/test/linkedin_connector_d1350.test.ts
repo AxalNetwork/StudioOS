@@ -38,7 +38,8 @@ function schema(upTo651 = true) {
   for (const n of names) if (!upTo651 || migrationNumber(n) < 651) db.exec(read(n));
   return db;
 }
-const apply651 = (db: DatabaseSync) => { for (const n of names) if (migrationNumber(n) >= 651) db.exec(read(n)); };
+// 651 alone: a later migration (652's ALTER TABLE, D1351) is not written to be applied twice.
+const apply651 = (db: DatabaseSync) => { for (const n of names) if (migrationNumber(n) === 651) db.exec(read(n)); };
 
 function fixture() {
   const db = schema();

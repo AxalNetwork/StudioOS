@@ -301,8 +301,10 @@ test('removing the form stranded nobody — /kyc is still routed and still linke
   assert.match(app, /path="\/kyc"/, '/kyc is no longer routed — the KYC form is now unreachable');
   assert.match(read('frontend/src/pages/KYCPage.jsx'), /KycVerification/,
     '/kyc no longer renders the KYC form');
-  assert.match(read('frontend/src/pages/SettingsPage.jsx'), /href="\/kyc"/,
-    'Settings no longer links to /kyc, so "managed in Account Settings" would be a dead end');
+  // Account no longer carries a Verification card (owner, 2026-10-28): the
+  // Trust Center is where a member finds the identity check, so it must link it.
+  assert.doesNotMatch(read('frontend/src/pages/SettingsPage.jsx'), /function VerificationStubCard/,
+    'Account grew a Verification card again; verification is the Trust Center\'s');
   // And this page says where it went.
   assert.match(PAGE, /this page reports status only/);
   assert.match(PAGE, /href="\/kyc"/, 'the Trust Center offers no route to the form it stopped rendering');

@@ -7,6 +7,8 @@
 // D1036 (#2877): the shared host header (MEV12a) carries that one action, and
 // /events/new has its own (MEV12b); a new event lands on its Details tab.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../lib/fillScoped.js';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, Gift } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
@@ -67,6 +69,13 @@ export default function EventEditorPage() {
   // What the header shows: the event as last read or saved, and Registrations' count.
   const [saved, setSaved] = useState(null);
   const [pending, setPending] = useState(undefined);
+  // D1329 (#3490, AF20): Fill with Eadwyn on a saved event's Description, for
+  // an admin or its host (`canManage`). Its times, capacity, price and approval
+  // are never filled.
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.event, record: isEdit ? Number(id) : null, enabled: isEdit,
+    values: { description: form.description }, onValues: (v) => { if (v.description != null) setForm((f) => ({ ...f, description: v.description })); },
+  });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -135,6 +144,7 @@ export default function EventEditorPage() {
       if (isEdit) {
         const body = payload();
         const updated = await eventsApi.update(id, body);
+        await fill.afterSave(Number(id));
         setSaved((ev) => updated?.event || (ev ? { ...ev, ...body } : ev));
         showToast({ kind: 'success', msg: 'Event saved.' });
       } else {
@@ -231,7 +241,10 @@ export default function EventEditorPage() {
             <input className={inputCls} value={form.summary} onChange={(e) => set('summary', e.target.value)} placeholder="One-line teaser" />
           </div>
           <div>
-            <label className={labelCls}>Description</label>
+            <FillLabel fill={fill} name="description" label="Description" value={form.description}>
+              <label className={labelCls}>Description</label>
+            </FillLabel>
+            <FillFormBar fill={fill} />
             <textarea className={inputCls} rows={4} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="What attendees can expect…" />
           </div>
         </section>

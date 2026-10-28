@@ -440,3 +440,7 @@ registerMcpTools(CHANNEL_TOOLS);
 // D874: the member's recorded calls, from Axal's own meeting records.
 import { MEETING_TOOLS } from './tools/meetings';
 registerMcpTools(MEETING_TOOLS);
+
+// D1343: Email's context and drafts. Neither sends; sending stays a press in Axal.
+import { MAIL_TOOLS } from './tools/mail';
+registerMcpTools(MAIL_TOOLS);
