@@ -126,10 +126,14 @@ test('D1364: CI records deployment success after publish and before saving serve
   const mark=source.indexOf('run: node scripts/record-asset-deploy.mjs');
   const save=source.indexOf('uses: actions/cache/save@');
   const step=source.slice(source.lastIndexOf('      - name:',mark),mark);
+  const publisher=source.slice(source.lastIndexOf('      - name:',publish),publish);
+  const cache=source.slice(source.lastIndexOf('      - name:',save),save);
   assert.deepEqual({ordered:publish>=0 && mark>publish && save>mark,
     hardFailure:!step.includes('continue-on-error: true') && !step.includes('if:'),
-    ledgerSaved:source.slice(save).includes('docs/.asset-retention.json')},
-    {ordered:true,hardFailure:true,ledgerSaved:true});
+    ledgerSaved:source.slice(save).includes('docs/.asset-retention.json'),
+    publisherId:publisher.includes('id: publish'),
+    cacheAfterStampFailure:cache.includes("if: always() && steps.publish.outcome == 'success'")},
+    {ordered:true,hardFailure:true,ledgerSaved:true,publisherId:true,cacheAfterStampFailure:true});
 });
 
 test('D1364: only a successful-deploy cache recovers unstamped entries, and its grace does not slide',()=>{

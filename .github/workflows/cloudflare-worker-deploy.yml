@@ -167,6 +167,7 @@ jobs:
       # to the pattern only with a run that shows it. `set -o pipefail` keeps
       # `tee` from turning a failed deploy into a green step.
       - name: Deploy to Cloudflare Worker
+        id: publish
         working-directory: cloudflare-worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -192,10 +193,12 @@ jobs:
       - name: Record successful asset deployment
         run: node scripts/record-asset-deploy.mjs
 
-      # D529 — only after the deploy above succeeded (a failed step skips
-      # this one), save what production now serves for the next deploy to
-      # restore. One entry per run; the restore takes the newest by prefix.
+      # D529 — save what actually shipped even if the timestamp step failed.
+      # Keep that failure visible, but preserve the served tree for recovery.
+      # A failed/skipped publication never saves. One entry per run; newest
+      # by prefix is restored next time.
       - name: Save the deployed assets for the next deploy
+        if: always() && steps.publish.outcome == 'success'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |

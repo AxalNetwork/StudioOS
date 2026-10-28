@@ -114,7 +114,7 @@ test('D1364: an unstamped deployed cache preserves known-served history with an 
     fs.writeFileSync(ledgerFile,JSON.stringify(ledger));
     const result=f.run();
     assert.equal(result.status,0);
-    assert.match(result.stderr,/restored deployment ledger is unstamped/);
+    assert.match(result.stderr,/::warning::.*restored deployment ledger is unstamped/);
     const saved=JSON.parse(fs.readFileSync(ledgerFile,'utf8'));
     const recovered=saved.builds.find(b=>b.files.includes('old-1.js'));
     assert.deepEqual({deployedAt:recovered?.deployedAt,legacy:recovered?.legacy,hasGrace:Number.isFinite(Date.parse(recovered?.firstSeenAt))},{deployedAt:null,legacy:true,hasGrace:true});

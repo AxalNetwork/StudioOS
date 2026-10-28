@@ -83,7 +83,7 @@ const ledgerBuilds = readLedgerBuilds(ledgerPath);
 // grace, never invent a deployedAt and never treat local candidates as deployed.
 if (process.argv.includes(SEED_RESTORED_TREE_FLAG)
     && ledgerBuilds.some(b => b?.deployedAt === null && b.legacy !== true)) {
-  console.warn('[build] restored deployment ledger is unstamped; preserving saved history under a one-time legacy grace until a successful deploy records its timestamp.');
+  console.warn('::warning::[build] restored deployment ledger is unstamped; preserving saved history under a one-time per-entry grace until a successful deploy records its timestamp.');
 }
 // D529: docs/ is not committed, so what is on disk here is whatever the job
 // restored (the production deploy) or nothing (every other job). Say which.
