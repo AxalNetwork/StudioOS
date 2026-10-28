@@ -85,6 +85,7 @@ import tickets from './routes/tickets';
 import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
 import mailAccounts from './routes/mail_accounts';
+import mailDrafts from './routes/mail_drafts';
 import dealContext from './routes/deal_context';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
@@ -977,6 +978,8 @@ app.route('/api/tickets', tickets);
 app.route('/api/deals/flow', dealFlow);
 // D1340 (#3548): the member's own mailboxes and the send — never Axal's house token.
 app.route('/api/mail', mailAccounts);
+// D1341 (#3549): Eadwyn's email drafts — the context pack, live update blocks and the member's own drafts.
+app.route('/api/mail', mailDrafts);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);

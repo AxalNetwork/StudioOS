@@ -369,11 +369,6 @@ test('disconnect deletes the credentials and keeps the sent rows; the mailbox no
 test('a draft\'s quoted refs ride the sent row; another member\'s draft is not found; the hourly limit holds; a support session is refused', async () => {
   const f = await fixture();
   try {
-    // Migration 648 (D1341) may land after this one: the table as it defines it.
-    f.db.exec(`CREATE TABLE IF NOT EXISTS mail_drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, user_id INTEGER NOT NULL,
-      person_ref TEXT NOT NULL, intent TEXT NOT NULL, tone TEXT NOT NULL, length TEXT NOT NULL, refs_json TEXT NOT NULL DEFAULT '[]', blocks_json TEXT NOT NULL DEFAULT '[]',
-      subject TEXT NOT NULL, body TEXT NOT NULL, parent_uid TEXT, instruction TEXT, model TEXT, prompt_tokens INTEGER, completion_tokens INTEGER, cost_micro_usd INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
     const mine = 'a'.repeat(32), theirs = 'b'.repeat(32);
     f.db.prepare("INSERT INTO mail_drafts(uid,user_id,person_ref,intent,tone,length,refs_json,subject,body) VALUES (?,2,'interviewee:11','thank_follow_up','warm','short',?,'S','B')")
       .run(mine, JSON.stringify([{ ref: 'interviewee:11', label: 'L' }, { ref: 'kpis:1', label: 'K' }]));

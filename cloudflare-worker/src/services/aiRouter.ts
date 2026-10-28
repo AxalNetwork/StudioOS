@@ -89,6 +89,8 @@ export type TaskClass =
   // D766 (#2094) PR 3 — Build › Brand's logo, which called FLUX.1 Schnell
   // directly. Now a member's press, drawn through D761's image shape.
   | 'brand_logo'
+  // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
+  | 'mail_draft'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -688,6 +690,16 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // cheaper still and shallower. Primary FIRST, because the rail sends back
   // whatever it renders selected and that includes the default.
   workspace_explain: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  // D1341 (#3549): an email drafted from the records the member ticked. Its own
+  // class, so the Usage page and the rail's average price a draft apart from a
+  // page explanation. A mid model with the same priced alternates; no cache: a
+  // draft quotes figures read at the press.
+  mail_draft: {
     provider: 'workers-ai',
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],
