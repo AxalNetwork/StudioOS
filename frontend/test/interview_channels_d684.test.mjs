@@ -168,6 +168,8 @@ test('every request in the module is written as a literal path the drift check c
     'GET /founder/validate/interviews/:p/meetings/:p/recording',
     // D875 (#2522) and D878 (#2525): the setup, the upcoming calls, the member's calls and one venture's calls, for Record a session › Calls.
     'GET /founder/validate/meetings',
+    // D1346 (#3554): whether Eadwyn AI can join, read when Record a Session opens.
+    'GET /founder/validate/meetings/bot',
     'GET /founder/validate/meetings/calls',
     'GET /founder/validate/meetings/setup',
     'GET /founder/validate/meetings/upcoming',
@@ -182,6 +184,8 @@ test('every request in the module is written as a literal path the drift check c
     // D871 (#2518): attach a Meet call from the member's Calendar posts to the same route again.
     'POST /founder/validate/interviews/:p/meetings',
     'POST /founder/validate/interviews/:p/meetings/:p/import',
+    // D1346 (#3554): "Create the meeting for me".
+    'POST /founder/validate/meetings/instant',
     'PUT /channels/whatsapp/link/venture',
   ], 'one per route of D684 §9, as the drift check will read them');
 });

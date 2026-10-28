@@ -121,6 +121,30 @@ export async function botControl(env: Env, uid: string, action: string, init?: R
     ...({ duplex: 'half' } as Record<string, string>), method: 'POST', ...init, headers: { 'x-bot-run': uid, ...Object.fromEntries(new Headers(init?.headers)) },
   }));
 }
+/**
+ * D1346 (#3554): whether Eadwyn AI can join this member's calls, read when
+ * Record a Session opens so Send is disabled up front, not refused after the
+ * press. The same two checks `dispatchBot` makes (`botConfigured`,
+ * `botMemberEnabled`), per platform, with the per-minute price the founder
+ * pays (bot time and transcription, D886 §5) and the plan's call limit. A
+ * price that has not been measured is null, never 0. No link, run or token.
+ */
+export async function botAvailability(env: Env, user: User) {
+  const member = await botMemberEnabled(env, user);
+  const platforms = Object.fromEntries((['zoom', 'google_meet', 'teams'] as const)
+    .map((p) => [p, member && botConfigured(env, p)])) as Record<BotPlatform, boolean>;
+  const available = Object.values(platforms).some(Boolean);
+  let bot: number | null = null, transcription: number | null = null;
+  if (available) {
+    const multiplier = await memberChargeMultiplier(env, user.id);
+    try { bot = botRate(env.MEETING_BOT === 'canary' ? 2232 : Number(env.MEETING_BOT_COST_MICROUSD_PER_MINUTE), multiplier); } catch { bot = null; }
+    try { const t = billedMicro('@cf/deepgram/nova-3', { audio_minutes: 1 }, multiplier); transcription = Number.isSafeInteger(t) && t > 0 ? t : null; } catch { transcription = null; }
+  }
+  return {
+    available, platforms, limit_minutes: botLimit(user),
+    price: { bot_microusd_per_minute: bot, transcription_microusd_per_minute: transcription },
+  };
+}
 export async function dispatchBot(env: Env, user: User, session: SessionRow, args: { meeting_url?: unknown; scheduled_at?: unknown }, now = Date.now()) {
   session = await botSession(env, { user_id: user.id, session_id: session.id, project_id: session.project_id });
   if (!AUDIO_CHANNELS.has(session.channel)) throw new BotError(400,'bot_needs_audio','Choose an audio recording session for the meeting bot.');

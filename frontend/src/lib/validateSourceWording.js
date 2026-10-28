@@ -110,6 +110,10 @@ export const CHANNEL_WORDING = Object.freeze({
 
 // ---------- Record a session -------------------------------------------------
 
+/** D1346 (#3554): a meeting's line. Eadwyn AI is a participant the host admits (D886). */
+export const BOT_ENGINE = 'Eadwyn AI joins the call as a participant. The host admits it, and it posts a recording notice in the meeting chat.';
+/** The call chips Eadwyn AI joins: a meeting with a link. */
+export const MEETING_BOT_PLATFORMS = Object.freeze(['zoom', 'google_meet', 'teams']);
 export const RECORD_ENGINE = "Axal records this device's microphone, turns speech into text, then writes a draft summary and suggests findings for your Validate modules.";
 
 /**
@@ -118,6 +122,8 @@ export const RECORD_ENGINE = "Axal records this device's microphone, turns speec
  * pasted transcript.
  */
 export function recordSourceLine(mode, provider) {
+  // D1346 (#3554): a Zoom, Meet or Teams call is recorded by Eadwyn AI in the meeting, not by this device.
+  if (mode === 'video' && MEETING_BOT_PLATFORMS.includes(provider)) return BOT_ENGINE;
   if (mode === 'in_person' || mode === 'video' || mode === 'phone') return RECORD_ENGINE;
   if (mode === 'text' && (provider === 'whatsapp' || provider === 'telegram')) return CHAT_ENGINE;
   return null;
