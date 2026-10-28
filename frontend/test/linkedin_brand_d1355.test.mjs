@@ -2,11 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
-import React from 'react';
+import React, { act } from 'react';
+import { mountContracts } from './_contracts_dom.mjs';
+import { api } from '../src/lib/api.js';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import PublicFooter from '../src/components/PublicFooter.jsx';
 import ShareButtons from '../src/components/ShareButtons.jsx';
+import { ConnectorCard } from '../src/pages/account/AccountConnectors.jsx';
 import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
 import { buildCatalogue } from '../src/pages/account/connectorsModel.js';
 import BrandIcon, { BRAND_MARKS } from '../src/ui/BrandIcon.jsx';
@@ -75,7 +78,7 @@ test('D1355: the official sign-in wording and all button states survive busy/dis
   const reconnect=renderToStaticMarkup(h(LinkedInSignInButton,{context:'Reconnect', 'aria-description':'Reconnect LinkedIn'}));
   assert.ok(reconnect.includes('aria-label="Sign in with LinkedIn — Reconnect"') && reconnect.includes('aria-description="Reconnect LinkedIn"') && />Reconnect<\/span>/.test(reconnect));
   const unavailable=renderToStaticMarkup(h(LinkedInSignInButton,{disabled:true}));
-  assert.ok(unavailable.includes('cursor-not-allowed') && unavailable.includes('Sign-in unavailable') && !unavailable.includes('cursor-wait'));
+  assert.ok(unavailable.includes('cursor-not-allowed') && unavailable.includes('Please wait…') && !unavailable.includes('cursor-wait'));
 
 });
 
@@ -99,7 +102,7 @@ test('D1355: real footer and share links reserve space, and the footer stays blu
   assert.ok(anchor.includes('min-width:44px;min-height:44px') && link.includes('/site/linkedin-in-blue.png') && !link.includes('/site/linkedin-in-white.png'));
   const share=renderToStaticMarkup(h(ShareButtons,{url:'https://example.invalid',title:'Synthetic',size:'sm'}));
   const target=share.match(/<a[^>]*data-testid="share-linkedin"[^>]*>[\s\S]*?<\/a>/)[0];
-  assert.ok(target.includes('min-h-[44px] min-w-[44px]') && target.includes('min-width:28px;min-height:28px'));
+  assert.ok(target.match(/^<a[^>]*>/)[0].includes('min-h-[46px] min-w-[46px]') && target.includes('min-width:28px;min-height:28px'));
 });
 
 
@@ -118,4 +121,39 @@ test('D1355: the real LinkedIn page retains unavailable and reconnect context', 
   assert.match(reconnect, /max-sm:flex-1/);
   assert.match(reconnect, /max-sm:flex-col max-sm:gap-2/);
   assert.match(reconnect, />Reconnect<\/span>/);
+});
+
+
+test('D1355: disconnect disables reconnect without falsely announcing that sign-in is opening', async () => {
+  const catalogue=buildCatalogue({firstParty:{linkedin:{configured:true,connected:true}}});
+  catalogue.find(p=>p.key === 'linkedin').connection.last_error='invalid_grant: expired';
+  const oldDisconnect=api.linkedinDisconnect, oldFetch=globalThis.fetch;
+  let finish, call;
+  api.linkedinDisconnect=()=>new Promise(resolve=>{finish=resolve;});
+  globalThis.fetch=async()=>new Response(JSON.stringify({connected:true,imported:{linkedin_only:0,kept:0},reviews:[]}),{status:200,headers:{'Content-Type':'application/json'}});
+  let m;
+  try {
+    m=await mountContracts(h(ConnectorPageView,{connectorKey:'linkedin',phone:true,data:{status:'ready',catalogue,reload() {}}}),'/account/connectors/linkedin');
+    const by=id=>m.nodes().find(n=>m.props(n)?.['data-testid'] === id);
+    await act(async()=>{m.props(by('connector-page-manage-disconnect')).onClick();});
+    await act(async()=>{call=m.props(by('connector-page-confirm-disconnect')).onClick();});
+    const button=m.props(by('connector-page-connect-button'));
+    assert.equal(button.disabled,true);
+    assert.equal(button['aria-busy'],undefined);
+    assert.doesNotMatch(m.text(), /Opening LinkedIn/);
+    assert.match(m.text(), /Disconnecting…/);
+  } finally {
+    if(finish) await act(async()=>{finish({ok:true});await call;});
+    if(m) await m.unmount();
+    api.linkedinDisconnect=oldDisconnect;globalThis.fetch=oldFetch;
+  }
+});
+
+
+test('D1355: real connector cards reserve one header height for the approved mark minimum', () => {
+  const catalogue=buildCatalogue({firstParty:{linkedin:{configured:true,connected:true},google:{configured:true,connected:true}}});
+  for(const p of catalogue.filter(p=>['linkedin','google'].includes(p.key))) {
+    const out=renderToStaticMarkup(h(MemoryRouter,null,h(ConnectorCard,{p})));
+    assert.match(out, /<div class="flex min-h-\[46px\] items-start justify-between">/);
+  }
 });

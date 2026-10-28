@@ -18,6 +18,6 @@ export default function LinkedInSignInButton({ busy = false, disabled = false, c
       </span>
     </button>
     {busy && <span role="status" className={STATUS}>Opening LinkedIn…</span>}
-    {!busy && disabled && <span className={STATUS}>Sign-in unavailable</span>}
+    {!busy && disabled && <span className={STATUS}>Please wait…</span>}
   </span>;
 }

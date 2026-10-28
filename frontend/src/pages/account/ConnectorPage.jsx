@@ -445,7 +445,7 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
       <div className={`flex items-stretch max-sm:w-full ${p.key === 'linkedin' && action.kind === 'reconnect' ? 'max-sm:flex-col max-sm:gap-2' : ''}`}>
         {action.kind === 'reconnect' && <span className="mr-2 self-center"><Pill tone={action.pill.tone}>{action.pill.label}</Pill></span>}
         {p.key === 'linkedin' ? (
-          <LinkedInSignInButton busy={starting || flow.busy} onClick={press} context={action.kind === 'reconnect' ? action.label : undefined} aria-description={action.aria} title={action.title} className="max-sm:flex-1" data-testid="connector-page-connect-button" />
+          <LinkedInSignInButton busy={starting} disabled={flow.busy && !starting} onClick={press} context={action.kind === 'reconnect' ? action.label : undefined} aria-description={action.aria} title={action.title} className="max-sm:flex-1" data-testid="connector-page-connect-button" />
         ) : (
         <button
           type="button"
