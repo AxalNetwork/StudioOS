@@ -390,19 +390,22 @@ import PublicFooter from '../src/components/PublicFooter.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 import ShareButtons from '../src/components/ShareButtons.jsx';
 
-test('step 10. Record a session\'s Provider chips draw the bare 16px mark before the label, real marks only', () => {
+test('step 10. Record a session\'s Provider chips draw official marks before the label, real marks only', () => {
   const src = read('frontend/src/pages/founder/RecordLightbox.jsx');
   // Only the Provider group passes an icon; mode, model, thread and consent stay text.
-  assert.equal((src.match(/icon: <BrandIcon/g) || []).length, 1, 'one Radios group passes marks');
-  assert.match(src, /<Radios label="Provider"[\s\S]*?icon: <BrandIcon provider=\{c\.value\} size=\{16\} variant="bare" fallback="none" \/>/);
+  assert.equal((src.match(/\bicon:/g) || []).length, 1, 'one Radios group passes marks');
+  assert.match(src, /<Radios label="Provider"[\s\S]*?icon: c\.value === 'teams'\s*\? <img src="\/microsoft-teams\.ico" width=\{16\} height=\{16\} alt="" aria-hidden="true" className="shrink-0" \/>\s*: <BrandIcon provider=\{c\.value\} size=\{16\} variant="bare" fallback="none" \/>/);
   const chips = ['zoom', 'google_meet', 'slack', 'linkedin', 'teams', 'phone_speaker', 'paste'];
   const out = html(h(Radios, { label: 'Provider', value: 'zoom', onChange() {}, testId: 'p',
     options: chips.map((k) => ({ value: k, label: `${k} · Ready`, disabled: k === 'slack',
-      icon: h(BrandIcon, { provider: k, size: 16, variant: 'bare', fallback: 'none' }) })) }));
+      icon: k === 'teams'
+        ? h('img', { src: '/microsoft-teams.ico', width: 16, height: 16, alt: '', 'aria-hidden': 'true', className: 'shrink-0' })
+        : h(BrandIcon, { provider: k, size: 16, variant: 'bare', fallback: 'none' }) })) }));
   for (const k of ['zoom', 'google_meet', 'slack', 'linkedin']) {
     assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*>(<span[^>]*>)?<svg[^>]*width="${k === 'linkedin' ? 28 : 16}"[^>]*data-provider="${k}"[\\s\\S]*?<span>${k} · Ready</span></button>`), `${k}: the mark, then its label`);
   }
-  for (const k of ['teams', 'phone_speaker', 'paste']) {
+  assert.match(out, /data-testid="p-teams"[^>]*><img[^>]*src="\/microsoft-teams\.ico"[^>]*width="16" height="16"[^>]*alt="" aria-hidden="true"[^>]*\/><span>teams · Ready<\/span><\/button>/, 'Teams: the official favicon, then its label');
+  for (const k of ['phone_speaker', 'paste']) {
     assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*><span>${k} · Ready</span></button>`), `${k}: text only (fallback none)`);
   }
   // A disabled chip dims its mark with it: the mark sits inside the chip that carries disabled:opacity-50.
