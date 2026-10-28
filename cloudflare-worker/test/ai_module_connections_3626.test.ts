@@ -233,6 +233,16 @@ test('unreadable specialist answers are withheld; malformed inputs never become 
   } finally { f.db.close(); }
 });
 
+test('standalone transcription quote and run obey the page assistance switch', async () => {
+  const f = fixture(), id = '@cf/openai/whisper-large-v3-turbo', page = pageFor(id).pageKey;
+  try {
+    f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES('transcribe-off',2,?,'','manual')").run(page.toLowerCase());
+    const statuses = [];
+    for (const action of ['quote', 'run']) statuses.push((await post(f, { page, model: id, text: '', audio_pcm16: pcm }, action)).status);
+    assert.deepEqual([statuses, f.calls.length, f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n], [[403, 403], 0, 0]);
+  } finally { f.db.close(); }
+});
+
 test('sentiment, image labels and turn detection use their own requests and billing units', async () => {
   const captured = [];
   for (const [model, text, extra, answer, expected] of [

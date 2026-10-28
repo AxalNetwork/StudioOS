@@ -1784,7 +1784,7 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
   if (!route) return { ok: false, refusal: 'misconfigured', error: `unknown task ${opts.task}` };
   const badInput = inputRefusal(opts);
   if (badInput) return { ok: false, refusal: 'invalid_input', error: badInput };
-  if (opts.rail && !route.isAudio) {
+  if (opts.rail && (!route.isAudio || opts.task === 'module_transcribe')) {
     try { if (await assistOff(env, opts.userId, opts.rail.page)) return { ok: false, refusal: 'assist_off', error: ASSIST_OFF_MESSAGE }; }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether AI assistance is on for this page could not be checked.' }; }
   }
@@ -1840,7 +1840,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // Before the cache, the hold and the guard, and with no usage row: nothing
   // ran and nothing is held or charged. Transcribing a member's own recording
   // is saving ("Your work saves as usual"), so the switch never refuses it.
-  if (opts.rail && !route.isAudio) {
+  // A standalone module transcription saves no record and obeys the switch.
+  if (opts.rail && (!route.isAudio || opts.task === 'module_transcribe')) {
     let off: boolean;
     try { off = await assistOff(env, opts.userId, opts.rail.page); }
     catch {
