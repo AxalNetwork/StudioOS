@@ -543,7 +543,7 @@ D1345 (#3553) retires the peer Messages inbox in favour of Email. `/messages`
 redirects through `pages/email/MessagesRedirect.jsx` (EM10). The Worker entry
 keeps only 410 tombstones at `/api/messages` and descendants; the old router,
 page, client helpers and storage area are removed. The first rollout retains
-the four empty stores; follow-up #3621 applies guarded migration 650 only
+the four empty stores; a separate follow-up applies guarded migration 650 only
 after the retirement Worker is confirmed live. `services/mail/moduleRecipients.ts`
 resolves the two former starters under the LP self-view and advisor engagement
 scopes. See [D1345](decisions/D1345.md).
