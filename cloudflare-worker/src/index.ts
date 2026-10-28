@@ -84,6 +84,7 @@ import capital from './routes/capital';
 import tickets from './routes/tickets';
 import deals from './routes/deals';
 import dealFlow from './routes/deal_flow';
+import mailAccounts from './routes/mail_accounts';
 import dealContext from './routes/deal_context';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
@@ -974,6 +975,8 @@ app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);
 // D1238 (#3251): an investor firm's own deal flow. Before dealContext and deals, so `flow` is never a deal id.
 app.route('/api/deals/flow', dealFlow);
+// D1340 (#3548): the member's own mailboxes and the send — never Axal's house token.
+app.route('/api/mail', mailAccounts);
 app.route('/api/deals', dealViews);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);

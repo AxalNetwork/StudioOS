@@ -457,3 +457,4 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `raiseEvidence.js` | D1263: founder evidence reads, refresh and versioned decisions against the mounted Worker routes. |
 | --- | --- |
 | `dealInsights.js` | D1151: per-deal Team, Market and Traction read clients. |
+| `mail.js` | D1340: the member's own mailboxes (Outlook, Gmail behind its switch, IMAP/SMTP) and the confirmed send. |
