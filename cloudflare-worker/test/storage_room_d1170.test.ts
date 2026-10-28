@@ -73,8 +73,6 @@ function fixture() {
     INSERT INTO member_files(uid,r2_key,owner_user_id,kind,size_bytes,size_missing_at) VALUES ('p-gone','headshots/11/gone.png',11,'headshot',NULL,'2026-02-01');
     INSERT INTO data_imports(user_id,source,target,raw_file_r2_key,size_bytes) VALUES (11,'spreadsheet','contacts','imports/11/a.csv',45);
     INSERT INTO research_documents(uid,owner_user_id,title,r2_key,size_bytes) VALUES ('r-own',11,'Market sizing','research/11/a',600),('r-lp',55,'Sector notes','research/55/a',64);
-    INSERT INTO message_attachments(uid,thread_id,message_id,uploader_user_id,r2_key,filename,content_type,size_bytes,sha256) VALUES
-      ('a-own',1,1,11,'messages/11/a','Term sheet.pdf','application/pdf',700,'hash');
     INSERT INTO dd_attachments(case_id,file_key,filename,size_bytes,uploaded_by_user_id) VALUES (1,'dd/11/a','NDA.pdf',800,11);
   `);
   const native = d1Over(db);
@@ -215,7 +213,6 @@ const SITES: Array<[string, string, string]> = [
   ['routes/dd.ts', "dd.post('/cases/:uid/sections/:sectionId/nda'", 'await c.env.FILES.put(storageKey, buf'],
   ['routes/dd.ts', "dd.post('/cases/:uid/items/:itemId/evidence'", 'await c.env.FILES.put(key, buf'],
   ['routes/research.ts', "research.post('/documents', async", 'await c.env.FILES.put(r2Key'],
-  ['routes/messages.ts', 'const digest = await sha256Hex(bytes);', 'await c.env.FILES.put(key, bytes'],
   ['routes/founder_validate.ts', "founderValidate.post('/interviews/:id/recording'", 'await c.env.FILES.put(key, await file.arrayBuffer()'],
   ['routes/deck_reviewer.ts', "deckReviewer.post('/upload'", 'await c.env.FILES.put(r2Key, bytes'],
   ['routes/imports.ts', 'async function maybeStoreRaw', "await env.FILES.put(key, csv"],
@@ -367,9 +364,9 @@ test('HQ\'s read: Super Admin only, totals by kind, plan and state, and no name,
 
 test('HQ\'s read says what it could not read, and never states a guessed figure', async () => {
   const f = fixture();
-  f.fail(/FROM message_attachments/);
+  f.fail(/FROM research_documents/);
   const { body } = await f.call(66, 'GET', '/api/admin/platform/storage');
-  assert.deepEqual(body.unreadable_areas, ['message_attachments']);
+  assert.deepEqual(body.unreadable_areas, ['research_library']);
   assert.deepEqual([body.complete, body.by_state, body.by_plan[0].measured_bytes], [false, null, null]);
   assert.match(body.by_state_reason, /no member’s total is complete/);
   f.fail(/account_subscriptions/);

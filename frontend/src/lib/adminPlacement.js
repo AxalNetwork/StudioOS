@@ -56,7 +56,7 @@ export const ADMIN_PLACEMENT = [
   // ── Home group ──────────────────────────────────────────────────────────
   row('Studio', '/studio', admin('Studio', 'row'), false,
     { how: 'Row 1 of the Admin shell. HQ’s own landing stays /hq.' }),
-  row('Messages', '/messages', admin(TOP_BAR, 'top bar'), false,
+  row('Email', '/email', admin(TOP_BAR, 'top bar'), false,
     { how: 'Top-bar button on HQ and Admin.', also: [hq(TOP_BAR, 'top bar')] }),
 
   // ── Admin group ─────────────────────────────────────────────────────────

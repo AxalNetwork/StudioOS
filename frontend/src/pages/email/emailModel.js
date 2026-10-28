@@ -125,6 +125,7 @@ export function stateFor(kind, { name = 'This person', provider = 'Gmail', modul
 
 /** The module a person's address would be recorded in, for "No email address on record". */
 export const MODULE_OF_KIND = Object.freeze({
+  fund_gp: 'LP commitment', work_product: 'Delivery',
   interviewee: 'Customer research', prospect: 'Capital relationships', cofounder: 'Founding team', growth_partner: 'Partner network',
   advisor: 'Advisors', partner: 'Operating partners', member: 'Network',
 });

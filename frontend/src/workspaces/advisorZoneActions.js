@@ -87,18 +87,8 @@ export const ADVISOR_ZONE_ACTIONS = {
   // THE REASON IS THE ADDRESS, NOT THE CHANNEL — and the first draft of this
   // entry said the opposite, which is exactly the failure this pass keeps
   // catching. It claimed "nothing sends a message from you to a client".
-  // Something does: `routes/messages.ts` (migration 185) is a person-to-person
-  // inbox, `POST /api/messages` opens a thread with any existing account, and
-  // its `SUBJECT_TYPES` already includes `'engagement'`. Writing a gap that is
-  // not there is the same defect as hiding one that is.
-  //
-  // What actually blocks it is WHO to send to. That POST keys the recipient on
-  // `to_email` against an existing account, and migration 238 keeps the client
-  // as a NAME with `founder_user_id` nullable on purpose — the artboard's
-  // clients are companies, and a retainer may predate the client joining. So
-  // the engagement payload carries no address at all today, and for an unlinked
-  // client there is none to carry. A bulk send over a mixed set would deliver
-  // to some rows and silently skip the rest, which is worse than no button.
+  // D1345: Email composes for a named, linked client. Renewal notices still
+  // lack addresses for unlinked engagements, so a bulk send stays unavailable.
   //
   // Two small pieces close it and neither belongs in a page PR: the client's
   // address on the read, and a rule for the rows that have none.
@@ -119,12 +109,11 @@ export const ADVISOR_ZONE_ACTIONS = {
   // a bulk send would silently skip them. Here it cannot: a deliverable version
   // can only BE sent to a client who has an account, so every row that could
   // possibly be unopened is addressable by construction. The channel already
-  // existed — `routes/messages.ts` (migration 185) opens a thread with any
-  // account and its `SUBJECT_TYPES` already carries `'engagement'`.
+  // exists in Email: each linked client opens a separate draft for review.
   //
   // `kind: 'handler'` RATHER THAN A DESTINATION, per D67: it acts on rows this
   // page has already loaded, and the page confirms the recipients on screen
-  // before anything is sent. The one case the send rule cannot prevent — an
+  // before opening an Email draft. The one case the send rule cannot prevent — an
   // engagement unlinked after a send — is reported as a count of rows the nudge
   // will NOT reach, never skipped quietly.
   'practice/delivery': [

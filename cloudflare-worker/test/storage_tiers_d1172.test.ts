@@ -91,7 +91,7 @@ test('by_tier: members, members with files, bytes in all, by kind and the median
 test('by_tier says what it could not read: an area unreadable leaves members and blanks bytes and states; the plans unreadable blank it all', async () => {
   const f = fixture();
   f.fill(11, 100);
-  f.fail(/FROM message_attachments/);
+  f.fail(/FROM research_documents/);
   const partial = await readPlatformStorage(f.env);
   const free = partial.by_tier!.find((t) => t.tier === 'free')!;
   assert.deepEqual([free.members, free.measured_bytes, free.median_bytes, free.by_kind, free.by_state], [3, null, null, null, null]);
@@ -99,7 +99,7 @@ test('by_tier says what it could not read: an area unreadable leaves members and
   f.db.exec('DELETE FROM users WHERE id = 16');
   const two = (await readPlatformStorage(f.env)).by_tier!.find((t) => t.tier === 'free')!;
   assert.equal(two.median_bytes, 50, 'two members: the mean of the middle two');
-  f.fail(/FROM message_attachments/);
+  f.fail(/FROM research_documents/);
   assert.match(partial.by_tier_reason!, /no member’s total is complete/);
   f.fail(/account_subscriptions/);
   const none = await readPlatformStorage(f.env);

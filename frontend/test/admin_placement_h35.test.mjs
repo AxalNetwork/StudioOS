@@ -46,7 +46,7 @@ const SIDEBAR_RAW = read('frontend/src/sidebarConfig.js');
 
 const LEGACY_ROWS = [
   // home
-  '/studio', '/messages',
+  '/studio', '/email',
   // admin
   '/admin', '/admin/due-diligence', '/admin/best-fit', '/admin/events',
   '/admin/jobs', '/admin/circles', '/admin/advisor-cohorts', '/admin/exploring',
@@ -248,8 +248,8 @@ test('the three decided placements hold: Wellbeing, X, Trash', () => {
     'All accounts\' More menu no longer carries a literal <HeaderMenuItem to="/admin/trash">; the door is gone');
 });
 
-test('Messages is a top-bar button on both shells', () => {
-  const m = byKey('/messages');
+test('Email is a top-bar button on both shells', () => {
+  const m = byKey('/email');
   assert.deepEqual([m.tier, m.row, m.form], ['Admin', TOP_BAR, 'top bar']);
   assert.ok((m.also || []).some((a) => a.tier === 'HQ' && a.row === TOP_BAR && a.form === 'top bar'));
 });

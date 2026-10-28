@@ -330,8 +330,8 @@ test('U6 renders the total or its absence, unknown sizes, an unreadable place, e
   assert.doesNotMatch(ok, /0 B/, 'an unknown size is never 0 bytes');
   const exact = html(h(StorageCard, { storage: ready({ ...STORAGE, total_bytes: 1_288_490_189, unknown_size_files: 0, areas: STORAGE.areas.map((a) => (a.bytes == null ? area(a.key, a.files, 1000) : a)) }) }));
   assert.match(exact, /1\.2 GB <span[^>]*>in 148 files/);
-  const one = html(h(StorageCard, { storage: ready({ ...STORAGE, areas: STORAGE.areas.map((a) => (a.key === 'message_attachments' ? { key: a.key, recorded: false } : a)) }) }));
-  assert.match(one, /Message attachments could not be read\. The other places still count\./);
+  const one = html(h(StorageCard, { storage: ready({ ...STORAGE, areas: STORAGE.areas.map((a) => (a.key === 'research_library' ? { key: a.key, recorded: false } : a)) }) }));
+  assert.match(one, /Research library could not be read\. The other places still count\./);
   assert.match(one, /64 files/);
   const empty = ready({ total_bytes: 0, files: 0, unknown_size_files: 0, areas: STORAGE.areas.map((a) => area(a.key, 0, 0)) });
   assert.match(html(h(StorageCard, { storage: empty, role: 'founder' })), /No files uploaded yet\.[\s\S]*Open the data room/);

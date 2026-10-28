@@ -278,7 +278,6 @@ export const AREA_PLACE = Object.freeze({
   data_room_versions: ['the data room, as an earlier version', '/raise/data-room/files'],
   diligence_files: ['due diligence', '/due-diligence'],
   research_library: ['the research library', '/research/library'],
-  message_attachments: ['the message it came with', '/messages'],
   interview_recordings: ['the interview', '/validate/customer-research'],
   session_audio: ['the interview', '/validate/customer-research'],
   deck_reviews: ['the deck review', '/raise/pitch/review'],

@@ -44,7 +44,7 @@ export const FOUNDER_BAND_PATHS = ['/studio'];
 /**
  * Doors that are not sidebar rows, among the rows that light More.
  *
- * - Messages left the sidebar for the top bar (D284). The top bar hid it
+ * - Email left the sidebar for the top bar (D284). The top bar hid it
  *   below 640px, and a founder's phone draws the band instead, so the More
  *   page carried it. Since that page was removed (#2297) it is the band's
  *   account sheet's first row.
@@ -53,11 +53,11 @@ export const FOUNDER_BAND_PATHS = ['/studio'];
  * sheet carries Trust Center and the company sheet carries Company Settings,
  * both opened from the band.
  *
- * Each is a route the founder guard already admits (`/messages` in App.jsx),
+ * Each is a route the founder guard already admits (`/email` in App.jsx),
  * and `mobile_tab_bar_d425` holds that.
  */
 export const FOUNDER_MORE_DOORS = [
-  { to: '/messages', label: 'Messages', icon: Mail },
+  { to: '/email', label: 'Email', icon: Mail },
 ];
 
 /** Every row of a licence's sidebar, flattened in display order. */

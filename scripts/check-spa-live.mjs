@@ -239,7 +239,8 @@ function routesForHost(base) {
     // that were in the broken set; on the apex they are served only by the
     // explicit route table, so a table-wide revert turns them red here.
     { path: '/perks', shell: true },
-    { path: '/messages', shell: true },
+    { path: '/messages', shell: true }, // D1345: retired address still serves the SPA redirect.
+    { path: '/email', shell: true },
     { path: '/raise/data-room', shell: true },
     { path: '/admin/licences', shell: true },
     { path: '/portfolio/health', shell: true },

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Star } from 'lucide-react';
+import { EmailAction } from '../../email/emailParts';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
@@ -8,7 +9,7 @@ import {
   buttonClass, ghostButtonClass, inputClass,
 } from '../expertise/kit';
 import {
-  STATE_LABEL, STATE_TONE, medianLabel, nudgeBody, nudgeTargets, seamLine, sentLine,
+  STATE_LABEL, STATE_TONE, medianLabel, nudgeTargets, seamLine, sentLine,
   shortMoment, versionCountLabel, versionTag,
 } from './deliveryTrail';
 import { formatDateTime } from '../advisory/kit';
@@ -219,44 +220,7 @@ export default function DeliveryZone() {
     'That version could not be sent.',
     `Sent ${versionTag(item.latest_version)} of “${item.title}”.`);
 
-  /**
-   * The nudge. One thread per unopened work product, over the inbox that
-   * already exists — nothing is sent on the advisor's behalf beyond opening it.
-   */
-  const nudgeUnopened = () => act('nudge', async () => {
-    let sent = 0;
-    for (const item of targets.reachable) {
-      await api.messageStartThread({
-        to_email: item.client_user_email,
-        subject: item.title,
-        subject_type: 'engagement',
-        subject_id: item.engagement_id || null,
-        body: nudgeBody(item),
-      });
-      sent += 1;
-    }
-    setNudging(false);
-    setNote({
-      ok: true,
-      text: `${sent} ${sent === 1 ? 'thread' : 'threads'} opened`
-        + `${targets.missed.length ? ` · ${targets.missed.length} not reached, no client account` : ''}.`,
-    });
-  }, 'The nudge could not be sent.');
-
-  /**
-   * The ops row's own handler, hoisted out of the JSX for two reasons.
-   *
-   * IT OPENS A CONFIRMATION RATHER THAN SENDING. A bulk action that fires on one
-   * click is how a client gets two nudges in a minute, so the button below the
-   * named recipients is what actually sends.
-   *
-   * AND PROSE CANNOT LIVE INSIDE THE `advisorZoneActions(…)` CALL.
-   * `profile_zone_actions.test.mjs` scans that call's text for identifiers the
-   * page never declares — the check that catches `scope: project?.name` on a
-   * page with no `project`, a ReferenceError no build step reports — and it
-   * cannot tell a word in a comment from a name. A note in there fails a page
-   * that is correct, so the note goes here and the call stays code.
-   */
+  // D1345: choose a client, then review and send their draft in Email.
   const bulkHandlers = {
     nudgeUnopened: {
       onClick: () => { setNudging(true); setNote(null); },
@@ -305,7 +269,7 @@ export default function DeliveryZone() {
         <Card padding="md" className="mb-3" data-testid="nudge-pr3">
           <ZoneHeading
             title="Nudge the clients who have not opened"
-            blurb="One thread each, in the message inbox you both already have. Nothing else is sent on your behalf."
+            blurb="Open an Email draft for each client. Review and send each one from your own mailbox."
           />
           {targets.reachable.length === 0
             ? <p className="text-[12.5px] leading-relaxed text-axal-muted">Nothing is sitting unopened, so there is nobody to nudge.</p>
@@ -314,6 +278,7 @@ export default function DeliveryZone() {
                 <li key={i.id} className="text-[12px] text-axal-muted">
                   <strong className="font-semibold text-axal-ink">{i.client_name}</strong>
                   {' · '}{i.title}{' · '}{seamLine(i, now)}
+                  <span className="ml-2 inline-flex"><EmailAction person={`work_product:${i.id}`} from="Delivery" /></span>
                 </li>
               ))}</ul>
               {/* THE ROWS IT WILL NOT REACH, said before anything is sent. A
@@ -328,11 +293,7 @@ export default function DeliveryZone() {
                 </p>
               )}
               <div className="mt-3 flex gap-2">
-                <button type="button" className={buttonClass} disabled={busy === 'nudge'} onClick={nudgeUnopened}
-                  data-testid="nudge-pr3-send">
-                  Open {targets.reachable.length} {targets.reachable.length === 1 ? 'thread' : 'threads'}
-                </button>
-                <button type="button" className={ghostButtonClass} onClick={() => setNudging(false)}>Cancel</button>
+                <button type="button" className={ghostButtonClass} onClick={() => setNudging(false)}>Close</button>
               </div>
             </>}
         </Card>

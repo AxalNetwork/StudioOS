@@ -70,7 +70,7 @@ import { LensProvider, useLensLocation } from './workspaces/lens';
 import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { RailStripSlot } from './ui/RailFrame';
 import { RailPageProvider } from './ui/railCrumbs';
-import { MESSAGES_ROLES } from './lib/paletteIndex';
+import { EMAIL_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
 import { disablePush } from './lib/pwa';
@@ -445,7 +445,7 @@ const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage')
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
-const MessagesPage = lazy(() => import('./pages/MessagesPage'));
+const MessagesRedirect = lazy(() => import('./pages/email/MessagesRedirect'));
 const EmailPage = lazy(() => import('./pages/email/EmailPage'));
 // D702 (#1664) — the founder's profile pages (Studio · Mobile S6m, S7m, S9m, S10m).
 const YouPage = lazy(() => import('./pages/profile/YouPage'));
@@ -1440,17 +1440,17 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 <FounderWellbeingMenu />
               </Suspense>
             )}
-            {/* D284 — Messages left the sidebar rows for the top bar. It is
-                offered to exactly the roles the /messages route admits, on
+            {/* D1345 — Email replaces Messages in the top bar. It is
+                offered to exactly the roles the /email route admits, on
                 every shell those roles get. */}
-            {MESSAGES_ROLES.includes(activeRole) && (
+            {EMAIL_ROLES.includes(activeRole) && (
               <Link
-                to="/messages"
-                data-testid="messages-door"
+                to="/email"
+                data-testid="email-door"
                 className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
               >
                 <Mail size={14} />
-                Messages
+                Email
               </Link>
             )}
             {/* D563 — no Workspaces launcher. Its 28 pages each light the
@@ -3323,10 +3323,10 @@ function AppInner() {
           RoleGuard tests `allowedRoles.includes(effectiveRole)`, which is
           always false on an empty array, so the route would exist and be
           unreachable. */}
-      <Route path="/messages" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MessagesPage user={user} />)} />
+      <Route path="/messages" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MessagesRedirect />)} />
       {/* D1344 (#3552): Email, in every profile's shell; /email/settings is its settings and sent log (EM7). */}
-      <Route path="/email" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <EmailPage />)} />
-      <Route path="/email/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <EmailPage />)} />
+      <Route path="/email" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <EmailPage userId={user?.id} />)} />
+      <Route path="/email/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <EmailPage userId={user?.id} />)} />
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}

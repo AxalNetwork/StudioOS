@@ -115,3 +115,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | --- | --- |
 | `deal_insights_client_d1151.test.mjs` | D1151: encoded deal clients preserve response states. |
 | `safari_regex_compat_3592.test.mjs` | #3592: number segments and image descriptions match the previous expressions; an empty-allowlist source guard rejects regex lookbehind. |
+| `messages_retirement_d1345.test.mjs` | EM10 routing and acknowledgment, blocked storage, account isolation, GP fund selection, and retirement of old client calls. |
