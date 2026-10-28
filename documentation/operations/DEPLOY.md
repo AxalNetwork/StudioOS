@@ -24,7 +24,7 @@ npm expands that into three scripts, in order:
 | ------------ | ------------------------------------------------------------------------------------------- |
 | `predeploy`  | `node scripts/migrate-d1.mjs --remote`                                                        |
 | `deploy`     | `npm run build && cd cloudflare-worker && npx wrangler deploy --config ../wrangler.toml --env production` |
-| `postdeploy` | `node scripts/check-spa-live.mjs`                                                             |
+| `postdeploy` | `node scripts/record-asset-deploy.mjs && node scripts/check-spa-live.mjs` |
 
 So one invocation applies pending D1 migrations, builds the frontend into
 `docs/`, uploads the worker, and then probes the live site.
@@ -156,17 +156,41 @@ is that source's build, so there is no second copy to drift from it, and
 
 The old-bundle window rides on a cache instead of a committed tree. A tab
 opened before a deploy still asks for the previous build's hashed chunks, so
-`scripts/build-frontend.mjs` keeps the last three builds' assets in
-`docs/assets`. `cloudflare-worker-deploy.yml` restores the previous successful
+`scripts/build-frontend.mjs` keeps complete deployed generations from the last
+72 hours in `docs/assets`, with at least the last three builds (including the
+new build) and an
+18,000-asset cap (D1364). It also retains the build that was serving before
+the first deployment in that window: tabs opened just before a long-lived
+build was superseded need its chunks for 72 hours too. It prunes the oldest optional generations first,
+never individual chunks. If the protected floor itself exceeds the cap, it
+fails the build rather than deleting the newest build's assets. A cap warning
+means the time window was shortened. The full static output must also stay
+under 20,000 files, including non-asset public files and prerendered shells.
+If any build step fails, the wrapper restores the full previous output and
+ledger, so a local retry still knows which assets were deployed.
+
+`cloudflare-worker-deploy.yml` restores the previous successful
 deploy's `docs/assets` and retention ledger from the `spa-assets-` entry in the
 Actions cache before it builds, and saves them after `wrangler deploy`
-succeeds. When there is nothing to restore (the first deploy, or an entry
+succeeds. The post-deploy `record-asset-deploy.mjs` hook records the actual
+successful deploy time in each new ledger entry's `deployedAt`; `ts` remains
+its build time. Old ledgers receive a single conservative 72-hour grace
+(`firstSeenAt`) without inventing a deployment time. Local or failed builds
+do not displace deployed builds from the minimum floor. An unstamped non-legacy
+entry in the restored deployment cache aborts the build before Vite runs; check
+the successful-deploy timestamp hook instead of losing live history.
+
+When there is nothing to restore (the first deploy, or an entry
 GitHub evicted after seven days unused) the deploy still ships, the build log
 says `retention restarted`, and the run carries a warning: a tab opened before
 that deploy may need one reload.
 
 A hand deploy with `npm run deploy` builds over whatever `docs/` holds on your
-machine. With no previous build there it restarts retention the same way.
+machine. Its postdeploy hook records successful deployment before running
+the live check. With no previous build there it restarts retention the same
+way. Retention still depends on restoring the previous successful cache; a
+cache miss or missing saved files cannot recreate deleted chunks. See D1364
+for the measured cache budget and platform limits.
 
 The deploy workflow also checks every lazy JS/CSS dependency after publishing
 (#3590), including `/hq`'s shell on both hosts. Before the build wipes `docs/`,

@@ -168,6 +168,7 @@ pull.
 | `og-assets/` | Open Graph image sources. |
 | `claude-review/` | The advisory pull-request review on the Anthropic Messages API (`claude-review.yml`): `review.mjs`, its own `package.json` pinning the SDK, and `rates.json`. Its rules live in `lib/claudeReview.mjs`. |
 | `__pycache__/` | Python bytecode. Not source. |
+| `record-asset-deploy.mjs` | D1364: stamp the latest retention entry only after successful deployment, before caching it. |
 
 ## Adding a guard
 
