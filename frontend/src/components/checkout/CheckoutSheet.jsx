@@ -89,6 +89,16 @@ export class CardFormBoundary extends React.Component {
 }
 
 /** Esc closes, focus moves in and stays inside, and returns to the opener on close. Pack mode (D1287) shares it. */
+/**
+ * The sheets' top bar on a phone (D1365). The page asks for
+ * `viewport-fit=cover`, so a full-height sheet starts under the status bar: the
+ * bar pads itself by the top safe area, and it is sticky, so Close stays in
+ * reach however far the sheet is scrolled. The scroll box clears the home
+ * indicator the same way.
+ */
+export const SHEET_BAR = 'sticky top-0 z-10 bg-white pt-[env(safe-area-inset-top)] dark:bg-gray-900 sm:pt-0';
+export const SHEET_SCROLL_PAD = 'pb-[env(safe-area-inset-bottom)] sm:pb-0';
+
 export function useDialog(onClose) {
   const box = useRef(null);
   const closeRef = useRef(onClose);
@@ -405,8 +415,9 @@ export default function CheckoutSheet({ plan, spec, user, role, held, planRead, 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center" data-testid="checkout-backdrop">
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="checkout-title" tabIndex={-1}
-        className="relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px]"
+        className={`relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px] ${SHEET_SCROLL_PAD}`}
         data-testid="checkout-sheet">
+        <div className={SHEET_BAR} data-testid="checkout-bar">
         <div className="flex items-center justify-between border-b border-axal-hairline px-5 py-3 dark:border-gray-700">
           {/* PAYX20: the phone's top bar is "‹ Back" and the title; the desktop keeps its ×. */}
           <button type="button" onClick={close} className={`${LINK} mr-2 sm:hidden`} data-testid="checkout-back">‹ Back</button>
@@ -422,6 +433,7 @@ export default function CheckoutSheet({ plan, spec, user, role, held, planRead, 
             )}
           </div>
           <button type="button" aria-label="Close" onClick={close} className="hidden h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800 sm:grid" data-testid="checkout-close"><X size={18} aria-hidden="true" /></button>
+        </div>
         </div>
         {phase === 'status' ? (
           <After status={status} slow={slow} unreadable={unreadable} free={!!started?.free} from={from} onClose={close} onRetry={again} />

@@ -277,3 +277,19 @@ test('CRP15: Pay sits in a bar fixed at the bottom on a phone and in place from 
     assert.ok(v.props('pack-sheet').className.includes('dark:bg-gray-900'));
   } finally { await v.close(); }
 });
+
+test('D1365: on a phone the sheet\'s bar stays in reach — sticky, clear of the status bar — and Close closes it with nothing on sale', async () => {
+  // Mutation checked: drop `sticky` (or the top safe area) from SHEET_BAR → the bar scrolls away under the status bar.
+  let closed = 0;
+  const v = await mount({ onClose: () => { closed += 1; } }, { ...ROUTES, topUp: { ...TOP_UP, packs: [] } });
+  try {
+    assert.equal(v.text('pack-rows-none'), 'Top-up isn’t available yet.');
+    const bar = v.props('pack-bar').className;
+    assert.match(bar, /\bsticky top-0\b/);
+    assert.match(bar, /pt-\[env\(safe-area-inset-top\)\]/);
+    assert.match(bar, /\bbg-white\b.*\bdark:bg-gray-900\b/, 'opaque, so content scrolls under it unseen, in both themes');
+    assert.match(v.props('pack-sheet').className, /pb-\[env\(safe-area-inset-bottom\)\]/, 'clear of the home indicator');
+    await v.click('pack-close');
+    assert.equal(closed, 1);
+  } finally { await v.close(); }
+});
