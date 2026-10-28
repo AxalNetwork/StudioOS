@@ -15,6 +15,14 @@ import { makeMeetLink } from '../services/calendar/itemRead';
  *   GET    /meetings/bot                                D1346: whether Eadwyn AI can join this member's calls, and its price
  *   POST   /meetings/instant                            D1346: { provider, duration_min?, topic? } a meeting starting now on the
  *                                                       member's own Zoom or Google account; the join link only
+ *   GET    /meetings/capabilities                       D1358: per provider, what Axal can really do here for this
+ *                                                       member (create, bot, realtime audio, transcript, recording)
+ *
+ * D1358: a Zoom call the member hosts is attached the same way with no
+ * `session_id` (`{ attach: { join_url }, consent }`): it opens its own session
+ * and is imported after the call, from Zoom's cloud transcript. A retried
+ * attach of the member's own call to the same interview answers the first
+ * attach (200, `existing: true`) for Zoom and for a Calendar Meet call.
  *
  * D871 (#2518): a Meet call the member did not schedule from Axal is attached
  * with `POST /interviews/:id/meetings` and `{ attach: { event_id | meeting_code
@@ -138,6 +146,96 @@ meetings.get('/meetings', async (c) => {
 meetings.get('/meetings/bot', async (c) => {
   const user = (await requireAuth(c)) as User;
   return c.json(await botAvailability(c.env, user));
+});
+
+// ---------------------------------------------------------------------------
+// D1358: what Axal can really do with each meeting platform, for this member
+// ---------------------------------------------------------------------------
+
+type CaptureMode = 'bot' | 'post_meeting_import';
+
+/**
+ * One provider's truthful capabilities. Every flag is read from this
+ * deployment's configuration and the member's own connection; none is assumed.
+ * `capture_modes` lists only the ways a call on this provider can reach a
+ * transcript here: the browser recorder is never one of them, because it hears
+ * the member's microphone and not the call (the phone-on-speaker mode is the
+ * only place the in-browser recorder is offered).
+ */
+async function providerCapabilities(env: Env, user: User) {
+  const bot = await botAvailability(env, user);
+  const zoomOn = available(env, 'zoom');
+  const meetOn = available(env, 'google_meet');
+  const zoomConn = zoomOn ? await zoom.zoomConnection(env, user.id) : null;
+  const google = meetOn ? await meet.googleConnection(env, user.id) : null;
+  const meetTranscripts = meet.transcriptAccess(google);
+  const modes = (botOn: boolean, importOn: boolean): CaptureMode[] =>
+    [...(botOn ? ['bot' as const] : []), ...(importOn ? ['post_meeting_import' as const] : [])];
+  const zoomReason = !zoomOn ? UNAVAILABLE.zoom
+    : !zoomConn ? 'Connect Zoom in Account › Connectors so Axal can create your meetings and import their cloud transcripts.'
+      : null;
+  const meetReason = !meetOn ? UNAVAILABLE.google_meet
+    : !google ? 'Connect Google in Account › Connectors so Axal can create Meet calls and import their transcripts.'
+      : meetTranscripts === 'missing' ? 'Your Google connection does not include Meet transcripts. Reconnect Google in Account › Connectors and allow them.'
+        : null;
+  return {
+    bot: { available: bot.available, limit_minutes: bot.limit_minutes, price: bot.price },
+    providers: {
+      zoom: {
+        label: PROVIDER_LABEL.zoom,
+        available: zoomOn,
+        connected: !!zoomConn,
+        can_create_meeting: !!zoomConn,
+        can_join_as_bot: bot.platforms.zoom,
+        // Zoom's Realtime Media Streams need an RTMS-enabled app and account
+        // approval; no RTMS consumer exists on this deployment.
+        can_capture_realtime_audio: bot.platforms.zoom,
+        can_retrieve_transcript: !!zoomConn,
+        can_retrieve_recording: !!zoomConn,
+        capture_modes: modes(bot.platforms.zoom, !!zoomConn),
+        reason: zoomReason,
+        notes: [
+          'Imports need a call hosted by the connected Zoom account with cloud recording on. Zoom makes the transcript after the call ends.',
+          'Realtime Media Streams (RTMS) are not configured on Axal.',
+        ],
+      },
+      google_meet: {
+        label: PROVIDER_LABEL.google_meet,
+        available: meetOn,
+        connected: !!google,
+        can_create_meeting: !!google,
+        can_join_as_bot: bot.platforms.google_meet,
+        can_capture_realtime_audio: bot.platforms.google_meet,
+        can_retrieve_transcript: !!google && meetTranscripts !== 'missing',
+        can_retrieve_recording: !!google,
+        capture_modes: modes(bot.platforms.google_meet, !!google && meetTranscripts !== 'missing'),
+        reason: meetReason,
+        notes: [
+          'Imports need a call organised by the connected Google account, with transcription turned on in the call (a Google Workspace plan that includes it).',
+        ],
+      },
+      teams: {
+        label: 'Microsoft Teams',
+        available: bot.platforms.teams,
+        connected: false,
+        can_create_meeting: false,
+        can_join_as_bot: bot.platforms.teams,
+        can_capture_realtime_audio: bot.platforms.teams,
+        can_retrieve_transcript: false,
+        can_retrieve_recording: false,
+        capture_modes: modes(bot.platforms.teams, false),
+        reason: bot.platforms.teams ? null
+          : 'Axal has no Microsoft Teams connection yet, and Eadwyn AI is not available for Teams here. Upload the recording or paste the transcript after the call.',
+        notes: ['A Microsoft Graph connection for Teams transcripts is not built.'],
+      },
+    },
+  };
+}
+
+// No token, link or run is read into the reply: flags and our own sentences.
+meetings.get('/meetings/capabilities', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  return c.json(await providerCapabilities(c.env, user));
 });
 
 const CREATE_CONNECT_FIRST: Record<MeetingProvider, string> = {
@@ -293,6 +391,12 @@ async function attachCalendarMeet(c: C, s: { user: User; scoped: ScopedInterview
   // One call, one interview: the event itself, or the same link pasted for a
   // recording during it. Both start in this call's slot; an event whose time
   // moved since is still refused, by the table's UNIQUE (provider, external_ref).
+  const mine = await ownAttach(c.env, s.user.id, s.scoped.interview.id, 'google_meet', call.eventId);
+  if (mine && withinCallSlot(Date.parse(call.startsAt), mine)) {
+    const again: MeetingErrorCode | null = meet.transcriptAccess(googleConn) === 'missing' ? 'meet_transcripts_unavailable' : null;
+    return c.json({ meeting: view(mine), session_id: mine.session_id,
+      notice: again ? { code: again, message: MEETING_ERRORS[again] } : null, existing: true }, 200);
+  }
   const taken = (await c.env.DB.prepare(
     `SELECT starts_at, ends_at FROM interview_channel_refs
       WHERE provider = 'google_meet' AND status <> 'cancelled' AND external_ref IN (?, ?)`,
@@ -329,6 +433,79 @@ async function attachCalendarMeet(c: C, s: { user: User; scoped: ScopedInterview
   }
 }
 
+/**
+ * D1358: the member's own earlier attach of this call to this interview, still
+ * live. A retried Save (a double press, a dropped reply) answers it again,
+ * rather than refusing the member's own call as "already attached".
+ */
+async function ownAttach(env: Env, userId: number, interviewId: number, provider: MeetingProvider, externalRef: string): Promise<MeetingRef | null> {
+  return env.DB.prepare(
+    `SELECT * FROM interview_channel_refs
+      WHERE provider = ? AND user_id = ? AND interview_id = ? AND external_ref = ? AND status <> 'cancelled'
+      ORDER BY id DESC LIMIT 1`,
+  ).bind(provider, userId, interviewId, externalRef).first<MeetingRef>();
+}
+
+const ZOOM_IMPORT_NOTICE = {
+  code: 'zoom_import_after_call',
+  message: 'Axal does not record this call itself. When the call ends, Axal imports the cloud transcript Zoom makes for the connected host account. Turn on cloud recording with audio transcripts in Zoom, or nothing comes back.',
+};
+
+/**
+ * D1358: a Zoom call the member hosts, saved for import after it ends, with no
+ * recording in progress. It opens its own video session, as scheduling does;
+ * the session waits in draft until Zoom's transcript arrives (the webhook, or
+ * the sweep once `meeting.ended` has given the call an end). Nothing is
+ * recorded in the browser.
+ */
+async function attachHostedZoom(c: C, s: { user: User; scoped: ScopedInterview }, body: Record<string, unknown>,
+  link: { joinUrl: string; externalRef: string }) {
+  const consentMethod = consentOf(body);
+  if (!consentMethod) {
+    return refuse(c, 400, { code: 'consent_required',
+      message: 'Record how the interviewee agreed to be recorded and transcribed before you save the call.',
+      extra: { accepted: CONSENT_METHODS } });
+  }
+  if (!available(c.env, 'zoom')) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE.zoom });
+  const mine = await ownAttach(c.env, s.user.id, s.scoped.interview.id, 'zoom', link.externalRef);
+  if (mine) return c.json({ meeting: view(mine), session_id: mine.session_id, notice: ZOOM_IMPORT_NOTICE, existing: true }, 200);
+  const conn = await zoom.zoomConnection(c.env, s.user.id);
+  if (!conn) return refuse(c, 409, { code: 'connect_first', message: 'Connect Zoom in Account › Connectors first, then save the call.' });
+  try {
+    if (!(await zoom.verifyHostedMeeting(c.env, conn, link.externalRef))) {
+      return refuse(c, 409, { code: 'meeting_not_hosted',
+        message: 'Axal can import only a Zoom call hosted by the account you connected. Ask the host to share the recording, then upload it.' });
+    }
+  } catch (e) {
+    if (e instanceof MeetingProviderError) return providerRefusal(c, e);
+    throw e;
+  }
+  let sessionId: number | null = null;
+  try {
+    const session = await openSession(c.env, s.scoped, 'zoom', 'video', { method: consentMethod });
+    sessionId = session.id;
+    const uid = crypto.randomUUID();
+    await c.env.DB.prepare(
+      `INSERT INTO interview_channel_refs
+         (uid, provider, external_ref, session_id, interview_id, user_id, join_url, starts_at, ends_at, status)
+       VALUES (?, 'zoom', ?, ?, ?, ?, ?, ?, NULL, 'scheduled')`,
+    ).bind(uid, link.externalRef, session.id, s.scoped.interview.id, s.user.id, link.joinUrl, new Date().toISOString()).run();
+    const ref = await loadRef(c.env, uid);
+    return c.json({ meeting: ref ? view(ref) : null, session_id: session.id, notice: ZOOM_IMPORT_NOTICE }, 201);
+  } catch (x) {
+    if (sessionId) {
+      await c.env.DB.prepare(
+        `DELETE FROM interview_sessions WHERE id = ? AND NOT EXISTS (SELECT 1 FROM interview_transcript_segments WHERE session_id = ?)`,
+      ).bind(sessionId, sessionId).run();
+    }
+    if (x instanceof IntakeError) return intakeRefusal(c, x);
+    if (/UNIQUE constraint/i.test(x instanceof Error ? x.message : '')) {
+      return refuse(c, 409, { code: 'meeting_link_reused', message: 'This Zoom call is already attached to another interview.' });
+    }
+    throw x;
+  }
+}
+
 async function attachCall(c: C, s: { user: User; scoped: ScopedInterview }, body: Record<string, unknown>) {
   const attach = body.attach && typeof body.attach === 'object' ? body.attach as Record<string, unknown> : null;
   if (body.session_id == null && (body.provider == null || body.provider === 'google_meet')) {
@@ -339,6 +516,7 @@ async function attachCall(c: C, s: { user: User; scoped: ScopedInterview }, body
   if (!link || (body.provider != null && body.provider !== link.provider)) {
     return refuse(c, 400, { code: 'meeting_link_invalid', message: 'Paste a Zoom or Google Meet join link for the call you host.' });
   }
+  if (body.session_id == null && link.provider === 'zoom') return attachHostedZoom(c, s, body, link);
   const sessionId = Number(body.session_id);
   if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
     return refuse(c, 400, { code: 'session_required', message: 'Start a video recording session before attaching its call.' });

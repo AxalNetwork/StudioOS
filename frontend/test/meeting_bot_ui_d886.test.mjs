@@ -50,12 +50,12 @@ test('B7 StrictMode status loads; rendered Stop uses its route exactly once and 
 
 test('B7 supported link sends the bot after saved consent without preparing a device or storing a plain link',async()=>{
   const s=setup(),m=await mountContracts(h(RecordLightbox,s.props));
-  try{await press(m,'record-provider-google_meet');await change(m,'record-link',link);assert.match(m.text(),/Send Eadwyn AI/);assert.ok(by(m,'meeting-bot-consent-notice'));assert.ok(by(m,'record-device'));assert.match(m.text(),/Eadwyn AI’s time: \$0\.0028 a minute/);assert.equal(by(m,'record-live'),undefined);assert.match(m.text(),/bot time and transcription/);await press(m,'record-start');assert.equal(s.sent.length,1,m.text());assert.equal(s.sent[0].id,15);assert.equal(s.sent[0].body.meeting_url,link);assert.equal(s.opened[0].meeting_url,undefined);assert.equal(s.opened[0].consent.status,'given');assert.equal(s.opened[0].final_model,'@cf/deepgram/nova-3');assert.equal(s.opened[0].live_model,null);assert.deepEqual(s.device,[]);assert.equal(s.started[0][0].submitted_via,'meeting_bot');}finally{await m.unmount();}
+  try{await press(m,'record-provider-google_meet');await change(m,'record-link',link);assert.match(m.text(),/Send Eadwyn AI/);assert.ok(by(m,'meeting-bot-consent-notice'));assert.equal(by(m,'record-device'),undefined,'D1358: no device recording for a meeting');assert.match(m.text(),/Eadwyn AI’s time: \$0\.0028 a minute/);assert.equal(by(m,'record-live'),undefined);assert.match(m.text(),/bot time and transcription/);await press(m,'record-start');assert.equal(s.sent.length,1,m.text());assert.equal(s.sent[0].id,15);assert.equal(s.sent[0].body.meeting_url,link);assert.equal(s.opened[0].meeting_url,undefined);assert.equal(s.opened[0].consent.status,'given');assert.equal(s.opened[0].final_model,'@cf/deepgram/nova-3');assert.equal(s.opened[0].live_model,null);assert.deepEqual(s.device,[]);assert.equal(s.started[0][0].submitted_via,'meeting_bot');}finally{await m.unmount();}
 });
 
-test('B7 secondary device choice stays explicit; refusal never falls back to microphone or echoes provider text',async()=>{
+test('B7 a meeting has no device choice (D1358); refusal never falls back to microphone or echoes provider text',async()=>{
   const s=setup(),m=await mountContracts(h(RecordLightbox,s.props));
-  try{await press(m,'record-provider-google_meet');await change(m,'record-link',link);await press(m,'record-device');assert.equal(s.sent.length,0);assert.deepEqual(s.device,['begin']);}finally{await m.unmount();}
+  try{await press(m,'record-provider-google_meet');await change(m,'record-link',link);assert.equal(by(m,'record-device'),undefined);assert.deepEqual(s.device,[]);}finally{await m.unmount();}
   const f=setup();f.props.sessions.sendBot=async()=>{throw Object.assign(new Error('PRIVATE-PROVIDER-DETAIL'),{status:402});};
   const n=await mountContracts(h(RecordLightbox,f.props));
   try{await press(n,'record-provider-google_meet');await change(n,'record-link',link);await press(n,'record-start');assert.deepEqual(f.device,[]);assert.match(n.text(),/not enough AI tokens/);assert.doesNotMatch(n.text(),/PRIVATE-PROVIDER-DETAIL/);assert.equal(f.started.length,0);assert.match(n.text(),/Open the session to check/);}finally{await n.unmount();}
@@ -78,13 +78,13 @@ test('B7 per-call opt-out cancels the persisted queued run; re-enable uses its o
   try{await change(n,'scheduled-bot-choice','',true);assert.equal(calls[1][0],'send');assert.equal(calls[1][2].scheduled_at,meeting.starts_at);}finally{await n.unmount();}
 });
 
-test('B7 unsaved consent sends nothing, duplicate Send presses share one setup, and explicit fallback has its own key',async()=>{
+test('B7 unsaved consent sends nothing, duplicate Send presses share one setup, and a refused send offers no device fallback (D1358)',async()=>{
   const no=setup();no.props.initialConsent='';const n=await mountContracts(h(RecordLightbox,no.props));
   try{await press(n,'record-provider-google_meet');await change(n,'record-link',link);await press(n,'record-start');assert.equal(no.sent.length,0);assert.equal(no.opened.length,0);}finally{await n.unmount();}
   const s=setup(),m=await mountContracts(h(RecordLightbox,s.props));
   try{await press(m,'record-provider-google_meet');await change(m,'record-link',link);const send=m.props(by(m,'record-start')).onClick;await act(async()=>{await Promise.all([send(),send()]);});assert.equal(s.sent.length,1);assert.equal(s.opened.length,1);}finally{await m.unmount();}
   const f=setup();f.props.sessions.sendBot=async()=>{throw{status:402};};const k=await mountContracts(h(RecordLightbox,f.props));
-  try{await press(k,'record-provider-google_meet');await change(k,'record-link',link);await press(k,'record-start');assert.deepEqual(f.device,[]);await press(k,'record-device');assert.notEqual(f.opened[0].client_key,f.opened[1].client_key);assert.deepEqual(f.device,['begin']);}finally{await k.unmount();}
+  try{await press(k,'record-provider-google_meet');await change(k,'record-link',link);await press(k,'record-start');assert.deepEqual(f.device,[]);assert.equal(by(k,'record-device'),undefined);assert.equal(f.opened.length,1);}finally{await k.unmount();}
 });
 
 test('B7 a failed status read is Unreadable, offers no Stop, and does not leave participants loading forever',async()=>{

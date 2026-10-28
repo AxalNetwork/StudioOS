@@ -56,14 +56,15 @@ test('the dialog: named, modal, 560px, and the five sections in the canvas\'s or
 });
 
 test('each mode: its note, its Start label, and Transcript only where there is audio', () => {
-  const cases = [['in_person', 'Put the phone on the table between you', 'Start recording', true], ['video', 'Paste the meeting link', 'Start the call', true],
-    ['phone', 'Put the call on speaker', 'Start recording', true], ['text', 'No audio. Import the conversation', 'Import the chat', false]];
-  for (const [initialMode, note, start, transcript] of cases) {
+  // D1358: a meeting's Transcript says how the call is captured; it has no device estimate.
+  const cases = [['in_person', 'Put the phone on the table between you', 'Start recording', true, true], ['video', 'Paste the meeting link', 'Start the call', true, false],
+    ['phone', 'Put the call on speaker', 'Start recording', true, true], ['text', 'No audio. Import the conversation', 'Import the chat', false, false]];
+  for (const [initialMode, note, start, transcript, estimated] of cases) {
     const out = render({ initialMode });
     assert.ok(renderedText(out).includes(note), `${initialMode}: note`);
     assert.ok(renderedText(/<button[^>]*data-testid="record-start"[^>]*>[\s\S]*?<\/button>/.exec(out)[0]).includes(start), `${initialMode}: ${start}`);
     assert.equal(out.includes('>Transcript</h3>'), transcript, `${initialMode}: transcript section`);
-    assert.equal(out.includes('data-testid="record-estimate"'), transcript, `${initialMode}: estimate`);
+    assert.equal(out.includes('data-testid="record-estimate"'), estimated, `${initialMode}: estimate`);
   }
 });
 
@@ -279,12 +280,17 @@ test('an interview it was opened on (maybe already held) opens on its own route,
   try {
     await m.click('record-mode-call');
     await m.click('record-consents-in_app');
+    // D1358: a Zoom call with no link has no capture: Start is off and says why.
+    await m.click('record-start');
+    assert.equal(s.calls.create.length, 0, 'a meeting never starts a device recording');
+    assert.match(m.by('record-capture-reason').textContent, /Paste the meeting link/);
+    await m.click('record-provider-phone_speaker');
     await m.click('record-start');
     assert.equal(s.calls.createInterview.length + s.calls.open.length, 0, 'the setup call would refuse a held interview');
     const [[id, { client_key: key, ...body }]] = s.calls.create;
     assert.equal(id, 7);
     assert.match(key, /^record-./);
-    assert.deepEqual(body, { channel: 'video', consent: { status: 'given', method: 'in_app' }, live_model: 'nova', final_model: 'whisper', call_provider: 'zoom', points: [2, 1] });
+    assert.deepEqual(body, { channel: 'phone', consent: { status: 'given', method: 'in_app' }, live_model: 'nova', final_model: 'whisper', call_provider: 'phone_speaker', points: [2, 1] });
     assert.deepEqual(s.calls.started[0][1], { id: 7, interviewee_name: 'Dana Ruiz', interviewee_company: null });
   } finally { await m.unmount(); }
 });
@@ -433,9 +439,13 @@ test('a talking point toggles, and is sent', async () => {
   } finally { await m.unmount(); }
 });
 
-test('an invalid meeting link blocks Start; a valid one is sent with its provider', async () => {
+test('an invalid meeting link blocks Start; a valid one on a connected Zoom is saved for import after the call, never recorded here (D1358)', async () => {
   const s = spies();
-  const m = await mount({ ...s.props, initialMode: 'video', channels: CHANNELS });
+  const saved = [];
+  s.props.channelsSource = { ...s.props.channelsSource, saveZoomCall: async (...a) => { saved.push(a); return { session_id: 777, meeting: { uid: 'r1' }, notice: { code: 'zoom_import_after_call' } }; } };
+  let prepared = 0;
+  const recorder = { prepare() { prepared += 1; }, release() {}, begin() { throw new Error('a meeting never reaches the recorder'); }, isCapturing: () => false, getSnapshot: () => ({}) };
+  const m = await mount({ ...s.props, recorder, initialMode: 'video', channels: CHANNELS });
   try {
     await m.type('record-name', 'Dana');
     await m.click('record-consents-verbal');
@@ -444,9 +454,56 @@ test('an invalid meeting link blocks Start; a valid one is sent with its provide
     assert.ok(m.text().includes('A Zoom link is on zoom.us.'));
     await m.type('record-link', 'https://acme.zoom.us/j/12345678');
     assert.equal(m.pr(m.by('record-start'))['aria-disabled'], undefined);
-    await m.click(m.by('record-device') ? 'record-device' : 'record-start');
-    assert.equal(s.calls.open[0].call_provider, 'zoom');
-    assert.equal(s.calls.open[0].meeting_url, 'https://acme.zoom.us/j/12345678');
+    assert.equal(m.text(m.by('record-start')), 'Save for import after the call');
+    assert.equal(m.by('record-device'), undefined, 'no "Record this device" for a meeting');
+    assert.match(m.text(m.by('record-import-note')), /Axal does not record this call/);
+    await m.click('record-start');
+    assert.deepEqual(s.calls.createInterview, [[3, { interviewee_name: 'Dana', interviewee_company: null }]]);
+    assert.deepEqual(s.calls.stage, [[3, 41, 'booked']]);
+    assert.deepEqual(saved, [[41, { join_url: 'https://acme.zoom.us/j/12345678', consent: { status: 'given', method: 'verbal' } }]]);
+    assert.deepEqual([s.calls.open.length, s.calls.create.length, prepared], [0, 0, 0], 'no device session, no microphone');
+    assert.deepEqual(s.calls.started[0][0], { id: 777, submitted_via: 'zoom' });
+  } finally { await m.unmount(); }
+});
+
+test('D1358: a refused save says the Worker\'s words, removes the interview it made, and never falls back to the microphone', async () => {
+  const s = spies();
+  s.props.channelsSource = { ...s.props.channelsSource, saveZoomCall: async () => { throw Object.assign(new Error('Axal can import only a Zoom call hosted by the account you connected. Ask the host to share the recording, then upload it.'), { status: 409, code: 'meeting_not_hosted' }); } };
+  let prepared = 0;
+  const recorder = { prepare() { prepared += 1; }, release() {}, begin() { throw new Error('never'); }, isCapturing: () => false, getSnapshot: () => ({}) };
+  const m = await mount({ ...s.props, recorder, initialMode: 'video', channels: CHANNELS });
+  try {
+    await m.type('record-name', 'Dana');
+    await m.click('record-consents-verbal');
+    await m.type('record-link', 'https://acme.zoom.us/j/12345678');
+    await m.click('record-start');
+    assert.match(m.text(m.by('record-error')), /hosted by the account you connected/);
+    assert.deepEqual(s.calls.deleteInterview, [41], 'the interview made for the call is removed');
+    assert.deepEqual([s.calls.open.length, s.calls.create.length, prepared, s.calls.started.length], [0, 0, 0, 0]);
+  } finally { await m.unmount(); }
+});
+
+test('D1358: Google Meet on a connected Google account is attached from Calendar for import; Teams has no capture and says so', async () => {
+  const s = spies();
+  const attached = [];
+  s.props.channelsSource = { ...s.props.channelsSource, attachCalendarMeet: async (...a) => { attached.push(a); return { session_id: 778 }; } };
+  const channels = { ...CHANNELS, connections: [...CHANNELS.connections, { provider: 'google_meet', connected: true }] };
+  const m = await mount({ ...s.props, interview: { id: 7, interviewee_name: 'Dana Ruiz' }, initialMode: 'video', channels });
+  try {
+    await m.click('record-consents-written');
+    await m.click('record-provider-teams');
+    await m.type('record-link', 'https://teams.microsoft.com/l/meetup-join/abc');
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true, 'Teams: nothing can capture it here');
+    assert.match(m.text(m.by('record-capture-reason')), /can’t capture a Microsoft Teams call yet/);
+    await m.click('record-start');
+    assert.equal(s.calls.create.length, 0);
+    await m.click('record-provider-google_meet');
+    await m.type('record-link', 'https://meet.google.com/abc-defg-hij');
+    assert.equal(m.text(m.by('record-start')), 'Save for import after the call');
+    await m.click('record-start');
+    assert.equal(s.calls.createInterview.length, 0, 'the interview it was opened on is used');
+    assert.deepEqual(attached, [[7, { join_url: 'https://meet.google.com/abc-defg-hij', consent: { status: 'given', method: 'written' } }]]);
+    assert.deepEqual(s.calls.started[0], [{ id: 778, submitted_via: 'google_meet' }, { id: 7, interviewee_name: 'Dana Ruiz', interviewee_company: null }]);
   } finally { await m.unmount(); }
 });
 
@@ -797,54 +854,23 @@ test('"Schedule the call for later" for a new person adds them to the pipeline, 
   } finally { await m2.unmount(); globalThis.fetch = prevFetch; }
 });
 
-test('#1588 Video on a phone says it records the microphone only; Start hands the Worker\'s meeting link to the recorder', async () => {
-  const phone = render({ initialMode: 'video', channels: CHANNELS, recorder: { canShareTab: false } });
-  assert.ok(renderedText(phone).includes('Paste the meeting link. It records the call’s audio. On a phone it records this device’s microphone only.'));
-  assert.doesNotMatch(renderedText(render({ initialMode: 'video', channels: CHANNELS, recorder: { canShareTab: true } })), /On a phone/);
-  assert.doesNotMatch(renderedText(render({ initialMode: 'in_person', recorder: { canShareTab: false } })), /On a phone/, 'Video only');
+test('D1358: a meeting never reaches the recorder, on a phone or a computer; not connected, Start is off with the reason', async () => {
+  const phone = renderedText(render({ initialMode: 'video', channels: CHANNELS, recorder: { canShareTab: false } }));
+  assert.ok(phone.includes('This device’s microphone is not used.'));
+  assert.doesNotMatch(phone, /On a phone it records/);
   const begun = [];
   const s = spies();
-  s.props.sessions.open = async (body) => { s.calls.open.push(body); return { session: { id: 501, channel: 'video' }, interview: { id: 41 }, meeting_url: 'https://acme.zoom.us/j/1', call_label: 'Video call · Zoom' }; };
-  const recorder = { canShareTab: true, prepare() {}, release() {}, begin: (a) => { begun.push(a); return Promise.resolve('share'); } };
-  const m = await mount({ ...s.props, recorder, initialMode: 'video', channels: CHANNELS });
+  const recorder = { canShareTab: true, prepare() { begun.push('prepare'); }, release() {}, begin: (a) => { begun.push(a); return Promise.resolve('share'); } };
+  const m = await mount({ ...s.props, recorder, initialMode: 'video', channels: { ...CHANNELS, connections: [{ provider: 'zoom', connected: false }] } });
   try {
     await m.type('record-name', 'Dana');
     await m.click('record-consents-verbal');
+    await m.type('record-link', 'https://acme.zoom.us/j/12345678');
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true);
+    assert.match(m.text(m.by('record-capture-reason')), /Connect Zoom in Account › Connectors/);
     await m.click('record-start');
-    assert.equal(begun[0].meetingUrl, 'https://acme.zoom.us/j/1');
-    assert.equal(begun[0].callLabel, 'Video call · Zoom');
+    assert.deepEqual([begun.length, s.calls.open.length, s.calls.create.length], [0, 0, 0]);
   } finally { await m.unmount(); }
-});
-
-test('#1588 attach by link: a video Start on a connected Zoom also attaches the call; the outcome goes to the share step in the Worker\'s words', async () => {
-  const run = async ({ attachMeeting, channels = CHANNELS, provider = null, link = 'https://acme.zoom.us/j/12345678' }) => {
-    const s = spies();
-    const begun = [];
-    const attached = [];
-    const recorder = { prepare() {}, release() {}, begin(arg) { begun.push(arg); return 'share'; }, isCapturing: () => false, getSnapshot: () => ({ session: null, phase: 'idle' }) };
-    s.props.channelsSource = { ...s.props.channelsSource, attachMeeting: async (...a) => { attached.push(a); return attachMeeting(...a); } };
-    const m = await mount({ ...s.props, recorder, initialMode: 'video', channels });
-    try {
-      await m.type('record-name', 'Dana');
-      await m.click('record-consents-verbal');
-      if (provider) await m.type('record-provider', provider);
-      await m.type('record-link', link);
-      await m.click(m.by('record-device') ? 'record-device' : 'record-start');
-    } finally { await m.unmount(); }
-    return { begun, attached, s };
-  };
-  const ok = await run({ attachMeeting: async () => ({ notice: { code: 'hosted_transcript_only', message: 'Axal will import a transcript only if this connected account hosts the call.' } }) });
-  assert.deepEqual(ok.attached, [[41, { session_id: 501, join_url: 'https://acme.zoom.us/j/12345678', provider: 'zoom' }]], 'on the session just made, before the hand-over');
-  assert.deepEqual(ok.begun[0].attach, { tone: 'attached', text: 'Axal will import a transcript only if this connected account hosts the call.' });
-  assert.equal(ok.begun[0].video, true);
-  const no = await run({ attachMeeting: async () => { throw Object.assign(new Error('Axal can import only a call hosted by the account you connected. Record this call in-app instead.'), { status: 409, code: 'meeting_not_hosted' }); } });
-  assert.deepEqual(no.begun[0].attach, { tone: 'refused', text: 'Axal can import only a call hosted by the account you connected. Record this call in-app instead.' }, 'its words');
-  assert.equal(no.begun.length, 1, 'a refused attach never stops the recording');
-  // Not connected, or no link: nothing is attached.
-  const off = await run({ attachMeeting: async () => ({}), channels: { ...CHANNELS, connections: [{ provider: 'zoom', connected: false }] } });
-  assert.deepEqual([off.attached.length, off.begun[0].attach], [0, null]);
-  const noLink = await run({ attachMeeting: async () => ({}), link: '' });
-  assert.deepEqual([noLink.attached.length, noLink.begun[0].attach], [0, null]);
 });
 
 test('#1588 r2 a Start that becomes busy while its session is being made is refused at the hand-over, in words, and its mic let go', async () => {

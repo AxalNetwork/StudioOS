@@ -537,8 +537,9 @@ test('the lightbox hands its draft over: the mic is opened in the Start click, t
     await act(async () => { pr(by('record-name')).onChange({ target: { value: 'Dana' } }); });
     await act(async () => { pr(by('record-start')).onClick(); });
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
-    assert.ok(!order.includes('prepare'), 'a video call asks in its own second click');
-    assert.deepEqual(order.find((x) => Array.isArray(x)).slice(2, 3), [true]);
+    // D1358: a meeting (Zoom, Meet, Teams) never reaches the recorder: no mic, no session, no begin.
+    assert.deepEqual(order, [], 'a meeting is captured by Eadwyn AI or imported after it ends, never here');
+    assert.equal(started.length, 0);
   } finally { await act(async () => root.unmount()); restore(); }
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   // D694: the live view is `finishPath`'s first answer, and `onDone` replaces /record with it.

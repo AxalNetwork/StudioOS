@@ -48,5 +48,5 @@ jobs:
           npm run test:drift > drift.log 2>&1
           drift_exit=$?
           echo "EXIT=$drift_exit"
-          if [ "$drift_exit" -ne 0 ]; then tail -n 160 drift.log; fi
+          if [ "$drift_exit" -ne 0 ]; then grep -n "not ok " drift.log | head -n 40; echo '--- tail ---'; tail -n 80 drift.log; fi
           exit "$drift_exit"
