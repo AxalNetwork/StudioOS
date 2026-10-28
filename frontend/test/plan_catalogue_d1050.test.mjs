@@ -73,17 +73,20 @@ test('the catalogue has every plan key the issue names, once, and no price', () 
     assert.deepEqual(p.storage, { bytes: storage.allowance_bytes, reason: storage.allowance_reason }, p.key);
     assert.equal(p.best_suited_for, storage.best_suited, p.key);
   }
-  assert.equal(planByKey('investor:plus').sellable, false, 'Investor Plus is not sold (D786)');
-  assert.equal(planByKey('investor:plus').sellable_reason, NOT_SOLD.plus);
+  // D1334 (#3540): Investor Plus is sold, replacing D786's "not sold" pin.
+  assert.equal(planByKey('investor:plus').sellable, true, 'Investor Plus is sold (D1334)');
+  assert.equal(planByKey('investor:plus').sellable_reason, null);
+  assert.equal('plus' in NOT_SOLD, false, 'no "not sold" reason is kept for Plus');
 });
 
-test('each sold plan names the Stripe metadata planOf matches, and Investor Plus none', () => {
+test('each sold plan names the Stripe metadata planOf matches, Investor Plus included (D1334)', () => {
   for (const p of PLAN_CATALOGUE.filter((x) => x.matches)) {
     assert.equal(planOf(p.matches)?.licence_key, p.licence_key, `${p.key}: planOf maps its metadata to its licence key`);
     assert.equal(planByLicenceKey(p.licence_key)?.key, p.key, `${p.key}: found again by its licence key`);
   }
-  assert.equal(planByKey('investor:plus').matches, null, 'no product is sold as Investor Plus');
-  assert.equal(planOf({ investor_tier: 'plus' }), null);
+  assert.deepEqual(planByKey('investor:plus').matches, { investor_tier: 'plus' }, 'Investor Plus is sold as investor_tier=plus');
+  assert.deepEqual(planOf({ investor_tier: 'plus' }), { family: 'investor', licence_key: 'investor:plus' });
+  assert.equal(planOf({ investor_tier: 'gold' }), null, 'an unknown tier is no plan');
 });
 
 test('the profile colours are the checkout sheet\'s pill colours', () => {

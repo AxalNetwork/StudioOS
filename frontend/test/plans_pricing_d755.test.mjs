@@ -113,17 +113,19 @@ test('planOf reads a product\'s metadata exactly as the Worker\'s planOf does', 
   const table = [
     [{ tier: 'growth' }, { family: 'founder', licence_key: 'founder:growth' }],
     [{ tier: 'studio' }, { family: 'founder', licence_key: 'founder:studio' }],
+    [{ investor_tier: 'plus' }, { family: 'investor', licence_key: 'investor:plus' }],
     [{ investor_tier: 'professional' }, { family: 'investor', licence_key: 'investor:professional' }],
     [{ investor_tier: 'institutional' }, { family: 'investor', licence_key: 'investor:institutional' }],
     [{ plan_group: 'advisor' }, { family: 'advisor', licence_key: 'advisor' }],
     [{ plan_group: 'partner' }, { family: 'partner', licence_key: 'partner' }],
     [{ plan: 'mi_pro' }, { family: 'market_intelligence', licence_key: null }],
-    [{ tier: 'free' }, null], [{}, null], [null, null],
+    [{ tier: 'free' }, null], [{ investor_tier: 'gold' }, null], [{}, null], [null, null],
   ];
   for (const [meta, want] of table) assert.deepEqual(planOf(meta), want, JSON.stringify(meta));
   // The two stay one rule: each Worker branch has its line here.
   const worker = read('cloudflare-worker/src/services/aiCredits.ts');
-  for (const cond of ["metadata.tier === 'growth' || metadata.tier === 'studio'", "metadata.investor_tier === 'professional' || metadata.investor_tier === 'institutional'",
+  // D1334: the investor branch reads the one tier list, `paidInvestorTier` (plus, professional, institutional).
+  for (const cond of ["metadata.tier === 'growth' || metadata.tier === 'studio'", "paidInvestorTier(metadata.investor_tier)",
     "metadata.plan_group === 'advisor' || metadata.plan_group === 'partner'", "metadata.plan === 'mi_pro'"]) assert.ok(worker.includes(cond), cond);
   // With the read out, a card is still named after its family.
   assert.ok(card(CATALOG.part, UNREADABLE).startsWith('Operating Partner'));

@@ -149,7 +149,7 @@ test('D640: audit write failure rolls back the charge and allows retry',async()=
   }finally{f.db.close();}
 });
 
-test('D640: Super Admin lists all ten plans in licence order; D783: members are computed, the admin keeps recorded attribution or environment source',async()=>{
+test('D640: Super Admin lists all eleven plans (D1334 adds investor:plus) in licence order; D783: members are computed, the admin keeps recorded attribution or environment source',async()=>{
   const f=fixture();try {
     f.env.WORKERS_AI_BUDGET_USD_DAY='7';f.env.WORKERS_AI_BUDGET_USD_MONTH='70';
     assert.equal((await request(f,'/caps',2)).status,403);
@@ -158,7 +158,7 @@ test('D640: Super Admin lists all ten plans in licence order; D783: members are 
     const before=await request(f,'/caps',1);assert.equal(before.status,200);
     const plans=(await before.json() as any).plans;
     assert.deepEqual(plans.map((r:any)=>r.licence_key),
-      ['founder:free','founder:growth','founder:studio','investor:free','investor:professional','investor:institutional','advisor','partner','admin','other']);
+      ['founder:free','founder:growth','founder:studio','investor:free','investor:plus','investor:professional','investor:institutional','advisor','partner','admin','other']);
     const admin=plans.length-2;
     // D783: a member licence's allowance is 25% of each member's plans, never typed, so HQ shows no figure to edit.
     assert.ok(plans.every((r:any,i:number)=>i===admin

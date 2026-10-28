@@ -4959,11 +4959,12 @@ function InvestorBillingPanel({ flash, billing }) {
   const TIER_LABEL = {
     free: 'Free',
     // D1050: the names are the plan catalogue's and the prices the plans read's, per the cycle shown.
+    plus: `${TIER_PLANS.plus.label} — ${priceText(prices, TIER_PLANS.plus.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
     professional: `${TIER_PLANS.professional.label} — ${priceText(prices, TIER_PLANS.professional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
     institutional: `${TIER_PLANS.institutional.label} — ${priceText(prices, TIER_PLANS.institutional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
   };
-  const ladder = ['free', 'professional', 'institutional'];
-  const RANK = { free: 0, professional: 1, institutional: 2 };
+  const ladder = ['free', 'plus', 'professional', 'institutional'];
+  const RANK = { free: 0, plus: 1, professional: 2, institutional: 3 };
 
   const introsCap = quotas.intros_per_quarter ?? 3;
   const introsUsed = quotas.intros_used ?? 0;
@@ -5021,7 +5022,7 @@ function InvestorBillingPanel({ flash, billing }) {
               ))}
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {ladder.map((t) => {
               const current = t === tier;
               const upgradable = t !== 'free' && RANK[t] !== RANK[tier];
@@ -5031,6 +5032,7 @@ function InvestorBillingPanel({ flash, billing }) {
                   <div className="font-semibold text-gray-900 dark:text-gray-100">{TIER_LABEL[t] || t}</div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {t === 'free' && '3 intros/qtr · 1 deal room · browse only'}
+                    {t === 'plus' && '10 intros/qtr · 2 deal rooms · research workspace'}
                     {t === 'professional' && '25 intros/qtr · 5 deal rooms · MI exports · calendar'}
                     {t === 'institutional' && '100 intros/qtr · unlimited deal rooms · 4 seats · Carta sync'}
                   </div>
@@ -5068,22 +5070,23 @@ function InvestorBillingPanel({ flash, billing }) {
 // Mirrors the matrix on /pricing?for=investor so investors see the same
 // feature breakdown without leaving the settings page.
 const INVESTOR_ROI_ROWS = [
-  { feature: 'Pipeline browse + AI scoring',     free: '✓', pro: '✓',  inst: '✓' },
-  { feature: 'Warm intros / quarter',            free: '3', pro: '25', inst: '100' },
-  { feature: 'Deal rooms (concurrent)',          free: '1', pro: '5',  inst: 'Unlimited' },
-  { feature: 'Calendar bookings with founders',  free: '—', pro: '✓',  inst: '✓' },
-  { feature: 'Market Intelligence — exports',    free: '—', pro: '✓',  inst: '✓' },
-  { feature: 'Co-invest discovery',              free: '—', pro: '—',  inst: '✓' },
-  { feature: 'Carta sync (write)',               free: '—', pro: '—',  inst: '✓' },
-  { feature: 'LP reporting + peer benchmarks',   free: '—', pro: '—',  inst: '✓' },
-  { feature: 'Founder reference checks',         free: '—', pro: '✓',  inst: '✓' },
-  { feature: 'Colleague seats included',         free: '0', pro: '0',  inst: '4' },
+  { feature: 'Pipeline browse + AI scoring',     free: '✓', plus: '✓', pro: '✓',  inst: '✓' },
+  { feature: 'Warm intros / quarter',            free: '3', plus: '10', pro: '25', inst: '100' },
+  { feature: 'Deal rooms (concurrent)',          free: '1', plus: '2', pro: '5',  inst: 'Unlimited' },
+  { feature: 'Calendar bookings with founders',  free: '—', plus: '—', pro: '✓',  inst: '✓' },
+  { feature: 'Market Intelligence — exports',    free: '—', plus: '—', pro: '✓',  inst: '✓' },
+  { feature: 'Co-invest discovery',              free: '—', plus: '—', pro: '—',  inst: '✓' },
+  { feature: 'Carta sync (write)',               free: '—', plus: '—', pro: '—',  inst: '✓' },
+  { feature: 'LP reporting + peer benchmarks',   free: '—', plus: '—', pro: '—',  inst: '✓' },
+  { feature: 'Founder reference checks',         free: '—', plus: '—', pro: '✓',  inst: '✓' },
+  { feature: 'Colleague seats included',         free: '0', plus: '0', pro: '0',  inst: '4' },
 ];
 
 function InvestorROITable({ currentTier }) {
   const cellCls = (col) => {
     const active =
       (col === 'free' && currentTier === 'free') ||
+      (col === 'plus' && currentTier === 'plus') ||
       (col === 'pro' && currentTier === 'professional') ||
       (col === 'inst' && currentTier === 'institutional');
     return `text-center px-3 py-2 ${active ? 'font-semibold text-gray-900 dark:text-gray-100 bg-violet-50/40 dark:bg-violet-900/10' : 'text-gray-700 dark:text-gray-200'}`;
@@ -5091,6 +5094,7 @@ function InvestorROITable({ currentTier }) {
   const headCls = (col) => {
     const active =
       (col === 'free' && currentTier === 'free') ||
+      (col === 'plus' && currentTier === 'plus') ||
       (col === 'pro' && currentTier === 'professional') ||
       (col === 'inst' && currentTier === 'institutional');
     return `text-center font-medium px-3 py-2 ${active ? 'text-violet-700 dark:text-violet-300' : 'text-gray-600 dark:text-gray-300'}`;
@@ -5102,6 +5106,7 @@ function InvestorROITable({ currentTier }) {
           <tr>
             <th className="text-left font-medium text-gray-600 dark:text-gray-300 px-3 py-2">Capability</th>
             <th className={headCls('free')}>Free</th>
+            <th className={headCls('plus')}>Plus</th>
             <th className={headCls('pro')}>Professional</th>
             <th className={headCls('inst')}>Institutional</th>
           </tr>
@@ -5111,6 +5116,7 @@ function InvestorROITable({ currentTier }) {
             <tr key={r.feature} className="border-t border-gray-100 dark:border-gray-800">
               <td className="px-3 py-2 text-gray-800 dark:text-gray-200">{r.feature}</td>
               <td className={cellCls('free')}>{r.free}</td>
+              <td className={cellCls('plus')}>{r.plus}</td>
               <td className={cellCls('pro')}>{r.pro}</td>
               <td className={cellCls('inst')}>{r.inst}</td>
             </tr>

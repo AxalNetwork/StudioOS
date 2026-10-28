@@ -29,8 +29,9 @@ test('the plan levels are /pricing\'s cards, with the metadata planOf reads; a l
   const lv = (fam, id) => PLAN_FAMILIES.find((f) => f.key === fam).levels.find((l) => l.id === id);
   assert.deepEqual(PLAN_FAMILIES.map((f) => f.key), ['founder', 'investor', 'advisor', 'partner', 'market_intelligence']);
   assert.deepEqual(PLAN_FAMILIES[0].levels.map((l) => [l.name, l.metadata]), [['Validate + Build', { tier: 'growth' }], ['Raise + Grow', { tier: 'studio' }]]);
-  assert.equal(lv('investor', 'plus').metadata, null, 'Investor Plus would be created with metadata no checkout reads');
-  assert.match(lv('investor', 'plus').note, /no checkout sells this level yet/);
+  // D1334 (#3540): Investor Plus is created with the metadata the webhook now reads.
+  assert.deepEqual(lv('investor', 'plus').metadata, { investor_tier: 'plus' });
+  assert.equal(lv('investor', 'plus').note, null);
   assert.deepEqual(lv('investor', 'professional').metadata, { investor_tier: 'professional' });
   assert.deepEqual(lv('investor', 'institutional').metadata, { investor_tier: 'institutional' });
   assert.match(lv('investor', 'institutional').note, /Contact Sales/);
@@ -38,7 +39,7 @@ test('the plan levels are /pricing\'s cards, with the metadata planOf reads; a l
   assert.deepEqual(lv('partner', 'pro').metadata, { plan_group: 'partner' });
   assert.deepEqual(lv('market_intelligence', 'mi_pro').metadata, { plan: 'mi_pro' });
   // Every level that can be created is one the Worker accepts (validateProductMetadata).
-  const ok = (m) => m.plan === 'mi_pro' || ['growth', 'studio'].includes(m.tier) || ['professional', 'institutional'].includes(m.investor_tier) || ['advisor', 'partner'].includes(m.plan_group);
+  const ok = (m) => m.plan === 'mi_pro' || ['growth', 'studio'].includes(m.tier) || ['plus', 'professional', 'institutional'].includes(m.investor_tier) || ['advisor', 'partner'].includes(m.plan_group);
   for (const f of PLAN_FAMILIES) for (const l of f.levels) if (l.metadata) assert.ok(ok(l.metadata), `${l.name}: metadata the Worker refuses`);
 });
 
@@ -217,7 +218,7 @@ test('New product, a plan: two steps, the preview as members will see it, the cl
   } finally { await v.unmount(); s.restore(); }
 });
 
-test('New product: Investor Plus cannot be created; an add-on needs its feature and whole days; ?new=product opens it', async () => {
+test('New product: Investor Plus is created as investor_tier=plus (D1334); an add-on needs its feature and whole days; ?new=product opens it', async () => {
   const s = stub();
   const v = await render('/admin/platform/payments?new=product');
   try {
@@ -225,9 +226,13 @@ test('New product: Investor Plus cannot be created; an add-on needs its feature 
     await v.click('pay-new-continue');
     await v.click('pay-new-family-investor');
     await v.click('pay-new-level-plus');
-    assert.match(v.of('pay-new-level-note'), /\/pricing shows this card, but no checkout sells this level yet\./);
-    await v.change('pay-new-reason', 'Try investor plus');
-    assert.equal(v.props('pay-new-create').disabled, true, 'a level no checkout sells was created');
+    assert.ok(!v.has('pay-new-level-note'), 'Plus is sold since D1334: no "no checkout sells" note');
+    await v.change('pay-new-name', 'Investor Plus');
+    await v.change('pay-new-reason', 'Investor Plus at $50 a month (D1334)');
+    assert.equal(v.props('pay-new-create').disabled, false);
+    assert.match(v.of('pay-new-tech'), /investor_tier=plus/);
+    await v.submit('pay-new-form');
+    assert.deepEqual(s.writes().at(-1).body, { name: 'Investor Plus', kind: 'subscription', metadata: { investor_tier: 'plus' }, reason: 'Investor Plus at $50 a month (D1334)' });
   } finally { await v.unmount(); }
   const w = await render('/admin/platform/payments');
   try {

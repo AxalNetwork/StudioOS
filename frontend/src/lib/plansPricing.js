@@ -35,7 +35,7 @@ const FREE_TITLES = { founder: 'Founder Free', investor: 'Investor Free', other:
 export function planOf(metadata) {
   const m = metadata && typeof metadata === 'object' ? metadata : {};
   if (m.tier === 'growth' || m.tier === 'studio') return { family: 'founder', licence_key: `founder:${m.tier}` };
-  if (m.investor_tier === 'professional' || m.investor_tier === 'institutional') return { family: 'investor', licence_key: `investor:${m.investor_tier}` };
+  if (m.investor_tier === 'plus' || m.investor_tier === 'professional' || m.investor_tier === 'institutional') return { family: 'investor', licence_key: `investor:${m.investor_tier}` };
   if (m.plan_group === 'advisor' || m.plan_group === 'partner') return { family: m.plan_group, licence_key: m.plan_group };
   if (m.plan === 'mi_pro') return { family: 'market_intelligence', licence_key: null };
   return null;
@@ -120,6 +120,7 @@ export function phonePlans(reading) {
 const METADATA_FOR = {
   'founder:growth': { tier: 'growth' },
   'founder:studio': { tier: 'studio' },
+  'investor:plus': { investor_tier: 'plus' },
   'investor:professional': { investor_tier: 'professional' },
   'investor:institutional': { investor_tier: 'institutional' },
   advisor: { plan_group: 'advisor' },

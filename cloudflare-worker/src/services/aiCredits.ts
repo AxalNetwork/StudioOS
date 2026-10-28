@@ -13,6 +13,7 @@
  * value, which is Stripe's integer cents.
  */
 import type { Env } from '../types';
+import { paidInvestorTier } from './investorTiers';
 import { AI_USD_SCALE, planView } from './aiBudget';
 import type { PricedCart } from './orders';
 
@@ -594,7 +595,7 @@ import type { PlanFamily } from './planCatalogue';
 /** A subscription product's family and licence key, from its metadata (§11). Null when the metadata names no plan: no card. */
 export function planOf(metadata: Record<string, string>): { family: PlanFamily; licence_key: string | null } | null {
   if (metadata.tier === 'growth' || metadata.tier === 'studio') return { family: 'founder', licence_key: `founder:${metadata.tier}` };
-  if (metadata.investor_tier === 'professional' || metadata.investor_tier === 'institutional') return { family: 'investor', licence_key: `investor:${metadata.investor_tier}` };
+  if (paidInvestorTier(metadata.investor_tier)) return { family: 'investor', licence_key: `investor:${metadata.investor_tier}` };
   if (metadata.plan_group === 'advisor' || metadata.plan_group === 'partner') return { family: metadata.plan_group, licence_key: metadata.plan_group };
   if (metadata.plan === 'mi_pro') return { family: 'market_intelligence', licence_key: null };
   return null;
@@ -650,10 +651,6 @@ export async function plansAndPacks(env: Env) {
     ['partner', 'partner:free'], ['other', 'other'], ['lp', 'lp_access']] as const)
     plans.push({ family, licence_key: key, product_id: null, plan_name: null, free: true, prices: [], allowance: none,
       monthly: null, yearly: null, yearly_saving_percent: null, ...storageFields(key), catalogue: catalogueFields(planByKey(key)) });
-  // Storage is known; Checkout does not sell Investor Plus yet (D786/#2451).
-  plans.push({ family: 'investor', licence_key: 'investor:plus', product_id: null, plan_name: null, free: false,
-    prices: [], allowance: null, monthly: null, yearly: null, yearly_saving_percent: null,
-    ...storageFields('investor:plus'), catalogue: catalogueFields(planByKey('investor:plus')) });
   for (const row of rows) {
     let metadata: Record<string, string>, prices: any[];
     try { metadata = JSON.parse(row.metadata_json); prices = JSON.parse(row.prices_json); } catch { continue; }
@@ -669,5 +666,11 @@ export async function plansAndPacks(env: Env) {
       ...intervalPrices(priced),
       ...storageFields(planByLicenceKey(plan.licence_key)?.key), catalogue: catalogueFields(planByLicenceKey(plan.licence_key)) });
   }
+  // D1334: Investor Plus is sold once its Stripe product is mirrored. Until then
+  // its card still reads, with no price, so /pricing shows it as not on sale.
+  if (!plans.some((p) => p.licence_key === 'investor:plus'))
+    plans.push({ family: 'investor', licence_key: 'investor:plus', product_id: null, plan_name: null, free: false,
+      prices: [], allowance: null, monthly: null, yearly: null, yearly_saving_percent: null,
+      ...storageFields('investor:plus'), catalogue: catalogueFields(planByKey('investor:plus')) });
   return { plans, packs: (await packsOnSale(env)).packs, covers: PLAN_COVERS, resets: PLAN_RESETS, catalogue: publicCatalogue() };
 }

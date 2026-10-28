@@ -163,8 +163,9 @@ test('provider and mirror failures remain refusals, never successful empty lists
 test('checkout-key persistence failure is a 503 sentence and writes no success audit',async()=>{
   const f=world();try{f.env.RATE_LIMITS.put=async()=>{throw new Error('Synthetic KV failure');};const response=await call(f,withReason(writes[6]));assert.equal(response.status,503);assert.equal((await response.json() as any).error,'stripe_config_write_failed');assert.equal(audits(f).length,0);}finally{f.db.close();}
 });
-test('advisor and partner metadata agree with planOf; unsupported groups and Investor Plus remain refused',()=>{
+test('advisor and partner metadata agree with planOf; unsupported groups and unknown investor tiers remain refused; Investor Plus is accepted (D1334)',()=>{
   for(const group of ['advisor','partner']){const m={plan_group:group};assert.deepEqual(validateProductMetadata('subscription',m),[]);assert.equal(planOf(m)?.family,group);}
-  for(const m of [{plan_group:'investor'},{plan_group:'Advisor'},{plan_group:'founder'},{plan_group:''},{investor_tier:'plus'},{}])assert.equal(validateProductMetadata('subscription',m).length,1);
+  for(const m of [{plan_group:'investor'},{plan_group:'Advisor'},{plan_group:'founder'},{plan_group:''},{investor_tier:'gold'},{}])assert.equal(validateProductMetadata('subscription',m).length,1);
+  assert.deepEqual(validateProductMetadata('subscription',{investor_tier:'plus'}),[]);assert.equal(planOf({investor_tier:'plus'})?.licence_key,'investor:plus');
   assert.equal(paymentChangeReason({reason:' x '}),'x');assert.equal(paymentChangeReason({reason:'x'.repeat(500)})?.length,500);
 });

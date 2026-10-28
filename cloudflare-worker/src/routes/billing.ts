@@ -9,6 +9,7 @@ import {
   ensureInvestorPaywallSchema,
   effectiveInvestorTier,
   INVESTOR_QUOTAS,
+  paidInvestorTier,
   type InvestorTier,
   type InvestorUser,
 } from '../middleware/requireInvestorTier';
@@ -512,6 +513,9 @@ billing.all('/tier/dev-upgrade', async (c) => {
 // product in the catalog carries `metadata.investor_tier === cfg.tier`; the
 // interval selects the matching recurring price on that product.
 const INVESTOR_PLAN_TO_PRICE: Record<string, { tier: InvestorTier; interval: 'month' | 'year' }> = {
+  // D1334: Investor Plus, between Basic and Pro.
+  investor_plus_monthly: { tier: 'plus',          interval: 'month' },
+  investor_plus_yearly:  { tier: 'plus',          interval: 'year'  },
   investor_pro_monthly:  { tier: 'professional',  interval: 'month' },
   investor_pro_yearly:   { tier: 'professional',  interval: 'year'  },
   investor_inst_monthly: { tier: 'institutional', interval: 'month' },
@@ -523,9 +527,9 @@ function isValidInvestorPlan(p: unknown): p is keyof typeof INVESTOR_PLAN_TO_PRI
 }
 
 /** D816: the plan key for a tier at an interval, so the plan Stripe records names what was bought. */
-function investorPlanFor(tier: InvestorTier, interval: 'month' | 'year'): keyof typeof INVESTOR_PLAN_TO_PRICE {
+function investorPlanFor(tier: InvestorTier, interval: 'month' | 'year'): keyof typeof INVESTOR_PLAN_TO_PRICE | null {
   const key = Object.entries(INVESTOR_PLAN_TO_PRICE).find(([, v]) => v.tier === tier && v.interval === interval)?.[0];
-  return key as keyof typeof INVESTOR_PLAN_TO_PRICE;
+  return key ?? null;
 }
 
 billing.post('/investor/checkout', async (c) => {
@@ -545,6 +549,8 @@ billing.post('/investor/checkout', async (c) => {
   const interval = body.interval === undefined ? INVESTOR_PLAN_TO_PRICE[body.plan].interval : checkoutInterval(body.interval);
   if (!interval) return c.json({ error: 'invalid_interval', allowed: ['month', 'year'] }, 400);
   const plan = investorPlanFor(INVESTOR_PLAN_TO_PRICE[body.plan].tier, interval);
+  // D1334: a tier with no plan key at this interval is refused, never priced as another tier.
+  if (!plan) return c.json({ error: 'invalid_interval', allowed: ['month', 'year'] }, 400);
   const cfg = INVESTOR_PLAN_TO_PRICE[plan];
   const stripeKey = c.env.STRIPE_SECRET_KEY;
   // Resolve the SKU from the catalog instead of STRIPE_PRICE_INVESTOR_*.
@@ -1054,7 +1060,9 @@ async function resolveScopePrice(
     if (!price) continue;
     if (price.active === false || price.type !== 'recurring') return null;
     if (scope === 'investor') {
-      return p.metadata.investor_tier ? { investorTier: p.metadata.investor_tier } : null;
+      // D1334: only a tier this code knows; an unknown one is refused, never mapped.
+      const investorTier = paidInvestorTier(p.metadata.investor_tier);
+      return investorTier ? { investorTier } : null;
     }
     return p.metadata.tier ? { tier: p.metadata.tier } : null;
   }
@@ -1662,8 +1670,13 @@ async function handleStripeEvent(
       const subscription = obj.subscription as string | null;
       if (!userId) return;
       if (isInvestor) {
-        const investorTier: InvestorTier = (meta.investor_tier === 'institutional')
-          ? 'institutional' : 'professional';
+        // D1334: the tier the checkout named, or nothing. An unknown tier never
+        // becomes Professional; the subscription events re-read it.
+        const investorTier = paidInvestorTier(meta.investor_tier);
+        if (!investorTier) {
+          console.warn(`[billing] investor checkout ${String(obj.id ?? '')} named no known investor_tier; granted nothing`);
+          return;
+        }
         const dealroomMax = INVESTOR_QUOTAS[investorTier].dealroom_max;
         await env.DB.prepare(
           `UPDATE users SET investor_tier = ?,
@@ -1772,11 +1785,7 @@ async function handleStripeEvent(
       // as inert as it was, so its own end drops nothing.
       const takeOver = fromCatalog ? 0 : 1;
       // Investor mirror — only touches users whose investor_stripe_customer_id matches.
-      const invTier: InvestorTier | null = isInvestor && meta.investor_tier === 'institutional'
-        ? 'institutional'
-        : isInvestor && meta.investor_tier === 'professional'
-          ? 'professional'
-          : null;
+      const invTier: InvestorTier | null = isInvestor ? paidInvestorTier(meta.investor_tier) : null;
       if (invTier) {
         const granted = await env.DB.prepare(
           `UPDATE users SET investor_tier = ?,

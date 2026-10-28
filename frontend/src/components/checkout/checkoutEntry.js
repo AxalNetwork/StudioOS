@@ -56,7 +56,8 @@ export const familyOfKey = (key) => (typeof key === 'string' && /^(founder|inves
  */
 const LADDER = Object.freeze({
   founder: { free: 'founder:growth', growth: 'founder:studio' },
-  investor: { free: 'investor:professional' },
+  // D1334: Investor Plus sits between Basic and Pro.
+  investor: { free: 'investor:plus', plus: 'investor:professional' },
   advisor: { free: 'advisor:pro' },
   partner: { free: 'partner:pro' },
 });
@@ -90,11 +91,11 @@ export function heldOfStatus(role, status) {
   return null;
 }
 
-/** A tier code a 402 or a lock names (`growth`, `studio`, `professional`, `institutional`) as its catalogue key, or null. */
+/** A tier code a 402 or a lock names (`growth`, `studio`, `plus`, `professional`, `institutional`) as its catalogue key, or null. */
 export function planKeyOfTier(tier) {
   const t = String(tier || '').toLowerCase().replace(/^investor_/, '');
   if (t === 'growth' || t === 'studio') return `founder:${t}`;
-  if (t === 'professional' || t === 'institutional') return `investor:${t}`;
+  if (t === 'plus' || t === 'professional' || t === 'institutional') return `investor:${t}`;
   return null;
 }
 
@@ -175,7 +176,7 @@ const longDay = (iso) => {
 export function planKeyOfProduct(p) {
   const m = p?.metadata || {};
   if (m.tier === 'growth' || m.tier === 'studio') return `founder:${m.tier}`;
-  if (m.investor_tier === 'professional' || m.investor_tier === 'institutional') return `investor:${m.investor_tier}`;
+  if (m.investor_tier === 'plus' || m.investor_tier === 'professional' || m.investor_tier === 'institutional') return `investor:${m.investor_tier}`;
   return null;
 }
 

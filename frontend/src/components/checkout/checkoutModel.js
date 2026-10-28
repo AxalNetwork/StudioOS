@@ -69,8 +69,8 @@ export function intervalsOf(plan) {
  *   - `staff`     an admin account holds no plan (PAYX16);
  *   - `explorer`  no profile yet: choose one first (PAYX15);
  *   - `other`     a plan for another profile (PAYX19);
- *   - `notsold`   the catalogue does not sell this plan: Investor Plus is not
- *                 offered yet, Institutional is priced by sales (D1054, PAYX13);
+ *   - `notsold`   the catalogue does not sell this plan: Institutional is
+ *                 priced by sales (D1054, PAYX13);
  *   - `unsellable` no monthly or yearly price is on sale (PAYX18);
  *   - `change`    the member already pays for a plan in this family: since
  *                 D1053 the change is quoted and made here, through D1051's
@@ -351,9 +351,7 @@ export const savedCardsApply = (plan) => plan?.family !== 'investor';
  * with the catalogue's own reason. A plan priced by sales offers Contact sales.
  */
 export function notSoldView(plan) {
-  const key = planKeyOf(plan);
   const reason = typeof plan?.catalogue?.sellable_reason === 'string' ? plan.catalogue.sellable_reason : null;
-  if (key === 'investor:plus') return { title: 'Not offered yet', line: reason || 'This plan is not sold yet.', contact: false };
   if (reason && /sales team/i.test(reason)) return { title: 'Contact sales', line: 'This plan is priced by our sales team for each firm. Nothing is bought here.', contact: true };
   return { title: 'Not sold here', line: reason || 'This plan is not sold here.', contact: false };
 }
