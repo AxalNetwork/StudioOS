@@ -133,7 +133,7 @@ function fakes({ items = [S(9, 'draft'), S(7, 'transcribed')], detail = {}, list
 const WRITER_READ = {
   cycle: 'validate', module: 'customer-research', id: '41', title: 'Dana Ruiz', sub: 'Ops lead at Acme · 7 Oct · 34 min',
   pills: [{ text: 'Strong fit', tone: 'ok' }, 'Transcribed'],
-  facts: [{ label: 'Captured', value: 'Recorded in StudioOS' }, { label: 'Consent', value: 'Said yes out loud' }, { label: 'ICP fit', value: 'Strong · Segment A' }, { label: 'Need-to-have', value: null, reason: 'No pain is judged yet.' }],
+  facts: [{ label: 'Captured', value: 'Recorded in Axal VC' }, { label: 'Consent', value: 'Said yes out loud' }, { label: 'ICP fit', value: 'Strong · Segment A' }, { label: 'Need-to-have', value: null, reason: 'No pain is judged yet.' }],
   main: [{ key: 'transcript', title: 'Transcript', gate: 'write', rows: [] }, { key: 'placements', title: 'Eadwyn’s placements', gate: 'write', rows: [] }],
   side: [{ key: 'fed', title: 'What it fed', gate: 'read', rows: [{ a: 'Manual reconciliation', b: '1 supports · 0 contradicts' }] }, { key: 'cost', title: 'Cost', gate: 'write', rows: [] }],
   actions: [
@@ -188,7 +188,7 @@ test('the page: the interview from the Worker, the newest reviewable session, it
   try {
     // D697: the header is the cycle's (CycleRoute); the record draws the read's pills and facts.
     assert.ok(m.text().includes('Strong fit'));
-    assert.ok(m.text().includes('Recorded in StudioOS'));
+    assert.ok(m.text().includes('Recorded in Axal VC'));
     assert.deepEqual(f.calls.filter((c) => c[0] === 'get'), [['get', 7]], 'opened on the transcribed one, not the draft');
     assert.ok(f.calls.some((c) => c[0] === 'placements' && c[1] === 7), 'the findings are D658\'s placements');
     assert.ok(m.by('placement-1'), 'a proposed finding is drawn');
