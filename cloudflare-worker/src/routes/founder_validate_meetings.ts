@@ -14,7 +14,8 @@ import { makeMeetLink } from '../services/calendar/itemRead';
  *   GET    /interviews/:id/meetings/:refUid/recording   a Meet call's Drive recordings, read live (D871)
  *   GET    /meetings/bot                                D1346: whether Eadwyn AI can join this member's calls, and its price
  *   POST   /meetings/instant                            D1346: { provider, duration_min?, topic? } a meeting starting now on the
- *                                                       member's own Zoom or Google account; the join link only
+ *                                                       member's own Zoom or Google account; the join link only. D1359:
+ *                                                       `teams` too, on the member's Microsoft calendar connection
  *   GET    /meetings/capabilities                       D1358: per provider, what Axal can really do here for this
  *                                                       member (create, bot, realtime audio, transcript, recording)
  *
@@ -60,6 +61,7 @@ import {
 import { readCappedBody } from '../services/channels/events';
 import * as zoom from '../services/channels/zoom';
 import * as meet from '../services/channels/googleMeet';
+import { TEAMS_ERRORS, TeamsMeetingError, createTeamsMeeting, microsoftConnected, teamsCreateAvailable } from '../services/channels/teamsMeet';
 import { googleOAuthAvailable } from '../services/calendar';
 import { CONSENT_METHODS } from '../services/interviewSessions';
 import { callsOf } from '../services/channels/callsList';
@@ -169,6 +171,8 @@ async function providerCapabilities(env: Env, user: User) {
   const zoomConn = zoomOn ? await zoom.zoomConnection(env, user.id) : null;
   const google = meetOn ? await meet.googleConnection(env, user.id) : null;
   const meetTranscripts = meet.transcriptAccess(google);
+  const teamsOn = teamsCreateAvailable(env);
+  const microsoft = teamsOn && await microsoftConnected(env, user.id);
   const modes = (botOn: boolean, importOn: boolean): CaptureMode[] =>
     [...(botOn ? ['bot' as const] : []), ...(importOn ? ['post_meeting_import' as const] : [])];
   const zoomReason = !zoomOn ? UNAVAILABLE.zoom
@@ -216,17 +220,23 @@ async function providerCapabilities(env: Env, user: User) {
       },
       teams: {
         label: 'Microsoft Teams',
-        available: bot.platforms.teams,
-        connected: false,
-        can_create_meeting: false,
+        available: bot.platforms.teams || teamsOn,
+        // D1359: the Microsoft calendar connection creates Teams meetings (work or school accounts).
+        connected: microsoft,
+        can_create_meeting: microsoft,
         can_join_as_bot: bot.platforms.teams,
         can_capture_realtime_audio: bot.platforms.teams,
         can_retrieve_transcript: false,
         can_retrieve_recording: false,
         capture_modes: modes(bot.platforms.teams, false),
         reason: bot.platforms.teams ? null
-          : 'Axal has no Microsoft Teams connection yet, and Eadwyn AI is not available for Teams here. Upload the recording or paste the transcript after the call.',
-        notes: ['A Microsoft Graph connection for Teams transcripts is not built.'],
+          : teamsOn
+            ? 'Eadwyn AI is not available for Teams here, and Axal cannot import a Teams transcript yet. Upload the recording or paste the transcript after the call.'
+            : 'Axal has no Microsoft Teams connection yet, and Eadwyn AI is not available for Teams here. Upload the recording or paste the transcript after the call.',
+        notes: [
+          'Creating a Teams meeting uses your Microsoft calendar connection and needs a work or school Microsoft 365 account.',
+          'Importing a Teams transcript after the call is not built.',
+        ],
       },
     },
   };
@@ -252,8 +262,8 @@ meetings.post('/meetings/instant', async (c) => {
   const user = (await requireAuth(c)) as User;
   const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
   const provider = String(body?.provider ?? '') as MeetingProvider;
-  if (!(MEETING_PROVIDERS as readonly string[]).includes(provider)) {
-    return refuse(c, 400, { code: 'provider_invalid', message: 'Choose Zoom or Google Meet.' });
+  if (!(MEETING_PROVIDERS as readonly string[]).includes(provider) && provider !== ('teams' as string)) {
+    return refuse(c, 400, { code: 'provider_invalid', message: 'Choose Zoom, Google Meet or Microsoft Teams.' });
   }
   const duration = body?.duration_min == null ? 30 : Number(body.duration_min);
   if (!Number.isInteger(duration) || duration < MIN_DURATION || duration > MAX_DURATION) {
@@ -261,6 +271,19 @@ meetings.post('/meetings/instant', async (c) => {
   }
   // Neutral by default: everyone the member invites sees the topic.
   const topic = String(body?.topic ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TOPIC) || 'Customer interview';
+  // D1359: Teams on the member's Microsoft calendar connection (work or school accounts).
+  if (provider === ('teams' as string)) {
+    if (!teamsCreateAvailable(c.env)) {
+      return refuse(c, 503, { code: 'provider_unavailable', message: 'Microsoft Teams meetings cannot be created on Axal yet. Create it in Microsoft Teams and paste the link.' });
+    }
+    try {
+      const made = await createTeamsMeeting(c.env, user.id, { topic, durationMin: duration });
+      return c.json({ provider: 'teams', join_url: made.joinUrl }, 201);
+    } catch (x) {
+      if (x instanceof TeamsMeetingError) return refuse(c, x.status, { code: x.code, message: TEAMS_ERRORS[x.code] });
+      throw x;
+    }
+  }
   if (!available(c.env, provider)) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE[provider] });
   if (provider === 'zoom') {
     const conn = await zoom.zoomConnection(c.env, user.id);

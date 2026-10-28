@@ -95,7 +95,7 @@ test('the bridge draws Trust Center\'s own number and verdict, not a third formu
 });
 
 test('the completeness banner says when it could not read, instead of drawing what "complete" draws', () => {
-  const b = slice(CODE, 'function ProfileCompletionBanner(', 'function ProfileTabs(');
+  const b = slice(CODE, 'function ProfileCompletionBanner(', 'function ProfileEditors(');
   assert.match(b, /setFailed\(e\?\.message \|\| ''\)/);
   assert.match(b, /if \(failed !== null && !row\)/);
   assert.match(b, /<Unreadable what="Your profile completeness"/);

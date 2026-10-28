@@ -74,7 +74,7 @@ const checks:any = {
     assert.deepEqual(m.server.registeredTools().map((t:any)=>[t.name,t.requiredScope]).sort(),[
       ['assign_chat_to_interview','validate:write'],['extract_action_items','validate:write'],['get_build_progress','build:read'],['get_interview_guide','validate:read'],['get_meeting_transcript','validate:read'],
       ['get_session_insights','validate:read'],['get_validate_context','validate:read'],['list_channel_chats','validate:read'],['list_companies','validate:read'],
-      ['list_connections','connectors:read'],['list_meetings','validate:read'],['propose_placements','validate:write'],['structure_with_axalvc','validate:write'],
+      ['list_connections','connectors:read'],['list_meetings','validate:read'],['mail_context','mail:read'],['mail_draft','mail:write'],['propose_placements','validate:write'],['structure_with_axalvc','validate:write'],
       ['submit_interview','validate:write'],['summarize_meeting','validate:write']]);
   },
   async scope(m:any) {

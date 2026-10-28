@@ -231,10 +231,14 @@ export const hasMeetingLink = (mode, provider) => mode === 'video' && ['zoom', '
  * says "Connect … first" in its own words.
  */
 export const TEAMS_PASTE = 'Create the meeting in Microsoft Teams and paste its link here. Axal cannot create a Teams meeting yet.';
-export const CREATE_CONNECT = Object.freeze({ zoom: 'Connect Zoom to create the meeting here', google_meet: 'Connect Google to create the meeting here' });
+/** D1359: Teams is created on the member's Microsoft calendar connection, which needs a work or school account. */
+export const TEAMS_CREATE_NOTE = 'Uses your Microsoft calendar connection, and needs a work or school Microsoft 365 account. A personal account: create it in Teams and paste the link.';
+export const CREATE_CONNECT = Object.freeze({ zoom: 'Connect Zoom to create the meeting here', google_meet: 'Connect Google to create the meeting here', teams: 'Connect Microsoft to create the meeting here' });
 export function createMeetingOffer(mode, provider, channels) {
   if (mode !== 'video') return null;
-  if (provider === 'teams') return { kind: 'paste', sentence: TEAMS_PASTE };
+  // D1359: Teams' connection is not in the channels read, so the Worker decides
+  // (`connected: null`) and refuses "Connect Microsoft … first" in its own words.
+  if (provider === 'teams') return { kind: 'create', connected: null, connectHref: null, connectLabel: CREATE_CONNECT.teams, note: TEAMS_CREATE_NOTE };
   if (provider !== 'zoom' && provider !== 'google_meet') return null;
   const label = provider === 'zoom' ? 'Zoom' : 'Google Meet';
   if (availableOf(channels, provider) === false) return { kind: 'unavailable', sentence: `${label} meetings cannot be created on Axal yet. Create it in ${label} and paste the link.` };

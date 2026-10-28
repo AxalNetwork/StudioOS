@@ -40,7 +40,8 @@ export const OAUTH_PATHS = { authorize: '/api/oauth/authorize', token: '/api/oau
  * (or, from #2464 on, a key's own scopes). Each scope's wording on the
  * consent page is `SCOPE_COPY` in `routes/mcp_consent.ts`.
  */
-export const SCOPES = ['validate:read', 'validate:write', 'build:read', 'raise:read', 'connectors:read'] as const;
+// D1343 (#3551): `mail:read` reads an email's context; `mail:write` drafts one. No scope sends.
+export const SCOPES = ['validate:read', 'validate:write', 'build:read', 'raise:read', 'connectors:read', 'mail:read', 'mail:write'] as const;
 export const CONSENT_TTL_SECONDS = 600;
 export const CLIENT_REGISTRATION_TTL_SECONDS = 7 * 86_400;
 export const PUBLIC_OAUTH_LIMITS = { register: 10, authorize: 30 } as const;

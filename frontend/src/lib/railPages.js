@@ -70,6 +70,8 @@ const NETWORK = (P) => [
  */
 const SHARED = (P) => [
   off('/messages', key(P, 'Messages')),
+  // D1344 (#3552): Email (its settings, `/email/settings`, take the same key by prefix).
+  off('/email', key(P, 'Email')),
   off('/help', key(P, 'Help')),
   // D786 (#2211): /pricing, with the catalogue at /pricing/products under it.
   off('/pricing', key(P, 'Plans and pricing')),

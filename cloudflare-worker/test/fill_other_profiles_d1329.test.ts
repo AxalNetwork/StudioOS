@@ -239,3 +239,17 @@ test('a reader never undoes: an IC memo\'s voter and an admin read the fill and 
   assert.equal((f.db.prepare('SELECT memo FROM ic_decisions WHERE id = 501').get() as any).memo, 'Fits the seed thesis on site software.');
   assert.equal((await f.call(41, 'POST', `/api/fills/${id}/undo`)).status, 200);
 });
+
+test('AF21: H20\'s waiting draft of the summary is offered in the publication\'s sheet; another admin\'s or a decided one is not', async () => {
+  const f = fixture();
+  f.db.exec(`INSERT INTO users(id,name,email,role,is_active) VALUES (53,'Admin Two','h2@example.test','admin',1);
+    INSERT INTO ai_rail_proposals(uid,user_id,rail_page,rail_option,record_ref,kind,payload_json,status) VALUES
+      ('h20-1',51,'super admin · content · publications','draft:publication-summary','publication:951','proposal','{"text":"Three companies incorporated in Q3."}','proposed'),
+      ('h20-2',51,'super admin · content · publications','draft:publication-summary','publication:952','proposal','{"text":"Another publication."}','proposed'),
+      ('h20-3',53,'super admin · content · publications','draft:publication-summary','publication:951','proposal','{"text":"Not mine."}','proposed');`);
+  const r = await f.sheet(51, { page: PUBLICATIONS, form: 'publication', record: 951 });
+  assert.equal(r.status, 200);
+  assert.deepEqual(byField(r.body).summary_text.waiting.map((w: any) => [w.source, w.value, w.ref]), [['eadwyn', 'Three companies incorporated in Q3.', 'h20-1']]);
+  f.db.exec("UPDATE ai_rail_proposals SET status = 'discarded' WHERE uid = 'h20-1'");
+  assert.deepEqual(byField((await f.sheet(51, { page: PUBLICATIONS, form: 'publication', record: 951 })).body).summary_text.waiting, [], 'a discarded draft is not offered');
+});

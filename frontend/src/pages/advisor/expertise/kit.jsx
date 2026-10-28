@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, Pill, Skeleton } from '../../../ui';
 import ZoneActions from '../../../workspaces/ZoneActions';
+import { FillLabel } from '../../../ui/useScopedFill.jsx';
 
 /**
  * Shared pieces for the five Expertise zones.
@@ -161,7 +162,24 @@ export function StatedLimit({ title, children }) {
   );
 }
 
-export function Field({ label, hint, children }) {
+/**
+ * D1329 (#3490, AF18): `fill` (`{ ctl, name, value }`, from `useScopedFill`)
+ * draws the field's Fill controls beside its label: the trigger, its mark,
+ * "Not saved". The controls sit outside the `<label>`, so a press on the
+ * trigger never lands in the box.
+ */
+export function Field({ label, hint, fill = null, children }) {
+  if (fill?.ctl) {
+    return (
+      <div className="block">
+        <FillLabel fill={fill.ctl} name={fill.name} label={label} value={fill.value}>
+          <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint" aria-hidden="true">{label}</span>
+        </FillLabel>
+        <label className="block"><span className="sr-only">{label}</span>{children}</label>
+        {hint && <span className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span>}
+      </div>
+    );
+  }
   return (
     <label className="block">
       <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</span>

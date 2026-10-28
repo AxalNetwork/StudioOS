@@ -200,7 +200,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'routes/deck_images.ts': ['AI_SURFACE.raisePitch'], // D903: the card and background images
-  'routes/mail_drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions
+  'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal; D1114: Story's Ask Eadwyn; D913: Answer it
   'routes/build_plan.ts': ['AI_SURFACE.buildPlan'], // D1071: Eadwyn words the build plan

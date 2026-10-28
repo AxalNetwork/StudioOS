@@ -115,6 +115,12 @@ regexes = [
   # tokens against an in-memory database. Not a credential and not the
   # Worker's JWT_SECRET; pinned to the exact literal so nothing looser rides on it.
   '''\blovable-launch-test-secret-0123456789-abcdef\b''',
+  # D1343 (#3551): the synthetic signing seed in
+  # cloudflare-worker/test/mail_mcp_tools_d1343.test.ts, repeated to length
+  # for that test's own in-memory JWTs. Not a credential and not the
+  # Worker's JWT_SECRET. The commit that added it stays in this pull
+  # request's scan range, so the literal is pinned here rather than rewritten.
+  '''\bsynthetic-d1343\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]
