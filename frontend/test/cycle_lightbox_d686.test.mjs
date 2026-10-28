@@ -245,7 +245,11 @@ test('one mechanism: each cycle names its path and Mount; opening pushes state.u
   for (const [cycle, path, mount] of [['validate', 'record', 'ValidateMount'], ['build', 'connect', 'BuildMount'], ['raise', 'call', 'RaiseMount'], ['grow', 'update', 'GrowMount']]) {
     const def = route.slice(route.indexOf(`\n  ${cycle}: {`), route.indexOf('\n  },', route.indexOf(`\n  ${cycle}: {`)));
     assert.match(def, new RegExp(`path: '${path}',\\s*Mount: ${mount},`), cycle);
-    assert.match(def, new RegExp(`href: \`/${cycle}/${path}\\$\\{q\\}\`, onOpen: open`), `${cycle} keeps the venture and opens in place`);
+    if (cycle === 'raise') {
+      assert.match(def, /action: \(q\) => \(\{ label: 'Build your deck', href: `\/raise\/pitch\$\{q\}` \}\)/, 'Raise opens Pitch Studio with the venture, without the call lightbox handler');
+    } else {
+      assert.match(def, new RegExp(`href: \`/${cycle}/${path}\\$\\{q\\}\`, onOpen: open`), `${cycle} keeps the venture and opens in place`);
+    }
   }
   assert.doesNotMatch(route, /href: '\/round-calls'/, 'Raise no longer drops the venture');
   assert.doesNotMatch(route, /sheetOpen|def\.sheet|onClick: open/);

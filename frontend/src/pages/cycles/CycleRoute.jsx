@@ -205,12 +205,10 @@ const CYCLE_DEFS = {
    */
   raise: {
     modules: MODULES.raise,
-    // D686: Call for Capital opens at /raise/call over the page, the venture
-    // kept; behind ROUND_CALLS_ENABLED, its lightbox says Coming soon in its
-    // own words (the tall Lightbox + ActionSheet frame, #1598).
+    // Keep the round-call lightbox route; the primary action opens Pitch Studio.
     path: 'call',
     Mount: RaiseMount,
-    action: (q, open) => ({ label: 'Call for Capital', href: `/raise/call${q}`, onOpen: open }),
+    action: (q) => ({ label: 'Build your deck', href: `/raise/pitch${q}` }),
     // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
     // D752 (#1989): then the founder's "Match to my Mercury" for committed prospects.
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
