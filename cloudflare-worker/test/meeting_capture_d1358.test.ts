@@ -121,15 +121,6 @@ async function request(f: World, method: string, path: string, body?: unknown) {
   }), f.env);
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
-function recording(f: World, id = INTERVIEW) {
-  const uid = crypto.randomUUID();
-  const row = f.db.prepare(`INSERT INTO interview_sessions
-    (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
-     started_at, submitted_via)
-    VALUES (?, ?, ?, ?, 'video', 'recording', 'given', 'verbal', datetime('now'), datetime('now'), NULL) RETURNING id`)
-    .get(uid, id, id === INTERVIEW ? 7 : 8, ME);
-  return Number(row.id);
-}
 async function zoomConnected(f: World, userId = ME) {
   const uid = `zoom-test-${userId}`;
   const encrypted = await encryptCredentials(f.env, uid, {
