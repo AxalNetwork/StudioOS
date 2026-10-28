@@ -33,11 +33,18 @@ export const notFound = () => new MailError(404, 'not_found', NOT_FOUND);
 
 export type PackItem = { ref: string; kind: string; label: string; as_of: string | null; link: string; selected: boolean; text: string };
 // `email_ready` (D1342): a Network match's Email opens only when both members have shared an address.
-export type Person = { ref: string; kind: string; relationship: Relationship; name: string; project_id: number | null; email_ready?: boolean };
+// `address` (D1344): the person's address as their own module row records it; null otherwise. A Network match's is
+// never here: only `GET /api/mail/shares` serves another member's address (D1342), and the composer reads it there.
+export type Person = { ref: string; kind: string; relationship: Relationship; name: string; project_id: number | null; email_ready?: boolean; address?: string | null };
 export type Pack = { person: Person; intents: readonly Intent[]; items: PackItem[] };
 
 const REF = /^([a-z_]{3,20}):([a-z0-9][a-z0-9_-]{0,63})$/;
 const NUMERIC = /^[1-9][0-9]{0,9}$/;
+/** An address as the module row stores it, when it looks like one; never guessed. */
+const addressOf = (v: unknown): string | null => {
+  const a = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a) && a.length <= 320 ? a : null;
+};
 const day = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
 
 export function parseRef(raw: unknown): { kind: string; id: string } | null {
@@ -45,7 +52,7 @@ export function parseRef(raw: unknown): { kind: string; id: string } | null {
   return m ? { kind: m[1], id: m[2] } : null;
 }
 
-type Found = { project_id: number | null; updated_at: string | null; pains_json?: string | null; stage?: string | null; invited_at?: string | null; booked_at?: string | null; done_at?: string | null };
+type Found = { project_id: number | null; updated_at: string | null; address?: string | null; pains_json?: string | null; stage?: string | null; invited_at?: string | null; booked_at?: string | null; done_at?: string | null };
 
 /** An interview's pains and its recruiting row (its own stage), from the row the record's gate already admitted. */
 function interviewLines(row: Found): string[] {
@@ -65,27 +72,27 @@ function interviewLines(row: Found): string[] {
 const MODULES: Record<string, { cycle: string; slug: string; module: string; sql: string; id: (id: string) => string | number | null; link: (id: string, p: number) => string; skip?: string[]; lines?: (row: Found) => string[] }> = {
   interviewee: {
     cycle: 'validate', slug: 'customer-research', module: 'Customer research',
-    sql: 'SELECT project_id, updated_at, pains_json, stage, invited_at, booked_at, done_at FROM discovery_interviews WHERE id = ?',
+    sql: 'SELECT project_id, updated_at, pains_json, stage, invited_at, booked_at, done_at, NULL AS address FROM discovery_interviews WHERE id = ?',
     skip: ['transcript', 'cost', 'session'], lines: interviewLines,
     id: (id) => (NUMERIC.test(id) ? Number(id) : null),
     link: (id, p) => `/validate/customer-research/${id}?project=${p}`,
   },
   prospect: {
     cycle: 'raise', slug: 'capital-relationships', module: 'Capital relationships',
-    sql: 'SELECT project_id, updated_at FROM raise_prospects WHERE id = ?',
+    sql: 'SELECT project_id, updated_at, email AS address FROM raise_prospects WHERE id = ?',
     id: (id) => (NUMERIC.test(id) ? Number(id) : null),
     link: (id, p) => `/raise/capital-relationships/${id}?project_id=${p}`,
   },
   cofounder: {
     cycle: 'build', slug: 'founding-team', module: 'Founding team',
     // A holder with no founder role is no co-founder: `ownedRow` refuses it, as the record page does.
-    sql: 'SELECT project_id, updated_at FROM cap_table_holders WHERE id = ?',
+    sql: 'SELECT project_id, updated_at, email AS address FROM cap_table_holders WHERE id = ?',
     id: (id) => (id.startsWith('h-') && NUMERIC.test(id.slice(2)) ? Number(id.slice(2)) : null),
     link: (id, p) => `/build/founding-team/${id}?project=${p}`,
   },
   growth_partner: {
     cycle: 'grow', slug: 'partner-network', module: 'Partner network',
-    sql: 'SELECT project_id, updated_at FROM growth_partners WHERE uid = ?',
+    sql: 'SELECT project_id, updated_at, contact_email AS address FROM growth_partners WHERE uid = ?',
     id: (id) => id,
     link: (id, p) => `/grow/partner-network/${id}?project_id=${p}`,
   },
@@ -122,7 +129,7 @@ async function moduleRecord(env: Env, user: User, kind: string, id: string): Pro
   const ref = `${kind}:${id}`;
   const projectId = Number(project.id);
   return {
-    person: { ref, kind, relationship: RELATIONSHIP_OF[kind], name: read.record.title, project_id: projectId },
+    person: { ref, kind, relationship: RELATIONSHIP_OF[kind], name: read.record.title, project_id: projectId, address: addressOf(row!.address) },
     item: { ref, kind, label: `${m.module} · ${read.record.title}`, as_of: day(row!.updated_at), link: m.link(id, projectId), selected: true, text: recordText(read, m.skip, m.lines?.(row!) ?? []) },
   };
 }
@@ -188,7 +195,7 @@ async function networkMatch(env: Env, user: User, id: string): Promise<Read> {
   const ref = `member:${id}`;
   const text = [m.name, `Role: ${m.role ?? 'Not recorded'}`, `Matched through an introduction you both accepted on ${day(m.matched_at) ?? 'a day not recorded'}.`].join('\n');
   return {
-    person: { ref, kind: 'member', relationship: 'network', name: m.name, project_id: null, email_ready: m.ready },
+    person: { ref, kind: 'member', relationship: 'network', name: m.name, project_id: null, email_ready: m.ready, address: null },
     item: { ref, kind: 'member', label: `Network match · ${m.name}`, as_of: day(m.matched_at), link: '/email', selected: true, text },
   };
 }

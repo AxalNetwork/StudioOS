@@ -446,6 +446,7 @@ const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
+const EmailPage = lazy(() => import('./pages/email/EmailPage'));
 // D702 (#1664) — the founder's profile pages (Studio · Mobile S6m, S7m, S9m, S10m).
 const YouPage = lazy(() => import('./pages/profile/YouPage'));
 const VenturePage = lazy(() => import('./pages/profile/VenturePage'));
@@ -3322,6 +3323,9 @@ function AppInner() {
           always false on an empty array, so the route would exist and be
           unreachable. */}
       <Route path="/messages" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MessagesPage user={user} />)} />
+      {/* D1344 (#3552): Email, in every profile's shell; /email/settings is its settings and sent log (EM7). */}
+      <Route path="/email" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <EmailPage />)} />
+      <Route path="/email/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <EmailPage />)} />
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}

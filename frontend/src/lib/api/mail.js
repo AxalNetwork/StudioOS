@@ -28,6 +28,8 @@ import { request } from '../api.js';
 //   share(uid, yes)                POST   /mail/shares/:uid { share: true|false } → { share }; 409 not_matched
 //   unshare(uid)                   DELETE /mail/shares/:uid → { share }; 409 not_shared
 // `address` is the other member's, and only while both have shared; a match's person is `member:<uid>`.
+// D1344 (#3552, part 5) — the sent log, on cloudflare-worker/src/routes/mail_accounts.ts.
+//   sent(page?, person?)           GET    /mail/sent?page=&person= → { page, per_page, total, items: [{ uid, to, subject, sent_at, status, error, draft_uid, person, quoted }] }
 const id = (v) => encodeURIComponent(String(v));
 const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
 export const mailApi = {
@@ -49,4 +51,5 @@ export const mailApi = {
   shares: () => request('/mail/shares'),
   share: (uid, yes) => post(`/mail/shares/${id(uid)}`, { share: yes === true }),
   unshare: (uid) => request(`/mail/shares/${id(uid)}`, { method: 'DELETE' }),
+  sent: (page = 1, person = null) => request(`/mail/sent?page=${id(page)}${person ? `&person=${id(person)}` : ''}`),
 };

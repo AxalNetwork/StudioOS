@@ -123,7 +123,7 @@ test('the pack: the person\'s record selected, read through its module; the comp
   try {
     const r = await call(f, 2, 'GET', '/api/mail/context?person=interviewee:11');
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.deepEqual(r.body.person, { ref: 'interviewee:11', kind: 'interviewee', relationship: 'customer', name: r.body.items[0].text.split('\n')[0], project_id: 1 });
+    assert.deepEqual(r.body.person, { ref: 'interviewee:11', kind: 'interviewee', relationship: 'customer', name: r.body.items[0].text.split('\n')[0], project_id: 1, address: null }, 'D1344: an interview records no address');
     assert.deepEqual(r.body.intents.map((i: any) => i.key), ['thank_follow_up', 'second_interview', 'share_built']);
     assert.deepEqual(r.body.items.map((i: any) => [i.ref, i.selected]), [['interviewee:11', true], ['one_liner:1', false], ['kpis:1', false]]);
     const [own, line, kpis] = r.body.items;
