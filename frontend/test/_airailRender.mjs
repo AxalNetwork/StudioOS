@@ -185,6 +185,7 @@ export const RENDER_NOT_YET = {
     'Founder /portfolio',
     'Founder /pipeline',
     'Founder /messages',
+    'Founder /email', // D1344: Email, off the canvas like Messages
     'Founder /help',
     'Founder /pricing',
     'Founder /trust',
@@ -195,6 +196,7 @@ export const RENDER_NOT_YET = {
     'Founder /studio/archetype',
     'Investor /build/competitors',
     'Investor /messages',
+    'Investor /email', // D1344: Email, off the canvas like Messages
     'Investor /help',
     'Investor /pricing',
     'Investor /trust',
@@ -206,6 +208,7 @@ export const RENDER_NOT_YET = {
     'Investor /wellbeing',
     'Investor /projects',
     'Advisor /messages',
+    'Advisor /email', // D1344: Email, off the canvas like Messages
     'Advisor /help',
     'Advisor /pricing',
     'Advisor /trust',
@@ -219,6 +222,7 @@ export const RENDER_NOT_YET = {
     'Operating Partner /raise/legal-engine',
     'Operating Partner /deals',
     'Operating Partner /messages',
+    'Operating Partner /email', // D1344: Email, off the canvas like Messages
     'Operating Partner /help',
     'Operating Partner /pricing',
     'Operating Partner /trust',
@@ -231,6 +235,7 @@ export const RENDER_NOT_YET = {
     'Admin /admin/accounts/credits',
     'Admin /exploring',
     'Admin /messages',
+    'Admin /email', // D1344: Email, off the canvas like Messages
     'Admin /help',
     'Admin /pricing',
     'Admin /trust',
@@ -242,6 +247,7 @@ export const RENDER_NOT_YET = {
     'Super Admin /admin/accounts/credits',
     'Super Admin /exploring',
     'Super Admin /messages',
+    'Super Admin /email', // D1344: Email, off the canvas like Messages
     'Super Admin /help',
     'Super Admin /pricing',
     'Super Admin /trust',

@@ -32,14 +32,17 @@ test('the API module reaches the two Worker routes, and api.js re-exports it', (
 test('H20: the proposal fills the open editor only, and Save names it', () => {
   // Mutations checked: "Put it in the summary" calling the update route; Save
   // dropping the proposal's uid; Discard writing the summary.
+  // D1329 (#3490, AF21): the draft is offered in the shared Fill sheet; placing
+  // it fills the editor through the hook's `onValues`, never a write.
   const page = read('pages/admin/PublicationDetail.jsx');
-  const use = page.slice(page.indexOf('const useProposal = () => {'), page.indexOf('const discardProposal'));
-  assert.match(use, /setSummary\(proposal\.text\);\s*setFromProposal\(proposal\.uid\);/);
+  const use = page.slice(page.indexOf('const fill = useScopedFill({'), page.indexOf('const save = async'));
+  assert.match(use, /onValues: \(v\) => \{ if \(v\.summary_text != null\) setSummary\(v\.summary_text\); \}/);
+  assert.match(use, /const fromProposal = proposal && placedUid === proposal\.uid/);
   assert.doesNotMatch(use, /publications\.|railProposalsApi\./, 'filling the editor writes something');
   const discard = page.slice(page.indexOf('const discardProposal'), page.indexOf('const render = async'));
   assert.match(discard, /railProposalsApi\.decide\(proposal\.uid, 'discard'\)/);
   assert.doesNotMatch(discard, /publications\./, 'Discard writes the publication');
-  const save = page.slice(page.indexOf('const save = async'), page.indexOf('const useProposal'));
+  const save = page.slice(page.indexOf('const save = async'), page.indexOf('const discardProposal'));
   assert.match(save, /\.\.\.\(fromProposal \? \{ summary_proposal_uid: fromProposal \} : \{\}\)/);
   assert.match(page, /setProposal\(res\.summary_proposal \|\| null\);/, 'the detail page does not read the proposal');
 });

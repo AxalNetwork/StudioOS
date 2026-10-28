@@ -77,6 +77,24 @@ async function eadwyn(env: Env, ctx: SourceCtx, fields: readonly FillField[]): P
     const v = p?.value;
     waiting.push({ field: f.field, value: typeof v === 'string' || typeof v === 'number' ? v : null, label: 'Eadwyn', ref: r.uid });
   }
+  // D1329 (#3490, AF21): H20's draft of a publication's summary (D780) moves into this sheet. It waits under
+  // its own option and record (`draft:publication-summary`, `publication:<id>`); the publication's Save keeps
+  // it as it always has (`summary_proposal_uid`). A newer Fill proposal for the field comes first.
+  const pub = ctx.form === 'publication' && ctx.scope?.table === 'admin_publications' && ctx.scope.row ? Number(ctx.scope.row.id) : NaN;
+  const summary = byField.get('summary_text');
+  if (Number.isSafeInteger(pub) && summary && !taken.has('summary_text')) {
+    const draft = await env.DB.prepare(
+      `SELECT uid, payload_json, created_at FROM ai_rail_proposals
+        WHERE user_id = ? AND rail_option = 'draft:publication-summary' AND status = 'proposed' AND record_ref = ?
+        ORDER BY id DESC LIMIT 1`,
+    ).bind(ctx.userId, `publication:${pub}`).first<{ uid: string; payload_json: string; created_at: string }>();
+    let text: unknown = null;
+    try { text = draft ? JSON.parse(draft.payload_json)?.text : null; } catch { text = null; }
+    if (draft && typeof text === 'string' && text.trim()) {
+      waiting.push({ field: 'summary_text', value: text, label: 'Eadwyn', ref: draft.uid });
+      rows.push({ uid: draft.uid, payload_json: draft.payload_json, created_at: draft.created_at });
+    }
+  }
   return { state: 'ok', as_of: newest(rows.map((r) => r.created_at)), waiting, choices: [] };
 }
 
