@@ -36,7 +36,11 @@ export interface SourceRead {
   choices: SourceItem[];
 }
 
-export interface SourceCtx { userId: number; projectId: number; form: string; recordRef: string | null }
+export interface SourceCtx {
+  userId: number; projectId: number; form: string; recordRef: string | null;
+  /** D1329: a record that is not a venture's (`scopes.ts`): the row, or the parent an Add form hangs under. */
+  scope?: { table: string; row: Record<string, unknown> | null; parentId: number | null };
+}
 
 const CONNECTOR_LABELS: Readonly<Record<string, string>> = Object.freeze({
   github: 'GitHub', mercury: 'Mercury', stripe: 'Stripe', notion: 'Notion', google_workspace: 'Google Workspace', vercel: 'Vercel', lovable: 'Lovable',
@@ -44,6 +48,9 @@ const CONNECTOR_LABELS: Readonly<Record<string, string>> = Object.freeze({
 const MODULE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   'validate/problem-discovery': 'Validate · Problem discovery',
   'validate/experiments': 'Validate · Experiments and evidence',
+  // D1329 (#3490).
+  'delivery/engagement': 'The engagement record',
+  'advisor/outcomes': 'Your recorded outcomes',
 });
 
 /** The newest of some timestamps, or null. */
@@ -95,8 +102,48 @@ async function moduleSource(env: Env, ctx: SourceCtx, ref: string, fields: reado
     return { state: 'ok', as_of: newest(rows.map((r) => r.updated_at)), waiting: [],
       choices: field ? rows.map((r) => ({ field, value: Number(r.id), label: `${r.code}: ${r.claim}`, ref: `hypotheses:${r.id}` })) : [] };
   }
+  if (ref === 'delivery/engagement') return engagementRecord(env, ctx, fields);
+  if (ref === 'advisor/outcomes') return advisorOutcomes(env, ctx);
   // A module no adapter reads yet says so; it is never drawn as empty.
   return { state: 'unreadable', as_of: null, waiting: [], choices: [] };
+}
+
+/**
+ * D1329 (AF19): a status report's Done and Next from the engagement record,
+ * at no AI tokens: the deliverables sent in the report's month, and the
+ * milestones still open, as the report's compose read lists them
+ * (`partner_delivery.ts`). The period is the report's, or this month for a new one.
+ */
+async function engagementRecord(env: Env, ctx: SourceCtx, fields: readonly FillField[]): Promise<Omit<SourceRead, 'key' | 'kind' | 'label'>> {
+  const row = ctx.scope?.row ?? null;
+  const engagementId = Number(row?.engagement_id ?? ctx.scope?.parentId);
+  if (!Number.isSafeInteger(engagementId) || engagementId <= 0) return { state: 'unreadable', as_of: null, waiting: [], choices: [] };
+  const period = typeof row?.period === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(row.period) ? row.period : new Date().toISOString().slice(0, 7);
+  const sent = ((await env.DB.prepare(
+    `SELECT title, sent_at FROM engagement_deliverables WHERE engagement_id = ? AND sent_at IS NOT NULL AND substr(sent_at, 1, 7) = ? ORDER BY sent_at LIMIT 50`,
+  ).bind(engagementId, period).all<{ title: string; sent_at: string }>()).results) || [];
+  const open = ((await env.DB.prepare(
+    `SELECT title, due_at, updated_at FROM engagement_milestones WHERE engagement_id = ? AND completed_at IS NULL ORDER BY due_at IS NULL, due_at LIMIT 20`,
+  ).bind(engagementId).all<{ title: string; due_at: string | null; updated_at: string | null }>()).results) || [];
+  const has = (name: string) => fields.some((f) => f.field === name && f.sources.includes('module:delivery/engagement'));
+  const waiting: SourceItem[] = [];
+  if (has('shipped') && sent.length) waiting.push({ field: 'shipped', value: sent.map((d) => d.title).join('\n'), label: 'From the engagement record', ref: `engagement:${engagementId}` });
+  if (has('next_up') && open.length) waiting.push({ field: 'next_up', value: open.map((m) => m.title).join('\n'), label: 'From the engagement record', ref: `engagement:${engagementId}` });
+  return { state: 'ok', as_of: newest([...sent.map((d) => d.sent_at), ...open.map((m) => m.updated_at)]), waiting, choices: [] };
+}
+
+/**
+ * D1329 (AF18): the advisor's recorded outcomes (`advisor_proof_items` of kind
+ * `outcome`, migration 204), which Eadwyn reads to draft What you deliver.
+ * They are the advisor's own: a choice to cite, never a value placed.
+ */
+async function advisorOutcomes(env: Env, ctx: SourceCtx): Promise<Omit<SourceRead, 'key' | 'kind' | 'label'>> {
+  const rows = ((await env.DB.prepare(
+    `SELECT p.id, p.title, p.updated_at FROM advisor_proof_items p JOIN advisors a ON a.id = p.advisor_id
+      WHERE a.user_id = ? AND p.kind = 'outcome' ORDER BY p.id DESC LIMIT 50`,
+  ).bind(ctx.userId).all<{ id: number; title: string; updated_at: string | null }>()).results) || [];
+  return { state: 'ok', as_of: newest(rows.map((r) => r.updated_at)), waiting: [],
+    choices: rows.map((r) => ({ field: 'scope', value: Number(r.id), label: r.title, ref: `advisor_proof_items:${r.id}` })) };
 }
 
 /** One form's sources, in the order its fields first name them, each read on its own. */
