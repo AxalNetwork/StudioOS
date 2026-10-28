@@ -107,7 +107,9 @@ test('Who: name and company inputs, or the interview it was opened on', () => {
 test('provider chips show their status; Connect links to Connectors; importing from an app that is not set up is disabled', () => {
   const video = render({ initialMode: 'video', channels: CHANNELS });
   const text = renderedText(video);
-  for (const t of ['Zoom · Connected', 'Google Meet · Connect', 'Microsoft Teams · Ready', 'WhatsApp · Ready', 'Telegram · Ready', 'Signal · Ready', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
+  // D1346 (#3554): Eadwyn AI joins Meet as a guest, so the chip never asks for a connection.
+  assert.ok(!text.includes('Google Meet · Connect'), 'no Connect on the Meet chip');
+  for (const t of ['Zoom · Connected', 'Google Meet · Ready', 'Microsoft Teams · Ready', 'WhatsApp · Ready', 'Telegram · Ready', 'Signal · Ready', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
   const wa = render({ initialMode: 'text', channels: CHANNELS });
   assert.ok(renderedText(tag(wa, 'record-provider-whatsapp') + 'x').length > 0);
   assert.ok(renderedText(wa).includes('WhatsApp · Connect'));

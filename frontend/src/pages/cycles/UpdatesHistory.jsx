@@ -13,6 +13,7 @@ import { periodTitle } from '../founder/ShareUpdateSheet';
  * a legacy submission is unlinked with its label. An amber "Ask again" pill
  * marks an update with an ask unanswered after 14 days. `updates: null` is
  * Unreadable, never "none yet"; an empty list offers Share an update.
+ * `rowAction(u)` draws beside a sent row (D1321: the desk's Publish to…).
  */
 const day = (v) => {
   const d = v ? new Date(String(v).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(v)) || String(v).length <= 10 ? '' : 'Z')) : null;
@@ -37,7 +38,7 @@ export function updateLine(u) {
 
 const AMBER = 'whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200';
 
-export default function UpdatesHistory({ updates, reason = null, onShare }) {
+export default function UpdatesHistory({ updates, reason = null, onShare, rowAction = null }) {
   if (updates === undefined) return null;
   let body;
   if (updates === null) body = <p role="alert" className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="updates-unreadable">{reason || 'Unreadable: Updates history could not be read'}</p>;
@@ -56,7 +57,11 @@ export default function UpdatesHistory({ updates, reason = null, onShare }) {
               : <span className="font-semibold text-axal-ink dark:text-gray-100">{updateTitle(u)}</span>}
             <div className="text-axal-muted dark:text-gray-400">{updateLine(u)}</div>
           </div>
-          {u.asks_to_ask_again > 0 && <span className={AMBER}>Ask again</span>}
+          <div className="flex flex-none flex-wrap items-center justify-end gap-2">
+            {u.asks_to_ask_again > 0 && <span className={AMBER}>Ask again</span>}
+            {/* D1321 (#3482): Publish to… on a sent update, when the page gives one. */}
+            {rowAction && u.sent_at ? rowAction(u) : null}
+          </div>
         </li>
       ))}
     </ul>

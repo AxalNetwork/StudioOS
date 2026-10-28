@@ -77,6 +77,7 @@ import { UseOfFundsHomeNav, UseOfFundsTabPage } from '../raise/useoffunds/UseOfF
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import { CapRelHomeNav, CapRelTabPage } from '../raise/caprel/CapRelTool';
 import EvidencePart from './evidence/EvidencePart';
+import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
 import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
 
 
@@ -1131,7 +1132,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           search={q}
           // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
+          // D1321 (#3482): Publish to… from Grow's overview, on part 2's gate (D1333's `publish`).
+          more={cycle === 'grow' && projectId ? <PublishTo part={rawOverview?.publish} projectId={projectId} module="overview" /> : null}
         />
+        {cycle === 'grow' && <PublishedFromHere part={rawOverview?.publish} />}
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
         {cycle === 'build' && <BuildPlanDoor search={q} />}
         <AlsoIn role="founder" row={name} />
@@ -1174,7 +1178,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} />
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} /> : undefined}
+        // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
+        more={cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} /> : null}
       >
+        {cycle === 'grow' && <PublishedFromHere part={module?.parts?.publish} />}
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
             railOption={`fill:${fillKind}`} />

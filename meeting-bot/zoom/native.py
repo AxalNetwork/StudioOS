@@ -15,6 +15,7 @@ class NativeZoom:
         self.people = {}
         self.enabled = set()
         self.service = self.auth = self.helper = None
+        self.self_key = None
 
     def ok(self, result):
         if result != self.z.SDKERR_SUCCESS:
@@ -94,17 +95,16 @@ class NativeZoom:
         if not allowed and self.ready:
             self.end()
 
-    def pcm(self, data):
-        if not self.ready or "audio" not in self.enabled:
-            return
+    def canonical(self, data):
+        """16 kHz mono 16-bit little-endian PCM as base64, or None after ending capture."""
         # Never reinterpret unsupported rates/channels as canonical PCM.
         if data.GetSampleRate() not in (16000, 32000) or data.GetChannelNum() != 1:
             self.end()
-            return
+            return None
         raw = bytes(data.GetBuffer())
         if len(raw) % 2 or len(raw) > 128000:
             self.end()
-            return
+            return None
         if data.GetSampleRate() == 32000:
             samples = array.array('h')
             samples.frombytes(raw)
@@ -112,12 +112,30 @@ class NativeZoom:
                 samples.byteswap()
             if len(samples) % 2:
                 self.end()
-                return
+                return None
             mono = array.array('h', ((samples[i] + samples[i + 1]) // 2 for i in range(0, len(samples), 2)))
             if sys.byteorder != 'little':
                 mono.byteswap()
             raw = mono.tobytes()
-        self.emit("audio", base64.b64encode(raw).decode("ascii"))
+        return base64.b64encode(raw).decode("ascii")
+
+    def pcm(self, data):
+        if not self.ready or "audio" not in self.enabled:
+            return
+        raw = self.canonical(data)
+        if raw is not None:
+            self.emit("audio", raw)
+
+    def voice(self, data, user_id):
+        """#2582: one participant's own stream (one-way audio), keyed as the roster is. Never the bot's own."""
+        if not self.ready or "voice" not in self.enabled:
+            return
+        key = str(user_id)
+        if key == self.self_key:
+            return
+        raw = self.canonical(data)
+        if raw is not None:
+            self.emit("voice", {"key": key, "pcm": raw})
 
     def command(self, uid, method, args):
         z = self.z
@@ -179,8 +197,11 @@ class NativeZoom:
                 onRecordPrivilegeChangedCallback=self.privilege))))
             self.ok(ctrl.StartRawRecording())
             self.helper = z.GetAudioRawdataHelper()
+            # Names checked against zoom-meeting-sdk 0.0.27's source (#2582):
+            # onOneWayAudioRawDataReceived(AudioRawData*, uint32_t user_id).
             self.ok(self.helper.subscribe(self.delegate(z.ZoomSDKAudioRawDataDelegateCallbacks(
-                onMixedAudioRawDataReceivedCallback=self.pcm)), False))
+                onMixedAudioRawDataReceivedCallback=self.pcm,
+                onOneWayAudioRawDataReceivedCallback=self.voice)), False))
             self.ready = True
         elif method == "subscribe":
             topic = args["topic"]

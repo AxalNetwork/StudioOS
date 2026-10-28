@@ -84,6 +84,9 @@ function world() {
   app.route('/api/partner/testing', partnerTesting);
   app.route('/api/admin/testing', adminTesting);
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any;
+  db.exec(readFileSync(`${SQL}/migrations/576_product_testers.sql`, 'utf8'));
+  // D1336: only an active Product tester reads and applies to programmes, so every member here starts as one.
+  db.exec("INSERT INTO product_testers (user_id, status, decided_at) SELECT id, 'active', '2026-10-01' FROM users WHERE role NOT IN ('partner', 'admin') AND id NOT IN (SELECT user_id FROM super_admins)");
   return { db, app, env };
 }
 
@@ -120,6 +123,8 @@ function worldPlus() {
   const u = w.db.prepare('INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, ?, ?)');
   u.run(IDA, `u${IDA}@example.test`, 'Ida Lane', 'founder', 1);
   u.run(IAN, `u${IAN}@example.test`, 'Ian Moss', 'founder', 1);
+  // D1336: both apply, so both are active testers.
+  w.db.exec(`INSERT INTO product_testers (user_id, status, decided_at) VALUES (${IDA}, 'active', '2026-10-01'), (${IAN}, 'active', '2026-10-01')`);
   return w;
 }
 

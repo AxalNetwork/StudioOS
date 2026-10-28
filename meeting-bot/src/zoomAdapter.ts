@@ -22,6 +22,12 @@ export interface ZoomSdkBridge {
   startRawRecording(signal: AbortSignal): Promise<void>;
   /** Mixed PCM only: 16 kHz mono signed 16-bit; borrowed SDK buffers must be copied. */
   mixedAudio(on: (samples: Int16Array) => void): Unsubscribe;
+  /**
+   * #2582: one participant's own stream (the SDK's one-way audio,
+   * `onOneWayAudioRawDataReceived(data, user_id)`), keyed by the same id as the
+   * roster, in the same PCM format. Optional: a bridge without it is mixed only.
+   */
+  participantAudio?(on: (key: string, samples: Int16Array) => void): Unsubscribe;
   /** Replay the current roster synchronously on subscribe, followed by changes/renames. */
   roster(on: (change: RosterChange) => void): Unsubscribe;
   speakers(on: (change: SpeakerChange) => void): Unsubscribe;
@@ -127,10 +133,25 @@ export class ZoomAdapter implements MeetingAdapter {
     this.subs.add(dispose);
     return dispose;
   }
+  /**
+   * #2582: per-participant audio when the SDK delivers it, otherwise mixed,
+   * never both for the same stretch. From the first participant frame on,
+   * mixed frames are dropped for the rest of the call. The bot's own stream
+   * is never sent.
+   */
   audio(on: (frame: AudioFrame) => void): Unsubscribe {
-    return this.subscribe(() => this.deps.sdk.mixedAudio(samples => {
-      if (this.ready && !this.left) on({ samples: samples.slice() });
-    }));
+    let own = false;
+    return this.subscribe(() => {
+      const offMixed = this.deps.sdk.mixedAudio(samples => {
+        if (this.ready && !this.left && !own) on({ samples: samples.slice() });
+      });
+      const offOwn = this.deps.sdk.participantAudio?.((key, samples) => {
+        if (!this.ready || this.left || typeof key !== 'string' || !key || key === this.selfKey) return;
+        own = true;
+        on({ samples: samples.slice(), participant: key });
+      });
+      return () => { offMixed(); offOwn?.(); };
+    });
   }
   roster(on: (change: RosterChange) => void): Unsubscribe {
     return this.subscribe(() => this.deps.sdk.roster(c => { if (!this.left && c.key !== this.selfKey) on(c); }));

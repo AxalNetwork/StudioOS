@@ -13,6 +13,9 @@ const WORDS = Object.freeze({
   stopped: 'Stopped',
 });
 const STOPPABLE = new Set(['queued', 'joining', 'waiting_room', 'recording']);
+// #2582: Zoom joins on the founder's behalf, so Eadwyn AI cannot enter until they have.
+// The Worker's read says so with `waiting_for: 'founder'`; the status stays `waiting_room`.
+const WAITING_FOR_FOUNDER = 'Join the call first; Eadwyn AI follows.';
 const FAILURES = Object.freeze({
   runtime_unavailable: 'Eadwyn AI is temporarily unavailable. Check the session before trying again.',
   heartbeat_timeout: 'The connection to Eadwyn AI was interrupted.',
@@ -103,9 +106,11 @@ export function botView(read, { unreadable = false, now = Date.now() } = {}) {
     const seconds = Math.floor((now - bot.started_at) / 1000);
     timer = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
   }
+  const waitingForFounder = (bot.status === 'joining' || bot.status === 'waiting_room') && bot.waiting_for === 'founder';
   return {
     state: bot.status,
-    label: WORDS[bot.status],
+    label: waitingForFounder ? WAITING_FOR_FOUNDER : WORDS[bot.status],
+    waitingForFounder,
     canStop: STOPPABLE.has(bot.status),
     poll: STOPPABLE.has(bot.status) || bot.status === 'processing',
     timer,
