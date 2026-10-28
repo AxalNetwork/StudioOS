@@ -20,7 +20,7 @@ import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlo
 import {
   CONSENTS, DURATIONS, HOW_OPTIONS, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callChannel, callLabel, chipStatus, consentNote, howOf,
   defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
-  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref, callCapture, IMPORT_START,
+  startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref, callCapture, callStartPlan, callStartNote, IMPORT_NOTE,
 } from './recordSetup.js';
 
 /**
@@ -196,7 +196,6 @@ export default function RecordLightbox({
     channelsSource.botAvailability().then((r) => { if (alive) setBotRead(r ?? null); }).catch(() => { if (alive) setBotRead(null); });
     return () => { alive = false; };
   }, [channelsSource, initialBot, botTick]);
-  const [creating, setCreating] = useState({ busy: false, error: '' });
   const nameRef = useRef(null);
   const sending = useRef(false); // a second press in the same render must not send again
   const startKey = useRef(null);
@@ -281,26 +280,20 @@ export default function RecordLightbox({
   // D1358: a meeting is captured by Eadwyn AI or imported from the provider after
   // it ends, never by this browser's microphone or a shared tab.
   const capture = callCapture({ mode, provider, link, channels, bot, botLink: !!botPlatform(link) });
-  const botReady = capture.kind === 'bot';
-  const importReady = capture.kind === 'import';
-  const captureReason = state.ok && !blockedReason && capture.kind === 'none' ? capture.reason : null;
-  const ready = state.ok && !blockedReason && !linkProblem && capture.kind !== 'none' && !busy;
-  const label = botReady ? 'Send Eadwyn AI' : importReady ? IMPORT_START : m.start;
   const offer = createMeetingOffer(mode, provider, channels);
-  const openHref = meeting && !linkProblem ? meetingHref(provider, link) : null;
-  useEffect(() => { setCreating({ busy: false, error: '' }); }, [provider]);
-  /** D1346: "Create the meeting for me" — a meeting starting now on the member's own account; its link fills the field. */
-  const createMeeting = async () => {
-    if (creating.busy || offer?.kind !== 'create' || typeof channelsSource?.instantMeeting !== 'function') return;
-    setCreating({ busy: true, error: '' });
-    try {
-      const url = createdLink(provider, await channelsSource.instantMeeting(provider, minutes));
-      if (!url) throw new Error('');
-      setLink(url); setRefusal(null); setCreating({ busy: false, error: '' });
-    } catch (e) {
-      setCreating({ busy: false, error: (typeof e?.message === 'string' && e.message.trim()) || `The meeting could not be created. Create it in ${chosen?.label || 'the app'} and paste its link.` });
-    }
-  };
+  // D1362: a meeting has one Start. It creates the meeting when no link is
+  // pasted, saves the call, sends Eadwyn AI where it can join, and opens the
+  // meeting; the transcript is imported when the call ends.
+  const plan = meeting ? callStartPlan({ mode, provider, link, channels, bot, botLink: !!botPlatform(link), offer }) : null;
+  const planNote = callStartNote(plan, provider);
+  const botReady = meeting ? plan?.kind === 'bot' : capture.kind === 'bot';
+  const importReady = meeting ? plan?.kind === 'import' : capture.kind === 'import';
+  const botJoins = meeting ? !!plan?.bot : botReady;
+  const captureKind = meeting ? (plan?.kind ?? 'none') : capture.kind;
+  const captureReason = state.ok && !blockedReason && captureKind === 'none' ? (meeting ? plan?.reason ?? null : capture.reason) : null;
+  const ready = state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
+    && (!meeting || !!String(link).trim() || (fields.meeting_url && typeof channelsSource?.instantMeeting === 'function'));
+  const label = meeting ? 'Start' : botReady ? 'Send Eadwyn AI' : m.start;
   const languages = languageOptions(models, live);
 
   // The chats waiting for this app, read when its chip is chosen.
@@ -376,7 +369,7 @@ export default function RecordLightbox({
    * the call for later" makes one (and removed if the save is refused). The
    * Worker opens the call's own session; nothing is recorded here.
    */
-  const saveForImport = async () => {
+  const saveForImport = async (url, opened) => {
     sending.current = true;
     setBusy(true); setRefusal(null); setAssigned(null);
     const named = (who?.interviewee_name || name).trim();
@@ -390,9 +383,10 @@ export default function RecordLightbox({
       }
       const given = { status: 'given', method: consent };
       const r = provider === 'zoom'
-        ? await channelsSource.saveZoomCall(target.id, { join_url: link.trim(), consent: given })
-        : await channelsSource.attachCalendarMeet(target.id, { join_url: link.trim(), consent: given });
+        ? await channelsSource.saveZoomCall(target.id, { join_url: url, consent: given })
+        : await channelsSource.attachCalendarMeet(target.id, { join_url: url, consent: given });
       if (r?.session_id == null) throw new Error('The call could not be saved. Try again.');
+      opened?.();
       // D1360: the Worker also sends Eadwyn AI when it can join (`r.bot`).
       onStarted?.({ id: r.session_id, submitted_via: r.bot ? 'meeting_bot' : provider }, {
         id: target.id, interviewee_name: target.interviewee_name ?? named, interviewee_company: target.interviewee_company ?? null,
@@ -402,13 +396,73 @@ export default function RecordLightbox({
       if (made?.id != null) { try { await api.deleteInterview(made.id); } catch { /* the refusal is the message */ } }
       setRefusal(startRefusal(e));
       setBusy(false); sending.current = false;
+      return false;
     }
+    return true;
+  };
+
+  /**
+   * D1362: Start for a meeting. A tab is opened inside the click, before
+   * anything is awaited, so the browser lets it through; it is pointed at the
+   * meeting once the call is saved, and closed again if Start is refused.
+   */
+  const startCall = async () => {
+    if (!ready || sending.current) return;
+    sending.current = true;
+    setBusy(true); setRefusal(null); setAssigned(null);
+    let tab = null;
+    try { tab = typeof window !== 'undefined' && typeof window.open === 'function' ? window.open('', '_blank') : null; } catch { tab = null; }
+    try { if (tab) tab.opener = null; } catch { /* a cross-origin tab keeps its own opener */ }
+    const refuse = (e) => {
+      try { tab?.close?.(); } catch { /* already closed */ }
+      setRefusal(startRefusal(e)); setBusy(false); sending.current = false;
+    };
+    let url = String(link).trim();
+    if (!url) {
+      try {
+        url = createdLink(provider, await channelsSource.instantMeeting(provider, minutes)) || '';
+        if (!url) throw new Error(`The meeting could not be created. Create it in ${chosen?.label || 'the app'} and paste its link.`);
+        setLink(url);
+      } catch (e) { refuse(e); return; }
+    }
+    const href = meetingHref(provider, url);
+    const opened = () => {
+      if (!href) return;
+      try { if (tab && !tab.closed) { tab.location.href = href; return; } } catch { /* fall through */ }
+      try { window.open(href, '_blank', 'noopener'); } catch { /* the session page offers the link */ }
+    };
+    if (plan?.kind === 'import') {
+      sending.current = false;
+      const ok = await saveForImport(url, opened);
+      if (!ok) { try { tab?.close?.(); } catch { /* already closed */ } }
+      return;
+    }
+    // Eadwyn AI only (Teams, or a call Axal cannot import).
+    const named = (who?.interviewee_name || name).trim();
+    const into = (r) => ({ id: r?.id ?? who?.id, interviewee_name: r?.interviewee_name ?? who?.interviewee_name ?? named, interviewee_company: r?.interviewee_company ?? who?.interviewee_company ?? (company.trim() || null) });
+    try {
+      const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
+      const botFields = { ...fields, meeting_url: false };
+      const r = interview
+        ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: `${startKey.current}-bot` })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}-bot` }, botFields));
+      try {
+        await sessions.sendBot(r.session.id, { meeting_url: url });
+      } catch (e) {
+        try { tab?.close?.(); } catch { /* already closed */ }
+        setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}` });
+        setBusy(false); sending.current = false;
+        return;
+      }
+      opened();
+      onStarted?.({ ...r.session, submitted_via: 'meeting_bot' }, into(r.interview));
+    } catch (e) { refuse(e); }
   };
 
   const submit = async () => {
     const useBot = botReady;
     if (!ready || sending.current) return;
-    if (importReady) { await saveForImport(); return; }
+    if (meeting) { await startCall(); return; }
     // The browser recorder is for in person and a call on this phone's speaker
     // only. A meeting never reaches it (D1358).
     const handsOver = !!recorder && m.audio && mode !== 'video' && !useBot;
@@ -498,7 +552,6 @@ export default function RecordLightbox({
           <span className="text-[11.5px] text-axal-faint">Runs on Cloudflare Workers AI</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-cancel">Cancel</button>
-            {meeting && !bot.canSend && <button type="button" disabled aria-describedby="record-bot-state" className="cursor-not-allowed rounded-[9px] border border-gray-300 px-3 py-2 text-[12.5px] font-bold text-gray-400 dark:border-gray-700 dark:text-gray-500" data-testid="record-bot-send-off">Send Eadwyn AI</button>}
             <button type="button" onClick={() => submit()} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : captureReason ? 'record-capture-reason' : 'record-start-reason')}
               disabled={busy} data-testid="record-start" className={ready ? 'rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep' : 'cursor-not-allowed rounded-[9px] bg-violet-300 px-3.5 py-2 text-[13px] font-bold text-white dark:bg-violet-900/60 dark:text-violet-300'}>{busy ? 'Starting…' : label}</button>
           </div>
@@ -566,33 +619,26 @@ export default function RecordLightbox({
           )}
           {hasMeetingLink(mode, provider) && (
             <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Meeting link
-              <input className={FIELD} value={link} onChange={(e) => setLink(e.target.value)} disabled={!fields.meeting_url} placeholder="https://…" inputMode="url" autoComplete="off" data-testid="record-link" aria-invalid={linkProblem ? true : undefined} />
+              <input className={FIELD} value={link} onChange={(e) => setLink(e.target.value)} disabled={!fields.meeting_url} placeholder={offer?.kind === 'create' ? 'Paste a link, or leave it empty: Start creates the meeting' : 'https://…'} inputMode="url" autoComplete="off" data-testid="record-link" aria-invalid={linkProblem ? true : undefined} />
               {!fields.meeting_url ? <span className="font-normal text-axal-faint" data-testid="record-link-note">{NOT_STORED}</span>
                 : linkProblem ? <span role="alert" className="font-normal text-red-700 dark:text-red-400">{linkProblem}</span> : null}
             </label>
           )}
-          {meeting && (offer || openHref) && (
+          {meeting && offer && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="record-create-meeting">
-              {offer?.kind === 'create' && (
-                <button type="button" onClick={createMeeting} disabled={creating.busy || offer.connected === false || !fields.meeting_url}
-                  className="rounded-[9px] border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold text-axal-ink hover:bg-axal-ground disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800" data-testid="record-create-meeting-button">
-                  {creating.busy ? 'Creating the meeting…' : 'Create the meeting for me'}
-                </button>
-              )}
-              {offer?.kind === 'create' && offer.connectHref && <Link to={offer.connectHref} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-create-connect">{offer.connectLabel}</Link>}
-              {openHref && <a href={openHref} target="_blank" rel="noopener noreferrer" className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-open-meeting">Open the meeting</a>}
-              {offer && offer.kind !== 'create' && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-note">{offer.sentence}</p>}
-              {offer?.kind === 'create' && offer.note && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-teams-note">{offer.note}</p>}
-              {creating.error && <p role="alert" className="m-0 w-full text-[11.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-create-error">{creating.error}</p>}
+              {offer.kind === 'create' && offer.connectHref && <Link to={offer.connectHref} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-create-connect">{offer.connectLabel}</Link>}
+              {offer.kind !== 'create' && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-note">{offer.sentence}</p>}
+              {offer.kind === 'create' && offer.note && <p className="m-0 w-full text-[11.5px] text-axal-faint" data-testid="record-create-teams-note">{offer.note}</p>}
             </div>
           )}
-          {meeting && !bot.canSend && (
+          {meeting && planNote && <p className="m-0 text-[12px] text-axal-ink dark:text-gray-100" data-testid="record-start-plan">{planNote}</p>}
+          {meeting && bot.state === 'unreadable' && (
             <p id="record-bot-state" className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-bot-state" data-state={bot.state}>
               {bot.sentence}
-              {bot.state === 'unreadable' && <button type="button" onClick={() => setBotTick((n) => n + 1)} className="ml-1.5 font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-bot-retry">Try again</button>}
+              <button type="button" onClick={() => setBotTick((n) => n + 1)} className="ml-1.5 font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-bot-retry">Try again</button>
             </p>
           )}
-          {botReady && <><MeetingBotConsentNotice /><p className="m-0 text-[12px] text-axal-faint" data-testid="bot-billing-note">Eadwyn AI uses your AI tokens for bot time and transcription. Your balance is checked before sending. The call limit is 30 minutes on a free plan and two hours on a paid plan.</p></>}
+          {botJoins && <><MeetingBotConsentNotice /><p className="m-0 text-[12px] text-axal-faint" data-testid="bot-billing-note">Eadwyn AI uses your AI tokens for bot time and transcription. Your balance is checked before sending. The call limit is 30 minutes on a free plan and two hours on a paid plan.</p></>}
           {mode === 'text' && provider === 'paste' && (
             <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">The conversation
               <textarea className={FIELD} rows={6} value={conversation} onChange={(e) => setConversation(e.target.value)} data-testid="record-conversation" />
@@ -651,17 +697,17 @@ export default function RecordLightbox({
           <p className="m-0 text-[11.5px] text-axal-faint" data-testid="record-points-note">{fields.points ? 'The hypotheses you pick appear in the Talking points drawer while you record.' : NOT_STORED}</p>
         </Section>
 
-        {m.audio && botReady && (
+        {m.audio && botJoins && (
           <Section title="Transcript" testId="record-transcript">
             <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-bot-transcript">{botTranscriptLine(botRead).transcript}</p>
             <p className="m-0 rounded-[9px] bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="record-bot-price">{botTranscriptLine(botRead).price}</p>
             <p className="m-0 text-[11.5px] text-axal-faint">Live captions and the final-transcript choice are for recording in person or a call on this phone’s speaker.</p>
           </Section>
         )}
-        {mode === 'video' && !botReady && (
+        {mode === 'video' && !botJoins && (
           <Section title="Transcript" testId="record-transcript">
             {importReady
-              ? <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-import-note">{capture.note}</p>
+              ? <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-import-note">{IMPORT_NOTE[provider]}</p>
               : <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="record-capture-none">No capture is set up for this call yet. Axal never records a meeting from this browser.</p>}
             <p className="m-0 text-[11.5px] text-axal-faint">Live captions and the final-transcript choice are for recording in person or a call on this phone’s speaker.</p>
           </Section>

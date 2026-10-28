@@ -159,7 +159,7 @@ export function chipStatus(mode, chip, channels) {
   const known = availableOf(channels, chip.link);
   const conn = connectionOf(channels, chip.link);
   // D1346 (#3554): Eadwyn AI joins a Meet call as a guest, so the chip never asks for a
-  // connection. Connecting Google is offered only beside "Create the meeting for me".
+  // connection. Connecting Google is offered only for Start to create the meeting (D1362).
   if (mode === 'video' && chip.value === 'google_meet') return { word: isConnected(conn, chip.link) ? 'Connected' : 'Ready', disabled: false };
   if (!channels || known === null) return { word: 'Not available yet', disabled: mode === 'text' };
   if (known === false) return { word: 'Not available yet', disabled: mode === 'text' };
@@ -224,9 +224,10 @@ export function attachOutcome(result, error) {
 export const hasMeetingLink = (mode, provider) => mode === 'video' && ['zoom', 'google_meet', 'teams'].includes(provider);
 
 /**
- * D1346 (#3554): "Create the meeting for me", beside Meeting link. Zoom and
- * Google Meet make a meeting starting now on the member's own account
- * (`POST /founder/validate/meetings/instant`); Teams is paste only. `connected`
+ * D1346 (#3554): creating the meeting — since D1362, Start does it when no
+ * link is pasted. Zoom and Google Meet make a meeting starting now on the
+ * member's own account (`POST /founder/validate/meetings/instant`), Teams on
+ * the Microsoft calendar connection (D1359). `connected`
  * is null when the connections could not be read: the Worker then decides, and
  * says "Connect … first" in its own words.
  */
@@ -311,6 +312,52 @@ export function callCapture({ mode, provider, link, channels, bot, botLink }) {
   return { kind: 'none', reason: channels
     ? `Connect ${label} in Account › Connectors so Axal can import this call’s transcript after it ends.`
     : 'Unreadable: Axal could not read your connections, so it cannot tell whether this call can be imported. Try again.' };
+}
+
+/**
+ * D1362: one Start for a meeting. It creates the meeting when no link is
+ * pasted, saves the call, sends Eadwyn AI where it can join, opens the
+ * meeting, and the call's transcript is imported when it ends. The plan says
+ * which of those this call will get, decided before the press:
+ *   · `import`: a Zoom or Google Meet call on the member's connected account.
+ *     The Worker also sends Eadwyn AI when it can join (D1360), so the bot's
+ *     recording and the provider's transcript are both on the way;
+ *   · `bot`: no import is possible (Teams, or no connection), Eadwyn AI joins;
+ *   · `none`: neither, with the reason, and Start is off.
+ * `create` is whether Start makes the meeting first (no link pasted).
+ */
+const CALL_LABEL = Object.freeze({ zoom: 'Zoom', google_meet: 'Google Meet', teams: 'Microsoft Teams' });
+export function callStartPlan({ mode, provider, link, channels, bot, botLink, offer }) {
+  if (mode !== 'video' || !CALL_LABEL[provider]) return null;
+  const text = String(link || '').trim();
+  const importable = ['zoom', 'google_meet'].includes(provider);
+  if (text) {
+    const problem = meetingLinkProblem(provider, text);
+    if (problem) return { kind: 'none', create: false, reason: null };
+    if (attachesCall(mode, provider, text, channels)) return { kind: 'import', create: false, bot: !!bot?.canSend };
+    if (bot?.canSend && botLink) return { kind: 'bot', create: false, bot: true };
+    const capture = callCapture({ mode, provider, link: text, channels, bot, botLink });
+    return { kind: 'none', create: false, reason: capture.kind === 'none' ? capture.reason : null };
+  }
+  if (offer?.kind !== 'create') {
+    return { kind: 'none', create: false, reason: offer?.kind === 'unavailable' ? offer.sentence : 'Paste the meeting link.' };
+  }
+  if (offer.connected === false) return { kind: 'none', create: false, reason: `${CREATE_CONNECT[provider]}, or paste the meeting link.` };
+  if (importable && offer.connected === true) return { kind: 'import', create: true, bot: !!bot?.canSend };
+  if (bot?.canSend) return { kind: 'bot', create: true, bot: true };
+  if (bot?.state === 'loading') return { kind: 'none', create: false, reason: bot.sentence };
+  if (provider === 'teams') return { kind: 'none', create: false, reason: TEAMS_NO_CAPTURE };
+  return { kind: 'none', create: false, reason: 'Unreadable: Axal could not read your connections, so it cannot tell whether this call can be imported. Try again.' };
+}
+/** What Start will do, in one sentence, from the plan. */
+export function callStartNote(plan, provider) {
+  if (!plan || plan.kind === 'none') return null;
+  const label = CALL_LABEL[provider] || 'the';
+  const make = plan.create ? `Start creates the ${label} meeting on your account, opens it` : `Start opens the ${label} meeting`;
+  if (plan.kind === 'bot') return `${make} and sends Eadwyn AI to join. Its recording and transcript land in this interview when the call ends.`;
+  return plan.bot
+    ? `${make} and sends Eadwyn AI to join. When the call ends, the transcript lands in this interview.`
+    : `${make}. When the call ends, Axal imports ${label}’s own transcript into this interview. Eadwyn AI can’t join ${label} calls on Axal yet.`;
 }
 
 const perMinute = (micro) => (Number.isSafeInteger(micro) && micro > 0 ? `$${(micro / 1e6).toFixed(4)} a minute` : 'not priced yet');

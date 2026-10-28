@@ -1222,4 +1222,44 @@ export async function sweepZoom(env: Env, now: Date): Promise<number> {
   return refs.length;
 }
 
-registerChannelSweep('zoom', async (env, now) => { await sweepZoom(env, now); });
+/**
+ * D1362: a call reports back soon after it ends, webhook or not. Every sweep
+ * (five minutes), each Zoom call that started in the last twelve hours and is
+ * still waiting asks Zoom for its latest recording. Only a recording that is
+ * ready (a transcript, or the audio D870 transcribes) and that started within
+ * the call's slot queues the import. A recording Zoom has not finished yet, or
+ * none at all, settles nothing: that stays the day-later sweep's to decide
+ * (`sweepZoom`), so an early look never marks a call "no transcript".
+ */
+export const EARLY_WINDOW_MS = 12 * 60 * 60_000;
+export async function sweepZoomEarly(env: Env, now: Date, limit = 10): Promise<number> {
+  if (!providerAvailable(env, 'zoom')) return 0;
+  const rows = await env.DB.prepare(
+    `SELECT * FROM interview_channel_refs
+      WHERE provider = 'zoom' AND status IN ('scheduled', 'ended') AND instr(external_ref, ':') = 0
+        AND starts_at IS NOT NULL AND datetime(starts_at) <= datetime(?) AND datetime(starts_at) > datetime(?)
+        AND datetime(updated_at) < datetime(?)
+      ORDER BY datetime(updated_at), id LIMIT ?`,
+  ).bind(now.toISOString(), new Date(now.getTime() - EARLY_WINDOW_MS).toISOString(),
+    new Date(now.getTime() - 5 * 60_000).toISOString(), Math.min(Math.max(limit, 1), 50)).all<MeetingRef>();
+  let queued = 0;
+  for (const ref of rows.results ?? []) {
+    await touchRef(env, ref.id);
+    const conn = await zoomConnection(env, Number(ref.user_id));
+    if (!conn) continue;
+    let listed: Recordings;
+    try { listed = await listRecordings(env, conn, ref.external_ref); }
+    catch (e) { if (e instanceof MeetingProviderError) continue; throw e; }
+    if (listed.kind !== 'instance' || !hasTranscriptFile(listed.files)) continue;
+    const choice = chooseRecordingSource(listed.files, ref.call_lang, (f) => !!zoomDownloadUrl(f.download_url));
+    if (choice.kind === 'waiting' || choice.kind === 'none') continue;
+    const started = Date.parse(listed.startTime);
+    if (Number.isFinite(started) && !withinCallSlot(started, ref)) continue;
+    // The import finds the call's own instances itself (a restarted call has more than one).
+    await enqueueChannelJob(env, 'meeting_import', 'zoom', `${ref.uid}:early:${listed.uuid || 'latest'}`, { refUid: ref.uid });
+    queued += 1;
+  }
+  return queued;
+}
+
+registerChannelSweep('zoom', async (env, now) => { await sweepZoom(env, now); await sweepZoomEarly(env, now); });
