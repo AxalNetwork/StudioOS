@@ -734,7 +734,7 @@ export function disconnectNote(p, role = null) {
   if (isPersonalMercury(p)) return memberDisconnectNote(role);
   if (p?.first_party) {
     if (p.key === 'google') return 'Calendar and Gmail access stop, and "Continue with Google" sign-in is unlinked. Events already in StudioOS stay.';
-    if (p.key === 'linkedin') return 'Contacts you already imported stay in Refer & Earn.';
+    if (p.key === 'linkedin') return 'Sign in with LinkedIn is unlinked. Contacts you imported stay in your Network unless you also delete them below.';
     return 'Calendar sync stops. Events already in StudioOS stay.';
   }
   return 'Data already in StudioOS stays. The stored credentials are deleted.';
