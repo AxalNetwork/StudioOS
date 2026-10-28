@@ -113,3 +113,10 @@ test('the reference decks: twelve cards and a sparse variant, varied layouts, ev
   assert.ok(sparse.every((s) => s.layout !== 'chart_text' && s.layout !== 'team_grid' && s.layout !== 'timeline'), 'sparse cards fall back');
   assert.ok(sparse.some((s) => (s.blocks as any[]).some((b) => b.kind === 'metric' && b.value == null)), 'and show Not recorded');
 });
+
+test('a bound chart series survives the slide model: its key carries the series cadence (it was dropped on save)', () => {
+  const binding = { source_key: 'grow.mrr.monthly', record_ref: 'project_metrics:3', as_of: '2026-10-01', grade: 'Measured', snapshot_hash: 'a'.repeat(24) };
+  const [chart] = sanitizeBlocks([{ id: 'c', kind: 'chart', grid: { c1: 1, c2: 8, r1: 2, r2: 6 }, chart_type: 'line', series: [{ label: 'MRR', binding }] }], url);
+  assert.deepEqual(chart.series, [{ label: 'MRR', binding }]);
+  assert.equal(sanitizeBlocks([{ id: 'c', kind: 'chart', grid: { c1: 1, c2: 8, r1: 2, r2: 6 }, series: [{ label: 'x', binding: { ...binding, source_key: 'grow.mrr.monthly.extra' } }] }], url)[0].series.length, 0, 'a third segment is still refused');
+});

@@ -510,7 +510,9 @@ export function sanitizeBinding(b: unknown): Binding | null {
   if (!b || typeof b !== 'object') return null;
   const x = b as Record<string, unknown>;
   const key = typeof x.source_key === 'string' ? x.source_key : '';
-  if (!/^[a-z]+\.[a-z0-9_]{1,48}$/.test(key)) return null;
+  // A slot is `area.slot`; a chart series adds its cadence or origin (`grow.mrr.monthly`, `chartSeries.ts`).
+  // D898 §8.7 (#3658): the one-dot rule dropped every bound chart series on save.
+  if (!/^[a-z]+\.[a-z0-9_]{1,48}(\.[a-z0-9_]{1,24})?$/.test(key)) return null;
   const ref = typeof x.record_ref === 'string' && x.record_ref.length <= 120 ? x.record_ref : null;
   const asOf = typeof x.as_of === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x.as_of) ? x.as_of : null;
   const grade = typeof x.grade === 'string' && BINDING_GRADES.has(x.grade) ? x.grade : null;
