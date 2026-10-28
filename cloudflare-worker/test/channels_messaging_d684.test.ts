@@ -342,7 +342,7 @@ const voiceJobs = (queued: any[]) => queued.filter((j) => j.job_type === 'channe
 const segments = (db: any, sessionId: number) => db.prepare('SELECT speaker_label, text FROM interview_transcript_segments WHERE session_id = ? ORDER BY id').all(sessionId)
   .map((s: any) => [s.speaker_label, s.text]);
 
-test('Telegram: a voice note on a pending chat runs no model and waits, with no text, until the member assigns the chat', async () => {
+test('Telegram: a voice note on a pending chat runs no model and waits, with no text, until the member assigns the chat', async (testContext) => {
   // Review findings 0 and 9: a stranger's voice notes used to be downloaded and
   // transcribed on arrival, on the member's AI budget and then their top-up.
   const { env, db, queued, aiCalls } = await world({ seed: true });
@@ -366,14 +366,23 @@ test('Telegram: a voice note on a pending chat runs no model and waits, with no 
     await consentGiven(env, db, t.uid);
     assert.equal(queued.length, 0, 'a pending chat queues nothing, consent or not');
     // ...and the member assigns the chat: now, and only now, the notes are queued — ids only.
+    // An opaque internal UUID may contain the chat ID's digits without exposing it.
+    let uuidSequence = 0;
+    testContext.mock.method(crypto, 'randomUUID', () => `80010000-0000-4000-8000-${(++uuidSequence).toString(16).padStart(12, '0')}`);
     const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
     assert.deepEqual([a.status, a.body.moved, a.body.voice_queued], [200, 0, 3]);
     const jobs = voiceJobs(queued);
     assert.equal(jobs.length, 3);
     for (const job of jobs) {
       assert.match(job.idempotency_key, /^telegram:channel_followup:[0-9a-f-]{36}$/);
-      assert.deepEqual(Object.keys(job.payload).sort(), ['event', 'job', 'kind', 'message', 'provider']);
-      assert.equal(JSON.stringify(job).includes('VOICE-1') || JSON.stringify(job).includes('8001'), false, 'no file ref and no chat id in the job');
+      const claim = db.prepare('SELECT uid, transcribe_job FROM channel_thread_messages WHERE transcribe_job = ?')
+        .get(job.idempotency_key.slice('telegram:channel_followup:'.length));
+      assert.ok(claim, 'the idempotency key names a stored internal transcription claim');
+      assert.deepEqual(job, {
+        job_type: 'channel_followup', idempotency_key: `telegram:channel_followup:${claim.transcribe_job}`,
+        payload: { provider: 'telegram', kind: 'voice', message: claim.uid, job: claim.transcribe_job, event: null },
+      }, 'only the internal message and job IDs are queued, with no provider chat or file fields');
+      assert.equal(JSON.stringify(job).includes('VOICE-1'), false, 'no file ref in the job');
     }
     assert.equal((await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW })).body.voice_queued, 0, 'never queued twice');
 
