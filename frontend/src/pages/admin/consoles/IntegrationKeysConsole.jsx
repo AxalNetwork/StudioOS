@@ -21,6 +21,7 @@ import { keySaveRefusal, TOKEN_MISSING_LEAD } from '../../../lib/integrationKeys
 import { ConsoleUnreadable } from './shared';
 // D885 (#2561) — the interview channels' secrets.
 import ChannelKeysSection from './ChannelKeysSection';
+import ConnectorClientSection from './ConnectorClientSection';
 
 /**
  * D648 (#1448) — the Integration keys console.
@@ -298,6 +299,9 @@ export function IntegrationKeysPanel() {
       {!loading && !failed && channels.length > 0 && (
         <ChannelKeysSection channels={channels} holdsSecretWrites={holdsSecretWrites} onChanged={() => refresh()} showToast={showToast} />
       )}
+
+      {/* D1361: the Lovable custom connector's OAuth client, Super Admin only. */}
+      {!loading && holdsSecretWrites && <ConnectorClientSection showToast={showToast} />}
 
       {editing && (
         <IntegrationKeysEditModal

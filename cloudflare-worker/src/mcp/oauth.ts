@@ -28,7 +28,7 @@
 import { OAuthProvider, getOAuthApi, type OAuthProviderOptions, type AuthRequest } from '@cloudflare/workers-oauth-provider';
 import type { Env } from '../types';
 import { mcpApiHandler, serveMcp } from './server';
-import { apiKeysEnabled, looksLikeKey, rowCompanies, rowScopes, touchLastUsed, verifyKey, type VerifyFailure } from '../services/apiKeys';
+import { apiKeysEnabled, looksLikeKey, rowCompanies, rowScopes, touchLastUsed, verifyKey, type KeyRow, type VerifyFailure } from '../services/apiKeys';
 import { keyFailuresExceeded, keyLimitId, recordKeyFailure, withinGrantLimit, type GrantProps } from './grants';
 
 export const MCP_PATH = '/mcp';
@@ -183,7 +183,20 @@ const keyRefusal = (code: keyof typeof KEY_REFUSALS, status: number, headers: Re
  * - The bearer is never logged.
  */
 async function serveWithKey(request: Request, env: Env, bearer: string): Promise<Response> {
-  if (!apiKeysEnabled(env)) return keyRefusal('invalid_key', 401);
+  const auth = await authenticateKey(request, env, bearer);
+  if (auth instanceof Response) return auth;
+  return serveMcp(request, env, auth.props, null, auth.scopes);
+}
+
+/**
+ * D1361: a member API key turned into the principal `/mcp` and the connector
+ * API (`routes/connector_api.ts`) both serve, or the refusal to answer with.
+ * The flag, the per-IP failure throttle, the key check, the key's own rate and
+ * `last_used_at` all happen here, once, for both. The bearer is never logged.
+ */
+export async function authenticateKey(request: Request, env: Env, bearer: string | null):
+  Promise<Response | { key: KeyRow; props: GrantProps; scopes: string[] }> {
+  if (!apiKeysEnabled(env) || !bearer) return keyRefusal('invalid_key', 401);
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   if (await keyFailuresExceeded(env, ip)) return keyRefusal('rate_limited', 429, { 'Retry-After': '60' });
   const verified = await verifyKey(env, bearer);
@@ -207,7 +220,7 @@ async function serveWithKey(request: Request, env: Env, bearer: string): Promise
     grantedAt: Math.floor(createdMs / 1000),
     keyUid: key.uid,
   };
-  return serveMcp(request, env, props, null, rowScopes(key));
+  return { key, props, scopes: rowScopes(key) };
 }
 
 /** Edge per-IP throttle, before the provider; fail closed when the counter is unavailable.

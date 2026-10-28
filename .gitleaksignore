@@ -183,3 +183,5 @@ b86a6d6d4eac96a90f29bc3f4714d364d2f6b4a0:cloudflare-worker/test/kyb_d1231.test.t
 # Pin only the two already-published findings; retain every other check.
 5e8d812707ccd72f3b83c00586252df8d43edc4c:cloudflare-worker/test/publish_core_d1319.test.ts:generic-api-key:38
 5e8d812707ccd72f3b83c00586252df8d43edc4c:cloudflare-worker/test/publish_core_d1319.test.ts:jwt:293
+# D1361: a fixture signing string in a test, removed in the next commit; the published commit is pinned.
+987c80ec092a8a971073fac8bc57017348041ca2:cloudflare-worker/test/connector_api_d1361.test.ts:generic-api-key:198
