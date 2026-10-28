@@ -87,18 +87,27 @@ export class MeetingBotRun implements DurableObject {
           const { zoomRuntimeCredentials }=await import('../services/meetingBotZoom');
           const credentials=await zoomRuntimeCredentials(this.env,run);
           if (!await this.allowed(run) || (await this.lease()??0)<=Date.now()) throw new BotError(403,'bot_zoom_unavailable','The Zoom runtime is not available.');
+          // #2582: Zoom refused the founder's OBF because they are not in the call yet. Kept here,
+          // not as a new D1 status: D1 stays waiting_room, and a repeated answer writes nothing.
+          const waiting='waitingForHost' in credentials && credentials.waitingForHost===true;
+          if ((await this.state.storage.get<boolean>('waiting_for_host')??false)!==waiting) await this.state.storage.put('waiting_for_host',waiting);
           return json(credentials);
         }
         else if (action === '/status') await this.tick(run);
         else throw new BotError(404,'bot_not_found','The bot run is not available.');
         run = await botRow(this.env,uid);
-        return json(run ? botView(run) : null);
+        return json(run ? await this.view(run) : null);
       } catch (e) {
         if (e instanceof BotError) return json(e.body(),e.status);
         // Neither request data nor a runtime/provider error is logged or reflected.
         return json({code:'bot_unavailable',detail:'The meeting bot is temporarily unavailable.',message:'The meeting bot is temporarily unavailable.'},503);
       }
     });
+  }
+  /** The founder's read: `waiting_for: 'founder'` while Zoom waits for them to join (#2582). Counts and states only. */
+  private async view(run: BotRun) {
+    const waiting=(run.status==='joining' || run.status==='waiting_room') && await this.state.storage.get<boolean>('waiting_for_host')===true;
+    return waiting ? {...botView(run),waiting_for:'founder' as const} : botView(run);
   }
   private async update(run: BotRun, status: BotStatus, code: string | null = null) {
     if (run.status !== status && !NEXT[run.status].includes(status)) throw new BotError(409,'invalid_bot_transition','That bot status change is not available.');

@@ -402,6 +402,16 @@ const BUCKETS: Bucket[] = [
   // people behind one office NAT, while making bulk stuffing pointless.
   // failClosed because this is spam control: if KV is down we would rather
   // reject signups for a moment than leave the only real barrier open.
+  // D1312 (#3432): a Lovable landing page's sign-up address. The same
+  // unauthenticated write as the landing waitlist above, so the same ceiling.
+  {
+    name: 'lovable_signup',
+    limit: 6,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && /^\/api\/validate\/lovable-signups\/[^/]+$/.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
   {
     name: 'landing_signup',
     limit: 6,

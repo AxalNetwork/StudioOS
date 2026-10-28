@@ -13,7 +13,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { fillRunLine, optionLabel } from '../src/lib/fillRun.js';
 import { keptProposals, proposalsFrom, PROPOSED_FIELDS } from '../src/lib/brand/proposals.js';
-import { FilledMark } from '../src/pages/SpinoutLabMarketPage.jsx';
+import { FillMark, marketFillMark } from '../src/ui/FillMark.jsx';
 import { codeOnly } from './_codeOnly.mjs';
 
 const RUN = { usage_log_id: 41, rail_page: 'Founder · Grow · Distribution', rail_option: 'form:landing', charged_microusd: 1200, est_cost_usd: null };
@@ -38,7 +38,7 @@ test('the run line says the control’s label, else its page, never the option k
 test('an Eadwyn mark’s hover names no model and no option key', () => {
   const fill = { edited: true, proposed_value: '$4.2B', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', citation: { source: 'Gartner 2026', quote: 'The market is $4.2B.' },
     run: { usage_log_id: 9, rail_page: 'Founder · Spin-Out Lab · Market', rail_option: 'fill:market', charged_microusd: 900 } };
-  const html = renderToStaticMarkup(React.createElement(FilledMark, { fill }));
+  const html = renderToStaticMarkup(React.createElement(FillMark, { mark: marketFillMark(fill) }));
   const title = /title="([^"]*)"/.exec(html)?.[1] || '';
   assert.match(title, /Eadwyn proposed this and you changed it/);
   assert.match(title, /Run: Founder · Spin-Out Lab · Market/);

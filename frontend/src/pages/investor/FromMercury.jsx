@@ -1,3 +1,4 @@
+import { ConnectorMark } from '../../ui/FillMark.jsx';
 import { useCallback, useEffect, useState } from 'react';
 import { mercuryInvestorApi } from '../../lib/api/mercuryInvestor';
 
@@ -78,7 +79,7 @@ export default function FromMercury({ section, fundId = null }) {
 
   return (
     <section id="from-mercury" className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid={`from-mercury-${section}`} aria-labelledby={`from-mercury-${section}-title`}>
-      <h2 id={`from-mercury-${section}-title`} className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From Mercury</h2>
+      <h2 id={`from-mercury-${section}-title`} className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From Mercury<ConnectorMark provider="mercury" /></h2>
       {section === 'portfolio' ? (
         <p className={LINE} data-testid="from-mercury-portfolio-none">Mercury feeds nothing in Portfolio: portfolio figures belong to the companies, not to your bank account.</p>
       ) : state.loading ? (

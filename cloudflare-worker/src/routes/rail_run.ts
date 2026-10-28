@@ -39,12 +39,22 @@ import { run as aiRun, quoteRun, type RunOptions, type RunResult } from '../serv
 import { loadAiBudget } from '../services/aiBudget';
 import { proposeRail } from '../services/railProposals';
 import { fieldsOf, type FillField } from '../services/fills/fields';
-import { MAX_RUN_ROWS, fieldsToAsk, formMessages, gatherForm, parseFields, parseRows, type Dropped } from '../services/fills/formRun';
+import { MAX_RUN_ROWS, fieldsToAsk, formMessages, gatherForm, gatherScoped, parseFields, parseRows, type Dropped } from '../services/fills/formRun';
+import { isExplorer, parentKey, scopeOf } from '../services/fills/scopes';
 import { runRefusalView } from '../util/railContext';
 import { ROW_READS } from './fills';
 
 /** The form fields an Add form needs before a whole row can be proposed (the writer's own rule). */
-export const ROW_REQUIRED: Readonly<Record<string, readonly string[]>> = Object.freeze({ mvp_features: ['title'] });
+export const ROW_REQUIRED: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  mvp_features: ['title'],
+  // D1328 (#3489), part one: each Add form's own required field.
+  pain_groups: ['title'],
+  customer_segments: ['name'],
+  hypotheses: ['claim'],
+  // D1329 (#3490): a session in an event's agenda, and an advisor's service, each need a title.
+  event_agenda_items: ['title'],
+  advisor_services: ['title'],
+});
 
 const SENTENCES: Record<string, string> = {
   unknown_handler: 'That option has no run here yet.',
@@ -54,6 +64,9 @@ const SENTENCES: Record<string, string> = {
   support_session_refused: 'A support session cannot ask Eadwyn to fill a form.',
   record_not_found: 'That record is not on this venture.',
   nothing_to_fill: 'Every field Eadwyn can fill already holds a value.',
+  // D1329 (#3490).
+  no_profile: 'Fill opens once you hold a venture or a profile.',
+  record_not_available: 'You cannot change this record.',
 };
 
 export type Runner = (env: Env, input: RunOptions) => Promise<RunResult>;
@@ -82,30 +95,64 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     const form = m[1];
     const fields = fieldsOf(page, form);
     if (!fields.length) return refuse(c, 404, 'unknown_form');
-    const projectId = Number(body?.project);
-    if (!Number.isSafeInteger(projectId) || projectId <= 0) return refuse(c, 400, 'invalid_project');
-    if ((await selectJwt(c))?.payload?.impersonated_by) return refuse(c, 403, 'support_session_refused');
-    const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
-      .bind(projectId).first<{ id: number; founder_id: number | null; company_id: number | null }>();
-    if (!project || !(await canAccessProject(c.env, user, project, { write: true }))) return refuse(c, 403, 'project_not_available');
-
     const table = fields[0].table;
     const rec = body?.record;
+    // D1329 (#3490): a record that is not a venture's is checked by its own scope (`scopes.ts`).
+    const recordScope = scopeOf(table);
+    let projectId: number | null = null;
     let recordId: number | null = null;
     let row: Record<string, unknown> | null = null;
-    if (rec != null) {
-      recordId = Number(rec?.id);
-      if (rec?.type !== table || !Number.isSafeInteger(recordId) || recordId <= 0 || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
-      row = await c.env.DB.prepare(ROW_READS[table]).bind(recordId, projectId).first<Record<string, unknown>>();
-      if (!row) return refuse(c, 404, 'record_not_found');
+    let scopeKey: string | null = null;
+    let scopedParent: number | null = null;
+    let reread: () => Promise<Record<string, unknown> | null>;
+    if (recordScope) {
+      if (isExplorer(user)) return refuse(c, 403, 'no_profile');
+      if ((await selectJwt(c))?.payload?.impersonated_by) return refuse(c, 403, 'support_session_refused');
+      let parentId: number | null = null;
+      if (rec != null) {
+        recordId = Number(rec?.id);
+        if (rec?.type !== table || !Number.isSafeInteger(recordId) || recordId <= 0) return refuse(c, 404, 'record_not_found');
+        row = await c.env.DB.prepare(recordScope.read).bind(recordId).first<Record<string, unknown>>();
+        if (!row) return refuse(c, 404, 'record_not_found');
+      } else if (recordScope.parent?.own) {
+        parentId = await recordScope.parent.own(c.env, user);
+      } else if (recordScope.parent) {
+        parentId = Number(body?.parent);
+        if (!Number.isSafeInteger(parentId) || parentId <= 0) return refuse(c, 404, 'record_not_found');
+      } else {
+        return refuse(c, 404, 'record_not_found');
+      }
+      const access = await recordScope.access(c.env, user, row, parentId);
+      if (!access.write) return refuse(c, 403, 'record_not_available');
+      scopeKey = recordId ? `${table}:${recordId}` : parentKey(recordScope, parentId as number);
+      scopedParent = parentId;
+      const id = recordId;
+      reread = async () => (id ? await c.env.DB.prepare(recordScope.read).bind(id).first<Record<string, unknown>>() : null);
+    } else {
+      projectId = Number(body?.project);
+      if (!Number.isSafeInteger(projectId) || projectId <= 0) return refuse(c, 400, 'invalid_project');
+      if ((await selectJwt(c))?.payload?.impersonated_by) return refuse(c, 403, 'support_session_refused');
+      const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+        .bind(projectId).first<{ id: number; founder_id: number | null; company_id: number | null }>();
+      if (!project || !(await canAccessProject(c.env, user, project, { write: true }))) return refuse(c, 403, 'project_not_available');
+      if (rec != null) {
+        recordId = Number(rec?.id);
+        if (rec?.type !== table || !Number.isSafeInteger(recordId) || recordId <= 0 || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
+        row = await c.env.DB.prepare(ROW_READS[table]).bind(recordId, projectId).first<Record<string, unknown>>();
+        if (!row) return refuse(c, 404, 'record_not_found');
+      }
+      const id = recordId, venture = projectId;
+      reread = async () => (id ? await c.env.DB.prepare(ROW_READS[table]).bind(id, venture).first<Record<string, unknown>>() : null);
     }
     const recordRef = recordId ? `${table}:${recordId}` : null;
+    // What the proposals are filed under: the venture, or (D1329) the record or parent of a scoped one.
+    const filed = scopeKey ? { project: null, scope: scopeKey } : { project: projectId };
     const input = (body?.input && typeof body.input === 'object' ? body.input : {}) as { values?: Record<string, unknown>; text?: unknown; rows?: unknown };
     const rowsWanted = !recordId && Number.isSafeInteger(Number(input.rows)) ? Math.max(0, Math.min(MAX_RUN_ROWS, Number(input.rows))) : 0;
     const asked = rowsWanted ? fields.filter((f) => fieldsToAsk([f]).length) : fieldsToAsk(fields, input.values ?? {}, row);
     if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
 
-    const gather = await gatherForm(c.env, projectId, asked);
+    const gather = recordScope ? await gatherScoped(c.env, Number(user.id), table, row, scopedParent) : await gatherForm(c.env, projectId as number, asked);
     const { messages, guardText } = formMessages(asked, gather, { text: typeof input.text === 'string' ? input.text : '', rows: rowsWanted || undefined });
     const runInput: RunOptions = {
       task: 'rail_write', userId: Number(user.id), messages, guardText, maxTokens: rowsWanted ? 1200 : 600, temperature: 0.2,
@@ -133,7 +180,7 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
 
     // A changed form drops the result.
     if (recordId) {
-      const after = await c.env.DB.prepare(ROW_READS[table]).bind(recordId, projectId).first<Record<string, unknown>>();
+      const after = await reread();
       if (!after || snapshot(after, asked) !== snapshot(row, asked)) {
         events.push(sse('done', { proposals: [], dropped: [{ field: '', why: 'record_changed' }], usage_log_id: result.usageLogId ?? null }));
         return finish();
@@ -149,7 +196,7 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
       const parsed = parseRows(result.output, fields, asked, gather, rowsWanted, ROW_REQUIRED[table] ?? []);
       dropped = parsed.dropped;
       for (const one of parsed.rows) {
-        const p = await proposeRail(c.env, { ...base, kind: 'proposal', payload: { row: one, table, project: projectId, source: 'eadwyn' } });
+        const p = await proposeRail(c.env, { ...base, kind: 'proposal', payload: { row: one, table, ...filed, source: 'eadwyn' } });
         proposals.push({ uid: p.uid, row: one });
       }
     } else {
@@ -161,7 +208,7 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
         const prior = row ? row[f.column] ?? null : null;
         const p = await proposeRail(c.env, { ...base, kind: 'proposal', payload: {
           field: k.field, value: k.value, label: f.label, class: f.class, table, column: f.column,
-          project: projectId, prior, ...(k.citation ? { citation: k.citation } : {}), source: 'eadwyn',
+          ...filed, prior, ...(k.citation ? { citation: k.citation } : {}), source: 'eadwyn',
         } });
         proposals.push({ uid: p.uid, field: k.field, value: k.value });
       }

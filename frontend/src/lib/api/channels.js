@@ -28,6 +28,9 @@
 //   reply            POST   /channels/threads/:uid/reply   { text, client_key }
 //   retryVoice       POST   /channels/threads/:uid/voice/:message/retry  a voice note that was not transcribed, again (#1586) → { ok, queued }
 //   meetings         GET    /founder/validate/interviews/:id/meetings
+//   meetingSetup     GET    /founder/validate/meetings/setup     D875: Zoom and Meet, step by step, from stored rows
+//   upcomingCalls    GET    /founder/validate/meetings/upcoming  D875: the next 14 days' calendar calls not yet attached
+//   calls            GET    /founder/validate/meetings/calls?project_id=  D878 (#2525): one venture's calls, each with its audio
 //   scheduleMeeting  POST   /founder/validate/interviews/:id/meetings  { provider, starts_at, duration_min, topic?, consent, auto_record? }
 //   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
 //   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
@@ -37,6 +40,8 @@
 //   meetingSetup     GET    /founder/validate/meetings/setup     D875: Zoom's and Google Meet's steps, read from stored rows
 //   upcomingCalls    GET    /founder/validate/meetings/upcoming  D875: the next 14 days of the member's own unattached calls
 //   calls            GET    /founder/validate/meetings           D878 (#2525): { calls, uploads, audio, retention }
+//   botAvailability  GET    /founder/validate/meetings/bot       D1346 (#3554): { available, platforms, limit_minutes, price }
+//   instantMeeting   POST   /founder/validate/meetings/instant   D1346 (#3554): { provider, duration_min? } → { provider, join_url }
 //   googleStatus     GET    /calendar/google/status        → { connected, meet_transcripts: 'granted' | 'available' | 'not_set_up', … } (D757, #1926)
 //   allowMeetTranscripts POST /calendar/google/meet-transcripts/connect?return_to=  then the page goes to Google's consent (D757, #1926)
 //
@@ -200,6 +205,14 @@ export const channelsApi = {
   upcomingCalls: () => request('/founder/validate/meetings/upcoming'),
   /** D878 (#2525): every call and uploaded recording of the member's, with each session's audio state. */
   calls: () => request('/founder/validate/meetings'),
+  /** D878 (#2525): one venture's calls, each with its ref and audio. */
+  ventureCalls: (projectId) => request(`/founder/validate/meetings/calls?project_id=${enc(projectId)}`),
+  /** D1346 (#3554): whether Eadwyn AI can join this member's calls yet, per platform, with its price. */
+  botAvailability: () => request('/founder/validate/meetings/bot'),
+  /** D1346 (#3554): "Create the meeting for me" — a meeting starting now on the member's own Zoom or Google account. */
+  instantMeeting: (provider, durationMin) => request('/founder/validate/meetings/instant', {
+    method: 'POST', body: JSON.stringify({ provider, ...(durationMin ? { duration_min: durationMin } : {}) }),
+  }),
 };
 
 /** The Telegram Business interview bot, for Super Admins (D756): its health, and registering its webhook. */

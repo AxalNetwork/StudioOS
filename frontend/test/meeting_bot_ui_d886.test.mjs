@@ -16,9 +16,11 @@ async function press(m,id){await act(async()=>{await m.props(by(m,id)).onClick?.
 async function change(m,id,value,checked){await act(async()=>{await m.props(by(m,id)).onChange({target:{value,checked}});});}
 const bot=(status)=>({bot:{uid:'synthetic',status,started_at:now-65000,participant_count:2}});
 const models={live:[],final:[],defaults:{live:null,final:null}};
+// D1346 (#3554): the availability read Record a Session makes on open, with Eadwyn AI deployed.
+const BOT_ON={available:true,platforms:{zoom:true,google_meet:true,teams:true},limit_minutes:30,price:{bot_microusd_per_minute:2790,transcription_microusd_per_minute:6500}};
 function setup(){
   const sent=[],device=[],started=[],opened=[];
-  const props={projectId:10,interview:{id:1,interviewee_name:'Fixture person'},initialMode:'video',initialModels:models,initialBoard:{hypotheses:[]},channels:{providers:[{provider:'zoom',available:false},{provider:'google_meet',available:true}],connections:{}},initialConsent:'written',onClose(){},onStarted:(...a)=>started.push(a),sessions:{async create(id,body){opened.push(body);return{session:{id:15,channel:'video'}};},async sendBot(id,body){sent.push({id,body});return bot('joining');}},recorder:{prepare(){device.push('prepare');},release(){device.push('release');},begin(){device.push('begin');},getSnapshot(){return{};},isCapturing(){return false;}}};
+  const props={projectId:10,interview:{id:1,interviewee_name:'Fixture person'},initialMode:'video',initialBot:BOT_ON,initialModels:models,initialBoard:{hypotheses:[]},channels:{providers:[{provider:'zoom',available:false},{provider:'google_meet',available:true}],connections:{}},initialConsent:'written',onClose(){},onStarted:(...a)=>started.push(a),sessions:{async create(id,body){opened.push(body);return{session:{id:15,channel:'video'}};},async sendBot(id,body){sent.push({id,body});return bot('joining');}},recorder:{prepare(){device.push('prepare');},release(){device.push('release');},begin(){device.push('begin');},getSnapshot(){return{};},isCapturing(){return false;}}};
   return {props,sent,device,started,opened};
 }
 
@@ -48,7 +50,7 @@ test('B7 StrictMode status loads; rendered Stop uses its route exactly once and 
 
 test('B7 supported link sends the bot after saved consent without preparing a device or storing a plain link',async()=>{
   const s=setup(),m=await mountContracts(h(RecordLightbox,s.props));
-  try{await press(m,'record-provider-google_meet');await change(m,'record-link',link);assert.match(m.text(),/Send Eadwyn AI/);assert.ok(by(m,'meeting-bot-consent-notice'));assert.ok(by(m,'record-device'));assert.match(m.text(),/Device recording options/);assert.match(m.text(),/bot time and transcription/);await press(m,'record-start');assert.equal(s.sent.length,1,m.text());assert.equal(s.sent[0].id,15);assert.equal(s.sent[0].body.meeting_url,link);assert.equal(s.opened[0].meeting_url,undefined);assert.equal(s.opened[0].consent.status,'given');assert.equal(s.opened[0].final_model,'@cf/deepgram/nova-3');assert.equal(s.opened[0].live_model,null);assert.deepEqual(s.device,[]);assert.equal(s.started[0][0].submitted_via,'meeting_bot');}finally{await m.unmount();}
+  try{await press(m,'record-provider-google_meet');await change(m,'record-link',link);assert.match(m.text(),/Send Eadwyn AI/);assert.ok(by(m,'meeting-bot-consent-notice'));assert.ok(by(m,'record-device'));assert.match(m.text(),/Eadwyn AI’s time: \$0\.0028 a minute/);assert.equal(by(m,'record-live'),undefined);assert.match(m.text(),/bot time and transcription/);await press(m,'record-start');assert.equal(s.sent.length,1,m.text());assert.equal(s.sent[0].id,15);assert.equal(s.sent[0].body.meeting_url,link);assert.equal(s.opened[0].meeting_url,undefined);assert.equal(s.opened[0].consent.status,'given');assert.equal(s.opened[0].final_model,'@cf/deepgram/nova-3');assert.equal(s.opened[0].live_model,null);assert.deepEqual(s.device,[]);assert.equal(s.started[0][0].submitted_via,'meeting_bot');}finally{await m.unmount();}
 });
 
 test('B7 secondary device choice stays explicit; refusal never falls back to microphone or echoes provider text',async()=>{

@@ -1,3 +1,4 @@
+import { ConnectorMark } from '../../ui/FillMark.jsx';
 import { useState } from 'react';
 import { LOVABLE_MARK, isLovable } from '../../lib/lovableMark';
 import { cyclesWrite } from '../../lib/api/cycles';
@@ -34,7 +35,7 @@ export default function SolutionDesignFromCode({ part, projectId, reload }) {
   };
   return (
     <section id="from-github" className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-part-from-code" aria-labelledby="from-github-title">
-      <h2 id="from-github-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From GitHub</h2>
+      <h2 id="from-github-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From GitHub<ConnectorMark provider="github" /></h2>
       {view.state === 'unreadable' ? (
         <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="from-code-unreadable">{view.reason}</p>
       ) : (

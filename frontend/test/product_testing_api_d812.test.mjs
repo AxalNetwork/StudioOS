@@ -42,6 +42,22 @@ test('a member lists, applies with consent only as the literal true, withdraws a
   ]);
 });
 
+test('D1336: the member reads, joins and leaves the tester pool, sending the consent version it was shown', async () => {
+  // Mutation checked: send consentVersion as `consent` → the Worker reads no version and refuses the join.
+  const calls = await seen(async () => {
+    await productTestingApi.tester();
+    await productTestingApi.joinPool({ consentVersion: 'd1336-1', availability: '3 hours a week' });
+    await productTestingApi.joinPool({ consentVersion: 'd1336-1' });
+    await productTestingApi.leavePool();
+  });
+  assert.deepEqual(calls, [
+    ['GET', '/testing/tester', null],
+    ['POST', '/testing/tester/apply', { consent_version: 'd1336-1', availability: '3 hours a week' }],
+    ['POST', '/testing/tester/apply', { consent_version: 'd1336-1', availability: null }],
+    ['POST', '/testing/tester/leave', null],
+  ]);
+});
+
 test('a partner and HQ reach their own routes', async () => {
   const calls = await seen(async () => {
     await partnerTestingApi.programmes();

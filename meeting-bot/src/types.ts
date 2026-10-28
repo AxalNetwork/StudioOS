@@ -37,6 +37,12 @@ export type Unsubscribe = () => void;
 /** 16 kHz mono 16-bit PCM, the format D872's chunk route admits. */
 export interface AudioFrame {
   readonly samples: Int16Array;
+  /**
+   * #2582: the platform's participant id when the frame is one person's own
+   * stream (Zoom's one-way audio), the same key the roster uses. Absent on
+   * mixed audio. An adapter never sends both for the same stretch.
+   */
+  readonly participant?: string;
 }
 
 /**
@@ -116,6 +122,12 @@ export interface StatusReport {
   readonly events?: number;
   readonly events_dropped?: number;
   readonly participants?: number;
+  /** #2582: which audio path ran, as counts, so the live check can read it. */
+  readonly mixed_chunks?: number;
+  readonly participant_chunks?: number;
+  readonly participant_streams?: number;
+  /** Voiced parts not sent because B1's chunk_seq range was spent. */
+  readonly voiced_dropped?: number;
 }
 
 /**
@@ -129,8 +141,11 @@ export interface CallbackTransport {
   /** Abort outstanding HTTP requests after the final bounded flush. */
   close?(): void;
   events(batch: readonly BotEvent[]): Promise<void>;
-  /** Store one audio chunk. Sending the same `seq` twice stores it once. */
-  putChunk(seq: number, wav: Uint8Array<ArrayBuffer>, startMs?: number): Promise<void>;
+  /**
+   * Store one audio chunk. Sending the same `seq` twice stores it once.
+   * `participant` names a per-participant chunk's stream (B1's chunk event `participant_id`).
+   */
+  putChunk(seq: number, wav: Uint8Array<ArrayBuffer>, startMs?: number, participant?: string): Promise<void>;
 }
 
 /** Timers the core uses, injectable so tests run on a fake clock. */

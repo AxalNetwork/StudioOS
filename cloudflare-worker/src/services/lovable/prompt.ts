@@ -32,7 +32,9 @@ export const NEVER_INCLUDE = Object.freeze([
 /** The dialog's "Left out" line, the same for both templates. */
 export const LEFT_OUT = 'Interview names, quotes and contacts are never included.';
 
-export type ExperimentRecord = { venture: string; description: string | null; code: string | null; claim: string; title: string; method: string | null; target: string | null };
+export type ExperimentRecord = { venture: string; description: string | null; code: string | null; claim: string; title: string; method: string | null; target: string | null;
+  /** D1312: the experiment's sign-up address, when it has one; the form posts its email there. */
+  signupUrl?: string | null };
 export type PrototypeRecord = { venture: string; description: string | null; mustHaves: Array<{ title: string; description: string | null }>; targetDate: string | null };
 
 const line = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
@@ -68,6 +70,8 @@ export function landingTestPrompt(r: ExperimentRecord): { prompt: string; droppe
     ...(line(r.target) ? [`What counts as a pass: ${line(r.target)}`] : []),
   ];
   const tail = ['Include a clear headline, the promise in one sentence, three short benefits, and one call to action that records interest (a sign-up form). Keep it simple and fast to load.'];
+  // D1312 (#3432): with a sign-up address, the form posts there; only the count is kept.
+  if (r.signupUrl) tail.push(`Make the sign-up form a plain HTML form: method POST, action ${r.signupUrl}, one email field named "email". Do not store the email anywhere else.`);
   return capped(head, list, tail);
 }
 

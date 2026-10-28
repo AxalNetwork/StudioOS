@@ -279,3 +279,16 @@ for (const [index, [before, after]] of mutations.entries()) {
     assert.equal(caught, true, 'broken behavior must fail a scenario');
   });
 }
+
+// #2582: Zoom waits for the founder; the Worker's read says so, the status stays waiting_room.
+test('#2582 waiting for the founder reads "Join the call first; Eadwyn AI follows." only while joining or waiting', () => {
+  for (const status of ['joining', 'waiting_room']) {
+    const view = model.botView({ bot: { status, waiting_for: 'founder' } });
+    assert.equal(view.label, 'Join the call first; Eadwyn AI follows.');
+    assert.equal(view.waitingForFounder, true);
+    assert.equal(view.canStop, true, 'the founder can still stop it');
+  }
+  assert.equal(model.botView({ bot: { status: 'waiting_room' } }).label, 'Waiting to be admitted');
+  assert.equal(model.botView({ bot: { status: 'waiting_room', waiting_for: 'someone' } }).label, 'Waiting to be admitted');
+  for (const status of ['recording', 'stopped', 'failed']) assert.equal(model.botView({ bot: { status, waiting_for: 'founder' } }).waitingForFounder, false, status);
+});

@@ -90,6 +90,9 @@ function world() {
   app.route('/api/partner/testing', partnerTesting);
   app.route('/api/admin/testing', adminTesting);
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any;
+  db.exec(readFileSync(`${SQL}/migrations/576_product_testers.sql`, 'utf8'));
+  // D1336: only an active Product tester reads and applies to programmes, so every member here starts as one.
+  db.exec("INSERT INTO product_testers (user_id, status, decided_at) SELECT id, 'active', '2026-10-01' FROM users WHERE role NOT IN ('partner', 'admin') AND id NOT IN (SELECT user_id FROM super_admins)");
   return { db, app, env };
 }
 
@@ -195,7 +198,8 @@ test('open and close tell the firm; HQ\'s own programme has no owner to tell', a
   const opened = await call(w, HQ, 'POST', `/admin/testing/programmes/${uid}/open`);
   assert.deepEqual([opened.body.programme.status, opened.body.told], ['open', { owner: 2 }]);
   const closed = await call(w, HQ, 'POST', `/admin/testing/programmes/${uid}/close`);
-  assert.deepEqual([closed.body.programme.status, closed.body.told], ['closed', { owner: 2 }]);
+  // D1336: the picked testers are told too; this programme has none.
+  assert.deepEqual([closed.body.programme.status, closed.body.told], ['closed', { owner: 2, testers: 0 }]);
   for (const who of [ACME, ACME_2]) {
     assert.deepEqual(inbox(w, who).map((n) => n.type).slice(-2), ['testing_programme_opened', 'testing_programme_closed']);
   }
@@ -206,7 +210,7 @@ test('open and close tell the firm; HQ\'s own programme has no owner to tell', a
   const hqBefore = w.db.prepare('SELECT COUNT(*) AS n FROM notifications_inbox').get().n;
   assert.deepEqual((await call(w, HQ, 'POST', `/admin/testing/programmes/${hq}/open`)).body.told, { owner: null });
   assert.deepEqual((await call(w, HQ, 'POST', `/admin/testing/programmes/${hq}/testing`)).body.told, { owner: null, testers: 0, mail_reach: 0 });
-  assert.deepEqual((await call(w, HQ, 'POST', `/admin/testing/programmes/${hq}/close`)).body.told, { owner: null });
+  assert.deepEqual((await call(w, HQ, 'POST', `/admin/testing/programmes/${hq}/close`)).body.told, { owner: null, testers: 0 });
   assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM notifications_inbox').get().n, hqBefore, 'nobody is told for HQ\'s own');
 });
 

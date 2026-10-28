@@ -141,6 +141,20 @@ const MARKS = {
     guidelines: null,
     path: 'M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z',
   },
+  // D1096 (#2961) / D1085 (#2950), re-sourced 2026-10-27: both are in Simple
+  // Icons 16.35.0 after all — the "could not be read from this environment"
+  // (vercel) and "no approved artwork" (notion) BRAND_MONOGRAM reasons were
+  // true only of the earlier attempt, re-checked and now false.
+  vercel: {
+    name: 'Vercel', slug: 'vercel', hex: '#000000', dark: '#ffffff',
+    guidelines: 'https://vercel.com/geist/brands',
+    path: 'm12 1.608 12 20.784H0Z',
+  },
+  notion: {
+    name: 'Notion', slug: 'notion', hex: '#000000', dark: '#ffffff',
+    guidelines: null,
+    path: 'M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z',
+  },
 };
 // D687 follow-up (#1682): static artwork reviewed from the recorded source blobs.
 // No SVG text is parsed in the browser. Gradients retain their original geometry;
@@ -1178,6 +1192,76 @@ export const VENDOR_MARKS = Object.freeze({
     "version": "2026-10-16",
     "licence": "https://x.ai/legal/brand-guidelines",
     "guidelines": "https://x.ai/legal/brand-guidelines"
+  },
+  // D1081, re-sourced 2026-10-27: not in Simple Icons. SVGL's mirror
+  // (pinned commit, MIT, below) draws the official mark unaltered — the
+  // gradient blob from lovable.dev/brand, mask-clipped to its rounded shape.
+  lovable: {
+    "name": "Lovable",
+    "viewBox": "0 0 121 122",
+    "hex": "#FF66F4",
+    "dark": "#FF66F4",
+    "multicolour": true,
+    "source": "https://github.com/pheralb/svgl/blob/82fd3de572f441241bc2e897f396eaedc266c997/static/library/lovable.svg",
+    "sourceBlob": "0ce3902deb1d5f1a34a69541ee43d21f5bb11fce",
+    "version": "2026-10-27",
+    "licence": "MIT",
+    "guidelines": "https://lovable.dev/brand",
+    "artwork": [
+      {
+        "tag": "mask", "attrs": { "id": "b", "width": 121, "height": 122, "x": 0, "y": 0, "maskUnits": "userSpaceOnUse", "style": { "maskType": "alpha" } },
+        "children": [
+          { "tag": "path", "attrs": { "fill": "url(#a)", "fillRule": "evenodd", "clipRule": "evenodd", "d": "M36.069 0c19.92 0 36.068 16.155 36.068 36.084v13.713h12.004c19.92 0 36.069 16.156 36.069 36.084 0 19.928-16.149 36.083-36.069 36.083H0v-85.88C0 16.155 16.148 0 36.069 0Z" }, "children": [] }
+        ]
+      },
+      {
+        "tag": "g", "attrs": { "mask": "url(#b)" },
+        "children": [
+          { "tag": "g", "attrs": { "filter": "url(#c)" }, "children": [
+            { "tag": "ellipse", "attrs": { "cx": 52.738, "cy": 65.101, "fill": "#4B73FF", "rx": 81.373, "ry": 81.192 }, "children": [] },
+          ] },
+          { "tag": "g", "attrs": { "filter": "url(#d)" }, "children": [
+            { "tag": "ellipse", "attrs": { "cx": 61.673, "cy": 20.547, "fill": "#FF66F4", "rx": 104.216, "ry": 81.192 }, "children": [] },
+          ] },
+          { "tag": "g", "attrs": { "filter": "url(#e)" }, "children": [
+            { "tag": "ellipse", "attrs": { "cx": 78.666, "cy": 5.268, "fill": "#FF0105", "rx": 81.373, "ry": 71.304 }, "children": [] },
+          ] },
+          { "tag": "g", "attrs": { "filter": "url(#f)" }, "children": [
+            { "tag": "ellipse", "attrs": { "cx": 63.121, "cy": 20.527, "fill": "#FE7B02", "rx": 48.937, "ry": 48.829 }, "children": [] },
+          ] },
+        ]
+      },
+      {
+        "tag": "defs", "attrs": {},
+        "children": [
+          { "tag": "filter", "attrs": { "id": "c", "width": 235.52, "height": 235.159, "x": -65.022, "y": -52.478, "colorInterpolationFilters": "sRGB", "filterUnits": "userSpaceOnUse" }, "children": [
+            { "tag": "feFlood", "attrs": { "floodOpacity": 0, "result": "BackgroundImageFix" }, "children": [] },
+            { "tag": "feBlend", "attrs": { "in": "SourceGraphic", "in2": "BackgroundImageFix", "result": "shape" }, "children": [] },
+            { "tag": "feGaussianBlur", "attrs": { "result": "effect1_foregroundBlur_572_319", "stdDeviation": 18.194 }, "children": [] },
+          ] },
+          { "tag": "filter", "attrs": { "id": "d", "width": 281.208, "height": 235.159, "x": -78.93, "y": -97.032, "colorInterpolationFilters": "sRGB", "filterUnits": "userSpaceOnUse" }, "children": [
+            { "tag": "feFlood", "attrs": { "floodOpacity": 0, "result": "BackgroundImageFix" }, "children": [] },
+            { "tag": "feBlend", "attrs": { "in": "SourceGraphic", "in2": "BackgroundImageFix", "result": "shape" }, "children": [] },
+            { "tag": "feGaussianBlur", "attrs": { "result": "effect1_foregroundBlur_572_319", "stdDeviation": 18.194 }, "children": [] },
+          ] },
+          { "tag": "filter", "attrs": { "id": "e", "width": 235.52, "height": 215.383, "x": -39.094, "y": -102.423, "colorInterpolationFilters": "sRGB", "filterUnits": "userSpaceOnUse" }, "children": [
+            { "tag": "feFlood", "attrs": { "floodOpacity": 0, "result": "BackgroundImageFix" }, "children": [] },
+            { "tag": "feBlend", "attrs": { "in": "SourceGraphic", "in2": "BackgroundImageFix", "result": "shape" }, "children": [] },
+            { "tag": "feGaussianBlur", "attrs": { "result": "effect1_foregroundBlur_572_319", "stdDeviation": 18.194 }, "children": [] },
+          ] },
+          { "tag": "filter", "attrs": { "id": "f", "width": 170.649, "height": 170.432, "x": -22.204, "y": -64.688, "colorInterpolationFilters": "sRGB", "filterUnits": "userSpaceOnUse" }, "children": [
+            { "tag": "feFlood", "attrs": { "floodOpacity": 0, "result": "BackgroundImageFix" }, "children": [] },
+            { "tag": "feBlend", "attrs": { "in": "SourceGraphic", "in2": "BackgroundImageFix", "result": "shape" }, "children": [] },
+            { "tag": "feGaussianBlur", "attrs": { "result": "effect1_foregroundBlur_572_319", "stdDeviation": 18.194 }, "children": [] },
+          ] },
+          { "tag": "linearGradient", "attrs": { "id": "a", "x1": 40.453, "x2": 76.933, "y1": 21.433, "y2": 121.971, "gradientUnits": "userSpaceOnUse" }, "children": [
+            { "tag": "stop", "attrs": { "offset": 0.025, "stopColor": "#FF8E63" }, "children": [] },
+            { "tag": "stop", "attrs": { "offset": 0.56, "stopColor": "#FF7EB0" }, "children": [] },
+            { "tag": "stop", "attrs": { "offset": 0.95, "stopColor": "#4B73FF" }, "children": [] },
+          ] },
+        ]
+      }
+    ]
   }
 });
 
@@ -1202,9 +1286,6 @@ const MS_TERMS = 'Microsoft\'s Trademark and Brand Guidelines (https://www.micro
 
 /** Initials on purpose, each with why. */
 export const BRAND_MONOGRAM = Object.freeze({
-  lovable: Object.freeze({ name: 'Lovable', reason: 'D1081 uses the existing initials tile. No approved Lovable artwork is recorded in this repository.' }),
-  vercel: Object.freeze({ name: 'Vercel', reason: 'D1096 (#2961) adds Vercel with the initials tile. Its Simple Icons artwork could not be read and pinned from this environment, and no approved Vercel artwork is recorded in this repository.' }),
-  notion: Object.freeze({ name: 'Notion', reason: 'D1085 (#2950) adds Notion with the initials tile. No approved Notion artwork, or the brand terms that would allow it, is recorded in this repository.' }),
   teams: Object.freeze({ name: 'Microsoft Teams', reason: MS_TERMS }),
   affinity: Object.freeze({ name: 'Affinity', reason: 'Affinity CRM is affinity.co, not the Affinity design suite. The vendor newsroom (https://www.affinity.co/company/newsroom, read 2026-10-16) has no downloadable icon kit. Brandfetch and an n8n SVG were located, but their current vendor provenance and permitted treatment remain unverified. Initials until that is recorded.' }),
 });
@@ -1316,7 +1397,7 @@ export default function BrandIcon({ provider, name = '', size = 34, variant = 't
 
 export { BrandIcon };
 
-/* SVGL asset mirror licence (Google, Salesforce, Slack, ChatGPT, Grok):
+/* SVGL asset mirror licence (Google, Salesforce, Slack, ChatGPT, Grok, Lovable):
 MIT License
 
 Copyright (c) 2022 Pablo Hdez

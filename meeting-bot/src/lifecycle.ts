@@ -4,7 +4,9 @@ import { TransportError } from './callback.ts';
 import { EventBatcher } from './events.ts';
 import { logLine } from './log.ts';
 import { ChunkUploader, withRetry } from './uploader.ts';
-import { Chunker } from './wav.ts';
+import { Chunker, SeqSource } from './wav.ts';
+import type { Chunk } from './wav.ts';
+import { VoicedStreams } from './voiced.ts';
 import { AdapterFailure } from './types.ts';
 import type { CallbackTransport, Clock, FailureCode, LeaveReason, LogSink, MeetingAdapter, RunConfig, StatusReport, Unsubscribe } from './types.ts';
 
@@ -99,7 +101,11 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
     if(!await report({state:'recording'}))return await failure('platform_blocked');
     if(control.signal.aborted)return await early();
     dataStop=new AbortController();
-    const origin=clock.now(),chunker=new Chunker(),uploader=new ChunkUploader(transport,clock,log,dataStop.signal),events=new EventBatcher(transport,clock,log,origin,dataStop.signal);
+    // #2582: one chunk_seq for both paths. Per-participant audio, once it arrives, replaces mixed for the rest of the call.
+    const origin=clock.now(),seqs=new SeqSource(),chunker=new Chunker(undefined,seqs),voices=new VoicedStreams(seqs,()=>clock.now()-origin);
+    let perParticipant=false,mixedChunks=0;
+    const mixed=(chunk:Chunk|null)=>{if(chunk){mixedChunks+=1;uploader.add(chunk);}};
+    const uploader=new ChunkUploader(transport,clock,log,dataStop.signal),events=new EventBatcher(transport,clock,log,origin,dataStop.signal);
     const present=new Set<string>(),seen=new Set<string>(),subs:Unsubscribe[]=[];
     let aloneCancel:(()=>void)|null=null,flushCancel=()=>{},finish:(why:LeaveReason)=>void=()=>{};
     let capturing=true;
@@ -125,7 +131,14 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
         events.roster(c);checkAlone();
       }));
       subs.push(adapter.speakers(c=>{if(authorised())events.speaker(c);}));
-      subs.push(adapter.audio(f=>{if(authorised())for(const chunk of chunker.push(f.samples))uploader.add(chunk);}));
+      subs.push(adapter.audio(f=>{
+        if(!authorised())return;
+        if(f.participant!==undefined){
+          // Never both for the same stretch: the mixed part in progress ends where the first own stream begins.
+          if(!perParticipant){perParticipant=true;mixed(chunker.flush());}
+          for(const chunk of voices.push(f.participant,f.samples))uploader.add(chunk);
+        }else if(!perParticipant)for(const chunk of chunker.push(f.samples))mixed(chunk);
+      }));
       tick();checkAlone();if(control.signal.aborted)stopRecording();
       ended=await done;
     } catch(e) {return await failure(codeOf(e));}
@@ -138,7 +151,9 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
     await leave();
     finished=true;heartbeatCancel();leaseCancel();
     events.speaker({key:null});
-    const partial=chunker.flush();if(partial)uploader.add(partial);
+    if(perParticipant)for(const chunk of voices.flush())uploader.add(chunk);else mixed(chunker.flush());
+    const paths={mixed_chunks:mixedChunks,participant_chunks:voices.sent,participant_streams:voices.streamCount,voiced_dropped:voices.dropped};
+    logLine(log,'audio_paths',paths);
     // B1's Stop drain is 30s; finish before it, even when a network stays down.
     let drainCancel=()=>{},timedOut=false;
     await Promise.race([
@@ -148,7 +163,7 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
     const incomplete=timedOut||uploader.failedCount>0||events.droppedCount+events.pendingCount>0;
     const result:RunResult={state:incomplete?'failed':'left',...(incomplete?{code:'processing_failed' as const}:{reason:ended}),
       chunks:uploader.storedCount,last_seq:uploader.lastSeq,chunks_failed:uploader.failedCount,events:events.sentCount,
-      events_dropped:events.droppedCount+events.pendingCount,participants:seen.size};
+      events_dropped:events.droppedCount+events.pendingCount,participants:seen.size,...paths};
     dataStop.abort();
     await report(result,1);return result;
   } finally {

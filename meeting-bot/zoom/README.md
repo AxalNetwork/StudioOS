@@ -25,11 +25,10 @@ model calls are made. The sidecar never has an OAuth refresh/access token.
 
 A caller supplies an SDK JWT signed with the credentials actually assigned to
 Axal's Zoom app; do not guess whether they are separate from OAuth credentials.
-B1 must supply the founder/run-scoped OBF mint through its existing helper.
-No runtime mint endpoint exists on the inspected B1 main yet. Do not expose a
-mint accepting caller-supplied member IDs or meeting IDs. B1 also needs a
-waiting-state representation. These are integration prerequisites, not
-implemented endpoints in this change.
+B1's founder/run-scoped OBF mint shipped with #2671
+(`POST /api/meeting-bots/:uid/zoom-credentials`); it never accepts
+caller-supplied member or meeting IDs. Its `waitingForHost` answer is the
+waiting state the founder's panel shows (#2582).
 
 The core notice is sent before joining audio, requesting recording privilege
 or starting raw recording. Host denial/timeout refuses recording; revocation
@@ -40,9 +39,12 @@ The binding exposes 32/48 kHz options; this sidecar requests mono 32 kHz and
 averages adjacent samples to 16 kHz. Other formats are refused. M4 must measure
 quality and timing; no live audio fidelity is claimed by these unit tests.
 
-Only mixed audio is connected to today's B2 core. Per-participant streams must
-wait for S29's #2580 participant-key transport alignment; never concatenate
-separate streams into a mixed timeline. Free-account M3/M4/M6 and credentials
+Per-participant audio is connected (#2582). `native.py` subscribes to both the
+mixed callback and `onOneWayAudioRawDataReceived(data, user_id)`, names checked
+against `zoom-meeting-sdk` 0.0.27's source (`ZoomSDKAudioRawDataDelegateCallbacks`'
+keyword arguments), and emits each participant's own stream as a `voice` event
+keyed by `user_id`, never the bot's own. Node decides which path runs; separate
+streams are never concatenated into a mixed timeline. Free-account M3/M4/M6 and credentials
 verification are the owner's final live check. Nothing here selects the adapter
 in a factory, changes a feature flag or enables live dispatch.
 

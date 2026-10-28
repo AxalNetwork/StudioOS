@@ -45,6 +45,8 @@ export interface FormGather {
   choices: Choices;
   /** Titles already on the form's table for this venture, newest first, at most 40. */
   existing: string[];
+  /** D1329: what a record that is not a venture's says about itself (titles, names), never a figure. */
+  context?: string[];
 }
 
 /**
@@ -63,6 +65,18 @@ export function fieldsToAsk(fields: readonly FillField[], values: Record<string,
   return fields.filter((f) => offeredToEadwyn(f) && blank(values[f.field]) && (!row || blank(row[f.column])));
 }
 
+/**
+ * What is already on each form's table for this venture, newest first, so a
+ * proposed row does not repeat one. One literal statement per table (D1328
+ * adds Validate's themes, segments and hypotheses).
+ */
+export const EXISTING_READS: Readonly<Record<string, string>> = Object.freeze({
+  mvp_features: 'SELECT title AS value FROM mvp_features WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  pain_groups: 'SELECT title AS value FROM pain_groups WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  customer_segments: 'SELECT name AS value FROM customer_segments WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 40',
+  hypotheses: 'SELECT claim AS value FROM hypotheses WHERE project_id = ? AND retired_at IS NULL ORDER BY id DESC LIMIT 40',
+});
+
 /** The venture's own records the form's restatement fields pick from. Literal statements only. */
 export async function gatherForm(env: Env, projectId: number, fields: readonly FillField[]): Promise<FormGather> {
   const choices: Choices = new Map();
@@ -78,12 +92,41 @@ export async function gatherForm(env: Env, projectId: number, fields: readonly F
       choices.set(f.field, rows.map((r) => ({ id: Number(r.id), label: `${r.code}: ${r.claim}` })));
     }
   }
-  let existing: string[] = [];
-  if (fields.some((f) => f.table === 'mvp_features')) {
-    existing = (((await env.DB.prepare('SELECT title FROM mvp_features WHERE project_id = ? ORDER BY id DESC LIMIT 40')
-      .bind(projectId).all<{ title: string }>()).results) || []).map((r) => String(r.title));
-  }
+  const table = fields[0]?.table;
+  const read = table ? EXISTING_READS[table] : undefined;
+  const existing = read
+    ? (((await env.DB.prepare(read).bind(projectId).all<{ value: string }>()).results) || []).map((r) => String(r.value))
+    : [];
   return { choices, existing };
+}
+
+/**
+ * D1329 (#3490): what Eadwyn reads for a record that is not a venture's, by
+ * its table, all literal statements on rows the route has already scoped:
+ * the record's own title and kind, the advisor's own recorded outcomes and
+ * services, the event's sessions. Never an amount, a term, a vote or a decision.
+ */
+export async function gatherScoped(env: Env, userId: number, table: string, row: Record<string, unknown> | null, parentId: number | null = null): Promise<FormGather> {
+  const out: FormGather = { choices: new Map(), existing: [], context: [] };
+  const list = async (sql: string, ...binds: unknown[]) => ((((await env.DB.prepare(sql).bind(...binds).all<{ value: string }>()).results) || []).map((r) => String(r.value)));
+  if (table === 'advisor_services') {
+    out.context = (await list(`SELECT p.title AS value FROM advisor_proof_items p JOIN advisors a ON a.id = p.advisor_id
+      WHERE a.user_id = ? AND p.kind = 'outcome' ORDER BY p.id DESC LIMIT 20`, userId)).map((t) => `Recorded outcome: ${t}`);
+    out.existing = await list('SELECT s.title AS value FROM advisor_services s JOIN advisors a ON a.id = s.advisor_id WHERE a.user_id = ? ORDER BY s.id DESC LIMIT 40', userId);
+  } else if (table === 'ic_decisions' && row) {
+    const name = await env.DB.prepare('SELECT name FROM projects WHERE id = ? AND deleted_at IS NULL').bind(row.project_id ?? null).first<{ name: string }>();
+    out.context = [`Decision: ${String(row.title ?? 'title not recorded')}`, `Company: ${name?.name ?? 'not recorded'}`];
+  } else if (table === 'events' && row) {
+    out.context = [`Event: ${String(row.title ?? 'title not recorded')}`, `Kind: ${String(row.type ?? 'not recorded')}`];
+  } else if (table === 'event_agenda_items') {
+    const eventId = row ? row.event_id : parentId;
+    out.existing = await list('SELECT title AS value FROM event_agenda_items WHERE event_id = ? ORDER BY display_order, id LIMIT 40', eventId ?? null);
+    const ev = await env.DB.prepare('SELECT title FROM events WHERE id = ?').bind(eventId ?? null).first<{ title: string }>();
+    out.context = ev ? [`Event: ${ev.title}`] : [];
+  } else if (table === 'admin_publications' && row) {
+    out.context = [`Publication: ${String(row.title ?? 'title not recorded')}`, `Section: ${String(row.section ?? 'not recorded')}`];
+  }
+  return out;
 }
 
 const SYSTEM = [
@@ -107,6 +150,7 @@ export function formMessages(asked: readonly FillField[], gather: FormGather, op
     opts.rows ? `Propose up to ${opts.rows} new rows.` : 'Fill these fields for one record.',
     'Fields:', ...lines,
     gather.existing.length ? `Already on file, do not repeat: ${JSON.stringify(gather.existing)}` : '',
+    gather.context?.length ? `On record: ${JSON.stringify(gather.context)}` : '',
     words ? `The founder's notes: ${words}` : '',
   ].filter(Boolean).join('\n');
   return {
