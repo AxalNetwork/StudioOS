@@ -103,7 +103,16 @@ async function call(db: any, who: number | null, method: string, path: string, b
 }
 
 const claims = (db: any, version = 'v2') => db.prepare("SELECT * FROM raise_claims WHERE surface = 'deck' AND surface_version = ? ORDER BY field_key").all(version) as any[];
+/** A check stamps the clock, and claim ids are random hex. Either can contain 42 or 38 without being a figure. */
+const withoutClockOrIds = (v: unknown) => JSON.stringify(v).replace(/\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/g, '').replace(/[0-9a-f]{16,}/gi, '');
 const logs = (db: any) => db.prepare("SELECT action, details FROM activity_logs WHERE entity_type LIKE '%pitch%' OR action LIKE 'deck_%' OR action LIKE 'claim_%' ORDER BY id").all() as any[];
+
+test('D900: the admin figure scan ignores a clock minute and a random id', () => {
+  const stamped = { checked_at: '2026-10-27 22:42:35', claims: [{ uid: 'e2e396ad24204627b9efe7fa4e1cad38', state: 'mismatch' }] };
+  assert.doesNotMatch(withoutClockOrIds(stamped), /\b42\b|\b38\b/);
+  assert.match(withoutClockOrIds({ ...stamped, stated_shown: '42' }), /\b42\b/);
+  assert.match(withoutClockOrIds({ ...stamped, record_shown: '38' }), /\b38\b/);
+});
 
 // ------------------------------------------------------------------ the check
 
@@ -154,7 +163,7 @@ test('D900: who runs and who reads — the founder runs; an Admin reads states w
   const row = admin.body.claims.find((c: any) => c.figure === 'paying_customers');
   assert.equal(row.state, 'mismatch');
   for (const k of ['stated_value', 'stated_shown', 'record', 'note']) assert.equal(k in row, false, `an Admin reads no ${k}`);
-  assert.doesNotMatch(JSON.stringify(admin.body), /\b42\b|\b38\b/);
+  assert.doesNotMatch(withoutClockOrIds(admin.body), /\b42\b|\b38\b/);
   const owner = await call(db, OWNER, 'GET', '/api/decks/21/check');
   assert.equal(owner.body.can_check, true);
   assert.equal(owner.body.claims.find((c: any) => c.figure === 'paying_customers').stated_shown, '42');
