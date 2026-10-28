@@ -90,7 +90,7 @@ function browser() {
   const urls: string[] = [];
   return {
     urls,
-    binding: { fetch: async (u: string, init: any) => { urls.push(JSON.parse(init.body).url); return new Response(u.endsWith('/pdf') ? new TextEncoder().encode('%PDF-1.4') : PNG, { status: 200 }); } },
+    binding: { fetch: async () => { throw new Error('#3655: the documented quickAction, never fetch'); }, quickAction: async (action: string, o: any) => { urls.push(o.url); return new Response(action === 'pdf' ? new TextEncoder().encode('%PDF-1.4') : PNG, { status: 200 }); } },
   };
 }
 const tokenOf = (url: string) => decodeURIComponent(/print-export\/([^?]+)/.exec(url)![1]);

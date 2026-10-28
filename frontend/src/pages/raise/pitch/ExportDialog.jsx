@@ -7,7 +7,7 @@ import { Lightbox } from '../../../ui';
 import { versionRows } from './pitchStudioModel';
 import {
   EXPORT_TITLE, FORMATS, OPTIONS_WHERE, GOOGLE_CONNECT, GOOGLE_CONNECT_HREF, GOOGLE_CONNECT_LINK, GOOGLE_STATE_UNREADABLE, OPEN_LINK,
-  chartsAsTextLine, exportButton, exportFailure, exportFileName, exportedLine, googleCreatedLine, googleOpenHref, googleState,
+  chartsAsTextLine, exportButton, exportDiagnostic, exportFailure, exportFileName, exportedLine, googleCreatedLine, googleOpenHref, googleState,
   lastExportLine, needsConnect, optionsApply, whatExportDoes,
 } from './presentExportModel';
 
@@ -52,6 +52,7 @@ export default function ExportDialog({ versions, current, onClose }) {
   const [sources, setSources] = useState(true);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(null);
+  const [failRef, setFailRef] = useState(null);
   const [done, setDone] = useState(null);
   const [ledger, setLedger] = useState({ status: 'loading', rows: [] });
   const [google, setGoogle] = useState({ status: 'idle', state: null });
@@ -79,7 +80,7 @@ export default function ExportDialog({ versions, current, onClose }) {
 
   const run = async () => {
     if (!version?.id || busy) return;
-    setBusy(true); setFailed(null); setDone(null); setCreated(null);
+    setBusy(true); setFailed(null); setFailRef(null); setDone(null); setCreated(null);
     try {
       if (format === 'google_slides') {
         const res = await api.deckExportGoogleSlides(version.id, { notes, sources });
@@ -100,6 +101,7 @@ export default function ExportDialog({ versions, current, onClose }) {
       if (!r.ok) {
         const body = await r.json().catch(() => null);
         setFailed(exportFailure(format, r.status, body));
+        setFailRef(exportDiagnostic(body));
         return;
       }
       download(await r.blob(), exportFileName(version.title, version.version, format));
@@ -182,7 +184,10 @@ export default function ExportDialog({ versions, current, onClose }) {
           {ledger.status === 'error' ? 'The export history could not be read.' : ledger.status === 'ok' ? lastExportLine(ledger.rows) : ' '}
         </span>
         {failed ? (
-          <div role="alert" className="rounded-[10px] bg-red-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-destructive dark:bg-red-950/40 dark:text-red-300" data-testid="pitch-export-failed">{failed}</div>
+          <div role="alert" className="rounded-[10px] bg-red-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-destructive dark:bg-red-950/40 dark:text-red-300" data-testid="pitch-export-failed">
+            {failed}
+            {failRef ? <span className="mt-1 block font-mono text-[11px] font-normal" data-testid="pitch-export-failed-ref">{failRef}</span> : null}
+          </div>
         ) : null}
         {created ? (
           <div role="status" className="flex flex-col gap-1 rounded-[10px] bg-emerald-50 px-3 py-2.5 text-[12.5px] font-semibold text-axal-positive dark:bg-emerald-950/40 dark:text-emerald-300" data-testid="pitch-export-google-created">

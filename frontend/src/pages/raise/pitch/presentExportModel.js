@@ -285,6 +285,21 @@ export function exportFailure(format, status, body) {
   return `${PRODUCED[format] || 'The file could not be produced.'} ${NOTHING_SHARED}`;
 }
 
+/**
+ * #3655: the Worker's code-only `diagnostic` on a failed PDF or PowerPoint
+ * render, as one reference line a member can quote, or null. Only codes and
+ * numbers are read; nothing else in the body is shown.
+ */
+export function exportDiagnostic(body) {
+  const d = body?.diagnostic;
+  if (!d || typeof d.reason !== 'string' || !/^[a-z_]{1,40}$/.test(d.reason)) return null;
+  const parts = [d.reason];
+  if (Number.isInteger(d.status)) parts.push(`status ${d.status}`);
+  if (Number.isInteger(d.slide)) parts.push(`slide ${d.slide + 1}`);
+  if (Number.isInteger(d.attempts) && d.attempts > 0) parts.push(`${d.attempts} ${d.attempts === 1 ? 'try' : 'tries'}`);
+  return `Reference: ${parts.join(' · ')}`;
+}
+
 export function exportFileName(title, version, format) {
   const ext = format === 'pptx' ? 'pptx' : format === 'html' ? 'html' : 'pdf';
   const base = (str(title) || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
