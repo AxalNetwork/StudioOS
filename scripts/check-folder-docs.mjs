@@ -45,6 +45,7 @@ const ROOT = resolve(process.cwd());
 // a newcomer's attention. Adding a folder here is the cheap part; the README
 // it then demands is the point.
 const DOCUMENTED = new Map([
+  ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
   ['frontend/src',                    'the SPA root — what each subtree is for'],
   ['frontend/src/pages',              'one file per route; the biggest folder in the repo'],
   ['frontend/src/components',         'shared presentational pieces'],

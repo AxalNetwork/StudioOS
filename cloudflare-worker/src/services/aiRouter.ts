@@ -38,11 +38,14 @@ import * as catalogue from './ai/catalogue';
 import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 import { resolveRail, resolveRailChain, resolveRailOption } from './ai/railMatrix';
+import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleConnections';
+import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 export type TaskClass =
+  | ModuleTask
   | 'safety'
   | 'role_detect'
   | 'advisor_turn'
@@ -159,6 +162,8 @@ export interface RailContext {
 }
 
 export interface RunOptions {
+  /** #3626: specialist analysis uses its own wire shape, never chat. */
+  specialist?: SpecialistInput;
   task: TaskClass;
   userId: number;
   // Free-form text for embed / sentiment / safety; chat messages for the rest.
@@ -480,6 +485,7 @@ interface RouteEntry {
  * future edit has to mean it.
  */
 export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }> = tokenPriceView([
+  ...Object.keys(MODEL_CONNECTIONS).filter(id => catalogue.modelById(id)?.neurons?.tokens_in != null),
   '@cf/meta/llama-guard-3-8b',
   // Kept for callers that still name it, and for accounting on runs already
   // recorded against it. It is DEPRECATED (5/30/2026) and is no longer routed
@@ -556,6 +562,7 @@ function minutePriceView(ids: string[], unit: 'audio_minutes' | 'audio_minutes_w
  * transcription that is free until the invoice arrives.
  */
 export const PRICE_USD_PER_AUDIO_MINUTE: Record<string, number> = minutePriceView([
+  '@cf/pipecat-ai/smart-turn-v2',
   '@cf/openai/whisper',
   '@cf/openai/whisper-large-v3-turbo',
   // D657 — Nova-3 over plain HTTP (batch). Its WebSocket rate is different and
@@ -652,6 +659,7 @@ const MID_LLAMA   = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const VISION_SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 export const ROUTE: Record<TaskClass, RouteEntry> = {
+  ...MODULE_ROUTES,
   safety:       { provider: 'workers-ai', model: '@cf/meta/llama-guard-3-8b' },
   role_detect:  { provider: 'workers-ai', model: SMALL_LLAMA },
   advisor_turn: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
@@ -1039,6 +1047,7 @@ async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
 export function estimateCostUsd(
   model: string, promptTok: number, completionTok: number, audioMinutes = 0, cachedTok = 0, characters = 0, image: shapes.Units = {},
 ): number {
+  if (model === '@cf/microsoft/resnet-50') return costMicro(model, { images: image.images ?? 0 }) / 1_000_000;
   // D761 PR 4: an image model is priced on its image units, at the catalogue's figure.
   if (IMAGE_PRICED_MODELS.has(model)) {
     const { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels } = image;
@@ -1076,7 +1085,7 @@ export function estimateCostUsd(
 export function modelRefusal(env: Env, model: string): 'model_unpriced' | 'model_not_offered' | null {
   const refusal = catalogue.refusalFor(model, env);
   if (refusal) return refusal;
-  return model in PRICE_USD_PER_1M_TOKENS || model in PRICE_USD_PER_AUDIO_MINUTE || model in PRICE_USD_PER_1K_CHARACTERS || IMAGE_PRICED_MODELS.has(model) ? null : 'model_unpriced';
+  return model in PRICE_USD_PER_1M_TOKENS || model in PRICE_USD_PER_AUDIO_MINUTE || model in PRICE_USD_PER_1K_CHARACTERS || IMAGE_PRICED_MODELS.has(model) || model === '@cf/microsoft/resnet-50' ? null : 'model_unpriced';
 }
 
 // Crude token estimator — ≈ 4 chars/token for English. Good enough for
@@ -1332,6 +1341,21 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   const runOpt = affinity ? { ...(gatewayOpt ?? {}), extraHeaders: { 'x-session-affinity': affinity } } : gatewayOpt;
   const facts = shapes.factsFor(model);
   try {
+    if (opts.specialist) {
+      const raw = await ai.run(model, specialistRequest(model, opts.specialist, opts.text ?? '', opts.images), runOpt);
+      const parsed = specialistOutput(raw, opts.specialist, opts.text ?? '');
+      return parsed ? { ok: true, ...parsed, prompt_tokens: parsed.units.tokens_in ?? 0, completion_tokens: 0 }
+        : { ok: false, status: 502, error: 'Unreadable specialist response' };
+    }
+    if (model === '@cf/moondream/moondream3.1-9B-A2B') {
+      if (opts.task !== 'module_vision') return { ok: false, status: 400, error: 'This image reader uses the standalone image-query operation.' };
+      if (opts.images?.length !== 1) return { ok: false, status: 400, error: 'Moondream needs one image' };
+      const raw = await ai.run(model, { task: 'query', image: opts.images[0], question: defaultContentBlob(opts), max_tokens: opts.maxTokens ?? 512 }, runOpt) as any;
+      if (typeof raw?.answer !== 'string' || !raw.answer.trim()) return { ok: false, status: 502, error: 'Unreadable image answer' };
+      if (['input_tokens', 'output_tokens'].some(key => raw.metrics?.[key] != null && (typeof raw.metrics[key] !== 'number' || !Number.isSafeInteger(raw.metrics[key]) || raw.metrics[key] < 0))) return { ok: false, status: 502, error: 'Unreadable image usage' };
+      const units = { tokens_in: raw.metrics?.input_tokens ?? estTokens(defaultContentBlob(opts)) + 1024, tokens_out: raw.metrics?.output_tokens ?? estTokens(raw.answer), images_in: 1 };
+      return { ok: true, output: raw.answer, prompt_tokens: units.tokens_in, completion_tokens: units.tokens_out, units };
+    }
     if (ROUTE[opts.task]?.isAudio) {
       // `Array.from` on the bytes is what the binding expects, and it is also
       // the memory cliff: V8 holds ~8 bytes per element, so the caller's size
@@ -1456,6 +1480,12 @@ function needOf(opts: RunOptions): shapes.Need {
 
 /** D761 PR 2: why a run's own inputs cannot be sent to any model, or null. Checked before any call. */
 function inputRefusal(opts: RunOptions): string | null {
+  if (opts.specialist) {
+    if (opts.stream || opts.draw || opts.speak || opts.translate || opts.rerank || opts.audio) return 'Specialist analysis is one non-streamed operation.';
+    if (opts.images?.length) { const bad = shapes.imagesRefusal(opts.images); if (bad) return bad; }
+    return specialistRefusal(opts.specialist, opts.text ?? '', opts.images);
+  }
+  if (opts.model === '@cf/meta/llama-3.2-11b-vision-instruct' && (opts.images?.length ?? 0) > 1) return 'Llama 3.2 Vision reads one image per run.';
   const asks = [opts.rerank != null, opts.translate != null, opts.speak != null, opts.draw != null, (opts.images?.length ?? 0) > 0].filter(Boolean).length;
   if (asks > 1) return 'a run is one of: images, a rerank, a translation, a voice or a drawing';
   if ((opts.speak != null || opts.draw != null) && opts.stream) return 'a voice or image run is not streamed';
@@ -1542,6 +1572,7 @@ function guarded(opts: RunOptions): boolean {
 function guardInputFor(opts: RunOptions): string {
   if (opts.guardText != null) return String(opts.guardText);
   if (ROUTE[opts.task]?.isAudio) return '';
+  if (opts.specialist?.operation === 'decision') return (opts.text ?? '') + '\n' + JSON.stringify(opts.specialist.questions);
   // D761 PR 2: a rerank's query and every context it sends.
   if (opts.rerank) return [opts.rerank.query, ...(opts.rerank.contexts ?? [])].join('\n\n');
   if (opts.messages?.length) return opts.messages.filter((m) => m.role !== 'system').map((m) => m.content).join('\n\n');
@@ -1675,7 +1706,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   // task's, and only bge-base writes axal-search. A row with no model for the
   // run leaves the route in charge too.
   let railed: { primary: string; chain: string[] } | null = null;
-  const railShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw;
+  const railShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && opts.task !== 'module_vision';
   const railRow = opts.rail && railShaped
     ? resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page)
     : null;
@@ -1706,18 +1737,22 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
 function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], guardOn: boolean, guardInput: string, multiplier: number): number {
   // UTF-8 bytes bound input tokenization; include chat/system overhead.
   // Reserve the most expensive offered fallback, refund to the actual logged estimate.
-  const inputBytes = new TextEncoder().encode(defaultContentBlob(opts) + (opts.systemPrompt || '')).byteLength;
-  const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64;
+  // Reranking pairs the query with every context; settlement counts each pair.
+  const material = opts.rerank ? opts.rerank.contexts.map(text => opts.rerank!.query + '\n' + text).join('\n') : defaultContentBlob(opts);
+  const inputBytes = new TextEncoder().encode(material + (opts.systemPrompt || '') + (opts.specialist?.operation === 'decision' ? JSON.stringify(opts.specialist.questions) : '')).byteLength;
+  const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64 + (opts.images?.length ?? 0) * 1024;
   // D761: a reasoning model's output budget is its task's, not 512.
-  const outputBound = Math.max(...models
+  const outputBound = Math.max(opts.specialist ? 2048 : 0, ...models
     .map((m) => shapes.maxTokensFor(shapes.factsFor(m), opts.maxTokens, route.reasoningMaxTokens)));
   if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0) < 0) throw new Error('AI estimate unreadable');
   // D761 PR 3: a voice is held for its text's characters (Aura) and for the
   // most audio `readSpeech` accepts (MeloTTS), which bounds what it returns.
-  const quoteMinutes = opts.speak ? audioMinutesFromBytes(shapes.MAX_SPEECH_BYTES) : opts.audioMinutes || 0;
+  const quoteMinutes = opts.specialist?.operation === 'turn' ? pcmMinutes(pcmBytes(opts.specialist.pcm16)!)
+    : opts.speak ? audioMinutesFromBytes(shapes.MAX_SPEECH_BYTES) : opts.audioMinutes || 0;
   const quoteChars = opts.speak ? (opts.text ?? '').length : 0;
   // D761 PR 4: an image is held for the size and steps sent to each model.
   const quoteImage = (model: string): shapes.Units => {
+    if (opts.specialist?.operation === 'image_labels') return { images: 1 };
     const req = opts.draw ? shapes.drawRequest(model, opts.text ?? '', opts.draw) : null;
     return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps) : {};
   };
@@ -1749,7 +1784,9 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
     : input;
   const route = ROUTE[opts.task];
   if (!route) return { ok: false, refusal: 'misconfigured', error: `unknown task ${opts.task}` };
-  if (opts.rail && !route.isAudio) {
+  const badInput = inputRefusal(opts);
+  if (badInput) return { ok: false, refusal: 'invalid_input', error: badInput };
+  if (opts.rail && (!route.isAudio || opts.task === 'module_transcribe')) {
     try { if (await assistOff(env, opts.userId, opts.rail.page)) return { ok: false, refusal: 'assist_off', error: ASSIST_OFF_MESSAGE }; }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether AI assistance is on for this page could not be checked.' }; }
   }
@@ -1805,7 +1842,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // Before the cache, the hold and the guard, and with no usage row: nothing
   // ran and nothing is held or charged. Transcribing a member's own recording
   // is saving ("Your work saves as usual"), so the switch never refuses it.
-  if (opts.rail && !route.isAudio) {
+  // A standalone module transcription saves no record and obeys the switch.
+  if (opts.rail && (!route.isAudio || opts.task === 'module_transcribe')) {
     let off: boolean;
     try { off = await assistOff(env, opts.userId, opts.rail.page); }
     catch {
@@ -2104,12 +2142,16 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     return r;
   };
   const callWai = async (model: string): Promise<ProviderResult> => {
+    // A fallback must not silently discard additional supplied images.
+    if (model === '@cf/meta/llama-3.2-11b-vision-instruct' && (opts.images?.length ?? 0) > 1) {
+      return record(model, { ok: false, status: 400, error: 'Llama 3.2 Vision reads one image per run.' }, false);
+    }
     // D761: an input the model's context window cannot hold skips the model
     // without calling it. An unknown window always fits.
     const facts = shapes.factsFor(model);
     // D761 PR 2: a model that cannot serve what the run asks (a text-only model
     // handed images, a chat model handed a rerank) is skipped without a call.
-    if (!route.isAudio && !shapes.canServe(facts, need)) {
+    if (!route.isAudio && !(opts.specialist ? MODEL_CONNECTIONS[model]?.operation === opts.specialist.operation : shapes.canServe(facts, need))) {
       return record(model, { ok: false, status: 422, error: `${model} cannot serve a ${need} run` }, false);
     }
     if (!route.isAudio && !shapes.fitsContext(facts, inputTokens, shapes.maxTokensFor(facts, opts.maxTokens, route.reasoningMaxTokens))) {

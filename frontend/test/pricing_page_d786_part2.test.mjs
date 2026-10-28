@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  heldCard, modelGroups, modelPrices, packCards, planCards, priceOf, unitPrice, usd, yearlySaving,
+  heldCard, modelGroups, modelPrices, modelUsage, packCards, planCards, priceOf, unitPrice, usd, yearlySaving,
 } from '../src/lib/pricingModel.js';
 import * as COPY from '../src/lib/sitePricing.js';
 
@@ -37,6 +37,16 @@ const READ = {
 };
 const cardsOf = (tab, opts) => planCards(READ, COPY.PLAN_CARDS[tab], opts).cards;
 const byId = (cards, id) => cards.find((c) => c.id === id);
+
+test('Used for shows the connected capability and module names, and honest missing data', () => {
+  assert.deepEqual([
+    modelUsage({ used_for: 'Classify evidence', pages: ['Founder · Validate', 'Advisor · Practice · Sessions', 'Investor · Deals'] }),
+    modelUsage({ used_for: 'Check unsafe content', pages: [] }),
+    modelUsage({ pages: ['Founder · Studio'] }), modelUsage(null),
+  ], ['Classify evidence · Founder › Validate · Advisor › Practice › Sessions and 1 more', 'Check unsafe content', 'Founder › Studio', 'Use not recorded']);
+  const page = read('frontend/src/pages/PricingPage.jsx');
+  assert.equal((page.match(/\{modelUsage\(m\)\}/g) ?? []).length, 2, 'desktop and phone use the same backend purpose');
+});
 
 // ================================================================ the frames
 

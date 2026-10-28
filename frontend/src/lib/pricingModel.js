@@ -65,6 +65,15 @@ export function modelsTab(read) {
   return { models: read.models.filter((m) => m && typeof m.id === 'string') };
 }
 
+/** A model's connected purpose and the first two module names, from one backend read. */
+export function modelUsage(model) {
+  const pages = Array.isArray(model?.pages) ? model.pages : [];
+  const purpose = typeof model?.used_for === 'string' ? model.used_for.trim() : '';
+  const named = pages.slice(0, 2).map(p => p.split(' · ').join(' › '));
+  const places = pages.length > 2 ? `${named.join(' · ')} and ${pages.length - 2} more` : named.join(' · ');
+  return [purpose, places].filter(Boolean).join(' · ') || 'Use not recorded';
+}
+
 // ─────────────────────────────────────────────── part 2: what the page draws ──
 // D786 (#2211) part 2. The cards join the canvas's copy (`sitePricing.js`) to
 // the catalogue read: every figure is the read's, a plan the catalogue does

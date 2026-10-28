@@ -175,6 +175,7 @@ const NO_PAGE: Record<string, string> = {
  * re-validates with `normaliseSurface` before it is stored.
  */
 const FORWARDED: Record<string, string[]> = {
+  'routes/ai_modules.ts': ['surface'],          // #3626: validated browser path; module access stays tied to the registered rail page
   'routes/ai.ts': ['page'],                     // the rail's own app path (D404)
   'routes/eadwyn.ts': ['page'],                 // the rail's composer, the same app path (D652)
   'routes/research.ts': ['page'],               // the zone draft's app path (D404, D510)
@@ -345,7 +346,8 @@ const NO_SURFACE_COLUMN = SCHEMA.replace(', surface TEXT', '');
  * so the rows sit seconds behind it: a run of this file has to straddle a
  * month boundary by under a minute to see a row fall into the previous month.
  */
-const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString().slice(0, 19).replace('T', ' ');
+const SEED_CLOCK = Date.now();
+const ago = (seconds: number) => new Date(SEED_CLOCK - seconds * 1000).toISOString().slice(0, 19).replace('T', ' ');
 const LAST_MONTH = (() => {
   const d = new Date(); d.setUTCDate(1); d.setUTCDate(0); d.setUTCHours(12, 0, 0, 0);
   return d.toISOString().slice(0, 19).replace('T', ' ');
@@ -516,7 +518,7 @@ test('the last run is the page\'s own, bounded by now', async () => {
   // Called directly with the clock set between the two Ask runs (30 s and 20 s
   // ago). The last run is not bounded to the month, so this holds on any day.
   const { DB } = makeD1(SCHEMA, SEED);
-  const cut = new Date(Date.now() - 25_000);
+  const cut = new Date(SEED_CLOCK - 25_000);
   const r = await loadMyAiSpendForSurface({ DB } as any, { id: ME, role: 'founder' }, '/research/ask', cut);
   assert.equal(r.last_run?.prompt_tokens, 400, 'a run after `now` was reported as the last one');
   assert.equal(r.last_run?.model, 'm-ask');

@@ -12,6 +12,7 @@
  * every priced model has a name.
  */
 import type { TaskClass } from './aiRouter';
+import { CATALOGUE } from './ai/catalogue';
 
 /**
  * One plain label per task class, as a member would describe the job.
@@ -19,6 +20,18 @@ import type { TaskClass } from './aiRouter';
  * error; the test reads `ROUTE`'s keys as the runtime list.
  */
 export const TASK_LABELS: Record<TaskClass, string> = {
+  module_chat: 'Explain the selected material',
+  module_decision: 'Classify evidence and options',
+  module_image_labels: 'Label an image',
+  module_embed: 'Represent text for semantic matching',
+  module_rerank: 'Rank supplied passages',
+  module_sentiment: 'Read English feedback sentiment',
+  module_translate: 'Translate supplied material',
+  module_transcribe: 'Transcribe an audio excerpt',
+  module_turn: 'Detect the end of a speaking turn',
+  module_voice: 'Read prepared text aloud',
+  module_draw: 'Create a visual draft',
+  module_vision: 'Read an image',
   safety: 'Safety check',
   role_detect: 'Work out your role',
   advisor_turn: 'Talk with Eadwyn',
@@ -86,6 +99,7 @@ export function taskLabel(task: string | null | undefined): string | null {
 
 /** A readable name for every model the router's price tables hold (token, audio, WebSocket). */
 export const MODEL_NAMES: Record<string, string> = {
+  ...Object.fromEntries(CATALOGUE.map(m => [m.id, m.name])),
   '@cf/meta/llama-guard-3-8b': 'Llama Guard 3 8B',
   '@cf/meta/llama-3.1-8b-instruct': 'Llama 3.1 8B Instruct',
   '@cf/meta/llama-3.1-8b-instruct-fp8': 'Llama 3.1 8B Instruct (FP8)',

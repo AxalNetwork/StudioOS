@@ -14,9 +14,10 @@ import { catalogueFor } from '../src/routes/ai.ts';
 import { CATALOGUE, modelById } from '../src/services/ai/catalogue.ts';
 import { AI_MARKUP, billedUnitPrice, unitPrice } from '../src/services/ai/pricing.ts';
 import { railOptionRows, railRows } from '../src/services/ai/railMatrix.ts';
+import { connectionOnPage } from '../src/services/ai/moduleConnections.ts';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
-const FIELDS = ['billed', 'group', 'id', 'is_new', 'kind', 'name', 'paid_only', 'pages', 'unit_words'];
+const FIELDS = ['billed', 'group', 'id', 'is_new', 'kind', 'name', 'paid_only', 'pages', 'unit_words', 'used_for'];
 
 async function get(env: Record<string, unknown> = {}) {
   // No DB: the read must not touch D1.
@@ -80,7 +81,11 @@ test('pages are the matrix\'s canvas page names that name each model; New and Pa
     if (!want.has(m.id)) want.set(m.id, new Set());
     want.get(m.id)!.add(row.pageKey);
   }
-  for (const m of body.models) assert.deepEqual(new Set(m.pages), want.get(m.id) ?? new Set(), m.id);
+  for (const m of body.models) {
+    const connected = railRows().filter(row => connectionOnPage(m.id, row)).map(row => row.pageKey);
+    assert.deepEqual(new Set(m.pages), new Set([...(want.get(m.id) ?? []), ...connected]), m.id);
+    assert.equal(typeof m.used_for, 'string');
+  }
   assert.ok(body.models.some((m: any) => m.pages.length > 0), 'some model is used on a page');
   assert.ok(body.models.some((m: any) => m.is_new), 'a New model is flagged');
   for (const m of body.models) assert.equal(m.is_new, NEW_MODEL_IDS.has(m.id));

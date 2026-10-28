@@ -16,6 +16,7 @@
 import { CATALOGUE, isOffered, type CatalogueModel, type CatalogueSwitches, type PriceUnit } from './catalogue';
 import { AI_MARKUP, billedUnitPrice, unitPrice } from './pricing';
 import { railOptionRows, railRows } from './railMatrix';
+import { MODEL_CONNECTIONS, connectionOnPage } from './moduleConnections';
 
 /** What each unit's price is per, as the page prints it. */
 export const UNIT_WORDS: Readonly<Record<PriceUnit, string>> = Object.freeze({
@@ -88,6 +89,8 @@ export function modelGroup(m: Pick<CatalogueModel, 'id' | 'kind' | 'capabilities
 }
 
 export interface PublicModel {
+  /** The capability connected by the backend, in product words. */
+  used_for: string;
   id: string;
   name: string;
   kind: string;
@@ -123,7 +126,9 @@ export function publicModels(env: CatalogueSwitches): PublicModel[] {
     }
     return {
       id: m.id, name: m.name, kind: m.kind, group: modelGroup(m), billed, unit_words: words,
-      pages: pages.get(m.id) ?? [], is_new: NEW_MODEL_IDS.has(m.id), paid_only: m.paid_only,
+      used_for: MODEL_CONNECTIONS[m.id]?.purpose ?? 'Use not recorded',
+      pages: [...new Set([...(pages.get(m.id) ?? []), ...railRows().filter(row => connectionOnPage(m.id, row)).map(row => row.pageKey)])],
+      is_new: NEW_MODEL_IDS.has(m.id), paid_only: m.paid_only,
     };
   });
 }
