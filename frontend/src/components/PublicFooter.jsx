@@ -32,9 +32,9 @@ export default function PublicFooter() {
             <ul className="ax-socials" aria-label="Axal VC on social media">
               {SOCIAL_LINKS.map(({ key, label, href }) => (
                 <li key={key}>
-                  <a href={href} target="_blank" rel="noopener noreferrer" aria-label={label} title={label}>
+                  <a href={href} target="_blank" rel="noopener noreferrer" aria-label={label} title={label} style={key === 'linkedin' ? { minWidth: 44, minHeight: 44 } : undefined}>
                     {/* D687: the one copy of each mark, monochrome as the canvas draws the footer. */}
-                    <BrandIcon provider={key} size={18} variant="bare" tone="current" />
+                    <BrandIcon provider={key} size={18} variant="bare" tone={key === 'linkedin' ? 'blue' : 'current'} />
                   </a>
                 </li>
               ))}

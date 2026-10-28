@@ -1,3 +1,4 @@
+import { LinkedInSignInButton } from '../../ui';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink, X } from 'lucide-react';
@@ -639,7 +640,9 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     );
     const cont = kind === 'key' || kind === 'token_first' || tokenOnly
       ? <button type="button" className={BTN.primary} onClick={() => go('key')} data-testid="button-connect-continue">Continue</button>
-      : <button type="button" className={BTN.primary} disabled={busy} onClick={startOauth} data-testid="button-connect-continue">Continue to {name}</button>;
+      : p.key === 'linkedin'
+        ? <LinkedInSignInButton busy={busy} onClick={startOauth} data-testid="button-connect-continue" />
+        : <button type="button" className={BTN.primary} disabled={busy} onClick={startOauth} data-testid="button-connect-continue">Continue to {name}</button>;
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Cancel</button>{cont}</>;
   } else if (view === 'signin') {
     title = `Sign in to ${name}`;

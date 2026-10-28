@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { connectorsApi } from '../../lib/api/connectors';
 import { ChevronDown, Info } from 'lucide-react';
-import { BrandIcon, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
+import { BrandIcon, LinkedInSignInButton, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
   ActivityGroup, CompaniesGroup, FedGroup, Group, KeyFields, PermissionsGroup, Row, SettingsGroup, ToolModals,
@@ -432,7 +432,9 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
     const keys = keysHref(p, { superAdmin });
     return (
       <div className="flex min-w-0 flex-col items-start gap-1.5 sm:items-end" data-testid="connector-page-action" data-kind="unavailable">
-        <button type="button" className={BTN.primary} disabled aria-describedby={`${p.key}-unavailable-note`} data-testid="connector-page-unavailable">{action.label}</button>
+        {p.key === 'linkedin'
+          ? <LinkedInSignInButton disabled aria-describedby={`${p.key}-unavailable-note`} data-testid="connector-page-unavailable" />
+          : <button type="button" className={BTN.primary} disabled aria-describedby={`${p.key}-unavailable-note`} data-testid="connector-page-unavailable">{action.label}</button>}
         <p id={`${p.key}-unavailable-note`} className="max-w-[18rem] text-[12px] text-axal-muted dark:text-gray-400 sm:text-right">{action.note}</p>
         {keys && <Link to={keys} className={`${BTN.link} text-[12px]`} data-testid={`connector-keys-link-${p.key}`}>Add its keys in Integration keys</Link>}
       </div>
@@ -444,6 +446,9 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
       {/* D753 F8 (#1992): on a phone the one action takes the band's full width. */}
       <div className="flex items-stretch max-sm:w-full">
         {action.kind === 'reconnect' && <span className="mr-2 self-center"><Pill tone={action.pill.tone}>{action.pill.label}</Pill></span>}
+        {p.key === 'linkedin' ? (
+          <LinkedInSignInButton busy={starting || flow.busy} onClick={press} data-testid="connector-page-connect-button" />
+        ) : (
         <button
           type="button"
           className={`${BTN.primary} max-sm:flex-1 ${hasChoices && !phone ? 'rounded-r-none' : ''}`}
@@ -456,6 +461,7 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
         >
           {action.label}
         </button>
+        )}
         {hasChoices && !phone && <ChoicesMenu p={p} choices={choices} flow={flow} disabled={starting} />}
         {action.kind === 'reconnect' && manage.length > 0 && !phone && <span className="ml-2"><ManageMenu p={p} items={manage} flow={flow} /></span>}
       </div>

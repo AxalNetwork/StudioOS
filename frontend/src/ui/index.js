@@ -115,3 +115,5 @@ export { default as Skeleton } from '../components/Skeleton';
 export { default as InfoStrip } from '../components/InfoStrip';
 
 export { AiBudgetUsage, LiveAiBudgetUsage } from './AiBudgetUsage';
+
+export { default as LinkedInSignInButton } from './LinkedInSignInButton';
