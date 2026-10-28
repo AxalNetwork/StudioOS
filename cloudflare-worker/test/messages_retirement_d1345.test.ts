@@ -64,6 +64,8 @@ test('the LP composer resolves only the own fund and the account GP, including l
     assert.equal(pack.person.address, 'gp@example.invalid');
     assert.equal(pack.person.relationship, 'fund_gp');
     assert.ok(intentFor(pack.person.relationship, 'ask_question'));
+    assert.equal(pack.intents[0].label, 'Start a fund question');
+    assert.match(pack.intents[0].instruction, /member will add it to the editable draft/);
     const { ask, pack: fresh } = await draftAsk(f.env, f.user(1), { person: 'fund_gp:1', intent: 'ask_question', tone: 'direct', length: 'short', refs: ['fund_gp:1'], blocks: [] });
     assert.match(draftMessages(fresh, ask, ticked(fresh, ask.refs), [])[1].content, /Fund: Synthetic Fund/);
     assert.match(pack.items[0].text, /Synthetic Fund/);

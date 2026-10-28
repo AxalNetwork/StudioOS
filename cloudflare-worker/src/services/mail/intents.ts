@@ -17,7 +17,7 @@ export interface Intent { key: string; label: string; instruction: string }
 
 export const INTENTS: Readonly<Record<Relationship, readonly Intent[]>> = Object.freeze({
   fund_gp: Object.freeze([
-    { key: 'ask_question', label: 'Ask a fund question', instruction: 'Ask the general partner one clear question about the selected fund records. Do not invent a question or financial figures.' },
+    { key: 'ask_question', label: 'Start a fund question', instruction: 'Write only a brief greeting and an opening saying the sender has a question about the named fund. Stop before the question: the member will add it to the editable draft before sending. Do not invent a question, figures or placeholders.' },
     { key: 'ask_update', label: 'Ask for an update', instruction: 'Ask the general partner for a short update about the selected fund records.' },
   ]),
   customer: Object.freeze([
