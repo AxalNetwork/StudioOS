@@ -146,3 +146,33 @@ test('D1364: a quiet-site build survives 72 hours after supersession despite man
   const expired=plan([build('a.js',1),build('b.js',2),build('c.js',72.001),build('old.js',200)]);
   assert.deepEqual(expired.keep,['current.js','a.js','b.js','c.js']);
 });
+
+test('D1364: CI records deployment success after publish and before saving served assets',()=>{
+  const source=fs.readFileSync(new URL('../../.github/workflows/cloudflare-worker-deploy.yml',import.meta.url),'utf8');
+  const publish=source.indexOf('if npx --no-install wrangler deploy --config');
+  const mark=source.indexOf('run: node scripts/record-asset-deploy.mjs');
+  const save=source.indexOf('uses: actions/cache/save@');
+  const step=source.slice(source.lastIndexOf('      - name:',mark),mark);
+  const publisher=source.slice(source.lastIndexOf('      - name:',publish),publish);
+  const cache=source.slice(source.lastIndexOf('      - name:',save),save);
+  assert.deepEqual({ordered:publish>=0 && mark>publish && save>mark,
+    hardFailure:!step.includes('continue-on-error: true') && !step.includes('if:'),
+    ledgerSaved:source.slice(save).includes('docs/.asset-retention.json'),
+    publisherId:publisher.includes('id: publish'),
+    cacheAfterStampFailure:cache.includes("if: always() && steps.publish.outcome == 'success'")},
+    {ordered:true,hardFailure:true,ledgerSaved:true,publisherId:true,cacheAfterStampFailure:true});
+});
+
+test('D1364: only a successful-deploy cache recovers unstamped entries, and its grace does not slide',()=>{
+  const p=plan([{ts:ago(1),deployedAt:null,files:['unstamped.js']},build('a.js',2),build('b.js',3)],{restoredFromDeploy:true});
+  const recovered=p.nextLedger.builds.find(b=>b.files.includes('unstamped.js'));
+  assert.deepEqual([recovered?.deployedAt,recovered?.legacy,recovered?.firstSeenAt],[null,true,now]);
+  const laterTime=new Date(Date.parse(now)+73*3_600_000).toISOString();
+  const recent=h=>new Date(Date.parse(laterTime)-h*3_600_000).toISOString();
+  const later=planAssetRetention({now:laterTime,newFiles:['next.js'],prevFiles:p.keep,restoredFromDeploy:true,ledgerBuilds:[
+    {ts:recent(1),deployedAt:recent(1),files:['new-a.js']},
+    {ts:recent(2),deployedAt:recent(2),files:['new-b.js']},
+    ...recordAssetDeployment(p.nextLedger,now).builds,
+  ]});
+  assert.equal(later.keep.includes('unstamped.js'),false);
+});

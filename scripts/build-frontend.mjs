@@ -77,18 +77,18 @@ function readLedgerBuilds(p) {
 
 // 1. Snapshot the pre-build assets — they must survive Vite's emptyOutDir wipe.
 const prevFiles = listAssetFiles(assetsDir);
-const restored = readLedgerBuilds(ledgerPath);
+const restoredLedger = readLedgerBuilds(ledgerPath);
 // #3591: the deploy that shipped before the stamp step existed left one
 // unstamped entry in the cache. It shipped, so it gets the legacy grace.
+// A later unstamped entry can also be restored when the timestamp step failed
+// after a successful publish. Keep those files under an explicit unknown-time
+// grace: never invent a deployedAt, and never treat a local candidate as deployed.
 const { builds: ledgerBuilds, adopted } = process.argv.includes(SEED_RESTORED_TREE_FLAG)
-  ? adoptUnstampedDeployments(restored) : { builds: restored, adopted: 0 };
+  ? adoptUnstampedDeployments(restoredLedger) : { builds: restoredLedger, adopted: 0 };
 if (adopted) console.log(`[build] ${adopted} deployment(s) recorded before the stamp step kept as legacy history.`);
-// A deployment cache is saved only after shipping. An unstamped v2 record there
-// means the post-deploy clock did not run; abort BEFORE Vite can discard it.
-// Legacy entries retain their explicit one-time grace without inventing a time.
 if (process.argv.includes(SEED_RESTORED_TREE_FLAG)
     && ledgerBuilds.some(b => b?.deployedAt === null && b.legacy !== true)) {
-  throw new Error('[build] restored deployment ledger is unstamped; refusing to discard live history. Check the successful-deploy timestamp hook.');
+  console.warn('::warning::[build] restored deployment ledger is unstamped; preserving saved history under a one-time per-entry grace until a successful deploy records its timestamp.');
 }
 // D529: docs/ is not committed, so what is on disk here is whatever the job
 // restored (the production deploy) or nothing (every other job). Say which.
@@ -170,6 +170,7 @@ try {
     newFiles,
     ledgerBuilds,
     retainBuilds: RETAIN_BUILDS,
+    restoredFromDeploy: process.argv.includes(SEED_RESTORED_TREE_FLAG),
   });
 
   if (plan.capExceeded) {
