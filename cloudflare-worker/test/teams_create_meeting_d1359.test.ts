@@ -29,16 +29,11 @@ import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import meetingsRouter from '../src/routes/founder_validate_meetings.ts';
-import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const JWT_SECRET = 'd1359-fixture-only-signing-secret-0123456789abc';
 const ME = 2;
-const HOUR = 3_600_000;
-const MEETING_ID = '85746065432';
-const MEET_CODE = 'abc-mnop-xyz';
-const HOST_SECRET = 'SECRET-HOST-TOKEN';
 
 function world(over: Record<string, unknown> = {}) {
   const { DB, db } = aiBudgetFixture();
@@ -62,17 +57,6 @@ function world(over: Record<string, unknown> = {}) {
   return { env, db };
 }
 type World = ReturnType<typeof world>;
-
-async function connectZoom(f: World) {
-  const uid = `zoom-${ME}`;
-  const enc = await encryptCredentials(f.env, uid, { access_token: 'zoom-at', refresh_token: 'zoom-rt', token_type: 'bearer', expires_at: Date.now() + HOUR });
-  f.db.prepare(`INSERT INTO integrations (uid, user_id, provider_key, status, auth_type, credentials_enc)
-                VALUES (?, ?, 'zoom', 'active', 'oauth2', ?)`).run(uid, ME, enc);
-}
-async function connectGoogle(f: World) {
-  f.db.prepare('INSERT INTO google_oauth_tokens (user_id, refresh_token, scope) VALUES (?, ?, ?)')
-    .run(ME, await encryptString(f.env, 'google-refresh-token'), 'https://www.googleapis.com/auth/calendar.events openid');
-}
 
 type Handler = (url: URL, init: any) => Response | Promise<Response>;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
