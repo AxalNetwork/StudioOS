@@ -322,8 +322,8 @@ function fundFacts(rows: any[]) {
         title: r.gp_title ?? null,
         email: r.gp_email ?? null,
         entity: r.gp_entity ?? null,
-        // D372: the GP of record's platform account, which "Message the GP"
-        // starts a thread with (`POST /api/messages` takes an account email).
+        // D372: the GP of record's platform account, which "Email the GP"
+        // opens an Email draft for (D1345, scoped by the own LP commitment).
         // `email` above is the fiduciary address as printed on the LPA, which
         // may not be an account at all. Only the LP's own funds reach here.
         contact_email: r.gp_account_email ?? null,

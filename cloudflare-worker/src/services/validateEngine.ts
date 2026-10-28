@@ -75,7 +75,7 @@ export const NOTES = {
   manual: 'Manual mode is on for Validate, so Axal did not summarise or structure this. Use Summarise and Structure on the session.',
   noTranscript: 'There is no transcript to summarise yet.',
   chatQuiet: 'This conversation has new text. Axal will digest it after the six-hour quiet window.',
-  busy: 'This conversation is already being summarised. It will be ready in a minute.',
+  busy: 'Eadwyn is already analysing this conversation. Refresh to check its progress.',
   noCitation: 'The summary could not be tied to the transcript, so none is stored.',
   modelDropped: 'Your saved model for this is no longer offered, so the default ran.',
   tooLarge: 'This conversation is longer than Axal can summarise in one run yet, so nothing was run and nothing was charged.',

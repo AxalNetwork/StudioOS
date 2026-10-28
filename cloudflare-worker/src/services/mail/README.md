@@ -16,6 +16,7 @@ and mail never goes out on Axal's house token: `../email.ts` stays for system ma
 | `shares.ts` | D1342 (#3550): Network members' address shares (`mail_address_shares`, migration 649). A pair opens on a mutual introduction accept (`askBoth`), or lazily when a member lists their matches; each side shares, declines or revokes on its own; the other's address is served only while both have shared (D414 elsewhere). A match is the person kind `member:<share uid>` in `contextPack.ts`. |
 | `profileRecords.ts` | D1348 (#3555): the other profiles' person kinds (`deal`, `holding`, `coinvestor`, `client`, `cohort`, `engagement`, `lead`, `application`, `ticket`), each read under its module's own rule with its sources and `as_of`; `profileOf`, and `caseOnly`, which keeps an admin's pack to the case they hold. |
 | `people.ts` | D1348: the People pane, grouped per profile as the canvas draws it, and `markerOf`: "Follow-up due" and "Needs a reply" derived, never stored. |
+| `moduleRecipients.ts` | D1345: the LP’s own fund GP (`fund_gp`) and the advisor’s own linked work product client (`work_product`), scoped through their modules for the two retired Messages starters. |
 
 The routes are `../../routes/mail_accounts.ts`, `../../routes/mail_drafts.ts`,
 `../../routes/mail_shares.ts` and `../../routes/mail_people.ts` (D1348), all mounted at `/api/mail`. A new provider adds an adapter in `adapters/` and a

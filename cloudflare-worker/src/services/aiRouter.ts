@@ -2113,7 +2113,12 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     : estTokens(route.isEmbed || opts.translate ? (opts.text ?? defaultContentBlob(opts)) : chatMessagesFor(opts).map((m) => m.content).join('\n'));
   // D761 PR 2: what this run asks of a model (chat, vision, rerank, embedding, translation).
   const need = needOf(opts);
-  const limitFor = (model: string): number => shapes.timeoutMs(shapes.factsFor(model), inputTokens);
+  // Interview analysis returns a complete cited document, not a chat first response.
+  const interviewAnalysis = ['summarise_interview', 'structure_interview', 'extract_conversation_items'].includes(opts.task);
+  const limitFor = (model: string): number => Math.max(
+    shapes.timeoutMs(shapes.factsFor(model), inputTokens),
+    interviewAnalysis ? shapes.TIMEOUT_MS.long_context : 0,
+  );
   const callWaiRaw = (model: string, bypassGateway: boolean): Promise<ProviderResult> => {
     const ms = limitFor(model);
     return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed, bypassGateway, ms), ms);

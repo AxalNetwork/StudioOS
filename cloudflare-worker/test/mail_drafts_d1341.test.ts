@@ -100,8 +100,9 @@ test('mail_draft is a routed, labelled task; each relationship has its own inten
   assert.ok(ROUTE.mail_draft.alternates!.length >= 2, 'priced alternates');
   assert.equal(TASK_LABELS.mail_draft, 'Draft an email');
   // D1348 adds `founder`, `coinvestor` and `case`, and the other profiles' kinds.
-  assert.deepEqual(Object.keys(INTENTS), ['customer', 'investor', 'advisor', 'cofounder', 'network', 'founder', 'coinvestor', 'case']);
+  assert.deepEqual(Object.keys(INTENTS), ['fund_gp', 'customer', 'investor', 'advisor', 'cofounder', 'network', 'founder', 'coinvestor', 'case']);
   assert.deepEqual(RELATIONSHIP_OF, {
+    fund_gp: 'fund_gp', work_product: 'founder',
     interviewee: 'customer', prospect: 'investor', cofounder: 'cofounder', advisor: 'advisor', partner: 'advisor', growth_partner: 'advisor', member: 'network',
     deal: 'founder', holding: 'founder', coinvestor: 'coinvestor', client: 'founder', cohort: 'founder', engagement: 'founder', lead: 'founder', application: 'case', ticket: 'case',
   });

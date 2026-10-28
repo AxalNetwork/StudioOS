@@ -8,7 +8,7 @@
 // figure with nothing behind it says "not recorded". Neither is ever a zero.
 import React, { useMemo, useReducer, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageSquare } from 'lucide-react';
+import { EmailAction } from './email/emailParts';
 import { Unreadable, Unrecorded } from '../ui';
 import { api } from '../lib/api';
 import { bankAccountsApi } from '../lib/api/bankAccounts';
@@ -380,80 +380,25 @@ function Fact({ k, v, note, reason }) {
   );
 }
 
-/**
- * "Message the GP" (D372). It linked to /help. The fund's general partner of
- * record has a platform account (`funds[id].gp.contact_email` on the LP's own
- * portal), and `POST /api/messages` starts a thread with an account, so the
- * message goes to them and lands in both inboxes. A fund with no GP account
- * says so instead of offering a button that cannot deliver.
- */
-export function MessageGp({ portal }) {
+/** D1345: the LP's GP of record opens a draft in Email, one selected fund at a time. */
+export function EmailGp({ portal }) {
   const rows = useMemo(() => commitmentsByFund(portal), [portal]);
   const reachable = rows.filter((r) => r.gp?.contact_email);
   const [fundId, setFundId] = useState(null);
-  const [open, setOpen] = useState(false);
-  const [body, setBody] = useState('');
-  const [state, setState] = useState({ busy: false, err: '', sent: false });
   const target = reachable.find((r) => r.fund_id === fundId) || reachable[0] || null;
-
-  if (!reachable.length) {
-    return (
-      <p className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="status-no-gp-contact">
-        {rows.length
-          ? 'No general partner of record with a platform account is set on your fund, so there is no one to message here. '
-          : 'Questions before you invest go to the fund team. '}
-        <Link to="/help" className="font-semibold text-violet-700 dark:text-violet-400">Contact the fund team</Link>
-      </p>
-    );
-  }
-
-  async function send(e) {
-    e.preventDefault();
-    if (!body.trim()) return;
-    setState({ busy: true, err: '', sent: false });
-    try {
-      await api.messageStartThread({
-        to_email: target.gp.contact_email,
-        subject: `${target.fund_name || 'Fund'} · LP question`,
-        body: body.trim(),
-      });
-      setBody('');
-      setState({ busy: false, err: '', sent: true });
-    } catch (ex) {
-      setState({ busy: false, err: ex?.message || 'The message could not be sent.', sent: false });
-    }
-  }
-
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} data-testid="button-message-gp"
-        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
-        <MessageSquare size={13} /> Message the GP
-      </button>
-    );
-  }
-  return (
-    <form onSubmit={send} className="flex w-full flex-col gap-2" data-testid="form-message-gp">
-      {reachable.length > 1 && (
-        <select value={target.fund_id} onChange={(e) => setFundId(Number(e.target.value))} data-testid="select-message-gp-fund"
-          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-xs text-gray-900 dark:text-gray-100">
-          {reachable.map((r) => <option key={r.fund_id} value={r.fund_id}>{r.fund_name || `Fund #${r.fund_id}`}</option>)}
-        </select>
-      )}
-      <div className="text-[11px] text-gray-500 dark:text-gray-400">
-        To {target.gp.name || 'the general partner of record'} · {target.fund_name || `Fund #${target.fund_id}`}
-      </div>
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} required data-testid="input-message-gp"
-        className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-900 dark:text-gray-100" />
-      <div className="flex gap-2">
-        <button type="submit" disabled={state.busy || !body.trim()} data-testid="button-send-message-gp"
-          className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
-          {state.busy ? 'Sending…' : 'Send'}
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300">Close</button>
-      </div>
-      {state.err && <p className="text-[11px] text-red-600 dark:text-red-400" role="alert">{state.err}</p>}
-      {state.sent && <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Sent. The conversation is in <Link to="/messages" className="font-semibold underline">Messages</Link>.</p>}
-    </form>
+  if (!target) return (
+    <p className="text-[11.5px] text-gray-500 dark:text-gray-400" data-testid="status-no-gp-contact">
+      {rows.length ? 'No general partner of record with a platform account is set on your fund. ' : 'Questions before you invest go to the fund team. '}
+      <Link to="/help" className="font-semibold text-violet-700 dark:text-violet-400">Contact the fund team</Link>
+    </p>
   );
+  return <div className="flex w-full flex-wrap items-center gap-2" data-testid="email-gp">
+    {reachable.length > 1 && <select value={target.fund_id} onChange={(e) => setFundId(Number(e.target.value))}
+      aria-label="Fund to email about" data-testid="select-email-gp-fund"
+      className="min-h-[44px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 text-xs text-gray-900 dark:text-gray-100">
+      {reachable.map((r) => <option key={r.fund_id} value={r.fund_id}>{r.fund_name || `Fund #${r.fund_id}`}</option>)}
+    </select>}
+    <span className="text-[11px] text-gray-500 dark:text-gray-400">{target.gp.name || 'General partner of record'} · {target.fund_name || `Fund #${target.fund_id}`}</span>
+    <EmailAction person={`fund_gp:${target.fund_id}`} from="LP commitment" />
+  </div>;
 }

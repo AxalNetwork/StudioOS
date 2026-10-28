@@ -69,7 +69,6 @@ const NETWORK = (P) => [
  * profile's own key, so a founder's Messages and an advisor's are two rows.
  */
 const SHARED = (P) => [
-  off('/messages', key(P, 'Messages')),
   // D1344 (#3552): Email (its settings, `/email/settings`, take the same key by prefix).
   off('/email', key(P, 'Email')),
   off('/help', key(P, 'Help')),

@@ -11,11 +11,15 @@
 
 // D1348 (#3555): `founder` is a founder written to by an investor, advisor or operating partner;
 // `coinvestor` another investor; `case` an admin's case (an application or a ticket).
-export type Relationship = 'customer' | 'investor' | 'advisor' | 'cofounder' | 'network' | 'founder' | 'coinvestor' | 'case';
+export type Relationship = 'customer' | 'investor' | 'advisor' | 'cofounder' | 'network' | 'founder' | 'coinvestor' | 'case' | 'fund_gp';
 
 export interface Intent { key: string; label: string; instruction: string }
 
 export const INTENTS: Readonly<Record<Relationship, readonly Intent[]>> = Object.freeze({
+  fund_gp: Object.freeze([
+    { key: 'ask_question', label: 'Start a fund question', instruction: 'Write only a brief greeting and an opening saying the sender has a question about the named fund. Stop before the question: the member will add it to the editable draft before sending. Do not invent a question, figures or placeholders.' },
+    { key: 'ask_update', label: 'Ask for an update', instruction: 'Ask the general partner for a short update about the selected fund records.' },
+  ]),
   customer: Object.freeze([
     { key: 'thank_follow_up', label: 'Thank and follow up', instruction: 'Thank them for their time and follow up on what they said.' },
     { key: 'second_interview', label: 'Ask for a second interview', instruction: 'Ask, politely and briefly, for a second conversation.' },
@@ -55,6 +59,8 @@ export const INTENTS: Readonly<Record<Relationship, readonly Intent[]>> = Object
 
 /** A person ref's kind (`kind:id`) and the relationship it is. */
 export const RELATIONSHIP_OF: Readonly<Record<string, Relationship>> = Object.freeze({
+  fund_gp: 'fund_gp',
+  work_product: 'founder',
   interviewee: 'customer',
   prospect: 'investor',
   cofounder: 'cofounder',

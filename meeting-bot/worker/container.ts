@@ -84,7 +84,7 @@ export class MeetingBotContainer implements DurableObject {
           // persist its tombstone immediately, even while the process is cold.
           return async () => {
             try {
-              await this.command('/start',input,7500);
+              await this.command('/start',input,20_000);
               return await this.state.blockConcurrencyWhile(async () => {
                 const current=await this.state.storage.get<Lease>('lease');
                 if (!current || current.stopped) return reply(409,'run_stopped');

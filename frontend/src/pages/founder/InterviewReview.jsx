@@ -73,7 +73,20 @@ export function placementText(p) {
       return `${v.direction === 'refutes' ? 'Refutes' : 'Supports'} ${h ? `${h.code} · ${h.claim}` : 'Hypothesis not recorded'} through ${g?.title || 'Pain group not recorded'} · ${STRENGTH[v.strength] || 'Strength not recorded'}`;
     }
     case 'competitor_mention': return `${v.name}${v.context ? ` · ${v.context}` : ''}`;
-    case 'market_fact': return `${v.fact} · source: ${v.source}`;
+    case 'market_fact': return `${v.fact}${v.topic ? ` · ${v.topic}` : ''}${v.source ? ` · source: ${v.source}` : ''}`;
+    case 'firmographic': return `${(v.attribute || 'Attribute').replaceAll('_', ' ')}: ${v.value}`;
+    case 'job_to_be_done': return v.job;
+    case 'alternative': return `${v.name} · ${(v.kind || '').replaceAll('_', ' ')}`;
+    case 'budget': return v.detail;
+    case 'timing': return v.when;
+    case 'urgency': return `${v.level} urgency${v.reason ? ` · ${v.reason}` : ''}`;
+    case 'buying_trigger': return v.trigger;
+    case 'objection': return `${v.about}: ${v.detail}`;
+    case 'follow_up': return [v.detail, v.owner_hint, v.due_hint].filter(Boolean).join(' · ');
+    case 'decision': return [v.statement, v.owner_hint].filter(Boolean).join(' · ');
+    case 'prototype_ask': return [v.feature, v.workflow, v.pain_ref].filter(Boolean).join(' · ');
+    case 'hypothesis_new': return [v.claim, v.disproof].filter(Boolean).join(' · ');
+    case 'experiment_idea': return [v.title, v.method].filter(Boolean).join(' · ');
     default: return 'Unreadable: this placement has a shape the page does not know.';
   }
 }

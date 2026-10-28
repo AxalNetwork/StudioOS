@@ -24,6 +24,7 @@
  * derivation when its read lands.
  */
 
+import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole.js';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { ENGAGEMENT_VIEW_ROWS } from '../../../lib/deckShareViews.js';
 
@@ -83,11 +84,11 @@ export function builderTarget(search = '', hash = '') {
 }
 
 /**
- * An admin reads the studio and changes nothing (PD21); everyone else the route
- * admits works in it, as before D894. An admin viewing as a founder (viewMode)
- * is still an admin account, so still reads.
+ * Ordinary admins read (PD21). The verified HQ Super Admin can use the builder;
+ * shell preview never grants this permission. The Worker verifies elevation again.
  */
-export const isReadOnly = (user) => String(user?.role || '') === 'admin';
+export const isReadOnly = (user) => String(user?.role || '').toLowerCase() === 'admin'
+  && (!isSuperAdminUser(user) || Boolean(branchOfUser(user)));
 
 export const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;

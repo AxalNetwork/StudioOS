@@ -23,7 +23,7 @@ import type { Env, User } from '../types';
 import { storagePlan, storagePlanKey } from './storagePlans';
 
 export type StorageAreaKey =
-  | 'data_room' | 'diligence_files' | 'research_library' | 'message_attachments' | 'interview_recordings'
+  | 'data_room' | 'diligence_files' | 'research_library' | 'interview_recordings'
   | 'data_room_versions' | 'session_audio' | 'deck_reviews' | 'validate_evidence' | 'build_proofs'
   | 'grow_minutes' | 'brand_files' | 'csv_imports';
 export type StorageKindKey = 'data_room' | 'documents' | 'recordings' | 'decks_exports' | 'brand' | 'other';
@@ -89,15 +89,6 @@ const AREAS: ReadonlyArray<Def> = [
     owners: `SELECT owner_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
       SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
       FROM research_documents WHERE owner_user_id IS NOT NULL GROUP BY owner_user_id` },
-  { key: 'message_attachments', kind: 'other', scope: 'personal',
-    groups: `SELECT NULL AS project_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
-      SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
-      FROM message_attachments WHERE uploader_user_id = ?`,
-    largest: `SELECT filename AS name, NULL AS version, size_bytes AS bytes, created_at AS added_at, NULL AS project_id, uid AS ref
-      FROM message_attachments WHERE uploader_user_id = ? AND size_bytes IS NOT NULL ORDER BY size_bytes DESC, id DESC LIMIT 10`,
-    owners: `SELECT uploader_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes,
-      SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
-      FROM message_attachments WHERE uploader_user_id IS NOT NULL GROUP BY uploader_user_id` },
   { key: 'interview_recordings', kind: 'recordings', scope: 'company',
     groups: `SELECT i.project_id AS project_id, COUNT(*) AS files, SUM(i.recording_size_bytes) AS bytes,
       SUM(CASE WHEN i.recording_size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
