@@ -32,6 +32,9 @@ import { request } from '../api.js';
 // `address` is the other member's, and only while both have shared; a match's person is `member:<uid>`.
 // D1344 (#3552, part 5) — the sent log, on cloudflare-worker/src/routes/mail_accounts.ts.
 //   sent(page?, person?)           GET    /mail/sent?page=&person= → { page, per_page, total, items: [{ uid, to, subject, sent_at, status, error, draft_uid, person, quoted }] }
+// D1348 (#3555, part 7) — the People pane, on cloudflare-worker/src/routes/mail_people.ts.
+//   people()                       GET    /mail/people → { profile, groups: [{ key, label, people: [{ ref, name, role, source, last_contact, marker, marker_label }], empty, error }], note, empty }
+// Each group is the member's profile's; a person's ref opens `context(ref)`. Markers are derived, never stored.
 const id = (v) => encodeURIComponent(String(v));
 const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
 export const mailApi = {
@@ -55,4 +58,5 @@ export const mailApi = {
   share: (uid, yes) => post(`/mail/shares/${id(uid)}`, { share: yes === true }),
   unshare: (uid) => request(`/mail/shares/${id(uid)}`, { method: 'DELETE' }),
   sent: (page = 1, person = null) => request(`/mail/sent?page=${id(page)}${person ? `&person=${id(person)}` : ''}`),
+  people: () => request('/mail/people'),
 };

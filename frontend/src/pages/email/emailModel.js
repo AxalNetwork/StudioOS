@@ -20,17 +20,21 @@ export { INTENTS, LENGTHS, TONES };
  * action is on. A module with no person (a KPI, a milestone) has none, so no
  * action. Advisors and operating partners open from their own pages.
  */
-const RECORD_PEOPLE = Object.freeze({
-  'validate/customer-research': (id) => (/^[1-9][0-9]{0,9}$/.test(id) ? `interviewee:${id}` : null),
-  'raise/capital-relationships': (id) => (/^[1-9][0-9]{0,9}$/.test(id) ? `prospect:${id}` : null),
-  'build/founding-team': (id) => (/^h-[1-9][0-9]{0,9}$/.test(id) ? `cofounder:${id}` : null),
-  'grow/partner-network': (id) => (/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id) ? `growth_partner:${id}` : null),
-});
+// A Map, not an object: the key comes from the address, and a Map has no inherited keys
+// (`constructor`, `toString`) for an address to reach.
+const RECORD_PEOPLE = new Map([
+  ['validate/customer-research', { kind: 'interviewee', id: /^[1-9][0-9]{0,9}$/ }],
+  ['raise/capital-relationships', { kind: 'prospect', id: /^[1-9][0-9]{0,9}$/ }],
+  ['build/founding-team', { kind: 'cofounder', id: /^h-[1-9][0-9]{0,9}$/ }],
+  ['grow/partner-network', { kind: 'growth_partner', id: /^[a-z0-9][a-z0-9_-]{0,63}$/ }],
+]);
 
 /** The person ref of a cycle record, or null when the record has no person. */
 export function personOfRecord(cycle, slug, recordId) {
-  const of = RECORD_PEOPLE[`${cycle}/${slug}`];
-  return of && recordId != null && recordId !== '' ? of(String(recordId)) : null;
+  const spec = RECORD_PEOPLE.get(`${cycle}/${slug}`);
+  if (!spec || recordId == null || recordId === '') return null;
+  const id = String(recordId);
+  return spec.id.test(id) ? `${spec.kind}:${id}` : null;
 }
 
 /** `/email` opened on one person, from a record (EM4b): the person and where the composer was opened from. */

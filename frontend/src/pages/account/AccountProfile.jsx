@@ -3,15 +3,12 @@ import { useEffect, useState } from 'react';
 import { normalizePhoneInput, phonePlaceholder, PHONE_ERROR } from '../../lib/phoneNumber';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
-import { useCompanyReadState } from '../../ui/CompanySwitcher';
-import { EmptyState, Pill, Skeleton, Unrecorded, Unreadable } from '../../ui';
+import { Pill, Skeleton, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, FieldRow, LoadingRows, Outcome, PanelCard, Switch, useAccountRead } from './AccountCenter';
 import {
-  LOCALES, changedFields, corporateIsEmpty, countryLabel, dayLabel, fieldErrorsFrom, historyLines,
+  LOCALES, changedFields, countryLabel, dayLabel, fieldErrorsFrom, historyLines,
   latestArchetype, localeLabel, locationLabel, phoneLabel, splitPersonalPatch,
 } from './accountCenterModel';
-import { companySettingsPathFor } from './companies/companiesModel';
 
 /**
  * D568 — Profile and identity: the canvas's `ac_profile` block.
@@ -20,18 +17,18 @@ import { companySettingsPathFor } from './companies/companiesModel';
  * card: Personal details (the account name, the identity route's username and
  * language, the details route's phone and location), Identity (legal name,
  * date of birth and nationality from the identity route, tax residence from
- * the details route), Company profile (the sidebar's active company),
- * Signing entity (the per-account corporate profile),
+ * the details route), Address and tax ID (the personal profile route),
  * Public archetype (the newest profile snapshot and its publish consent), and
  * Change history (the profile snapshots, with "Ask me again").
  *
- * THE EDITORS BELOW THESE CARDS STAY. Personal / Corporate / Verification, the
- * LinkedIn import, the background and the rest of the pane edit far more than
- * the canvas draws, and some of the same fields. Two editors of one field on
- * one pane can overwrite each other with a stale copy, so the two sides keep
- * each other current: a save here calls `onSaved` (the page remounts the
- * editors below, which re-read) and announces `axal:profile_saved`; a save
- * below announces the same event, and these cards re-read on it.
+ * No company or signing entity here (owner, 2026-10-28): both are Companies
+ * and projects', and verification is Trust Center's. The profile editors below
+ * these cards (LinkedIn import, profile, background, extras, jurisdictions,
+ * role preferences) have no sub-tabs. They edit some neighbouring fields, so
+ * the two sides keep each other current: a save here calls `onSaved` (the page
+ * remounts the editors below, which re-read) and announces
+ * `axal:profile_saved`; a save below announces the same event, and these cards
+ * re-read on it.
  */
 
 export const PROFILE_SAVED_EVENT = 'axal:profile_saved';
@@ -260,92 +257,76 @@ export function IdentityCard({ identity, details, onSave }) {
   );
 }
 
-const COMPANY_KEYS = ['entity_name', 'signing_authority_title', 'registration_number', 'registered_country'];
+const ADDRESS_KEYS = ['address_line1', 'address_line2', 'state_or_region', 'postal_code'];
 
-/** The sidebar and this card share the selected company, with one editor. */
-export function CompanyProfileCard() {
-  const { company } = useActiveCompany();
-  const { loading, failed } = useCompanyReadState();
-  return (
-    <PanelCard title="Company profile" aside="Selected in the sidebar" data-testid="card-company-profile"
-      action={company && <Link className={BTN.link} to={companySettingsPathFor(company.uid)}>Company Settings</Link>}>
-      {loading ? <LoadingRows lines={3} /> : failed ? (
-        <Unreadable what="Your company profile" claim="Your company memberships could not be read." />
-      ) : !company ? (
-        <EmptyState size="sm" data-testid="company-profile-empty" title="No company selected."
-          body="Create or select a company in Companies and projects."
-          cta={{ label: 'Companies and projects', to: '/account/companies' }} />
-      ) : (
-        <div>
-          <FieldRow label="Company"><Value value={company.company_name} missing="no company name is saved" testid="value-company" /></FieldRow>
-          <FieldRow label="Role"><Value value={company.my_role} missing="no role is recorded for your membership" testid="value-company-role" /></FieldRow>
-          <FieldRow label="Stage"><Value value={company.stage} missing="no company stage is saved" testid="value-company-stage" /></FieldRow>
-          <FieldRow label="Website"><Value value={company.website} missing="no company website is saved" testid="value-company-website" /></FieldRow>
-        </div>
-      )}
-    </PanelCard>
-  );
+/** One line for the saved address: street lines, then city, region, postal code and country. */
+function addressLine(p) {
+  const parts = [p.address_line1, p.address_line2, p.city, p.state_or_region, p.postal_code, countryLabel(p.country)]
+    .map((v) => String(v ?? '').trim()).filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
 }
 
 /**
- * Signing entity: the account's own corporate profile — one row per account
- * (`corporate_profiles.user_id` is its key), the entity that signs for you.
- * The full record (type, address, owners, directors) is edited in the
- * Corporate tab below; these are the four lines the canvas draws.
+ * Address and tax ID: the contract fields the other cards don't hold. The
+ * personal profile route stores them, as it stores Identity's; city and
+ * country are edited in Personal details, so this card shows them and does
+ * not edit them twice. The tax ID is encrypted at rest: the route serves its
+ * last four digits only, and an empty box keeps the saved one.
  */
-export function SigningEntityCard({ corporate, onSave }) {
+export function AddressTaxCard({ personal, onSave }) {
   const ed = useEditor();
-  const corp = corporate.data || {};
+  const p = personal.data || {};
   const current = {
-    entity_name: corp.entity_name || '',
-    signing_authority_title: corp.signing_authority_title || '',
-    registration_number: corp.registration_number || '',
-    registered_country: corp.registered_country || '',
+    address_line1: p.address_line1 || '',
+    address_line2: p.address_line2 || '',
+    state_or_region: p.state_or_region || '',
+    postal_code: p.postal_code || '',
+    tax_id_number: '',
   };
-  const empty = corporate.status === 'ready' && corporateIsEmpty(corp);
+  const taxLabel = p.has_tax_id ? `•••• ${p.tax_id_last4 || '••••'}` : null;
+  const save = (patch) => {
+    const out = { ...patch };
+    if (!String(out.tax_id_number ?? '').trim()) delete out.tax_id_number;
+    return onSave(out);
+  };
   return (
     <PanelCard
-      title="Signing entity"
-      aside="Used for contracts · account details"
-      data-testid="card-signing-entity"
-      action={!ed.editing && corporate.status === 'ready' && !empty && (
-        <EditButton onClick={() => ed.begin(current)} testid="button-edit-signing-entity" />
+      title="Address and tax ID"
+      aside="Used for contracts"
+      data-testid="card-address-tax"
+      action={!ed.editing && (
+        <EditButton onClick={() => ed.begin(current)} disabled={personal.status !== 'ready'}
+          title={personal.status === 'ready' ? undefined : 'Editing opens once your address is read.'} testid="button-edit-address" />
       )}
     >
-      {corporate.status === 'loading' ? <LoadingRows lines={3} />
-        : corporate.status === 'unreadable' ? (
-          <Unreadable what="Your signing entity" claim={corporate.message || 'This is not a claim that you have none.'} onRetry={corporate.reload} />
+      {personal.status === 'loading' ? <LoadingRows lines={2} />
+        : personal.status === 'unreadable' ? (
+          <Unreadable what="Your address and tax ID" claim={personal.message || 'This is not a claim that none is saved.'} onRetry={personal.reload} />
         ) : ed.editing ? (
           <div>
-            <FieldRow label="Company" htmlFor="ac-entity" control error={ed.errors.entity_name}>
-              <input id="ac-entity" className={INPUT} maxLength={200} {...ed.field('entity_name')} />
+            <FieldRow label="Address line 1" htmlFor="ac-addr1" control error={ed.errors.address_line1}>
+              <input id="ac-addr1" className={INPUT} maxLength={200} {...ed.field('address_line1')} />
             </FieldRow>
-            <FieldRow label="Role" htmlFor="ac-title" control error={ed.errors.signing_authority_title} hint="Your title, as the person who signs for it.">
-              <input id="ac-title" className={INPUT} maxLength={100} {...ed.field('signing_authority_title')} />
+            <FieldRow label="Address line 2" htmlFor="ac-addr2" control error={ed.errors.address_line2}>
+              <input id="ac-addr2" className={INPUT} maxLength={200} {...ed.field('address_line2')} />
             </FieldRow>
-            <FieldRow label="Registration" htmlFor="ac-reg" control error={ed.errors.registration_number || ed.errors.entity_type}>
-              <input id="ac-reg" className={`${INPUT} font-mono`} maxLength={100} {...ed.field('registration_number')} />
+            <FieldRow label="State or region" htmlFor="ac-region" control error={ed.errors.state_or_region}>
+              <input id="ac-region" className={INPUT} maxLength={100} {...ed.field('state_or_region')} />
             </FieldRow>
-            <FieldRow label="Country" htmlFor="ac-regc" control error={ed.errors.registered_country} hint="Country of incorporation, two-letter code.">
-              <input id="ac-regc" className={`${INPUT} w-20 font-mono uppercase`} {...ed.upper('registered_country')} />
+            <FieldRow label="Postal code" htmlFor="ac-postal" control error={ed.errors.postal_code} hint="City and country are in Personal details.">
+              <input id="ac-postal" className={`${INPUT} w-32 font-mono`} maxLength={20} {...ed.field('postal_code')} />
+            </FieldRow>
+            <FieldRow label="Tax ID" htmlFor="ac-taxid" control error={ed.errors.tax_id_number}
+              hint={p.has_tax_id ? 'One is saved. Type a new one to replace it, or leave this empty to keep it.' : 'Encrypted at rest.'}>
+              <input id="ac-taxid" className={`${INPUT} font-mono`} maxLength={64} autoComplete="off" {...ed.field('tax_id_number')} placeholder={taxLabel || ''} />
             </FieldRow>
             <Outcome outcome={ed.outcome} />
-            <EditActions ed={ed} onSave={() => ed.commit(changedFields(current, ed.draft, COMPANY_KEYS), onSave)} />
+            <EditActions ed={ed} onSave={() => ed.commit(changedFields(current, ed.draft, [...ADDRESS_KEYS, 'tax_id_number']), save)} />
           </div>
-        ) : empty ? (
-          <EmptyState
-            size="sm"
-            data-testid="signing-entity-empty"
-            title="No signing entity recorded."
-            body="Add the legal entity you sign for."
-            cta={{ label: 'Add signing entity', onClick: () => ed.begin(current) }}
-          />
         ) : (
           <div>
-            <FieldRow label="Company"><Value value={corp.entity_name} missing="no company name is saved" testid="value-signing-entity" /></FieldRow>
-            <FieldRow label="Role"><Value value={corp.signing_authority_title} missing="no title is saved" testid="value-signing-role" /></FieldRow>
-            <FieldRow label="Registration"><Value value={corp.registration_number} missing="no registration number is saved" testid="value-signing-registration" /></FieldRow>
-            <FieldRow label="Country"><Value value={countryLabel(corp.registered_country)} missing="no country of incorporation is saved" testid="value-signing-country" /></FieldRow>
+            <FieldRow label="Address"><Value read={personal} value={addressLine(p)} missing="no address is saved" testid="value-address" /></FieldRow>
+            <FieldRow label="Tax ID"><Value read={personal} value={taxLabel} missing="no tax ID is saved" testid="value-tax-id" /></FieldRow>
             <Outcome outcome={ed.outcome} />
           </div>
         )}
@@ -476,26 +457,26 @@ export function ChangeHistoryCard({ history, fetchReask = () => api.profileReask
 }
 
 /**
- * The section's container: five reads, three writers, and the archetype's
+ * The section's container: five reads, four writers, and the archetype's
  * publish consent. `data` is the root settings payload the page already holds
  * (name, email, role); `onAccountChange` merges a name change back into it.
  */
 export default function ProfileIdentityCanvas({ data, onAccountChange, onSaved }) {
   const identity = useAccountRead(() => api.getIdentitySettings());
   const details = useAccountRead(() => api.getProfileDetails());
-  const corporate = useAccountRead(() => api.getCorporateProfile());
+  const personal = useAccountRead(() => api.getPersonalProfile());
   const history = useAccountRead(() => api.profileHistory());
   const published = useAccountRead(() => api.archetypePublished());
   const { reload: reloadIdentity } = identity;
   const { reload: reloadDetails } = details;
-  const { reload: reloadCorporate } = corporate;
+  const { reload: reloadPersonal } = personal;
 
   // A save in the editors below this block re-reads what these cards show.
   useEffect(() => {
-    const reread = () => { reloadIdentity(); reloadDetails(); reloadCorporate(); };
+    const reread = () => { reloadIdentity(); reloadDetails(); reloadPersonal(); };
     window.addEventListener(PROFILE_SAVED_EVENT, reread);
     return () => window.removeEventListener(PROFILE_SAVED_EVENT, reread);
-  }, [reloadIdentity, reloadDetails, reloadCorporate]);
+  }, [reloadIdentity, reloadDetails, reloadPersonal]);
 
   const wrote = () => { onSaved?.(); announceSaved(); };
 
@@ -535,9 +516,9 @@ export default function ProfileIdentityCanvas({ data, onAccountChange, onSaved }
     return errors;
   };
 
-  const saveCompany = async (patch) => {
+  const saveAddress = async (patch) => {
     try {
-      corporate.set(await api.updateCorporateProfile(patch));
+      personal.set(await api.updatePersonalProfile(patch));
       wrote();
       return {};
     } catch (e) {
@@ -554,17 +535,16 @@ export default function ProfileIdentityCanvas({ data, onAccountChange, onSaved }
     <div className="@container space-y-3" data-testid="account-profile-canvas">
       <PersonaFollowUpCheck />
       <div className="grid items-start gap-3 @2xl:grid-cols-2">
-        <PersonalDetailsCard account={data} identity={identity} details={details} onSave={savePersonal} />
+        <div className="space-y-3">
+          <PersonalDetailsCard account={data} identity={identity} details={details} onSave={savePersonal} />
+          <AddressTaxCard personal={personal} onSave={saveAddress} />
+        </div>
         <div className="space-y-3">
           <IdentityCard identity={identity} details={details} onSave={saveIdentity} />
-          <CompanyProfileCard />
-          <SigningEntityCard corporate={corporate} onSave={saveCompany} />
+          <PublicArchetypeCard role={data?.role} history={history} published={published} onToggle={togglePublished} />
         </div>
       </div>
-      <div className="grid items-start gap-3 @2xl:grid-cols-2">
-        <PublicArchetypeCard role={data?.role} history={history} published={published} onToggle={togglePublished} />
-        <ChangeHistoryCard history={history} />
-      </div>
+      <ChangeHistoryCard history={history} />
     </div>
   );
 }

@@ -9,7 +9,9 @@
  * intent has its chip's words and the instruction the prompt carries.
  */
 
-export type Relationship = 'customer' | 'investor' | 'advisor' | 'cofounder' | 'network';
+// D1348 (#3555): `founder` is a founder written to by an investor, advisor or operating partner;
+// `coinvestor` another investor; `case` an admin's case (an application or a ticket).
+export type Relationship = 'customer' | 'investor' | 'advisor' | 'cofounder' | 'network' | 'founder' | 'coinvestor' | 'case';
 
 export interface Intent { key: string; label: string; instruction: string }
 
@@ -35,6 +37,20 @@ export const INTENTS: Readonly<Record<Relationship, readonly Intent[]>> = Object
   network: Object.freeze([
     { key: 'introduce_myself', label: 'Introduce myself', instruction: 'Introduce the sender in a few sentences and suggest a short call.' },
   ]),
+  founder: Object.freeze([
+    { key: 'check_in', label: 'Check in', instruction: 'Check in on how things are going, from the selected records, and offer one concrete next step.' },
+    { key: 'ask_update', label: 'Ask for an update', instruction: 'Ask for a short update on what the selected records leave open.' },
+    { key: 'share_feedback', label: 'Share feedback', instruction: 'Share specific, kind feedback drawn only from the selected records.' },
+  ]),
+  coinvestor: Object.freeze([
+    { key: 'discuss_deal', label: 'Discuss a deal', instruction: 'Discuss the deal the selected records name, and suggest a short call.' },
+    { key: 'co_invest_status', label: 'Share co-investment status', instruction: 'Share where the co-investment stands, from the selected records only.' },
+  ]),
+  case: Object.freeze([
+    { key: 'ask_missing', label: 'Ask for what is missing', instruction: 'Ask, briefly, for what the case still needs, from the case record only.' },
+    { key: 'share_next_step', label: 'Share the next step', instruction: 'Tell them what happens next in their case, from the case record only.' },
+    { key: 'answer_case', label: 'Answer their question', instruction: 'Answer their question from the case record only; say plainly what is not known.' },
+  ]),
 });
 
 /** A person ref's kind (`kind:id`) and the relationship it is. */
@@ -46,6 +62,16 @@ export const RELATIONSHIP_OF: Readonly<Record<string, Relationship>> = Object.fr
   partner: 'advisor',
   growth_partner: 'advisor',
   member: 'network',
+  // D1348 (#3555): the other profiles' people.
+  deal: 'founder',
+  holding: 'founder',
+  coinvestor: 'coinvestor',
+  client: 'founder',
+  cohort: 'founder',
+  engagement: 'founder',
+  lead: 'founder',
+  application: 'case',
+  ticket: 'case',
 });
 
 export const TONES = Object.freeze(['warm', 'direct', 'formal'] as const);

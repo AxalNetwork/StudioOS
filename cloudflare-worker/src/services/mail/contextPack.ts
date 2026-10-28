@@ -20,6 +20,7 @@ import { readableRecord } from '../records/read';
 import { INTENTS, RELATIONSHIP_OF, type Intent, type Relationship } from './intents';
 import { computeBlock, type BlockKind } from './blocks';
 import { shareOf } from './shares';
+import { caseOnly, profileRecord, RecordMissing } from './profileRecords';
 
 export const NOT_FOUND = 'Record not found.';
 
@@ -115,7 +116,7 @@ function recordText(r: NonNullable<Awaited<ReturnType<typeof readableRecord>>>, 
   return lines.join('\n');
 }
 
-type Read = { person: Person; item: PackItem };
+type Read = { person: Person; item: PackItem; more?: PackItem[] };
 
 async function moduleRecord(env: Env, user: User, kind: string, id: string): Promise<Read> {
   const m = MODULES[kind];
@@ -200,10 +201,22 @@ async function networkMatch(env: Env, user: User, id: string): Promise<Read> {
   };
 }
 
-/** The person's own record. `member` is a Network match (D1342); any other kind does not exist. */
+/**
+ * The person's own record. `member` is a Network match (D1342); the other
+ * profiles' kinds are `profileRecords.ts`'s (D1348); any other kind does not exist.
+ */
 export async function personRecord(env: Env, user: User, raw: unknown): Promise<Read> {
   const ref = parseRef(raw);
   if (!ref) throw notFound();
+  // D1348 (#3555): the other profiles' kinds, each under its module's rule. An admin reads the case only.
+  try {
+    const other = await profileRecord(env, user, ref.kind, ref.id);
+    if (other) return other;
+  } catch (e) {
+    if (e instanceof RecordMissing) throw notFound();
+    throw e;
+  }
+  if (caseOnly(user)) throw notFound();
   if (MODULES[ref.kind]) return moduleRecord(env, user, ref.kind, ref.id);
   if (ref.kind === 'advisor') return advisorEngagement(env, user, ref.id);
   if (ref.kind === 'partner') return partnerEngagement(env, user, ref.id);
@@ -218,7 +231,8 @@ export const COMPANY_ITEMS: ReadonlyArray<{ kind: BlockKind; label: string }> = 
 ];
 
 export async function companyItems(env: Env, user: User, projectId: number | null, now: number): Promise<PackItem[]> {
-  if (projectId == null) return [];
+  // D1348: an admin's pack is the case only; no company item is reachable from it.
+  if (projectId == null || caseOnly(user)) return [];
   const project = await projectRef(env, projectId);
   if (!project) return [];
   const out: PackItem[] = [];
@@ -231,7 +245,7 @@ export async function companyItems(env: Env, user: User, projectId: number | nul
 
 /** The pack for one person. `projectParam` names the member's company when the person has none (an advisor). */
 export async function contextPack(env: Env, user: User, raw: unknown, projectParam: number | null = null, now = Date.now()): Promise<Pack> {
-  const { person, item } = await personRecord(env, user, raw);
+  const { person, item, more = [] } = await personRecord(env, user, raw);
   const company = await companyItems(env, user, person.project_id ?? projectParam, now);
-  return { person, intents: INTENTS[person.relationship], items: [item, ...company] };
+  return { person, intents: INTENTS[person.relationship], items: [item, ...more, ...company] };
 }

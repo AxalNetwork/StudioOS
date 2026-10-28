@@ -268,6 +268,17 @@ test('D912: Use the record\'s figure replaces it in its section, through the sec
   assert.equal(again.body.code, 'claim_not_mismatch');
 });
 
+/** A check stamps the clock. Seconds of 38 or 42 are not the figures. */
+const withoutClock = (v: unknown) => JSON.stringify(v).replace(/\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/g, '');
+const FIGURE = /:\s*"?(42|38)"?[,}]/;
+
+test('D912: the admin figure scan ignores a clock second', () => {
+  const stamped = { checked_at: '2026-10-28 09:25:38', claims: [{ uid: '6d783c257094412abe4af4a15644822a', state: 'mismatch' }] };
+  assert.doesNotMatch(withoutClock(stamped), FIGURE);
+  assert.match(withoutClock({ ...stamped, stated_shown: '42' }), FIGURE);
+  assert.match(withoutClock({ ...stamped, record_value: 38 }), FIGURE);
+});
+
 test('D912: who — an admin with a reason reads states only; no reason, another founder and nobody reach nothing; only the founder checks', async () => {
   const db = fixture();
   const v = await version1(db);
@@ -282,8 +293,8 @@ test('D912: who — an admin with a reason reads states only; no reason, another
   const row = admin.body.claims.find((c: any) => c.figure === 'paying_customers');
   assert.equal(row.state, 'mismatch');
   for (const k of ['stated_value', 'stated_shown', 'record', 'candidates', 'eadwyn', 'note', 'links']) assert.equal(k in row, false, `an admin reads no ${k}`);
-  // checked_at is "YYYY-MM-DD HH:MM:SS". A minute of 42 or 38, closing the clock, reads as a JSON figure.
-  assert.doesNotMatch(JSON.stringify(admin.body).replace(/\d{2}:\d{2}:\d{2}/g, ''), /:\s*"?(42|38)"?[,}]/, 'no figure anywhere');
+  // checked_at is "YYYY-MM-DD HH:MM:SS". A minute or second of 42 or 38 reads as a JSON figure.
+  assert.doesNotMatch(withoutClock(admin.body), FIGURE, 'no figure anywhere');
   assert.equal((await call(db, ADMIN, 'POST', `/narrative/${v}/check`)).status, 403, 'an admin reads and changes nothing');
   // A support session on the founder's account reads, and never checks.
   const support = await call(db, OWNER, 'POST', `/narrative/${v}/check`, undefined, PID, true);

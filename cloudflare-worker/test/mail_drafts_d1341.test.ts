@@ -99,8 +99,12 @@ test('mail_draft is a routed, labelled task; each relationship has its own inten
   assert.equal(ROUTE.mail_draft.provider, 'workers-ai');
   assert.ok(ROUTE.mail_draft.alternates!.length >= 2, 'priced alternates');
   assert.equal(TASK_LABELS.mail_draft, 'Draft an email');
-  assert.deepEqual(Object.keys(INTENTS), ['customer', 'investor', 'advisor', 'cofounder', 'network']);
-  assert.deepEqual(RELATIONSHIP_OF, { interviewee: 'customer', prospect: 'investor', cofounder: 'cofounder', advisor: 'advisor', partner: 'advisor', growth_partner: 'advisor', member: 'network' });
+  // D1348 adds `founder`, `coinvestor` and `case`, and the other profiles' kinds.
+  assert.deepEqual(Object.keys(INTENTS), ['customer', 'investor', 'advisor', 'cofounder', 'network', 'founder', 'coinvestor', 'case']);
+  assert.deepEqual(RELATIONSHIP_OF, {
+    interviewee: 'customer', prospect: 'investor', cofounder: 'cofounder', advisor: 'advisor', partner: 'advisor', growth_partner: 'advisor', member: 'network',
+    deal: 'founder', holding: 'founder', coinvestor: 'coinvestor', client: 'founder', cohort: 'founder', engagement: 'founder', lead: 'founder', application: 'case', ticket: 'case',
+  });
   assert.equal(intentFor('customer', 'second_interview')!.label, 'Ask for a second interview');
   assert.equal(intentFor('investor', 'second_interview'), null, 'an intent belongs to its relationship');
   assert.deepEqual(parseDraft('Here: {"subject":" Hi ","body":"Hello"}'), { subject: 'Hi', body: 'Hello' });
@@ -285,7 +289,9 @@ test('each block is computed now under its module\'s gate; nothing recorded or u
     assert.equal((await call(f, 2, 'POST', '/api/mail/blocks', { kind: 'interview_insights', project: 1 })).body.block?.kind, 'interview_insights');
     assert.equal((await call(f, 3, 'POST', '/api/mail/blocks', { kind: 'kpis', project: 3 })).body.block, null, 'an empty board');
     assert.equal((await call(f, 3, 'POST', '/api/mail/blocks', { kind: 'kpis', project: 1 })).body.block, null, 'another venture');
-    assert.equal((await call(f, 1, 'POST', '/api/mail/blocks', { kind: 'one_liner', project: 1 })).body.block, null, 'an admin never reads the narrative through a draft');
+    // D1348: an admin's email quotes the case only, so no block is computed for them at all.
+    const admin = await call(f, 1, 'POST', '/api/mail/blocks', { kind: 'one_liner', project: 1 });
+    assert.deepEqual([admin.status, admin.body.block], [403, undefined], 'an admin never reads the narrative through a draft');
     f.db.exec("INSERT INTO raise_prospects(id,uid,project_id,name,firm,stage,commit_status,updated_at) VALUES (22,'p22',1,'Synthetic Angel','','committed','signed','2026-10-08 10:00:00')");
     const unpriced = (await call(f, 2, 'POST', '/api/mail/blocks', { kind: 'raise_status', project: 1 })).body.block;
     assert.equal(unpriced.text, 'Committed amount: not recorded\n1 investor committed', 'an amount not recorded is never $0');
@@ -295,7 +301,7 @@ test('each block is computed now under its module\'s gate; nothing recorded or u
     assert.match(raise.text, /1 investor committed/);
     assert.equal(raise.as_of, '2026-10-08');
     assert.equal((await call(f, 3, 'POST', '/api/mail/blocks', { kind: 'raise_status', project: 1 })).body.block, null, 'another venture\'s raise');
-    assert.equal((await call(f, 1, 'POST', '/api/mail/blocks', { kind: 'raise_status', project: 1 })).body.block, null, 'staff never read the pipeline through a draft');
+    assert.equal((await call(f, 1, 'POST', '/api/mail/blocks', { kind: 'raise_status', project: 1 })).status, 403, 'staff never read the pipeline through a draft');
     assert.equal((await call(f, 3, 'POST', '/api/mail/blocks', { kind: 'project_progress', project: 3 })).body.block, null, 'an empty roadmap');
     assert.equal((await call(f, 2, 'POST', '/api/mail/blocks', { kind: 'kpis', ref: 'interviewee:31' })).status, 404);
     assert.equal((await call(f, 2, 'POST', '/api/mail/blocks', { kind: 'kpis' })).status, 400);

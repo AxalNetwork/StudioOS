@@ -37,6 +37,8 @@ test('the Email action shows only on a record with a person', () => {
   assert.equal(personOfRecord('grow', 'revenue-and-traction', '3'), null, 'a module with no person');
   assert.equal(personOfRecord('validate', 'customer-research', ''), null);
   assert.equal(personOfRecord('validate', 'customer-research', 'new'), null);
+  assert.equal(personOfRecord('constructor', undefined, '1'), null, 'an inherited key is no module');
+  assert.equal(personOfRecord('__proto__', 'x', '1'), null);
   assert.equal(render(React.createElement(EmailAction, { person: null })), '', 'no person, no button');
   const html = render(React.createElement(EmailAction, { person: 'prospect:21', from: 'Ben · Capital relationships' }));
   assert.match(html, /data-testid="email-action"/);
