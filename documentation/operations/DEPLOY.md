@@ -189,6 +189,13 @@ capture selects generation 0. A cache miss or a single-generation first build
 is reported as previous-build coverage unavailable, never as a successful
 retention check. A matched but unreadable cache fails instead of silently
 dropping the previous generation. No cache or build metadata is published.
+A smoke-only retry reuses this run's artifact; a full deploy retry replaces
+it. Custom dispatch hosts check their live graph without production cache
+hashes. The scheduled retention proof assumes CI deploys: a hand deployment
+via `npm run deploy` does not update Actions' cache and can leave the schedule
+red against stale generation identities until the next CI deploy. Such a
+run cannot establish previous-deploy retention; inspect the deployed version
+and cache provenance before treating it as asset loss.
 
 The smoke fails the deploy run on a missing file, wrong content type or
 unreadable dependency map. It never rolls production back. The owner checks

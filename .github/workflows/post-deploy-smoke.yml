@@ -89,14 +89,16 @@ jobs:
         env:
           SMOKE_CACHE_RESTORED: ${{ steps.retention.outputs.cache-matched-key }}
         run: node scripts/capture-spa-previous.mjs "$RUNNER_TEMP/spa-smoke-previous.json" --previous-generation
+      # Custom hosts have their own live graph; production cache hashes do not
+      # belong to a preview/other deployment. Scheduled/default hosts use both.
       - name: Live SPA smoke check
         env:
           SMOKE_HOSTS: ${{ github.event.inputs.hosts }}
           SMOKE_API_PROBE: ${{ github.event.inputs.api_probe }}
           SMOKE_API_PROBE_LIMITED: ${{ github.event.inputs.api_probe_limited }}
           SMOKE_CONNECTORS_STRICT: ${{ github.event.inputs.connectors_strict == 'true' && '1' || '' }}
-          SMOKE_BUILD_DIR: ${{ steps.retention.outputs.cache-matched-key != '' && 'docs' || '' }}
-          SMOKE_PREVIOUS_BUILD: ${{ runner.temp }}/spa-smoke-previous.json
+          SMOKE_BUILD_DIR: ${{ (github.event.inputs.hosts == '' || github.event.inputs.hosts == 'https://axal.vc https://app.axal.vc') && steps.retention.outputs.cache-matched-key != '' && 'docs' || '' }}
+          SMOKE_PREVIOUS_BUILD: ${{ (github.event.inputs.hosts == '' || github.event.inputs.hosts == 'https://axal.vc https://app.axal.vc') && format('{0}/spa-smoke-previous.json', runner.temp) || '' }}
           SKIP_LIVE_SMOKE: '0'
         run: node scripts/check-spa-live.mjs
       # D755 (#1987): the public plans-and-packs read and /plans-and-pricing,

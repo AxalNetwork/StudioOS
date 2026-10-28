@@ -275,7 +275,7 @@ test('#3590: deploy verification cannot gate publishing or skip sibling jobs; th
     captureSoft: /continue-on-error: true/.test(stepAt(deploy,capture)) && /continue-on-error: true/.test(stepAt(deploy,current)),
     currentInput: /SMOKE_CACHE_RESTORED: 'built'/.test(stepAt(deploy,current)),
     transferSoft: /continue-on-error: true/.test(stepAt(deploy,transfer)) && /spa-smoke-current.json[\s\S]*spa-smoke-previous.json/.test(deploy.slice(transfer,publish)),
-    exactRun: /name: spa-smoke-inputs-\$\{\{ github.run_attempt \}\}/.test(deploy) && /name: spa-smoke-inputs-\$\{\{ github.run_attempt \}\}/.test(job),
+    exactRun: /name: spa-smoke-inputs\n/.test(deploy) && /name: spa-smoke-inputs\n/.test(job) && /overwrite: true/.test(deploy.slice(transfer,publish)),
     download: /uses: actions\/download-artifact@[a-f0-9]{40}/.test(job) && /continue-on-error: true/.test(stepAt(job,job.indexOf('uses: actions/download-artifact@'))),
     bothHosts: /SMOKE_HOSTS: 'https:\/\/axal.vc https:\/\/app.axal.vc'/.test(step),
     current: /SMOKE_CURRENT_BUILD: \$\{\{ runner.temp \}\}\/spa-smoke\/spa-smoke-current.json/.test(step),
@@ -286,10 +286,11 @@ test('#3590: deploy verification cannot gate publishing or skip sibling jobs; th
     captureInput: /SMOKE_CACHE_RESTORED: \$\{\{ steps.retention.outputs.cache-matched-key \}\}/.test(deploy),
     scheduledInput: /SMOKE_CACHE_RESTORED: \$\{\{ steps.retention.outputs.cache-matched-key \}\}/.test(schedule),
     scheduledSoftCapture: /Capture the retained previous lazy entry\n        continue-on-error: true/.test(schedule),
-    scheduledManifest: /SMOKE_PREVIOUS_BUILD: \$\{\{ runner.temp \}\}\/spa-smoke-previous.json/.test(schedule),
+    scheduledManifest: /SMOKE_PREVIOUS_BUILD:.*format\('\{0\}\/spa-smoke-previous.json', runner.temp\)/.test(schedule),
     scheduledRun: /run: node scripts\/check-spa-live.mjs/.test(schedule),
-    scheduledCurrent: /SMOKE_BUILD_DIR: \$\{\{ steps.retention.outputs.cache-matched-key != '' && 'docs' \|\| '' \}\}/.test(schedule),
+    scheduledCurrent: /SMOKE_BUILD_DIR:.*steps.retention.outputs.cache-matched-key != '' && 'docs' \|\| '' \}\}/.test(schedule),
+    customHosts: ['SMOKE_BUILD_DIR:', 'SMOKE_PREVIOUS_BUILD:'].every(key => (schedule.split('\n').find(line => line.includes(key)) || '').includes("github.event.inputs.hosts == '' || github.event.inputs.hosts == 'https://axal.vc https://app.axal.vc'")),
   }, { order:true,noPrePublishSmoke:true,independent:true,captureSoft:true,currentInput:true,transferSoft:true,exactRun:true,download:true,
     bothHosts:true,current:true,previous:true,noSoftFailure:true,schedule:true,scheduledCache:true,generation:true,
-    captureInput:true,scheduledInput:true,scheduledSoftCapture:true,scheduledManifest:true,scheduledRun:true,scheduledCurrent:true });
+    captureInput:true,scheduledInput:true,scheduledSoftCapture:true,scheduledManifest:true,scheduledRun:true,scheduledCurrent:true,customHosts:true });
 });
