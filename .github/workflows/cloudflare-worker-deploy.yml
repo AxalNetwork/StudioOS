@@ -68,9 +68,10 @@ jobs:
 
       # D529 — docs/ IS NOT COMMITTED, SO THE OLD-BUNDLE WINDOW COMES FROM
       # HERE. A tab opened before this deploy still asks for the previous
-      # build's hashed chunks; scripts/build-frontend.mjs keeps the last three
-      # builds' assets in docs/assets, but only if the previous ones are on
-      # disk when it runs. This restores what the last successful deploy saved
+      # build's hashed chunks; scripts/build-frontend.mjs keeps the last 72
+      # hours of deployed assets, at least three builds, within its file cap
+      # (D1364), provided the previous tree is on disk when the build runs.
+      # This restores what the last successful deploy saved
       # (its docs/assets and retention ledger) into the empty docs/ the
       # checkout leaves. `restore-keys` picks the newest `spa-assets-` entry.
       #
@@ -189,9 +190,18 @@ jobs:
           echo "::error::wrangler deploy failed three times with Cloudflare error 10013; see the attempts above"
           exit 1
 
+      # D1364 (#3591): stamp the build that just shipped, from the repo root,
+      # before it is cached. Without it the next deploy's build refuses the
+      # restored ledger ("restored deployment ledger is unstamped"). A failed
+      # publish skips this step; building alone never advances the clock.
+      - name: Record successful asset deployment
+        run: node scripts/record-asset-deploy.mjs
+
       # D529 — only after the deploy above succeeded (a failed step skips
       # this one), save what production now serves for the next deploy to
-      # restore. One entry per run; the restore takes the newest by prefix.
+      # restore, including the deployedAt stamp above. Smoke runs afterward
+      # as a dependent job, so a failed probe cannot lose the tree that shipped.
+      # One entry per run; the restore takes the newest by prefix.
       - name: Save the deployed assets for the next deploy
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

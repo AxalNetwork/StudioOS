@@ -44,12 +44,16 @@ function world() {
   const { DB, db } = aiBudgetFixture();
   db.exec(`
     ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
-    CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER);
+    ALTER TABLE users ADD COLUMN founder_id INTEGER;
+    ALTER TABLE users ADD COLUMN spinout_lab_active INTEGER;
+    ALTER TABLE users ADD COLUMN deletion_requested_at TEXT;
+    ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER;
+    CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
     CREATE TABLE discovery_interviews (
       id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, interviewee_name TEXT NOT NULL,
       transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT, stage TEXT, channel TEXT,
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
-    INSERT INTO projects VALUES (10, 'Venture', 100);
+    INSERT INTO projects (id,name,founder_id) VALUES (10, 'Venture', 100);
     INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (1, 10, 'Dana');
   `);
   db.exec(mig('438_interview_sessions.sql'));
@@ -143,3 +147,39 @@ test('the two per-drain AI caps are one set, and interview_process is kept out o
   // The reasoning is beside AI_JOB_TYPES in services/queueWorker.ts.
   assert.equal(DRAIN_AI_JOB_TYPES.has('interview_process'), false);
 });
+
+
+test('an active Super Admin retry processes another creator’s recording and meters/audits the actor', async () => {
+  const { env, db, sid, payload, aiCalls } = world();
+  await handleJob(env, asJob({ ...payload, user_id: 1 }));
+  assert.equal(sessionState(db, sid).processing_stage, 'done');
+  assert.deepEqual(finalText(db, sid), [SAID]);
+  assert.equal(aiCalls.length, 1);
+  const usage = db.prepare("SELECT user_id FROM ai_usage_logs WHERE task='transcribe'").all();
+  assert.deepEqual(usage.map((r: any) => r.user_id), [1]);
+  const audit = db.prepare("SELECT user_id,details FROM activity_logs WHERE action='interview_processing_retry'").get();
+  assert.equal(audit.user_id, 1);
+  assert.deepEqual(JSON.parse(audit.details), { session_id: sid });
+});
+
+for (const scenario of ['ordinary member', 'plain admin', 'revoked elevation', 'inactive admin', 'deleted admin', 'missing project', 'mismatched project']) {
+  test(`a non-creator retry refuses ${scenario} before audio or AI`, async () => {
+    const { env, db, sid, payload, aiCalls } = world();
+    let actor = 1;
+    if (scenario === 'ordinary member') actor = 3;
+    if (scenario === 'plain admin') { actor = 4; db.exec("UPDATE users SET role='admin' WHERE id=4"); }
+    if (scenario === 'revoked elevation') db.exec('DELETE FROM super_admins WHERE user_id=1');
+    if (scenario === 'inactive admin') db.exec('UPDATE users SET is_active=0 WHERE id=1');
+    if (scenario === 'deleted admin') db.exec("UPDATE users SET deletion_requested_at=datetime('now') WHERE id=1");
+    if (scenario === 'missing project') db.exec("UPDATE projects SET deleted_at=datetime('now') WHERE id=10");
+    if (scenario === 'mismatched project') db.prepare('UPDATE interview_sessions SET project_id=99 WHERE id=?').run(sid);
+    let reads = 0;
+    env.FILES.get = async () => { reads++; throw new Error('must not read'); };
+    const before = sessionState(db,sid);
+    await handleJob(env, asJob({ ...payload, user_id: actor }));
+    assert.deepEqual(sessionState(db,sid), before);
+    assert.equal(reads,0);
+    assert.equal(aiCalls.length,0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='interview_processing_retry'").get().n,0);
+  });
+}

@@ -6,10 +6,10 @@ import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { topUpRows } from '../../pages/account/usageModel';
 import { notifyTokensAdded } from '../../lib/aiTokens';
 import { SECURE_LINE, SELLER_LINE, declineFamily, newNonce, refusalView } from './checkoutModel';
-import { CardFormBoundary, STRIPE_BRIDGE, useDialog } from './CheckoutSheet';
+import { CardFormBoundary, SHEET_BAR, SHEET_SCROLL_PAD, STRIPE_BRIDGE, backdropClose, useDialog } from './CheckoutSheet';
 import {
   HISTORY_EMPTY, HISTORY_EMPTY_LINE, HISTORY_MORE, HISTORY_TITLE, NOTHING_ON_SALE, PACK_PROMO, PACK_RATE, PACK_TITLE, PACKS_UNREADABLE,
-  PICK_ANOTHER, RUNS_TOGGLE, autoReloadView, backLabel, balanceLine, countFrames, holdRule, intentBody, keepsReading, landingView,
+  CUSTOM_KEY, CUSTOM_LABEL, PICK_ANOTHER, RUNS_TOGGLE, autoReloadView, backLabel, balanceLine, countFrames, customPack, customRangeLine, holdRule, intentBody, keepsReading, landingView,
   packRule, packTotals, packsView, startingPack,
 } from './packModel';
 
@@ -213,8 +213,11 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
   const reload = useRead(() => reads.autoReload(), []);
   const view = packsView(packs);
   const [chosen, setChosen] = useState(null);
-  useEffect(() => { if (view.status === 'ready' && chosen === null) setChosen(startingPack(view.rows, wanted)); }, [view.status, view.rows, wanted, chosen]);
-  const pack = view.rows.find((r) => r.key === chosen) || null;
+  useEffect(() => { if (view.status === 'ready' && chosen === null) setChosen(startingPack(view.rows, wanted, view.custom)); }, [view.status, view.rows, view.custom, wanted, chosen]);
+  // D1366: the custom amount, typed in whole dollars; a pack only once it is in range.
+  const [customText, setCustomText] = useState('');
+  const custom = customPack(view.custom, customText);
+  const pack = chosen === CUSTOM_KEY ? custom.pack : view.rows.find((r) => r.key === chosen) || null;
   const balanceMicro = me.status === 'ready' && Number.isSafeInteger(me.data?.balance_microusd) ? me.data.balance_microusd : null;
 
   const [card, setCard] = useState(undefined);
@@ -280,10 +283,11 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
   const paid = intent ? totals.find((t) => t.key === 'due')?.value : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center" data-testid="pack-backdrop">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center" data-testid="pack-backdrop" {...backdropClose(close, locked)}>
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="pack-title" tabIndex={-1}
-        className="relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px]"
+        className={`relative flex max-h-full w-full flex-col overflow-y-auto bg-white outline-none dark:bg-gray-900 sm:max-h-[88vh] sm:max-w-[880px] sm:rounded-[16px] ${SHEET_SCROLL_PAD}`}
         data-testid="pack-sheet">
+        <div className={SHEET_BAR} data-testid="pack-bar">
         <div className="flex items-center justify-between border-b border-axal-hairline px-5 py-2 dark:border-gray-700">
           <div className="flex items-center gap-1" role="tablist" aria-label="Add tokens">
             {[['add', PACK_TITLE], ['history', HISTORY_TITLE]].map(([k, t]) => (
@@ -291,7 +295,8 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
                 className={`min-h-[44px] rounded-[8px] px-3 text-[15px] font-extrabold tracking-[-.02em] ${tab === k ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>{t}</button>
             ))}
           </div>
-          <button type="button" aria-label="Close" onClick={close} className="grid h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"><X size={18} aria-hidden="true" /></button>
+          <button type="button" aria-label="Close" onClick={close} data-testid="pack-close" className="grid h-11 w-11 place-items-center rounded-[9px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"><X size={18} aria-hidden="true" /></button>
+        </div>
         </div>
         {tab === 'history' ? <History reads={reads} onClose={close} />
           : phase === 'landing' ? <Landing order={order} view={landing} fromMicro={balanceMicro} paid={paid} from={from} onClose={close} onHistory={() => setTab('history')} />
@@ -329,6 +334,28 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
                           </label>
                         );
                       })}
+                      {view.custom && (() => {
+                        const on = chosen === CUSTOM_KEY;
+                        const own = hold || rules[CUSTOM_KEY];
+                        const pick = () => { setChosen(CUSTOM_KEY); setFailure(null); setIntent(null); };
+                        return (
+                          <label className={`flex min-h-[44px] cursor-pointer flex-col rounded-[10px] border px-3.5 py-2.5 ${on ? 'border-axal-violet bg-axal-lavender/40 dark:border-violet-500 dark:bg-violet-950/30' : 'border-axal-hairline dark:border-gray-700'}`} data-testid="pack-row-custom">
+                            <span className="flex items-center gap-2.5">
+                              <input type="radio" name="pack" checked={on} disabled={locked} onChange={pick} data-testid="pack-pick-custom" />
+                              <span className="flex-1 text-[13.5px] font-bold text-axal-ink dark:text-gray-100">{CUSTOM_LABEL}</span>
+                              <span className="flex items-center gap-1">
+                                <span className={`${MONO} text-[13.5px] font-bold text-axal-ink dark:text-gray-100`} aria-hidden="true">$</span>
+                                <input type="text" inputMode="numeric" autoComplete="off" aria-label="Custom amount in dollars" placeholder={String(view.custom.minDollars)}
+                                  value={customText} disabled={locked} onFocus={pick} onChange={(e) => { setCustomText(e.target.value); pick(); }} data-testid="pack-custom-amount"
+                                  className={`${MONO} h-9 w-24 rounded-[8px] border border-axal-hairline bg-white px-2 text-right text-[13.5px] font-bold text-axal-ink outline-none focus:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} />
+                              </span>
+                            </span>
+                            <span className={`mt-1 pl-6 ${SUB}`} data-testid="pack-custom-range">{customRangeLine(view.custom)}</span>
+                            {on && custom.problem && <span className={RULE} role="alert" data-testid="pack-custom-problem">{custom.problem}</span>}
+                            {on && own && <span className={RULE} role="alert" data-testid={`pack-rule-${own.code}`}>{own.line}</span>}
+                          </label>
+                        );
+                      })()}
                     </div>
                   )}
                   {pack && <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="pack-balance-line">{balanceLine(balanceMicro, pack)}</p>}
@@ -370,6 +397,8 @@ export default function PackSheet({ pack: wanted = null, from = 'Models', onClos
                     <button type="button" className={PRIMARY} onClick={pay} disabled={locked || !pack || !!rule || !card} data-testid="pack-pay">
                       {locked ? 'Processing…' : pack ? `Pay ${totals.find((t) => t.key === 'due')?.value ?? pack.price}` : 'Pay'}
                     </button>
+                    {/* D1365: a way out beside Pay, on every screen size; none while a payment is taken. */}
+                    {!locked && <button type="button" className={`${LINK} self-center`} onClick={close} data-testid="pack-cancel">Cancel</button>}
                     {rule && <p className={`m-0 ${SUB}`} data-testid="pack-pay-blocked">{PICK_ANOTHER}</p>}
                     {locked && <p className="m-0 text-[12.5px] font-bold text-axal-ink dark:text-gray-100" data-testid="pack-processing">Don’t close this window.</p>}
                   </div>

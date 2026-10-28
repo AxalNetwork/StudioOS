@@ -6,7 +6,7 @@ import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAi
 import { parseSpendLimit, readSpendLimit, writeSpendLimit } from '../services/aiSpendLimit';
 import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
-import { HISTORY_MAX, ledgerBalance, packOrdersToday, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
+import { HISTORY_MAX, customTopUp, ledgerBalance, mirrorPackPrices, packOrdersToday, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
 import { COST_GROUPS, COST_RANGES, costCsv, memberCost, type CostGroup, type CostRange } from '../services/aiCost';
 import { CONSUMPTION_GROUPS, memberConsumption, memberMonth, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
@@ -73,7 +73,12 @@ r.get('/holds',async c=>{
  */
 r.get('/top-up',async c=>{
   const user=await requireAuth(c);
-  try { return c.json({...memberTopupReading(await readAiTopupProduct(c.env)),...await memberTopUp(c.env,user.id)}); }
+  try {
+    // D1366: a pack price the mirror lacks is fetched first, then the custom amount is read beside the packs.
+    await mirrorPackPrices(c.env);
+    const custom=await customTopUp(c.env).catch((e:unknown)=>{ console.warn('[ai_budget] custom amount unreadable',(e as Error)?.message); return null; });
+    return c.json({...memberTopupReading(await readAiTopupProduct(c.env)),...await memberTopUp(c.env,user.id),custom});
+  }
   catch(error) { return refuse(c,503,{code:'ai_topup_unreadable',message:'Unreadable: the AI top-up could not be read.',raw:error,audience:'member'}); }
 });
 // D755: the member's own top-up history, newest first; `runs=1` adds each run's hold, release and spend.

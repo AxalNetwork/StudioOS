@@ -112,6 +112,33 @@ export function planAssetRetention({
   };
 }
 
+/**
+ * The deploy workflow stamps `deployedAt` from this instant on (#3591). The
+ * one deploy that shipped before the stamp existed (run 2031, 2026-10-28)
+ * saved an unstamped entry; every deploy after it refused to build.
+ */
+export const DEPLOY_STAMP_SINCE = '2026-10-29T00:00:00.000Z';
+
+/**
+ * A restored cache is saved only after a deploy succeeds, so an unstamped
+ * entry built before DEPLOY_STAMP_SINCE did ship; its deploy time is unknown.
+ * It becomes legacy (the one-time grace, D1364) rather than inventing a time.
+ * Entries built after it are left alone, so the build guard still catches a
+ * missing stamp.
+ */
+export function adoptUnstampedDeployments(builds, since = DEPLOY_STAMP_SINCE) {
+  const before = Date.parse(since);
+  let adopted = 0;
+  const out = (Array.isArray(builds) ? builds : []).map((b) => {
+    if (b?.deployedAt !== null || b.legacy === true || !(Date.parse(b.ts) < before)) return b;
+    adopted++;
+    const kept = { ...b, legacy: true };
+    delete kept.firstSeenAt;
+    return kept;
+  });
+  return { builds: out, adopted };
+}
+
 /** Mark only what actually shipped, after the deploy command succeeded. */
 export function recordAssetDeployment(ledger, now = new Date().toISOString()) {
   if (!Number.isFinite(Date.parse(now)) || !Array.isArray(ledger?.builds)

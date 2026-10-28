@@ -1156,7 +1156,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     // this one.
     || activeRole === 'advisor'
     // Account fills the column but keeps the shell gutter its phone frame cancels.
-    || /^\/account(?:\/|$)/.test(location.pathname);
+    || /^\/account(?:\/|$)/.test(location.pathname)
+    // Guide pages cancel the shell gutter so their right rail meets its edge.
+    || /^\/help\/(?!tickets\/)[a-z0-9-]+\/[a-z0-9-]+\/?$/.test(location.pathname);
   const flushSurface = fullBleedSurface;
   // The three role wizards paint their own background across this column.
   // Padding and the footer are the gaps around it; both have to go, or the

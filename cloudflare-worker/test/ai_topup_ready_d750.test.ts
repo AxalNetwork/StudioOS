@@ -127,7 +127,7 @@ test('the route answers members the state only, and 503 only when D1 or Stripe c
       await mirror(f, [{ ...PRICE, currency: 'eur' }]);
       const r = await budgetRoute.request('/top-up', { headers: await bearer(f, 2) }, f.env);
       // D755 adds the pack fields beside D750's `configured`; the member still never sees the reason.
-      assert.equal(r.status, 200); assert.deepEqual(await r.json(), { configured: true, state: 'not_ready', packs: [], on_hold: false, latest: null }, 'the member never sees the reason');
+      assert.equal(r.status, 200); assert.deepEqual(await r.json(), { configured: true, state: 'not_ready', packs: [], on_hold: false, latest: null, custom: null }, 'the member never sees the reason');
       assert.equal((await budgetRoute.request('/top-up', {}, f.env)).status, 401);
     } finally { f.db.close(); }
     f = fixture();
@@ -204,8 +204,8 @@ test('end to end: a price created after the last sync is fetched, bought through
     const headers = await bearer(f, 2);
     const read = await budgetRoute.request('/top-up', { headers }, f.env);
     // D755: D750's fields fetch and mirror the price first, so the D1-only pack list then offers it as the fallback pack.
-    const { packs, on_hold, latest, ...d750 } = await read.json() as any;
-    assert.deepEqual(d750, READY); assert.deepEqual([on_hold, latest], [false, null]);
+    const { packs, on_hold, latest, custom, ...d750 } = await read.json() as any;
+    assert.deepEqual(d750, READY); assert.deepEqual([on_hold, latest, custom], [false, null, null], 'D1366: no custom amount without its price');
     assert.deepEqual(packs, [{ uid: null, label: '$25 of tokens', price_id: ID, unit_amount: 2500, currency: 'usd', credit_microusd: 25000000, bonus_microusd: 0, bonus_usd: 0, offer_ends_at: null, first_purchase_only: false }]);
     const order = await ordersRoute.request('/intent', { method: 'POST', headers, body: JSON.stringify({ items: [{ price_id: ID, quantity: 1 }], nonce: 'd750' }) }, f.env);
     assert.equal(order.status, 200, await order.clone().text());
