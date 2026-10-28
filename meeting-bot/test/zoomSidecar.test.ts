@@ -63,6 +63,21 @@ test('crash, malformed protocol, too-large line and bad PCM end the run with san
     await assert.rejects(join(f.sidecar), { message: 'platform_blocked' });
   }
 });
+test('#2582 a participant\'s own stream arrives keyed; a malformed key ends the run', async () => {
+  const f = fixture(); await join(f.sidecar);
+  const heard: Array<[string, number[]]> = [];
+  const off = f.sidecar.participantAudio((key, s) => heard.push([key, [...s]]));
+  assert.deepEqual(f.commands.at(-1), { id: f.commands.at(-1).id, method: 'subscribe', args: { topic: 'voice' } });
+  f.event('voice', { key: '16778240', pcm: Buffer.from([1, 0, 255, 255]).toString('base64') }); await settle();
+  assert.deepEqual(heard, [['16778240', [1, -1]]]);
+  off();
+  for (const key of ['', 'x'.repeat(129), 7]) {
+    const g = fixture(); await join(g.sidecar); let ended = 0; g.sidecar.ended(() => ended++);
+    g.event('voice', { key, pcm: 'AQD//w==' }); await settle();
+    assert.equal(ended, 1, `key ${JSON.stringify(key)}`); assert.equal(g.kills(), 1);
+  }
+  await f.sidecar.leave();
+});
 test('stalled child has a deadline and abort kills outstanding work', async () => {
   const f = fixture('stall'); await assert.rejects(join(f.sidecar), { message: 'platform_blocked' }); assert.equal(f.kills(), 1);
   const g = fixture(); await join(g.sidecar);

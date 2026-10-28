@@ -1,4 +1,5 @@
-import { BotError, dispatchBot, stopSessionBot, sessionBot, botView } from '../services/meetingBots';
+import { BotError, botAvailability, dispatchBot, stopSessionBot, sessionBot, botView } from '../services/meetingBots';
+import { makeMeetLink } from '../services/calendar/itemRead';
 /**
  * D684 (#1577) — a Zoom or Google Meet call scheduled from a Validate
  * interview, and the transcript it brings back. Mounted on
@@ -11,6 +12,9 @@ import { BotError, dispatchBot, stopSessionBot, sessionBot, botView } from '../s
  *   DELETE /interviews/:id/meetings/:refUid             cancel it (at the provider too, while it is still to come)
  *   POST   /interviews/:id/meetings/:refUid/import      fetch and import its transcript now
  *   GET    /interviews/:id/meetings/:refUid/recording   a Meet call's Drive recordings, read live (D871)
+ *   GET    /meetings/bot                                D1346: whether Eadwyn AI can join this member's calls, and its price
+ *   POST   /meetings/instant                            D1346: { provider, duration_min?, topic? } a meeting starting now on the
+ *                                                       member's own Zoom or Google account; the join link only
  *
  * D871 (#2518): a Meet call the member did not schedule from Axal is attached
  * with `POST /interviews/:id/meetings` and `{ attach: { event_id | meeting_code
@@ -122,6 +126,59 @@ const view = (ref: MeetingRef) => meetingView(ref, PROVIDER_LABEL[ref.provider])
 meetings.get('/meetings', async (c) => {
   const user = (await requireAuth(c)) as User;
   return c.json(await callsOf(c.env, user));
+});
+
+// ---------------------------------------------------------------------------
+// D1346 (#3554): Record a Session › Call — whether Eadwyn AI can join, and
+// "Create the meeting for me"
+// ---------------------------------------------------------------------------
+
+// Read when the dialog opens, so Send Eadwyn AI is disabled up front rather
+// than refused after the press. No link, run or token is read or returned.
+meetings.get('/meetings/bot', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  return c.json(await botAvailability(c.env, user));
+});
+
+const CREATE_CONNECT_FIRST: Record<MeetingProvider, string> = {
+  zoom: 'Connect Zoom in Account › Connectors first, then create the meeting.',
+  google_meet: 'Connect Google in Account › Connectors first, then create the meeting.',
+};
+
+// A meeting starting now on the member's own account: Zoom's instant meeting
+// with the waiting room on, or a Google Calendar event with a Meet link (the
+// call D1211's "Add a Google Meet link" makes). The reply is the join link
+// only. Nothing is saved here: the link fills the dialog's Meeting link field
+// and the session keeps it when Start is pressed (`POST /sessions`).
+meetings.post('/meetings/instant', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const provider = String(body?.provider ?? '') as MeetingProvider;
+  if (!(MEETING_PROVIDERS as readonly string[]).includes(provider)) {
+    return refuse(c, 400, { code: 'provider_invalid', message: 'Choose Zoom or Google Meet.' });
+  }
+  const duration = body?.duration_min == null ? 30 : Number(body.duration_min);
+  if (!Number.isInteger(duration) || duration < MIN_DURATION || duration > MAX_DURATION) {
+    return refuse(c, 400, { code: 'duration_invalid', message: `Choose a length from ${MIN_DURATION} to ${MAX_DURATION} minutes.` });
+  }
+  // Neutral by default: everyone the member invites sees the topic.
+  const topic = String(body?.topic ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TOPIC) || 'Customer interview';
+  if (!available(c.env, provider)) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE[provider] });
+  if (provider === 'zoom') {
+    const conn = await zoom.zoomConnection(c.env, user.id);
+    if (!conn) return refuse(c, 409, { code: 'connect_first', message: CREATE_CONNECT_FIRST.zoom });
+    try {
+      const made = await zoom.createInstantMeeting(c.env, conn, topic);
+      return c.json({ provider, join_url: made.joinUrl }, 201);
+    } catch (x) {
+      if (x instanceof MeetingProviderError) return providerRefusal(c, x);
+      throw x;
+    }
+  }
+  if (!(await meet.googleConnection(c.env, user.id))) return refuse(c, 409, { code: 'connect_first', message: CREATE_CONNECT_FIRST.google_meet });
+  const made = await makeMeetLink(c.env, user.id, { topic, startsAt: new Date().toISOString(), durationMin: duration });
+  if (!made.ok) return refuse(c, made.refusal.status, { code: made.refusal.code, message: made.refusal.message });
+  return c.json({ provider, join_url: made.joinUrl }, 201);
 });
 
 // ---------------------------------------------------------------------------

@@ -72,7 +72,7 @@ export const MEETING_ERRORS = {
   zoom_reconnect: 'Zoom no longer accepts Axal’s access. Reconnect Zoom in Account › Connectors, then retry.',
   zoom_unreachable: 'Zoom did not answer. Try again in a minute.',
   // D886 (#2582): the notetaker's Zoom join token.
-  zoom_waiting_for_host: 'Join the call first; the notetaker follows.',
+  zoom_waiting_for_host: 'Join the call first; Eadwyn AI follows.',
   zoom_obf_scope_missing: 'Reconnect Zoom in Account › Connectors so the notetaker may join your calls, then retry.',
   zoom_meeting_invalid: 'That is not a Zoom meeting id.',
   zoom_create_failed: 'Zoom could not create the call. Try again in a minute.',

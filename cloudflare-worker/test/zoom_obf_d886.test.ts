@@ -70,14 +70,14 @@ test('the founder in the call: one OBF token for that meeting, from their own gr
   assert.ok(!z.lines.some((l) => l.includes(OBF)), 'never logged');
 });
 
-test('the founder not yet in the call: the notetaker waits, retryably, with the words the UI shows', async (t) => {
+test('the founder not yet in the call: Eadwyn AI waits, retryably, with the words the UI shows', async (t) => {
   // Mutations checked: a not-in-meeting answer read as a reconnect; the wait made final; the sentence changed.
   const w = await world();
   zoomAnswers(t, () => json({ code: 3001, message: 'fixture refusal' }, 400));
   const e = await refusal(mintObfToken(w.env, w.conn, MEETING));
   assert.equal(e.code, 'zoom_waiting_for_host');
   assert.equal(e.retryable, true);
-  assert.equal(MEETING_ERRORS.zoom_waiting_for_host, 'Join the call first; the notetaker follows.');
+  assert.equal(MEETING_ERRORS.zoom_waiting_for_host, 'Join the call first; Eadwyn AI follows.');
   assert.ok(!e.message.includes(OBF));
 });
 

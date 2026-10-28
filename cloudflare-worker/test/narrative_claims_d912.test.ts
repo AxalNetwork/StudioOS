@@ -13,6 +13,8 @@
  *      it through the section's own save, only for the figure shown.
  *   5. Who: the founder checks; an admin with a reason reads states only; an
  *      admin without one, another founder and nobody reach nothing.
+ *   6. A figure typed in Solution, Business model or Team (`narrative_sections`)
+ *      is a claim and a check row like any other, swapped in its own store.
  *
  * Every name and figure is synthetic.
  *
@@ -30,7 +32,8 @@ import { SignJWT } from 'jose';
 
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import { FIGURE_KINDS, couldBack, sectionOfField } from '../src/services/narrative/claims.ts';
-import { FIGURES } from '../src/services/raiseCycle.ts';
+import { FIGURES, SECTION_STORE_KEYS } from '../src/services/raiseCycle.ts';
+import { NARRATIVE_SECTIONS } from '../src/services/narrative/store.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
@@ -302,4 +305,30 @@ test('D912: every figure has the kinds that could back it, and every narrative f
   assert.equal(couldBack('headcount', { kind: 'kpi-snapshot', source_ref: '5:paying_accounts' }), false, 'another metric of a snapshot');
   assert.equal(couldBack('lois', { kind: 'loi-file', source_ref: '3' }), true);
   assert.equal(couldBack('raise', { kind: 'kpi-snapshot', source_ref: '1:mrr' }), false, 'nothing records the raise');
+});
+
+test('D912: a figure typed in a section-store section (Solution, Business model, Team) is a claim, a check row and swappable', async () => {
+  const db = fixture();
+  const v = await version1(db, 'We are early.');
+  const put = await call(db, OWNER, 'PUT', `/narrative/${v}/sections/team`, { body: 'Built for the 42 paying customers we serve today.' });
+  assert.equal(put.status, 200, JSON.stringify(put.body));
+  const claims = (await call(db, OWNER, 'GET', `/narrative/${v}/claims`)).body.claims;
+  const paying = claims.find((c: any) => c.figure === 'paying_customers');
+  assert.ok(paying, 'the Team section\'s figure is read by D1264\'s check');
+  assert.equal(paying.state, 'mismatch');
+  assert.equal(paying.section, 'team');
+  assert.equal(paying.section_label, 'Team');
+  const row = (await call(db, OWNER, 'GET', `/narrative/${v}/check`)).body.rows.find((x: any) => x.figure === 'paying_customers');
+  assert.equal(row?.section, 'team', 'NAR8 compares it too');
+  const ok = await call(db, OWNER, 'POST', `/narrative/${v}/claims/${paying.uid}/use-record`, { record_value: 38 });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const body = (db.prepare("SELECT body FROM narrative_sections WHERE project_id = ? AND version = ? AND section = 'team'").get(PID, v) as any).body;
+  assert.equal(body, 'Built for the 38 paying customers we serve today.', 'swapped in its own store');
+  assert.equal(claimRow(db, 'paying_customers').state, 'backed');
+});
+
+test('D912: SECTION_STORE_KEYS names exactly the store\'s section-store sections, and sectionOfField maps them', () => {
+  assert.deepEqual([...SECTION_STORE_KEYS], NARRATIVE_SECTIONS.filter((s) => s.store === 'section').map((s) => s.key));
+  assert.deepEqual(sectionOfField('section:business_model'), { key: 'business_model', label: 'Business model' });
+  assert.equal(sectionOfField('section:traction'), null, 'a deck-store section is read by its deck key, never as section:');
 });

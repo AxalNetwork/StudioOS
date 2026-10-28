@@ -27,6 +27,7 @@ import type { Env } from '../types';
 import { notify } from './notify';
 import { newUid, nowIso } from '../routes/_t13t14t15_helpers';
 import { likeNeedle } from '../util/likeSearch';
+import { requireActiveTester, testerStatusOf } from './testerPool';
 
 export type Owner = { kind: 'hq' } | { kind: 'partner'; partnerId: number };
 
@@ -209,9 +210,12 @@ async function programmeByUid(env: Env, uid: string): Promise<any> {
 /**
  * What a member may apply to: open, between `opens_at` and `closes_at`, for
  * their role, with a place left. The summary counts the same set; `apply`
- * re-checks each condition on the one programme.
+ * re-checks each condition on the one programme. D1336 (#3541): only an
+ * active Product tester reads the list; anyone else is refused with the
+ * sentence for their pool status.
  */
 export async function memberProgrammes(env: Env, user: { id: number; role: string }) {
+  await requireActiveTester(env, user.id);
   const now = nowIso();
   const { results } = await env.DB.prepare(
     `SELECT p.*,
@@ -228,8 +232,21 @@ export async function memberProgrammes(env: Env, user: { id: number; role: strin
   return (results || []).map((r: any) => ({ ...programmeDto(r), my_status: r.my_status ?? null }));
 }
 
-const SELECT_APPLICATION = `SELECT a.*, p.uid AS programme_uid, p.product_name, p.testing_starts, p.testing_ends, p.status AS programme_status
+// D1336: the actor of the event that ended a withdrawn application, the
+// member's own `withdrawn`, HQ's `withdrawn_by_hq`, or HQ's removal ending the
+// place (`place_ended`, D1132); the newest one, should there be several.
+const SELECT_APPLICATION = `SELECT a.*, p.uid AS programme_uid, p.product_name, p.testing_starts, p.testing_ends, p.status AS programme_status,
+       p.closes_at AS programme_closes_at,
+       (SELECT e.actor_user_id FROM testing_events e
+         WHERE e.application_id = a.id AND e.action IN ('withdrawn', 'withdrawn_by_hq', 'place_ended')
+         ORDER BY e.id DESC LIMIT 1) AS withdrawn_actor
   FROM testing_applications a JOIN testing_programmes p ON p.id = a.programme_id`;
+
+/** D1336: who withdrew an application, the member or HQ; null when it is not withdrawn or no event says. */
+export function withdrawnBy(r: { status: string; user_id: unknown; withdrawn_actor: unknown }): 'member' | 'hq' | null {
+  if (r.status !== 'withdrawn' || r.withdrawn_actor == null) return null;
+  return Number(r.withdrawn_actor) === Number(r.user_id) ? 'member' : 'hq';
+}
 
 function applicationDto(r: any) {
   return {
@@ -243,6 +260,11 @@ function applicationDto(r: any) {
     availability: r.availability ?? null,
     consented: !!r.consent_email_at,
     status: r.status,
+    // D1336 (PT-M3): picked on a programme that has since closed.
+    finished: r.status === 'picked' && r.programme_status === 'closed',
+    // D1336: the owner decides by the programme's close.
+    decides_by: r.programme_closes_at ?? null,
+    withdrawn_by: withdrawnBy(r),
     applied_at: r.created_at,
     updated_at: r.updated_at,
   };
@@ -305,7 +327,9 @@ export async function applicants(env: Env, owner: Owner, uid: string) {
 /** The Studio card (D814): how many the caller could apply to, and where they were picked. */
 export async function summary(env: Env, user: { id: number; role: string }) {
   const now = nowIso();
-  const open = await env.DB.prepare(
+  // D1336: the count is of what the member may read, so only an active tester's is counted.
+  const active = (await testerStatusOf(env, user.id)) === 'active';
+  const open = !active ? { n: 0 } : await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM testing_programmes p
       WHERE p.status = 'open' AND (p.closes_at IS NULL OR p.closes_at > ?) AND (p.opens_at IS NULL OR p.opens_at <= ?)
         AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value = ?)
@@ -639,18 +663,21 @@ export const MY_APPLICATIONS_LINK = '/inbox';
 const MEMBER_NOTICES = new Set(['testing_applied', 'testing_picked', 'testing_not_picked', 'testing_withdrawn']);
 
 /** The bell, best-effort. True only when the notice reached their inbox. */
-async function tell(env: Env, userId: number | null | undefined, type: string, title: string, body: string, payload: Record<string, unknown>): Promise<boolean> {
+async function tell(env: Env, userId: number | null | undefined, type: string, title: string, body: string, payload: Record<string, unknown>,
+  memberLink = false): Promise<boolean> {
   if (!userId) return false;
-  const link = MEMBER_NOTICES.has(type) ? MY_APPLICATIONS_LINK : null;
+  // `memberLink`: a member's notice under a type the owner's notices share (D1336's programme closed).
+  const link = memberLink || MEMBER_NOTICES.has(type) ? MY_APPLICATIONS_LINK : null;
   try {
     return (await notify(env, { userId: Number(userId), type, title, body, payload, link, channels: ['in_app'], category: 'product_testing' })) != null;
   } catch (e) { console.warn('[testing] notify failed', (e as Error)?.message); return false; }
 }
 
 /** How many of `userIds` the bell reached. */
-async function tellEach(env: Env, userIds: number[], type: string, title: string, body: string, payload: Record<string, unknown>): Promise<number> {
+async function tellEach(env: Env, userIds: number[], type: string, title: string, body: string, payload: Record<string, unknown>,
+  memberLink = false): Promise<number> {
   let n = 0;
-  for (const id of userIds) if (await tell(env, id, type, title, body, payload)) n += 1;
+  for (const id of userIds) if (await tell(env, id, type, title, body, payload, memberLink)) n += 1;
   return n;
 }
 
@@ -786,6 +813,10 @@ export async function closeProgramme(env: Env, actor: number, uid: string) {
     ? await tellEach(env, await ownerPeople(env, p), 'testing_programme_closed', `${p.product_name} is closed`,
       'HQ closed your testing programme. It takes no new applications.', { programme_uid: uid })
     : null };
+  // D1336 (PT-M4): each picked tester is told the programme closed, best-effort, linking Inbox.
+  told.testers = await tellEach(env, await pickedPeople(env, p.id), 'testing_programme_closed', `${p.product_name} is closed`,
+    'The programme you were picked for is closed. It takes no new applications; your place and your answers stay on record.',
+    { programme_uid: uid }, true);
   return { programme: programmeDto(await programmeByUid(env, uid)), told };
 }
 
@@ -812,6 +843,8 @@ export async function startTesting(env: Env, actor: number, uid: string) {
 }
 
 export async function apply(env: Env, user: { id: number; role: string }, uid: string, body: any) {
+  // D1336: only an active Product tester applies to a programme.
+  await requireActiveTester(env, user.id);
   const p = await programmeByUid(env, uid);
   const now = nowIso();
   const accepting = p.status === 'open' && (!p.closes_at || p.closes_at > now) && (!p.opens_at || p.opens_at <= now);

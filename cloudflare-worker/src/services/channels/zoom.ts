@@ -460,6 +460,26 @@ export async function createMeeting(env: Env, conn: ZoomConnection, input: Meeti
   };
 }
 
+/**
+ * D1346 (#3554): "Create the meeting for me" in Record a Session. An instant
+ * meeting (type 1) on the member's own Zoom user, waiting room on and no join
+ * before the host, so the host admits Eadwyn AI and the interviewee. Only the
+ * join link and the meeting id come back; Zoom's start link (the host's
+ * signed-in URL) is never read out of the reply.
+ */
+export async function createInstantMeeting(env: Env, conn: ZoomConnection, topic: string): Promise<{ externalRef: string; joinUrl: string }> {
+  const res = await zoomApi(env, conn, '/users/me/meetings', {
+    method: 'POST',
+    body: JSON.stringify({ topic: topic.slice(0, 200), type: 1, settings: { waiting_room: true, join_before_host: false, auto_recording: 'none' } }),
+  });
+  if (!res.ok) throw zoomFailure(res.status, 'zoom_create_failed');
+  const body = await res.json().catch(() => null) as { id?: number | string; join_url?: string } | null;
+  const id = String(body?.id ?? '').trim();
+  const joinUrl = String(body?.join_url ?? '');
+  if (!/^\d{6,20}$/.test(id) || !/^https:\/\//.test(joinUrl)) throw new MeetingProviderError('zoom_create_failed', false);
+  return { externalRef: id, joinUrl };
+}
+
 /** Delete the meeting at Zoom. True when it is gone (a 404 is gone already). */
 export async function cancelMeeting(env: Env, conn: ZoomConnection, externalRef: string): Promise<boolean> {
   if (!/^\d{6,20}$/.test(externalRef)) return false;
@@ -498,7 +518,7 @@ export async function verifyHostedMeeting(env: Env, conn: ZoomConnection, meetin
  * has required since 2026-03-02. It is minted for the founder whose Zoom
  * connection this is, with `user:read:token`, and Zoom mints it only while
  * that founder is in the meeting: until then the notetaker waits
- * (`zoom_waiting_for_host`, "Join the call first; the notetaker follows").
+ * (`zoom_waiting_for_host`, "Join the call first; Eadwyn AI follows").
  *
  * THE TOKEN IS THE CALLER'S FOR ONE RUN. It is returned and nothing else:
  * never stored, never logged, never in an error. Its endpoint and its

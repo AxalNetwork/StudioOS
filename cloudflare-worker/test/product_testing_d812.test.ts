@@ -90,6 +90,9 @@ function world() {
   app.route('/api/partner/testing', partnerTesting);
   app.route('/api/admin/testing', adminTesting);
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any;
+  db.exec(readFileSync(`${SQL}/migrations/576_product_testers.sql`, 'utf8'));
+  // D1336: only an active Product tester reads and applies to programmes, so every member here starts as one.
+  db.exec("INSERT INTO product_testers (user_id, status, decided_at) SELECT id, 'active', '2026-10-01' FROM users WHERE role NOT IN ('partner', 'admin') AND id NOT IN (SELECT user_id FROM super_admins)");
   return { db, app, env };
 }
 

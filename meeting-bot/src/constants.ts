@@ -16,6 +16,23 @@ export const WAV_HEADER_BYTES = 44;
 export const CHUNK_SECONDS = 30;
 export const CHUNK_SAMPLES = SAMPLE_RATE * CHUNK_SECONDS;
 
+/** B1's chunk event admits `chunk_seq` 0 to 3599 (`meeting-bot-run.ts`); every chunk of a run shares that range. */
+export const CHUNK_SEQ_MAX = 3599;
+
+/**
+ * #2582, D886 §4's energy gate for Zoom's per-participant streams: only voiced
+ * audio is sent. A 20 ms window is voiced when its RMS reaches VOICE_RMS
+ * (about -36 dBFS). A part opens on a voiced window with VOICE_PREROLL_MS
+ * before it, stays open through VOICE_HANGOVER_MS of quiet, and is kept only
+ * with VOICE_MIN_MS of voiced windows. A part never exceeds CHUNK_SAMPLES.
+ * Every figure is a first setting for M4 to measure (UNVERIFIED).
+ */
+export const VOICE_WINDOW_SAMPLES = 320;
+export const VOICE_RMS = 500;
+export const VOICE_PREROLL_MS = 200;
+export const VOICE_HANGOVER_MS = 1500;
+export const VOICE_MIN_MS = 300;
+
 /** The bot leaves after this long as the only one in the call. */
 export const ALONE_MS = 2 * 60 * 1000;
 
