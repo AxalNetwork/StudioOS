@@ -71,18 +71,49 @@ export function packRows(topUp) {
   });
 }
 
-/** The sheet's state for the pack read: reading, couldn't be read, nothing on sale, or the rows. */
+/** The sheet's state for the pack read: reading, couldn't be read, nothing on sale, or the rows (and D1366's custom amount). */
 export function packsView(read) {
-  if (!read || read.status === 'loading') return { status: 'loading', rows: [] };
-  if (read.status !== 'ready') return { status: 'unreadable', rows: [] };
+  if (!read || read.status === 'loading') return { status: 'loading', rows: [], custom: null };
+  if (read.status !== 'ready') return { status: 'unreadable', rows: [], custom: null };
   const rows = packRows(read.data);
-  return { status: rows.length ? 'ready' : 'none', rows, onHold: read.data?.on_hold === true };
+  const custom = customOffer(read.data?.custom);
+  return { status: rows.length || custom ? 'ready' : 'none', rows, custom, onHold: read.data?.on_hold === true };
 }
 
-/** The pack a caller asked for (Models' Buy), else the first one. */
-export function startingPack(rows, wanted) {
-  if (!rows.length) return null;
+/** The pack a caller asked for (Models' Buy), else the first one; with no pack, the custom amount. */
+export function startingPack(rows, wanted, custom = null) {
+  if (!rows.length) return custom ? CUSTOM_KEY : null;
   return rows.find((r) => r.key === String(wanted) || (wanted && r.priceId === wanted))?.key ?? rows[0].key;
+}
+
+/**
+ * D1366: the custom amount. The Worker sells $N of tokens as N of a $1 price,
+ * any whole N from its minimum to its maximum ($5 to $500). `customOffer`
+ * reads the Worker's offer, or null; `customPack` is the typed amount as a
+ * pack the sheet can quote and pay, or null with the reason to show.
+ */
+export const CUSTOM_KEY = 'custom';
+export const CUSTOM_LABEL = 'Custom amount';
+export function customOffer(c) {
+  if (!c || typeof c !== 'object' || !/^price_[A-Za-z0-9]+$/.test(String(c.price_id ?? '')) || c.unit_amount !== 100 || c.currency !== 'usd') return null;
+  const whole = (n) => Number.isSafeInteger(n) && n > 0 && n % 100 === 0;
+  if (!whole(c.min_cents) || !whole(c.max_cents) || c.min_cents > c.max_cents) return null;
+  return { priceId: c.price_id, minDollars: c.min_cents / 100, maxDollars: c.max_cents / 100 };
+}
+export function customRangeLine(offer) {
+  return offer ? `Any whole amount from ${usdWhole(offer.minDollars * 100)} to ${usdWhole(offer.maxDollars * 100)}.` : null;
+}
+export function customPack(offer, text) {
+  if (!offer) return { pack: null, problem: null };
+  const raw = String(text ?? '').trim().replace(/^\$/, '');
+  if (raw === '') return { pack: null, problem: null };
+  if (!/^\d+$/.test(raw)) return { pack: null, problem: `Enter whole dollars, from ${usdWhole(offer.minDollars * 100)} to ${usdWhole(offer.maxDollars * 100)}.` };
+  const dollars = Number(raw);
+  if (dollars < offer.minDollars) return { pack: null, problem: `The minimum top-up is ${usdWhole(offer.minDollars * 100)}.` };
+  if (dollars > offer.maxDollars) return { pack: null, problem: `The most one top-up can add is ${usdWhole(offer.maxDollars * 100)}.` };
+  const cents = dollars * 100;
+  return { pack: { key: CUSTOM_KEY, uid: null, priceId: offer.priceId, quantity: dollars, cents, currency: 'usd',
+    label: `${usdWhole(cents)} of AI tokens`, price: moneyOf(cents, 'usd'), creditMicro: cents * 10_000, bonusMicro: 0, offers: [] }, problem: null };
 }
 
 /**
@@ -117,7 +148,8 @@ export function packTotals(pack, intent = null) {
 }
 
 /** The one line the intent is sent: exactly one pack, once. */
-export const intentBody = (pack, nonce) => ({ items: [{ price_id: pack.priceId, quantity: 1 }], nonce });
+/** One pack line; D1366's custom amount is N of its $1 price. */
+export const intentBody = (pack, nonce) => ({ items: [{ price_id: pack.priceId, quantity: Number.isSafeInteger(pack.quantity) && pack.quantity > 0 ? pack.quantity : 1 }], nonce });
 
 /**
  * CRP5: a pack rule, by the Worker's code (D755 §5, D790). Shown on the pack's

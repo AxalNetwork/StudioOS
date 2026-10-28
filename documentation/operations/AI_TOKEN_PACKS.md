@@ -86,6 +86,23 @@ Use **Adopt a price** for a price made outside HQ, or for the
 USD, active and whole dollars from $5 to $500. Once the fallback is adopted,
 delete the `STRIPE_PRICE_AI_TOPUP` variable.
 
+## The custom amount (D1366)
+
+Besides the packs, a member may buy any whole amount from **$5** to **$500**.
+Every custom amount uses one $1 price, named by `STRIPE_PRICE_AI_TOPUP_UNIT`:
+
+- The price must be one-time, USD and exactly $1. Production's is in `wrangler.toml` `[env.production.vars]`.
+- $N of tokens is N of that price. It is credited at face value, with no bonus.
+- It meets a pack's limits: five orders a day, the $1,000 ceiling, and holds.
+- Unset, or not a $1 price, means no custom amount is offered. The packs still sell.
+
+To change the price, create a new $1 one-time USD price in Stripe and change
+the variable. To stop custom amounts, remove the variable.
+
+A pack row whose price the catalog mirror lacks, such as one seeded by a
+migration, is fetched into the mirror on the first member read of
+`/api/ai-budget/top-up`.
+
 ## Archive a pack
 
 **Archive** (`POST /api/admin/catalog/token-packs/:uid/archive`) takes the pack

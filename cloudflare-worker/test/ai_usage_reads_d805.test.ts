@@ -175,7 +175,11 @@ test('today\'s pack orders: the rolling window, the member\'s own orders, and wh
 // differently from the check.
 test('the purchase check and the read count with one function, so the read shows what the check refuses at', async () => {
   const src = readFileSync(new URL('../src/services/aiCredits.ts', import.meta.url), 'utf8');
-  const quote = src.slice(src.indexOf('export async function tokenPackQuote('), src.indexOf('\n}\n', src.indexOf('export async function tokenPackQuote(')));
+  const fn = (name: string) => src.slice(src.indexOf(name), src.indexOf('\n}\n', src.indexOf(name)));
+  // D1366: a pack and a custom amount meet the same limits, in one helper both quotes call.
+  const quote = fn('async function accountLimits(');
+  assert.match(fn('export async function tokenPackQuote('), /await accountLimits\(env, userId, /);
+  assert.match(fn('async function customAmountQuote('), /await accountLimits\(env, userId, /);
   assert.match(quote, /const recent = await recentPackOrders\(env, userId, opts\.excludeOrderRef \?\? ''\);/);
   assert.match(quote, /if \(recent\.n >= TOKEN_PACK_LIMITS\.ordersPerDay\) return \{ error: 'token_pack_daily_limit' \};/);
   assert.doesNotMatch(quote, /FROM ai_topup_purchases/, 'the check has no copy of the count');
