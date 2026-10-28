@@ -473,6 +473,7 @@ import portfolioUpdates from './routes/portfolio_updates';
 import portfolioSupport from './routes/portfolio_support';
 import positions from './routes/positions';
 import contacts from './routes/contacts';
+import contactImports from './routes/contact_imports';
 import roundCalls from './routes/round_calls';
 import track from './routes/track';
 
@@ -1299,6 +1300,9 @@ app.route('/api/portfolio-support', portfolioSupport);
 app.route('/api/positions', positions);
 // Contacts — unified inbound relationship hub (founder CRM). Role-gated
 // in-route (founder/admin); no paywall prefix so it's core-available.
+// D1351 (#3566): the member's own book — LinkedIn's Connections.csv, suggested
+// duplicates, notes and follow-ups — on /import/* and /book/*, ahead of the CRM.
+app.route('/api/contacts', contactImports);
 app.route('/api/contacts', contacts);
 app.route('/api/round-calls', roundCalls);
 app.route('/api/funds', funds);
