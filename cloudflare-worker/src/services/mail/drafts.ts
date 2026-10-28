@@ -129,7 +129,6 @@ type Row = {
   subject: string; body: string; parent_uid: string | null; instruction: string | null; model: string | null;
   prompt_tokens: number | null; completion_tokens: number | null; cost_micro_usd: number | null; created_at: string;
 };
-const COLUMNS = 'uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at';
 const json = (v: string) => { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch { return []; } };
 
 export function draftView(r: Row) {
@@ -160,7 +159,7 @@ export async function insertDraft(env: Env, user: User, d: NewDraft): Promise<Dr
 
 async function rowOf(env: Env, user: User, uid: string): Promise<Row | null> {
   if (!/^[a-f0-9]{32}$/.test(uid)) return null;
-  return await env.DB.prepare(`SELECT ${COLUMNS} FROM mail_drafts WHERE uid = ? AND user_id = ?`).bind(uid, user.id).first<Row>();
+  return await env.DB.prepare('SELECT uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at FROM mail_drafts WHERE uid = ? AND user_id = ?').bind(uid, user.id).first<Row>();
 }
 
 export async function draftOf(env: Env, user: User, uid: string): Promise<DraftView | null> {
@@ -171,8 +170,8 @@ export async function draftOf(env: Env, user: User, uid: string): Promise<DraftV
 /** The member's own drafts, newest first; `person` narrows to one recipient. */
 export async function listDrafts(env: Env, user: User, person: string | null) {
   const rows = person
-    ? await env.DB.prepare(`SELECT ${COLUMNS} FROM mail_drafts WHERE user_id = ? AND person_ref = ? ORDER BY created_at DESC, id DESC LIMIT 100`).bind(user.id, person).all<Row>()
-    : await env.DB.prepare(`SELECT ${COLUMNS} FROM mail_drafts WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100`).bind(user.id).all<Row>();
+    ? await env.DB.prepare('SELECT uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at FROM mail_drafts WHERE user_id = ? AND person_ref = ? ORDER BY created_at DESC, id DESC LIMIT 100').bind(user.id, person).all<Row>()
+    : await env.DB.prepare('SELECT uid, person_ref, intent, tone, length, refs_json, blocks_json, subject, body, parent_uid, instruction, model, prompt_tokens, completion_tokens, cost_micro_usd, created_at FROM mail_drafts WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100').bind(user.id).all<Row>();
   return (rows.results || []).map(draftView);
 }
 

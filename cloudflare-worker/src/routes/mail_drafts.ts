@@ -61,7 +61,7 @@ async function chargedOf(env: Env, usageLogId: number | null | undefined, userId
 function runOptions(c: Context<any>, user: User, pack: Pack, ask: DraftAsk, sources: PackItem[], blocks: Block[], revision: Revision | null): RunOptions {
   return {
     task: 'mail_draft', userId: Number(user.id), messages: draftMessages(pack, ask, sources, blocks, revision), maxTokens: MAX_TOKENS[ask.length],
-    surface: AI_SURFACE.mailDraft, rail: railFor(c, { page: PAGE, option: OPTION }, pack.person.ref),
+    rail: railFor(c, { page: PAGE, option: OPTION }, pack.person.ref),
   };
 }
 
@@ -72,11 +72,11 @@ async function press(c: Context<any>, user: User, b: Record<string, unknown>, pa
   const blocks = await blocksNow(c.env, user, pack, ask);
   const opts = runOptions(c, user, pack, ask, sources, blocks, parent?.revision ?? null);
   if (b.estimate === true) {
-    const q = await quoteRun(c.env, opts);
+    const q = await quoteRun(c.env, { ...opts, surface: AI_SURFACE.mailDraft, rail: opts.rail });
     if (!q.ok) return refuseRun(c, { refusal: q.refusal, error: q.error }) ?? refuse(c, 503, { code: 'estimate_unreadable', message: 'The cost of this draft could not be worked out. Try again.' });
     return c.json({ estimate: { hold_microusd: q.hold_microusd, model: q.model }, sources: sources.map(({ ref, label, as_of, link }) => ({ ref, label, as_of, link })), blocks: blocks.map(({ kind, as_of, link }) => ({ kind, as_of, link })) });
   }
-  const out = await run(c.env, opts);
+  const out = await run(c.env, { ...opts, surface: AI_SURFACE.mailDraft, rail: opts.rail });
   const refused = refuseRun(c, { refusal: out.refusal, error: out.refusal === 'guard_unavailable' ? 'The draft could not be checked. A started run may still be charged.' : undefined });
   if (refused) return refused;
   if (!out.ok) return refuse(c, 503, { code: 'draft_unreadable', message: 'Eadwyn could not draft this email. Try again.' });
