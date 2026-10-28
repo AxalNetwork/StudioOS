@@ -340,6 +340,16 @@ for (const replacing of [false, true]) test(`OAuth client replacement: overlappi
   const row = f.db.prepare('SELECT value, updated_by FROM platform_settings WHERE key = ?').get(LOVABLE_STATE_KEY);
   assert.equal(row.updated_by, String(ADMIN));
   assert.ok(!row.value.includes(winner.body.client_secret), 'the journal never stores the secret');
+  const audit = f.db.prepare("SELECT user_id, details FROM activity_logs WHERE action = 'lovable_connector_client_replaced' ORDER BY id").all() as any[];
+  assert.equal(audit.length, replacing ? 2 : 1, 'one standard audit entry per successful act, none for the refused overlap');
+  assert.equal(audit.at(-1).user_id, ADMIN);
+  const details = JSON.parse(audit.at(-1).details);
+  assert.equal(details.client_id, winner.body.client_id);
+  assert.equal(details.previous_client_id, first?.body.client_id ?? null);
+  assert.match(details.operation, UUID);
+  const governance = f.db.prepare("SELECT filters_json FROM admin_audit_log WHERE action = 'lovable_connector_client_replaced'").all();
+  assert.equal(governance.length, audit.length);
+  assert.ok(!JSON.stringify([audit, governance]).includes(winner.body.client_secret), 'no secret in either audit store');
 });
 
 test('OAuth client read: confirmed empty and legacy clients remain readable; D1, KV and provider errors are 503 without a false empty client', async () => {

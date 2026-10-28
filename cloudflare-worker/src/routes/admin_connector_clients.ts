@@ -22,6 +22,7 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { OAUTH_PATHS, mcpEnabled, providerOptions, publicOrigin } from '../mcp/oauth';
 import { refuse } from '../util/refusal';
+import { logAdminAction } from '../services/adminAudit';
 
 export const LOVABLE_REDIRECT_URI = 'https://api.lovable.dev/workspaces/connectors/standard/oauth/callback';
 /** The pre-fix KV pointer, imported only before D1 has a current state. */
@@ -122,6 +123,10 @@ adminConnectorClients.post('/lovable', async (c) => {
     const saved = await c.env.DB.prepare('UPDATE platform_settings SET value = ?, updated_at = ?, updated_by = ? WHERE key = ? AND value = ?')
       .bind(JSON.stringify({ state: 'ready', current } satisfies Ready), new Date().toISOString(), String(actor.id), LOVABLE_STATE_KEY, claimedValue).run();
     if (!saved.success || saved.meta.changes !== 1) return unreadable(c);
+    await logAdminAction(c.env, actor.id, actor.email, 'lovable_connector_client_replaced', {
+      operation: claim.operation, client_id: current.client_id,
+      previous_client_id: before.current?.client_id ?? null,
+    });
     return c.json({ client_id: made.clientId, client_secret: made.clientSecret, created_at: current.created_at, replaced: !!before.current, ...settings(c.env) }, 201);
   } catch { return unreadable(c); }
 });
