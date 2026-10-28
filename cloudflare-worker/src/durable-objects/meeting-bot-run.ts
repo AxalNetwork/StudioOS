@@ -232,7 +232,7 @@ export class MeetingBotRun implements DurableObject {
       await this.env.DB.prepare('UPDATE meeting_bots SET started_at = ? WHERE uid = ? AND started_at IS NULL').bind(run.started_at,run.uid).run();
       await this.update(run,'joining');
       try {
-        await withDeadline(meetingBotRuntime(this.env).start({uid:run.uid,platform:run.platform,meeting_url:link,limit_minutes:run.limit_minutes,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!,notice,venture_name:ventureName}),10_000,'bot start');
+        await withDeadline(meetingBotRuntime(this.env).start({uid:run.uid,platform:run.platform,meeting_url:link,limit_minutes:run.limit_minutes,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!,notice,venture_name:ventureName}),25_000,'bot start');
       } catch { return this.finish(run,'failed','runtime_unavailable'); }
     }
     const now=Date.now();
