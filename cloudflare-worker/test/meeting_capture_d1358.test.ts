@@ -424,3 +424,44 @@ test('D1360: a Calendar Meet call under way sends Eadwyn AI now; one already ove
   assert.deepEqual([past.body.bot, past.body.bot_error], [null, null]);
   assert.deepEqual(commands, ['/init'], 'a call already over gets no bot');
 });
+
+// D1378: the bot's container start (a cold start alone can take 25 s) runs after the save
+// answers, under the request's waitUntil, so Start never passes the dialog's 30 s.
+test('D1378: a saved Meet call answers before the bot container starts; the start runs under waitUntil', async (t) => {
+  const f = world();
+  await meetConnected(f);
+  botDeployed(f);
+  let release!: () => void;
+  const starting = new Promise<void>((r) => { release = r; });
+  const commands: string[] = [];
+  f.env.MEETING_BOT_RUN = { idFromName: (s: string) => s, get: () => ({ fetch: async (req: Request) => {
+    commands.push(new URL(req.url).pathname); await starting; return json({ status: 'joining' });
+  } }) };
+  const now = Date.now();
+  mockFetch(t, {
+    'POST https://oauth2.googleapis.com/token': () => json({ access_token: 'fixture-access' }),
+    'GET https://www.googleapis.com/calendar/v3/calendars/primary/events': () => json({ items: [{
+      id: 'evt0001fixture', organizer: { self: true }, hangoutLink: `https://meet.google.com/${MEET_CODE}`,
+      conferenceData: { conferenceId: MEET_CODE, entryPoints: [{ entryPointType: 'video', uri: `https://meet.google.com/${MEET_CODE}` }] },
+      start: { dateTime: new Date(now - 60_000).toISOString() }, end: { dateTime: new Date(now + 3_600_000).toISOString() },
+    }] }),
+  });
+  const waited: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => { waited.push(p); }, passThroughOnException() {}, props: {} };
+  const res = await Promise.race([
+    app.fetch(new Request(`http://x/api/founder/validate/interviews/${INTERVIEW}/meetings`, {
+      method: 'POST', headers: { ...await auth(), 'content-type': 'application/json' },
+      body: JSON.stringify({ attach: { join_url: `https://meet.google.com/${MEET_CODE}` }, consent: CONSENT }),
+    }), f.env, ctx as any),
+    new Promise<null>((r) => setTimeout(() => r(null), 2_000)),
+  ]);
+  assert.ok(res, 'the save answered while the container was still starting');
+  const body = await (res as Response).json() as any;
+  assert.equal((res as Response).status, 201, JSON.stringify(body));
+  assert.equal(body.bot.status, 'queued');
+  assert.equal(body.bot_error, null);
+  assert.deepEqual(commands, ['/init'], 'the start was asked for');
+  assert.equal(waited.length, 1, 'and handed to waitUntil');
+  release();
+  await Promise.all(waited);
+});

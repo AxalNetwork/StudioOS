@@ -145,7 +145,13 @@ export async function botAvailability(env: Env, user: User) {
     price: { bot_microusd_per_minute: bot, transcription_microusd_per_minute: transcription },
   };
 }
-export async function dispatchBot(env: Env, user: User, session: SessionRow, args: { meeting_url?: unknown; scheduled_at?: unknown }, now = Date.now()) {
+/**
+ * `defer`, when given, takes the run's start off the request: the row is queued and returned at once, and the start
+ * (up to the 25 s container cold start) runs under the caller's waitUntil. A start that fails there fails the run, as it
+ * would inline; a queued row the start never reached is started by the next read or dispatch.
+ */
+export async function dispatchBot(env: Env, user: User, session: SessionRow, args: { meeting_url?: unknown; scheduled_at?: unknown }, now = Date.now(),
+  defer?: (start: Promise<unknown>) => void) {
   session = await botSession(env, { user_id: user.id, session_id: session.id, project_id: session.project_id });
   if (!AUDIO_CHANNELS.has(session.channel)) throw new BotError(400,'bot_needs_audio','Choose an audio recording session for the meeting bot.');
   const parsed = botPlatform(args.meeting_url);
@@ -176,6 +182,10 @@ export async function dispatchBot(env: Env, user: User, session: SessionRow, arg
     throw new BotError(503, 'bot_unavailable', 'The meeting bot could not be queued.');
   }
   // GET and duplicate dispatch can initialize a persisted queued row after an interrupted request.
+  if (defer) {
+    defer(botControl(env, uid, 'init').catch(() => null));
+    return botView((await botRow(env, uid))!);
+  }
   const response = await botControl(env, uid, 'init');
   if (!response.ok) throw new BotError(response.status, 'bot_unavailable', 'The meeting bot could not be started.');
   return botView((await botRow(env, uid))!);

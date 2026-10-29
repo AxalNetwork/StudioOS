@@ -410,10 +410,13 @@ async function sendBotByDefault(c: C, user: User, session: Parameters<typeof dis
   const read = await botAvailability(c.env, user).catch(() => null);
   if (read?.platforms?.[provider] !== true) return { bot: null, bot_error: null };
   const start = Date.parse(call.startsAt);
+  let ctx: C['executionCtx'] | undefined;
+  try { ctx = c.executionCtx; } catch { /* no execution context outside a live request: the start runs inline */ }
   try {
+    // D1378: the save answers before the bot's container starts (a cold start alone can take 25 s, past the dialog's 30 s).
     const bot = await dispatchBot(c.env, user, session, {
       meeting_url: call.joinUrl, ...(Number.isFinite(start) && start > now ? { scheduled_at: new Date(start).toISOString() } : {}),
-    });
+    }, now, ctx ? (begin) => ctx!.waitUntil(begin) : undefined);
     return { bot, bot_error: null };
   } catch (e) {
     return { bot: null, bot_error: e instanceof BotError ? e.body() : { code: 'bot_unavailable', message: 'Eadwyn AI could not be queued. Open the session to check its status.' } };
