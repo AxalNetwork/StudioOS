@@ -32,6 +32,7 @@ import {
   shouldResetGoogleSyncMappings,
   callbackGoogleScopes,
   clearGoogleIdentityLink,
+  meetScopesOnConnect,
 } from '../src/routes/calendar.ts';
 import { returnFromNonce } from '../src/util/oauthReturn.ts';
 
@@ -612,4 +613,27 @@ test('PUBLIC_BASE_URL wins over APP_URL when both are set', () => {
     url.searchParams.get('redirect_uri'),
     'https://app.axal.vc/api/calendar/google/callback',
   );
+});
+
+// D1380: one consent. Once the owner has switched Meet on, an ordinary Google connect
+// asks for both Meet scopes as preserved ('mp_'), so the callback never refuses a member
+// who unticks them, and nobody needs a second "Allow transcript import" round trip.
+test('D1380: an ordinary connect asks for the Meet scopes when Meet is switched on', async () => {
+  assert.equal(meetScopesOnConnect({ MEET_TRANSCRIPTS_ENABLED: 'on' } as any, false), true);
+  assert.equal(meetScopesOnConnect({ MEET_TRANSCRIPTS_ENABLED: 'off' } as any, false), false, 'switched off: Calendar only');
+  assert.equal(meetScopesOnConnect({} as any, false), false);
+  assert.equal(meetScopesOnConnect({ MEET_TRANSCRIPTS_ENABLED: 'on' } as any, true), false, 'the explicit button keeps its own gm_ grant');
+
+  const stub = makeStubDB();
+  const env = { ...FULL_GOOGLE, DB: stub.DB, MEET_TRANSCRIPTS_ENABLED: 'on' } as any;
+  const preserved = meetScopesOnConnect(env, false);
+  const { status, body } = await buildGoogleOAuthStartResponse(env, 42, undefined, preserved, '', preserved);
+  assert.equal(status, 200);
+  const url = new URL(body.redirect_url);
+  const scopes = (url.searchParams.get('scope') || '').split(' ');
+  assert.ok(scopes.includes('https://www.googleapis.com/auth/meetings.space.created'), 'create Meet calls');
+  assert.ok(scopes.includes('https://www.googleapis.com/auth/meetings.space.readonly'), 'read Meet transcripts');
+  assert.ok(scopes.includes('https://www.googleapis.com/auth/calendar.events'), 'Calendar as before');
+  const nonce = decodeURIComponent((url.searchParams.get('state') || '').split('.')[0]);
+  assert.match(nonce, /^mp_/, 'preserved: an unticked Meet box never fails the connect');
 });
