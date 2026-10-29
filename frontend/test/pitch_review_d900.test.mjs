@@ -188,7 +188,7 @@ test('D900: an admin reads the reviews and is offered no run; a version never re
   try {
     assert.ok(failed.by('pitch-review-history-error'));
     assert.equal(failed.by('pitch-review-history-empty'), undefined);
-    assert.equal(failed.pr(failed.by('pitch-review-run')).disabled, true, 'no run while the history cannot be read');
+    assert.equal(failed.by('pitch-review-run'), undefined, 'no run while the history cannot be read (#3657: none offered, not a disabled one)');
   } finally { await failed.unmount(); }
 });
 
