@@ -28,6 +28,7 @@ export function checkConfig(cfg: RunConfig, now=Date.now()): void {
     ||!Number.isSafeInteger(cfg.budgetDeadlineAt)||cfg.budgetDeadlineAt<=now||cfg.budgetDeadlineAt>cfg.deadlineAt) throw new Error('lease_required');
 }
 const codeOf=(e:unknown):FailureCode=>e instanceof AdapterFailure?e.code:'platform_blocked';
+const detailOf=(e:unknown):string|undefined=>e instanceof AdapterFailure?e.detail:undefined;
 export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
   const clock=deps.clock??realClock,log=deps.log??(()=>{}),{adapter,transport}=deps;
   checkConfig(cfg,clock.now());
@@ -65,9 +66,9 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
     let cancel=()=>{};
     await Promise.race([Promise.resolve().then(()=>adapter.leave()).catch(()=>{}),new Promise<void>(resolve=>{cancel=clock.setTimeout(resolve,5000);})]);cancel();
   })());
-  const failure=async(code:FailureCode):Promise<RunResult>=>{
+  const failure=async(code:FailureCode,reason?:string):Promise<RunResult>=>{
     await leave();
-    const step=adapter.diagnostic?.()??null;
+    const step=reason??adapter.diagnostic?.()??null;
     const result:RunResult={state:'failed',code,...(step?{detail:step}:{})};await report(result);return result;
   };
   const early=async():Promise<RunResult>=>{
@@ -143,7 +144,7 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
       }));
       tick();checkAlone();if(control.signal.aborted)stopRecording();
       ended=await done;
-    } catch(e) {return await failure(codeOf(e));}
+    } catch(e) {return await failure(codeOf(e),detailOf(e));}
     finally {
       capturing=false;
       for(const off of subs){try{off();}catch{/* continue cleanup */}}

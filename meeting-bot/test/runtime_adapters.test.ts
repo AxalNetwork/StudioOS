@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes } from 'node:crypto';
 import { runtimeAdapter } from '../src/runtimeAdapters.ts';
+import { AdapterFailure } from '../src/types.ts';
 import type { RuntimeAdapterContext } from '../src/runtime.ts';
 import type { ZoomSdkBridge } from '../src/zoomAdapter.ts';
 const uid='00000000-0000-4000-8000-000000000001',secret=randomBytes(32).toString('hex');
@@ -35,4 +36,17 @@ test('a failed credential request creates no native sidecar and keeps the respon
   for(const [status,jwt,token] of [[403,'synthetic-sdk-jwt-'.repeat(3),'fixture'],[200,'','fixture'],[200,'synthetic-sdk-jwt-'.repeat(3),'x'.repeat(8193)]] as const)
     await assert.rejects(()=>runtimeAdapter('zoom',context,{zoom:()=>{native++;throw new Error('not reached');},fetch:(async()=>Response.json({sdk_jwt:jwt,token,message:'synthetic-private-provider'}, {status})) as typeof fetch}),{message:'obf_unavailable'});
   assert.equal(native,0);
+});
+
+// D1381: the Worker's refusal code rides on the failure as its detail, never the provider's message.
+test('D1381: a refused credential request carries the Worker refusal code, and only a code',async()=>{
+  for(const [body,detail] of [[{code:'zoom_not_connected',message:'synthetic-private-provider'},'zoom_not_connected'],
+    [{code:'Has Spaces & https://x',message:'m'},undefined],[{message:'no code'},'credentials_refused'],[null,'credentials_refused']] as const){
+    const failure:any=await runtimeAdapter('zoom',context,{zoom:()=>{throw new Error('not reached');},
+      fetch:(async()=>new Response(body===null?'not json':JSON.stringify(body),{status:503})) as typeof fetch}).then(()=>null,(e:unknown)=>e);
+    assert.ok(failure instanceof AdapterFailure);
+    assert.equal(failure.code,'obf_unavailable');
+    assert.equal(failure.detail,detail);
+    assert.ok(!JSON.stringify(failure.detail??'').includes('synthetic-private-provider'));
+  }
 });

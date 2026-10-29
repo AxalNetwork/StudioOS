@@ -4,6 +4,7 @@ import { runBot, checkConfig } from './lifecycle.ts';
 import { httpTransport, signRequest } from './callback.ts';
 import { logLine } from './log.ts';
 import { meetingBotNotice, MEETING_BOT_NOTICE_PUBLISHED } from '../notice.mjs';
+import { AdapterFailure } from './types.ts';
 import type { CallbackTransport, LogSink, MeetingAdapter, Platform, RunConfig } from './types.ts';
 
 export interface RuntimeOptions {
@@ -76,9 +77,11 @@ export class RuntimeHost {
         const originalLeave=adapter.leave.bind(adapter);let leaving:Promise<void>|null=null;
         adapter.leave=()=>leaving??(leaving=Promise.resolve().then(originalLeave));
         await runBot(cfg,{adapter,transport,stop:stop.signal,shutdown:this.shutdownController.signal,log:this.options.log});
-      }catch{
+      }catch(e){
         logLine(this.options.log??(()=>{}),'runtime_failed');
-        try{await transport.status({state:'failed',code:'platform_blocked',detail:'runtime_start'});}catch{/* no raw exception */}
+        // D1381: a refusal the adapter named (the Zoom credentials' reason) is reported as itself.
+        const named=e instanceof AdapterFailure&&e.detail?{code:e.code,detail:e.detail}:{code:'platform_blocked' as const,detail:'runtime_start'};
+        try{await transport.status({state:'failed',...named});}catch{/* no raw exception */}
       }finally{
         if(adapter){let timer:ReturnType<typeof setTimeout>|undefined;await Promise.race([adapter.leave().catch(()=>{}),new Promise<void>(resolve=>{timer=setTimeout(resolve,5000);})]);if(timer)clearTimeout(timer);}
         active.ended=true;
