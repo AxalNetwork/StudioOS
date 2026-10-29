@@ -66,7 +66,9 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
     await Promise.race([Promise.resolve().then(()=>adapter.leave()).catch(()=>{}),new Promise<void>(resolve=>{cancel=clock.setTimeout(resolve,5000);})]);cancel();
   })());
   const failure=async(code:FailureCode):Promise<RunResult>=>{
-    await leave();const result:RunResult={state:'failed',code};await report(result);return result;
+    await leave();
+    const step=adapter.diagnostic?.()??null;
+    const result:RunResult={state:'failed',code,...(step?{detail:step}:{})};await report(result);return result;
   };
   const early=async():Promise<RunResult>=>{
     await leave();const result:RunResult={state:'left',reason,chunks:0,last_seq:-1,chunks_failed:0,events:0,events_dropped:0};await report(result);return result;

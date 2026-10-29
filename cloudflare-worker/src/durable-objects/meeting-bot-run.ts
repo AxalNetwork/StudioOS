@@ -55,6 +55,8 @@ export async function boundedBotBody(req: Request, max: number): Promise<ArrayBu
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), {status,headers:{'content-type':'application/json'}});
 const int = (v: unknown, max: number) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= max;
 const FAILED_CODES = new Set(['admission_refused','meeting_ended','runtime_failed','notice_failed','unsupported_platform','processing_failed']);
+/** D1368: the bot's `<code>` or `<code>@<step>[:<state>]`, the same shape meeting-bot/src/callback.ts sends. */
+export const BOT_FAILURE_DETAIL = /^[a-z_]{1,40}(@[a-z_]{1,40}(:[a-z_]{1,20})?)?$/;
 interface BillingBlock { uid: string; index: number; start: number; end: number; settled: boolean; minutes: number }
 interface UploadTicket { token: string; seq: number; size: number; start: number; expires: number; used: boolean }
 
@@ -345,6 +347,12 @@ export class MeetingBotRun implements DurableObject {
         if (session.processing_stage !== 'done' || !run.participants_enc) throw new BotError(409,'bot_processing','The transcript is still being assembled.');
       }
       const failure=typeof event.failure_code==='string' && FAILED_CODES.has(event.failure_code) ? event.failure_code : status==='failed'?'runtime_failed':null;
+      // D1368: where it failed, in the bot's own codes (migration 655). Diagnostic only; never shown to the member.
+      if (status==='failed' && typeof event.failure_detail==='string' && BOT_FAILURE_DETAIL.test(event.failure_detail)) {
+        // Best-effort: a database before 655 must not turn a failure report into a 503.
+        try { await this.env.DB.prepare('UPDATE meeting_bots SET failure_detail = ? WHERE uid = ?').bind(event.failure_detail,run.uid).run(); }
+        catch (e) { if (!/no such column|no column named/i.test(String((e as Error)?.message ?? e))) throw e; }
+      }
       if (status==='done' || status==='failed' || status==='stopped') {
         const draining=await this.state.storage.get<number>('drain_until');
         await this.finish(run,draining && status==='done'?'stopped':status,draining?(await this.state.storage.get<string>('drain_reason'))??failure:failure);

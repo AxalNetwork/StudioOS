@@ -74,14 +74,11 @@ export async function memberAiCap(env: Env, userId: number): Promise<number | nu
   }
 }
 /**
- * D1363: a Super Admin's AI is never refused for its allowance or balance.
- * Their caps are this figure ($1 billion a day and a month in micro-USD, a
- * number no run meets), so every hold is taken from the included allowance and
- * the top-up balance is never touched. Spend is still counted and every run is
- * still recorded: HQ › AI usage shows it like anyone's. A pause (D791) and the
- * member's own spend limit (D788) still apply, as both are set on purpose.
+ * D1367: a Super Admin is capped again, at the admin licence's monthly cap
+ * ($50 unless HQ types another), with no separate daily cap. D1363 had given
+ * them $1 billion; the owner asked for the cap back. A pause (D791) and the
+ * member's own spend limit still apply.
  */
-export const SUPER_ADMIN_AI_MICROUSD = 1_000_000_000_000_000;
 /** D783: the one licence whose caps are still typed on HQ. It is staff, not revenue. */
 export const TYPED_CAP_LICENCES: ReadonlySet<AiLicenceKey> = new Set<AiLicenceKey>(['admin']);
 /**
@@ -100,10 +97,6 @@ export async function resolveAiCaps(env: Env, userId:number) {
   const own = await memberAiCap(env, userId);
   const capped = (monthly: number) => (own !== null && own < monthly ? own : monthly);
   const ownCap = own !== null ? { member_cap_microusd: own } : {};
-  if (licence === 'admin' && isSuperAdmin(await hydrateSuperAdmin(env, user))) {
-    return { licence, source: 'super_admin', unlimited: true, daily_capped: false,
-      daily_microusd: SUPER_ADMIN_AI_MICROUSD, monthly_microusd: SUPER_ADMIN_AI_MICROUSD, plan: null };
-  }
   if (!TYPED_CAP_LICENCES.has(licence)) {
     const plan = await planAllowanceFor(env, user);
     const monthly = capped(amount(plan.monthly_microusd));
@@ -112,6 +105,11 @@ export async function resolveAiCaps(env: Env, userId:number) {
   }
   const recorded = await env.DB.prepare('SELECT daily_microusd, monthly_microusd FROM ai_licence_caps WHERE licence_key = ?').bind(licence).first<any>();
   const fallback = environmentAiCaps(env);
+  if (isSuperAdmin(await hydrateSuperAdmin(env, user))) {
+    // D1367: the admin month, no day of its own (the day equals the month, as a member's does).
+    const monthly = capped(recorded ? amount(recorded.monthly_microusd) : usdToMicro(fallback.month));
+    return { licence, source: 'super_admin', daily_capped: false, daily_microusd: monthly, monthly_microusd: monthly, plan: null, ...ownCap };
+  }
   return { licence, source:recorded ? 'recorded' : 'environment', daily_capped: true,
     daily_microusd:recorded ? amount(recorded.daily_microusd) : usdToMicro(fallback.day),
     monthly_microusd:capped(recorded ? amount(recorded.monthly_microusd) : usdToMicro(fallback.month)), plan: null, ...ownCap };

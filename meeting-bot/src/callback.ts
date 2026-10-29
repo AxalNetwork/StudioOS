@@ -27,6 +27,13 @@ const failures: Record<FailureCode,string> = {
   platform_blocked:'runtime_failed',obf_unavailable:'runtime_failed',notice_failed:'notice_failed',processing_failed:'processing_failed',
 };
 type Pending = { seq: number; body: string; result?: Record<string,any> };
+/** D1368: `<code>` or `<code>@<step>[:<state>]`, lowercase codes only, so nothing else can ride along. */
+export const FAILURE_DETAIL = /^[a-z_]{1,40}(@[a-z_]{1,40}(:[a-z_]{1,20})?)?$/;
+export function failureDetail(report: StatusReport): string | null {
+  if (report.state!=='failed' || !report.code) return null;
+  const value=report.detail?`${report.code}@${report.detail}`:report.code;
+  return FAILURE_DETAIL.test(value)?value:report.code;
+}
 export function httpTransport(opts: HttpTransportOptions): CallbackTransport {
   let base: URL;
   try { base=new URL(opts.baseUrl); } catch {throw new TransportError(0);}
@@ -81,7 +88,8 @@ export function httpTransport(opts: HttpTransportOptions): CallbackTransport {
       // queued audio/events have been acknowledged.
       const status=report.reason==='interrupted'?'failed':report.state==='left'?(recorded?'processing':'stopped'):report.state;
       const failure_code=report.reason==='interrupted'?'runtime_failed':report.code?failures[report.code]:null;
-      const data=await event({type:'status',status,failure_code,
+      const failure_detail=failureDetail(report);
+      const data=await event({type:'status',status,failure_code,...(failure_detail?{failure_detail}:{}),
         ...(report.chunks===undefined?{}:{chunks:report.chunks}),
         ...(report.chunks_failed===undefined?{}:{chunks_failed:report.chunks_failed})},`status:${status}:${failure_code}`);
       if (status==='recording') recorded=true;

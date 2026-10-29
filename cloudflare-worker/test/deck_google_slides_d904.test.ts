@@ -381,7 +381,7 @@ test('2b. with the headless browser bound, a chart is the print page\'s picture 
   // Mutation checked: the clip left out (a whole-card shot) → the clip check fails; a non-PNG answer kept → the words fallback check fails.
   const f = fixture(); await f.ready();
   const shots: any[] = [];
-  f.env.BROWSER = { fetch: async (_u: string, init: any) => { shots.push(JSON.parse(init.body)); return new Response(PNG); } };
+  f.env.BROWSER = { fetch: async () => { throw new Error('#3655: the documented quickAction, never fetch'); }, quickAction: async (_a: string, o: any) => { shots.push(o); return new Response(PNG); } };
   const g = google(() => Response.json({ id: 'drive_file_4', mimeType: SLIDES_MIME }));
   try {
     const r = await exportGoogle(f);
@@ -394,7 +394,7 @@ test('2b. with the headless browser bound, a chart is the print page\'s picture 
   } finally { g.restore(); }
   // A browser answer that is not a PNG is not a picture: the chart goes in as words.
   const f2 = fixture(); await f2.ready();
-  f2.env.BROWSER = { fetch: async () => new Response('<html>error</html>') };
+  f2.env.BROWSER = { fetch: async () => new Response(PNG), quickAction: async () => new Response('<html>error</html>') };
   const g2 = google(() => Response.json({ id: 'drive_file_5', mimeType: SLIDES_MIME }));
   try { assert.deepEqual((await exportGoogle(f2)).body.charts, { pictured: 0, as_text: 1 }); } finally { g2.restore(); }
 });

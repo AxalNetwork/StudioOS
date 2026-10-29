@@ -217,7 +217,7 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
   let cap: {day:number|null;month:number|null} = environmentAiCaps(env);
   const callerId = scope.binds[0];
   if (typeof callerId === 'number' && callerId>0) {
-    try { const resolved=await resolveAiCaps(env,callerId); cap={day:resolved.daily_capped?resolved.daily_microusd/1000000:null,month:'unlimited' in resolved?null:resolved.monthly_microusd/1000000}; } // D783: a member has no day cap; D1363: a Super Admin has no cap
+    try { const resolved=await resolveAiCaps(env,callerId); cap={day:resolved.daily_capped?resolved.daily_microusd/1000000:null,month:resolved.monthly_microusd/1000000}; } // D783: a member has no day cap; D1367: nor has a Super Admin
     catch { cap={day:null,month:null}; }
   }
   const mKey = monthKey(now);

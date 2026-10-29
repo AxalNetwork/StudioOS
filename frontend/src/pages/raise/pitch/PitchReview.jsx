@@ -7,7 +7,7 @@ import { Lightbox, useRailOption } from '../../../ui';
 import DeckReviewerPage from '../../DeckReviewerPage';
 import { asList, currentVersion, versionLabel } from './pitchStudioModel';
 import {
-  NO_REVIEWS, NO_REVIEW_YET, REVIEW_COLUMNS, REVIEW_READ_ONLY, SCORE_NOT_RETURNED, UPLOAD_LINE,
+  NO_REVIEWS, NO_REVIEW_YET, REVIEW_COLUMNS, REVIEW_READ_ONLY, SCORE_NOT_RETURNED, UPLOAD_LINE, isReviewReadOnly, mayRunReview,
   costLabel, estimateOf, historyRows, latestReview, pointerLabel, ranAt, reviewSentence,
 } from './reviewModel';
 
@@ -54,6 +54,7 @@ export default function PitchReview({ reads, readOnly }) {
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(null);
+  const [refused, setRefused] = useState(false);
   // D771: the press names itself to the rail while the review runs, as the reviewer's presses do.
   useRailOption(busy ? 'review:deck-version' : null, 'Review this version');
 
@@ -68,8 +69,8 @@ export default function PitchReview({ reads, readOnly }) {
   }, [deckId, tick]);
 
   const reviews = history.status === 'ok' ? asList(history.data, 'reviews') : [];
-  // The Worker's own answer decides who may run: an admin reads only.
-  const canRun = !readOnly && history.data?.viewer !== 'admin' && history.data?.viewer !== 'super_admin';
+  // #3657: the Worker's own answer decides who may run: only a founder viewer, and only once it has answered.
+  const canRun = mayRunReview(history, readOnly) && !refused;
   const latest = latestReview(reviews, deckId);
   const estimate = estimateOf(reviews);
 
@@ -82,6 +83,7 @@ export default function PitchReview({ reads, readOnly }) {
       setTick((t) => t + 1);
     } catch (e) {
       reportError('pitch-studio:review-run', e);
+      if (isReviewReadOnly(e)) { setConfirm(false); setRefused(true); return; }
       setFailed(e?.message || 'The review could not be run. Nothing was saved. Try again.');
     } finally {
       setBusy(false);
