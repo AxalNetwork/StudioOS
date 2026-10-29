@@ -296,7 +296,22 @@ meetings.post('/meetings/instant', async (c) => {
       throw x;
     }
   }
-  if (!(await meet.googleConnection(c.env, user.id))) return refuse(c, 409, { code: 'connect_first', message: CREATE_CONNECT_FIRST.google_meet });
+  const googleConn = await meet.googleConnection(c.env, user.id);
+  if (!googleConn) return refuse(c, 409, { code: 'connect_first', message: CREATE_CONNECT_FIRST.google_meet });
+  // D1376: with the Meet permission, the call is a space Axal creates: Open, so Eadwyn AI joins
+  // without knocking, and transcribing itself where the plan allows. Otherwise a Calendar event, as before.
+  if (meet.canCreateSpaces(googleConn)) {
+    try {
+      const startsAt = new Date().toISOString();
+      const space = await meet.createOpenSpace(c.env, googleConn);
+      await meet.recordCreatedSpace(c.env, user.id, space, startsAt, new Date(Date.parse(startsAt) + duration * 60_000).toISOString());
+      return c.json({ provider, join_url: space.joinUrl, open: true, auto_transcribe: space.autoTranscribe }, 201);
+    } catch (x) {
+      if (!(x instanceof MeetingProviderError)) throw x;
+      if (x.code !== 'meet_create_failed') return providerRefusal(c, x);
+      // An account the Meet API will not create for falls back to the Calendar event.
+    }
+  }
   const made = await makeMeetLink(c.env, user.id, { topic, startsAt: new Date().toISOString(), durationMin: duration });
   if (!made.ok) return refuse(c, made.refusal.status, { code: made.refusal.code, message: made.refusal.message });
   return c.json({ provider, join_url: made.joinUrl }, 201);
@@ -415,9 +430,11 @@ async function attachCalendarMeet(c: C, s: { user: User; scoped: ScopedInterview
   if (!available(c.env, 'google_meet')) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE.google_meet });
   const googleConn = await meet.googleConnection(c.env, s.user.id);
   if (!googleConn) return refuse(c, 409, { code: 'connect_first', message: 'Connect Google in Account › Connectors first, then attach the call.' });
-  let call: meet.CalendarMeet | null;
+  let call: meet.CalendarMeet | null = null;
+  // D1376: a space Axal created for this member is on no Calendar event; it is found first, without a Google read.
+  if ('meetingCode' in target) call = await meet.createdSpaceCall(c.env, s.user.id, target.meetingCode);
   try {
-    call = await meet.findCalendarMeet(c.env, googleConn, target);
+    if (!call) call = await meet.findCalendarMeet(c.env, googleConn, target);
   } catch (e) {
     if (e instanceof MeetingProviderError) return providerRefusal(c, e);
     throw e;
