@@ -73,18 +73,26 @@ export function botSnapshotEvents(rows: readonly { kind: string; payload: unknow
   return { events, manifests, state };
 }
 
+/**
+ * D1383: Nova pads a segment's end past the audio it heard (a live 2.34 s chunk said
+ * 2.56 s; a 30 s one said 30.77 s), so a time up to STAGE_SLACK_MS past the chunk is
+ * read as the chunk's end. Anything further is still a malformed stage.
+ */
+export const STAGE_SLACK_MS = 2_000;
 /** speaker_raw already preserves Nova's number in the shared recorder stage. */
 export function botStagedPassages(raw: unknown, seq: number, start: number, duration: number, participant: string | null): BotPassage[] {
   if (!Array.isArray(raw)) return fail('bot_stage_invalid');
+  const end = Math.floor(duration);
+  const at = (v: unknown) => Math.min(Number(v), end) + start;
   return raw.map((s) => {
     if (!object(s) || typeof s.text !== 'string') return fail('bot_stage_invalid');
-    for (const key of ['start_ms', 'end_ms']) if (s[key] !== null && !integer(s[key], duration)) return fail('bot_stage_invalid');
+    for (const key of ['start_ms', 'end_ms']) if (s[key] !== null && !integer(s[key], duration + STAGE_SLACK_MS)) return fail('bot_stage_invalid');
     if (s.start_ms !== null && s.end_ms !== null && Number(s.end_ms) < Number(s.start_ms)) return fail('bot_stage_invalid');
     // null/blank/labels are not the model's speaker zero.
     const speaker = typeof s.speaker_raw === 'string' && /^\d{1,6}$/.test(s.speaker_raw) ? Number(s.speaker_raw) : null;
     return { chunk: seq, participant_key: participant, text: s.text, speaker,
-      start_ms: s.start_ms === null ? null : Number(s.start_ms) + start,
-      end_ms: s.end_ms === null ? null : Number(s.end_ms) + start };
+      start_ms: s.start_ms === null ? null : at(s.start_ms),
+      end_ms: s.end_ms === null ? null : at(s.end_ms) };
   });
 }
 
