@@ -9,7 +9,8 @@
  *   blocks      what sits on the card's 12 × 6 grid (PD8b). Each block is
  *               `{ id, kind, grid: { c1, c2, r1, r2 }, binding?, … }`: the
  *               range is inclusive, columns 1–12 and rows 1–6, and no two
- *               blocks on a card share a cell.
+ *               blocks on a card share a cell. A `graphic` block may carry
+ *               a typed `diagram` (D898 §8.4, `diagramModel.ts`).
  *
  * A deck version also carries a theme (PD8): the venture's brand kit or one of
  * two neutral themes, with a deck background.
@@ -26,6 +27,7 @@
  * which every reader shows as "Not recorded", never 0.
  */
 import { sanitizeBinding } from './sources';
+import { diagramProblem, sanitizeDiagram } from './diagramModel';
 
 export const GRID_COLS = 12;
 export const GRID_ROWS = 6;
@@ -162,7 +164,13 @@ function blockBody(kind: BlockKind, v: any, url: UrlGuard): Record<string, unkno
         range: oneOf(v.range, CHART_RANGES) ?? 'all', previous: v.previous === true, labels: v.labels !== false,
       };
     }
-    case 'graphic': return { graphic: str(v.graphic, 60), ratio: v.ratio === '2x2' ? '2x2' : '1x1' };
+    case 'graphic': {
+      const out: Record<string, unknown> = { graphic: str(v.graphic, 60), ratio: v.ratio === '2x2' ? '2x2' : '1x1' };
+      // D898 §8.4 (#3658): an editable typed diagram, optional and versioned (`diagramModel.ts`).
+      const diagram = sanitizeDiagram(v.diagram);
+      if (diagram) out.diagram = diagram;
+      return out;
+    }
     case 'image': {
       const image_url = typeof v.image_url === 'string' ? url(v.image_url) : null;
       const out: Record<string, unknown> = { image_url, alt: str(v.alt, 200), tag: oneOf(v.tag, IMAGE_TAGS) };
@@ -251,6 +259,8 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
       placed.push(grid);
       if (!blockBody(kind, v, url)) out.push(kind === 'video' ? `${where}: the video must be a YouTube or Vimeo link.` : `${where}: the link must be https on a public host.`);
       if (v?.binding != null && !bindingOf(v.binding)) out.push(`${where}: the binding is not a source.`);
+      const dp = kind === 'graphic' ? diagramProblem(v?.diagram) : null;
+      if (dp) out.push(`${where}: ${dp}`);
     });
   });
   return out;
