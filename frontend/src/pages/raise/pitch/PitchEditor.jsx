@@ -27,7 +27,7 @@ import {
   ADDABLE_KINDS, AUDIENCE_LABELS, CALLOUTS, KIND_LABELS, KIT_FAILED, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS, NO_KIT,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
   addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, firstRunSeen,
-  keyMove, markFirstRunSeen, moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock,
+  keyMove, markFirstRunSeen, moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
 } from './editorModel';
 
 /**
@@ -359,6 +359,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
       ) : null}
       {dialog?.kind === 'layout' && card ? (() => {
         const r = applyLayout(card, dialog.layout);
+        if (r.error) {
+          return <ConfirmDialog title={`The ${dialog.layout.label} layout cannot take card ${sel + 1}`} testId="pitch-editor-layout-dialog"
+            lines={[r.error, 'Nothing changed.']} confirm="Close" onClose={() => setDialog(null)} onConfirm={() => setDialog(null)} />;
+        }
         return (
           <ConfirmDialog title={`Use the ${dialog.layout.label} layout on card ${sel + 1}?`} testId="pitch-editor-layout-dialog"
             lines={[
@@ -611,7 +615,10 @@ function DesignTab({ model, card, theme, audience, kit, readOnly, onLayout, onBa
 // Add a block (PD8c)
 // ---------------------------------------------------------------------------
 
-function AddBlockDialog({ card, model, sources, initialKind, onClose, onAdd }) {
+function AddBlockDialog({ card: given, model, sources, initialKind, onClose, onAdd }) {
+  // #3656: a field-based card is placed against as it will be, its fields' content as blocks.
+  const ready = useMemo(() => withFieldBlocks(given, model), [given, model]);
+  const card = ready.card || given;
   const [kind, setKind] = useState(ADDABLE_KINDS.includes(initialKind) ? initialKind : 'text');
   const [fields, setFields] = useState({ style: 'paragraph', text: '', ratio: '16:9' });
   const [video, setVideo] = useState(idle);
@@ -627,7 +634,7 @@ function AddBlockDialog({ card, model, sources, initialKind, onClose, onAdd }) {
   };
   const pickSize = (s) => { setSize(s); setAt(firstFree(card, s.cols, s.rows, model)); };
   const grid = at ? { c1: at.c1, r1: at.r1, c2: at.c1 + size.cols - 1, r2: at.r1 + size.rows - 1 } : null;
-  const problem = grid ? placementProblem(card, grid, model) : `No free ${size.cols} × ${size.rows} range on this card. Remove a block or pick a smaller size.`;
+  const problem = ready.error || (grid ? placementProblem(card, grid, model) : `No free ${size.cols} × ${size.rows} range on this card. Remove a block or pick a smaller size.`);
 
   const items = (sources.data?.items || []).filter((i) => i.state === 'recorded');
   const source = items.find((i) => i.source_key === fields.source_key) || null;

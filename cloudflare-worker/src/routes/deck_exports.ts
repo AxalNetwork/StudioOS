@@ -43,6 +43,7 @@ import { WorkspaceError } from '../services/google/workspace';
 import { createPresentation, driveName } from '../services/google/driveCreate';
 import { writeEditableDeck, type ChartShot } from '../services/decks/pptxEditable';
 import { stripTrailingSlashes } from '../util/url';
+import { DECK_PAGE_LOAD_MS, MAX_SLIDE_PNG_BYTES, renderUrl } from '../services/browserRun';
 
 const deckExports = new Hono<{ Bindings: Env }>();
 
@@ -54,6 +55,8 @@ export const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 export const IMAGES_MAX_BYTES = 12 * 1024 * 1024;
 export const IMAGES_MAX = 40;
 const IMAGE_DEADLINE_MS = 10_000;
+/** #3655: every chart picture of one Google Slides export, together. */
+export const CHART_SHOTS_BUDGET_MS = 120_000;
 
 export const NOT_RECORDED_MESSAGE = 'The export could not be recorded, so no file was made. Try again in a moment. Nothing was shared.';
 
@@ -216,25 +219,22 @@ deckExports.post('/:id/export/google-slides', async (c) => {
   const images = await fetchImages(imageUrlsOf(slides));
 
   // A chart is pictured from the print page, block by block, when the headless browser is bound.
-  const browser = (c.env as any).BROWSER;
+  // #3655: through the documented `quickAction` (`renderUrl`), one try each under one deadline;
+  // a chart that cannot be pictured goes in as words, as before.
   let chartShot: ChartShot | null = null;
-  if (browser?.fetch) {
+  if (typeof c.env.BROWSER?.quickAction === 'function') {
     const token = await signDeckPrintToken(c.env, row.id, 300, opts);
     const base = stripTrailingSlashes((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc');
+    const deadline = Date.now() + CHART_SHOTS_BUDGET_MS;
     chartShot = async (i, r) => {
-      const res = await browser.fetch('https://browser/screenshot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: `${base}/deck/print-export/${token}?print_mode=single&slide=${i}`,
-          viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
-          gotoOptions: { waitUntil: 'networkidle0', timeout: 45000 },
-          screenshotOptions: { type: 'png', omitBackground: false, clip: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.w), height: Math.round(r.h) } },
-        }),
-      });
-      if (!res.ok) return null;
-      const png = new Uint8Array(await res.arrayBuffer());
-      return sniffImage(png) === 'png' ? png : null;
+      const shot = await renderUrl(c.env, 'screenshot', {
+        url: `${base}/deck/print-export/${token}?print_mode=single&slide=${i}`,
+        viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
+        gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
+        screenshotOptions: { type: 'png', omitBackground: false, clip: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.w), height: Math.round(r.h) } },
+      }, { kind: 'png', maxBytes: MAX_SLIDE_PNG_BYTES, attempts: 1, deadline });
+      if (!shot.ok) { console.warn('[decks/export/google-slides] chart as words', shot.code, shot.status ?? ''); return null; }
+      return shot.bytes;
     };
   }
   const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot });
