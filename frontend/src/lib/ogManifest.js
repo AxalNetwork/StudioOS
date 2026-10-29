@@ -23,7 +23,7 @@ export const OG_MANIFEST = {
   "company": "9e7ceb16",
   "content": "2bc2c9b1",
   "default": "1a45773f",
-  "home": "69a1630b",
+  "home": "b37bea04",
   "jobs": "1dcccfe5",
   "pricing": "8612984c",
   "product": "29a42ae7",

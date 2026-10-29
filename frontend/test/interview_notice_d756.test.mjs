@@ -119,5 +119,5 @@ test('D756 the Privacy Policy links to the notice under its own section', () => 
   const html = render(React.createElement(PrivacyPage), '/privacy');
   assert.match(html, /<span class="ax-mono ax-legal-n">08<\/span><h2 id="ax-legal-s8" class="ax-legal-h2">Interviews recorded by founders<\/h2>/);
   assert.match(html, /href="\/privacy\/interviews"/);
-  assert.match(html, /<span class="ax-mono ax-legal-n">09<\/span><h2 id="ax-legal-s9" class="ax-legal-h2">Contact us<\/h2>/);
+  assert.match(html, /<span class="ax-mono ax-legal-n">10<\/span><h2 id="ax-legal-s10" class="ax-legal-h2">Contact us<\/h2>/);
 });
