@@ -17,11 +17,11 @@ test('the page state, from its hooks', () => {
   for (const [hooks, state] of cases) assert.equal(classify(new Set(hooks)), state, hooks.join('+'));
 });
 
-test('removal and the end win over a stale Leave button; a block needs its reason line', () => {
+test('removal and the end win over a stale Leave button; Meet\'s refusal alone is a block (D1374)', () => {
   assert.equal(classify(new Set(['leave', 'removed'])), 'removed');
   assert.equal(classify(new Set(['leave', 'ended'])), 'ended');
-  // "You can't join this video call" alone is not proof the organization blocks guests.
-  assert.equal(classify(new Set(['blocked'])), 'unknown');
+  // D1374: the live Workspace refusal (2026-10-29) says "You can't join this video call" with no organisation line.
+  assert.equal(classify(new Set(['blocked'])), 'platform_blocked');
   assert.deepEqual(REFUSAL, { not_admitted: 'not_admitted', platform_blocked: 'platform_blocked', link_invalid: 'link_invalid' });
   assert.deepEqual(['ended', 'removed', 'in_call'].map((s) => isOut(s as never)), [true, true, false]);
 });

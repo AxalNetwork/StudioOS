@@ -43,7 +43,9 @@ export const HOOKS = {
   lobby: { selector: 'text=/Asking to be let in|Please wait until a meeting host brings you into the call/i', purpose: 'the waiting room: no host has admitted the bot yet', page: 'lobby' },
   // ── refusals ──
   denied: { selector: 'text=/denied your request to join|You can.t join this call/i', purpose: 'the host refused the bot', page: 'denied' },
-  blocked: { selector: 'text=/You can.t join this video call/i', purpose: 'Meet will not let this guest in', page: 'blocked' },
+  // Seen live, 2026-10-29 (D1374): a Workspace meeting refusing a guest who is not signed in. Meet's words may be
+  // joined by non-breaking spaces, so the words are matched across any whitespace.
+  blocked: { selector: 'text=/You can.t\\s+join\\s+this\\s+video\\s+call|No\\s+one\\s+can\\s+join\\s+a\\s+meeting\\s+unless\\s+invited\\s+or\\s+admitted/i', purpose: 'Meet will not let this guest in', page: 'blocked' },
   blocked_org: { selector: 'text=/only people (in|from) .* can join/i', purpose: 'why: the meeting admits only its own Workspace organization', page: 'blocked' },
   link_invalid: { selector: 'text=/Check your meeting code|Invalid video call name|meeting code is invalid/i', purpose: 'the link names no meeting', page: 'link_invalid' },
   // ── an unread page, named for the run's diagnostic only (D1373) ──
