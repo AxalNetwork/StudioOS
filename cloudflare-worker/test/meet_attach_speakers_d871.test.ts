@@ -266,6 +266,45 @@ test('refusals store nothing: another organiser, not in the calendar, no Meet, n
   assert.equal(sessions(f).length, 0, 'no session opened for a refused attach');
 });
 
+test('the search reads the day around now first: a call on today\'s calendar costs one Calendar read, under a time limit', async (t) => {
+  const f = world();
+  await meetConnected(f);
+  const windows: number[] = [];
+  let signalled = 0;
+  mockFetch(t, {
+    ...TOKEN,
+    [`GET ${CAL}`]: (url, init) => {
+      windows.push(Date.parse(url.searchParams.get('timeMax')!) - Date.parse(url.searchParams.get('timeMin')!));
+      if (init?.signal instanceof AbortSignal) signalled++;
+      return json({ items: [event({ start: { dateTime: iso(-10 * 60_000) }, end: { dateTime: iso(50 * 60_000) } })] });
+    },
+  });
+  assert.equal((await attach(f, { join_url: `https://meet.google.com/${MEET_CODE}` })).status, 201);
+  assert.equal(windows.length, 1, 'found in the first, narrow read');
+  assert.ok(windows[0] <= 2 * 24 * HOUR, `the first read spans the day either side of now, not ${windows[0] / HOUR} h`);
+  assert.equal(signalled, 1, 'every Calendar read carries its own timeout');
+});
+
+test('a Meet code on no event (a call started from Meet itself) is refused within the search budget, not after the browser gives up', async (t) => {
+  const f = world();
+  await meetConnected(f);
+  let reads = 0;
+  const realNow = Date.now;
+  let skew = 0;
+  Date.now = () => realNow() + skew;
+  t.after(() => { Date.now = realNow; });
+  mockFetch(t, {
+    ...TOKEN,
+    // A long calendar: every page has another, and each read is slow.
+    [`GET ${CAL}`]: () => { reads++; skew += 3_000; return json({ items: [], nextPageToken: `p${reads}` }); },
+  });
+  const r = await attach(f, { join_url: `https://meet.google.com/${MEET_CODE}` });
+  assert.deepEqual([r.status, r.body.error], [503, 'meet_unreachable']);
+  assert.ok(reads <= 5, `stopped at the budget, after ${reads} reads (was up to 20)`);
+  assert.equal(refs(f).length, 0);
+  assert.equal(sessions(f).length, 0, 'nothing stored');
+});
+
 test('one call attaches once: the same event, or a link already pasted for a recording during it', async (t) => {
   const f = world();
   await meetConnected(f);

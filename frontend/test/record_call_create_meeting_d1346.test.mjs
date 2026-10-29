@@ -27,12 +27,12 @@ const by = (m, id) => m.nodes().find((n) => m.props(n)?.['data-testid'] === id);
 async function press(m, id) { await act(async () => { await m.props(by(m, id)).onClick?.({ preventDefault() {} }); }); }
 async function change(m, id, value) { await act(async () => { await m.props(by(m, id)).onChange({ target: { value } }); }); }
 
-function setup({ bot = BOT_OFF, channels = CONNECTED, instant, botAvailability } = {}) {
+function setup({ bot = BOT_OFF, channels = CONNECTED, instant, botAvailability, attachRefusal } = {}) {
   const made = [], sent = [], device = [], reads = [];
   const channelsSource = {
     async overview() { return channels; },
     async saveZoomCall(id, body) { device.push(['saveZoomCall', id, body]); return { session_id: 16 }; },
-    async attachCalendarMeet(id, body) { device.push(['attachCalendarMeet', id, body]); return { session_id: 17, bot: bot.platforms?.google_meet ? { status: 'joining' } : null }; },
+    async attachCalendarMeet(id, body) { device.push(['attachCalendarMeet', id, body]); if (attachRefusal) throw Object.assign(new Error(`refused: ${attachRefusal}`), { code: attachRefusal }); return { session_id: 17, bot: bot.platforms?.google_meet ? { status: 'joining' } : null }; },
     async instantMeeting(provider, minutes) { made.push([provider, minutes]); return instant ? instant(provider) : { provider, join_url: provider === 'zoom' ? ZOOM_LINK : provider === 'teams' ? TEAMS_LINK : MEET_LINK }; },
     ...(botAvailability ? { async botAvailability() { reads.push(1); return botAvailability(reads.length); } } : {}),
   };
@@ -144,6 +144,39 @@ test('bot deployed: a Meet call is saved for import and the Worker sends Eadwyn 
     assert.equal(t.opened[0].location.href, MEET_LINK);
   } finally { t.restore(); await m.unmount(); }
 
+});
+
+test('a Meet link on no Calendar event (a call started from Meet itself) still gets Eadwyn AI: Start sends the bot instead of refusing', async () => {
+  for (const code of ['meeting_not_in_calendar', 'meeting_not_hosted', 'meet_unreachable']) {
+    const s = setup({ bot: BOT_ON, attachRefusal: code });
+    const t = tabs();
+    const m = await mountContracts(h(RecordLightbox, s.props));
+    try {
+      await press(m, 'record-provider-google_meet');
+      await change(m, 'record-link', MEET_LINK);
+      await press(m, 'record-start');
+      assert.equal(s.device[0][0], 'attachCalendarMeet', code);
+      assert.deepEqual(s.sent, [{ meeting_url: MEET_LINK }], `${code}: the bot is sent to the pasted link`);
+      assert.equal(t.opened[0].location.href, MEET_LINK, `${code}: the meeting opens`);
+      assert.doesNotMatch(m.text(), /refused:/, `${code}: no refusal is shown`);
+    } finally { t.restore(); await m.unmount(); }
+  }
+});
+
+test('the bot fallback is not taken when it could double a run or the bot cannot join', async () => {
+  for (const [bot, code, why] of [[BOT_ON, 'timeout', 'a timed-out attach may have been saved and sent its own bot'], [BOT_ON, 'meeting_link_reused', 'already attached'], [BOT_OFF, 'meeting_not_in_calendar', 'the bot cannot join here']]) {
+    const s = setup({ bot, attachRefusal: code });
+    const t = tabs();
+    const m = await mountContracts(h(RecordLightbox, s.props));
+    try {
+      await press(m, 'record-provider-google_meet');
+      await change(m, 'record-link', MEET_LINK);
+      await press(m, 'record-start');
+      assert.deepEqual(s.sent, [], why);
+      assert.match(m.text(), new RegExp(`refused: ${code}`), `${why}: the refusal is shown`);
+      assert.ok(t.opened.every((tab) => tab.closed), `${why}: the tab opened by the press is closed`);
+    } finally { t.restore(); await m.unmount(); }
+  }
 });
 
 test('Start with no link creates the meeting, fills the link, saves the call and opens it: Zoom and Meet', async () => {
