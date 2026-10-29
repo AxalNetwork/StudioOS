@@ -242,3 +242,14 @@ test('D1373: an unread pre-join page says which kind it was: the browser decline
     await bot.leave();
   });
 });
+
+test('D1374: the live Workspace refusal (non-breaking spaces, no organisation line) is platform_blocked, not an unread page', { skip }, async () => {
+  await withMeetPage(async (page) => {
+    const lines: string[] = [];
+    const bot = new MeetAdapter(page, { pollMs: 10, stepTimeoutMs: 2000, log: (event) => lines.push(event) });
+    await assert.rejects(bot.join({ url: 'https://meet.google.com/blocked_live-fixture', botName: BOT_NAME, signal: soon() }), { code: 'platform_blocked' });
+    assert.equal(bot.diagnostic(), 'meet_prejoin_result:platform_blocked');
+    assert.ok(!lines.some((l) => l.startsWith('meeting_bot.meet_page_')), 'a refusal Meet states is not an unread page');
+    await bot.leave();
+  });
+});

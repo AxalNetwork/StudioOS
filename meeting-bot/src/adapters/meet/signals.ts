@@ -24,7 +24,8 @@ type StateHook = typeof STATE_HOOKS[number];
 const RULES: ReadonlyArray<readonly [MeetState, readonly StateHook[]]> = [
   ['removed', ['removed']],
   ['ended', ['ended']],
-  ['platform_blocked', ['blocked', 'blocked_org']],
+  // D1374: Meet's own refusal is enough. A live Workspace refusal (2026-10-29) carries no organisation line.
+  ['platform_blocked', ['blocked']],
   ['link_invalid', ['link_invalid']],
   ['not_admitted', ['denied']],
   ['in_call', ['leave']],
