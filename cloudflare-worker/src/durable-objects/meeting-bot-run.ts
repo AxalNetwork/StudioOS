@@ -82,7 +82,7 @@ export class MeetingBotRun implements DurableObject {
         else if (action === '/event') return await this.event(req,run);
         else if (action === '/chunk') return await this.upload(req,run);
         else if (action === '/zoom-credentials') {
-          if (!await this.allowed(run) || !['joining','waiting_room'].includes(run.status) || (await this.lease()??0)<=Date.now()) throw new BotError(403,'bot_zoom_unavailable','The Zoom runtime is not available.');
+          if (!await this.allowed(run) || !['joining','waiting_room'].includes(run.status) || (await this.lease()??0)<=Date.now()) throw new BotError(403,'zoom_run_inactive','The Zoom runtime is not available.');
           const last=await this.state.storage.get<number>('credentials_requested_at')??0;
           if (Date.now()-last<2500) throw new BotError(429,'bot_zoom_rate','The runtime must wait before retrying.');
           await this.state.storage.put('credentials_requested_at',Date.now());

@@ -9,15 +9,21 @@ import { MeetingProviderError } from './channels/meetings';
 export async function zoomRuntimeCredentials(env: Env, run: BotRun) {
   await botSession(env,run);
   const id=env.MEETING_BOT_ZOOM_CLIENT_ID,secret=env.MEETING_BOT_ZOOM_CLIENT_SECRET;
-  if (run.platform!=='zoom' || !id || !secret || !['joining','waiting_room'].includes(run.status)) throw new BotError(503,'bot_zoom_unavailable','The Zoom runtime is not configured.');
+  // D1381: each refusal says which check failed, as a code the bot records (never a provider message).
+  if (!id || !secret) throw new BotError(503,'zoom_bot_unconfigured','The Zoom runtime is not configured.');
+  if (run.platform!=='zoom' || !['joining','waiting_room'].includes(run.status)) throw new BotError(503,'zoom_run_inactive','The Zoom runtime is not configured.');
   const raw=await decryptColumn(env,'meeting_bots','meeting_url_enc',run.uid,run.meeting_url_enc);
   const parsed=botPlatform(raw),url=new URL(parsed.url);
   const meeting=/^\/(?:j\/|wc\/join\/)(\d{6,20})\/?$/.exec(url.pathname)?.[1];
+  if (parsed.platform!=='zoom' || !meeting) throw new BotError(503,'zoom_meeting_unread','The Zoom runtime is not configured.');
   const connection=await zoomConnection(env,run.user_id);
-  if (parsed.platform!=='zoom' || !meeting || !connection) throw new BotError(503,'bot_zoom_unavailable','The Zoom runtime is not configured.');
+  if (!connection) throw new BotError(503,'zoom_not_connected','The Zoom runtime is not configured.');
   let token:string|undefined,waiting=false;
   try { token=await mintObfToken(env,connection,meeting); }
-  catch(e) { if(e instanceof MeetingProviderError && e.code==='zoom_waiting_for_host') waiting=true; else throw new BotError(503,'bot_zoom_unavailable','The Zoom runtime is not configured.'); }
+  catch(e) {
+    if(e instanceof MeetingProviderError && e.code==='zoom_waiting_for_host') waiting=true;
+    else throw new BotError(503,e instanceof MeetingProviderError && /^zoom_[a-z_]{1,35}$/.test(e.code) ? e.code : 'zoom_obf_failed','The Zoom runtime is not configured.');
+  }
   // No caller-supplied user/meeting id; recheck access/consent after the provider.
   await botSession(env,run);
   const now=Math.floor(Date.now()/1000),iat=now-30;

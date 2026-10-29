@@ -48,7 +48,7 @@ export function zoomMeeting(raw: string): { meetingId: string; passcode: string 
   } catch { throw new AdapterFailure('link_invalid'); }
 }
 
-const stopped = (signal: AbortSignal) => { if (signal.aborted) throw new AdapterFailure('obf_unavailable'); };
+const stopped = (signal: AbortSignal) => { if (signal.aborted) throw new AdapterFailure('obf_unavailable', 'join_timed_out'); };
 const pause = (signal: AbortSignal) => new Promise<void>((resolve, reject) => {
   stopped(signal);
   const abort = () => { clearTimeout(timer); reject(new AdapterFailure('obf_unavailable')); };
@@ -97,13 +97,14 @@ export class ZoomAdapter implements MeetingAdapter {
       } catch (e) {
         if (!(e instanceof ZoomJoinFailure && e.code === 'authorized_user_absent')) {
           if (e instanceof ZoomJoinFailure && e.code === 'ended') throw new AdapterFailure('meeting_ended');
-          throw new AdapterFailure('obf_unavailable');
+          if (e instanceof AdapterFailure && e.detail) throw e;
+          throw new AdapterFailure('obf_unavailable', e instanceof ZoomJoinFailure ? `sdk_${e.code}` : 'join_failed');
         }
       }
       await this.deps.waitingForHost();
       await (this.deps.wait ?? pause)(joinSignal);
     }
-    throw new AdapterFailure('obf_unavailable');
+    throw new AdapterFailure('obf_unavailable', 'host_never_joined');
   }
 
   async admitted(signal: AbortSignal): Promise<void> {

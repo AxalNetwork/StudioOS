@@ -115,3 +115,19 @@ test('the registry lists user:read:token with one plain sentence, so a grant car
   const page = readFileSync('cloudflare-worker/src/integrations/connectorPages.ts', 'utf8');
   assert.match(page, /tool\('notetaker_join_token'/);
 });
+
+// D1381: Start pressed before the founder joined. Zoom answered a bare 403 (no scope code),
+// which was read as a missing scope and ended the run at once; it now waits for the founder.
+test('D1381: a 403 that names no scope means the founder is not in the call yet: the notetaker waits', async (t) => {
+  const w = await world();
+  let body: unknown = { code: 124, message: 'User not in meeting' };
+  zoomAnswers(t, () => json(body, 403));
+  const absent = await refusal(mintObfToken(w.env, w.conn, MEETING));
+  assert.deepEqual([absent.code, absent.retryable], ['zoom_waiting_for_host', true]);
+  body = null;
+  assert.equal((await refusal(mintObfToken(w.env, w.conn, MEETING))).code, 'zoom_waiting_for_host', 'an empty 403 waits too');
+  body = { code: 4711, message: 'Invalid access token, does not contain scopes:[user:read:token]' };
+  assert.equal((await refusal(mintObfToken(w.env, w.conn, MEETING))).code, 'zoom_obf_scope_missing');
+  body = { code: 999, message: 'does not contain scopes' };
+  assert.equal((await refusal(mintObfToken(w.env, w.conn, MEETING))).code, 'zoom_obf_scope_missing', 'a scope message without 4711');
+});

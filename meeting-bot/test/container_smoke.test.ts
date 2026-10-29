@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { RuntimeHost } from '../src/runtime.ts';
 import { signRequest } from '../src/callback.ts';
 import { FakeAdapter } from '../src/fakeAdapter.ts';
+import { AdapterFailure } from '../src/types.ts';
 import type { CallbackTransport, StatusReport } from '../src/types.ts';
 
 const UID='00000000-0000-4000-8000-000000000001',SECRET='synthetic-runtime-only-secret-0123456789';
@@ -56,4 +57,18 @@ test('factory completed after lease expiry still releases its adapter without jo
   assert.equal((await command(host,'/start',{...run(),budget_deadline_at:Date.now()+50})).status,202);
   await new Promise(resolve=>setTimeout(resolve,60));release(adapter);await host.shutdown();
   assert.equal(adapter.joinedAs,null);assert.equal(adapter.leaveCalls,1);assert.equal(host.running,false);
+});
+
+// D1381: an adapter that cannot start because the Worker refused its credentials reports
+// that refusal (obf_unavailable@<code>), not the old blanket platform_blocked@runtime_start.
+test('D1381: a named adapter failure at start is reported as itself; an unnamed one keeps runtime_start',async()=>{
+  for(const [thrown,expected] of [[new AdapterFailure('obf_unavailable','zoom_not_connected'),{code:'obf_unavailable',detail:'zoom_not_connected'}],
+    [new Error('synthetic'),{code:'platform_blocked',detail:'runtime_start'}]] as const){
+    const statuses:StatusReport[]=[];
+    const transport:CallbackTransport={async status(r){statuses.push(r);},async heartbeat(){return Date.now()+120_000;},async events(){},async putChunk(){}};
+    const host=new RuntimeHost({secret:SECRET,callbackOrigin:'https://axal.vc',notice:()=> 'Synthetic test notice',transport:()=>transport,adapter:async()=>{throw thrown;}});
+    assert.equal((await command(host,'/start',run())).status,202);
+    await host.shutdown();
+    assert.deepEqual(statuses.map(s=>({code:s.code,detail:s.detail})),[expected]);
+  }
 });

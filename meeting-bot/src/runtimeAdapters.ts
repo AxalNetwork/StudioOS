@@ -18,7 +18,8 @@ export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterCon
       const url=new URL(`/api/meeting-bots/${context.uid}/zoom-credentials`,context.callbackOrigin),raw='{}';
       const response=await (factories.fetch??fetch)(url,{method:'POST',body:raw,redirect:'error',signal:AbortSignal.any([AbortSignal.timeout(10_000),...(signal?[signal]:[])]),
         headers:{'content-type':'application/json',...await signRequest(context.secret,url.pathname,raw,Date.now())}});
-      if(!response.ok)throw new AdapterFailure('obf_unavailable');
+      // D1381: the Worker's refusal code (zoom_reconnect, zoom_not_in_meeting, ...) rides along; never its message.
+      if(!response.ok){const body=await response.json().catch(()=>null);throw new AdapterFailure('obf_unavailable',typeof body?.code==='string'?body.code:'credentials_refused');}
       const value=await response.json();
       if(typeof value?.sdk_jwt!=='string'||value.sdk_jwt.length<32||value.sdk_jwt.length>4096||!(value.waitingForHost===true||typeof value.token==='string'&&value.token.length>0&&value.token.length<=8192))throw new AdapterFailure('obf_unavailable');
       return value;

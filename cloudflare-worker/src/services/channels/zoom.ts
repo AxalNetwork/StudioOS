@@ -530,7 +530,14 @@ export async function mintObfToken(env: Env, conn: ZoomConnection, meetingId: st
   const res = await zoomApi(env, conn, `/users/me/token?type=onbehalf&meeting_id=${meetingId}`);
   if (res.status === 401) throw new MeetingProviderError('zoom_reconnect', false);
   // A grant from before `user:read:token` was added (Zoom 4711, "does not contain scopes").
-  if (res.status === 403) throw new MeetingProviderError('zoom_obf_scope_missing', false);
+  // D1381: any other 403 is read as Zoom refusing because the founder is not in the call
+  // yet, so the notetaker waits for them instead of failing at once (the live run of
+  // 2026-10-29, Start pressed before the founder joined, ended on a bare 403).
+  if (res.status === 403) {
+    const refusal = await res.clone().json().catch(() => null) as { code?: unknown; message?: unknown } | null;
+    const scope = Number(refusal?.code) === 4711 || /scope/i.test(String(refusal?.message ?? ''));
+    throw new MeetingProviderError(scope ? 'zoom_obf_scope_missing' : 'zoom_waiting_for_host', !scope);
+  }
   if (res.status === 429 || res.status >= 500) throw new MeetingProviderError('zoom_unreachable', true);
   // Zoom refuses the mint while the authorizing user is not in the meeting (UNVERIFIED: its exact status).
   if (!res.ok) throw new MeetingProviderError('zoom_waiting_for_host', true);

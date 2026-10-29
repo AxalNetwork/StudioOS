@@ -25,10 +25,13 @@ export type BotState = 'joining' | 'waiting_room' | 'recording' | 'left' | 'fail
 /** An adapter's refusal, carrying one of D886's codes and never the platform's own message. */
 export class AdapterFailure extends Error {
   readonly code: FailureCode;
-  constructor(code: FailureCode) {
+  /** D1381: why, as a lowercase code (the Worker's refusal or the SDK's), never a provider message. */
+  readonly detail?: string;
+  constructor(code: FailureCode, detail?: string) {
     super(code);
     this.name = 'AdapterFailure';
     this.code = code;
+    if (detail && /^[a-z_]{1,40}$/.test(detail)) this.detail = detail;
   }
 }
 
