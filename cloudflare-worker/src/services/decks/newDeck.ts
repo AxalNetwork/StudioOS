@@ -24,6 +24,7 @@ import { AUDIENCES, modelProblems } from './slideModel';
 import { chooseLayout, fitProblems, type Evidence } from './designSystem';
 import type { Series } from './chartSeries';
 import { sanitizeDiagram, type Diagram } from './diagramModel';
+import { chartTypeFor } from './visuals';
 
 export type Audience = typeof AUDIENCES[number];
 
@@ -410,10 +411,10 @@ function tileSpans(n: number): Array<[number, number]> {
 /**
  * D897 §9 (#3659): what a card may draw besides its slots. `series` are the
  * venture's chart series (`chartSeries.ts`, read by code), `diagrams` a typed
- * diagram per card that a record placed (#3660 builds them). Nothing here
- * comes from a model.
+ * diagram per card that a record placed, and `rows` how many records a matrix
+ * placed (D903 §10, `visuals.ts` `recordDiagrams`). Nothing here comes from a model.
  */
-export type CardVisuals = { series?: Series[]; diagrams?: Record<string, Diagram> };
+export type CardVisuals = { series?: Series[]; diagrams?: Record<string, Diagram>; rows?: Record<string, number> };
 const NO_VISUALS: CardVisuals = {};
 
 /** The chart series each card may plot, best first: a connector's before the founder's typed one. */
@@ -456,8 +457,10 @@ export function evidenceOf(row: OutlineRow, items: SourceItem[], exclude: Exclud
     // Tiles are worth drawing once one figure is recorded; the missing ones then read "Not recorded" beside it.
     metrics: recorded.length ? figures.filter((f) => !isLongText(f)).length : 0,
     series: seriesFor(row.card, visuals.series) ? 1 : 0,
-    people: 0, rows: 0, images: 0,
-    steps: diagram ? diagram.items.length : 0,
+    people: 0, images: 0,
+    // D903 §10: a matrix is the comparison's rows; any other diagram is ordered steps.
+    rows: diagram?.type === 'matrix' ? Number(visuals.rows?.[row.card] ?? 0) : 0,
+    steps: diagram && diagram.type !== 'matrix' ? diagram.items.length : 0,
   };
 }
 
@@ -488,7 +491,7 @@ function compose(layout: string, row: OutlineRow, figures: Figure[], words: { he
     case 'chart_text': {
       const s = seriesFor(row.card, visuals.series)!;
       heading(G(1, 12, 1, 1));
-      blocks.push({ id: 'c', kind: 'chart', grid: G(1, 8, 2, 6), chart_type: 'line', range: 'all', previous: false, labels: true, series: [{ label: s.label, binding: seriesBinding(s) }] });
+      blocks.push({ id: 'c', kind: 'chart', grid: G(1, 8, 2, 6), chart_type: chartTypeFor(s) ?? 'line', range: 'all', previous: false, labels: true, series: [{ label: s.label, binding: seriesBinding(s) }] });
       tiles.filter((f) => f.value != null).slice(0, 2).forEach((f, i) => blocks.push(metricBlock(`m${i + 1}`, f, G(9, 12, 2 + i * 2, 3 + i * 2))));
       if (words.body) notes.push(words.body);
       break;
@@ -502,6 +505,14 @@ function compose(layout: string, row: OutlineRow, figures: Figure[], words: { he
       break;
     }
     case 'timeline': {
+      heading(G(1, 12, 1, 1));
+      const d = sanitizeDiagram(visuals.diagrams?.[row.card]);
+      blocks.push({ id: 'd', kind: 'graphic', grid: G(1, 12, 2, 5), graphic: d!.type, ratio: '2x2', diagram: d });
+      body(G(1, 12, 6, 6));
+      break;
+    }
+    case 'comparison_table': {
+      // D903 §10: the market as a matrix the founder's recorded positions placed.
       heading(G(1, 12, 1, 1));
       const d = sanitizeDiagram(visuals.diagrams?.[row.card]);
       blocks.push({ id: 'd', kind: 'graphic', grid: G(1, 12, 2, 5), graphic: d!.type, ratio: '2x2', diagram: d });

@@ -294,3 +294,24 @@ test('only the venture\'s writers ask for images', async () => {
     assert.equal(f.calls.length, 0);
   } finally { f.close(); }
 });
+
+// D903 §10 (#3660): the artwork plan is a proposal only, and says when this Worker cannot draw.
+test('the image plan: words-only cards, one art direction, nothing run or charged; without the AI binding it proposes nothing', async () => {
+  const f = await fixture();
+  try {
+    f.db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = 7').run(JSON.stringify([
+      { spec_id: 'new:title', title: 'Title', blocks: [{ id: 'h', kind: 'text', grid: { c1: 1, c2: 12, r1: 2, r2: 3 }, style: 'heading', text: 'Close the books in a day' }] },
+      { spec_id: 'new:traction', title: 'Traction', blocks: [] },
+    ]));
+    const r = await call(f, 2, '/api/decks/7/images/plan');
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.capability.available, true);
+    assert.deepEqual(r.body.cards.map((c: any) => c.card), ['title']);
+    assert.match(r.body.direction.suffix, /No text, no numbers/);
+    assert.deepEqual([f.runs().length, f.holds(), f.rows().length], [0, 0, 0], 'a plan runs, holds and stores nothing');
+    assert.equal((await call(f, 3, '/api/decks/7/images/plan')).status, 403, 'another venture');
+    delete f.env.AI;
+    const off = await call(f, 2, '/api/decks/7/images/plan');
+    assert.deepEqual([off.body.capability.available, off.body.cards], [false, []]);
+  } finally { f.close(); }
+});
