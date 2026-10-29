@@ -11,6 +11,7 @@
  * exactly that. A value nobody recorded reads "Not recorded", never 0.
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { fieldBlocks, renderableFields } from './presentExportModel.js';
 
 export { NOT_RECORDED };
 
@@ -129,12 +130,40 @@ const nextId = (blocks) => {
   return `b${n}`;
 };
 
-/** The card with one block added, or `{ error }` when it does not fit. */
+/**
+ * #3656: a field-based card as an editable one. A card with blocks is returned
+ * as it is. A card with none has its fields' content turned into blocks
+ * (`fieldBlocks`), so the first block or layout added never hides what the card
+ * showed; its fields stay stored, untouched. `{ error }` when the content
+ * cannot fit the grid: nothing is converted and nothing is hidden.
+ */
+export function withFieldBlocks(card, model) {
+  if (Array.isArray(card?.blocks) && card.blocks.length) return { card };
+  // Only a card whose fields say something: a new card with just a title is a new card.
+  if (!renderableFields(card).some((f) => f.kind !== 'title')) return { card };
+  const r = fieldBlocks(card, model);
+  if (r.error) return { error: r.error };
+  return { card: r.blocks.length ? { ...card, blocks: r.blocks } : card };
+}
+
+/**
+ * The card with one block added, or `{ error }` when it does not fit. A
+ * field-based card is converted first; when the range asked for now overlaps
+ * its content, the block takes the first free range of the same size.
+ */
 export function addBlock(card, block, model) {
-  const problem = placementProblem(card, block.grid, model);
+  const ready = withFieldBlocks(card, model);
+  if (ready.error) return { error: ready.error };
+  const base = ready.card;
+  let grid = block.grid;
+  if (base !== card && grid && placementProblem(base, grid, model)) {
+    const at = firstFree(base, grid.c2 - grid.c1 + 1, grid.r2 - grid.r1 + 1, model);
+    if (at) grid = { c1: at.c1, r1: at.r1, c2: at.c1 + (block.grid.c2 - block.grid.c1), r2: at.r1 + (block.grid.r2 - block.grid.r1) };
+  }
+  const problem = placementProblem(base, grid, model);
   if (problem) return { error: problem };
-  const blocks = Array.isArray(card.blocks) ? card.blocks : [];
-  return { card: { ...card, blocks: [...blocks, { ...block, id: block.id || nextId(blocks) }] } };
+  const blocks = Array.isArray(base.blocks) ? base.blocks : [];
+  return { card: { ...base, blocks: [...blocks, { ...block, grid, id: block.id || nextId(blocks) }] } };
 }
 
 export function removeBlock(card, id) {
@@ -152,6 +181,11 @@ export function updateBlock(card, id, patch) {
  * `dropped`, so the dialog can say so before anything changes.
  */
 export function applyLayout(card, layout) {
+  // #3656: a field-based card's content moves with it, kind by kind, like any other card's.
+  // When it cannot be converted, the layout is refused rather than hiding it.
+  const ready = withFieldBlocks(card, null);
+  if (ready.error) return { error: ready.error, card, dropped: [] };
+  card = ready.card;
   const old = Array.isArray(card?.blocks) ? card.blocks : [];
   const byKind = new Map();
   for (const b of old) byKind.set(b.kind, [...(byKind.get(b.kind) || []), b]);
