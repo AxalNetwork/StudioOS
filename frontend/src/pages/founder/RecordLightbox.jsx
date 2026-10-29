@@ -20,7 +20,7 @@ import { recordSourceLine } from '../../lib/validateSourceWording.js';
 import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
 import {
   CONSENTS, DURATIONS, HOW_OPTIONS, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callChannel, callLabel, chipStatus, consentNote, howOf,
-  defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
+  defaultProvider, estimate, hasMeetingLink, languageOptions, meetingAppHref, meetingLinkProblem, phoneOs, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
   startRefusal, startState, talkingPoints, threadsFor, modeNote, createMeetingOffer, createdLink, botState, botTranscriptLine, meetingHref, callCapture, callStartPlan, callStartNote, IMPORT_NOTE, TOKENS_ADDED_START,
 } from './recordSetup.js';
 
@@ -444,9 +444,14 @@ export default function RecordLightbox({
     if (!ready || sending.current) return;
     sending.current = true;
     setBusy(true); setRefusal(null); setAssigned(null);
+    // D1377: on a phone the call opens in the Zoom or Meet app, so no browser tab is opened for it.
+    const os = phoneOs(globalThis.navigator);
+    const inApp = !!os && (provider === 'zoom' || (provider === 'google_meet' && os === 'android'));
     let tab = null;
-    try { tab = typeof window !== 'undefined' && typeof window.open === 'function' ? window.open('', '_blank') : null; } catch { tab = null; }
-    try { if (tab) tab.opener = null; } catch { /* a cross-origin tab keeps its own opener */ }
+    if (!inApp) {
+      try { tab = typeof window !== 'undefined' && typeof window.open === 'function' ? window.open('', '_blank') : null; } catch { tab = null; }
+      try { if (tab) tab.opener = null; } catch { /* a cross-origin tab keeps its own opener */ }
+    }
     const refuse = (e) => {
       try { tab?.close?.(); } catch { /* already closed */ }
       setRefusal(startRefusal(e)); setBusy(false); sending.current = false;
@@ -462,6 +467,8 @@ export default function RecordLightbox({
     const href = meetingHref(provider, url);
     const opened = () => {
       if (!href) return;
+      const app = inApp ? meetingAppHref(provider, url, os) : null;
+      if (app) { try { globalThis.location?.assign?.(app); return; } catch { /* the session page offers the link */ } }
       try { if (tab && !tab.closed) { tab.location.href = href; return; } } catch { /* fall through */ }
       try { window.open(href, '_blank', 'noopener'); } catch { /* the session page offers the link */ }
     };

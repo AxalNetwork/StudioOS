@@ -261,6 +261,46 @@ export function meetingHref(provider, raw) {
     return u.protocol === 'https:' && (host === 'teams.microsoft.com' || host === 'teams.live.com' || host === 'teams.cloud.microsoft') ? u.toString() : null;
   } catch { return null; }
 }
+/**
+ * D1377: the phone the dialog runs on, from the browser's own user agent:
+ * 'ios', 'android', or null for a computer. An iPad that reports a Mac is
+ * known by its touch points.
+ */
+export function phoneOs(nav) {
+  const ua = String(nav?.userAgent || '');
+  if (/Android/i.test(ua)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && Number(nav?.maxTouchPoints) > 1)) return 'ios';
+  return null;
+}
+
+const ZOOM_MEETING_PATH = /^\/(?:j|w|wc\/join)\/(\d{9,11})\/?$/;
+/**
+ * D1377: on a phone, the meeting opens in its app, not a web page:
+ * - Zoom (iPhone and Android): `zoomus://zoom.us/join?confno=…&pwd=…`, the
+ *   Zoom app's own join link, built from the checked https link's id and
+ *   passcode;
+ * - Google Meet on Android: an intent for the Meet app, with the https link
+ *   as the browser's fallback when the app is not installed.
+ * Null otherwise: a computer, Teams, and Meet on an iPhone keep the https
+ * link, which the Meet app takes on its own.
+ */
+export function meetingAppHref(provider, raw, os) {
+  const href = meetingHref(provider, raw);
+  if (!href || !os) return null;
+  const u = new URL(href);
+  if (provider === 'zoom') {
+    const id = ZOOM_MEETING_PATH.exec(u.pathname)?.[1];
+    if (!id) return null;
+    const q = new URLSearchParams({ confno: id });
+    const pwd = u.searchParams.get('pwd');
+    if (pwd) q.set('pwd', pwd);
+    return `zoomus://zoom.us/join?${q.toString()}`;
+  }
+  if (provider === 'google_meet' && os === 'android') {
+    return `intent://${u.host}${u.pathname}#Intent;scheme=https;package=com.google.android.apps.tachyon;S.browser_fallback_url=${encodeURIComponent(href)};end`;
+  }
+  return null;
+}
 /** The link the Worker made, or null: a reply that is not a link on the provider's own host fills nothing. */
 export function createdLink(provider, reply) {
   const url = typeof reply?.join_url === 'string' ? reply.join_url.trim() : '';

@@ -9,7 +9,7 @@ import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
 import RecordLightbox from '../src/pages/founder/RecordLightbox.jsx';
 import {
-  BOT_UNAVAILABLE, BOT_UNREADABLE, TEAMS_CREATE_NOTE, TEAMS_NO_CAPTURE, botState, botTranscriptLine, callStartNote, callStartPlan, createMeetingOffer, createdLink, meetingHref,
+  BOT_UNAVAILABLE, BOT_UNREADABLE, TEAMS_CREATE_NOTE, TEAMS_NO_CAPTURE, botState, botTranscriptLine, callStartNote, callStartPlan, createMeetingOffer, createdLink, meetingAppHref, meetingHref, phoneOs,
 } from '../src/pages/founder/recordSetup.js';
 import { BOT_ENGINE, RECORD_ENGINE } from '../src/lib/validateSourceWording.js';
 
@@ -176,6 +176,59 @@ test('the bot fallback is not taken when it could double a run or the bot cannot
       assert.match(m.text(), new RegExp(`refused: ${code}`), `${why}: the refusal is shown`);
       assert.ok(t.opened.every((tab) => tab.closed), `${why}: the tab opened by the press is closed`);
     } finally { t.restore(); await m.unmount(); }
+  }
+});
+
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+const ANDROID = 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36';
+const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';
+
+test('D1377: the phone is read from the browser; on it a meeting opens in its app, and the link is only ever the checked one', () => {
+  assert.deepEqual([phoneOs({ userAgent: IPHONE }), phoneOs({ userAgent: ANDROID }), phoneOs({ userAgent: MAC }), phoneOs({ userAgent: MAC, maxTouchPoints: 5 }), phoneOs(null)],
+    ['ios', 'android', null, 'ios', null]);
+  assert.equal(meetingAppHref('zoom', ZOOM_LINK, 'ios'), 'zoomus://zoom.us/join?confno=85746065432&pwd=abc');
+  assert.equal(meetingAppHref('zoom', 'https://us05web.zoom.us/j/82436256995', 'android'), 'zoomus://zoom.us/join?confno=82436256995');
+  assert.equal(meetingAppHref('google_meet', MEET_LINK, 'android'),
+    `intent://meet.google.com/abc-mnop-xyz#Intent;scheme=https;package=com.google.android.apps.tachyon;S.browser_fallback_url=${encodeURIComponent(MEET_LINK)};end`);
+  assert.equal(meetingAppHref('google_meet', MEET_LINK, 'ios'), null, 'Meet on an iPhone keeps its https link, which the Meet app takes');
+  assert.equal(meetingAppHref('zoom', ZOOM_LINK, null), null, 'a computer keeps the web link');
+  assert.equal(meetingAppHref('teams', TEAMS_LINK, 'ios'), null);
+  assert.equal(meetingAppHref('zoom', 'https://evil.example/j/85746065432', 'ios'), null, 'only a link on the provider\'s own host');
+  assert.equal(meetingAppHref('zoom', 'https://zoom.us/my/someone', 'ios'), null, 'a personal room name is not a meeting id');
+});
+
+test('D1377: on a phone Start opens the Zoom or Meet app, with no browser tab; a computer still gets the tab', async () => {
+  const navDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const run = async (ua, provider, link) => {
+    const assigned = [];
+    Object.defineProperty(globalThis, 'navigator', { value: { userAgent: ua, maxTouchPoints: 5 }, configurable: true, writable: true });
+    const s = setup({ bot: BOT_ON });
+    const t = tabs();
+    const m = await mountContracts(h(RecordLightbox, s.props));
+    // The mount sets its own location; the app hand-off is read from it after.
+    globalThis.location.assign = (u) => assigned.push(u);
+    try {
+      await press(m, `record-provider-${provider}`);
+      await change(m, 'record-link', link);
+      await press(m, 'record-start');
+      return { assigned, opened: t.opened };
+    } finally { t.restore(); await m.unmount(); }
+  };
+  try {
+    const zoomPhone = await run(IPHONE, 'zoom', ZOOM_LINK);
+    assert.deepEqual(zoomPhone.assigned, ['zoomus://zoom.us/join?confno=85746065432&pwd=abc']);
+    assert.equal(zoomPhone.opened.length, 0, 'no browser tab on a phone');
+    const meetAndroid = await run(ANDROID, 'google_meet', MEET_LINK);
+    assert.match(meetAndroid.assigned[0] || '', /^intent:\/\/meet\.google\.com\/abc-mnop-xyz#Intent;.*package=com\.google\.android\.apps\.tachyon/);
+    assert.equal(meetAndroid.opened.length, 0);
+    const meetIphone = await run(IPHONE, 'google_meet', MEET_LINK);
+    assert.deepEqual(meetIphone.assigned, [], 'Meet on an iPhone uses its https link');
+    assert.equal(meetIphone.opened[0]?.location.href, MEET_LINK);
+    const zoomMac = await run(MAC.replace('Macintosh', 'X11'), 'zoom', ZOOM_LINK);
+    assert.deepEqual(zoomMac.assigned, []);
+    assert.equal(zoomMac.opened[0]?.location.href, ZOOM_LINK, 'a computer keeps the tab');
+  } finally {
+    if (navDesc) Object.defineProperty(globalThis, 'navigator', navDesc); else delete globalThis.navigator;
   }
 });
 
