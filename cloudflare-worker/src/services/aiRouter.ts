@@ -1588,9 +1588,13 @@ async function guardSlice(env: Env, opts: RunOptions, slice: string, side: 'inpu
     ? [{ role: 'user', content: slice }]
     : [{ role: 'user', content: GUARD_OUTPUT_TURN }, { role: 'assistant', content: slice }];
   const ms = shapes.TIMEOUT_MS.chat;
-  const r = await withTimeout(callWorkersAI(env, GUARD_MODEL, {
+  const ask = () => withTimeout(callWorkersAI(env, GUARD_MODEL, {
     task: 'safety', userId: opts.userId, surface: opts.surface, messages, maxTokens: GUARD_MAX_TOKENS, temperature: 0,
   }, false, false, ms), ms);
+  // D1375: one slow or failed answer is asked once more before the guard fails closed.
+  // Only a call that did not complete is retried; an unsafe or unreadable verdict never is.
+  let r = await ask();
+  if (!r.ok) r = await ask();
   const verdict = r.ok ? guard.parseVerdict(r.output) : { verdict: 'unreadable' as const };
   const prompt = r.ok ? r.prompt_tokens || 0 : 0;
   const completion = r.ok ? r.completion_tokens || 0 : 0;
