@@ -208,6 +208,96 @@ export async function createMeeting(env: Env, conn: GoogleConnection, input: Mee
   return { externalRef: eventId, joinUrl, startsAt, endsAt, meetingCode: meetingCodeOf(joinUrl)! };
 }
 
+// ───────────────────────────────────────────────────────────── D1376: a space Axal creates
+
+/** Create a Meet space Axal owns: only the spaces this app created, nothing else of the member's. */
+export const MEET_SPACE_SCOPE = 'https://www.googleapis.com/auth/meetings.space.created';
+
+/** Whether the member's grant lets Axal create Meet spaces (asked with the transcript permission). */
+export function canCreateSpaces(conn: GoogleConnection | null): boolean {
+  return !!conn && conn.scope.split(/[\s,]+/).includes(MEET_SPACE_SCOPE);
+}
+
+export interface CreatedSpace { spaceName: string; joinUrl: string; meetingCode: string; autoTranscribe: boolean }
+
+const SPACE_NAME = /^spaces\/[A-Za-z0-9_-]{1,128}$/;
+const MEET_FETCH_TIMEOUT_MS = 8_000;
+
+async function postSpace(token: string, config: Record<string, unknown>): Promise<Response> {
+  try {
+    return await fetch(`${MEET_API}/spaces`, {
+      method: 'POST', signal: AbortSignal.timeout(MEET_FETCH_TIMEOUT_MS),
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config }),
+    });
+  } catch {
+    throw new MeetingProviderError('meet_unreachable', true);
+  }
+}
+
+/**
+ * D1376: a Meet space on the member's own account, created through the Meet
+ * API so its settings are Axal's to choose, not the account's defaults:
+ * - Open: anyone with the link joins without knocking, so Eadwyn AI gets in
+ *   (within what the member's Workspace admin allows guests);
+ * - transcription generated automatically, so a call whose admin turns away
+ *   every guest still leaves Google's own transcript to import.
+ * An account whose plan has no automatic transcripts (a personal one) refuses
+ * the artifact setting; the space is then made Open alone.
+ */
+export async function createOpenSpace(env: Env, conn: GoogleConnection): Promise<CreatedSpace> {
+  const token = await accessToken(env, conn.userId);
+  const open = { accessType: 'OPEN' };
+  let autoTranscribe = true;
+  let res = await postSpace(token, { ...open, artifactConfig: { transcriptionConfig: { autoGenerationType: 'ON' } } });
+  if (res.status === 400 || res.status === 403) {
+    autoTranscribe = false;
+    res = await postSpace(token, open);
+  }
+  if (res.status === 401) throw new MeetingProviderError('meet_reconnect', false);
+  if (res.status === 403) throw new MeetingProviderError('meet_reconnect', false);
+  if (res.status === 429 || res.status >= 500) throw new MeetingProviderError('meet_unreachable', true);
+  if (!res.ok) throw new MeetingProviderError('meet_create_failed', false);
+  const body = await res.json().catch(() => null) as { name?: string; meetingUri?: string } | null;
+  const spaceName = String(body?.name ?? '');
+  const joinUrl = String(body?.meetingUri ?? '');
+  const meetingCode = meetingCodeOf(joinUrl);
+  if (!SPACE_NAME.test(spaceName) || !/^https:\/\/meet\.google\.com\//.test(joinUrl) || !meetingCode) {
+    throw new MeetingProviderError('meet_link_unavailable', false);
+  }
+  return { spaceName, joinUrl, meetingCode, autoTranscribe };
+}
+
+/** Remember a space Axal created, so attaching its link finds it without a Calendar event. */
+export async function recordCreatedSpace(env: Env, userId: number, space: CreatedSpace, startsAt: string, endsAt: string): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO meet_created_spaces (user_id, meeting_code, space_name, join_url, auto_transcribe, starts_at, ends_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(userId, space.meetingCode, space.spaceName, space.joinUrl, space.autoTranscribe ? 1 : 0, startsAt, endsAt).run();
+}
+
+/**
+ * The member's own Axal-created space for a Meet code, made within Meet's 30
+ * days, as the call an attach saves: hosted by them, with its slot. NULL when
+ * Axal did not create it (or before migration 656).
+ */
+export async function createdSpaceCall(env: Env, userId: number, meetingCode: string): Promise<CalendarMeet | null> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT space_name, join_url, starts_at, ends_at FROM meet_created_spaces
+        WHERE user_id = ? AND meeting_code = ? AND created_at >= datetime('now', '-30 days')
+        ORDER BY id DESC LIMIT 1`,
+    ).bind(userId, meetingCode.toLowerCase()).first<{ space_name: string; join_url: string; starts_at: string; ends_at: string }>();
+    if (!row) return null;
+    return {
+      eventId: String(row.space_name).replace('/', ':'), joinUrl: row.join_url, meetingCode: meetingCode.toLowerCase(),
+      startsAt: row.starts_at, endsAt: row.ends_at, organizerSelf: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Delete the Calendar event (and with it the meeting's place on the calendar). */
 export async function cancelMeeting(env: Env, conn: GoogleConnection, externalRef: string): Promise<boolean> {
   if (!/^[A-Za-z0-9_-]{5,1024}$/.test(externalRef)) return false;

@@ -83,7 +83,7 @@ function world() {
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
-    '488_channel_consents.sql', '529_meeting_transcript_source.sql']) db.exec(migration(name));
+    '488_channel_consents.sql', '529_meeting_transcript_source.sql', '656_meet_created_spaces.sql']) db.exec(migration(name));
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
@@ -303,6 +303,35 @@ test('a Meet code on no event (a call started from Meet itself) is refused withi
   assert.ok(reads <= 5, `stopped at the budget, after ${reads} reads (was up to 20)`);
   assert.equal(refs(f).length, 0);
   assert.equal(sessions(f).length, 0, 'nothing stored');
+});
+
+test('D1376: a space Axal created attaches with no Calendar read, as the member\'s own call in its slot, and its transcript is found by code', async (t) => {
+  const f = world();
+  await meetConnected(f);
+  const starts = iso(-2 * HOUR), ends = iso(-1 * HOUR);
+  f.db.prepare(`INSERT INTO meet_created_spaces (user_id, meeting_code, space_name, join_url, auto_transcribe, starts_at, ends_at)
+                VALUES (?, ?, 'spaces/sp1abc', ?, 1, ?, ?)`).run(ME, MEET_CODE, `https://meet.google.com/${MEET_CODE}`, starts, ends);
+  const calls = mockFetch(t, {
+    ...TOKEN,
+    [`GET ${MEET}/conferenceRecords`]: (url) => {
+      assert.equal(url.searchParams.get('filter'), `space.meeting_code = "${MEET_CODE}"`);
+      return json({ conferenceRecords: [] });
+    },
+  });
+  const made = await attach(f, { join_url: `https://meet.google.com/${MEET_CODE}` });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  assert.ok(!calls.some((k) => k.includes('/calendar/v3/')), 'no Calendar search for a space Axal made');
+  const [ref] = refs(f);
+  assert.deepEqual([ref.external_ref, ref.starts_at, ref.ends_at, ref.status], ['spaces:sp1abc', starts, ends, 'ended']);
+  assert.equal(sessions(f).length, 1);
+  // Another member's space with the same code is not theirs: the Calendar is read, and it is not there.
+  const g = world();
+  await meetConnected(g);
+  g.db.prepare(`INSERT INTO meet_created_spaces (user_id, meeting_code, space_name, join_url, starts_at, ends_at)
+                VALUES (99, ?, 'spaces/x', ?, ?, ?)`).run(MEET_CODE, `https://meet.google.com/${MEET_CODE}`, starts, ends);
+  mockFetch(t, { ...TOKEN, [`GET ${CAL}`]: () => json({ items: [] }) });
+  const theirs = await attach(g, { join_url: `https://meet.google.com/${MEET_CODE}` });
+  assert.deepEqual([theirs.status, theirs.body.error], [404, 'meeting_not_in_calendar']);
 });
 
 test('one call attaches once: the same event, or a link already pasted for a recording during it', async (t) => {

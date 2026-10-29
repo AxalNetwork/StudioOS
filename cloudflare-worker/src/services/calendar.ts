@@ -91,6 +91,12 @@ const GOOGLE_SCOPES = [
   'openid',
 ];
 export const GOOGLE_MEET_TRANSCRIPT_SCOPE = 'https://www.googleapis.com/auth/meetings.space.readonly';
+/**
+ * D1376: create Meet spaces through the Meet API, so a call Axal makes is Open
+ * (Eadwyn joins without knocking) and transcribes itself. It reaches only the
+ * spaces Axal created. Asked in the same consent as transcripts.
+ */
+export const GOOGLE_MEET_SPACE_SCOPE = 'https://www.googleapis.com/auth/meetings.space.created';
 
 // ===========================================================================
 // Microsoft constants — Graph v1.0 + Azure AD v2 endpoints. Tenant defaults
@@ -251,7 +257,7 @@ export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string, 
     client_id: googleCalClientId(env)!,
     redirect_uri: googleRedirectUri(env),
     response_type: 'code',
-    scope: [...GOOGLE_SCOPES, ...(includeMeetTranscripts ? [GOOGLE_MEET_TRANSCRIPT_SCOPE] : []), ...(includeWorkspaceFiles ? ['https://www.googleapis.com/auth/drive.file'] : [])].join(' '),
+    scope: [...GOOGLE_SCOPES, ...(includeMeetTranscripts ? [GOOGLE_MEET_TRANSCRIPT_SCOPE, GOOGLE_MEET_SPACE_SCOPE] : []), ...(includeWorkspaceFiles ? ['https://www.googleapis.com/auth/drive.file'] : [])].join(' '),
     access_type: 'offline',
     prompt: 'select_account consent',
     state,

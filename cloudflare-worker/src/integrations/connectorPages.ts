@@ -620,7 +620,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     tagline: 'Your Google Calendar events and interview slots, and sign-in with Google.',
     long_description: [
       'Calendar events and interview slots from your Google sign-in.',
-      'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
+      'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research. With that permission, a call you start in Record a Session is a Meet Axal creates: Open, so Eadwyn AI joins, and transcribing itself where your plan allows.',
       'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
       'Google Docs, Sheets, Slides, Forms and Drive files are chosen on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
     ],
@@ -632,6 +632,8 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       tool('delete_event', 'calendar events', 'write', 'Removes an event Axal VC added, when you cancel it.', null, ['export async function deleteEventFromGoogle(']),
       tool('create_meet_event', 'Meet interview calls', 'write', 'Adds an interview call with a Google Meet link, when you schedule one.', null,
         ["'/calendars/primary/events?conferenceDataVersion=1'"]),
+      tool('create_meet_space', 'Meet interview calls', 'write', 'Creates an Open Google Meet call that Eadwyn AI can join, set to transcribe itself where your plan allows, when you start a call in Record a Session after allowing it.', null,
+        ['return await fetch(`${MEET_API}/spaces`, {']),
       tool('list_events', 'calendar events', 'read', 'Reads events on your primary calendar.', 'customer_research',
         ['calendarFetch(token, `/calendars/primary/events?${q}`)', 'calendarFetch(token, `/calendars/primary/events/${eventId}`)']),
       tool('read_meet_transcripts', 'Meet transcripts', 'read', 'Reads a Meet call’s transcript, when you have allowed it.', 'customer_research', ['fetch(`${MEET_API}${path}`']),

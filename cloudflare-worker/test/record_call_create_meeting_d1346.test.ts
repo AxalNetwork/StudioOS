@@ -53,6 +53,7 @@ function world(over: Record<string, unknown> = {}) {
     CREATE TABLE user_recovery_state (user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
   `);
   for (const t of ['integrations', 'google_oauth_tokens']) db.exec(tableFromBaseline(BASELINE, t));
+  db.exec(readFileSync(new URL('../sql/migrations/656_meet_created_spaces.sql', import.meta.url), 'utf8'));
   const env: any = {
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48),
     ZOOM_CLIENT_ID: 'zoom-client-id', ZOOM_CLIENT_SECRET: 'zoom-client-secret', ZOOM_WEBHOOK_SECRET_TOKEN: 'zoom-webhook-secret',
@@ -70,10 +71,11 @@ async function connectZoom(f: World) {
   f.db.prepare(`INSERT INTO integrations (uid, user_id, provider_key, status, auth_type, credentials_enc)
                 VALUES (?, ?, 'zoom', 'active', 'oauth2', ?)`).run(uid, ME, enc);
 }
-async function connectGoogle(f: World) {
+async function connectGoogle(f: World, extraScope = '') {
   f.db.prepare('INSERT INTO google_oauth_tokens (user_id, refresh_token, scope) VALUES (?, ?, ?)')
-    .run(ME, await encryptString(f.env, 'google-refresh-token'), 'https://www.googleapis.com/auth/calendar.events openid');
+    .run(ME, await encryptString(f.env, 'google-refresh-token'), `https://www.googleapis.com/auth/calendar.events openid${extraScope}`);
 }
+const SPACE_SCOPE = ' https://www.googleapis.com/auth/meetings.space.created';
 
 type Handler = (url: URL, init: any) => Response | Promise<Response>;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -159,6 +161,54 @@ test('Google Meet: a Calendar event with a Meet link starting now; the reply is 
   const start = Date.parse(event.start.dateTime);
   assert.ok(start >= before - 1000 && start <= Date.now() + 1000, 'it starts now');
   assert.equal(Date.parse(event.end.dateTime) - start, 45 * 60_000);
+});
+
+test('D1376: with the Meet permission the call is a space Axal creates: Open and transcribing itself, no Calendar event', async (t) => {
+  const f = world();
+  await connectGoogle(f, SPACE_SCOPE);
+  const calls = mockFetch(t, {
+    'POST https://oauth2.googleapis.com/token': () => json({ access_token: 'g-at', expires_in: 3599, token_type: 'Bearer' }),
+    'POST https://meet.googleapis.com/v2/spaces': () => json({ name: 'spaces/sp1abc', meetingUri: `https://meet.google.com/${MEET_CODE}`, meetingCode: MEET_CODE }),
+  });
+  const r = await call(f.env, 'POST', '/meetings/instant', { provider: 'google_meet', duration_min: 45 });
+  assert.equal(r.status, 201, r.text);
+  assert.deepEqual(r.body, { provider: 'google_meet', join_url: `https://meet.google.com/${MEET_CODE}`, open: true, auto_transcribe: true });
+  const sent = JSON.parse(calls.find((c) => c.key.endsWith('/v2/spaces'))!.body!);
+  assert.deepEqual(sent.config, { accessType: 'OPEN', artifactConfig: { transcriptionConfig: { autoGenerationType: 'ON' } } });
+  assert.ok(!calls.some((c) => c.key.includes('/calendar/v3/')), 'no Calendar event');
+  const [row] = f.db.prepare('SELECT * FROM meet_created_spaces').all() as any[];
+  assert.deepEqual([row.user_id, row.meeting_code, row.space_name, row.auto_transcribe], [ME, MEET_CODE, 'spaces/sp1abc', 1]);
+  assert.equal(Date.parse(row.ends_at) - Date.parse(row.starts_at), 45 * 60_000, 'the slot an import reads');
+  assert.ok(!r.text.includes('g-at'), 'no token in the reply');
+});
+
+test('D1376: an account whose plan refuses automatic transcripts still gets an Open space; without the permission, the Calendar event as before', async (t) => {
+  const f = world();
+  await connectGoogle(f, SPACE_SCOPE);
+  const bodies: any[] = [];
+  mockFetch(t, {
+    'POST https://oauth2.googleapis.com/token': () => json({ access_token: 'g-at', expires_in: 3599, token_type: 'Bearer' }),
+    'POST https://meet.googleapis.com/v2/spaces': (_u, init) => {
+      const b = JSON.parse(String(init.body)); bodies.push(b);
+      return b.config.artifactConfig ? json({ error: { code: 400, status: 'FAILED_PRECONDITION' } }, 400)
+        : json({ name: 'spaces/sp2', meetingUri: `https://meet.google.com/${MEET_CODE}` });
+    },
+  });
+  const r = await call(f.env, 'POST', '/meetings/instant', { provider: 'google_meet' });
+  assert.equal(r.status, 201, r.text);
+  assert.equal(r.body.auto_transcribe, false);
+  assert.deepEqual(bodies.map((b) => b.config), [
+    { accessType: 'OPEN', artifactConfig: { transcriptionConfig: { autoGenerationType: 'ON' } } }, { accessType: 'OPEN' }]);
+
+  const g = world();
+  await connectGoogle(g);
+  const calls = mockFetch(t, {
+    'POST https://oauth2.googleapis.com/token': () => json({ access_token: 'g-at', expires_in: 3599, token_type: 'Bearer' }),
+    'POST https://www.googleapis.com/calendar/v3/calendars/primary/events': () => json({ id: 'evt0123abc', hangoutLink: `https://meet.google.com/${MEET_CODE}` }),
+  });
+  const old = await call(g.env, 'POST', '/meetings/instant', { provider: 'google_meet' });
+  assert.equal(old.status, 201);
+  assert.ok(!calls.some((c) => c.key.includes('meet.googleapis.com')), 'no Meet API without the permission');
 });
 
 test('not connected is 409, not set up is 503, and any other provider is 400', async (t) => {
