@@ -174,7 +174,8 @@ test('the bot fallback is not taken when it could double a run or the bot cannot
       await press(m, 'record-start');
       assert.deepEqual(s.sent, [], why);
       assert.match(m.text(), new RegExp(`refused: ${code}`), `${why}: the refusal is shown`);
-      assert.ok(t.opened.every((tab) => tab.closed), `${why}: the tab opened by the press is closed`);
+      // D1382: the founder's own meeting opened at the press and stays open; the refusal says what was not saved.
+      assert.deepEqual(t.opened.map((tab) => [tab.location.href, tab.closed]), [[MEET_LINK, false]], `${why}: the meeting stays open`);
     } finally { t.restore(); await m.unmount(); }
   }
 });
@@ -409,4 +410,25 @@ test('a late connection read cannot overwrite a newer return read', async () => 
     await act(async () => pending[2].reject(new Error('late failure')));
     assert.match(m.text(), /Google Meet · Connected/, 'older error cannot erase the newer success');
   } finally { await m.unmount(); }
+});
+
+// D1382: on a computer the meeting opens at the press, before the interview and call are saved.
+test('D1382: Start points the tab at the meeting before the save answers; a phone still waits for the save', async () => {
+  const s = setup({ bot: BOT_ON });
+  let answer;
+  s.props.channelsSource.saveZoomCall = (id, body) => new Promise((resolve) => { s.device.push(['saveZoomCall', id, body]); answer = () => resolve({ session_id: 16 }); });
+  const t = tabs();
+  const m = await mountContracts(h(RecordLightbox, s.props));
+  try {
+    await press(m, 'record-provider-zoom');
+    await change(m, 'record-link', ZOOM_LINK);
+    const pressing = press(m, 'record-start');
+    for (let i = 0; i < 20 && !answer; i++) await new Promise((r) => setTimeout(r, 0));
+    assert.ok(answer, 'the save is still in flight');
+    assert.equal(t.opened.length, 1);
+    assert.equal(t.opened[0].location.href, ZOOM_LINK, 'the meeting is already open while the call is being saved');
+    answer();
+    await pressing;
+    assert.deepEqual(t.opened.map((tab) => [tab.location.href, tab.closed]), [[ZOOM_LINK, false]], 'one tab, pointed once');
+  } finally { t.restore(); await m.unmount(); }
 });

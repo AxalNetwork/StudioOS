@@ -437,8 +437,12 @@ export default function RecordLightbox({
 
   /**
    * D1362: Start for a meeting. A tab is opened inside the click, before
-   * anything is awaited, so the browser lets it through; it is pointed at the
-   * meeting once the call is saved, and closed again if Start is refused.
+   * anything is awaited, so the browser lets it through. D1382: on a computer it is
+   * pointed at the meeting as soon as the link is known, and the call is saved while
+   * the founder joins; a refused save then leaves the founder's own meeting open and
+   * says what was not saved. A tab never pointed at a meeting is closed on refusal.
+   * On a phone the app still opens only once the call is saved: handing the page to
+   * the app would stop the save.
    */
   const startCall = async () => {
     if (!ready || sending.current) return;
@@ -452,8 +456,10 @@ export default function RecordLightbox({
       try { tab = typeof window !== 'undefined' && typeof window.open === 'function' ? window.open('', '_blank') : null; } catch { tab = null; }
       try { if (tab) tab.opener = null; } catch { /* a cross-origin tab keeps its own opener */ }
     }
+    let early = false;
+    const closeUnused = () => { if (!early) { try { tab?.close?.(); } catch { /* already closed */ } } };
     const refuse = (e) => {
-      try { tab?.close?.(); } catch { /* already closed */ }
+      closeUnused();
       setRefusal(startRefusal(e)); setBusy(false); sending.current = false;
     };
     let url = String(link).trim();
@@ -465,18 +471,22 @@ export default function RecordLightbox({
       } catch (e) { refuse(e); return; }
     }
     const href = meetingHref(provider, url);
+    let shown = false;
     const opened = () => {
-      if (!href) return;
+      if (!href || shown) return;
+      shown = true;
       const app = inApp ? meetingAppHref(provider, url, os) : null;
       if (app) { try { globalThis.location?.assign?.(app); return; } catch { /* the session page offers the link */ } }
       try { if (tab && !tab.closed) { tab.location.href = href; return; } } catch { /* fall through */ }
       try { window.open(href, '_blank', 'noopener'); } catch { /* the session page offers the link */ }
     };
+    // D1382: the founder joins now; the interview, session and Eadwyn AI are saved meanwhile.
+    if (!inApp && href && tab && !tab.closed) { opened(); early = true; }
     if (plan?.kind === 'import') {
       sending.current = false;
       const ok = await saveForImport(url, opened, !!plan.bot && botPlatform(url) === provider);
       if (ok === true) return;
-      if (ok !== 'bot') { try { tab?.close?.(); } catch { /* already closed */ } return; }
+      if (ok !== 'bot') { closeUnused(); return; }
       // Not importable, but Eadwyn AI can join it: the bot path below.
       sending.current = true; setBusy(true);
     }
@@ -495,7 +505,7 @@ export default function RecordLightbox({
         try {
           await sessions.sendBot(r.session.id, { meeting_url: url });
         } catch (e) {
-          try { tab?.close?.(); } catch { /* already closed */ }
+          closeUnused();
           setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}`,
             ...(tokenRefusal(e) ? { topUp: true, resume: () => { setRefusal(null); setBusy(true); sending.current = true; send(); } } : {}) });
           setBusy(false); sending.current = false;
