@@ -162,6 +162,13 @@ function Section({ title, children, testId }) {
   );
 }
 
+// A Meet link the Worker cannot import (a call started from Meet itself, so on
+// no Calendar event; another account's event; Calendar not answering) is still
+// a call Eadwyn AI can join: Start sends the bot to it instead of refusing. A
+// timeout is not among these: the attach may have been saved, and a second
+// session would send a second bot.
+const BOT_INSTEAD = new Set(['meeting_not_in_calendar', 'meeting_not_hosted', 'meeting_no_time', 'meet_unreachable']);
+
 export default function RecordLightbox({
   projectId, interview = null, onClose, onStarted, initialModels, initialBoard, channels: initialChannels, fields = SETUP_FIELDS,
   initialMode = 'in_person', initialConsent = '', api = defaultApi, sessions = interviewSessionsApi, channelsSource = channelsApi, returnFocusTo,
@@ -395,7 +402,7 @@ export default function RecordLightbox({
    * the call for later" makes one (and removed if the save is refused). The
    * Worker opens the call's own session; nothing is recorded here.
    */
-  const saveForImport = async (url, opened) => {
+  const saveForImport = async (url, opened, botInstead = false) => {
     sending.current = true;
     setBusy(true); setRefusal(null); setAssigned(null);
     const named = (who?.interviewee_name || name).trim();
@@ -420,6 +427,7 @@ export default function RecordLightbox({
     } catch (e) {
       // Not left half-made: an interview with no call would count as held.
       if (made?.id != null) { try { await api.deleteInterview(made.id); } catch { /* the refusal is the message */ } }
+      if (botInstead && provider === 'google_meet' && BOT_INSTEAD.has(e?.code)) return 'bot';
       setRefusal(startRefusal(e));
       setBusy(false); sending.current = false;
       return false;
@@ -459,9 +467,11 @@ export default function RecordLightbox({
     };
     if (plan?.kind === 'import') {
       sending.current = false;
-      const ok = await saveForImport(url, opened);
-      if (!ok) { try { tab?.close?.(); } catch { /* already closed */ } }
-      return;
+      const ok = await saveForImport(url, opened, !!plan.bot && botPlatform(url) === provider);
+      if (ok === true) return;
+      if (ok !== 'bot') { try { tab?.close?.(); } catch { /* already closed */ } return; }
+      // Not importable, but Eadwyn AI can join it: the bot path below.
+      sending.current = true; setBusy(true);
     }
     // Eadwyn AI only (Teams, or a call Axal cannot import).
     const named = (who?.interviewee_name || name).trim();

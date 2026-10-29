@@ -159,9 +159,13 @@ function calendarFailure(status: number): MeetingProviderError {
   return new MeetingProviderError('meet_create_failed', false);
 }
 
+/** One Calendar call may take this long; a hung Google answer must not hold the member's request. */
+export const CALENDAR_FETCH_TIMEOUT_MS = 8_000;
+
 export async function calendarFetch(token: string, path: string, init: RequestInit = {}): Promise<Response> {
   try {
     return await fetch(`${CALENDAR_API}${path}`, {
+      signal: AbortSignal.timeout(CALENDAR_FETCH_TIMEOUT_MS),
       ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
   } catch {
@@ -260,6 +264,15 @@ const MEET_CODE_ONLY = /^[a-z]{3,4}-[a-z]{4}-[a-z]{3,4}$/;
 /** How far back an attach looks: Meet keeps a call's records 30 days. */
 const ATTACH_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 const ATTACH_LOOKAHEAD_MS = 366 * 24 * 60 * 60 * 1000;
+/**
+ * A call being recorded now is on today's calendar, so the search reads the
+ * day either side of now first. The wider window (30 days back, a year ahead,
+ * recurring meetings expanded) is read only when that misses, and never for
+ * longer than this: a code that is on no event (a call started from Meet
+ * itself) used to page through thousands of events past the browser's 30 s.
+ */
+const ATTACH_NEAR_MS = 24 * 60 * 60 * 1000;
+export const ATTACH_SEARCH_BUDGET_MS = 10_000;
 
 /** A Meet code typed on its own, normalised, or null. */
 export function bareMeetingCode(raw: unknown): string | null {
@@ -304,28 +317,33 @@ export async function findCalendarMeet(env: Env, conn: GoogleConnection, target:
   }
   const code = bareMeetingCode(target.meetingCode);
   if (!code) return null;
-  const found: CalendarMeet[] = [];
-  let pageToken = '';
-  for (let page = 0; page < 10; page++) {
-    const q = new URLSearchParams({
-      singleEvents: 'true', showDeleted: 'false', maxResults: '250',
-      timeMin: new Date(now - ATTACH_LOOKBACK_MS).toISOString(),
-      timeMax: new Date(now + ATTACH_LOOKAHEAD_MS).toISOString(),
-      ...(pageToken ? { pageToken } : {}),
-    });
-    const res = await calendarFetch(token, `/calendars/primary/events?${q}`);
-    if (res.status === 401 || res.status === 403) throw new MeetingProviderError('meet_reconnect', false);
-    if (!res.ok) throw new MeetingProviderError('meet_unreachable', true);
-    const body = await res.json().catch(() => null) as { items?: CalendarItem[]; nextPageToken?: string } | null;
-    for (const item of body?.items ?? []) {
-      const meet = asCalendarMeet(item);
-      if (meet && meet.meetingCode === code) found.push(meet);
-    }
-    pageToken = String(body?.nextPageToken || '');
-    if (!pageToken) break;
-  }
+  const started = Date.now();
   const distance = (m: CalendarMeet) => (m.startsAt ? Math.abs(Date.parse(m.startsAt) - now) : Number.POSITIVE_INFINITY);
-  return found.sort((a, b) => distance(a) - distance(b))[0] ?? null;
+  const search = async (from: number, to: number): Promise<CalendarMeet | null> => {
+    const found: CalendarMeet[] = [];
+    let pageToken = '';
+    for (let page = 0; page < 10; page++) {
+      if (Date.now() - started > ATTACH_SEARCH_BUDGET_MS) throw new MeetingProviderError('meet_unreachable', true);
+      const q = new URLSearchParams({
+        singleEvents: 'true', showDeleted: 'false', maxResults: '250',
+        timeMin: new Date(from).toISOString(), timeMax: new Date(to).toISOString(),
+        ...(pageToken ? { pageToken } : {}),
+      });
+      const res = await calendarFetch(token, `/calendars/primary/events?${q}`);
+      if (res.status === 401 || res.status === 403) throw new MeetingProviderError('meet_reconnect', false);
+      if (!res.ok) throw new MeetingProviderError('meet_unreachable', true);
+      const body = await res.json().catch(() => null) as { items?: CalendarItem[]; nextPageToken?: string } | null;
+      for (const item of body?.items ?? []) {
+        const meet = asCalendarMeet(item);
+        if (meet && meet.meetingCode === code) found.push(meet);
+      }
+      pageToken = String(body?.nextPageToken || '');
+      if (!pageToken) break;
+    }
+    return found.sort((a, b) => distance(a) - distance(b))[0] ?? null;
+  };
+  return await search(now - ATTACH_NEAR_MS, now + ATTACH_NEAR_MS)
+    ?? await search(now - ATTACH_LOOKBACK_MS, now + ATTACH_LOOKAHEAD_MS);
 }
 
 // ───────────────────────────────────────────────────────────── Meet REST
