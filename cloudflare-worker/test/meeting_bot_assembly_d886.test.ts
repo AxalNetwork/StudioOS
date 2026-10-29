@@ -161,9 +161,12 @@ const scenarios: Record<string, (m: Module) => Promise<void>> = {
       [{kind:'chunk',payload:{chunk_seq:0,start_ms:0,size_bytes:32044}}, {kind:'chunk',payload:{chunk_seq:0,start_ms:1,size_bytes:32044}}],
     ]) assert.throws(()=>m.botSnapshotEvents(rows,1800000), /bot_manifest_(invalid|conflict)/);
     assert.equal(m.botSnapshotEvents([{kind:'speaker',payload:{participant_id:null,at_ms:0}}],1000).events[0].type,'active_speaker');
-    for(const segment of [{start_ms:0,end_ms:1001,text:'Fixture.'},{start_ms:2,end_ms:1,text:'Fixture.'},{start_ms:0,end_ms:1,text:42}]) {
+    for(const segment of [{start_ms:0,end_ms:3001,text:'Fixture.'},{start_ms:2,end_ms:1,text:'Fixture.'},{start_ms:0,end_ms:1,text:42}]) {
       assert.throws(()=>m.botStagedPassages([segment],0,0,1000,null), /bot_stage_invalid/);
     }
+    // D1383: Nova's padded end (live: 2.56 s on a 2.34 s chunk) is read as the chunk's own end, on the call's clock.
+    const padded=m.botStagedPassages([{start_ms:880,end_ms:2560,text:'Fixture.'},{start_ms:2400,end_ms:2500,text:'Fixture.'}],15,107269,2340,'p1');
+    assert.deepEqual(padded.map((p:any)=>[p.start_ms,p.end_ms]),[[108149,109609],[109609,109609]]);
   },
   async 'final segments, encrypted participants and receipt commit atomically once'(m) {
     const w=await world(), prepared=await m.prepareBotAssembly(w.env,w.uid);
@@ -280,9 +283,10 @@ const mutations=[
   ['p.participant_id !== null &&','false &&'],
   ['previous.start !== manifest.start','false'],
   ["typeof s.speaker_raw === 'string' && /^\\d{1,6}$/.test(s.speaker_raw)", 'true'],
-  ['Number(s.start_ms) + start','Number(s.start_ms)'],
-  ['Number(s.end_ms) + start','Number(s.end_ms)'],
-  ['!integer(s[key], duration)','false'],
+  ['at(s.start_ms)','Number(s.start_ms)'],
+  ['at(s.end_ms)','Number(s.end_ms)'],
+  ['!integer(s[key], duration + STAGE_SLACK_MS)','false'],
+  ['Math.min(Number(v), end)','Number(v)'],
   ["['processing', 'stopped'].includes(run.status)",'true'],
   ["session.submitted_via !== 'meeting_bot'",'false'],
   ['`${uid}:${event.seq}`','`${uid}:0`'],
