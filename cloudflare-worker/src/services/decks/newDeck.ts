@@ -21,6 +21,10 @@
  */
 import { DECK_SOURCES, type SourceItem, type Unit } from './sources';
 import { AUDIENCES, modelProblems } from './slideModel';
+import { chooseLayout, fitProblems, type Evidence } from './designSystem';
+import type { Series } from './chartSeries';
+import { sanitizeDiagram, type Diagram } from './diagramModel';
+import { chartTypeFor } from './visuals';
 
 export type Audience = typeof AUDIENCES[number];
 
@@ -85,20 +89,53 @@ export const CARD_IDS = CARD_CATALOGUE.map((c) => c.card);
 const specOf = (card: string) => CARD_CATALOGUE.find((c) => c.card === card) ?? null;
 
 const STANDARD = ['title', 'problem', 'why_now', 'solution', 'traction', 'validation', 'product', 'market', 'unit_economics', 'team', 'round', 'use_of_funds'];
+const DECK_CARDS_SHORT = ['title', 'problem', 'solution', 'traction', 'team', 'round'];
 const DECK_CARDS: Record<Length, string[]> = {
-  short: ['title', 'problem', 'solution', 'traction', 'team', 'round'],
+  short: DECK_CARDS_SHORT,
   standard: STANDARD,
   full: [...STANDARD, 'competition', 'roadmap', 'cap_table', 'every_figure'],
 };
 
-export type OutlineRow = { card: string; title: string; purpose: string };
+/**
+ * D897 §9 (#3659): a row may carry its `message`, the one thing the card must
+ * say, in words. It is planned before any card is built and steers the
+ * card's headline; like a title, it names no number.
+ */
+export type OutlineRow = { card: string; title: string; purpose: string; message?: string };
+export const MESSAGE_MAX = 140;
 
-/** The outline StudioOS proposes without a model: the length's cards in order. */
-export function standardOutline(length: Length): OutlineRow[] {
-  return DECK_CARDS[length].map((card) => {
+/**
+ * D897 §9 (#3659): what each audience reads first. These cards move up to
+ * just after the title, in this order; the rest keep the length's order, so
+ * the same records make a different story for an angel and a Series A fund.
+ * A short deck takes its six from the audience's own list.
+ */
+export const AUDIENCE_EMPHASIS: Record<Audience, { lead: string[]; short: string[] }> = {
+  angel: { lead: ['problem', 'team', 'solution'], short: ['title', 'problem', 'solution', 'team', 'traction', 'round'] },
+  pre_seed_fund: { lead: ['problem', 'team', 'solution'], short: ['title', 'problem', 'team', 'solution', 'validation', 'round'] },
+  seed_fund: { lead: ['problem', 'traction', 'solution'], short: ['title', 'problem', 'solution', 'traction', 'team', 'round'] },
+  series_a_fund: { lead: ['traction', 'unit_economics', 'market'], short: ['title', 'traction', 'unit_economics', 'market', 'team', 'round'] },
+  strategic: { lead: ['product', 'market', 'solution'], short: ['title', 'problem', 'product', 'market', 'team', 'round'] },
+  grant: { lead: ['problem', 'solution', 'validation'], short: ['title', 'problem', 'solution', 'validation', 'team', 'use_of_funds'] },
+  other: { lead: [], short: DECK_CARDS_SHORT },
+};
+
+/** The outline StudioOS proposes without a model: the length's cards, in the audience's order when one is named. */
+export function standardOutline(length: Length, audience?: Audience): OutlineRow[] {
+  return cardsFor(length, audience).map((card) => {
     const s = specOf(card)!;
     return { card, title: s.title, purpose: s.purpose };
   });
+}
+
+/** The cards of a length for an audience: the title first, its lead cards next, the rest in order. */
+export function cardsFor(length: Length, audience?: Audience): string[] {
+  const e = audience ? AUDIENCE_EMPHASIS[audience] : null;
+  if (!e) return DECK_CARDS[length];
+  if (length === 'short') return e.short;
+  const cards = DECK_CARDS[length];
+  const lead = e.lead.filter((c) => cards.includes(c));
+  return ['title', ...lead, ...cards.filter((c) => c !== 'title' && !lead.includes(c))];
 }
 
 // ─────────────────────────────────────────────────────────── numbers in text
@@ -202,9 +239,10 @@ export function outlineFromBody(input: unknown, projectId: number): { rows: Outl
     if (!spec) return { error: `outline row ${i + 1}: card must be one of ${CARD_IDS.join(', ')}` };
     const title = text((r as any)?.title, TITLE_MAX) || spec.title;
     const purpose = text((r as any)?.purpose, PURPOSE_MAX) || spec.purpose;
-    const refused = figureRefusal(`${title} ${purpose}`, projectId, `an outline row (row ${i + 1})`);
+    const message = text((r as any)?.message, MESSAGE_MAX);
+    const refused = figureRefusal(`${title} ${purpose} ${message}`, projectId, `an outline row (row ${i + 1})`);
     if (refused) return { error: refused.message, refusal: refused };
-    rows.push({ card: spec.card, title, purpose });
+    rows.push({ card: spec.card, title, purpose, ...(message ? { message } : {}) });
   }
   return { rows };
 }
@@ -223,10 +261,13 @@ export function outlineFromModel(raw: unknown, length: Length): OutlineRow[] | n
     if (!spec || rows.some((x) => x.card === spec.card)) continue;
     const title = text(r?.title, TITLE_MAX);
     const purpose = text(r?.purpose, PURPOSE_MAX);
+    const message = text(r?.message, MESSAGE_MAX);
     rows.push({
       card: spec.card,
       title: title && !numberIn(title) ? title : spec.title,
       purpose: purpose && !numberIn(purpose) ? purpose : spec.purpose,
+      // A message that names a number is dropped, as a title is; the card then says its purpose.
+      ...(message && !numberIn(message) ? { message } : {}),
     });
   }
   // Too few cards for the length asked is not that length's deck.
@@ -273,9 +314,9 @@ export function outlineMessage(o: { audience: Audience; length: Length; prompt: 
   }) }));
   return [
     `Plan a ${LENGTHS.find((l) => l.id === o.length)!.label} pitch deck for ${AUDIENCE_CARDS[o.audience].label} (${AUDIENCE_CARDS[o.audience].line}).`,
-    `Pick about ${DECK_CARDS[o.length].length} cards from this list, in the order an investor should read them, and say in under twelve words what each card shows: ${JSON.stringify(cards)}.`,
+    `Pick about ${DECK_CARDS[o.length].length} cards from this list, in the order this audience should read them, and say in under twelve words what each card shows. Give each card one message: the single takeaway the reader should leave with, in under twenty words, drawn only from what is recorded: ${JSON.stringify(cards)}.`,
     o.prompt ? `The founder's note on tone and emphasis (it is not a source of facts): ${JSON.stringify(o.prompt)}.` : '',
-    'Return {"rows":[{"card":"<card id from the list>","title":"<short title>","purpose":"<what it shows>"}]}.',
+    'Return {"rows":[{"card":"<card id from the list>","title":"<short title>","purpose":"<what it shows>","message":"<its one takeaway>"}]}.',
   ].filter(Boolean).join('\n');
 }
 
@@ -283,10 +324,10 @@ export const BUILD_SYSTEM = 'You write the words on investor pitch deck cards. C
 
 /** The build run's message: one entry per card, with its facts as read-only context. */
 export function buildMessage(o: { audience: Audience; prompt: string; rows: OutlineRow[]; items: SourceItem[]; ventureName: string | null; exclude?: Excluded }): string {
-  const cards = o.rows.map((r, i) => ({ n: i + 1, title: r.title, shows: r.purpose, facts: factsFor(specOf(r.card)!, o.items, o.exclude ?? NONE) }));
+  const cards = o.rows.map((r, i) => ({ n: i + 1, title: r.title, shows: r.purpose, ...(r.message ? { message: r.message } : {}), facts: factsFor(specOf(r.card)!, o.items, o.exclude ?? NONE) }));
   return [
     `Write the cards of a pitch deck${o.ventureName ? ` for ${JSON.stringify(o.ventureName)}` : ''}, for ${AUDIENCE_CARDS[o.audience].label} (${AUDIENCE_CARDS[o.audience].line}).`,
-    `For each card write a headline (under twelve words) and one sentence (under thirty words). The facts are shown on the card by code; refer to them in words without restating any number. Where a fact is Not recorded, do not invent it. Cards: ${JSON.stringify(cards)}.`,
+    `For each card write a headline (under ten words) that states its message, and one sentence (under thirty words). The facts are shown on the card by code; refer to them in words without restating any number. Where a fact is Not recorded, do not invent it. Cards: ${JSON.stringify(cards)}.`,
     o.prompt ? `The founder's note on tone and emphasis (it is not a source of facts): ${JSON.stringify(o.prompt)}.` : '',
     'Return {"cards":[{"n":<card number>,"headline":"...","body":"..."}]}.',
   ].filter(Boolean).join('\n');
@@ -368,37 +409,180 @@ function tileSpans(n: number): Array<[number, number]> {
 }
 
 /**
- * One card of the proposal, built by code from its outline row, its slots and
- * Eadwyn's words. Figures are metric blocks and read-only `auto` fields, each
- * with its binding, so the editor, present mode and export read the same card.
+ * D897 §9 (#3659): what a card may draw besides its slots. `series` are the
+ * venture's chart series (`chartSeries.ts`, read by code), `diagrams` a typed
+ * diagram per card that a record placed, and `rows` how many records a matrix
+ * placed (D903 §10, `visuals.ts` `recordDiagrams`). Nothing here comes from a model.
  */
-export function cardOf(row: OutlineRow, items: SourceItem[], words: Wording, ventureName: string | null, exclude: Excluded = NONE): any {
-  const spec = specOf(row.card)!;
-  const headline = words.headline || row.title;
-  const figures = figuresOf(spec, items, exclude);
+export type CardVisuals = { series?: Series[]; diagrams?: Record<string, Diagram>; rows?: Record<string, number> };
+const NO_VISUALS: CardVisuals = {};
+
+/** The chart series each card may plot, best first: a connector's before the founder's typed one. */
+export const CARD_SERIES: Record<string, string[]> = {
+  traction: ['grow.mrr.monthly', 'grow.mrr.typed', 'grow.arr.monthly', 'grow.arr.typed', 'grow.paying_customers.monthly', 'grow.paying_customers.typed'],
+  validation: ['validate.interviews.weekly'],
+  unit_economics: ['grow.churn.monthly', 'grow.churn.typed'],
+};
+
+/** The series a card plots: the first recorded one with two points or more, or null. */
+export function seriesFor(card: string, series: Series[] | undefined): Series | null {
+  for (const key of CARD_SERIES[card] ?? []) {
+    const s = (series ?? []).find((x) => x.key === key);
+    if (s && s.state === 'recorded' && s.points.length >= 2) return s;
+  }
+  return null;
+}
+
+/**
+ * The one line a card with nothing recorded says instead of empty tiles. A
+ * label that names a number ("Releases in 90 days") stays off unbound text;
+ * the card's own read-only fields still name it.
+ */
+function missingLine(figures: Figure[]): string {
+  const named = figures.map((f) => f.label).filter((l) => !numberIn(l));
+  const rest = figures.length - named.length;
+  return `Not recorded on StudioOS yet: ${[...named, ...(rest ? [rest === 1 ? 'one more figure' : 'other figures'] : [])].join(', ')}.`;
+}
+
+/** A recorded text figure too long for a tile reads as a bound line of text instead. */
+const TILE_TEXT_MAX = 12;
+const isLongText = (f: Figure) => f.value != null && f.value.length > TILE_TEXT_MAX;
+
+/** What a card's records give it, counted by code: the evidence `chooseLayout` reads. */
+export function evidenceOf(row: OutlineRow, items: SourceItem[], exclude: Excluded = NONE, visuals: CardVisuals = NO_VISUALS): Evidence {
+  const figures = figuresOf(specOf(row.card)!, items, exclude);
+  const recorded = figures.filter((f) => f.value != null);
+  const diagram = visuals.diagrams?.[row.card] ? sanitizeDiagram(visuals.diagrams[row.card]) : null;
+  return {
+    // Tiles are worth drawing once one figure is recorded; the missing ones then read "Not recorded" beside it.
+    metrics: recorded.length ? figures.filter((f) => !isLongText(f)).length : 0,
+    series: seriesFor(row.card, visuals.series) ? 1 : 0,
+    people: 0, images: 0,
+    // D903 §10: a matrix is the comparison's rows; any other diagram is ordered steps.
+    rows: diagram?.type === 'matrix' ? Number(visuals.rows?.[row.card] ?? 0) : 0,
+    steps: diagram && diagram.type !== 'matrix' ? diagram.items.length : 0,
+  };
+}
+
+const G = (c1: number, c2: number, r1: number, r2: number) => ({ c1, c2, r1, r2 });
+const metricBlock = (id: string, f: Figure, grid: ReturnType<typeof G>) => ({ id, kind: 'metric', grid, label: f.label, value: f.value, binding: f.binding });
+const seriesBinding = (s: Series) => ({ source_key: s.key, record_ref: s.record_ref, as_of: s.as_of, grade: s.grade, snapshot_hash: s.snapshot_hash });
+
+/**
+ * The blocks of one card for the layout its evidence earns. Code places every
+ * figure (a metric, a chart series or a bound line); Eadwyn's words are the
+ * heading and one sentence. Words that do not fit their space go to the
+ * card's notes rather than overflow it.
+ */
+function compose(layout: string, row: OutlineRow, figures: Figure[], words: { headline: string; body: string | null }, visuals: CardVisuals): { blocks: any[]; notes: string[] } {
   const blocks: any[] = [];
+  const notes: string[] = [];
+  const heading = (grid: ReturnType<typeof G>) => blocks.push({ id: 'h', kind: 'text', grid, style: 'heading', text: words.headline });
+  const body = (grid: ReturnType<typeof G>) => { if (words.body) blocks.push({ id: 'p', kind: 'text', grid, style: 'paragraph', text: words.body }); };
+  const tiles = figures.filter((f) => !isLongText(f));
+  const lines = figures.filter(isLongText);
+  const boundLines = (c1: number, c2: number, r1: number) => lines.slice(0, 6 - r1 + 1).forEach((f, i) =>
+    blocks.push({ id: `t${i + 1}`, kind: 'text', grid: G(c1, c2, r1 + i, r1 + i), style: 'paragraph', text: `${f.label} · ${f.value}`, binding: f.binding }));
+  switch (layout) {
+    case 'title':
+      heading(G(1, 12, 2, 3));
+      body(G(1, 12, 4, 4));
+      break;
+    case 'chart_text': {
+      const s = seriesFor(row.card, visuals.series)!;
+      heading(G(1, 12, 1, 1));
+      blocks.push({ id: 'c', kind: 'chart', grid: G(1, 8, 2, 6), chart_type: chartTypeFor(s) ?? 'line', range: 'all', previous: false, labels: true, series: [{ label: s.label, binding: seriesBinding(s) }] });
+      tiles.filter((f) => f.value != null).slice(0, 2).forEach((f, i) => blocks.push(metricBlock(`m${i + 1}`, f, G(9, 12, 2 + i * 2, 3 + i * 2))));
+      if (words.body) notes.push(words.body);
+      break;
+    }
+    case 'metric_tiles': {
+      heading(G(1, 12, 1, 1));
+      const shown = tiles.slice(0, 4);
+      const per = Math.floor(12 / Math.max(1, shown.length));
+      shown.forEach((f, i) => blocks.push(metricBlock(`m${i + 1}`, f, G(i * per + 1, i === shown.length - 1 ? 12 : i * per + per, 2, 4))));
+      if (lines.length) { boundLines(1, 12, 5); if (words.body) notes.push(words.body); } else body(G(1, 12, 5, 6));
+      break;
+    }
+    case 'timeline': {
+      heading(G(1, 12, 1, 1));
+      const d = sanitizeDiagram(visuals.diagrams?.[row.card]);
+      blocks.push({ id: 'd', kind: 'graphic', grid: G(1, 12, 2, 5), graphic: d!.type, ratio: '2x2', diagram: d });
+      body(G(1, 12, 6, 6));
+      break;
+    }
+    case 'comparison_table': {
+      // D903 §10: the market as a matrix the founder's recorded positions placed.
+      heading(G(1, 12, 1, 1));
+      const d = sanitizeDiagram(visuals.diagrams?.[row.card]);
+      blocks.push({ id: 'd', kind: 'graphic', grid: G(1, 12, 2, 5), graphic: d!.type, ratio: '2x2', diagram: d });
+      body(G(1, 12, 6, 6));
+      break;
+    }
+    case 'two_columns':
+      heading(G(1, 12, 1, 1));
+      body(G(1, 6, 2, 6));
+      if (lines.length) boundLines(7, 12, 2);
+      else if (figures.some((f) => f.value != null)) tiles.filter((f) => f.value != null).slice(0, 2).forEach((f, i) => blocks.push(metricBlock(`m${i + 1}`, f, G(7, 12, 2 + i * 2, 3 + i * 2))));
+      else if (figures.length) blocks.push({ id: 'n', kind: 'text', grid: G(7, 12, 2, 3), style: 'paragraph', text: missingLine(figures) });
+      break;
+    default: {
+      // statement: the message large, the sentence under it, and the card's figures beneath when one is recorded.
+      // With none recorded, one line names what is missing instead of a row of empty tiles.
+      const anyRecorded = figures.some((f) => f.value != null);
+      const shown = anyRecorded ? figures.slice(0, 3) : [];
+      if (!anyRecorded && figures.length) {
+        heading(G(2, 11, 2, 4));
+        body(G(2, 11, 5, 5));
+        blocks.push({ id: 'n', kind: 'text', grid: G(2, 11, 6, 6), style: 'paragraph', text: missingLine(figures) });
+        break;
+      }
+      heading(G(2, 11, shown.length ? 1 : 2, 4));
+      if (shown.length) {
+        if (words.body) notes.push(words.body);
+        shown.forEach((f, i) => (isLongText(f)
+          ? blocks.push({ id: `t${i + 1}`, kind: 'text', grid: G(2 + i * 3, 4 + i * 3, 5, 6), style: 'paragraph', text: `${f.label} · ${f.value}`, binding: f.binding })
+          : blocks.push(metricBlock(`m${i + 1}`, f, G(2 + i * 3, 4 + i * 3, 5, 6)))));
+      } else body(G(2, 11, 5, 5));
+    }
+  }
+  return { blocks, notes };
+}
+
+/**
+ * One card of the proposal, built by code from its outline row, its slots and
+ * Eadwyn's words. D897 §9 (#3659): its layout is the one its evidence earns
+ * (`designSystem.ts` `chooseLayout`), so a deck varies with its records instead
+ * of being a stack of tiles. Figures are metric blocks, bound chart series or
+ * bound lines, and read-only `auto` fields, each with its binding.
+ */
+export function cardOf(row: OutlineRow, items: SourceItem[], words: Wording, ventureName: string | null, exclude: Excluded = NONE, visuals: CardVisuals = NO_VISUALS): any {
+  const spec = specOf(row.card)!;
+  const headline = words.headline || row.message || row.title;
+  const figures = figuresOf(spec, items, exclude);
   const fields: any[] = [];
   let layout: string;
+  let blocks: any[] = [];
+  let notes: string[] = [];
   if (spec.appendix) {
+    // The appendix is a reference table: one bound line per recorded figure, four across, five down.
     layout = 'appendix_table';
-    blocks.push({ id: 'h', kind: 'text', grid: { c1: 1, c2: 12, r1: 1, r2: 1 }, style: 'heading', text: headline });
+    blocks.push({ id: 'h', kind: 'text', grid: G(1, 12, 1, 1), style: 'heading', text: headline });
     figures.forEach((f, i) => {
       const c1 = (i % 4) * 3 + 1;
       const r = 2 + Math.floor(i / 4);
-      blocks.push({ id: `m${i + 1}`, kind: 'metric', grid: { c1, c2: c1 + 2, r1: r, r2: r }, label: f.label, value: f.value, binding: f.binding });
+      if (r <= 6) blocks.push({ id: `m${i + 1}`, kind: 'text', grid: G(c1, c1 + 2, r, r), style: 'paragraph', text: `${f.label} · ${f.value ?? 'Not recorded'}`, binding: f.binding });
     });
-  } else if (figures.length) {
-    layout = 'metric_tiles';
-    blocks.push({ id: 'h', kind: 'text', grid: { c1: 1, c2: 12, r1: 1, r2: 1 }, style: 'heading', text: headline });
-    tileSpans(figures.length).forEach(([c1, c2], i) => {
-      const f = figures[i];
-      blocks.push({ id: `m${i + 1}`, kind: 'metric', grid: { c1, c2, r1: 2, r2: 4 }, label: f.label, value: f.value, binding: f.binding });
-    });
-    if (words.body) blocks.push({ id: 'p', kind: 'text', grid: { c1: 1, c2: 12, r1: 5, r2: 6 }, style: 'paragraph', text: words.body });
   } else {
-    layout = row.card === 'title' ? 'title' : 'statement';
-    blocks.push({ id: 'h', kind: 'text', grid: row.card === 'title' ? { c1: 1, c2: 12, r1: 2, r2: 3 } : { c1: 2, c2: 11, r1: 2, r2: 4 }, style: 'heading', text: headline });
-    if (words.body) blocks.push({ id: 'p', kind: 'text', grid: row.card === 'title' ? { c1: 1, c2: 12, r1: 4, r2: 4 } : { c1: 2, c2: 11, r1: 5, r2: 5 }, style: 'paragraph', text: words.body });
+    layout = chooseLayout(row.card, evidenceOf(row, items, exclude, visuals)).layout;
+    ({ blocks, notes } = compose(layout, row, figures, { headline, body: words.body }, visuals));
+    // What would overflow at 16:9 is moved, never cut: a long headline gives way to the title, a long sentence to the notes.
+    for (const p of fitProblems([{ layout, blocks }])) {
+      const b = blocks.find((x) => x.id === p.block);
+      if (!b || p.kind !== 'overflow') continue;
+      if (b.id === 'h') { notes.unshift(b.text); b.text = row.title; }
+      else if (b.id === 'p') { notes.push(b.text); blocks = blocks.filter((x) => x !== b); }
+    }
   }
   if (row.card === 'title' && ventureName) fields.push({ key: 'venture_name', label: 'Venture', kind: 'subtitle', value: ventureName, source: 'data', readonly: true });
   if (words.headline) fields.push({ key: 'headline', label: 'Headline', kind: 'paragraph', value: words.headline, source: 'ai' });
@@ -412,14 +596,27 @@ export function cardOf(row: OutlineRow, items: SourceItem[], words: Wording, ven
   return {
     title: row.title, subtitle: null, body: '', bullets: [], image_url: null,
     spec_id: `new:${row.card}`, ...(spec.appendix ? { appendix: true } : {}),
-    layout, blocks, fields,
+    layout, blocks, fields, ...(notes.length ? { notes: notes.join('\n\n') } : {}),
   };
 }
 
-/** Every card of the proposal, in the outline's order, checked against the slide model. */
-export function buildCards(rows: OutlineRow[], items: SourceItem[], wording: Wording[], ventureName: string | null, exclude: Excluded = NONE): { slides: any[]; problems: string[] } {
-  const slides = rows.map((r, i) => cardOf(r, items, wording[i] ?? { headline: null, body: null }, ventureName, exclude));
-  return { slides, problems: modelProblems(slides, () => null) };
+/** Every card of the proposal, in the outline's order, checked against the slide model and the design system's fit. */
+export function buildCards(rows: OutlineRow[], items: SourceItem[], wording: Wording[], ventureName: string | null, exclude: Excluded = NONE, visuals: CardVisuals = NO_VISUALS): { slides: any[]; problems: string[] } {
+  const slides = rows.map((r, i) => cardOf(r, items, wording[i] ?? { headline: null, body: null }, ventureName, exclude, visuals));
+  return { slides, problems: [...modelProblems(slides, () => null), ...fitProblems(slides.filter((s) => !s.appendix)).map((p) => p.message)] };
+}
+
+/**
+ * D897 §9: the story before any card is built: each card's message and the
+ * records it rests on, with their state. Code fills `sources`; a model never
+ * names one.
+ */
+export function planOf(rows: OutlineRow[], items: SourceItem[], exclude: Excluded = NONE): Array<{ card: string; message: string; sources: Array<{ source_key: string; state: string }> }> {
+  return rows.map((r) => ({
+    card: r.card,
+    message: r.message || r.purpose,
+    sources: keysOf(specOf(r.card)!, items, exclude).map((k) => ({ source_key: k, state: items.find((x) => x.source_key === k)?.state ?? 'not_recorded' })),
+  }));
 }
 
 /** What each card was filled from: its slots, how many are recorded, and the slots that are not. */

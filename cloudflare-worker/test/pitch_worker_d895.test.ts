@@ -182,7 +182,9 @@ test('D895: no recorded runway says Not recorded in the generated Ask',async()=>
   const response=await call(f,2,'POST','/api/decks/generate',{project_id:1});assert.equal(response.status,201,JSON.stringify(response.body));
   const card=response.body.proposal.slides.find((s:any)=>s.spec_id==='new:unit_economics');assert.ok(card);
   const runway=card.fields.find((x:any)=>x.key==='grow.runway');assert.equal(runway.source,'placeholder');assert.equal(runway.binding.grade,'Not recorded');
-  assert.equal(card.blocks.find((b:any)=>b.binding?.source_key==='grow.runway').value,null);
+  // D897 §9 (#3659): with nothing on the card recorded, no tile shows a value; one line names what is missing.
+  assert.ok(card.blocks.every((b:any)=>b.binding?.source_key!=='grow.runway'||b.value==null));
+  assert.match(card.blocks.find((b:any)=>b.id==='n').text,/Not recorded on StudioOS yet: .*Runway/);
   assert.doesNotMatch(JSON.stringify(response.body.proposal.slides),/18-24|24\+|9000000.*months|9,000,000 months/);
  }finally{f.db.close()}
 });

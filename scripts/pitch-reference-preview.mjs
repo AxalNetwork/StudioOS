@@ -16,8 +16,16 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { BASE_THEMES, SLIDE, TYPE_SCALE, boxOf, fitProblems, themeProblems, typeRoleOf } from '../cloudflare-worker/src/services/decks/designSystem.ts';
 import { fullReferenceDeck, sparseReferenceDeck, SYNTHETIC_VENTURE } from '../cloudflare-worker/test/fixtures/pitchReferenceDecks.ts';
+// D897 §9 (#3659): `--story` draws decks the composer generated from synthetic records instead of the hand-composed ones.
+import { buildCards, standardOutline } from '../cloudflare-worker/src/services/decks/newDeck.ts';
+import { conflictingRecords, fullRecords, sparseRecords, wordsFor } from '../cloudflare-worker/test/fixtures/pitchStoryFixtures.ts';
 
-const OUT = resolve(process.argv[2] || 'pitch-reference-preview');
+const STORY = process.argv.includes('--story');
+/** `--full` draws the full length (sixteen cards), so the roadmap and competition cards appear. */
+const STORY_LENGTH = process.argv.includes('--full') ? 'full' : 'standard';
+const OUT = resolve(process.argv.slice(2).find((a) => !a.startsWith('--')) || 'pitch-reference-preview');
+/** A bound series' points, as the editor reads them from `GET /api/decks/chart-series`; here, from the fixture. */
+const SERIES_POINTS = new Map();
 mkdirSync(OUT, { recursive: true });
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -27,7 +35,7 @@ const fmt = (n) => (n >= 1000 ? `$${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`
 
 function type(role, t, extra = '') {
   const s = TYPE_SCALE[role];
-  return `font-size:${s.size}px;line-height:${s.leading};font-weight:${s.weight};letter-spacing:${s.tracking}em;${extra}`;
+  return `font-size:${s.size}px;line-height:${s.leading};font-weight:${s.weight};letter-spacing:${s.tracking}em;${extra ? `${extra};` : ''}`;
 }
 
 function sourceChip(b, t) {
@@ -48,7 +56,7 @@ function chartSvg(b, t, w, h) {
         ${sourceChip(b.series[0]?.binding, t)}
       </div>`).join('')}</div>`;
   }
-  const pts = b.series[0]?.points || [];
+  const pts = b.series[0]?.points || SERIES_POINTS.get(b.series[0]?.binding?.source_key) || [];
   if (!pts.length) return '';
   const pad = { l: 120, r: 40, t: 40, b: 80 };
   const max = Math.max(...pts.map((p) => p.y)) * 1.15;
@@ -70,11 +78,21 @@ function chartSvg(b, t, w, h) {
 function diagramHtml(d, t, w) {
   const c = t.colours;
   const n = d.items.length;
+  if (d.type === 'matrix') {
+    const cell = (it, i) => `<div style="padding:28px;border-radius:${t.radius}px;background:${i === 1 ? t.chart[0] + '22' : c.surface};border:2px solid ${c.hairline};display:flex;flex-direction:column;gap:10px">
+      <div style="${type('metric_label', t)}color:${t.chart[i % t.chart.length]};text-transform:uppercase">${esc(it.label)}</div>
+      <div style="font-family:${t.fonts.display};${type('subheading', t, 'font-size:34px')}color:${it.detail === 'None recorded here' ? c.muted : c.ink}">${esc(it.detail || '')}</div></div>`;
+    return `<div style="display:grid;grid-template-columns:48px 1fr 1fr;grid-template-rows:1fr 1fr 40px;gap:16px;height:100%">
+      <div style="grid-row:1/3;writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;${type('caption', t)}color:${c.muted}">${esc(d.axes?.y)} ↑ broader</div>
+      ${cell(d.items[0], 0)}${cell(d.items[1], 1)}
+      ${cell(d.items[2], 2)}${cell(d.items[3], 3)}
+      <div></div><div style="grid-column:2/4;text-align:center;${type('caption', t)}color:${c.muted}">${esc(d.axes?.x)} → pricier</div></div>`;
+  }
   if (d.type === 'timeline') {
     return `<div style="position:relative;height:100%;display:flex;align-items:center">
       <div style="position:absolute;left:0;right:0;top:50%;height:4px;background:${c.hairline}"></div>
       ${d.items.map((it, i) => `<div style="position:absolute;left:${(i + 0.5) * (100 / n)}%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:20px;width:${Math.floor(w / n) - 24}px">
-        <div style="${type('metric_label', t)}color:${t.chart[0]};text-transform:uppercase">${esc(month(it.date))}</div>
+        <div style="${type('metric_label', t)}color:${t.chart[0]};text-transform:uppercase">${esc(it.date ? month(it.date) : it.detail || '')}</div>
         <div style="width:36px;height:36px;border-radius:50%;background:${i === 0 ? t.chart[0] : c.surface};border:6px solid ${t.chart[0]}"></div>
         <div style="${type('subheading', t)}color:${c.ink};text-align:center;font-size:34px">${esc(it.label)}</div>
       </div>`).join('')}
@@ -159,11 +177,18 @@ function phonePage(name, slides, t) {
     </div></body></html>`;
 }
 
-const decks = { full: fullReferenceDeck(), sparse: sparseReferenceDeck() };
+function storyDeck(rec, audience) {
+  for (const x of rec.series) SERIES_POINTS.set(x.key, x.points);
+  const rows = standardOutline(STORY_LENGTH, audience);
+  return buildCards(rows, rec.items, wordsFor(rows), SYNTHETIC_VENTURE, new Set(), { series: rec.series, diagrams: rec.diagrams, rows: rec.rows }).slides;
+}
+const decks = STORY
+  ? { 'story-full': storyDeck(fullRecords(), 'seed_fund'), 'story-sparse': storyDeck(sparseRecords(), 'pre_seed_fund'), 'story-conflicting': storyDeck(conflictingRecords(), 'series_a_fund') }
+  : { full: fullReferenceDeck(), sparse: sparseReferenceDeck() };
 const report = { themes: {}, fit: {}, files: [] };
 for (const [kind, t] of Object.entries(BASE_THEMES)) report.themes[kind] = themeProblems(t);
 for (const [name, slides] of Object.entries(decks)) {
-  report.fit[name] = fitProblems(slides);
+  report.fit[name] = fitProblems(slides.filter((x) => !x.appendix));
   for (const t of Object.values(BASE_THEMES)) {
     const f = join(OUT, `${name}-${t.kind}.html`);
     writeFileSync(f, deckPage(`${name} deck`, slides, t));

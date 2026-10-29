@@ -18,8 +18,12 @@ import deckNew from '../src/routes/deck_new.ts';
 import decks from '../src/routes/decks.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import {
-  CARD_CATALOGUE, buildCards, figureRefusal, numberIn, outlineFromBody, outlineFromModel, standardOutline, valueText, wordingFromModel,
+  AUDIENCE_EMPHASIS, CARD_CATALOGUE, buildCards, buildMessage, cardOf, figureRefusal, numberIn, outlineFromBody, outlineFromModel, planOf,
+  standardOutline, valueText, wordingFromModel,
 } from '../src/services/decks/newDeck.ts';
+import { fitProblems } from '../src/services/decks/designSystem.ts';
+import { AUDIENCES } from '../src/services/decks/slideModel.ts';
+import { conflictingRecords, fullRecords, sparseRecords, wordsFor } from './fixtures/pitchStoryFixtures.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
@@ -96,7 +100,8 @@ function unboundNumbers(slides: any[]): string[] {
     for (const t of [s.title, s.subtitle, s.body, ...(s.bullets || [])]) if (numberIn(t)) out.push(String(t));
     for (const f of s.fields || []) if (numberIn(typeof f.value === 'string' ? f.value : JSON.stringify(f.value)) && !(f.binding && f.binding.grade !== 'Not recorded')) out.push(`${f.key}: ${f.value}`);
     for (const b of s.blocks || []) {
-      if (b.kind === 'text' && numberIn(b.text)) out.push(`text: ${b.text}`);
+      // D897 §9: a line of text code wrote from a record carries that record's binding.
+      if (b.kind === 'text' && numberIn(b.text) && !(b.binding && b.binding.grade !== 'Not recorded' && b.binding.snapshot_hash)) out.push(`text: ${b.text}`);
       if (b.kind === 'metric' && b.value != null && !(b.binding && b.binding.grade !== 'Not recorded' && b.binding.snapshot_hash)) out.push(`metric: ${b.value}`);
     }
   }
@@ -192,7 +197,7 @@ test('built cards pass the slide model, and every number on them is a binding', 
   assert.deepEqual(traction.fields.find((x: any) => x.key === 'grow.mrr'), { key: 'grow.mrr', label: 'MRR', kind: 'auto', readonly: true, binding: mrr.binding, value: '', source: 'placeholder' });
   const appendix = slides.at(-1);
   assert.equal(appendix.appendix, true);
-  assert.equal(appendix.blocks.filter((b: any) => b.kind === 'metric').length, 1, 'the appendix lists recorded figures only');
+  assert.deepEqual(appendix.blocks.filter((b: any) => b.binding).map((b: any) => b.text), ['Paying customers · 42'], 'the appendix lists recorded figures only, as bound lines');
   assert.equal(slides[0].fields.find((x: any) => x.key === 'venture_name').value, 'Synthetic venture');
 });
 
@@ -276,7 +281,9 @@ test('AI off: the outline is StudioOS\'s standard one and the build is figures o
     assert.equal(o.status, 201, JSON.stringify(o.body));
     assert.equal(o.body.outline.proposed_by, 'StudioOS');
     assert.match(o.body.outline.reason, /AI assistance is off/);
-    assert.deepEqual(o.body.outline.rows, standardOutline('short'));
+    // D897 §9: the standard outline is in the audience's order; an angel reads the team before the traction.
+    assert.deepEqual(o.body.outline.rows, standardOutline('short', 'angel'));
+    assert.deepEqual(o.body.outline.rows.map((r: any) => r.card), ['title', 'problem', 'solution', 'team', 'traction', 'round']);
     const g = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, proposal_id: o.body.proposal.id });
     assert.equal(g.status, 201, JSON.stringify(g.body));
     assert.equal(g.body.wording.by, 'none');
@@ -290,8 +297,8 @@ test('AI off: the outline is StudioOS\'s standard one and the build is figures o
 test('Build deck: one deck:build run, code fills every figure, and invented numbers never reach a card', async () => {
   const f = await fixture({ cards: { cards: [
     { n: 1, headline: 'Close the books in a day.', body: 'Finance teams asked for it.' },
-    { n: 2, headline: 'We have 200 customers.', body: 'Revenue grew 300%.' },
-    { n: 5, headline: 'Customers keep coming.', body: 'Accounts are paying.' },
+    { n: 2, headline: 'Customers keep coming.', body: 'Accounts are paying.' },
+    { n: 5, headline: 'We have 200 customers.', body: 'Revenue grew 300%.' },
   ] } });
   try {
     const r = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, audience: 'series_a_fund', length: 'standard' });
@@ -301,16 +308,19 @@ test('Build deck: one deck:build run, code fills every figure, and invented numb
     assert.deepEqual(unboundNumbers(slides), [], 'a generated deck holds no number that is not a binding');
     assert.doesNotMatch(JSON.stringify(slides), /200 customers|300%/);
     assert.equal(r.body.wording.dropped, 2);
-    const traction = slides[4];
+    // D897 §9: a Series A fund reads traction, unit economics and market first.
+    assert.deepEqual(slides.slice(0, 4).map((x: any) => x.spec_id), ['new:title', 'new:traction', 'new:unit_economics', 'new:market']);
+    const card = (id: string) => slides.find((x: any) => x.spec_id === `new:${id}`);
+    const traction = card('traction');
     assert.equal(traction.blocks[0].text, 'Customers keep coming.');
     const paying = traction.blocks.find((b: any) => b.binding?.source_key === 'grow.paying_customers');
     assert.deepEqual([paying.value, paying.binding.grade, paying.binding.record_ref], ['42', 'Stated', 'project_metrics:1']);
-    const validation = slides[5];
+    const validation = card('validation');
     assert.equal(validation.blocks.find((b: any) => b.binding?.source_key === 'validate.interviews').value, '3');
     assert.equal(validation.blocks.find((b: any) => b.binding?.source_key === 'validate.strong_fit').value, '2');
     const lois = validation.blocks.find((b: any) => b.binding?.source_key === 'validate.lois');
     assert.deepEqual([lois.value, lois.binding.grade], [null, 'Not recorded'], 'an empty slot is Not recorded, never 0');
-    const round = slides[10].blocks.find((b: any) => b.binding?.source_key === 'raise.round_target');
+    const round = card('round').blocks.find((b: any) => b.binding?.source_key === 'raise.round_target');
     assert.equal(round.value, '$1,500,000');
     // The model saw the figures as read-only facts and was told not to restate them.
     const prompt = f.calls.find((c) => /Write the cards/.test(c.prompt))!.prompt;
@@ -320,7 +330,7 @@ test('Build deck: one deck:build run, code fills every figure, and invented numb
     assert.equal(runs.length, 1);
     assert.equal(runs[0].rail_option, 'deck:build');
     assert.equal(r.body.cost.charged_microusd, runs[0].charged_microusd);
-    assert.deepEqual(r.body.progress[4], { n: 5, title: 'Traction', filled: 1, slots: 4, missing: ['grow.mrr', 'grow.mercury_growth', 'grow.arr'], worded: true });
+    assert.deepEqual(r.body.progress[1], { n: 2, title: 'Traction', filled: 1, slots: 4, missing: ['grow.mrr', 'grow.mercury_growth', 'grow.arr'], worded: true });
     assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM pitch_decks').get() as any).n, 0, 'nothing is a version until it is kept');
     assert.deepEqual(f.audits(), ['deck_built']);
     assert.equal(r.body.proposal.outline.audience, 'series_a_fund');
@@ -380,7 +390,7 @@ test('keep slide by slide: kept cards accumulate, Save writes them alone as the 
     assert.equal((await call(f, 1, 'POST', `/api/decks/proposals/${id}/keep-slides`, { all: true })).status, 403, 'an admin reads only');
     const saved = await call(f, 2, 'POST', `/api/decks/proposals/${id}/keep-slides`, { save: true });
     assert.equal(saved.status, 200, JSON.stringify(saved.body));
-    assert.deepEqual(saved.body.deck.slides.map((s: any) => s.spec_id), ['new:title', 'new:solution', 'new:team']);
+    assert.deepEqual(saved.body.deck.slides.map((s: any) => s.spec_id), ['new:title', 'new:solution', 'new:traction'], 'kept 0, 2 and 4 of the angel’s order');
     assert.equal(saved.body.deck.audience, 'angel');
     assert.equal(saved.body.deck.round.uid, 'round-synthetic-1');
     assert.equal(saved.body.deck.is_current, true);
@@ -425,7 +435,7 @@ test('PD4: a record the founder unticked is on no card and in no prompt, and the
     assert.match(slides, /validate\.interviews/, 'the other records still fill their cards');
     assert.doesNotMatch(f.calls.find((c) => /Write the cards/.test(c.prompt))!.prompt, /Paying customers/);
     assert.deepEqual(r.body.proposal.outline.exclude, ['grow.paying_customers']);
-    assert.deepEqual(r.body.progress[4].missing, ['grow.mrr', 'grow.mercury_growth', 'grow.arr']);
+    assert.deepEqual(r.body.progress.find((p: any) => p.title === 'Traction').missing, ['grow.mrr', 'grow.mercury_growth', 'grow.arr']);
     for (const bad of ['grow', ['Grow.MRR'], ['grow.mrr', 'grow.mrr'], 'x'.split('')]) {
       assert.equal((await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, exclude: bad })).status, 400, JSON.stringify(bad));
     }
@@ -453,5 +463,144 @@ test('HQ Super Admin can outline, build and keep a deck; branch and ordinary adm
     assert.equal((await call(f, 1, 'POST', '/api/decks/outline', input, { impersonated_by: 2 })).status, 403, 'support cannot use elevated writes');
     f.env.BRANCH_CODE = 'test';
     assert.equal((await call(f, 1, 'POST', '/api/decks/outline', input)).status, 403);
+  } finally { f.close(); }
+});
+
+// ─────────────────────────────────────────────────────────── D897 §9 (#3659)
+
+const compose = (rec: any, audience: any = 'seed_fund', length: any = 'standard') => {
+  const rows = standardOutline(length, audience);
+  return { rows, ...buildCards(rows, rec.items, wordsFor(rows), 'Synthetic venture', new Set(), { series: rec.series }) };
+};
+const byCard = (slides: any[], id: string) => slides.find((x) => x.spec_id === `new:${id}`);
+
+test('§9 composition: each card takes the layout its records earn; traction plots its bound series; the deck varies and fits at 16:9', () => {
+  const { slides, problems } = compose(fullRecords());
+  assert.deepEqual(problems, []);
+  assert.deepEqual(unboundNumbers(slides), []);
+  assert.deepEqual(fitProblems(slides.filter((x) => !x.appendix)), []);
+  const traction = byCard(slides, 'traction');
+  assert.equal(traction.layout, 'chart_text');
+  const chart = traction.blocks.find((b: any) => b.kind === 'chart');
+  assert.deepEqual([chart.series.length, chart.series[0].binding.source_key, chart.series[0].points], [1, 'grow.mrr.monthly', undefined], 'bound, never typed points');
+  assert.ok(new Set(slides.map((x) => x.layout)).size >= 5, 'at least five layouts in a twelve-card deck');
+  assert.equal(byCard(slides, 'problem').layout, 'statement', 'a problem reads as a statement with its evidence');
+  assert.equal(byCard(slides, 'team').layout, 'two_columns', 'no consented photos, so no photo grid');
+  assert.ok(byCard(slides, 'team').blocks.some((b: any) => b.kind === 'text' && b.binding?.source_key === 'team.skills'), 'a long text figure is a bound line');
+});
+
+test('§9 sparse records: cards fall back honestly; a card with nothing recorded names what is missing in one line, never a row of empty tiles or a 0', () => {
+  const { slides, problems } = compose(sparseRecords(), 'pre_seed_fund');
+  assert.deepEqual(problems, []);
+  assert.deepEqual(unboundNumbers(slides), []);
+  const validation = byCard(slides, 'validation');
+  assert.equal(validation.layout, 'statement');
+  assert.equal(validation.blocks.filter((b: any) => b.kind === 'metric').length, 0);
+  assert.match(validation.blocks.find((b: any) => b.id === 'n').text, /^Not recorded on StudioOS yet: Interviews, Strong fit/);
+  const traction = byCard(slides, 'traction');
+  assert.equal(traction.layout, 'metric_tiles', 'one recorded figure earns tiles, the missing ones beside it');
+  assert.deepEqual(traction.blocks.filter((b: any) => b.kind === 'metric').map((b: any) => b.value), [null, '3', null, null]);
+  assert.ok(slides.every((x) => x.layout !== 'chart_text'), 'no series, no chart');
+  const bare = sparseRecords().items.filter((i: any) => i.source_key !== 'build.must_haves');
+  const product = cardOf({ card: 'product', title: 'Product', purpose: 'p' }, bare as any, { headline: null, body: null }, null);
+  assert.equal(product.blocks.find((b: any) => b.id === 'n').text, 'Not recorded on StudioOS yet: Must-haves done, other figures.', 'a label naming a number stays off the line');
+  assert.deepEqual(unboundNumbers([product]), []);
+});
+
+test('§9 conflicting sources: the connector’s series is plotted, the founder’s typed one stays apart; the two are never blended', () => {
+  const { slides } = compose(conflictingRecords(), 'series_a_fund');
+  const chart = byCard(slides, 'traction').blocks.find((b: any) => b.kind === 'chart');
+  assert.deepEqual(chart.series.map((x: any) => x.binding.source_key), ['grow.mrr.monthly']);
+  assert.equal(chart.series[0].binding.grade, 'Measured');
+});
+
+test('§9 words that would overflow move to the notes, never off the card; a numbered message is dropped', () => {
+  const rec = fullRecords();
+  const long = 'A headline that goes on and on far beyond what any heading on a slide could hold in one line of text';
+  const card = cardOf({ card: 'product', title: 'Product', purpose: 'p' }, rec.items as any, { headline: long, body: 'Short.' }, null);
+  assert.equal(card.blocks.find((b: any) => b.id === 'h').text, 'Product');
+  assert.match(card.notes, new RegExp(long));
+  assert.deepEqual(fitProblems([card]), []);
+  const rows = outlineFromModel({ rows: [{ card: 'title', message: 'Close in a day' }, { card: 'problem', message: 'We saved 200 hours' }, { card: 'solution' }] }, 'short')!;
+  assert.deepEqual(rows.map((r) => r.message ?? null), ['Close in a day', null, null]);
+  const refused = outlineFromBody([{ card: 'traction', title: 'Traction', message: 'Grew 3x' }], 1);
+  assert.ok('refusal' in refused && refused.refusal?.code === 'figure_in_prompt');
+  assert.match(buildMessage({ audience: 'angel', prompt: '', rows: [{ card: 'title', title: 'T', purpose: 'p', message: 'Close in a day' }], items: [], ventureName: null }), /"message":"Close in a day"/);
+});
+
+test('§9 the same records tell a different story per audience: each length keeps its count, the title first, the audience’s lead cards next', () => {
+  for (const a of AUDIENCES) {
+    const counts = (['short', 'standard', 'full'] as const).map((l) => standardOutline(l, a).length);
+    assert.deepEqual(counts, [6, 12, 16], a);
+    for (const l of ['short', 'standard', 'full'] as const) assert.equal(standardOutline(l, a)[0].card, 'title');
+    const lead = AUDIENCE_EMPHASIS[a].lead;
+    assert.deepEqual(standardOutline('standard', a).slice(1, 1 + lead.length).map((r) => r.card), lead, a);
+  }
+  assert.notDeepEqual(standardOutline('standard', 'angel').map((r) => r.card), standardOutline('standard', 'series_a_fund').map((r) => r.card));
+  assert.deepEqual(standardOutline('standard'), standardOutline('standard', undefined), 'no audience keeps the canvas order');
+});
+
+test('§9 the plan names each card’s message and the records it rests on, with their state', () => {
+  const rows = [{ card: 'traction', title: 'Traction', purpose: 'Revenue and customers', message: 'Revenue grows monthly' }, { card: 'why_now', title: 'Why now', purpose: 'The moment' }];
+  const plan = planOf(rows, sparseRecords().items as any);
+  assert.equal(plan[0].message, 'Revenue grows monthly');
+  assert.deepEqual(plan[0].sources.map((x) => `${x.source_key}:${x.state}`), ['grow.mrr:not_recorded', 'grow.paying_customers:recorded', 'grow.mercury_growth:not_recorded', 'grow.arr:not_recorded']);
+  assert.deepEqual(plan[1], { card: 'why_now', message: 'The moment', sources: [] });
+});
+
+test('§9 regenerate one card: one run, only that card changes, a kept card is refused, and a stale tab is refused before anything runs', async () => {
+  const f = await fixture({ cards: { cards: [{ n: 1, headline: 'Fresh words for this card', body: 'Only words.' }] } });
+  try {
+    const o = await call(f, 2, 'POST', '/api/decks/outline', { project_id: 1, audience: 'angel', length: 'short' });
+    assert.ok(o.body.proposal_hash && Array.isArray(o.body.plan));
+    const id = o.body.proposal.id;
+    const g = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, proposal_id: id, base_hash: o.body.proposal_hash });
+    assert.equal(g.status, 201, JSON.stringify(g.body));
+    const before = g.body.proposal.slides;
+    const stale = await call(f, 2, 'POST', `/api/decks/proposals/${id}/regenerate-card`, { index: 2, base_hash: o.body.proposal_hash });
+    assert.deepEqual([stale.status, stale.body.error], [409, 'proposal_changed'], 'the hash read before the build is stale');
+    const runsBefore = f.runs().length;
+    const q = await call(f, 2, 'POST', '/api/decks/new/quote', { project_id: 1, step: 'card', index: 2, audience: 'angel', length: 'short' });
+    assert.equal(q.status, 200, JSON.stringify(q.body));
+    assert.ok(q.body.ai === true && q.body.hold_microusd > 0, 'the card’s price is shown first');
+    const whole = await call(f, 2, 'POST', '/api/decks/new/quote', { project_id: 1, step: 'build', audience: 'angel', length: 'short' });
+    assert.ok(q.body.hold_microusd < whole.body.hold_microusd, 'one card costs less than the deck');
+    const r = await call(f, 2, 'POST', `/api/decks/proposals/${id}/regenerate-card`, { index: 2, base_hash: g.body.proposal_hash });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(f.runs().length, runsBefore + 1, 'one run');
+    const after = r.body.proposal.slides;
+    assert.equal(after[2].blocks.find((b: any) => b.id === 'h').text, 'Fresh words for this card');
+    for (const i of [0, 1, 3, 4, 5]) assert.deepEqual(after[i], before[i], `card ${i} untouched`);
+    await call(f, 2, 'POST', `/api/decks/proposals/${id}/keep-slides`, { indexes: [2] });
+    const kept = await call(f, 2, 'POST', `/api/decks/proposals/${id}/regenerate-card`, { index: 2 });
+    assert.deepEqual([kept.status, kept.body.error], [409, 'card_kept']);
+    assert.equal((await call(f, 2, 'POST', `/api/decks/proposals/${id}/regenerate-card`, { index: 9 })).status, 400);
+    assert.equal((await call(f, 6, 'POST', `/api/decks/proposals/${id}/regenerate-card`, { index: 1 })).status, 403);
+    assert.ok(f.audits().includes('deck_card_regenerated'));
+  } finally { f.close(); }
+});
+
+test('§9 a rebuild keeps the cards the founder kept; AI off rebuilds a card from records at no cost; out of tokens changes nothing', async () => {
+  const f = await fixture({ cards: { cards: [{ n: 1, headline: 'First words', body: 'One.' }, { n: 2, headline: 'Second words', body: 'Two.' }] } });
+  try {
+    const g = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, audience: 'angel', length: 'short' });
+    const id = g.body.proposal.id;
+    await call(f, 2, 'POST', `/api/decks/proposals/${id}/keep-slides`, { indexes: [1] });
+    f.db.prepare('UPDATE pitch_deck_proposals SET slides = ? WHERE id = ?').run(JSON.stringify(g.body.proposal.slides.map((x: any, i: number) => (i === 1 ? { ...x, title: 'My edited problem' } : x))), id);
+    const again = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, proposal_id: id });
+    assert.equal(again.status, 201, JSON.stringify(again.body));
+    assert.deepEqual(again.body.proposal.kept, [1]);
+    assert.equal(again.body.proposal.slides[1].title, 'My edited problem', 'the kept card survives the rebuild');
+    aiOff(f);
+    const off = await call(f, 2, 'POST', `/api/decks/proposals/${id}/regenerate-card`, { index: 0 });
+    assert.equal(off.status, 200, JSON.stringify(off.body));
+    assert.deepEqual([off.body.cost.charged_microusd, off.body.wording.by], [0, 'none']);
+    assert.match(off.body.wording.reason, /AI assistance is off/);
+    f.db.exec('DELETE FROM ai_rail_preferences');
+    f.db.exec('UPDATE ai_topup_accounts SET balance_microusd = 0 WHERE user_id = 2');
+    const snapshot = (f.db.prepare('SELECT slides FROM pitch_deck_proposals WHERE id = ?').get(id) as any).slides;
+    const broke = await call(f, 2, 'POST', `/api/decks/proposals/${id}/regenerate-card`, { index: 0 });
+    assert.equal(broke.status, 402, JSON.stringify(broke.body));
+    assert.equal((f.db.prepare('SELECT slides FROM pitch_deck_proposals WHERE id = ?').get(id) as any).slides, snapshot, 'nothing written');
   } finally { f.close(); }
 });

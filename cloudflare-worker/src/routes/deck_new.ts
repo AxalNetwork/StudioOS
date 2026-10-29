@@ -12,6 +12,14 @@
  *        → { proposal, progress, wording, cost }
  *   POST /api/decks/proposals/:id/keep-slides   { indexes?: number[], all?: true, save?: true }
  *        → { proposal } | { deck }
+ *   POST /api/decks/proposals/:id/regenerate-card { index, base_hash? }   (D897 §9, #3659)
+ *        → { proposal, proposal_hash, card: { index, layout }, wording, cost }
+ *
+ * D897 §9 (#3659): the outline and the build answers carry `plan` (each card's
+ * message and the records it rests on) and `proposal_hash`. A request that
+ * sends `base_hash` is refused 409 `proposal_changed` when the proposal moved
+ * since that read (another tab built or kept), so nothing is overwritten
+ * unseen. A rebuild keeps every card the founder already kept.
  *
  * Mounted in index.ts BEFORE `decks`: `GET /api/decks/:id` would otherwise
  * answer `/new/context` (Hono matches in registration order; #2434's worker
@@ -51,9 +59,12 @@ import { readSources, type SourceItem } from '../services/decks/sources';
 import { AUDIENCES } from '../services/decks/slideModel';
 import {
   AUDIENCE_CARDS, BUILD_SYSTEM, CARD_CATALOGUE, FAST_PATH_AUDIENCE, LENGTHS, LENGTH_IDS, OUTLINE_SYSTEM, PROMPT_MAX,
-  buildCards, buildMessage, cardProgress, excludedOf, figureRefusal, keptIndexes, outlineFromBody, outlineFromModel, outlineMessage,
-  standardOutline, wordingFromModel, type Audience, type FigureRefusal, type Length, type OutlineRow, type Wording,
+  buildCards, buildMessage, cardOf, cardProgress, excludedOf, figureRefusal, keptIndexes, outlineFromBody, outlineFromModel, outlineMessage,
+  planOf, standardOutline, wordingFromModel, type Audience, type CardVisuals, type FigureRefusal, type Length, type OutlineRow, type Wording,
 } from '../services/decks/newDeck';
+import { readAllSeries } from '../services/decks/chartSeries';
+import { recordDiagrams } from '../services/decks/visuals';
+import { contentHash } from '../services/decks/slideModel';
 import { proposeRail } from '../services/railProposals';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
@@ -196,7 +207,7 @@ deckNew.get('/new/context', async (c) => {
 });
 
 /** The outline rows a build uses: the request's, else the proposal's, else the length's standard deck. */
-function rowsFor(body: any, outline: any, length: Length, projectId: number): { rows: OutlineRow[] } | { response: { error: string; refusal?: any } } {
+function rowsFor(body: any, outline: any, length: Length, projectId: number, audience?: Audience): { rows: OutlineRow[] } | { response: { error: string; refusal?: any } } {
   if (body && Object.prototype.hasOwnProperty.call(body, 'outline')) {
     const got = outlineFromBody(body.outline, projectId);
     return 'rows' in got ? got : { response: got };
@@ -205,7 +216,7 @@ function rowsFor(body: any, outline: any, length: Length, projectId: number): { 
     const got = outlineFromBody(outline.rows, projectId);
     if ('rows' in got) return got;
   }
-  return { rows: standardOutline(length) };
+  return { rows: standardOutline(length, audience) };
 }
 
 deckNew.post('/new/quote', async (c) => {
@@ -213,8 +224,8 @@ deckNew.post('/new/quote', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const projectId = projectIdOf(body?.project_id);
   if (!projectId) return c.json({ error: 'project_id required' }, 400);
-  const step = body?.step === 'outline' ? 'outline' : body?.step === 'build' ? 'build' : null;
-  if (!step) return c.json({ error: 'step must be outline or build' }, 400);
+  const step = body?.step === 'outline' ? 'outline' : body?.step === 'build' ? 'build' : body?.step === 'card' ? 'card' : null;
+  if (!step) return c.json({ error: 'step must be outline, build or card' }, 400);
   const got = await venture(c, user, projectId, true);
   if ('refused' in got) return got.refused;
   const inputs = await inputsOf(c.env, projectId, body);
@@ -226,11 +237,14 @@ deckNew.post('/new/quote', async (c) => {
   if (step === 'outline') {
     opts = runOptions(c, user, projectId, 'outline', outlineMessage({ ...inputs, items }));
   } else {
-    const picked = rowsFor(body, null, inputs.length, projectId);
+    const picked = rowsFor(body, null, inputs.length, projectId, inputs.audience);
     if ('response' in picked) return picked.response.refusal ? refuseFigure(c, picked.response.refusal) : c.json({ error: picked.response.error }, 400);
     const excluded = excludedOf(body?.exclude ?? null);
     if (typeof excluded === 'string') return c.json({ error: excluded }, 400);
-    opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: picked.rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded) }), picked.rows.length);
+    // D897 §9: a card's regeneration is one row's build run, so its price is that run's.
+    const rows = step === 'card' ? picked.rows.slice(Number.isInteger(body?.index) ? body.index : 0, (Number.isInteger(body?.index) ? body.index : 0) + 1) : picked.rows;
+    if (!rows.length) return c.json({ error: 'index must be a card position in the outline' }, 400);
+    opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded) }), rows.length);
   }
   const q = await quoteRun(c.env, opts);
   if (q.ok) return c.json({ step, ai: true, hold_microusd: q.hold_microusd, model: q.model });
@@ -251,6 +265,31 @@ async function writeProposal(env: Env, projectId: number, baseDeckId: number, ti
 
 async function proposalRow(env: Env, id: number) {
   return env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>();
+}
+
+/** D897 §9: what a proposal holds now, as one hash: its cards, what is kept and its outline. */
+export async function proposalHash(row: any): Promise<string> {
+  return contentHash(String(row?.slides ?? '[]'), `${row?.kept_slides_json ?? ''}|${row?.outline_json ?? ''}`);
+}
+
+/** A 409 when the request read an older proposal than the one stored; null when it did not say, or read this one. */
+async function staleRefusal(c: any, row: any, body: any): Promise<Response | null> {
+  const base = body?.base_hash;
+  if (base == null) return null;
+  if (typeof base === 'string' && base === await proposalHash(row)) return null;
+  return refuse(c, 409, { code: 'proposal_changed', message: 'This deck changed in another tab or window. Reload it to see the latest cards; nothing was changed here.' });
+}
+
+/**
+ * What a card may draw besides its slots: the venture's chart series and the
+ * diagrams its records place (D903 §10). A failed read draws none, never a
+ * made-up line or diagram.
+ */
+async function visualsFor(env: Env, projectId: number): Promise<CardVisuals> {
+  let series: CardVisuals['series'] = [];
+  try { series = await readAllSeries(env, projectId); } catch { series = []; }
+  const { diagrams, rows } = await recordDiagrams(env, projectId);
+  return { series, diagrams, rows };
 }
 
 /** The version a New deck sits beside: the one it starts from, else the current one, else none (0). */
@@ -302,7 +341,7 @@ deckNew.post('/outline', async (c) => {
     reason = 'Eadwyn could not answer, so this is the standard outline for the length you chose. Nothing was charged.';
   }
   const proposedBy = rows ? 'Eadwyn' : 'StudioOS';
-  rows = rows ?? standardOutline(inputs.length);
+  rows = rows ?? standardOutline(inputs.length, inputs.audience);
 
   let railUid: string | null = null;
   if (proposedBy === 'Eadwyn') {
@@ -323,9 +362,12 @@ deckNew.post('/outline', async (c) => {
   const title = `${(await ventureName(c.env, projectId)) || 'Venture'} — Pitch deck`;
   const id = await writeProposal(c.env, projectId, base, title, [], outline, userId);
   await auditDeckWrite(c, user, projectId, 'deck_outline_proposed', 'Deck outline proposed');
+  const written = await proposalRow(c.env, id);
   return c.json({
-    proposal: rowToProposal(await proposalRow(c.env, id)),
+    proposal: rowToProposal(written),
+    proposal_hash: await proposalHash(written),
     outline: { rows, proposed_by: proposedBy, ...(reason ? { reason } : {}) },
+    plan: planOf(rows, items),
     cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
   }, 201);
 });
@@ -347,6 +389,8 @@ deckNew.post('/generate', async (c) => {
     const row = await ownedProposal(c, user, Number(body.proposal_id));
     if (row instanceof Response) return row;
     if (Number(row.project_id) !== projectId) return c.json({ error: 'not found' }, 404);
+    const stale = await staleRefusal(c, row, body);
+    if (stale) return stale;
     proposal = rowToProposal(row);
   }
   const prior = proposal?.outline ?? {};
@@ -356,7 +400,7 @@ deckNew.post('/generate', async (c) => {
   if (typeof inputs === 'string') return c.json({ error: inputs }, 400);
   const refused = figureRefusal(inputs.prompt, projectId);
   if (refused) return refuseFigure(c, refused);
-  const picked = rowsFor(body, prior, inputs.length, projectId);
+  const picked = rowsFor(body, prior, inputs.length, projectId, inputs.audience);
   if ('response' in picked) return picked.response.refusal ? refuseFigure(c, picked.response.refusal) : c.json({ error: picked.response.error }, 400);
   const rows = picked.rows;
   // PD4: the records the founder unticked are on no card; a build without the key keeps the outline's choice.
@@ -387,28 +431,99 @@ deckNew.post('/generate', async (c) => {
     reason = 'Eadwyn could not answer. The figures are from your records; the cards carry their titles. Nothing was charged.';
   }
 
-  const { slides, problems } = buildCards(rows, items, wording, name, exclude);
-  if (problems.length) return c.json({ error: 'cards_unsound', problems }, 500);
+  const built = buildCards(rows, items, wording, name, exclude, await visualsFor(c.env, projectId));
+  if (built.problems.length) return c.json({ error: 'cards_unsound', problems: built.problems }, 500);
+  // D897 §9: a card the founder already kept stays as kept when its row is the same card; the rest are rebuilt.
+  const kept = (proposal?.kept ?? []).filter((i: number) => proposal.slides[i]?.spec_id === built.slides[i]?.spec_id);
+  const slides = built.slides.map((s, i) => (kept.includes(i) ? proposal.slides[i] : s));
   const stored = sanitizeSlides(slides);
   const outline = { ...prior, audience: inputs.audience, round_ref: inputs.round_ref, length: inputs.length, prompt: inputs.prompt, rows, exclude: excluded,
     proposed_by: prior.proposed_by ?? 'StudioOS', start: prior.start ?? { kind: 'blank' }, rail_proposal_uid: prior.rail_proposal_uid ?? null };
   const title = `${name || 'Venture'} — Pitch deck`;
   let id: number;
   if (proposal) {
-    await c.env.DB.prepare('UPDATE pitch_deck_proposals SET slides = ?, title = ?, outline_json = ?, kept_slides_json = NULL WHERE id = ?')
-      .bind(JSON.stringify(stored), title, JSON.stringify(outline), proposal.id).run();
+    await c.env.DB.prepare('UPDATE pitch_deck_proposals SET slides = ?, title = ?, outline_json = ?, kept_slides_json = ? WHERE id = ?')
+      .bind(JSON.stringify(stored), title, JSON.stringify(outline), kept.length ? JSON.stringify(kept) : null, proposal.id).run();
     id = Number(proposal.id);
   } else {
     const base = await baseDeckId(c.env, projectId, null);
     id = await writeProposal(c.env, projectId, typeof base === 'number' ? base : 0, title, stored, outline, userId);
   }
   await auditDeckWrite(c, user, projectId, 'deck_built', 'Deck proposal built from records');
+  const written = await proposalRow(c.env, id);
   return c.json({
-    proposal: rowToProposal(await proposalRow(c.env, id)),
+    proposal: rowToProposal(written),
+    proposal_hash: await proposalHash(written),
+    plan: planOf(rows, items, exclude),
     progress: cardProgress(rows, items, wording, exclude),
     wording: { by, dropped, ...(reason ? { reason } : {}) },
     cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
   }, 201);
+});
+
+/**
+ * D897 §9 (#3659): regenerate one card, not the deck. One `deck:build` run for
+ * that card's row; code places its figures again from the records. A kept
+ * card is refused (it is the founder's), every other card is untouched, and
+ * a request that read an older proposal is refused before anything runs.
+ */
+deckNew.post('/proposals/:id/regenerate-card', async (c) => {
+  const user = await requireAuth(c);
+  const plan = planRefusal(user);
+  if (plan) return plan;
+  await ensureSchema(c.env);
+  const row = await ownedProposal(c, user, Number(c.req.param('id')) || 0);
+  if (row instanceof Response) return row;
+  const body = await c.req.json().catch(() => ({} as any));
+  const stale = await staleRefusal(c, row, body);
+  if (stale) return stale;
+  const proposal = rowToProposal(row);
+  const projectId = Number(row.project_id);
+  const got = await venture(c, user, projectId, true);
+  if ('refused' in got) return got.refused;
+  const slides: any[] = proposal.slides;
+  const index = body?.index;
+  if (!Number.isInteger(index) || index < 0 || index >= slides.length) return c.json({ error: `index must be a card position from 0 to ${Math.max(0, slides.length - 1)}` }, 400);
+  if ((proposal.kept ?? []).includes(index)) return refuse(c, 409, { code: 'card_kept', message: 'You kept this card, so it stays as it is. Nothing was run.' });
+  const o = proposal.outline;
+  const picked = rowsFor({}, o, o?.length ?? 'standard', projectId, o?.audience);
+  if ('response' in picked) return c.json({ error: picked.response.error }, 400);
+  const rowOf = picked.rows[index];
+  if (!rowOf || `new:${rowOf.card}` !== slides[index]?.spec_id) return refuse(c, 409, { code: 'outline_changed', message: 'This card no longer matches the outline. Build the deck again first; nothing was run.' });
+  const excluded = excludedOf(o?.exclude ?? null);
+  const exclude = new Set(typeof excluded === 'string' ? [] : excluded);
+  const items = await sourcesFor(c, user, got.project, projectId);
+  const name = await ventureName(c.env, projectId);
+  const inputs = { audience: (o?.audience ?? FAST_PATH_AUDIENCE) as Audience, prompt: String(o?.prompt ?? '') };
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude }), 1);
+  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
+  let words: Wording = { headline: null, body: null };
+  let reason: string | null = null;
+  let dropped = 0;
+  if (res.ok) {
+    const w = wordingFromModel(parseJsonLoose<any>(res.output), 1);
+    words = w.byIndex[0];
+    dropped = w.dropped;
+    if (!words.headline && !words.body) reason = 'Eadwyn’s words could not be read. The card keeps its figures and its title.';
+  } else if (res.refusal === 'assist_off') {
+    reason = 'AI assistance is off on this page, so the card was rebuilt from your records with its title. Nothing was charged.';
+  } else {
+    const stop = refuseRun(c, res);
+    if (stop) return stop;
+    reason = 'Eadwyn could not answer. The card was rebuilt from your records with its title. Nothing was charged.';
+  }
+  const card = cardOf(rowOf, items, words, name, exclude, await visualsFor(c.env, projectId));
+  const next = sanitizeSlides(slides.map((s, i) => (i === index ? card : s)));
+  await c.env.DB.prepare('UPDATE pitch_deck_proposals SET slides = ? WHERE id = ?').bind(JSON.stringify(next), row.id).run();
+  await auditDeckWrite(c, user, projectId, 'deck_card_regenerated', `Card ${index + 1} of the proposal regenerated`);
+  const userId = Number(user.id) || 0;
+  const written = await proposalRow(c.env, Number(row.id));
+  return c.json({
+    proposal: rowToProposal(written), proposal_hash: await proposalHash(written),
+    card: { index, layout: card.layout },
+    wording: { by: words.headline || words.body ? 'Eadwyn' : 'none', dropped, ...(reason ? { reason } : {}) },
+    cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
+  });
 });
 
 /**

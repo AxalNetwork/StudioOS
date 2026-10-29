@@ -9,6 +9,9 @@
  *   POST /api/decks/:id/images           (the same body) → { images: [image], stopped? }
  *   POST /api/decks/:id/images/upload    multipart: file, use, card?, alt?, shows_person?, consent?
  *   GET  /api/decks/:id/images           the venture's kept images, generated or uploaded (PD12d's Design list)
+ *   GET  /api/decks/:id/images/plan      D903 §10 (#3660): whether this Worker can draw, the deck's one art
+ *        direction, and the words-only cards an illustration would help → { capability, direction, cards }.
+ *        A proposal only: it runs nothing and charges nothing.
  *   POST /api/decks/images/:uid/keep     { use?, overlay?, ink?, alt? }
  *   POST /api/decks/images/:uid/discard
  *   GET  /api/decks/images/:uid/file     the bytes, at an https app URL (never a data: URL)
@@ -49,7 +52,9 @@ import { figureRefusal } from '../services/decks/newDeck';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
-import { auditDeckWrite, getDeckRow, projectOwned } from './decks';
+import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
+import { imageCapability, imagePlan } from '../services/decks/visuals';
+import { fetchLandingPageForProject } from '../services/decks/branding';
 
 const deckImages = new Hono<{ Bindings: Env }>();
 
@@ -257,6 +262,18 @@ deckImages.get('/:id/images', async (c) => {
   const rows = await c.env.DB.prepare("SELECT * FROM deck_images WHERE project_id = ? AND state = 'kept' ORDER BY created_at DESC, id DESC LIMIT 100")
     .bind(deck.projectId).all();
   return c.json({ images: (rows.results ?? []).map((r: any) => view(c, r)) });
+});
+
+deckImages.get('/:id/images/plan', async (c) => {
+  const user = await requireAuth(c);
+  const deck = await deckOf(c, user, false);
+  if (deck instanceof Response) return deck;
+  const row = await getDeckRow(c.env, deck.deckId);
+  let slides: any[] = [];
+  try { slides = JSON.parse(row?.slides || '[]'); } catch { slides = []; }
+  const theme = themeOfRow(row);
+  const kit = await fetchLandingPageForProject(c.env, deck.projectId);
+  return c.json(imagePlan(slides, theme?.kind ?? 'brand', kit, imageCapability(c.env)));
 });
 
 deckImages.post('/images/:uid/keep', async (c) => {
