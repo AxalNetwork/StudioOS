@@ -63,6 +63,7 @@ import {
   planOf, standardOutline, wordingFromModel, type Audience, type CardVisuals, type FigureRefusal, type Length, type OutlineRow, type Wording,
 } from '../services/decks/newDeck';
 import { readAllSeries } from '../services/decks/chartSeries';
+import { recordDiagrams } from '../services/decks/visuals';
 import { contentHash } from '../services/decks/slideModel';
 import { proposeRail } from '../services/railProposals';
 import { railFor, refuseRun } from '../util/railContext';
@@ -279,9 +280,16 @@ async function staleRefusal(c: any, row: any, body: any): Promise<Response | nul
   return refuse(c, 409, { code: 'proposal_changed', message: 'This deck changed in another tab or window. Reload it to see the latest cards; nothing was changed here.' });
 }
 
-/** What a card may draw besides its slots: the venture's chart series. A failed read draws none, never a made-up line. */
+/**
+ * What a card may draw besides its slots: the venture's chart series and the
+ * diagrams its records place (D903 §10). A failed read draws none, never a
+ * made-up line or diagram.
+ */
 async function visualsFor(env: Env, projectId: number): Promise<CardVisuals> {
-  try { return { series: await readAllSeries(env, projectId) }; } catch { return { series: [] }; }
+  let series: CardVisuals['series'] = [];
+  try { series = await readAllSeries(env, projectId); } catch { series = []; }
+  const { diagrams, rows } = await recordDiagrams(env, projectId);
+  return { series, diagrams, rows };
 }
 
 /** The version a New deck sits beside: the one it starts from, else the current one, else none (0). */

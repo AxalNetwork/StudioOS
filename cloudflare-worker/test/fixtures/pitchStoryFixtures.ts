@@ -48,12 +48,22 @@ export function fullRecords() {
       recorded('raise.cap_table', 'Cap table holders', 5, 'count', 'Reviewed'),
       recorded('raise.vesting', 'Vesting schedules', 3, 'count', 'Reviewed'),
     ],
+    // D903 §10: what the records place, in `recordDiagrams`' shape (roadmap objectives, use-of-funds sections, positioned competitors).
+    diagrams: {
+      roadmap: { v: 1, type: 'timeline', items: [{ label: 'Multi-entity close', detail: 'Now · 2026-Q4' }, { label: 'Auditor workspace', detail: 'Next · 2027-Q1' }, { label: 'Payroll feeds', detail: 'Later · 2027-Q2' }, { label: 'Self-serve onboarding', detail: 'Later' }] },
+      use_of_funds: { v: 1, type: 'flow', items: [{ label: 'Product & engineering' }, { label: 'GTM: sales and marketing' }, { label: 'Operations, legal & compliance' }] },
+      market: { v: 1, type: 'matrix', axes: { x: 'Price against ours', y: 'Depth against ours' }, items: [{ label: 'Cheaper and broader', detail: 'None recorded here' }, { label: 'Pricier and broader', detail: 'Ledgerly' }, { label: 'Cheaper and narrower', detail: 'Spreadsheets and email' }, { label: 'Pricier and narrower', detail: 'CloseKit' }] },
+      competition: { v: 1, type: 'matrix', axes: { x: 'Price against ours', y: 'Depth against ours' }, items: [{ label: 'Cheaper and broader', detail: 'None recorded here' }, { label: 'Pricier and broader', detail: 'Ledgerly' }, { label: 'Cheaper and narrower', detail: 'Spreadsheets and email' }, { label: 'Pricier and narrower', detail: 'CloseKit' }] },
+    },
+    rows: { market: 3, competition: 3 },
     series: [series('grow.mrr.monthly', 'MRR, monthly', [['2026-03', 4100], ['2026-04', 5200], ['2026-05', 6900], ['2026-06', 8300], ['2026-07', 10400], ['2026-08', 12900], ['2026-09', 15100]])],
   };
 }
 
 export function sparseRecords() {
   return {
+    diagrams: {},
+    rows: {},
     items: [
       missing('validate.top_pain', 'Top pain theme', 'count'),
       missing('validate.interviews', 'Interviews', 'count'),
@@ -82,6 +92,8 @@ export function conflictingRecords() {
   const full = fullRecords();
   return {
     items: full.items,
+    diagrams: full.diagrams,
+    rows: full.rows,
     series: [
       series('grow.mrr.typed', 'Typed MRR', [['2026-05', 9000], ['2026-06', 11000], ['2026-07', 14000], ['2026-08', 18000], ['2026-09', 21000]], 'Stated', 'Typed'),
       ...full.series,
