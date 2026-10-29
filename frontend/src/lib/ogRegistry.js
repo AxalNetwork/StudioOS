@@ -85,8 +85,9 @@ const ROUTES = [
   {
     path: '/',
     title: 'From idea to funded company',
+    // D1379: says what the app does, for Google's OAuth verification as much as for a link preview.
     description:
-      'One network connecting partners, capital, and founders. Spin-Out Lab takes companies from idea to funded in 28 days.',
+      'Axal VC is a venture studio platform: founders validate an idea with customer interviews, form the company and raise, with partners and investors in one network.',
     key: 'home',
     type: 'website',
     section: 'home',

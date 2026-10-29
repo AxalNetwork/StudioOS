@@ -6,13 +6,14 @@ import LegalDocument from './site/LegalDocument';
  * `/privacy` — the Privacy Policy, in the owner's canvas legal layout (D680).
  *
  * The text is the page's own, as it read before D680 (option A on #1554):
- * sections 0 to 9, their headings in sentence case, and its date as "Last
+ * sections 0 to 9 (section 9, Google user data, added for Google's OAuth
+ * verification in D1379; contact moved to 10), their headings in sentence case, and its date as "Last
  * updated". The canvas's policy waits on the owner and counsel; see
  * LegalDocument. Section 7 still describes four cookie categories; the
  * preferences dialog now draws only the ones the site sets (D680), and the
  * text changes when the owner's does.
  */
-export const PRIVACY_UPDATED = 'March 31, 2026';
+export const PRIVACY_UPDATED = 'October 29, 2026';
 export const PRIVACY_EMAIL = 'privacy@axal.vc';
 
 const INTRO = (
@@ -147,6 +148,31 @@ const SECTIONS = [
   },
   {
     n: '09',
+    h: 'Google user data',
+    body: (
+      <>
+        <p>You can connect a Google account to Axal VC in Account › Connectors. Axal VC then uses Google data only for the features you turn on, and only to provide them to you:</p>
+        <ul>
+          <li><strong>Google Calendar:</strong> We read your calendar events to find the call you attach to an interview, and we create calendar events with a Google Meet link when you schedule a call from Axal VC.</li>
+          <li><strong>Google Meet:</strong> When you start a call from Record a Session, we create the Meet meeting for you and set it so your Axal VC note-taker can join and Meet can transcribe it. After a call you attached to an interview, we read that call's participants and transcript and add them to the interview.</li>
+          <li><strong>Google Drive and Google Sheets:</strong> We open only the files you choose in Google's own file picker, or the spreadsheet you connect for fund reporting.</li>
+          <li><strong>Gmail:</strong> If you connect a mailbox, we send the emails you send from Axal VC through it. We do not read your inbox.</li>
+          <li><strong>Your Google profile:</strong> Your name and email address, to show which account is connected.</li>
+        </ul>
+        <p>Axal VC's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>, including the Limited Use requirements. In particular:</p>
+        <ul>
+          <li>We use Google user data only to provide and improve the features above, which you can see in the Platform.</li>
+          <li>We do not sell it, use it for advertising, or use it to build user profiles for third parties.</li>
+          <li>We do not use it to train generalized AI or machine-learning models.</li>
+          <li>We transfer it to others only as needed to provide those features (for example, the service that transcribes a call), to comply with law, or as part of a merger or sale with notice to you.</li>
+          <li>Our staff do not read it unless you ask us to, it is needed for security or to investigate abuse, or the law requires it.</li>
+        </ul>
+        <p><strong>Storage and deletion:</strong> Google access tokens are stored encrypted. A transcript or participant list we import is kept with the interview it belongs to until you or your company delete that interview. Disconnecting Google in Account › Connectors deletes the stored tokens and revokes Axal VC's access. You can also remove access at any time at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a>. To ask us to delete Google data we hold, email privacy@axal.vc.</p>
+      </>
+    ),
+  },
+  {
+    n: '10',
     h: 'Contact us',
     body: (
       <>
