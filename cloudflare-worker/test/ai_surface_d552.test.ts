@@ -198,7 +198,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/deckVersionReview.ts': ['AI_SURFACE.raisePitchReview'],
   // D767 (#2096): the deck draft and the slide fill.
   // D1113 retired decks.ts's old positioning call; the active deck/narrative calls remain below.
-  'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here
+  'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here; D897 §9 (#3659): one card's regeneration
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'routes/deck_images.ts': ['AI_SURFACE.raisePitch'], // D903: the card and background images
   'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool
