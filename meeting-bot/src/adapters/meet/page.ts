@@ -24,4 +24,6 @@ export interface MeetPage {
   addInitScript(script: { content: string }): Promise<void>;
   /** True once the page or its browser has gone. */
   isClosed(): boolean;
+  /** The page's address now; read for its host only (D1373), never logged. */
+  url?(): string;
 }

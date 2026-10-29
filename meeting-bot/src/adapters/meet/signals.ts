@@ -39,6 +39,24 @@ export function classify(present: ReadonlySet<string>): MeetState {
   return 'unknown';
 }
 
+/**
+ * D1373: what an `unknown` pre-join page was, for the run's diagnostic, from
+ * the page's host and two hooks; never its text.
+ * - `signin`: Google sent the bot to its sign-in page;
+ * - `other_host`: any other host than Meet;
+ * - `unsupported`: Google declined the browser;
+ * - `name_only`: the guest name field, but no Ask to join or Join now;
+ * - `unread`: a Meet page none of the hooks match.
+ */
+export type UnknownPage = 'signin' | 'other_host' | 'unsupported' | 'name_only' | 'unread';
+export function unknownPage(seen: { host: string | null; unsupported: boolean; nameInput: boolean }): UnknownPage {
+  if (seen.host === 'accounts.google.com') return 'signin';
+  if (seen.host && seen.host !== 'meet.google.com') return 'other_host';
+  if (seen.unsupported) return 'unsupported';
+  if (seen.nameInput) return 'name_only';
+  return 'unread';
+}
+
 /** The states that refuse a join, as D886's failure codes. */
 export const REFUSAL: Partial<Record<MeetState, FailureCode>> = {
   not_admitted: 'not_admitted',
