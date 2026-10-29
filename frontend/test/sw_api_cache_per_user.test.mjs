@@ -99,14 +99,20 @@ function loadWorker({ online = true, body = 'net' } = {}) {
 const ALICE = '8';
 const BOB = '9';
 const OWN_DATA = '/api/projects/41';          // stale-while-revalidate
-const OTHER_API = '/api/companies/mine';      // network-first
+const OTHER_API = '/api/companies/mine';      // not intercepted (v19)
 
 test("a body cached for one account is not served to another, offline", async () => {
   // THE WHOLE POINT, on the path that actually leaked: network-first only
   // reads its cache when the network throws, so this is the offline case.
   for (const path of [OWN_DATA, OTHER_API]) {
     const w = loadWorker({ online: true, body: 'alice-secret' });
-    assert.equal(await (await w.go(path, ALICE)).text(), 'alice-secret', 'setup: Alice was not served');
+    const first = await w.go(path, ALICE);
+    if (first === undefined) {
+      // v19: the worker stands aside for this path, so nothing is cached to leak.
+      assert.deepEqual(await w.caches.keys(), [], `${path}: stood aside yet opened a cache`);
+      continue;
+    }
+    assert.equal(await first.text(), 'alice-secret', 'setup: Alice was not served');
 
     w.setNetwork(false);
     const bob = await w.go(path, BOB);
@@ -168,7 +174,7 @@ test('a crafted identity cannot name another bucket', async () => {
     assert.ok(!seen.includes('alice-secret'), `identity ${JSON.stringify(crafted)} reached Alice's bucket`);
   }
   const api = (await w.caches.keys()).filter((k) => k.startsWith('studioos-api-'));
-  assert.deepEqual(api.sort(), ['studioos-api-v18-2026-09-22-8', 'studioos-api-v18-2026-09-22-anon'],
+  assert.deepEqual(api.sort(), ['studioos-api-v19-2026-10-29-8', 'studioos-api-v19-2026-10-29-anon'],
     'a crafted identity created a bucket of its own');
 });
 
@@ -194,11 +200,22 @@ test('activate keeps this build\'s per-account buckets and drops every older one
   await w.activate();
 
   const left = (await w.caches.keys()).sort();
-  assert.ok(left.includes('studioos-api-v18-2026-09-22-8'), "activate deleted an account's live bucket");
-  assert.ok(left.includes('studioos-api-v18-2026-09-22-9'), "activate deleted an account's live bucket");
+  assert.ok(left.includes('studioos-api-v19-2026-10-29-8'), "activate deleted an account's live bucket");
+  assert.ok(left.includes('studioos-api-v19-2026-10-29-9'), "activate deleted an account's live bucket");
   assert.ok(!left.includes('studioos-api-v16-2026-09-10'),
     'the shared bucket from the previous build survived — every browser keeps reading it');
   assert.ok(!left.includes('studioos-static-v9-old'), 'a stale static cache survived');
+});
+
+test('any other API call is left to the browser and opens no cache', async () => {
+  // v19: network-first awaited `caches.open` before every fetch and stored
+  // every body with no eviction, so a bucket weeks old held each call past
+  // api.js's 30s deadline. Mutation checked: route OTHER_API back through a
+  // cache-opening strategy → both assertions fail.
+  const w = loadWorker();
+  assert.equal(await w.go(OTHER_API, ALICE), undefined, 'the worker answered an ordinary API call itself');
+  assert.equal(await w.go('/api/company/memberships', ALICE), undefined);
+  assert.deepEqual(await w.caches.keys(), [], 'an ordinary API call opened or wrote a cache');
 });
 
 test('a navigation is left to the browser', async () => {
