@@ -254,6 +254,35 @@ test('fails closed: an unreachable guard runs nothing, releases the hold and cha
   } finally { f.db.close(); }
 });
 
+test('D1375: a guard call that does not complete is asked once more; a second answer lets the run through', async () => {
+  let asked = 0;
+  const f = world({ verdict: () => { asked++; if (asked === 1) throw new Error('slow'); return 'safe'; } });
+  try {
+    const r = await run(f.env, { task: 'advisor_turn', userId: 2, text: 'hello' });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(f.calls.model.length, 1, 'the model ran on a checked input');
+    assert.ok(asked >= 2, 'the input slice was asked again');
+  } finally { f.db.close(); }
+});
+
+test('D1375: two failures in a row still fail closed, as one guard row; a verdict is never re-asked', async () => {
+  let asked = 0;
+  const f = world({ verdict: () => { asked++; throw new Error('down'); } });
+  try {
+    const r = await run(f.env, { task: 'advisor_turn', userId: 2, text: 'hello' });
+    assert.equal(r.refusal, 'guard_unavailable');
+    assert.equal(asked, 2, 'one retry, no more');
+    assert.equal(rows(f.db).filter((x) => x.task === 'safety').length, 1);
+  } finally { f.db.close(); }
+  let unsafeAsked = 0;
+  const g = world({ verdict: () => { unsafeAsked++; return 'unsafe\nS2'; } });
+  try {
+    const r = await run(g.env, { task: 'advisor_turn', userId: 2, text: 'hello' });
+    assert.equal(r.refusal, 'guard_blocked');
+    assert.equal(unsafeAsked, 1, 'an unsafe verdict is final');
+  } finally { g.db.close(); }
+});
+
 test('fails closed: a guard that answers anything but a verdict is unavailable, and the call it completed is charged', async () => {
   for (const said of ['I think this is fine.', '', 'S1', 'safe\nunsafe\nS1']) {
     const f = world({ verdict: () => said });
