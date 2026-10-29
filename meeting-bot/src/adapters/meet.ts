@@ -77,10 +77,20 @@ export class MeetAdapter implements MeetingAdapter {
   private out = false;
   private watching: Promise<void> | null = null;
   private prepared = false;
+  private lastStep: string | null = null;
 
   constructor(page: MeetPage, opts: MeetOptions = {}) {
     this.page = page;
-    this.log = opts.log ?? consoleSink;
+    const sink = opts.log ?? consoleSink;
+    // D1368: remember the last join step it logged, so a failed run can say
+    // where it stopped. The line is already code-only (`logLine`'s allowlist).
+    this.log = (event, fields) => {
+      if (event.startsWith('meeting_bot.meet_')) {
+        const state = typeof fields.state === 'string' ? `:${fields.state}` : '';
+        this.lastStep = event.slice('meeting_bot.'.length) + state;
+      }
+      sink(event, fields);
+    };
     this.clock = opts.clock ?? realClock;
     this.pollMs = opts.pollMs ?? 500;
     this.stepTimeoutMs = opts.stepTimeoutMs ?? 30_000;
@@ -195,6 +205,8 @@ export class MeetAdapter implements MeetingAdapter {
 
   speakers(on: Listener<SpeakerChange>): Unsubscribe { return this.speakerTopic.on(on); }
   ended(on: () => void): Unsubscribe { return this.endTopic.on(on); }
+
+  diagnostic(): string | null { return this.lastStep; }
 
   async leave(): Promise<void> {
     // Out first, so the watch never reads the bot's own leaving as the call ending.

@@ -87,6 +87,8 @@ export interface MeetingAdapter {
   ended(on: () => void): Unsubscribe;
   /** Leave the call. Must not throw on a call that already ended. */
   leave(): Promise<void>;
+  /** The last join step reached, as `<step>` or `<step>:<page state>`, from the bot's own codes only. */
+  diagnostic?(): string | null;
 }
 
 /** What B1's Durable Object hands the runtime when it starts a run. */
@@ -115,6 +117,8 @@ export interface StatusReport {
   readonly state: BotState;
   readonly reason?: LeaveReason;
   readonly code?: FailureCode;
+  /** Where a failure happened: the adapter's last join step (`diagnostic()`), never page text. */
+  readonly detail?: string;
   /** Counts only. */
   readonly chunks?: number;
   readonly last_seq?: number;
