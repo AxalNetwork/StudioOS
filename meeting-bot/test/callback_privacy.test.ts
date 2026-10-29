@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { createHmac, randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { encodeWav } from '../src/wav.ts';
-import { CALLBACK_PATHS, TransportError, httpTransport, signRequest } from '../src/callback.ts';
+import { CALLBACK_PATHS, TransportError, failureDetail, httpTransport, signRequest } from '../src/callback.ts';
 import { logLine, safeFields } from '../src/log.ts';
 import { runBot } from '../src/lifecycle.ts';
 import { FakeAdapter } from '../src/fakeAdapter.ts';
@@ -118,4 +118,31 @@ test('5. a whole run, with a passcode in the link and names in the roster, write
   for (const needle of [LINK, 'Zq9SECRETpass', '81234567890', 'zoom.us/j', ...NAMES, 'Zelda', 'u1', 'u2']) {
     assert.ok(!all.includes(needle), `a log line carries ${needle}`);
   }
+});
+
+test('6. D1368: a failed status names the bot\'s own code and its last step; nothing else can ride along', async () => {
+  // Mutation checked: send report.detail unchecked → the page-text detail reaches the body.
+  const {f,seen}=stubFetch(()=>Response.json({}));
+  const transport=httpTransport({baseUrl:BASE,runId:RUN,key:KEY,fetch:f,now:()=>NOW});
+  await transport.status({state:'failed',code:'platform_blocked',detail:'meet_prejoin_result:unknown'});
+  const body=JSON.parse(String(seen[0].init.body));
+  assert.deepEqual([body.failure_code,body.failure_detail],['runtime_failed','platform_blocked@meet_prejoin_result:unknown']);
+  assert.equal(failureDetail({state:'failed',code:'platform_blocked',detail:'You can\'t join this video call'}),'platform_blocked','page text falls back to the code alone');
+  assert.equal(failureDetail({state:'failed',code:'not_admitted'}),'not_admitted');
+  assert.equal(failureDetail({state:'recording'}),null,'only a failure carries one');
+});
+
+test('7. D1368: a failed join reports the adapter\'s last step through runBot', async () => {
+  // Mutation checked: drop `detail` from lifecycle's failure report → no detail reaches the transport.
+  const clock = new FakeClock();
+  const cb = new StubCallback();
+  const a = new FakeAdapter({ platform: 'google_meet', openDoor: true });
+  a.join = async () => { throw new AdapterFailure('platform_blocked'); };
+  (a as any).diagnostic = () => 'meet_prejoin_result:unknown';
+  const run = runBot({ runId: 'r', platform: 'google_meet', meetingUrl: 'https://meet.google.com/abc-defg-hij', notice: 'n', limitMs: FREE_LIMIT_MS, deadlineAt: clock.now()+FREE_LIMIT_MS, budgetDeadlineAt: clock.now()+120_000 },
+    { adapter: a, transport: cb, clock, log: () => {} });
+  const r = await clock.until(run);
+  assert.deepEqual([r.state, r.code, r.detail], ['failed', 'platform_blocked', 'meet_prejoin_result:unknown']);
+  const failed = cb.statuses.find((s) => s.state === 'failed');
+  assert.equal(failed?.detail, 'meet_prejoin_result:unknown');
 });

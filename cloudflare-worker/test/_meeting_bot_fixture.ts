@@ -13,6 +13,7 @@ export function world(monthMicro=500_000_000, Supervisor=UnpublishedMeetingBotRu
   w.db.exec(mig('525_ai_reservation_idempotency.sql'));
   w.db.exec(mig('531_meeting_bots.sql'));
   w.db.exec(mig('532_meeting_bot_participants.sql'));
+  w.db.exec(mig('655_meeting_bot_failure_detail.sql'));
   const session=seed(w,{kind:'recorder',chunks:0,ageDays:0});
   w.db.prepare("UPDATE interview_sessions SET status='draft', processing_stage=NULL, consent_method='written', consent_at=datetime('now') WHERE id=?").run(session);
   w.db.prepare('DELETE FROM interview_transcript_segments WHERE session_id=?').run(session);

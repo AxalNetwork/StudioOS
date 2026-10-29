@@ -224,6 +224,8 @@ test('join diagnostics distinguish unknown pages and explicit refusals without p
       ['meeting_bot.meet_navigation_started', {}], ['meeting_bot.meet_navigation_ready', {}],
       ['meeting_bot.meet_prejoin_result', { state: state === 'unknown' ? 'unknown' : 'platform_blocked' }],
     ]);
+    // D1368: the run can say where it stopped, in the same codes.
+    assert.equal(bot.diagnostic(), `meet_prejoin_result:${state === 'unknown' ? 'unknown' : 'platform_blocked'}`);
     await bot.leave();
   });
 });

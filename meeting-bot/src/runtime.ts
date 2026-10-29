@@ -78,7 +78,7 @@ export class RuntimeHost {
         await runBot(cfg,{adapter,transport,stop:stop.signal,shutdown:this.shutdownController.signal,log:this.options.log});
       }catch{
         logLine(this.options.log??(()=>{}),'runtime_failed');
-        try{await transport.status({state:'failed',code:'platform_blocked'});}catch{/* no raw exception */}
+        try{await transport.status({state:'failed',code:'platform_blocked',detail:'runtime_start'});}catch{/* no raw exception */}
       }finally{
         if(adapter){let timer:ReturnType<typeof setTimeout>|undefined;await Promise.race([adapter.leave().catch(()=>{}),new Promise<void>(resolve=>{timer=setTimeout(resolve,5000);})]);if(timer)clearTimeout(timer);}
         active.ended=true;
