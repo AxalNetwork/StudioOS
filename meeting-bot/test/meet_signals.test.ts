@@ -4,7 +4,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { REFUSAL, RosterTracker, SpeakerTracker, classify, isMeetLink, isOut } from '../src/adapters/meet/signals.ts';
+import { REFUSAL, RosterTracker, SpeakerTracker, classify, isMeetLink, isOut, unknownPage } from '../src/adapters/meet/signals.ts';
 import { HOOKS } from '../src/adapters/meet/selectors.ts';
 import { readFileSync } from 'node:fs';
 
@@ -62,4 +62,14 @@ test('every hook names its fixture state and purpose; the adapter names hooks, n
     assert.ok(hook.selector && hook.purpose && hook.page, name);
     assert.ok(!adapter.includes(hook.selector), `${name}'s selector is written into the adapter`);
   }
+});
+
+test('D1373: an unknown page is named from its host and two hooks, sign-in first', () => {
+  const page = (host: string | null, unsupported = false, nameInput = false) => unknownPage({ host, unsupported, nameInput });
+  assert.equal(page('accounts.google.com', true, true), 'signin');
+  assert.equal(page('www.google.com'), 'other_host');
+  assert.equal(page('meet.google.com', true, true), 'unsupported');
+  assert.equal(page('meet.google.com', false, true), 'name_only');
+  assert.equal(page('meet.google.com'), 'unread');
+  assert.equal(page(null), 'unread', 'a page whose address cannot be read');
 });

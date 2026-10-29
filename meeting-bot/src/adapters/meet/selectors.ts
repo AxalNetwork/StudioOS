@@ -19,7 +19,8 @@
 
 /** The fixture states a hook can belong to: one page of `test/fixtures/meet.html` each. */
 export type MeetPageName =
-  | 'media_prompt' | 'prejoin' | 'prejoin_open' | 'lobby' | 'denied' | 'blocked' | 'link_invalid' | 'in_call' | 'ended' | 'removed';
+  | 'media_prompt' | 'prejoin' | 'prejoin_open' | 'lobby' | 'denied' | 'blocked' | 'link_invalid' | 'in_call' | 'ended' | 'removed'
+  | 'unsupported';
 
 export interface Hook {
   readonly selector: string;
@@ -45,6 +46,8 @@ export const HOOKS = {
   blocked: { selector: 'text=/You can.t join this video call/i', purpose: 'Meet will not let this guest in', page: 'blocked' },
   blocked_org: { selector: 'text=/only people (in|from) .* can join/i', purpose: 'why: the meeting admits only its own Workspace organization', page: 'blocked' },
   link_invalid: { selector: 'text=/Check your meeting code|Invalid video call name|meeting code is invalid/i', purpose: 'the link names no meeting', page: 'link_invalid' },
+  // ── an unread page, named for the run's diagnostic only (D1373) ──
+  unsupported_browser: { selector: 'text=/browser (is not|isn.t|is no longer) supported|unsupported browser|switch to a supported browser/i', purpose: 'Google declined this browser before the pre-join screen', page: 'unsupported' },
   // ── in the call ──
   leave: { selector: '[role="button"][aria-label="Leave call"]', purpose: 'the bot is in the call; pressing it leaves', page: 'in_call' },
   people_button: { selector: '[role="button"][aria-label^="People"]', purpose: 'opens the participant panel', page: 'in_call' },

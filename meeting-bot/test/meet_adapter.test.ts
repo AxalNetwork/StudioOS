@@ -223,9 +223,22 @@ test('join diagnostics distinguish unknown pages and explicit refusals without p
     assert.deepEqual(lines, [
       ['meeting_bot.meet_navigation_started', {}], ['meeting_bot.meet_navigation_ready', {}],
       ['meeting_bot.meet_prejoin_result', { state: state === 'unknown' ? 'unknown' : 'platform_blocked' }],
+      // D1373: an unknown page is named by kind, never by its text.
+      ...(state === 'unknown' ? [['meeting_bot.meet_page_unread', {}] as [string, Record<string, unknown>]] : []),
     ]);
     // D1368: the run can say where it stopped, in the same codes.
-    assert.equal(bot.diagnostic(), `meet_prejoin_result:${state === 'unknown' ? 'unknown' : 'platform_blocked'}`);
+    assert.equal(bot.diagnostic(), state === 'unknown' ? 'meet_page_unread' : 'meet_prejoin_result:platform_blocked');
+    await bot.leave();
+  });
+});
+
+test('D1373: an unread pre-join page says which kind it was: the browser declined, or a name field with no join button', { skip }, async () => {
+  for (const [path, kind] of [['unsupported', 'unsupported'], ['nameonly', 'name_only']] as const) await withMeetPage(async (page) => {
+    const lines: string[] = [];
+    const bot = new MeetAdapter(page, { pollMs: 10, stepTimeoutMs: 60, log: (event) => lines.push(event) });
+    await assert.rejects(bot.join({ url: `https://meet.google.com/${path}-fixture`, botName: BOT_NAME, signal: soon() }), { code: 'platform_blocked' });
+    assert.equal(lines.at(-1), `meeting_bot.meet_page_${kind}`, path);
+    assert.equal(bot.diagnostic(), `meet_page_${kind}`, path);
     await bot.leave();
   });
 });

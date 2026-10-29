@@ -35,7 +35,7 @@ import { realClock } from '../lifecycle.ts';
 import { CAPTURE_BINDING, CAPTURE_SCRIPT, decodeBlock } from './meet/capture.ts';
 import type { MeetPage } from './meet/page.ts';
 import { sel, type HookName } from './meet/selectors.ts';
-import { REFUSAL, RosterTracker, STATE_HOOKS, SpeakerTracker, classify, isMeetLink, isOut, type MeetState, type RosterRow } from './meet/signals.ts';
+import { REFUSAL, RosterTracker, STATE_HOOKS, SpeakerTracker, classify, isMeetLink, isOut, unknownPage, type MeetState, type RosterRow } from './meet/signals.ts';
 
 export type { MeetPage, MeetLocator } from './meet/page.ts';
 
@@ -121,6 +121,13 @@ export class MeetAdapter implements MeetingAdapter {
     }
   }
 
+  /** D1373: which kind of page an unknown pre-join page was; its host and two hooks, never its text. */
+  private async unknownPage() {
+    let host: string | null = null;
+    try { host = this.page.url ? new URL(this.page.url()).hostname : null; } catch { host = null; }
+    return unknownPage({ host, unsupported: await this.visible('unsupported_browser'), nameInput: await this.visible('name_input') });
+  }
+
   private async dismissMediaOnboarding(): Promise<void> {
     if (!(await this.visible('continue_without_media'))) return;
     logLine(this.log, 'meet_media_prompt');
@@ -160,6 +167,7 @@ export class MeetAdapter implements MeetingAdapter {
     logLine(this.log, 'meet_navigation_ready');
     const first = await this.waitFor((s) => s === 'prejoin' || s in REFUSAL || isOut(s), this.stepTimeoutMs, req.signal, true);
     logLine(this.log, 'meet_prejoin_result', { state: first });
+    if (first === 'unknown') logLine(this.log, `meet_page_${await this.unknownPage()}`);
     this.refuseOn(first);
     if (first !== 'prejoin') throw new AdapterFailure('platform_blocked');
     if (await this.visible('name_input')) await this.page.locator(sel('name_input')).first().fill(req.botName);
