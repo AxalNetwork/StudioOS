@@ -20,16 +20,17 @@
  * - `not_admitted`: the host denied the request;
  * - `meeting_ended`: the call ended before the bot was admitted.
  *
- * **Privacy:** nothing here logs. The core's `logLine` is the only log, and it
- * writes codes and counts. The link, display names and the chat text never
+ * **Privacy:** join diagnostics use only the core's `logLine`, which writes
+ * codes and counts. The link, display names and the chat text never
  * leave the page and the callback.
  *
  * **UNVERIFIED:** every page hook is in `meet/selectors.ts`, built without access
  * to Meet. See there.
  */
 import { AdapterFailure } from '../types.ts';
-import type { AudioFrame, Clock, JoinRequest, MeetingAdapter, RosterChange, SpeakerChange, Unsubscribe } from '../types.ts';
+import type { AudioFrame, Clock, JoinRequest, LogSink, MeetingAdapter, RosterChange, SpeakerChange, Unsubscribe } from '../types.ts';
 import { toPcm16k } from '../wav.ts';
+import { consoleSink, logLine } from '../log.ts';
 import { realClock } from '../lifecycle.ts';
 import { CAPTURE_BINDING, CAPTURE_SCRIPT, decodeBlock } from './meet/capture.ts';
 import type { MeetPage } from './meet/page.ts';
@@ -50,6 +51,7 @@ class Topic<T> {
 }
 
 export interface MeetOptions {
+  readonly log?: LogSink;
   readonly clock?: Clock;
   /** How often the page is read in the call, and while waiting. */
   readonly pollMs?: number;
@@ -61,6 +63,7 @@ export class MeetAdapter implements MeetingAdapter {
   readonly platform = 'google_meet' as const;
 
   private readonly page: MeetPage;
+  private readonly log: LogSink;
   private readonly clock: Clock;
   private readonly pollMs: number;
   private readonly stepTimeoutMs: number;
@@ -74,9 +77,20 @@ export class MeetAdapter implements MeetingAdapter {
   private out = false;
   private watching: Promise<void> | null = null;
   private prepared = false;
+  private lastStep: string | null = null;
 
   constructor(page: MeetPage, opts: MeetOptions = {}) {
     this.page = page;
+    const sink = opts.log ?? consoleSink;
+    // D1368: remember the last join step it logged, so a failed run can say
+    // where it stopped. The line is already code-only (`logLine`'s allowlist).
+    this.log = (event, fields) => {
+      if (event.startsWith('meeting_bot.meet_')) {
+        const state = typeof fields.state === 'string' ? `:${fields.state}` : '';
+        this.lastStep = event.slice('meeting_bot.'.length) + state;
+      }
+      sink(event, fields);
+    };
     this.clock = opts.clock ?? realClock;
     this.pollMs = opts.pollMs ?? 500;
     this.stepTimeoutMs = opts.stepTimeoutMs ?? 30_000;
@@ -95,14 +109,23 @@ export class MeetAdapter implements MeetingAdapter {
 
   /** Reads the page until its state is one of `wanted`, or `ms` pass; the last state seen.
    * A page that has gone (the browser died) is `platform_blocked`, never a wait that cannot end. */
-  private async waitFor(wanted: (s: MeetState) => boolean, ms: number, signal?: AbortSignal): Promise<MeetState> {
+  private async waitFor(wanted: (s: MeetState) => boolean, ms: number, signal?: AbortSignal, mediaOnboarding = false): Promise<MeetState> {
     const until = this.clock.now() + ms;
     for (;;) {
       if (this.page.isClosed()) throw new AdapterFailure('platform_blocked');
+      if (signal?.aborted) throw new Error('aborted');
+      if (mediaOnboarding) await this.dismissMediaOnboarding();
       const s = await this.state();
       if (wanted(s) || this.clock.now() >= until || signal?.aborted) return s;
       await this.clock.sleep(this.pollMs);
     }
+  }
+
+  private async dismissMediaOnboarding(): Promise<void> {
+    if (!(await this.visible('continue_without_media'))) return;
+    logLine(this.log, 'meet_media_prompt');
+    await this.page.locator(sel('continue_without_media')).first().click();
+    logLine(this.log, 'meet_media_dismissed');
   }
 
   async readRoster(): Promise<RosterRow[] | null> {
@@ -132,8 +155,11 @@ export class MeetAdapter implements MeetingAdapter {
       await this.page.addInitScript({ content: CAPTURE_SCRIPT });
       this.prepared = true;
     }
+    logLine(this.log, 'meet_navigation_started');
     await this.page.goto(req.url, { waitUntil: 'domcontentloaded' });
-    const first = await this.waitFor((s) => s === 'prejoin' || s in REFUSAL || isOut(s), this.stepTimeoutMs, req.signal);
+    logLine(this.log, 'meet_navigation_ready');
+    const first = await this.waitFor((s) => s === 'prejoin' || s in REFUSAL || isOut(s), this.stepTimeoutMs, req.signal, true);
+    logLine(this.log, 'meet_prejoin_result', { state: first });
     this.refuseOn(first);
     if (first !== 'prejoin') throw new AdapterFailure('platform_blocked');
     if (await this.visible('name_input')) await this.page.locator(sel('name_input')).first().fill(req.botName);
@@ -141,8 +167,13 @@ export class MeetAdapter implements MeetingAdapter {
     for (const hook of ['mic_on', 'camera_on'] as const) {
       if (await this.visible(hook)) await this.page.locator(sel(hook)).first().click();
     }
+    await this.dismissMediaOnboarding();
+    if (req.signal.aborted) throw new Error('aborted');
+    logLine(this.log, 'meet_join_click_started');
     await this.page.locator(sel((await this.visible('join_now')) ? 'join_now' : 'ask_to_join')).first().click();
+    logLine(this.log, 'meet_join_clicked');
     const next = await this.waitFor((s) => s === 'lobby' || s === 'in_call' || s in REFUSAL || isOut(s), this.stepTimeoutMs, req.signal);
+    logLine(this.log, 'meet_join_result', { state: next });
     this.refuseOn(next);
     if (next === 'in_call') await this.entered();
     else if (next !== 'lobby') throw new AdapterFailure('platform_blocked');
@@ -174,6 +205,8 @@ export class MeetAdapter implements MeetingAdapter {
 
   speakers(on: Listener<SpeakerChange>): Unsubscribe { return this.speakerTopic.on(on); }
   ended(on: () => void): Unsubscribe { return this.endTopic.on(on); }
+
+  diagnostic(): string | null { return this.lastStep; }
 
   async leave(): Promise<void> {
     // Out first, so the watch never reads the bot's own leaving as the call ending.

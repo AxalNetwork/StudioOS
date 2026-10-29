@@ -104,6 +104,17 @@ export function refusalText(e, fallback) {
   return m || fallback;
 }
 
+/**
+ * #3657: who runs the check is the check read's answer (`can_check`, D900),
+ * never the editor's write access: HQ may edit a deck (#3637) yet the Worker
+ * keeps the check the venture founder's. Unknown (not yet read, or the read
+ * failed) is no.
+ */
+export const mayRunCheck = (data, readOnly) => !readOnly && data?.can_check === true;
+
+/** The Worker's refusal for anyone but the venture's founder. */
+export const isFounderOnly = (e) => e?.code === 'founder_only' || e?.data?.error === 'founder_only';
+
 export const NOTE_MAX = 500;
 /** A note's text, or the reason it cannot be saved. */
 export function checkNote(text) {

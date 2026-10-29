@@ -30,6 +30,7 @@ import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCard
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { DECK_PAGE_LOAD_MS, MAX_DECK_PDF_BYTES, MAX_SLIDE_PNG_BYTES, renderUrl, type RenderFailure } from '../services/browserRun';
 import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
@@ -2024,6 +2025,29 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
   return { slides, renderable };
 }
 
+const SLIDE_VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: 1 };
+/** #3655: at most three slide pictures at once, and four minutes for the whole PowerPoint. */
+export const PPTX_RENDER_CONCURRENCY = 3;
+export const PPTX_RENDER_BUDGET_MS = 240_000;
+
+const RENDER_FAILED: Record<'pdf' | 'pptx', { code: string; message: string }> = {
+  pdf: { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.' },
+  pptx: { code: 'pptx_render_failed', message: 'The PowerPoint file could not be produced. Try again in a moment.' },
+};
+
+/**
+ * #3655: a failed render, with what failed as codes only — the renderer's
+ * reason, its status, the attempts and the slide. Never the print URL (it
+ * carries a signed token), the page's text or the deck's content.
+ */
+function renderRefusal(c: any, format: 'pdf' | 'pptx', f: RenderFailure & { slide?: number }) {
+  const diagnostic: Record<string, unknown> = { reason: f.code, attempts: f.attempts };
+  if (f.status != null) diagnostic.status = f.status;
+  if (f.slide != null) diagnostic.slide = f.slide;
+  console.error('[decks/export] render failed', format, JSON.stringify(diagnostic));
+  return refuse(c, 502, { ...RENDER_FAILED[format], extra: { diagnostic } });
+}
+
 /**
  * POST /api/decks/:id/export — { format: 'pdf' | 'pptx' } → file bytes.
  *
@@ -2037,6 +2061,10 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
  *    via renderDeckPPTXWithImages(). Falls back to the text-only
  *    renderer when BROWSER is unavailable so dev still gets a download.
  *  - PNG cover removed end-to-end (UI + handler + validator).
+ *
+ * #3655: both renders go through `renderUrl` (`services/browserRun.ts`), the
+ * documented `BROWSER.quickAction`, with a bounded retry; a failure answers a
+ * code-only `diagnostic`, and only a checked PDF or PNG is ever handed out.
  */
 decks.post('/:id/export', async (c) => {
   const user = await requireAuth(c);
@@ -2057,8 +2085,8 @@ decks.post('/:id/export', async (c) => {
   const brand = await deckOwnerBrand(c.env, Number(row.project_id));
   const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
 
-  const browser = (c.env as any).BROWSER;
-  const browserAvailable = !!browser?.fetch;
+  // #3655: the documented `quickAction`, never `BROWSER.fetch` to a made-up host.
+  const browserAvailable = typeof c.env.BROWSER?.quickAction === 'function';
 
   // Public base URL the headless browser will hit. The worker serves
   // the SPA assets at /deck/print-export/:token on both axal.vc and
@@ -2078,40 +2106,24 @@ decks.post('/:id/export', async (c) => {
       }, 503);
     }
     const token = await signDeckPrintToken(c.env, id, 180, opts);
-    const url = `${publicBase}/deck/print-export/${token}?print_mode=pdf`;
-    let r: Response;
-    try {
-      r = await browser.fetch('https://browser/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url,
-          viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
-          gotoOptions: { waitUntil: 'networkidle0', timeout: 45000 },
-          addStyleTag: [{
-            content: '@page { size: 1920px 1080px; margin: 0; } html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }',
-          }],
-          printOptions: {
-            printBackground: true,
-            preferCSSPageSize: true,
-            width: '1920px',
-            height: '1080px',
-            margin: { top: '0', right: '0', bottom: '0', left: '0' },
-          },
-        }),
-      });
-    } catch (e) {
-      console.error('[decks/export] pdf browser fetch threw:', (e as Error).message);
-      return refuse(c, 502, { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.', raw: e, audience: 'member' });
-    }
-    if (!r.ok) {
-      const text = await r.text().catch(() => '');
-      console.error('[decks/export] pdf render failed:', r.status, text.slice(0, 200));
-      return refuse(c, 502, { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.', raw: text, extra: { status: r.status } });
-    }
-    const bytes = await r.arrayBuffer();
+    const r = await renderUrl(c.env, 'pdf', {
+      url: `${publicBase}/deck/print-export/${token}?print_mode=pdf`,
+      viewport: SLIDE_VIEWPORT,
+      gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
+      addStyleTag: [{
+        content: '@page { size: 1920px 1080px; margin: 0; } html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }',
+      }],
+      pdfOptions: {
+        printBackground: true,
+        preferCSSPageSize: true,
+        width: '1920px',
+        height: '1080px',
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
+      },
+    }, { kind: 'pdf', maxBytes: MAX_DECK_PDF_BYTES });
+    if (!r.ok) return renderRefusal(c, 'pdf', r);
     await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
-    return new Response(bytes, {
+    return new Response(r.bytes, {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
@@ -2141,36 +2153,31 @@ decks.post('/:id/export', async (c) => {
 
   // Browser Rendering available — capture one full-bleed PNG per slide
   // by navigating the SPA print template with slide=N. 5-minute TTL
-  // comfortably covers the longest deck (60-slide cap).
+  // comfortably covers the longest deck (60-slide cap). #3655: a few at a
+  // time under one deadline; the first slide that cannot be pictured stops
+  // the export, and nothing is handed out or recorded.
   const token = await signDeckPrintToken(c.env, id, 300, opts);
   // With sources, the last index is the appendix page the print page draws after the cards.
   const slideCount = renderable.slides.length;
-  const images: Uint8Array[] = [];
-  for (let i = 0; i < slideCount; i++) {
-    const slideUrl = `${publicBase}/deck/print-export/${token}?print_mode=single&slide=${i}`;
-    let r: Response;
-    try {
-      r = await browser.fetch('https://browser/screenshot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: slideUrl,
-          viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
-          gotoOptions: { waitUntil: 'networkidle0', timeout: 45000 },
-          screenshotOptions: { type: 'png', omitBackground: false, fullPage: false },
-        }),
-      });
-    } catch (e) {
-      console.error('[decks/export] pptx screenshot threw slide', i, (e as Error).message);
-      return refuse(c, 502, { code: 'pptx_render_failed', message: 'The PowerPoint file could not be produced. Try again in a moment.', raw: e, audience: 'member', extra: { slide: i } });
+  const deadline = Date.now() + PPTX_RENDER_BUDGET_MS;
+  const images: Uint8Array[] = new Array(slideCount);
+  const out: { failure: (RenderFailure & { slide: number }) | null } = { failure: null };
+  let next = 0;
+  const worker = async () => {
+    while (!out.failure && next < slideCount) {
+      const i = next++;
+      const r = await renderUrl(c.env, 'screenshot', {
+        url: `${publicBase}/deck/print-export/${token}?print_mode=single&slide=${i}`,
+        viewport: SLIDE_VIEWPORT,
+        gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
+        screenshotOptions: { type: 'png', omitBackground: false, fullPage: false },
+      }, { kind: 'png', maxBytes: MAX_SLIDE_PNG_BYTES, deadline });
+      if (!r.ok) { out.failure = out.failure || { ...r, slide: i }; return; }
+      images[i] = r.bytes;
     }
-    if (!r.ok) {
-      const text = await r.text().catch(() => '');
-      console.error('[decks/export] pptx screenshot failed slide', i, r.status, text.slice(0, 200));
-      return refuse(c, 502, { code: 'pptx_render_failed', message: 'The PowerPoint file could not be produced. Try again in a moment.', raw: text, extra: { slide: i, status: r.status } });
-    }
-    images.push(new Uint8Array(await r.arrayBuffer()));
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(PPTX_RENDER_CONCURRENCY, slideCount) }, worker));
+  if (out.failure) return renderRefusal(c, 'pptx', out.failure);
   const bytes = renderDeckPPTXWithImages(renderable, brand, images);
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
   return new Response(bytes, {

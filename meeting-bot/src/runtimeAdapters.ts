@@ -34,7 +34,7 @@ export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterCon
   }
   const browser=await (factories.launch??(()=>chromium.launch({headless:true,chromiumSandbox:true})))();
   try{
-    const page=await browser.newPage();
+    const page=await browser.newPage({locale:'en-US'});
     const adapter=platform==='teams'?new TeamsAdapter(page as unknown as TeamsPage):new MeetAdapter(page as unknown as MeetPage);
     const leave=adapter.leave.bind(adapter);let leaving:Promise<void>|null=null;
     adapter.leave=()=>leaving??(leaving=(async()=>{await Promise.allSettled([Promise.resolve().then(leave),Promise.resolve().then(()=>browser.close())]);})());

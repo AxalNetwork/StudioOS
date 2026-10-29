@@ -193,3 +193,39 @@ test('a page that has gone ends a wait as platform_blocked, and ends the call fo
   });
   assert.equal(ended, 1);
 });
+
+// #3667: live-observed media overlay; the rest of the page remains a fixture.
+test('media onboarding is dismissed without granting input before the guest asks to join', { skip }, async () => {
+  await withMeetPage(async (page, raw) => {
+    const lines: string[] = [];
+    const bot = new MeetAdapter(page, { ...fast, log: (event, fields) => lines.push(`${event} ${JSON.stringify(fields)}`) });
+    try {
+      await bot.join({ url: 'https://meet.google.com/media_prompt-fixture?pwd=private-fixture', botName: 'Private fixture name', signal: soon() });
+      const log = await raw.evaluate(() => (globalThis as any).__meet.log);
+      assert.deepEqual([log.mediaDismissed, log.mediaGranted, log.mic, log.camera, log.asked], [true, undefined, 'off', 'off', 'ask']);
+      assert.equal(await bot.state(), 'lobby');
+      assert.deepEqual(lines.map(l => l.split(' ')[0]), [
+        'meeting_bot.meet_navigation_started', 'meeting_bot.meet_navigation_ready',
+        'meeting_bot.meet_media_prompt', 'meeting_bot.meet_media_dismissed',
+        'meeting_bot.meet_prejoin_result', 'meeting_bot.meet_join_click_started',
+        'meeting_bot.meet_join_clicked', 'meeting_bot.meet_join_result',
+      ]);
+      assert.ok(lines.every(line => !/private-fixture|Private fixture name|meet.google.com/.test(line)));
+    } finally { await bot.leave(); }
+  });
+});
+
+test('join diagnostics distinguish unknown pages and explicit refusals without page text', { skip }, async () => {
+  for (const state of ['unknown', 'blocked'] as const) await withMeetPage(async (page) => {
+    const lines: [string, Record<string, unknown>][] = [];
+    const bot = new MeetAdapter(page, { pollMs: 10, stepTimeoutMs: 60, log: (event, fields) => lines.push([event, fields]) });
+    await assert.rejects(bot.join({ url: `https://meet.google.com/${state}-fixture`, botName: BOT_NAME, signal: soon() }), { code: 'platform_blocked' });
+    assert.deepEqual(lines, [
+      ['meeting_bot.meet_navigation_started', {}], ['meeting_bot.meet_navigation_ready', {}],
+      ['meeting_bot.meet_prejoin_result', { state: state === 'unknown' ? 'unknown' : 'platform_blocked' }],
+    ]);
+    // D1368: the run can say where it stopped, in the same codes.
+    assert.equal(bot.diagnostic(), `meet_prejoin_result:${state === 'unknown' ? 'unknown' : 'platform_blocked'}`);
+    await bot.leave();
+  });
+});

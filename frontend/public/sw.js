@@ -5,7 +5,7 @@
  *   - cache-first:     same-origin static assets (Vite-fingerprinted /assets/*)
  *   - never cached:    /api/auth/*  (who you are is not a cacheable fact)
  *   - stale-while-revalidate:  /api/academy/*  +  /api/projects/*  (own data, offline read)
- *   - network-first:   every other /api/* (always prefer fresh)
+ *   - not intercepted: every other /api/* (straight to the network, no cache)
  *   - navigation:      not intercepted (a 307 returned from the worker crashes Safari)
  *
  * Push: a `push` event with JSON `{title, body, link}` shows a system
@@ -22,7 +22,13 @@
 // v17 is required for the same reason one step further out: v16 still kept
 // ONE API bucket for the whole origin, so it holds one signed-in person's
 // API bodies where the next signed-in person can be handed them.
-const VERSION = 'v18-2026-09-22';
+// v19 is required too: v18's network-first path wrote EVERY /api GET it saw
+// into its account's bucket and never evicted one. Weeks of use made those
+// buckets large enough that opening one (which networkFirst awaited BEFORE
+// the fetch) took longer than api.js's 30s deadline, so pages failed with
+// "The server did not respond within 30s" while the Worker had not even
+// been asked. Bumping VERSION is what deletes them.
+const VERSION = 'v19-2026-10-29';
 const PRECACHE = `studioos-precache-${VERSION}`;
 const RUNTIME_STATIC = `studioos-static-${VERSION}`;
 
@@ -105,8 +111,8 @@ const OFFLINE_API_PATTERNS = [
 // Who you are is never read from a cache — not stale-while-revalidate, not
 // network-first's offline fallback, and never written to Cache Storage in the
 // first place. Dropping `/api/auth/me` from the list above is not enough on
-// its own: `networkFirst` also `cache.put`s every 200 it sees and replays it
-// whenever the network throws, so the same body would still be handed to the
+// its own: network-first (until v19) also `cache.put` every 200 it saw and replayed it
+// whenever the network threw, so the same body would still be handed to the
 // next account, just on the offline path.
 const NEVER_CACHE_API = [
   /^\/api\/auth(\/|$)/,
@@ -156,26 +162,6 @@ async function staleWhileRevalidate(req, cacheName) {
     { status: 503, headers: { 'Content-Type': 'application/json' } }
   ));
   return cached || (await network);
-}
-
-async function networkFirst(req, cacheName) {
-  const cache = await caches.open(cacheName);
-  try {
-    const res = await fetch(req);
-    if (res && res.status === 200 && req.method === 'GET') {
-      cache.put(req, res.clone()).catch(() => {});
-    }
-    return res;
-  } catch (err) {
-    // `cache.match`, NOT the global `caches.match`. The global one searches
-    // EVERY bucket in the origin and returns the first hit, so with one
-    // bucket per account it would walk straight into somebody else's and
-    // hand their body back — undoing the split above on the exact path the
-    // split exists for, the offline one.
-    const cached = await cache.match(req);
-    if (cached) return cached;
-    throw err;
-  }
 }
 
 function isHtmlResponse(res) {
@@ -242,14 +228,16 @@ self.addEventListener('fetch', (event) => {
     if (isNeverCachableApi(url)) return;
     // One bucket per signed-in account, resolved from this request rather
     // than from any state the worker is holding.
-    const apiCache = apiCacheName(request);
     if (isOfflineCachableApi(url)) {
-      event.respondWith(staleWhileRevalidate(request, apiCache));
-    } else {
-      event.respondWith(networkFirst(request, apiCache).catch(() => new Response(
-        JSON.stringify({ offline: true }), { status: 503, headers: { 'Content-Type': 'application/json' } }
-      )));
+      event.respondWith(staleWhileRevalidate(request, apiCacheName(request)));
+      return;
     }
+    // EVERY OTHER API CALL GOES STRAIGHT TO THE NETWORK, untouched. It used to
+    // run network-first: await `caches.open`, fetch, then `cache.put` the
+    // body, so that a failed fetch could replay it. Nothing ever evicted
+    // those entries, and one slow bucket held every call on the page behind
+    // Cache Storage — longer than api.js's 30s deadline. The offline promise
+    // is the two lists above; the rest is fresher from the Worker anyway.
     return;
   }
 

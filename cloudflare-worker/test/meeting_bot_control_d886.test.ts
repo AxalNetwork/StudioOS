@@ -547,3 +547,14 @@ test('B7 queued bot cannot be started as a device from a stale session snapshot'
   assert.equal(await transition(w.env,before!,'start'),false);
   assert.equal((await call(w.env,FOUNDER,'POST',`/sessions/${w.session}/start`,{})).status,409);
 });
+
+test('D1368: a failed run keeps the bot\'s own code and last step, and only in that shape', async () => {
+  // Mutation checked: store event.failure_detail unchecked → the sentence is stored.
+  for (const [detail, stored] of [['platform_blocked@meet_prejoin_result:unknown', 'platform_blocked@meet_prejoin_result:unknown'], ['You cannot join this call', null]] as const) {
+    const w=world(),r=await post(w),uid=r.body.bot.uid;
+    assert.equal((await event(w,uid,{seq:1,type:'status',status:'failed',failure_code:'runtime_failed',failure_detail:detail})).status,200);
+    const row=(await botRow(w.env,uid))! as any;
+    assert.deepEqual([row.status,row.failure_code],['failed','runtime_failed']);
+    assert.equal(w.db.prepare('SELECT failure_detail FROM meeting_bots WHERE uid=?').get(uid).failure_detail,stored);
+  }
+});

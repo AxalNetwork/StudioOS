@@ -235,7 +235,7 @@ export const hasMeetingLink = (mode, provider) => mode === 'video' && ['zoom', '
 export const TEAMS_PASTE = 'Create the meeting in Microsoft Teams and paste its link here. Axal cannot create a Teams meeting yet.';
 /** D1359: Teams is created on the member's Microsoft calendar connection, which needs a work or school account. */
 export const TEAMS_CREATE_NOTE = 'Uses your Microsoft calendar connection, and needs a work or school Microsoft 365 account. A personal account: create it in Teams and paste the link.';
-export const CREATE_CONNECT = Object.freeze({ zoom: 'Connect Zoom to create the meeting here', google_meet: 'Connect Google to create the meeting here', teams: 'Connect Microsoft to create the meeting here' });
+export const CREATE_CONNECT = Object.freeze({ zoom: 'Connect Zoom to create the meeting here', google_meet: 'Connect Google Calendar to create a Meet meeting here', teams: 'Connect Microsoft to create the meeting here' });
 export function createMeetingOffer(mode, provider, channels) {
   if (mode !== 'video') return null;
   // D1359: Teams' connection is not in the channels read, so the Worker decides
@@ -245,7 +245,7 @@ export function createMeetingOffer(mode, provider, channels) {
   const label = provider === 'zoom' ? 'Zoom' : 'Google Meet';
   if (availableOf(channels, provider) === false) return { kind: 'unavailable', sentence: `${label} meetings cannot be created on Axal yet. Create it in ${label} and paste the link.` };
   const connected = channels ? isConnected(connectionOf(channels, provider), provider) : null;
-  return { kind: 'create', connected, connectHref: connected === false ? '/account/connectors' : null, connectLabel: CREATE_CONNECT[provider] };
+  return { kind: 'create', connected, connectHref: connected === false ? (provider === 'google_meet' ? '/account/connectors/google' : '/account/connectors') : null, connectLabel: CREATE_CONNECT[provider] };
 }
 /**
  * "Open the meeting"'s href: the link re-serialised from a parsed https URL on

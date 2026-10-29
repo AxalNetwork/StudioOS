@@ -49,7 +49,8 @@ function stub(over = {}) {
   const rec = (name, f) => async (...args) => { calls.push([name, ...args]); return (over[name] || f)(...args); };
   Object.assign(deckCheckApi, {
     run: rec('run', async () => RUN()),
-    read: rec('read', async () => ({ ...RUN(), can_check: false, claims: [{ uid: 'c1', slide: 2, figure: 'paying_customers', label: 'Paying customers', state: 'mismatch', display_state: 'mismatch' }] })),
+    // #3657: the read is the Worker's answer on who checks; the default reader here is the founder.
+    read: rec('read', async () => ({ ...RUN(), can_check: true, claims: [{ uid: 'c1', slide: 2, figure: 'paying_customers', label: 'Paying customers', state: 'mismatch', display_state: 'mismatch' }] })),
     useRecord: rec('useRecord', async () => ({ deck: { id: 40, version: 4 } })),
   });
   Object.assign(raiseEvidenceApi, { note: rec('note', async () => ({ ok: true })) });
@@ -113,7 +114,7 @@ test('the founder\'s panel runs the check on open: the counts, each figure, and 
   const calls = stub();
   const v = await mount({});
   try {
-    assert.deepEqual(calls.map((c) => c[0]), ['run'], 'run, not read, for the founder');
+    assert.deepEqual(calls.map((c) => c[0]), ['read', 'run'], 'the read says founder, then the run (#3657)');
     assert.equal(v.text('pitch-check-last'), 'Last checked 27 Oct 2026, 14:05 UTC');
     assert.match(v.text('pitch-check-summary'), /4 figures: 1 Backed, 1 Mismatch, 1 Not backed, 1 Stale/);
     assert.match(v.text('pitch-check-figures-c1'), /Your card 42 Stripe 38 · 2026-10-20/);
@@ -125,7 +126,7 @@ test('the founder\'s panel runs the check on open: the counts, each figure, and 
     assert.match(v.text('pitch-check-row-c4'), /Stale/);
     assert.equal(v.props('pitch-check-evidence-c1').to ?? v.props('pitch-check-evidence-c1').href, '/raise/evidence/claim/c1?project=7');
     await v.click('pitch-check-run');
-    assert.deepEqual(calls.map((c) => c[0]), ['run', 'run']);
+    assert.deepEqual(calls.map((c) => c[0]), ['read', 'run', 'run']);
   } finally { await v.close(); }
 });
 
@@ -205,7 +206,9 @@ test('a failed check says so with Try again, never an empty panel', async () => 
   const v = await mount({});
   try {
     assert.match(v.text('pitch-check-error'), /slides could not be read/);
-    assert.ok(!v.by('pitch-check-summary'));
+    assert.ok(v.by('pitch-check-retry'), 'Try again');
+    // #3657: the panel read the last check first, so it still stands under the error.
+    assert.match(v.text('pitch-check-summary'), /4 figures/);
   } finally { await v.close(); }
 });
 

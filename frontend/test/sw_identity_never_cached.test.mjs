@@ -67,7 +67,7 @@ test('the refusal happens before either strategy runs', () => {
   // back inside a strategy.
   const at = SW.indexOf("if (url.pathname.startsWith('/api/'))");
   assert.ok(at >= 0, 'the /api routing branch is gone');
-  const branch = SW.slice(at, SW.indexOf('return;', SW.indexOf('networkFirst(request', at)));
+  const branch = SW.slice(at, SW.indexOf('staleWhileRevalidate(request', at));
   const never = branch.indexOf('isNeverCachableApi(url)');
   const swr = branch.indexOf('isOfflineCachableApi(url)');
   assert.ok(never >= 0, 'the /api branch never consults the never-cache list');
@@ -96,7 +96,7 @@ test('the cache names changed, so the poisoned ones are dropped', () => {
   // cache name carries VERSION, so bumping it drops what came before.
   const m = SW.match(/const VERSION = '([^']+)'/);
   assert.ok(m, 'VERSION is gone');
-  for (const stale of ['v15-2026-08-05', 'v16-2026-09-10']) {
+  for (const stale of ['v15-2026-08-05', 'v16-2026-09-10', 'v18-2026-09-22']) {
     assert.notEqual(m[1], stale,
       `VERSION still names build ${stale}, whose API cache holds other accounts' bodies`);
   }
