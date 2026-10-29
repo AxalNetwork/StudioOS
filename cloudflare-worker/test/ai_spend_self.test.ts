@@ -186,7 +186,7 @@ test('the task breakdown covers the month and sums to the month total', async ()
 
 test('the admin licence\'s caps come from the env vars the router enforces, with its defaults', async () => {
   const { env: e, db } = env();
-  db.exec('DELETE FROM super_admins'); // a plain admin: a Super Admin has no cap (D1363)
+  db.exec('DELETE FROM super_admins'); // a plain admin: a Super Admin has no day (D1367)
   const d = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
   assert.equal(d.month.cap_usd, SPEND_CAP_DEFAULTS.month);
   assert.equal(d.today.cap_usd, SPEND_CAP_DEFAULTS.day);
@@ -198,11 +198,11 @@ test('the admin licence\'s caps come from the env vars the router enforces, with
   assert.equal(o.today.cap_usd, 12);
 });
 
-test('D1363: a Super Admin\'s meter has no cap, never a billion-dollar one', async () => {
-  // Mutation checked: keep monthly_microusd / 1e6 for a Super Admin → cap 1000000000.
+test('D1367: a Super Admin\'s meter shows the admin month and no day, never a billion dollars', async () => {
+  // Mutation checked: keep the $1 billion cap → cap_usd 1000000000.
   const { env: e } = env();
   const d = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
-  assert.deepEqual([d.month.cap_usd, d.today.cap_usd], [null, null]);
+  assert.deepEqual([d.month.cap_usd, d.today.cap_usd], [SPEND_CAP_DEFAULTS.month, null]);
 });
 
 test('D783: a member\'s cap is their plan\'s share each month, with no day cap and no env var', async () => {

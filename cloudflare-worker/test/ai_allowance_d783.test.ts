@@ -18,7 +18,7 @@ import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import billing from '../src/routes/billing.ts';
 import budget from '../src/routes/ai_budget.ts';
-import { loadAiBudget, reserveAiBudget, resolveAiCaps, listAiLicenceCaps, SUPER_ADMIN_AI_MICROUSD } from '../src/services/aiBudget.ts';
+import { loadAiBudget, reserveAiBudget, resolveAiCaps, listAiLicenceCaps } from '../src/services/aiBudget.ts';
 import { plansAndPacks } from '../src/services/aiCredits.ts';
 import { PLAN_AI_SHARE, allowanceFromCharge, chargeOf, planAllowanceFor } from '../src/services/planAllowance.ts';
 
@@ -191,7 +191,7 @@ test('there is no daily cap: a member spends past the old $5 a day within the mo
 test('the admin licence keeps its typed caps and its day', async () => {
   // Mutation checked: compute the admin licence from plans → $0.
   const { db, env } = fixture();
-  db.exec('DELETE FROM super_admins'); // a plain admin: a Super Admin has no limit (D1363)
+  db.exec('DELETE FROM super_admins'); // a plain admin: a Super Admin has no day (D1367)
   db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run('admin', 2_000_000, 9_000_000);
   db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run('founder:free', 1_000_000, 4_000_000);
   const admin = await resolveAiCaps(env, ADMIN);
@@ -206,18 +206,20 @@ test('the admin licence keeps its typed caps and its day', async () => {
   db.close();
 });
 
-test('D1363: a Super Admin is never refused for the allowance, and the spend is still counted', async () => {
-  // Mutation checked: drop the Super Admin branch in resolveAiCaps → the first $5 hold is refused 'budget_user_day'.
+test('D1367: a Super Admin has the admin month as their cap, and no day of its own', async () => {
+  // Mutation checked: return the $1 billion cap again → the hold past $9 is granted.
   const { db, env } = fixture();
   db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run('admin', 2_000_000, 9_000_000);
   const caps = await resolveAiCaps(env, ADMIN);
-  assert.deepEqual([caps.source, (caps as any).unlimited, caps.daily_capped, caps.monthly_microusd], ['super_admin', true, false, SUPER_ADMIN_AI_MICROUSD]);
-  for (let i = 0; i < 3; i++) assert.equal((await reserveAiBudget(env, ADMIN, 5_000_000, NOW)).ok, true, `hold ${i + 1} of $5, past the typed $2 day`);
-  const b = await loadAiBudget(env, ADMIN, NOW);
-  assert.deepEqual([b.unlimited, b.month_reserved_microusd, b.balance_microusd], [true, 15_000_000, 0], 'held from the allowance, never the balance');
-  // The same admin, no longer a Super Admin, is back on the typed caps.
+  assert.deepEqual([caps.source, (caps as any).unlimited, caps.daily_capped, caps.daily_microusd, caps.monthly_microusd], ['super_admin', undefined, false, 9_000_000, 9_000_000]);
+  assert.equal((await reserveAiBudget(env, ADMIN, 5_000_000, NOW)).ok, true, 'past the typed $2 day: a Super Admin has no day');
+  assert.deepEqual(await reserveAiBudget(env, ADMIN, 5_000_000, NOW), { ok: false, refusal: 'budget_user_month' }, 'the month is the cap');
+  // With nothing typed, the admin month is the deployment's: $50.
+  db.exec("DELETE FROM ai_licence_caps");
+  assert.equal((await resolveAiCaps(env, ADMIN)).monthly_microusd, 50_000_000);
+  // The same admin, no longer a Super Admin, is back on the typed day.
   db.exec('DELETE FROM super_admins');
-  assert.deepEqual(await reserveAiBudget(env, ADMIN, 1_000_000, NOW), { ok: false, refusal: 'budget_user_day' });
+  assert.equal((await resolveAiCaps(env, ADMIN)).daily_capped, true);
   // A member flagged in super_admins without the admin role gets nothing extra.
   db.prepare('INSERT INTO super_admins VALUES (?)').run(FOUNDER);
   assert.equal((await resolveAiCaps(env, FOUNDER)).monthly_microusd, 0);
