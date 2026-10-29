@@ -1577,6 +1577,11 @@ export async function buildMicrosoftOAuthStartResponse(
   }
 }
 
+/** D1380: an ordinary Google connect also asks for the Meet scopes once the owner has switched Meet on. */
+export function meetScopesOnConnect(env: Env, explicitMeetConsent: boolean): boolean {
+  return !explicitMeetConsent && meetTranscriptsEnabled(env);
+}
+
 async function startGoogleOAuth(c: any, meetTranscripts = false) {
   const user = await requireAuth(c);
   // Task #1 — pass the Axal user's email as `login_hint` so Google's
@@ -1587,11 +1592,11 @@ async function startGoogleOAuth(c: any, meetTranscripts = false) {
   // across the Google round-trip via a short-lived, scoped cookie. Build's
   // return also rides in the signed nonce, with its venture (#1597).
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
-  // With incremental scope carry-forward disabled, include an already granted
-  // optional Meet scope explicitly during ordinary reconnects.
-  const preserveMeetTranscripts = !meetTranscripts
-    && meetTranscriptsEnabled(c.env)
-    && await storedGoogleGrantHasScope(c.env, user.id, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+  // D1380: once the owner has switched Meet on, every Google connect asks for the Meet
+  // scopes on the same consent, so a member never needs a second "Allow transcript
+  // import" round trip. They ride as preserved ('mp_'): a member who unticks them still
+  // connects Calendar, and the separate button stays for them.
+  const preserveMeetTranscripts = meetScopesOnConnect(c.env, meetTranscripts);
   const sql = getSQL(c.env);
   let linkedGoogle: any;
   try {
@@ -1618,8 +1623,9 @@ async function startGoogleOAuth(c: any, meetTranscripts = false) {
 calendar.post('/google/connect', safe('g_connect', 'Could not start Google OAuth', startGoogleOAuth));
 calendar.get('/google/start',    safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
 calendar.post('/google/start',   safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
-// Explicit opt-in. A normal Calendar connection never asks to read Meet transcripts.
-// Until the owner switches it on (D757, #1926) it refuses before any state is written.
+// Explicit opt-in, kept for a member who unticked the Meet permissions on connect (D1380:
+// an ordinary connect asks for them too). Until the owner switches Meet on (D757, #1926)
+// it refuses before any state is written.
 calendar.post('/google/meet-transcripts/connect', safe('g_meet_consent', 'Could not start Meet transcript consent',
   async (c) => {
     if (!meetTranscriptsEnabled(c.env)) {
