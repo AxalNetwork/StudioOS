@@ -76,7 +76,7 @@ test('the new company becomes the active one', () => {
  */
 const WIDE_ON_PURPOSE = {
   'account_companies.ts': 'Account › Companies and projects (D1136) lists every company and venture the member holds, across companies by design; each read is the caller\'s own (owned or seated), never another founder\'s',
-  'calendar.ts': 'the personal calendar spans the member’s companies; project ownership validates a named founder’s venture before scheduling, while event reads and exports require the member to be a party (#2440)',
+  // 'calendar.ts' stood here: D1384 (#3692) narrows its compliance source by the active company.
   'capital.ts': 'the project read sits inside an admin-only handler',
   'deal_insights.ts': 'D1151 reads a named deal through userMayReadDeal, not a founder venture list; founder_id resolves its published team and canonical NDA party. The company switcher neither selects that deal nor grants access to it',
   'founder_risk.ts': "keys its payload on founder_id — a risk profile belongs to the person, not to one of their companies; the projects join is only a lookup from a deal to its owner",
