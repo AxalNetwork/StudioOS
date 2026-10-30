@@ -115,3 +115,15 @@ test('an explicit heartbeat budget refusal stops immediately instead of waiting 
   const run=runBot(config(clock),{clock,adapter,transport:callback});await clock.advance(15_000);
   const result=await clock.until(run);assert.equal(result.reason,'tokens');assert.ok(clock.now()<1_120_000);assert.equal(adapter.listening,0);
 });
+
+
+test('#3711: recording admission without uploaded audio never reports processing',async()=>{
+  for (const reason of ['call_ended','stopped','alone','time_limit'] as const) {
+    const seen:any[]=[];
+    const transport=client((async(_url,init)=>{seen.push(JSON.parse(String(init?.body)));return Response.json({budget_deadline_at:NOW+120_000});}) as typeof fetch);
+    await transport.status({state:'recording'});
+    await transport.status({state:'left',reason,chunks:0,chunks_failed:0});
+    assert.deepEqual([seen.at(-1).status,seen.at(-1).failure_code],['failed','no_audio']);
+    assert.equal(seen.some(e=>e.status==='processing'),false);
+  }
+});

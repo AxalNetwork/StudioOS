@@ -832,3 +832,10 @@ test('#1588 r2 Exit from a Start still opening sets no focus flag, so a later pi
     assert.equal(document.activeElement, typing, 'and leaves the founder\'s focus where it was');
   } finally { await app.unmount(); }
 });
+
+
+test('#3711 a missing server error never promises that recording data survived',()=>{
+  const out=renderedText(view({phase:'stopping',processing:{stage:'failed',error:null}}));
+  assert.match(out,/Processing stopped. Try again to resume processing./);
+  assert.doesNotMatch(out,/Nothing was lost/);
+});
