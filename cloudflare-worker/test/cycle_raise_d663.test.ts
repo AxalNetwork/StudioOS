@@ -223,14 +223,14 @@ test('every mismatch cites both of its figures', async () => {
     assert.ok(Number.isFinite(m.stated_value) && Number.isFinite(m.metric_value), 'both values');
     assert.ok(m.stated_source && m.metric_source && m.stated_source !== m.metric_source, 'both sources, and they differ');
   }
-  assert.equal(found.find((m: any) => m.stated_value === 45000).metric_source, 'Metrics (stated: source not recorded) · project_metrics.mrr on 2026-10-01', 'the newest snapshot does not invent an absent source');
+  assert.equal(found.find((m: any) => m.stated_value === 45000).metric_source, 'Metrics (stated: source not recorded) · MRR on 2026-10-01', 'the newest snapshot does not invent an absent source');
   // Stored for the version, and drawn on the card as a sentence naming both sides.
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = 1').get(P).n, 3);
   const c = card((await overview(db)).body, 'investor-narrative');
   const lines = c.series.find((s: any) => s.kind === 'rows').items.filter((i: any) => i.tone === 'warn' && i.label !== 'Comparison');
   assert.equal(lines.length, 3);
   for (const l of lines) assert.match(String(l.value), /^.+ in .+, .+ in .+$/);
-  assert.ok(lines.some((l: any) => l.value === 'MRR: $45,000 in Narrative · traction.takeaway, $38,000 in Metrics (stated: source not recorded) · project_metrics.mrr on 2026-10-01'));
+  assert.ok(lines.some((l: any) => l.value === 'MRR: $45,000 in Narrative · traction.takeaway, $38,000 in Metrics (stated: source not recorded) · MRR on 2026-10-01'));
   assert.equal(c.next.href, `/raise/investor-narrative/check?project_id=${P}`);
   // The version is the deck wording copied, plus its marker; the live wording is untouched.
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM spinout_deck_overrides WHERE project_id = ? AND version = 0').get(P).n, 2);

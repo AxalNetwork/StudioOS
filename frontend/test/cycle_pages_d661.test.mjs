@@ -30,6 +30,33 @@ import { MODULES as LIVE_MODULES } from '../src/pages/cycles/modules.js';
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const html = (el, entry = '/validate') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
 const text = (s) => s.replace(/<title>[\s\S]*?<\/title>/g, '').replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+
+test('#3715: readiness rows offer scoped next steps and keep missing dates muted', () => {
+  const out = html(h(Chart, { spec: { kind: 'rows', items: [
+    { label: 'Founding team', value: 'No founders recorded yet', tone: 'muted', next: { text: 'Add founders', href: '/build/founding-team?project=7' } },
+    { label: 'Vesting', value: 'No vesting recorded', tone: 'muted', next: { text: 'Add vesting', href: '/raise/cap-table?project=7' } },
+    { label: 'GitHub activity', value: 'GitHub · 3 contributors in the last 90 days', tone: 'ok', note: '15 commits · dates not available' },
+  ] } }));
+  assert.deepEqual([...out.matchAll(/<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].map((m) => [m[1], m[2]]), [
+    ['/build/founding-team?project=7', 'Add founders'], ['/raise/cap-table?project=7', 'Add vesting'],
+  ]);
+  for (const copy of ['No founders recorded yet', 'No vesting recorded', '15 commits · dates not available']) {
+    const cls = out.match(new RegExp(`<span class="([^"]+)">${copy}<\\/span>`))?.[1];
+    assert.ok(cls?.includes('text-axal-muted') && !/text-red|text-emerald/.test(cls), `${copy} is muted in both modes`);
+  }
+  assert.match(out, /min-h-\[44px\]/, 'the new links have phone-sized hit areas');
+});
+
+test('#3715: failed row reads stay red, missing values stay muted, and row links stay in-app', () => {
+  const out = html(h(Chart, { spec: { kind: 'rows', items: [
+    { label: 'Failed read', value: 'Could not be read', tone: 'bad' },
+    { label: 'Missing', value: null, tone: 'bad', next: { text: 'Unsafe', href: 'javascript:alert(1)' } },
+    { label: 'Missing', value: null, next: { text: 'Unsafe', href: '//example.test' } },
+  ] } }));
+  assert.match(out, /<span class="text-red-700 dark:text-red-300">Could not be read<\/span>/);
+  assert.equal((out.match(/<span class="text-axal-muted dark:text-gray-400">Not recorded<\/span>/g) || []).length, 2);
+  assert.doesNotMatch(out, /<a\b/, 'an unsafe next step is never a link');
+});
 const kinds = (out) => [...out.matchAll(/data-chart="([a-z]+)"/g)].map((m) => m[1]);
 
 // ------------------------------------------------------------------ the rules
