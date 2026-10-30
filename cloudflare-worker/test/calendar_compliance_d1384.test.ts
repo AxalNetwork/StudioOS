@@ -31,7 +31,7 @@ for (const n of readdirSync(dir).filter((n) => /^\d+_.*\.sql$/.test(n) && migrat
 initial.prepare('VACUUM INTO ?').run(seed); initial.close();
 after(() => rmSync(root, { recursive: true, force: true }));
 
-const SECRET = 'synthetic-d1384-jwt-secret-'.repeat(2);
+const SECRET = 'synthetic-calendar-d1384-'.repeat(3);
 const FROM = '2026-11-01T00:00:00.000Z', TO = '2026-12-01T00:00:00.000Z';
 let serial = 0;
 function fixture() {
