@@ -21,6 +21,7 @@ import {
 import CycleOverview, { CycleCard, FigureTile } from '../src/pages/cycles/CycleOverview.jsx';
 import CycleModulePage, { RecordsTable } from '../src/pages/cycles/CycleModulePage.jsx';
 import { Chart } from '../src/pages/cycles/CycleCharts.jsx';
+import { useProject } from '../src/pages/cycles/CycleRoute.jsx';
 import DurabilityChecklist from '../src/pages/cycles/DurabilityChecklist.jsx';
 import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { EDITS, FORMS, editFor, formFor } from '../src/pages/cycles/forms.js';
@@ -45,6 +46,13 @@ test('#3715: readiness rows offer scoped next steps and keep missing dates muted
     assert.ok(cls?.includes('text-axal-muted') && !/text-red|text-emerald/.test(cls), `${copy} is muted in both modes`);
   }
   assert.match(out, /min-h-\[44px\]/, 'the new links have phone-sized hit areas');
+  function DestinationProject() { const { projectId } = useProject(); return h('output', null, projectId); }
+  for (const [, href] of out.matchAll(/<a[^>]*href="([^"]+)"/g)) {
+    const url = new URL(href, 'https://example.invalid');
+    const [, cycle, slug] = url.pathname.split('/');
+    assert.ok(LIVE_MODULES[cycle]?.some(module => module.slug === slug), 'the next step is a registered cycle module');
+    assert.equal(html(h(DestinationProject), url.pathname + url.search), '<output>7</output>', 'the destination hook selects the linked venture');
+  }
 });
 
 test('#3715: failed row reads stay red, missing values stay muted, and row links stay in-app', () => {
