@@ -985,7 +985,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     : formOpen && cycle === 'raise' && slug === DATA_ROOM ? (
       <DataRoomUpload key="dataroom-upload" projectId={projectId} onSaved={saved} onClose={closeAdd} />
     ) : formOpen ? (
-      <FormLightbox {...narrativeAccess} key={`add-${formOpen.key}${fillRow ? `-${fillRow.uid}` : ''}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
+      <FormLightbox key={`add-${formOpen.key}${fillRow ? `-${fillRow.uid}` : ''}`} form={formOpen} {...narrativeAccess} cycle={cycle} slug={slug} search={location.search}
         renderAssistant={uofAssistant}
         fill={fillFor(formOpen)}
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
@@ -997,18 +997,18 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     ) : editing && edit.idOf(editing) != null && edit.readsRecord ? (
       // Drawn once the record answers: its values, or the refusal in the dialog.
       rowEdit?.spec ? (
-        <FormLightbox {...narrativeAccess} key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} cycle={cycle} slug={slug}
+        <FormLightbox key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} {...narrativeAccess} cycle={cycle} slug={slug}
           renderAssistant={uofAssistant}
           loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
           onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
           onSaved={saved}
           onClose={closeEdit} />
       ) : rowEdit ? (
-        <FormLightbox {...narrativeAccess} key={`edit-${editing.id}-refused`} form={{ ...edit, fields: [] }} cycle={cycle} slug={slug}
+        <FormLightbox key={`edit-${editing.id}-refused`} form={{ ...edit, fields: [] }} {...narrativeAccess} cycle={cycle} slug={slug}
           refused={rowEdit.error || 'This record has no Edit.'} onSubmit={() => {}} onClose={closeEdit} />
       ) : null
     ) : editing && edit.idOf(editing) != null ? (
-      <FormLightbox {...narrativeAccess} key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} cycle={cycle} slug={slug}
+      <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} {...narrativeAccess} cycle={cycle} slug={slug}
         renderAssistant={uofAssistant}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
         onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
