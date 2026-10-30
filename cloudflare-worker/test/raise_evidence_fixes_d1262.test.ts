@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
-import { cards, checkInputs, computeReadiness, dataRoomCard, figures, loadReadiness, latestScores, readinessCard, teamReadiness } from '../src/services/raiseCycle.ts';
+import { cards, checkInputs, computeReadiness, dataRoomCard, figures, loadReadiness, latestScores, mismatchSentence, readinessCard, teamReadiness } from '../src/services/raiseCycle.ts';
 import { runCheck, scoreReadinessItem, rescoreReadiness } from '../src/services/raiseWriters.ts';
 const migrations = new URL('../sql/migrations/', import.meta.url);
 const ddl = (() => {
@@ -81,7 +81,15 @@ test('#3715: every Raise card and headline uses display words rather than a snak
       }
       if (state === 'unreadable') f.env.DB.prepare = () => { throw new Error('Synthetic cap_table_holders/project_metrics read failure'); };
       const surface = { cards: await cards(f.ctx), figures: await figures(f.ctx),
-        checks: state === 'unreadable' ? await teamReadiness(f.env, 1) : await computeReadiness(f.env, 1) };
+        checks: state === 'unreadable' ? await teamReadiness(f.env, 1) : await computeReadiness(f.env, 1),
+        legacy: [
+          { note: mismatchSentence({ figure: 'mrr', stated_value: 1500, stated_source: 'Narrative · traction.takeaway', metric_value: 1000, metric_source: 'Stripe (measured) · project_metrics.mrr on 2026-09-30' }) },
+          { note: mismatchSentence({ figure: 'raise', stated_value: 150000, stated_source: 'Narrative · why_now', metric_value: 100000, metric_source: 'Pipeline · raise_rounds.target_amount (active round)' }) },
+        ] };
+      assert.deepEqual(surface.legacy.map(row => row.note), [
+        'MRR: $1,500 in Narrative · traction.takeaway, $1,000 in Stripe (measured) · MRR on 2026-09-30',
+        'The raise: $150,000 in Narrative · why now, $100,000 in Pipeline · active round target',
+      ], 'previously stored checks keep both values, provenance and dates in display words');
       assert.equal(surface.cards.length, 7, 'the guard covers all seven Raise cards');
       assert.doesNotMatch(memberWords(surface).join('\n'), internalName, `${state}: visible labels, values, sources and reasons`);
       if (state === 'populated') {

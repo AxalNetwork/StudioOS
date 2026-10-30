@@ -161,7 +161,10 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing' | 'Unreadable'; tone: 'ok' | 'amb' | 'bad' | 'muted'; note?: string; next?: { text: string; href: string } };
 export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'muted' });
-const sourceWords = (source: string | null | undefined) => String(source ?? 'source not recorded').replaceAll('_', ' ');
+/** Display current or previously stored source labels without storage identifiers. */
+const sourceWords = (source: string | null | undefined) => String(source ?? 'source not recorded')
+  .replaceAll('project_metrics.mrr', 'MRR').replaceAll('project_metrics.paying_accounts', 'paying accounts')
+  .replaceAll('raise_rounds.target_amount (active round)', 'active round target').replaceAll('_', ' ');
 
 type MetricProof = { figure: 'mrr' | 'paying_customers'; value: number; source: string; connector: boolean; measured: boolean; fresh: boolean; observed_on: string };
 type RevenueProof = { source: string; verification: string; has_document: number; month: string; observed_on: string; cents: number };
@@ -741,7 +744,7 @@ export const fmtFigure = (f: FigureKey, v: number) => {
 };
 /** One mismatch as a sentence that names both figures and both sources. */
 export function mismatchSentence(m: Mismatch): string {
-  return `${FIGURE_LABEL[m.figure]}: ${fmtFigure(m.figure, m.stated_value)} in ${m.stated_source}, ${fmtFigure(m.figure, m.metric_value)} in ${m.metric_source}`;
+  return `${FIGURE_LABEL[m.figure]}: ${fmtFigure(m.figure, m.stated_value)} in ${sourceWords(m.stated_source)}, ${fmtFigure(m.figure, m.metric_value)} in ${sourceWords(m.metric_source)}`;
 }
 
 export async function narrativeCard(ctx: Ctx): Promise<Card> {
