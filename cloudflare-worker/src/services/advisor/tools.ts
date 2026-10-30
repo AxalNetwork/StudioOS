@@ -122,8 +122,6 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/legal': 'Legal',
   // `/legal-capital` was removed (#2354); its contract CTAs open Raise › Legal.
   '/raise/legal': 'Legal',
-  // D1384: /compliance is retired into Calendar's Compliance layer.
-  '/calendar': 'Calendar',
   '/help': 'Help Center',
   // `/docs` redirects into `/help`; kept so an older stored CTA still labels.
   '/docs': 'Docs',

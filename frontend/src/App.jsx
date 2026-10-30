@@ -124,7 +124,6 @@ const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage
 const CofounderAgreementPage = lazy(() => import('./pages/CofounderAgreementPage'));
 const SpinoutLab83bPage = lazy(() => import('./pages/SpinoutLab83bPage'));
 const SpinoutLabCompliancePage = lazy(() => import('./pages/SpinoutLabCompliancePage'));
-const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const WellbeingPage = lazy(() => import('./pages/WellbeingPage'));
 const WellbeingBookPage = lazy(() => import('./pages/wellbeing/WellbeingBookPage'));
 const WellbeingResourceLibrary = lazy(() => import('./pages/wellbeing/WellbeingResourceLibrary'));
