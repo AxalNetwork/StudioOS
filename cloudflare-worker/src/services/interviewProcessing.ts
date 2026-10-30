@@ -586,7 +586,7 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
   const interview = await env.DB.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?')
     .bind(session.interview_id).first<{ interviewee_name: string | null }>();
   try {
-    if (session.submitted_via === 'meeting_bot' && ['uploading', 'transcribing'].includes(session.processing_stage)) {
+    if (session.submitted_via === 'meeting_bot') {
       const { sessionBot } = await import('./meetingBots');
       const run = await sessionBot(env,session.id,userId);
       if (!run) throw new Error('bot_not_ready');
