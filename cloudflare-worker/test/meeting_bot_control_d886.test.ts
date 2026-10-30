@@ -611,3 +611,22 @@ test('#3711: a failed bot assembly retries staged transcription without another 
   assert.equal(await runInterviewProcessJob(w.env,{session_id:w.session,user_id:FOUNDER}),null);
   assert.equal(calls,1);
 });
+
+
+test('#3711 a stopped empty run preserves the new runtime no_audio callback and rejects false empty reports',async()=>{
+  for (const hasAudio of [false,true]) {
+    const w=world(),r=await post(w),uid=r.body.bot.uid;
+    await event(w,uid,{seq:1,type:'status',status:'recording'});
+    if(hasAudio){
+      const part=await event(w,uid,{seq:2,type:'chunk',chunk_seq:0,start_ms:0,size_bytes:wav().byteLength});
+      await upload(w,part.body.upload_path);
+    }
+    await call(w.env,FOUNDER,'POST',`/sessions/${w.session}/bot/stop`,{});
+    const result=await event(w,uid,{seq:3,type:'status',status:'failed',failure_code:'no_audio',chunks:0,chunks_failed:0});
+    assert.equal(result.body.bot.failure_code,hasAudio?'processing_failed':'no_audio');
+    assert.equal(result.body.bot.status,'failed');
+    const session=await botSession(w.env,(await botRow(w.env,uid))!);
+    assert.equal(session.processing_stage,null);
+    assert.equal(w.supervisors.get(uid).data.has('assembly_queued'),false);
+  }
+});

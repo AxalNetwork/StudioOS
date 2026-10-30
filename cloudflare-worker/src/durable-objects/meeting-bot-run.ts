@@ -344,6 +344,13 @@ export class MeetingBotRun implements DurableObject {
     if (event.type === 'status') {
       if (typeof event.status !== 'string' || event.status !== run.status && !NEXT[run.status].includes(event.status as BotStatus)) throw new BotError(409,'invalid_bot_transition','That bot status change is not available.');
       const status=event.status as BotStatus;
+      // A zero-audio failure from the runtime must survive a user Stop drain.
+      // Validate its declaration before the drain reason can replace its code.
+      if (status==='failed' && event.failure_code==='no_audio') {
+        const empty=await this.uploadsComplete(run,event) && await this.state.storage.get('upload_count')===0;
+        await this.finish(run,'failed',empty?'no_audio':'processing_failed');
+        return json({bot:botView(run)});
+      }
       if ((status==='processing' || status==='done' || status==='stopped' && ['recording','processing'].includes(run.status)) && !await this.uploadsComplete(run,event)) {
         await this.finish(run,'failed','processing_failed');
         return json({bot:botView(run)});

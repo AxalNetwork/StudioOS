@@ -635,13 +635,13 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
   } catch (e) {
     // Persist the failed step without copying provider errors, meeting data or
     // transcript text into either logs or the member's error sentence.
-    const current = await loadSession(env, session.id);
-    const stage = current?.processing_stage ?? session.processing_stage;
+    let stage = session.processing_stage;
+    try { stage = (await loadSession(env, session.id))?.processing_stage ?? stage; }
+    catch { /* A failed diagnostic read must not prevent the failure write. */ }
     const step = stage === 'placing' ? 'Placing findings' : stage === 'summarising' ? 'Summarising' : 'Transcribing';
-    const { BotAssemblyError } = await import('./meetingBotAssembly');
     const safeCodes = new Set(['bot_audio_incomplete', 'bot_transcript_incomplete', 'bot_stage_invalid', 'bot_manifest_invalid', 'bot_assembly_unreadable', 'bot_not_ready']);
-    const code = e instanceof BotAssemblyError && safeCodes.has(e.code) ? e.code : 'processing_exception';
-    console.warn('[processing] job failed', { stage, code });
+    const code = e instanceof Error && safeCodes.has(e.message) ? e.message : 'processing_exception';
+    console.warn('[processing] job failed', { session_id: session.id, stage, code });
     await failProcessing(env, session, `${step} stopped unexpectedly. Try again to resume this step.`);
     return 'failed';
   }

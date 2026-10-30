@@ -64,3 +64,21 @@ test('processing exceptions name the persisted step without leaking provider tex
     assert.match(JSON.stringify(warnings), new RegExp(stage));
   }
 });
+
+
+test('a failed diagnostic read still records the processing failure and safe internal cause',async()=>{
+  const w=world();
+  w.db.prepare("UPDATE interview_sessions SET processing_stage='transcribing' WHERE id=?").run(w.id);
+  const prepare=w.env.DB.prepare.bind(w.env.DB);let reads=0;
+  w.env.DB.prepare=(sql:string)=>{
+    if(sql==='SELECT * FROM interview_sessions WHERE id = ?' && ++reads>1) throw new Error('SYNTHETIC_READ_FAILURE');
+    if(sql.includes('SELECT seq FROM interview_chunk_transcripts')) throw new Error('bot_not_ready');
+    return prepare(sql);
+  };
+  const warnings:unknown[][]=[];const warn=console.warn;console.warn=(...args)=>warnings.push(args);
+  try {assert.equal(await runInterviewProcessJob(w.env,{session_id:w.id,user_id:FOUNDER}),'failed');}
+  finally {console.warn=warn;w.env.DB.prepare=prepare;}
+  assert.equal((await loadSession(w.env,w.id))!.processing_stage,'failed');
+  assert.match(JSON.stringify(warnings),/bot_not_ready/);
+  assert.doesNotMatch(JSON.stringify(warnings),/SYNTHETIC_READ_FAILURE/);
+});
