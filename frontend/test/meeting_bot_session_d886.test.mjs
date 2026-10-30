@@ -292,3 +292,10 @@ test('#2582 waiting for the founder reads "Join the call first; Eadwyn AI follow
   assert.equal(model.botView({ bot: { status: 'waiting_room', waiting_for: 'someone' } }).label, 'Waiting to be admitted');
   for (const status of ['recording', 'stopped', 'failed']) assert.equal(model.botView({ bot: { status, waiting_for: 'founder' } }).waitingForFounder, false, status);
 });
+
+
+test('#3711 no-audio failure explains the missing transcript instead of a processing error',()=>{
+  const view=model.botView(answer('failed',{failure_code:'no_audio'}));
+  assert.equal(view.failure,'Eadwyn AI joined, but no audio was stored. No transcript was created. Start a new recording.');
+  assert.doesNotMatch(view.failure,/Nothing was lost|Processing stopped/);
+});

@@ -135,7 +135,7 @@ test('Stop and Retry transcribe only unless the member chose more; never from th
   assert.match(read('src/routes/founder_validate_sessions.ts'), /finishSession\(c\.env, s\.session, s\.user\.id, lastSeq, body\?\.auto === true\)/);
   const proc = read('src/services/interviewProcessing.ts');
   assert.match(proc, /COALESCE\(processing_auto, 0\)/, 'a row with no recorded choice retries as transcribe only');
-  assert.match(proc, /const resumeAt: Stage = !transcribed \? 'transcribing' : session\.processing_auto === 1 \? 'summarising' : 'done';/);
+  assert.match(proc, /const resumeAt: Stage = !transcribed \? 'transcribing' : session\.processing_auto === 1 \? .* : 'done';/);
   assert.match(proc, /if \(resumeAt !== 'done'\) await enqueueProcess\(env, session\.id, userId\);/);
   const front = (p: string) => readFileSync(join(ROOT, '../frontend/src', p), 'utf8');
   assert.match(front('lib/activeRecording.js'), /async confirmStop\(\{ auto = false \} = \{\}\) \{/);

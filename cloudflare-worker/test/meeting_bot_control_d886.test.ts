@@ -8,7 +8,7 @@ import { botHmac, BOT_CALLBACK_WINDOW_MS } from '../src/durable-objects/meeting-
 import { world as botWorld, syntheticLink, hmacSecret, event, wav, upload } from './_meeting_bot_fixture.ts';
 import { BOT_COMMISSION_MULTIPLIER, botRate, botLimit, botPlatform, botRow, botSession } from '../src/services/meetingBots.ts';
 import { decryptColumn } from '../src/services/columnCipher.ts';
-import { runInterviewProcessJob } from '../src/services/interviewProcessing.ts';
+import { recoverSession, runInterviewProcessJob } from '../src/services/interviewProcessing.ts';
 import { withGuard } from './_guard_stub.mjs';
 
 // Positive contract tests use the real shared wording with only its approval date
@@ -206,8 +206,10 @@ test('D886 scheduled events cannot bypass alarm, expired authority stops a run, 
   await v.supervisors.get(u).object.alarm();assert.equal((await botRow(v.env,u))!.status,'stopped');
   const p=world(),pp=await post(p),id=pp.body.bot.uid;
   await event(p,id,{seq:1,type:'status',status:'recording'});
-  assert.equal((await event(p,id,{seq:2,type:'status',status:'processing'})).status,200);
-  assert.equal((await event(p,id,{seq:3,type:'status',status:'done'})).body.code,'bot_processing');
+  const part=await event(p,id,{seq:2,type:'chunk',chunk_seq:0,start_ms:0,size_bytes:wav().byteLength});
+  await upload(p,part.body.upload_path);
+  assert.equal((await event(p,id,{seq:3,type:'status',status:'processing'})).status,200);
+  assert.equal((await event(p,id,{seq:4,type:'status',status:'done'})).body.code,'bot_processing');
   assert.equal((await botRow(p.env,id))!.status,'processing');
   assert.equal(p.stops.length,1);
 });
@@ -245,7 +247,9 @@ test('D886 signed upload to recorder job to named final transcript completes onl
 test('D886 moving processing progress keeps assembly alive without extending runtime billing',async()=>{
   const w=world(),r=await post(w),uid=r.body.bot.uid;
   await event(w,uid,{seq:1,type:'status',status:'recording'});
-  await event(w,uid,{seq:2,type:'status',status:'processing'});
+  const part=await event(w,uid,{seq:2,type:'chunk',chunk_seq:0,start_ms:0,size_bytes:wav().byteLength});
+  await upload(w,part.body.upload_path);
+  await event(w,uid,{seq:3,type:'status',status:'processing'});
   w.supervisors.get(uid).data.set('assembly_queued',true);
   const run=(await botRow(w.env,uid))!,clock=Date.now;
   const later=run.ended_at!+360000;
@@ -556,5 +560,73 @@ test('D1368: a failed run keeps the bot\'s own code and last step, and only in t
     const row=(await botRow(w.env,uid))! as any;
     assert.deepEqual([row.status,row.failure_code],['failed','runtime_failed']);
     assert.equal(w.db.prepare('SELECT failure_detail FROM meeting_bots WHERE uid=?').get(uid).failure_detail,stored);
+  }
+});
+
+
+test('#3711: admitted with two participants and no chunks ends without processing, receipt or AI work',async()=>{
+  for (const status of ['processing','stopped']) {
+    const w=world(),r=await post(w),uid=r.body.bot.uid;
+    await event(w,uid,{seq:1,type:'status',status:'recording'});
+    await event(w,uid,{seq:2,type:'roster',participants:[{id:'a',name:'Synthetic A',joined_ms:0,left_ms:null},{id:'b',name:'Synthetic B',joined_ms:0,left_ms:null}]});
+    const result=await event(w,uid,{seq:3,type:'status',status,chunks:0,chunks_failed:0});
+    assert.equal(result.body.bot.failure_code,'no_audio');
+    assert.equal(result.body.bot.status,'failed');
+    const session=await botSession(w.env,(await botRow(w.env,uid))!);
+    assert.equal(session.processing_stage,null);
+    assert.equal(session.status,'stopped');
+    assert.equal(w.stt.length,0);
+    assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM interview_session_receipts WHERE session_id=?').get(w.session).n,0);
+    assert.equal(w.db.prepare("SELECT COUNT(*) AS n FROM interview_transcript_segments WHERE session_id=? AND source='final'").get(w.session).n,0);
+    assert.equal(w.supervisors.get(uid).data.has('assembly_queued'),false);
+  }
+});
+
+
+test('#3711: a failed bot assembly retries staged transcription without another AI call or receipt',async()=>{
+  const w=world(),r=await post(w),uid=r.body.bot.uid;
+  const messages:any[]=[];let calls=0;
+  w.env.USE_CF_QUEUE='true';w.env.JOB_QUEUE={async send(body:any){messages.push(body);}} as any;
+  w.env.AI=withGuard({async run(){calls++;return {results:{channels:[{detected_language:'en',alternatives:[{transcript:'Synthetic.',words:[{word:'Synthetic.',start:0,end:1,speaker:0}]}]}]}};}}) as any;
+  await event(w,uid,{seq:1,type:'status',status:'recording'});
+  const part=await event(w,uid,{seq:2,type:'chunk',chunk_seq:0,start_ms:0,size_bytes:wav().byteLength});
+  await upload(w,part.body.upload_path);
+  await event(w,uid,{seq:3,type:'status',status:'processing'});
+  await w.supervisors.get(uid).object.alarm();
+  const prepare=w.env.DB.prepare.bind(w.env.DB);
+  w.env.DB.prepare=(sql:string)=>{
+    if(sql.startsWith('UPDATE meeting_bots SET participants_enc')) throw new Error('SYNTHETIC_ASSEMBLY_EXCEPTION');
+    return prepare(sql);
+  };
+  try {assert.equal(await runInterviewProcessJob(w.env,{session_id:w.session,user_id:FOUNDER}),'failed');}
+  finally{w.env.DB.prepare=prepare;}
+  const session=await botSession(w.env,(await botRow(w.env,uid))!);
+  assert.equal(session.processing_error,'Transcribing stopped unexpectedly. Try again to resume this step.');
+  assert.equal(calls,1);
+  assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM interview_chunk_transcripts WHERE session_id=?').get(w.session).n,1);
+  assert.deepEqual(await recoverSession(w.env,session,FOUNDER),{ok:true,stage:'transcribing'});
+  assert.equal(await runInterviewProcessJob(w.env,{session_id:w.session,user_id:FOUNDER}),'done');
+  assert.equal(calls,1);
+  assert.equal(w.db.prepare("SELECT COUNT(*) AS n FROM interview_session_receipts WHERE session_id=? AND outcome='ok'").get(w.session).n,1);
+  assert.equal(await runInterviewProcessJob(w.env,{session_id:w.session,user_id:FOUNDER}),null);
+  assert.equal(calls,1);
+});
+
+
+test('#3711 a stopped empty run preserves the new runtime no_audio callback and rejects false empty reports',async()=>{
+  for (const hasAudio of [false,true]) {
+    const w=world(),r=await post(w),uid=r.body.bot.uid;
+    await event(w,uid,{seq:1,type:'status',status:'recording'});
+    if(hasAudio){
+      const part=await event(w,uid,{seq:2,type:'chunk',chunk_seq:0,start_ms:0,size_bytes:wav().byteLength});
+      await upload(w,part.body.upload_path);
+    }
+    await call(w.env,FOUNDER,'POST',`/sessions/${w.session}/bot/stop`,{});
+    const result=await event(w,uid,{seq:3,type:'status',status:'failed',failure_code:'no_audio',chunks:0,chunks_failed:0});
+    assert.equal(result.body.bot.failure_code,hasAudio?'processing_failed':'no_audio');
+    assert.equal(result.body.bot.status,'failed');
+    const session=await botSession(w.env,(await botRow(w.env,uid))!);
+    assert.equal(session.processing_stage,null);
+    assert.equal(w.supervisors.get(uid).data.has('assembly_queued'),false);
   }
 });

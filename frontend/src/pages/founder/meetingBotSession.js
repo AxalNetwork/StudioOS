@@ -22,6 +22,7 @@ const FAILURES = Object.freeze({
   schedule_missed: 'The scheduled start was missed. Schedule the call again.',
   admission_refused: 'Eadwyn AI was not admitted. Ask the host to check the waiting room.',
   not_admitted: 'Eadwyn AI was not admitted. Ask the host to check the waiting room.',
+  no_audio: 'Eadwyn AI joined, but no audio was stored. No transcript was created. Start a new recording.',
   meeting_ended: 'The meeting ended before Eadwyn AI could finish recording.',
   link_invalid: 'Eadwyn AI could not use this meeting link. Check it and try again.',
   platform_blocked: 'The meeting platform did not allow Eadwyn AI to join.',

@@ -349,7 +349,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
         }
         if (p?.stage === 'failed') return 'failed';
         if (p?.stale) {
-          failWith(p.error || 'Processing has not moved for 15 minutes. Nothing was lost; try again.');
+          failWith(p.error || 'Processing has not moved for 15 minutes. Try again to resume processing.');
           return 'failed';
         }
       }
@@ -543,7 +543,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
         processing: { stage: 'uploading', done: null, total: null, error: null }, stageAt: 0 });
       dropLock(); // nothing is captured from here: another tab may follow the processing
       try { return await process(auto === true); } catch (e) {
-        failWith(e?.message || 'Processing could not start. Nothing was lost; try again.');
+        failWith(e?.message || 'Processing could not start. Try again to resume processing.');
         return 'failed';
       }
     },
@@ -557,7 +557,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
         showProcessing(r?.processing || null);
         return await follow(s.id);
       } catch (e) {
-        failWith(e?.message || 'Processing could not start. Nothing was lost; try again.');
+        failWith(e?.message || 'Processing could not start. Try again to resume processing.');
         return 'failed';
       }
     },
