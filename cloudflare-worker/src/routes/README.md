@@ -378,6 +378,10 @@ D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 `/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
 operator's own consented session; status events supply content-free timings.
+#3708 adds `/meeting-bots/diagnose` (start, TOTP plus step-up), `/diagnose/:id`
+and `/diagnose/:id/screenshot` (reads, the starter only), and
+`meeting_bot_callbacks.ts` takes the container's signed
+`/diagnostics/:id/{report,screenshot,probe}` (`../services/meetingBotDiagnose.ts`).
 
 D1128 (#3008): `persona_segments.ts` adds HQ-only `POST /` creation and the
 admin `GET /:key/completion` count. `personas.ts` exposes authenticated

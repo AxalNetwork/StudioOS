@@ -445,6 +445,8 @@ export interface Env {
   // when these are undefined.
   MEETING_BOT?: string;
   MEETING_BOT_SECRET?: string;
+  // #3708: the bot host's deployed commit, set by meeting-bot-deploy.yml; read only by the owner's diagnostic.
+  MEETING_BOT_VERSION?: string;
   MEETING_BOT_ZOOM_CLIENT_ID?: string;
   MEETING_BOT_ZOOM_CLIENT_SECRET?: string;
   MEETING_BOT_COST_MICROUSD_PER_MINUTE?: string;

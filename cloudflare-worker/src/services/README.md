@@ -128,6 +128,12 @@ delegates the step-up-protected live check to B1's existing dispatch
 service with the authenticated actor and reads only the operator's own status-event timings. It never reads
 roster, speaker or transcript content. The routes are on `admin_platform.ts`;
 no new schema, runtime or billing path is introduced.
+`meetingBotDiagnose.ts` (#3708) is the owner's staged diagnostic: the site,
+Google's or Zoom's setup and the last real run are read here; the container's
+stages arrive by signed callback. One record per diagnostic in `FILES`
+(`meeting-bot-diagnostics/<id>.json`, written only on a matching etag, and
+`<id>.png` for the stopping point), read only by the Super Admin who started
+it. Codes, counts and one screenshot; no link, name, page text or audio.
 
 | File | Why it matters |
 | --- | --- |

@@ -79,6 +79,8 @@ import { Hono } from 'hono';
 import { backfillMemberFileSizes } from '../services/memberFileSizeBackfill';
 import { ownBotTest, dispatchBotTest, validBotTestId } from '../services/meetingBotOperationsTest';
 import { readMeetingBotOperations, meetingBotPricePolicy } from '../services/meetingBotOperationsRead';
+import { startDiagnosis, readDiagnosis, readDiagnosisScreenshot } from '../services/meetingBotDiagnose';
+import { BotError } from '../services/meetingBots';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { readWebhookDeliveries } from '../services/stripeWebhookDeliveries';
@@ -792,6 +794,39 @@ r.get('/meeting-bots/test/:uid', async (c) => {
     const result = await ownBotTest(c.env,actor.id,c.req.param('uid'));
     return result ? c.json({ test: result }) : c.json({ code: 'bot_test_not_found', message: 'That check is not available.' },404);
   } catch { return c.json({ code: 'bot_test_unreadable', message: 'The check timings could not be read.' },503); }
+});
+
+// #3708: the owner's staged diagnostic. A Meet or Zoom link the owner hosts; no
+// session, consent or charge, and nothing but codes, counts and one screenshot
+// kept, for the Super Admin who started it.
+r.post('/meeting-bots/diagnose', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  c.header('Cache-Control', 'private, no-store');
+  const body = await c.req.json().catch(() => null);
+  try {
+    const result = await startDiagnosis(c.env, actor, body?.meeting_url);
+    await logAdminAction(c.env, actor.id, actor.email, 'meeting_bot_diagnosis_started', { target_user_id: actor.id, platform: result.platform });
+    return c.json({ diagnosis: result }, 202);
+  } catch (e) {
+    if (e instanceof BotError) return c.json(e.body(), e.status as 400 | 503);
+    return c.json({ code: 'diagnosis_unreadable', message: 'The diagnostic could not start. Try again.' }, 503);
+  }
+});
+r.get('/meeting-bots/diagnose/:id', async (c) => {
+  const actor = await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  try {
+    const result = await readDiagnosis(c.env, actor.id, c.req.param('id'));
+    return result ? c.json({ diagnosis: result }) : c.json({ code: 'diagnosis_not_found', message: 'That diagnostic is not available.' }, 404);
+  } catch { return c.json({ code: 'diagnosis_unreadable', message: 'The diagnostic could not be read.' }, 503); }
+});
+r.get('/meeting-bots/diagnose/:id/screenshot', async (c) => {
+  const actor = await requireSuperAdmin(c);
+  try {
+    const png = await readDiagnosisScreenshot(c.env, actor.id, c.req.param('id'));
+    if (!png) return c.json({ code: 'screenshot_not_found', message: 'No screenshot for that diagnostic.' }, 404);
+    return new Response(png, { headers: { 'content-type': 'image/png', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' } });
+  } catch { return c.json({ code: 'diagnosis_unreadable', message: 'The screenshot could not be read.' }, 503); }
 });
 
 /** D1168: one bounded, audited batch; calling again resumes persisted checkpoints. */

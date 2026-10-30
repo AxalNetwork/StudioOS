@@ -6,6 +6,8 @@ interface Lease { uid: string; deadline: number; funded: number; fingerprint: st
 const reply = (status: number, code: string) => Response.json({code},{status});
 const integer = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v);
 const pause = () => new Promise(resolve=>setTimeout(resolve,100));
+/** #3708: a diagnostic's container lives at most this long. */
+export const DIAGNOSE_MS = 8 * 60_000;
 export class MeetingBotContainer implements DurableObject {
   private readonly state: DurableObjectState;
   private readonly env: Env;
@@ -16,8 +18,9 @@ export class MeetingBotContainer implements DurableObject {
         const container=this.state.container;
         if (!container) return reply(503,'container_unavailable');
         const path=new URL(request.url).pathname;
-        if (request.method==='GET' && path==='/health') return Response.json({running:container.running});
-        if (request.method!=='POST' || !['/start','/stop','/heartbeat'].includes(path)) return reply(404,'not_found');
+        // #3708: the deployed commit answers the owner's diagnostic (`--var` in meeting-bot-deploy.yml).
+        if (request.method==='GET' && path==='/health') return Response.json({running:container.running,version:/^[a-f0-9]{7,40}$/.test(this.env.MEETING_BOT_VERSION ?? '') ? this.env.MEETING_BOT_VERSION : null});
+        if (request.method!=='POST' || !['/start','/stop','/heartbeat','/diagnose'].includes(path)) return reply(404,'not_found');
         const raw=await request.text();
         if (raw.length>16_384) return reply(413,'invalid_command');
         let body;
@@ -43,6 +46,30 @@ export class MeetingBotContainer implements DurableObject {
           return reply(200,'stop_requested');
         }
         if (lease?.stopped) return reply(409,'run_stopped');
+        if (path==='/diagnose') {
+          // #3708: one owner diagnostic per id, on its own instance; no meeting run, no heartbeat.
+          if (lease || container.running) return reply(409,'runtime_busy');
+          if (!['zoom','google_meet'].includes(body.platform) || typeof body.meeting_url!=='string' || body.meeting_url.length>2048) return reply(400,'invalid_command');
+          const image=container.images.runtime;
+          if (!image) return reply(503,'image_unavailable');
+          const key=await runtimeKey(this.env.MEETING_BOT_SECRET ?? '',body.uid),origin=runtimeOrigin(this.env);
+          const input={uid:body.uid,platform:body.platform,meeting_url:body.meeting_url},end=Date.now()+DIAGNOSE_MS;
+          lease={uid:body.uid,deadline:end,funded:end,fingerprint:'diagnose',started:false,stopped:false};
+          await this.state.storage.put('lease',lease);
+          let booted=false;
+          try { await this.boot(image,key,origin,lease); booted=true; } catch { await this.destroy(lease); }
+          if (!booted) return reply(503,'container_start_failed');
+          // A run's heartbeats keep its container awake; a diagnostic has none, and waits minutes for admission.
+          await container.setInactivityTimeout(Math.max(1,end+30_000-Date.now()));
+          return async () => {
+            try { await this.command('/diagnose',input,20_000); return reply(202,'started'); }
+            catch (e) {
+              await this.state.blockConcurrencyWhile(async()=>{ const current=await this.state.storage.get<Lease>('lease'); if (current) await this.destroy(current); });
+              // Refused: the image answered and said no. Unavailable: it never answered (no boot).
+              return reply(503,e instanceof Error && e.message==='command_refused' ? 'runtime_refused' : 'runtime_no_answer');
+            }
+          };
+        }
         if (lease && Date.now()>=Math.min(lease.deadline,lease.funded)+30_000) {
           await this.destroy(lease); return reply(409,'run_expired');
         }
@@ -76,10 +103,7 @@ export class MeetingBotContainer implements DurableObject {
         lease={uid:body.uid,deadline:body.deadline_at,funded:body.budget_deadline_at,fingerprint,started:false,stopped:false};
         await this.state.storage.put('lease',lease);
         try {
-          container.start({image,instance:'standard-2',enableInternet:true,
-            env:{MEETING_BOT_SECRET:key,MEETING_BOT_CALLBACK_ORIGIN:origin,PORT:'8080'}});
-          this.state.waitUntil(container.monitor().catch(()=>{}));
-          await this.arm(lease);
+          await this.boot(image,key,origin,lease);
           // Boot/HTTP waits must run outside the critical section so Stop can
           // persist its tombstone immediately, even while the process is cold.
           return async () => {
@@ -103,6 +127,13 @@ export class MeetingBotContainer implements DurableObject {
       } catch { return reply(503,'runtime_unavailable'); }
     });
     return typeof result === 'function' ? result() : result;
+  }
+  /** The run's and the diagnostic's one way to start the image: its own key, its callback origin, egress on. */
+  private async boot(image: string, key: string, origin: string, lease: Lease) {
+    this.state.container!.start({image,instance:'standard-2',enableInternet:true,
+      env:{MEETING_BOT_SECRET:key,MEETING_BOT_CALLBACK_ORIGIN:origin,PORT:'8080'}});
+    this.state.waitUntil(this.state.container!.monitor().catch(()=>{}));
+    await this.arm(lease);
   }
   private async command(path: string, body: {uid:string}, timeout: number) {
     const port=this.state.container!.getTcpPort(8080),raw=JSON.stringify(body);

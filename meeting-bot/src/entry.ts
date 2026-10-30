@@ -1,11 +1,11 @@
 /** D886 B2: private container HTTP entry; B8 supplies routing and secrets. */
 import { createServer } from 'node:http';
 import { RuntimeHost } from './runtime.ts';
-import { runtimeAdapter } from './runtimeAdapters.ts';
+import { runtimeAdapter, runtimeDiagnose } from './runtimeAdapters.ts';
 import { consoleSink, logLine } from './log.ts';
 
 try{
-  const host=new RuntimeHost({secret:process.env.MEETING_BOT_SECRET??'',callbackOrigin:process.env.MEETING_BOT_CALLBACK_ORIGIN??'',adapter:runtimeAdapter,log:consoleSink});
+  const host=new RuntimeHost({secret:process.env.MEETING_BOT_SECRET??'',callbackOrigin:process.env.MEETING_BOT_CALLBACK_ORIGIN??'',adapter:runtimeAdapter,diagnose:runtimeDiagnose,log:consoleSink});
   const port=Number(process.env.PORT??8080);
   if(!Number.isSafeInteger(port)||port<1||port>65535)throw new Error('port_invalid');
   const server=createServer(async(req,res)=>{
