@@ -18,7 +18,7 @@ const mounted = new Hono().route('/api/meeting-bots', callbacks);
 import platform from '../src/routes/admin_platform.ts';
 import { signRequest } from '../../meeting-bot/src/callback.ts';
 
-const SECRET = randomBytes(32).toString('hex'), JWT_SECRET = 'synthetic-diagnose-jwt-secret-0123456789';
+const SECRET = randomBytes(32).toString('hex'), JWT_SECRET = randomBytes(32).toString('hex');
 const ID = '00000000-0000-4000-8000-0000000037a8', MEET = 'https://meet.google.com/abc-defg-hij';
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 
