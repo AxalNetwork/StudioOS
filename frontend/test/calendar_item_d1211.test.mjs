@@ -119,7 +119,8 @@ test('the drawer\'s address, its words and its rules', () => {
   assert.equal(refusalOf({ status: 409, message: 'Google is not connected.' }).text, 'Google is not connected.');
 
   assert.deepEqual(newMenu('investor').map((x) => x.key), ['ic', 'checkin', 'event']);
-  assert.deepEqual(newMenu('founder').map((x) => x.key), ['checkin', 'interview', 'advisor', 'event']);
+  // D1384: Compliance deadline joins for a founder (and an admin), in the page.
+  assert.deepEqual(newMenu('founder').map((x) => x.key), ['checkin', 'compliance', 'interview', 'advisor', 'event']);
   assert.deepEqual(newMenu('advisor').map((x) => x.key), ['checkin', 'event']);
   assert.ok(newMenu('founder').filter((x) => x.to).every((x) => x.label.endsWith('↗') && x.sub), 'items that leave the page carry ↗ and say where');
 

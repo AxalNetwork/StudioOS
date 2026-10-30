@@ -366,7 +366,8 @@ export const SIDEBAR_GROUPS = {
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'] },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
-      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/incorporate', '/compliance'] },
+      // D1384: /compliance is retired into Calendar, so it lights nothing here.
+      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/incorporate'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
         match: ['/grow', '/build/team', '/advisors', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks'] },
       // Points at /network, not at the first zone: /network is the one route

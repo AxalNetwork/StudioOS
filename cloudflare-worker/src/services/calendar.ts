@@ -11,6 +11,7 @@
  * They are kept as side-by-side pairs (no shared interface) so each
  * provider's quirks stay legible.
  */
+import { complianceDueEvents, complianceState, type ComplianceFacts } from './calendar/sourceReaders';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { isSuperAdmin } from '../auth';
@@ -431,7 +432,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due';
   source_id: number;
   source_uid: string;
   title: string;
@@ -476,6 +477,8 @@ export interface CalendarEvent {
   time_zone?: string | null;
   /** D1207 — the booked advisor's uid, for the booking's page. */
   advisor_uid?: string | null;
+  /** D1384 — a compliance deadline's own facts (`compliance_due` only). */
+  compliance?: ComplianceFacts;
 }
 
 /**
@@ -484,7 +487,15 @@ export interface CalendarEvent {
  * Google and Outlook sync and the one-event push never see one, so a
  * cancelled meeting is never copied back into anyone's calendar.
  */
-export interface ReadOptions { withCancelled?: boolean }
+export interface ReadOptions {
+  withCancelled?: boolean;
+  /**
+   * D1384 — the caller's active company, set by the page read and the item
+   * read only. A reader that scopes by company (`compliance_due`) narrows to
+   * it; the others ignore it.
+   */
+  companyId?: number | null;
+}
 
 /** A booking's stored cancel code, in words; free text passes as written. */
 export function bookingCancelReason(code: string | null | undefined): string | null {
@@ -851,9 +862,23 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   event_hosted: hostedEvents,
   // D1190 (#3124): a founder's meeting or call with an investor, from Capital relationships.
   investor_meeting: investorMeetingEvents,
+  // D1384 (#3692): the Compliance layer. D1208's reader; the page read alone
+  // asks for done deadlines (they stay on their day) and passes the company.
+  compliance_due: async (env, userId, from, to, opts) => (await complianceDueEvents(env, userId, from, to, {
+    withDone: !!opts?.withCancelled, companyId: opts?.companyId,
+  })) as CalendarEvent[],
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
+
+/**
+ * D1384 — kinds the page reads but no .ics file, subscription or provider
+ * copy carries. A deadline is a whole day with no time, which `eventsToIcs`
+ * and the Google and Outlook payloads do not write; `fetchUserEvents` leaves
+ * these out, so a feed never holds one by accident.
+ */
+export const PAGE_ONLY_KINDS: readonly CalendarEvent['kind'][] = ['compliance_due'];
+export const FEED_KINDS = KNOWN_KINDS.filter((k) => !PAGE_ONLY_KINDS.includes(k));
 
 /** Whether one source answered, so a page can say which of the eight did not. */
 export interface CalendarSourceStatus {
@@ -990,6 +1015,15 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
         WHERE ev.starts_at >= ? AND ev.starts_at <= ? AND ev.kind IN ('meeting','call') AND ev.calendar_item_uid IS NOT NULL
           AND pr.founder_id IN (SELECT founder_id FROM members WHERE founder_id IS NOT NULL)`;
       break;
+    // D1384: what /compliance showed an admin, read-only, for the scope's ventures.
+    case 'compliance_due':
+      query = `WITH members AS (SELECT id,founder_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
+        SELECT e.id AS id,e.uid,e.title,date(e.due_date) AS start_at,date(e.due_date,'+1 day') AS end_at,
+               e.completion_status,e.project_id,e.event_type,e.jurisdiction,e.recurrence,e.source,e.owner_name
+        FROM compliance_events e JOIN projects pr ON pr.id = e.project_id AND pr.deleted_at IS NULL
+        WHERE julianday(date(e.due_date), '+1 day') > julianday(?) AND julianday(date(e.due_date)) < julianday(?)
+          AND pr.founder_id IN (SELECT founder_id FROM members WHERE founder_id IS NOT NULL)`;
+      break;
     default: return { rows: [], truncated: false };
   }
   const result = await env.DB.prepare(query + ' ORDER BY start_at, id LIMIT ?').bind(actor.id, all ? 1 : 0, from, to, SCOPED_SOURCE_LIMIT + 1).all<ScopedRow>();
@@ -1020,6 +1054,13 @@ function scopedEvent(kind: CalendarEvent['kind'], row: ScopedRow): CalendarEvent
     const who = String(row.prospect_firm || row.prospect_name || '').trim() || 'an investor';
     title = `Investor ${row.kind === 'call' ? 'call' : 'meeting'} · ${who}`; status = 'scheduled';
   }
+  if (kind === 'compliance_due') status = row.completion_status === 'completed' ? 'completed' : 'scheduled';
+  const compliance: ComplianceFacts | undefined = kind === 'compliance_due' ? {
+    state: complianceState(row.completion_status, String(row.start_at), new Date().toISOString().slice(0, 10)),
+    due_date: String(row.start_at), event_type: row.event_type ?? null, jurisdiction: row.jurisdiction ?? null,
+    recurrence: row.recurrence ?? null, owner: typeof row.owner_name === 'string' && row.owner_name.trim() ? row.owner_name.trim() : null,
+    source: row.source ?? null,
+  } : undefined;
   return {
     id: `${kind}:${row.id}`, kind, source_id: Number(row.id), source_uid: String(uid),
     title: title || 'Not recorded: this item has no title.', start_at: row.start_at,
@@ -1031,6 +1072,7 @@ function scopedEvent(kind: CalendarEvent['kind'], row: ScopedRow): CalendarEvent
       ? (kind === 'advisor_booking' || kind === 'partner_office_hour' ? bookingCancelReason(row.cancel_reason) : row.cancel_reason ?? null)
       : null,
     time_zone: row.time_zone || null,
+    ...(compliance ? { compliance } : {}),
   };
 }
 
@@ -1146,7 +1188,10 @@ export async function fetchUserEvents(
   env: Env, userId: number, role: string, fromIso: string, toIso: string,
   kinds?: string[],
 ): Promise<CalendarEvent[]> {
-  const { events, sources } = await gather(env, userId, role, fromIso, toIso, kinds);
+  // D1384: an empty ask is every feed kind, never every kind.
+  const wanted = (kinds && kinds.length ? kinds : FEED_KINDS).filter((k) => !(PAGE_ONLY_KINDS as readonly string[]).includes(k));
+  if (!wanted.length) return [];
+  const { events, sources } = await gather(env, userId, role, fromIso, toIso, wanted);
   const failed = sources.find((s) => !s.ok);
   if (failed) throw new Error(`calendar source ${failed.kind} failed: ${failed.error}`);
   return events;

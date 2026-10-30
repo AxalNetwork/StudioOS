@@ -202,6 +202,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/lp/investor' },
   { path: '/lp/partner' },
   { path: '/legal-capital' }, // #2354: the page is removed (#2297 §3); it lands on Raise › Legal
+  { path: '/compliance' }, // D1384 (#3692): retired into Calendar's Compliance layer (`/calendar?layer=compliance`).
   { path: '/cofounder' }, // #2355: the page is removed (#2297 §3); it lands on Co-founder Match
   { path: '/admin/held/insights' }, // D893 (#2366): Insights moved to /admin/insights
   { path: '/admin/partners' }, // D923 (#2370): Partner invitations moved to /admin/partner-invitations

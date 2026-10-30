@@ -50,11 +50,19 @@ export const FAMILIES = Object.freeze([
   { key: 'events', label: 'Events', kinds: ['event_ticket', 'event_hosted'] },
   { key: 'meetings', label: 'Meetings', kinds: ['ic_meeting', 'founder_checkin', 'investor_meeting'] },
   { key: 'sessions', label: 'Sessions', kinds: ['advisor_booking', 'partner_office_hour', 'expert_booking'] },
-  { key: 'deadlines', label: 'Deadlines', kinds: [] },
+  { key: 'deadlines', label: 'Deadlines', kinds: ['compliance_due'] },
   { key: 'other', label: 'From other calendars', kinds: ['calendly_event'] },
 ]);
 
 export const familyOf = (kind) => FAMILIES.find((f) => f.kinds.includes(kind))?.key || null;
+
+/**
+ * D1384 (#3692) — `?layer=` names one source by a word a link can carry, and
+ * reads as `?kinds=` of that source's registered kinds. `/compliance` now
+ * redirects to `?layer=compliance`. #3723's source settings can replace this
+ * map without touching a link.
+ */
+export const LAYERS = Object.freeze({ compliance: ['compliance_due'] });
 
 /**
  * A kind's chip count: the number in range, or a dash when its source did not
@@ -71,6 +79,6 @@ export const NOT_YET = 'Not read here yet';
 
 /** What the canvas draws that no read carries yet. Never a zero, never "none". */
 export const WAITS = Object.freeze({
-  deadlines: 'Deadlines are not read yet: cohort week dates, filings and board meetings, and deal closing dates each need a reader on the calendar.',
+  deadlines: 'Compliance deadlines are read. Cohort week dates and deal closing dates are not read yet: each needs a reader on the calendar.',
   interviews: 'Interview calls are not on the calendar yet. They stay on Validate › Customer research until the calendar reads them.',
 });

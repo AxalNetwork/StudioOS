@@ -122,7 +122,8 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/legal': 'Legal',
   // `/legal-capital` was removed (#2354); its contract CTAs open Raise › Legal.
   '/raise/legal': 'Legal',
-  '/compliance': 'Compliance',
+  // D1384: /compliance is retired into Calendar's Compliance layer.
+  '/calendar': 'Calendar',
   '/help': 'Help Center',
   // `/docs` redirects into `/help`; kept so an older stored CTA still labels.
   '/docs': 'Docs',
@@ -402,14 +403,15 @@ async function listMyTasks(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelo
     console.warn('[advisor.tools] listMyTasks:', (e as Error).message);
   }
   const top = tasks[0];
-  const route = top ? `/compliance?task=${top.id}` : '/compliance';
+  // D1384: /compliance is a Calendar layer now. `?task=` was never read, so it is not carried.
+  const route = '/calendar?layer=compliance';
   const label = top ? `Open “${top.title}”` : 'Open compliance';
   return {
     result: { count: tasks.length, tasks },
     cta: {
       label, route,
       primary: { label, route },
-      secondary: tasks.length ? { label: 'See all tasks', route: '/compliance' } : undefined,
+      secondary: tasks.length ? { label: 'See all tasks', route } : undefined,
     },
   };
 }

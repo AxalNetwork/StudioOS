@@ -108,7 +108,8 @@ test('the address: ?date= anchors the view and steps a month or a week; ?kinds= 
   assert.equal(needsFrom('?needs=1'), true);
   assert.equal(withNeeds('?needs=1', false), '');
   assert.equal(quickKinds('everything', allowed), null);
-  assert.equal(quickKinds('no-deadlines', allowed).size, allowed.length, 'Deadlines carry no kind yet');
+  // D1384: Deadlines carries compliance_due, so Hide deadlines drops exactly it.
+  assert.deepEqual([...quickKinds('no-deadlines', allowed)].sort(), allowed.filter((k) => k !== 'compliance_due').sort());
 });
 
 test('the Kinds panel counts: a family sums its kinds, says how many are unread, and has no count when the list was not read', () => {
@@ -238,7 +239,7 @@ test('the Kinds filter (CAL6): families with counts, a dash and why for a source
   // Mutation checked: the panel counting the pool (narrowed) instead of the one list.
   const v = await mounted('/calendar?date=' + TK, { events: { items: ITEMS, sources: ok(['partner_office_hour']) } });
   try {
-    assert.equal(v.text('cal-kinds'), 'Kinds 9 on');
+    assert.equal(v.text('cal-kinds'), 'Kinds 10 on');
     await v.click('cal-kinds');
     assert.ok(v.text('cal-fam-meetings').startsWith('Meetings 2'));
     assert.ok(v.text('cal-fam-sessions').includes('and 1 unread'));
@@ -248,9 +249,10 @@ test('the Kinds filter (CAL6): families with counts, a dash and why for a source
     assert.equal(v.text('cal-kinds-show'), 'Show 3 items');
     await v.click('cal-kinds-show');
     const q = new URLSearchParams(v.seen.location.search);
-    assert.deepEqual(q.get('kinds').split(','), ['event_ticket', 'event_hosted', 'ic_meeting', 'founder_checkin', 'investor_meeting']);
+    // D1384: Deadlines (the Compliance layer) stays ticked.
+    assert.deepEqual(q.get('kinds').split(','), ['event_ticket', 'event_hosted', 'ic_meeting', 'founder_checkin', 'investor_meeting', 'compliance_due']);
     assert.equal(q.get('date'), TK, 'the date stays');
-    assert.equal(v.text('cal-kinds'), 'Kinds 5 on');
+    assert.equal(v.text('cal-kinds'), 'Kinds 6 on');
     assert.ok(!v.has('cal-gchip-calendly_event:4') && !v.has('cal-gchip-advisor_booking:5'));
     assert.ok(v.has('cal-kinds-clear'));
   } finally { await v.close(); }
@@ -273,7 +275,7 @@ test('the states (CAL16, CAL17): nothing answered shows no grid and no count; Ag
   let v = await mounted('/calendar', { fail: true });
   try {
     assert.ok(!v.has('cal-month'), 'no grid of empty days for a calendar that was not read');
-    assert.equal(v.text('cal-kinds'), 'Kinds 9 on');
+    assert.equal(v.text('cal-kinds'), 'Kinds 10 on');
     await v.click('cal-kinds');
     assert.ok(!/\b0\b/.test(v.text('cal-kinds-panel').replace(/\?kinds=…/, '')), 'no zero in the panel for an unread list');
     assert.equal(v.text('cal-kinds-show'), 'Show these kinds');

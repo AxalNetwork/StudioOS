@@ -2,10 +2,11 @@
 import type { Env } from '../../types';
 import type { CalendarEvent } from '../calendar';
 import { COHORT_TZ } from '../cohortTiming';
+import { projectInActiveCompany } from '../tenancyScope';
 
 export const READ_ONLY_KINDS: ReadonlySet<string> = new Set(['interview_call', 'cohort_date', 'compliance_due', 'deal_closing']);
 export type SourceKind = 'interview_call' | 'cohort_date' | 'compliance_due' | 'deal_closing';
-export type SourceEvent = Omit<CalendarEvent, 'kind'> & { kind: SourceKind; all_day: boolean };
+export type SourceEvent = Omit<CalendarEvent, 'kind'> & { kind: SourceKind; all_day: boolean; compliance?: ComplianceFacts };
 type Row = Record<string, any>;
 
 function results(value: { results?: Row[] }): Row[] {
@@ -53,20 +54,71 @@ export async function interviewCallEvents(env: Env, userId: number, from: string
   });
 }
 
-/** A founder's own ventures only; neither staff privileges nor team grants widen it. */
-export async function complianceDueEvents(env: Env, userId: number, from: string, to: string): Promise<SourceEvent[]> {
+/** D1384: a deadline's state on its day; done wins over the date. */
+export type ComplianceState = 'due' | 'overdue' | 'done';
+export interface ComplianceFacts {
+  state: ComplianceState;
+  due_date: string;
+  event_type: string | null;
+  jurisdiction: string | null;
+  recurrence: string | null;
+  /** The owner's name where one was recorded (Grow's obligations); null is "Not recorded". */
+  owner: string | null;
+  /** `auto` when the legal seeder wrote it, else `manual` or the feed that did. */
+  source: string | null;
+}
+export interface ComplianceReadOptions {
+  /** The page read only: a done deadline stays on its day, so Mark done can be undone there. */
+  withDone?: boolean;
+  /** The caller's active company; a venture of another company is not this read's (D1384 §1). */
+  companyId?: number | null;
+  /** Today as YYYY-MM-DD, for the state. */
+  today?: string;
+}
+
+export function complianceState(completion: unknown, dueDate: string, today: string): ComplianceState {
+  if (String(completion) === 'completed') return 'done';
+  return String(dueDate).slice(0, 10) < today ? 'overdue' : 'due';
+}
+
+/**
+ * A founder's own ventures only; neither staff privileges nor team grants widen it.
+ * D1384 wires it as the `compliance_due` source: the page read asks for done
+ * rows too and passes the active company, the rule `GET /compliance/events`
+ * applies, so every row shown is one its writes accept.
+ */
+export async function complianceDueEvents(
+  env: Env, userId: number, from: string, to: string, opts: ComplianceReadOptions = {},
+): Promise<SourceEvent[]> {
   const rows = results(await env.DB.prepare(
-    `SELECT e.id, e.uid, e.title, e.due_date, e.description, e.project_id
+    `SELECT e.id, e.uid, e.title, e.due_date, e.description, e.project_id, e.completion_status,
+            e.event_type, e.jurisdiction, e.recurrence, e.source, e.owner_name, p.company_id
        FROM compliance_events e JOIN projects p ON p.id = e.project_id AND p.deleted_at IS NULL
        JOIN users u ON u.id = ? AND u.founder_id = p.founder_id AND u.role = 'founder'
         AND u.is_active = 1 AND u.deletion_requested_at IS NULL
-      WHERE e.completion_status <> 'completed'
+      WHERE (e.completion_status <> 'completed' OR ? = 1)
         AND julianday(date(e.due_date), '+1 day') > julianday(?)
         AND julianday(date(e.due_date)) < julianday(?)
       ORDER BY date(e.due_date), e.id`,
-  ).bind(userId, from, to).all<Row>());
-  return rows.map((r) => deadline({ ...base('compliance_due', Number(r.id), String(r.uid), String(r.title)),
-    project_id: Number(r.project_id), notes: r.description || null }, String(r.due_date)));
+  ).bind(userId, opts.withDone ? 1 : 0, from, to).all<Row>());
+  const today = opts.today || new Date().toISOString().slice(0, 10);
+  return rows
+    .filter((r) => opts.companyId === undefined || projectInActiveCompany(opts.companyId, { company_id: r.company_id ?? null }))
+    .map((r) => {
+      const state = complianceState(r.completion_status, String(r.due_date), today);
+      const compliance: ComplianceFacts = {
+        state, due_date: String(r.due_date).slice(0, 10),
+        event_type: r.event_type ?? null, jurisdiction: r.jurisdiction ?? null, recurrence: r.recurrence ?? null,
+        owner: typeof r.owner_name === 'string' && r.owner_name.trim() ? r.owner_name.trim() : null,
+        source: r.source ?? null,
+      };
+      return {
+        ...deadline({ ...base('compliance_due', Number(r.id), String(r.uid), String(r.title)),
+          project_id: Number(r.project_id), notes: r.description || null }, String(r.due_date)),
+        status: state === 'done' ? 'completed' : 'scheduled',
+        compliance,
+      };
+    });
 }
 
 /** Only the investor's actual deal-room memberships, never staff-wide deal access. */

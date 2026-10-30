@@ -29,6 +29,7 @@ export const KIND_WORDS = Object.freeze({
   event_ticket: 'Event · going',
   event_hosted: 'Event · hosting',
   calendly_event: 'From Calendly',
+  compliance_due: 'Compliance',
 });
 
 /** The lengths each dialog offers, in minutes: CAL7 and CAL19 for an IC meeting, CAL8 for a check-in. */
@@ -170,6 +171,8 @@ export function newMenu(role) {
   if (r === 'admin' || r === 'investor') out.push({ key: 'ic', label: 'IC meeting' });
   out.push({ key: 'checkin', label: 'Check-in' });
   if (r === 'founder' || r === 'admin') {
+    // D1384: /compliance's create, retired into Calendar.
+    out.push({ key: 'compliance', label: 'Compliance deadline' });
     out.push({ key: 'interview', label: 'Interview call ↗', sub: 'Opens Validate › Customer research', to: '/validate/customer-research' });
     out.push({ key: 'advisor', label: 'Book an advisor session ↗', sub: 'Opens Build › Team › Advisors', to: '/advisors' });
   }
