@@ -201,4 +201,5 @@ export function createPosthogRouter(deps: PosthogRouteDeps = {}) {
   return router;
 }
 
-export default createPosthogRouter();
+const posthogRouter = createPosthogRouter();
+export default posthogRouter;
