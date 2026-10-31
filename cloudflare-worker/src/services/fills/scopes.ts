@@ -13,6 +13,17 @@
  *   admin_publications        an admin (routes/admin_publications.ts, `requireAdmin`)
  *   ic_decisions              its author, while it is not decided (routes/ic.ts `PUT /:uid`);
  *                             read as `icDecisionScope` reads it
+ *   portfolio_support_entries D1595: an investor, on a project in their own book
+ *                             (routes/portfolio_support.ts, `supportBookIds`); an admin reads
+ *   service_offerings         D1595: the offering's owner (routes/services.ts, `offeringOwned`);
+ *                             an admin reads
+ *   perks                     D1595: a partner's own listing (routes/perks.ts, `myPerk`);
+ *                             an admin reads
+ *
+ * The D1595 three are CONCEALED: a caller who may not read the record is
+ * answered as if it did not exist, and each reads the request's verified
+ * active company (`ScopeContext`), as its route does; without one it answers
+ * nothing.
  *
  * WHO SEES WHAT, as on a venture: whoever may read the record reads its marks;
  * the trigger is for whoever may write it, in their own session. A reader is,
@@ -29,9 +40,13 @@
  * by the same rule. Every statement is literal; every value is bound.
  */
 import type { Env, User } from '../../types';
+import { inSupportBook, myPerk, offeringOwned, supportBookIds } from '../profileWriteGates';
 
 export interface ScopeAccess { read: boolean; write: boolean }
-export type ParentKind = 'advisor' | 'engagement' | 'event';
+export type ParentKind = 'advisor' | 'engagement' | 'event' | 'project' | 'owner';
+
+/** What a scope may need from the request: the caller's verified active company (`activeCompanyFor`). */
+export interface ScopeContext { activeCompany(): Promise<number | null> }
 
 export interface RecordScope {
   /** The record by its id, with what its rule reads. */
@@ -43,10 +58,16 @@ export interface RecordScope {
    */
   parent: { kind: ParentKind; column: string; own?: (env: Env, user: User) => Promise<number | null> } | null;
   /** The caller's access to a record (`row`), or to adding one under `parentId`. */
-  access(env: Env, user: User, row: Record<string, unknown> | null, parentId: number | null): Promise<ScopeAccess>;
+  access(env: Env, user: User, row: Record<string, unknown> | null, parentId: number | null, ctx?: ScopeContext): Promise<ScopeAccess>;
+  /** D1595: a caller who may not read is told the record does not exist, never that it is someone else's. */
+  concealed?: boolean;
 }
 
 const NONE: ScopeAccess = Object.freeze({ read: false, write: false });
+const READ_ONLY: ScopeAccess = Object.freeze({ read: true, write: false });
+const BOTH: ScopeAccess = Object.freeze({ read: true, write: true });
+/** The caller's own user id, for a record whose parent is its owner. */
+const ownUserId = async (_env: Env, user: User) => (Number.isSafeInteger(Number(user.id)) ? Number(user.id) : null);
 const role = (u: User) => String(u.role || '').toLowerCase();
 const isAdminUser = (u: User) => role(u) === 'admin';
 
@@ -136,6 +157,47 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
       if (!readable) return NONE;
       // Only the author fills it, and never once it is decided: an admin gets marks, not a trigger.
       return { read: true, write: Number(row.created_by) === Number(user.id) && row.status !== 'decided' };
+    },
+  },
+  // D1595 (#3868): Value-add's Log support. `canViewLpData`, then the book the route writes against.
+  // No admin trigger (D1329, #2431 question 5): an admin reads every entry and fills none.
+  portfolio_support_entries: {
+    read: 'SELECT * FROM portfolio_support_entries WHERE id = ?',
+    parent: { kind: 'project', column: 'project_id' },
+    concealed: true,
+    async access(env, user, row, parentId, ctx) {
+      if (isAdminUser(user)) return READ_ONLY;
+      if (role(user) !== 'investor' || !ctx) return NONE;
+      const projectId = Number(row ? row.project_id : parentId);
+      if (!Number.isSafeInteger(projectId) || projectId <= 0) return NONE;
+      const book = await supportBookIds(env, user, await ctx.activeCompany());
+      return inSupportBook(book, projectId) ? BOTH : NONE;
+    },
+  },
+  // D1595: Catalog's New service. The owner, under `offeringOwned`'s company rule; the public catalog's readers get no marks.
+  service_offerings: {
+    read: 'SELECT * FROM service_offerings WHERE id = ?',
+    parent: { kind: 'owner', column: 'owner_user_id', own: ownUserId },
+    concealed: true,
+    async access(env, user, row, parentId, ctx) {
+      if (!ctx) return NONE;
+      if (!row) return parentId != null && parentId === Number(user.id) ? BOTH : NONE;
+      if (Number(row.owner_user_id) === Number(user.id) && await offeringOwned(env, Number(row.id), user, await ctx.activeCompany())) return BOTH;
+      return isAdminUser(user) ? READ_ONLY : NONE;
+    },
+  },
+  // D1595: Perk deals' New perk. A partner's own listing, as `myPerk` returns it; founders who browse get no marks.
+  perks: {
+    read: 'SELECT * FROM perks WHERE id = ?',
+    parent: { kind: 'owner', column: 'partner_user_id', own: ownUserId },
+    concealed: true,
+    async access(env, user, row, parentId, ctx) {
+      if (!ctx) return NONE;
+      if (role(user) === 'partner') {
+        if (!row) return parentId != null && parentId === Number(user.id) ? BOTH : NONE;
+        if (await myPerk(env, String(row.uid ?? ''), Number(user.id), await ctx.activeCompany())) return BOTH;
+      }
+      return isAdminUser(user) && row ? READ_ONLY : NONE;
     },
   },
 });

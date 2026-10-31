@@ -27,6 +27,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8');
+const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
 
 // People: Ada is the primary admin of Northwind (company 1) and owns the venture; Ben is a member of
 // Northwind and a co-founder of the venture with a founder account; Cy is a co-founder with no founder
@@ -38,8 +39,9 @@ const VENTURE = 10;
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs']) db.exec(tableFromBaseline(BASELINE, t));
+  for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597);
+  db.exec(M685); // D1415: projects.slug, which a move checks
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADA, 'founder', 'Ada Made-up', 'ada@example.test', 101);
   u.run(BEN, 'founder', 'Ben Made-up', 'ben@example.test', 102);
@@ -259,4 +261,16 @@ test('a venture\'s seat changes write their events, and the event writer refuses
   // The migration's CHECK holds the same rule for any writer.
   assert.throws(() => db.prepare("INSERT INTO company_membership_events (kind) VALUES ('join')").run());
   assert.throws(() => db.prepare("INSERT INTO company_membership_events (company_id, kind) VALUES (1, 'promoted')").run());
+});
+
+test('D1415: a move into a company that already holds the venture\'s slug is refused with nothing changed', async () => {
+  // Mutation checked: the slug clash check dropped from the move (company_id changes, or the batch fails).
+  const db = fixture(); const env = envOf(db);
+  db.prepare("UPDATE projects SET slug = 'made-up' WHERE id = ?").run(VENTURE);
+  db.prepare("INSERT INTO projects (id, name, founder_id, company_id, slug) VALUES (11, 'Southwind venture', 101, ?, 'made-up')").run(SOUTH);
+  const res = await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: SOUTH });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'slug_taken');
+  assert.equal((db.prepare('SELECT company_id FROM projects WHERE id = ?').get(VENTURE) as any).company_id, NORTH, 'company_id unchanged');
+  assert.equal(events(db).length, 0, 'no event for a move that did not happen');
 });

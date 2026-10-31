@@ -31,7 +31,7 @@ import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 
 const app = new Hono<{ Bindings: Env }>();
 // D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
-const MODULES = [
+export const BUILD_MODULES = [
   ['solution-design', 'Solution design', 'mvp_features and venture_risks', 'Features linked to a pain theme, and risks by severity.', 'Features'],
   ['prototype-mvp', 'Prototype / MVP', 'mvp_features', 'Must-haves done over time against the total.', 'Must-haves'],
   ['product-roadmap', 'Product roadmap', 'roadmap_okrs and okr_column_moves', 'Items in Now, Next and Later; items shipped per month.', 'Roadmap items'],
@@ -39,6 +39,8 @@ const MODULES = [
   ['company-creation', 'Company creation', 'formation_steps and entity_obligations', 'Formation steps and the next three filings.', 'Filings'],
   ['operating-systems', 'Operating systems', 'integration_companies and ritual_runs', 'Core systems by state; weekly reviews held.', 'Systems'],
 ] as const;
+// D1418 (#3862): exported for the Studio catalogue (`services/studioModules.ts`); the routes keep reading it as MODULES.
+const MODULES = BUILD_MODULES;
 type Slug = typeof MODULES[number][0];
 type Project = { id: number; founder_id: number | null; company_id: number | null; entity_id: number | null; mvp_target_date: string | null; incorporation_meta: string | null; cofounder_decision_meta: string | null; spinout_ip_meta: string | null };
 type Filter = NonNullable<BuildRecords['filters']>[number];

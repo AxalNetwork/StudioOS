@@ -60,3 +60,36 @@ export function retireSlug(env: Env, kind: SlugKind, slug: string, targetId: num
 }
 
 export const companyPath = (c: { uid: string; slug: string | null }) => `/c/${c.slug ?? c.uid}`;
+
+/**
+ * A project's canonical path. `company` is the company it sits in (its slug or
+ * uid), or null for a standalone project.
+ */
+export function projectPath(p: { id: number; slug: string | null }, company: { uid: string; slug: string | null } | null): string {
+  const own = p.slug ?? String(p.id);
+  return company ? `${companyPath(company)}/p/${own}` : `/p/${own}`;
+}
+
+/** A name as a slug: lower case, ASCII letters and digits, single hyphens; '' when nothing is left. */
+export function slugify(name: string): string {
+  return name.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50).replace(/-+$/g, '');
+}
+
+/**
+ * A free slug made from `name` in this scope: the slugified name, then `-2`,
+ * `-3`… on a clash or a reserved word. Null when the name yields no slug or
+ * fifty tries all clash; the row is then addressed by uid or id, as rows from
+ * before migration 685 are.
+ */
+export async function generateSlug(env: Env, kind: SlugKind, name: string, scopeCompanyId: number | null = null): Promise<string | null> {
+  const base = slugify(name);
+  if (!base) return null;
+  for (let n = 1; n <= 50; n += 1) {
+    const suffix = n === 1 ? '' : `-${n}`;
+    const candidate = `${base.slice(0, 50 - suffix.length).replace(/-+$/g, '')}${suffix}`;
+    if (!checkSlug(candidate).ok) continue;
+    if ((await slugHolder(env, kind, candidate, scopeCompanyId)) == null) return candidate;
+  }
+  return null;
+}

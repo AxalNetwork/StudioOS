@@ -11,6 +11,7 @@ import { railBody } from './railPages.js';
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
 export * from './api/accountCompanies.js';
+export * from './api/accountPortfolio.js';
 export * from './api/adminAccountWrites.js';
 export * from './api/adminAccounts.js';
 export * from './api/adminAiUsage.js';
@@ -51,6 +52,7 @@ export * from './api/closings.js';
 export * from './api/community.js';
 export * from './api/communityTasks.js';
 export * from './api/companyActions.js';
+export * from './api/companyDocuments.js';
 export * from './api/companyEin.js';
 export * from './api/companyLegal.js';
 export * from './api/companyReceivingAccounts.js';

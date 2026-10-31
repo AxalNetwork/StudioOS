@@ -35,7 +35,8 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, canViewLpData } from '../auth';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
-import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
+import { investorActiveCompany } from './_investorProjectScope';
+import { supportBookIds } from '../services/profileWriteGates';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -88,8 +89,8 @@ function hoursOrNull(v: unknown): number | null {
  * in it, which every caller must answer WITHOUT reaching a query.
  */
 async function scopeFor(c: any, user: User): Promise<{ ids: number[] | null; empty: boolean }> {
-  const ids = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
-  return { ids, empty: ids != null && ids.length === 0 };
+  // D1595 (#3868): the book is services/profileWriteGates.ts' `supportBookIds`, shared with Fill's scope for this table.
+  return supportBookIds(c.env, user, await investorActiveCompany(c, user));
 }
 
 // GET /api/portfolio-support — the ledger, the per-company rollup, and the
