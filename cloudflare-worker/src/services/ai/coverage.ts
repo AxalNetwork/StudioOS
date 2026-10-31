@@ -8,7 +8,7 @@
  *   - which models a page runs and lists: `railMatrix.json` (D764) and
  *     `moduleConnections` (#3626);
  *   - which models a fixed job runs: `ROUTE` (the router), reached from the
- *     call sites in `FIXED_JOBS`, each one cited by file and line;
+ *     call sites in `FIXED_JOBS`, each one cited by the file that calls it;
  *   - Record a Session's speech-to-text picker: `STT_MODELS` (D657).
  *
  * A cell is one of four states (`CellState`). `renderCoverage()` writes
@@ -65,50 +65,52 @@ export function moduleOfPage(pageKey: string): ModuleKey {
 }
 
 /**
- * The jobs that run outside a rail, each at the line that names its router
- * task. The test reads every `ref` and fails when that line no longer names
- * the task, so a moved call is found, not silently mis-cited.
+ * The jobs that run outside a rail, each cited by the file that calls its
+ * router task. The test fails when that file no longer names the task, so a
+ * moved or removed call is found, not silently mis-cited. Line numbers are not
+ * kept: unrelated edits shift them, and a citation that goes red on every
+ * edit above it would hold every other PR hostage (D1478).
  */
 export interface FixedJob { module: ModuleKey; task: keyof typeof ROUTE; ref: string }
 export const FIXED_JOBS: readonly FixedJob[] = Object.freeze([
-  { module: 'validate', task: 'validate_tag_pains', ref: 'services/fills/registry.ts:63' },
-  { module: 'validate', task: 'validate_draft_hypotheses', ref: 'services/fills/registry.ts:174' },
-  { module: 'validate', task: 'market_sizing_inputs', ref: 'services/fills/registry.ts:286' },
-  { module: 'validate', task: 'competitor_scan', ref: 'services/fills/registry.ts:457' },
-  { module: 'validate', task: 'research_ask', ref: 'services/fills/citations.ts:160' },
-  { module: 'validate', task: 'transcribe', ref: 'services/interviewProcessing.ts:168' },
-  { module: 'record', task: 'transcribe', ref: 'routes/founder_validate.ts:1136' },
-  { module: 'record', task: 'detect_language', ref: 'services/sessionTranslation.ts:142' },
-  { module: 'record', task: 'translate_segment', ref: 'services/sessionTranslation.ts:204' },
-  { module: 'record', task: 'structure_interview', ref: 'services/interviewStructuring.ts:556' },
-  { module: 'record', task: 'summarise_interview', ref: 'services/interviewStructuring.ts:920' },
-  { module: 'record', task: 'extract_conversation_items', ref: 'services/conversationItems.ts:285' },
-  { module: 'raise', task: 'deck_image', ref: 'routes/deck_images.ts:117' },
-  { module: 'grow', task: 'grow_theme_feedback', ref: 'services/fills/registry.ts:642' },
-  { module: 'grow', task: 'brand_autofill', ref: 'routes/brand.ts:464' },
-  { module: 'grow', task: 'brand_logo', ref: 'routes/brand.ts:514' },
-  { module: 'grow', task: 'brand_palette', ref: 'routes/brand.ts:1109' },
-  { module: 'grow', task: 'brand_taglines', ref: 'routes/brand.ts:1145' },
-  { module: 'network', task: 'embed', ref: 'services/vectorize.ts:79' },
-  { module: 'research', task: 'embed', ref: 'services/vectorize.ts:79' },
-  { module: 'research', task: 'research_ask', ref: 'routes/research.ts:756' },
-  { module: 'research', task: 'workspace_explain', ref: 'routes/research.ts:3637' },
-  { module: 'research', task: 'paraphrase', ref: 'services/market_intel/extractors/index.ts:151' },
-  { module: 'email', task: 'mail_draft', ref: 'services/mail/drafts.ts:202' },
-  { module: 'studio', task: 'tool_call', ref: 'routes/advisor.ts:2602' },
-  { module: 'studio', task: 'advisor_explain', ref: 'routes/advisor.ts:2268' },
-  { module: 'studio', task: 'rerank', ref: 'services/advisor/rerank.ts:268' },
-  { module: 'studio', task: 'transcribe', ref: 'routes/advisor.ts:2909' },
-  { module: 'studio', task: 'onboarding_chat', ref: 'routes/profiling.ts:237' },
-  { module: 'studio', task: 'workspace_explain', ref: 'routes/ai.ts:720' },
-  { module: 'admin', task: 'ops_summary', ref: 'routes/monitoring.ts:235' },
-  { module: 'admin', task: 'image_screen', ref: 'routes/admin_x.ts:746' },
-  { module: 'admin', task: 'image_alt_text', ref: 'routes/admin_x.ts:805' },
-  { module: 'safety', task: 'safety', ref: 'services/aiRouter.ts:1592' },
-  { module: 'safety', task: 'safety', ref: 'services/advisor/guardrails.ts:150' },
-  { module: 'workspaces', task: 'workspace_explain', ref: 'routes/deal_flow.ts:82' },
-  { module: 'workspaces', task: 'dd_synthesis', ref: 'services/deckExtract.ts:180' },
-  { module: 'workspaces', task: 'publication', ref: 'services/publications.ts:120' },
+  { module: 'validate', task: 'validate_tag_pains', ref: 'services/fills/registry.ts' },
+  { module: 'validate', task: 'validate_draft_hypotheses', ref: 'services/fills/registry.ts' },
+  { module: 'validate', task: 'market_sizing_inputs', ref: 'services/fills/registry.ts' },
+  { module: 'validate', task: 'competitor_scan', ref: 'services/fills/registry.ts' },
+  { module: 'validate', task: 'research_ask', ref: 'services/fills/citations.ts' },
+  { module: 'validate', task: 'transcribe', ref: 'services/interviewProcessing.ts' },
+  { module: 'record', task: 'transcribe', ref: 'routes/founder_validate.ts' },
+  { module: 'record', task: 'detect_language', ref: 'services/sessionTranslation.ts' },
+  { module: 'record', task: 'translate_segment', ref: 'services/sessionTranslation.ts' },
+  { module: 'record', task: 'structure_interview', ref: 'services/interviewStructuring.ts' },
+  { module: 'record', task: 'summarise_interview', ref: 'services/interviewStructuring.ts' },
+  { module: 'record', task: 'extract_conversation_items', ref: 'services/conversationItems.ts' },
+  { module: 'raise', task: 'deck_image', ref: 'routes/deck_images.ts' },
+  { module: 'grow', task: 'grow_theme_feedback', ref: 'services/fills/registry.ts' },
+  { module: 'grow', task: 'brand_autofill', ref: 'routes/brand.ts' },
+  { module: 'grow', task: 'brand_logo', ref: 'routes/brand.ts' },
+  { module: 'grow', task: 'brand_palette', ref: 'routes/brand.ts' },
+  { module: 'grow', task: 'brand_taglines', ref: 'routes/brand.ts' },
+  { module: 'network', task: 'embed', ref: 'services/vectorize.ts' },
+  { module: 'research', task: 'embed', ref: 'services/vectorize.ts' },
+  { module: 'research', task: 'research_ask', ref: 'routes/research.ts' },
+  { module: 'research', task: 'workspace_explain', ref: 'routes/research.ts' },
+  { module: 'research', task: 'paraphrase', ref: 'services/market_intel/extractors/index.ts' },
+  { module: 'email', task: 'mail_draft', ref: 'services/mail/drafts.ts' },
+  { module: 'studio', task: 'tool_call', ref: 'routes/advisor.ts' },
+  { module: 'studio', task: 'advisor_explain', ref: 'routes/advisor.ts' },
+  { module: 'studio', task: 'rerank', ref: 'services/advisor/rerank.ts' },
+  { module: 'studio', task: 'transcribe', ref: 'routes/advisor.ts' },
+  { module: 'studio', task: 'onboarding_chat', ref: 'routes/profiling.ts' },
+  { module: 'studio', task: 'workspace_explain', ref: 'routes/ai.ts' },
+  { module: 'admin', task: 'ops_summary', ref: 'routes/monitoring.ts' },
+  { module: 'admin', task: 'image_screen', ref: 'routes/admin_x.ts' },
+  { module: 'admin', task: 'image_alt_text', ref: 'routes/admin_x.ts' },
+  { module: 'safety', task: 'safety', ref: 'services/aiRouter.ts' },
+  { module: 'safety', task: 'safety', ref: 'services/advisor/guardrails.ts' },
+  { module: 'workspaces', task: 'workspace_explain', ref: 'routes/deal_flow.ts' },
+  { module: 'workspaces', task: 'dd_synthesis', ref: 'services/deckExtract.ts' },
+  { module: 'workspaces', task: 'publication', ref: 'services/publications.ts' },
 ]);
 
 /** Where Record a Session's picker is: its live and final model each a per-session choice. */
@@ -163,8 +165,8 @@ const NOT_HERE: Readonly<Record<ModuleOperation, string>> = Object.freeze({
  * #3721 makes these lists the run's own, and the section empties.
  */
 export const OPTION_RUNS: Readonly<Record<string, { operation: ModuleOperation; run: string }>> = Object.freeze({
-  'deck:image': { operation: 'draw', run: '`deck_image` (routes/deck_images.ts:117)' },
-  'draft:logo': { operation: 'draw', run: '`brand_logo` (routes/brand.ts:514)' },
+  'deck:image': { operation: 'draw', run: '`deck_image` (routes/deck_images.ts)' },
+  'draft:logo': { operation: 'draw', run: '`brand_logo` (routes/brand.ts)' },
   'transcribe:voice-answer': { operation: 'transcribe', run: '`transcribe`' },
   'transcribe:interview': { operation: 'transcribe', run: '`transcribe`' },
   'transcribe:session': { operation: 'transcribe', run: '`transcribe`' },
@@ -177,7 +179,7 @@ export function optionMismatches(): Array<{ pageKey: string; optionKey: string; 
   for (const o of OPTIONS) {
     const r = OPTION_RUNS[o.optionKey ?? ''];
     if (!r) continue;
-    const listed = o.models.map((m) => m.id).filter((id) => MODEL_CONNECTIONS[id]?.operation !== r.operation);
+    const listed = choicesOf(o).filter((id) => MODEL_CONNECTIONS[id]?.operation !== r.operation);
     if (listed.length) out.push({ pageKey: o.pageKey, optionKey: o.optionKey!, run: r.run, wants: r.operation, listed });
   }
   return out;
@@ -213,7 +215,9 @@ export function notOfferedReason(m: CatalogueModel): string | null {
   return isOffered(m, SWITCHES_ALL_ON) ? null : 'partner gate';
 }
 
-type RowLike = { pageKey: string; kind: string; models: Array<{ id: string; role: string }>; optionKey?: string };
+/** #3745: `models` are the (at most 3) suggested cards; `more` are the rest, pickable under All models. */
+type RowLike = { pageKey: string; kind: string; models: Array<{ id: string; role: string }>; more?: Array<{ id: string }>; optionKey?: string };
+const choicesOf = (r: RowLike): string[] => [...r.models, ...(r.more ?? [])].map((m) => m.id);
 const ROWS = matrix.rows as RowLike[];
 const OPTIONS = matrix.options as RowLike[];
 
@@ -237,12 +241,12 @@ function buildCells(): Map<string, Map<ModuleKey, Cell>> {
   for (const row of ROWS) {
     const mod = moduleOfPage(row.pageKey);
     const ref = `railMatrix.json "${row.pageKey}"`;
-    row.models.forEach((m, i) => note(i === 0 ? wired : offered, m.id, mod, ref));
+    choicesOf(row).forEach((id, i) => note(i === 0 ? wired : offered, id, mod, ref));
     for (const c of moduleConnections(row as never, SWITCHES_ALL_ON)) note(offered, c.id, mod, `/api/ai/modules on "${row.pageKey}"`);
   }
   for (const opt of OPTIONS) {
     const mod = moduleOfPage(opt.pageKey);
-    for (const m of opt.models) note(offered, m.id, mod, `railMatrix.json option ${opt.optionKey}`);
+    for (const id of choicesOf(opt)) note(offered, id, mod, `railMatrix.json option ${opt.optionKey}`);
   }
   for (const job of FIXED_JOBS) {
     const { primary, picks } = routeModels(job.task);

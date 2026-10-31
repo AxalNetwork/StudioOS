@@ -44,11 +44,11 @@ test('every catalogue row has exactly one matrix row, and every cell one of the 
   assert.equal(table.split('\n').filter((l) => /^\| `@(cf|hf)\//.test(l)).length, CATALOGUE.length);
 });
 
-test('every fixed job cites a line that names its router task', () => {
+test('every fixed job cites a file that calls its router task', () => {
   for (const job of FIXED_JOBS) {
-    const [file, line] = job.ref.split(':');
-    const text = readFileSync(SRC(file), 'utf8').split('\n')[Number(line) - 1] ?? '';
-    assert.ok(text.includes(String(job.task)), `${job.ref} no longer names ${String(job.task)}: ${text.trim()}`);
+    assert.doesNotMatch(job.ref, /:\d+$/, `${job.ref}: cite the file, not a line that the next edit moves`);
+    const text = readFileSync(SRC(job.ref), 'utf8');
+    assert.ok(new RegExp(`['"]${String(job.task)}['"]`).test(text), `${job.ref} no longer names ${String(job.task)}`);
     assert.ok(ROUTE[job.task], `${String(job.task)} is not a router task`);
   }
 });
@@ -85,7 +85,7 @@ test('every model a job routes to, a page lists or a session can pick is offered
   for (const r of Object.values(ROUTE) as Array<{ model: string; fallbackChain?: string[]; alternates?: string[] }>) {
     for (const id of [r.model, ...(r.fallbackChain ?? []), ...(r.alternates ?? [])]) ids.add(id);
   }
-  for (const row of [...matrix.rows, ...matrix.options]) for (const m of row.models) ids.add(m.id);
+  for (const row of [...matrix.rows, ...matrix.options]) for (const m of [...row.models, ...(row.more ?? [])]) ids.add(m.id);
   for (const s of STT_MODELS) if (isChoosable(s.model, s.kind)) ids.add(s.model);
   const unoffered = [...ids].filter((id) => {
     const m = modelById(id);
