@@ -27,6 +27,7 @@
  * are deliberately TOTP-only — see `requireFactor()` in `src/auth.ts`.
  */
 import { Hono } from 'hono';
+import { parsePhoneNumberFromString } from 'libphonenumber-js/min';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { recordSecurityEvent } from '../services/securityEvents';
@@ -38,9 +39,9 @@ import { clientIp } from '../util/clientIp';
 import { hasTotpConfigured } from '../services/authTotp';
 import {
   hasSmsConfigured, loadSms, persistSmsEnrollment, clearSms, markSmsUsed,
-  getUserFactors, setUserFactor, clearUserFactor, isCountryAllowed,
+  getUserFactors, setUserFactor, clearUserFactor, isCountryAllowed, smsCountryAllowlist,
 } from '../services/authSms';
-import { isGcipConfigured, sendVerificationCode, signInWithPhoneNumber, deleteGcipPhone } from '../services/gcip';
+import { isGcipConfigured, getRecaptchaSiteKey, sendVerificationCode, signInWithPhoneNumber, deleteGcipPhone } from '../services/gcip';
 import { withDeadline } from '../util/deadline';
 import { refuse } from '../util/refusal';
 import { gcipSentence } from '../services/gcip';
@@ -89,6 +90,10 @@ function gcip503(c: any) {
   return c.json({ error: 'sms_unavailable', message: 'SMS 2FA is not configured on this server.' }, 503);
 }
 
+function enrollmentUnavailable(c: any) {
+  return refuse(c, 503, { code: 'sms_unavailable', message: "SMS backup isn't available yet on this server." });
+}
+
 // -------- factor discovery --------------------------------------------------
 
 sms.get('/factors', async (c) => {
@@ -115,23 +120,28 @@ sms.get('/factors', async (c) => {
 // -------- enrollment (authenticated) ----------------------------------------
 
 sms.post('/sms/start-enrollment', async (c) => {
-  if (!(await isGcipConfigured(c.env))) return gcip503(c);
+  if (!(await isGcipConfigured(c.env))) return enrollmentUnavailable(c);
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const phone = String(body?.phone || '').trim();
-  const country = String(body?.country || '').trim().toUpperCase();
+  const requestedCountry = String(body?.country || '').trim().toUpperCase();
   const recaptcha = body?.recaptcha_token ? String(body.recaptcha_token) : null;
-  if (!isE164(phone)) return c.json({ error: 'invalid_phone', message: 'Phone must be E.164 (e.g. +14155551234).' }, 400);
-  if (!country || country.length !== 2) return c.json({ error: 'invalid_country' }, 400);
+  if (!isE164(phone)) return refuse(c, 400, { code: 'invalid_phone', message: gcipSentence('invalid_phone') });
+  if (!/^[A-Z]{2}$/.test(requestedCountry)) return refuse(c, 400, { code: 'invalid_country', message: 'Choose a country for this phone number.' });
+  const destination = parsePhoneNumberFromString(phone, { extract: false });
+  if (!destination?.isPossible() || !destination.country) return refuse(c, 400, { code: 'invalid_phone', message: gcipSentence('invalid_phone') });
+  const country = destination.country;
+  if (country !== requestedCountry) return refuse(c, 400, { code: 'invalid_country', message: 'Choose the country that matches this phone number.' });
   if (!isCountryAllowed(c.env, country)) {
-    return c.json({ error: 'country_not_allowed', message: `SMS to ${country} is not enabled.` }, 400);
+    return refuse(c, 400, { code: 'country_not_allowed', message: `Texts to ${country} aren't offered yet.` });
   }
   // 10/min/IP, 5/min/user — matches the brief.
-  if (!(await rate(c.env, `sms-enroll-ip:${clientIp(c.req.raw)}`, 10, 60))) return c.json({ error: 'Too many requests' }, 429);
-  if (!(await rate(c.env, `sms-enroll-user:${user.id}`, 5, 60))) return c.json({ error: 'Too many requests' }, 429);
-  const r = await sendVerificationCode(c.env, phone, recaptcha);
+  if (!(await rate(c.env, `sms-enroll-ip:${clientIp(c.req.raw)}`, 10, 60))) return refuse(c, 429, { code: 'rate_limited', message: gcipSentence('rate_limited') });
+  if (!(await rate(c.env, `sms-enroll-user:${user.id}`, 5, 60))) return refuse(c, 429, { code: 'rate_limited', message: gcipSentence('rate_limited') });
+  const r = await sendVerificationCode(c.env, phone, recaptcha).catch(() => ({ ok: false as const, code: 'upstream_error' as const, message: 'SMS provider unavailable' }));
   if (!r.ok) {
-    return refuse(c, r.code === 'recaptcha_required' ? 412 : 502, { code: r.code, message: gcipSentence(r.code), raw: r.message });
+    const status = r.code === 'recaptcha_required' ? 412 : r.code === 'quota_exceeded' ? 429 : r.code === 'region_blocked' || r.code === 'invalid_phone' ? 400 : r.code === 'phone_auth_disabled' ? 503 : 502;
+    return refuse(c, status, { code: r.code, message: gcipSentence(r.code), raw: r.message });
   }
   // Stash the candidate {phone, country} in KV against the sessionInfo so
   // the confirm step doesn't have to trust the client to round-trip these.
@@ -140,18 +150,18 @@ sms.post('/sms/start-enrollment', async (c) => {
     JSON.stringify({ phone, country, ts: Date.now() }),
     { expirationTtl: 600 },
   ), RATE_KV_DEADLINE_MS, 'stash-put');
-  return c.json({ session_info: r.sessionInfo });
+  return c.json({ session_info: r.sessionInfo, last4: phone.slice(-4), resend_after_s: 60, expires_in_s: 600 });
 });
 
 sms.post('/sms/confirm-enrollment', async (c) => {
-  if (!(await isGcipConfigured(c.env))) return gcip503(c);
+  if (!(await isGcipConfigured(c.env))) return enrollmentUnavailable(c);
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const sessionInfo = String(body?.session_info || '');
   const code = String(body?.code || '').trim();
-  if (!sessionInfo || !code) return c.json({ error: 'session_info and code required' }, 400);
+  if (!sessionInfo || !/^\d{6}$/.test(code)) return refuse(c, 400, { code: 'code_required', message: 'Enter the six-digit code from the text message.' });
   const stashed = await withDeadline(c.env.RATE_LIMITS.get(`sms-enroll:${user.id}:${sessionInfo}`), RATE_KV_DEADLINE_MS, 'stash-get');
-  if (!stashed) return c.json({ error: 'session_expired', message: 'Verification session expired. Restart enrollment.' }, 410);
+  if (!stashed) return refuse(c, 410, { code: 'session_expired', message: gcipSentence('session_expired') });
   let country: string;
   try {
     const obj = JSON.parse(stashed);
@@ -159,8 +169,8 @@ sms.post('/sms/confirm-enrollment', async (c) => {
   } catch {
     return c.json({ error: 'session_corrupted' }, 500);
   }
-  const v = await signInWithPhoneNumber(c.env, sessionInfo, code);
-  if (!v.ok) return refuse(c, v.code === 'invalid_code' ? 401 : 502, { code: v.code, message: gcipSentence(v.code), raw: v.message });
+  const v = await signInWithPhoneNumber(c.env, sessionInfo, code).catch(() => ({ ok: false as const, code: 'upstream_error' as const, message: 'SMS provider unavailable' }));
+  if (!v.ok) return refuse(c, v.code === 'invalid_code' ? 401 : v.code === 'session_expired' ? 410 : 502, { code: v.code, message: gcipSentence(v.code), raw: v.message });
   // GCIP echoes back the verified phoneNumber; trust THAT, not the stash.
   // The stash is only authoritative for the country/jurisdiction binding.
   await persistSmsEnrollment(c.env, user.id, v.phoneNumber, country, v.localId);
@@ -331,13 +341,18 @@ sms.post('/sms/verify-challenge', async (c) => {
 sms.get('/sms/status', async (c) => {
   const user = await requireAuth(c);
   const row = await loadSms(c.env, user.id);
+  const available = await isGcipConfigured(c.env);
+  const siteKey = available ? await getRecaptchaSiteKey(c.env) : null;
   return c.json({
     configured: !!row,
     last4: row?.last4 || null,
     country: row?.country || null,
     enrolled_at: row?.enrolledAt || null,
     factors: await getUserFactors(c.env, user.id),
-    sms_available: await isGcipConfigured(c.env),
+    sms_available: available,
+    allowed_countries: smsCountryAllowlist(c.env),
+    recaptcha_site_key: siteKey,
+    sms_ready: available && (siteKey !== null || !!c.env.GCIP_RECAPTCHA_TOKEN_FALLBACK),
   });
 });
 

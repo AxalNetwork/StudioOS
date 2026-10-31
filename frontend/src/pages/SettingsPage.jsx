@@ -3,6 +3,7 @@ import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api, refusalError } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
 import { normalizePhoneInput, phoneCountry, phonePlaceholder, PHONE_COUNTRIES, PHONE_ERROR } from '../lib/phoneNumber';
+import { loadRecaptcha, invisibleToken } from '../lib/recaptcha';
 import { useToast } from '../components/useToast';
 import {
   User,
@@ -1846,11 +1847,6 @@ function EmailSection({ data, flash, reload }) {
   );
 }
 
-// Task #6 — SMS 2FA panel. Only renders the enrolment UI when the worker
-// reports `sms_available=true` (GCIP API key configured); otherwise falls
-// back to a quiet "not available" notice so single-tenant deployments
-// without GCIP don't see a broken form. Phone numbers are stored encrypted
-// at rest server-side; the UI only ever sees the last 4 digits.
 // BLOCK-AUTH-02 — passkey (WebAuthn) management. Register a platform/roaming
 // authenticator, list registered passkeys, and remove them. A passkey is a
 // strong factor: signing in with one mints a full-assurance session that also
@@ -1976,12 +1972,37 @@ function SmsPanel({ data, flash, onChanged }) {
   const [session, setSession] = useState(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [checkReady, setCheckReady] = useState(false);
+  const [last4, setLast4] = useState('');
+  const [resendAt, setResendAt] = useState(0);
+  const [now, setNow] = useState(Date.now);
+  const [checking, setChecking] = useState(false);
+  const recaptchaRef = useRef(null);
+  const pendingCheck = useRef(null);
+  useEffect(() => () => pendingCheck.current?.abort(), []);
 
   const refresh = async () => {
     try { setStatus(await api.smsStatus()); }
-    catch { setStatus({ configured: false, sms_available: false }); }
+    catch { setStatus({ unreadable: true }); }
   };
   useEffect(() => { refresh(); }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCheckReady(false);
+    if (!status?.sms_ready || step === 'idle') return;
+    if (!status.recaptcha_site_key) { setCheckReady(true); return; }
+    loadRecaptcha().then(() => { if (!cancelled) setCheckReady(true); })
+      .catch(e => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
+  }, [status?.sms_ready, status?.recaptcha_site_key, step]);
+
+  useEffect(() => {
+    if (step !== 'verify') return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [step]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1993,23 +2014,46 @@ function SmsPanel({ data, flash, onChanged }) {
   }, []);
 
   const normalizedPhone = normalizePhoneInput(phone, country);
+  const countryOk = !normalizedPhone || status?.allowed_countries === null || (Array.isArray(status?.allowed_countries) && status.allowed_countries.includes(normalizedPhone.country));
+  const canSend = countryReady && !busy && !!normalizedPhone && countryOk && checkReady;
+  const resendSeconds = Math.max(0, Math.ceil((resendAt - now) / 1000));
+  const refusal = async (e, fallback) => {
+    const message = e?.message || fallback;
+    setError(message);
+    flash(message, 'error');
+    if (e?.code === 'session_expired') { setCode(''); setResendAt(0); }
+    if (e?.code === 'sms_unavailable' || e?.code === 'phone_auth_disabled') await refresh();
+  };
   const start = async () => {
     if (!countryReady) return;
     if (!normalizedPhone) { flash(PHONE_ERROR, 'error'); return; }
+    if (!canSend || (step === 'verify' && resendSeconds > 0)) return;
+    const controller = new AbortController();
+    pendingCheck.current = controller;
     setBusy(true);
+    setChecking(true);
+    setError('');
     try {
-      const res = await api.smsStartEnrollment(normalizedPhone.e164, normalizedPhone.country, null);
+      const token = status.recaptcha_site_key ? await invisibleToken(recaptchaRef.current, status.recaptcha_site_key, controller.signal) : null;
+      setChecking(false);
+      if (controller.signal.aborted) return;
+      const res = await api.smsStartEnrollment(normalizedPhone.e164, normalizedPhone.country, token);
       setSession(res.session_info);
+      setLast4(res.last4);
+      setCode('');
+      setNow(Date.now());
+      setResendAt(Date.now() + (res.resend_after_s ?? 60) * 1000);
       setStep('verify');
       flash('Verification code sent.');
     } catch (e) {
-      flash(e?.message || 'Could not send verification code.', 'error');
-    } finally { setBusy(false); }
+      if (!controller.signal.aborted) await refusal(e, 'Could not send verification code.');
+    } finally { pendingCheck.current = null; setChecking(false); setBusy(false); }
   };
 
   const confirm = async () => {
     if (code.length !== 6) return;
     setBusy(true);
+    setError('');
     try {
       await api.smsConfirmEnrollment(session, code);
       flash('SMS 2FA enabled.');
@@ -2017,7 +2061,7 @@ function SmsPanel({ data, flash, onChanged }) {
       await refresh();
       onChanged?.();
     } catch (e) {
-      flash(e?.message || 'Verification failed.', 'error');
+      await refusal(e, 'Verification failed.');
     } finally { setBusy(false); }
   };
 
@@ -2038,12 +2082,15 @@ function SmsPanel({ data, flash, onChanged }) {
     } finally { setBusy(false); }
   };
 
+  const errorNotice = error && <p role="alert" data-testid="sms-error" className="text-sm text-red-700 dark:text-red-300 mb-3">{error}</p>;
   if (!status) {
     return <Card title="SMS as a backup factor" description="Loading…"><div className="text-sm text-gray-500">…</div></Card>;
   }
+  if (status.unreadable) return <Card title="SMS as a backup factor" description="SMS status could not be read.">{errorNotice}<button onClick={refresh} className="text-sm text-violet-700">Try again</button></Card>;
   if (!status.sms_available) {
     return (
       <Card title="SMS as a backup factor" description="SMS verification is not enabled on this server yet.">
+        {errorNotice}
         <div className="text-xs text-gray-500 dark:text-gray-400 space-y-2">
           <p>
             A Super Admin needs to add Google Cloud Identity Platform credentials
@@ -2065,11 +2112,21 @@ function SmsPanel({ data, flash, onChanged }) {
     );
   }
 
+  if (!status.sms_ready && !status.configured) return (
+    <Card title="SMS as a backup factor" description="SMS backup isn't available yet — set-up isn't finished on this server.">
+      {errorNotice}
+      <button onClick={refresh} className="text-sm text-violet-700 mr-3">Try again</button>
+      {isSuperAdmin && <a href="/admin/integration-keys" data-testid="sms-admin-keys-link" className="text-sm text-violet-700">Open Integration Keys</a>}
+    </Card>
+  );
+
   return (
     <Card
       title="SMS as a backup factor"
       description="Add a phone number as a backup verification factor. You'll receive a 6-digit code by text to confirm the number — used only for account recovery, never as a primary sign-in method."
     >
+      <div ref={recaptchaRef} data-testid="sms-recaptcha" />
+      {errorNotice}
       <div className="text-xs text-amber-800 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900 rounded-lg p-3 mb-3">
         <strong>SIM-swap warning:</strong> SMS is less secure than your authenticator app — anyone who takes over your phone number can use it to sign in.
         Billing changes, impersonation and other sensitive actions will always still require your authenticator code.
@@ -2107,14 +2164,17 @@ function SmsPanel({ data, flash, onChanged }) {
           <Field label="Phone" hint="Your mobile number, any country">
             <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={busy || !countryReady}
               placeholder={phonePlaceholder(country)} className={`${inputCls} font-mono`} data-testid="sms-phone-input" />
+            {phone.trim() && !normalizedPhone && <p className="text-xs text-red-700 mt-1">{PHONE_ERROR}</p>}
+            {normalizedPhone && !countryOk && <p className="text-xs text-amber-700 mt-1">Texts to {PHONE_COUNTRIES.find(c => c.country === normalizedPhone.country)?.label.split(' (+')[0] || normalizedPhone.country} aren't offered yet.</p>}
             {normalizedPhone && <p className="text-xs text-gray-500 mt-1" role="status">We'll text {normalizedPhone.international}.</p>}
           </Field>
+          {!checkReady && !error && <p className="text-xs text-gray-500">Loading the security check…</p>}
           <div className="flex gap-2">
-            <button onClick={start} disabled={busy || !phone || !countryReady}
+            <button onClick={start} disabled={!canSend}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium">
-              {busy ? 'Sending…' : 'Send verification code'}
+              {busy ? (checking ? 'Checking…' : 'Sending…') : 'Send verification code'}
             </button>
-            <button onClick={() => { setStep('idle'); setPhone(''); }}
+            <button disabled={busy && !checking} onClick={() => { pendingCheck.current?.abort(); setStep('idle'); setPhone(''); setError(''); }}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm">
               Cancel
             </button>
@@ -2124,17 +2184,20 @@ function SmsPanel({ data, flash, onChanged }) {
 
       {step === 'verify' && (
         <div className="space-y-3">
-          <div className="text-sm text-gray-700 dark:text-gray-300">Enter the 6-digit code we just texted to your phone.</div>
+          <div className="text-sm text-gray-700 dark:text-gray-300">We texted a 6-digit code to the number ending {last4}.</div>
           <div className="flex gap-2">
             <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="000000" inputMode="numeric"
+              placeholder="000000" inputMode="numeric" autoComplete="one-time-code" aria-label="Six-digit SMS code" data-testid="sms-code-input"
               className={`${inputCls} font-mono text-center tracking-widest`} />
             <button onClick={confirm} disabled={busy || code.length !== 6}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium whitespace-nowrap">
-              {busy ? 'Verifying…' : 'Confirm'}
+              {busy ? 'Verifying…' : 'Verify'}
             </button>
           </div>
-          <button onClick={() => { setStep('enroll'); setCode(''); setSession(null); }}
+          <button onClick={start} disabled={busy || resendSeconds > 0 || !checkReady} className="text-sm text-violet-700 disabled:text-gray-500 mr-3" data-testid="sms-resend">
+            {resendSeconds > 0 ? `Resend in ${Math.floor(resendSeconds / 60)}:${String(resendSeconds % 60).padStart(2, '0')}` : 'Resend'}
+          </button>
+          <button disabled={busy && !checking} onClick={() => { pendingCheck.current?.abort(); setStep('enroll'); setCode(''); setSession(null); setError(''); setResendAt(0); }}
             className="text-xs text-gray-500 hover:text-gray-700">Use a different number</button>
         </div>
       )}

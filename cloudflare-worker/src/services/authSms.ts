@@ -165,13 +165,15 @@ const DEFAULT_COUNTRY_ALLOWLIST = [
   'NZ', 'BR', 'MX',
 ];
 
+export function smsCountryAllowlist(env: Env): string[] | null {
+  const raw = (env as { SMS_COUNTRY_ALLOWLIST?: string }).SMS_COUNTRY_ALLOWLIST || '';
+  if (raw.trim() === '*') return null;
+  return raw
+    ? raw.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+    : [...DEFAULT_COUNTRY_ALLOWLIST];
+}
 export function isCountryAllowed(env: Env, countryAlpha2: string): boolean {
   const cc = (countryAlpha2 || '').toUpperCase();
-  if (!cc) return false;
-  const raw = (env as { SMS_COUNTRY_ALLOWLIST?: string }).SMS_COUNTRY_ALLOWLIST || '';
-  if (raw.trim() === '*') return true;
-  const list = raw
-    ? raw.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
-    : DEFAULT_COUNTRY_ALLOWLIST;
-  return list.includes(cc);
+  const list = smsCountryAllowlist(env);
+  return !!cc && (list === null || list.includes(cc));
 }
