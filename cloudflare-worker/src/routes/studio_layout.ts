@@ -12,6 +12,14 @@
  *   and nothing is written.
  * - `POST /layout/reset`: delete the row; the read answers the default again.
  *
+ * D1594 (#3863): every read carries the row's `revision` (migration 750), and
+ * a `PUT` names the one it was made from (`expected_revision`, null for no
+ * row): a save from a stale copy is 409 `stale_layout` and writes nothing. A
+ * saved module that is no longer offered, or that the member's plan now locks,
+ * leaves `layout` for `dropped`, with its title and why, so it never blocks
+ * Done and the page never shows a key. A read never rewrites the row: after an
+ * upgrade the module comes back until the member saves without it.
+ *
  * The member is always the session's; an admin names the profile they preview
  * with `?profile=`. A display preference: no activity_logs row (migration 687).
  */
@@ -23,7 +31,7 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import {
   STUDIO_DEFAULTS, STUDIO_GROUPS, STUDIO_LAYOUT_MAX, STUDIO_SIZES, catalogueOf, lockOf, studioProfile,
-  type StudioProfile, type StudioSize,
+  type StudioPlan, type StudioProfile, type StudioSize,
 } from '../services/studioModules';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -38,26 +46,47 @@ async function who(c: Context<{ Bindings: Env }>): Promise<Who | Response> {
   return { user, profile: answer.profile };
 }
 
-type Row = { layout: string; updated_at: string };
+type Row = { layout: string; updated_at: string; revision: number };
 async function savedRow(env: Env, userId: number, profile: StudioProfile): Promise<Row | null> {
-  return await env.DB.prepare('SELECT layout, updated_at FROM studio_layouts WHERE user_id = ?1 AND profile = ?2')
+  return await env.DB.prepare('SELECT layout, updated_at, revision FROM studio_layouts WHERE user_id = ?1 AND profile = ?2')
     .bind(userId, profile).first<Row>();
 }
 
-/** The read every route answers with: saved or default, each entry with its lock, and saved keys no longer offered named in `dropped`. */
+/**
+ * D1594: the last known title of a key the registry no longer offers — a
+ * fixed block, a removed one, or one renamed by D1418 — so `dropped` can name
+ * it. Any other unknown key has no title, and the page says "A module was
+ * removed" without it.
+ */
+export const RETIRED_TITLES: Readonly<Record<string, string>> = {
+  chat: 'Chat', strip: 'Founder strip', profile_card: 'Profile card',
+  founder_actions: 'Do these next', founder_activity: 'Activity across the platform',
+  module_map: 'Module map', firm_standing: 'Firm standing',
+};
+
+type Dropped = { key: string; title: string | null; reason: 'not_offered' | 'plan'; plan: StudioPlan | null };
+
+/**
+ * The read every route answers with: saved or default, holding only modules
+ * this member can place now, the row's revision, and every saved module that
+ * left named in `dropped` with a title (or null) and a reason. Read-only.
+ */
 function layoutView(user: User, profile: StudioProfile, row: Row | null) {
   const catalogue = new Map(catalogueOf(profile, user).map((m) => [m.key, m]));
   const source = row ? 'saved' as const : 'default' as const;
   const entries: Array<{ key: string; size: StudioSize }> = row ? JSON.parse(row.layout) : STUDIO_DEFAULTS[profile].map((e) => ({ ...e }));
   if (!Array.isArray(entries)) throw new Error('layout_not_array');
-  const dropped: string[] = [];
-  const layout = [];
+  const dropped: Dropped[] = [];
+  const layout: Array<{ key: string; size: StudioSize }> = [];
   for (const e of entries) {
-    const mod = catalogue.get(e?.key);
-    if (!mod) { dropped.push(String(e?.key)); continue; }
-    layout.push({ key: mod.key, size: e.size, locked_by_plan: lockOf(user, mod) !== null });
+    const key = String(e?.key);
+    const mod = catalogue.get(key);
+    if (!mod) { dropped.push({ key, title: RETIRED_TITLES[key] ?? null, reason: 'not_offered', plan: null }); continue; }
+    const plan = lockOf(user, mod);
+    if (plan) { dropped.push({ key, title: mod.title, reason: 'plan', plan }); continue; }
+    layout.push({ key: mod.key, size: e.size });
   }
-  return { profile, source, layout, updated_at: row?.updated_at ?? null, dropped };
+  return { profile, source, layout, revision: row ? Number(row.revision) : null, updated_at: row?.updated_at ?? null, dropped: row ? dropped : [] };
 }
 
 async function readLayout(c: Context<{ Bindings: Env }>, w: Who) {
@@ -100,6 +129,10 @@ r.put('/layout', async (c) => {
   const bad = (code: string, message: string, extra?: Record<string, unknown>) => refuse(c, 400, { code, message, extra });
   if (!body || typeof body !== 'object' || Array.isArray(body) || !Array.isArray(body.layout))
     return bad('invalid_layout', 'Send the layout as a list of modules, each with a key and a size.');
+  // D1594: the revision the edit was made from; null when the read had no row.
+  const expected = body.expected_revision;
+  if (!('expected_revision' in body) || (expected !== null && !(Number.isSafeInteger(expected) && expected > 0)))
+    return bad('invalid_layout', 'Send the revision your layout was read at, or null when there was none.');
   const list: unknown[] = body.layout;
   if (list.length > STUDIO_LAYOUT_MAX)
     return bad('too_many_modules', `A Studio holds at most ${STUDIO_LAYOUT_MAX} modules.`);
@@ -121,10 +154,22 @@ r.put('/layout', async (c) => {
     if (plan) return refuse(c, 402, { code: 'module_locked', message: `${mod.title} is on the ${plan.name} plan.`, extra: { key, plan } });
     clean.push({ key, size: size as StudioSize });
   }
-  await c.env.DB.prepare(
-    `INSERT INTO studio_layouts (user_id, profile, layout) VALUES (?1, ?2, ?3)
-     ON CONFLICT (user_id, profile) DO UPDATE SET layout = excluded.layout, updated_at = datetime('now')`,
-  ).bind(w.user.id, w.profile, JSON.stringify(clean)).run();
+  // One write, guarded by the revision: a copy read before another save (or
+  // before a reset, or before the first save) changes nothing.
+  const json = JSON.stringify(clean);
+  const res = expected === null
+    ? await c.env.DB.prepare(
+      `INSERT INTO studio_layouts (user_id, profile, layout) VALUES (?1, ?2, ?3)
+       ON CONFLICT (user_id, profile) DO NOTHING`,
+    ).bind(w.user.id, w.profile, json).run()
+    : await c.env.DB.prepare(
+      `UPDATE studio_layouts SET layout = ?3, revision = revision + 1, updated_at = datetime('now')
+        WHERE user_id = ?1 AND profile = ?2 AND revision = ?4`,
+    ).bind(w.user.id, w.profile, json, expected).run();
+  if (!Number(res.meta?.changes ?? 0)) {
+    const now = await savedRow(c.env, w.user.id, w.profile);
+    return refuse(c, 409, { code: 'stale_layout', message: 'Your layout changed in another tab. Reload it to see the latest.', extra: { revision: now ? Number(now.revision) : null } });
+  }
   return readLayout(c, w);
 });
 
