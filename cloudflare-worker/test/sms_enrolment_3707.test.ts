@@ -9,7 +9,7 @@ import * as gcip from '../src/services/gcip.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const PHONE = '+41790000000'; // synthetic, never sent to a live provider
-const SECRET = 'synthetic-sms-3707-key-'.repeat(3);
+const SECRET = 'fixture'.repeat(12);
 const DEFAULT_COUNTRIES = 'US CA GB IE DE FR NL CH LU ES IT SE NO DK FI EE AE IL IN SG HK JP KR AU NZ BR MX'.split(' ');
 async function fixture(t: any) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });

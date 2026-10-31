@@ -2185,7 +2185,7 @@ function SmsPanel({ data, flash, onChanged }) {
               {busy ? 'Verifying…' : 'Verify'}
             </button>
           </div>
-          <button onClick={start} disabled={busy || resendSeconds > 0 || !checkReady} className="text-sm text-violet-700 disabled:text-gray-500" data-testid="sms-resend">
+          <button onClick={start} disabled={busy || resendSeconds > 0 || !checkReady} className="text-sm text-violet-700 disabled:text-gray-500 mr-3" data-testid="sms-resend">
             {resendSeconds > 0 ? `Resend in ${Math.floor(resendSeconds / 60)}:${String(resendSeconds % 60).padStart(2, '0')}` : 'Resend'}
           </button>
           <button onClick={() => { setStep('enroll'); setCode(''); setSession(null); setError(''); setResendAt(0); }}
