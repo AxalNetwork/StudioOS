@@ -130,7 +130,7 @@ export function FillRowsPanel({ target, projectId, moduleName, read, reload, aiO
 
   return (
     <>
-      <Sheet label={`Proposals for ${where}`} eyebrow="Fill with Eadwyn" title={rows.length ? `${rows.length} ${rows.length === 1 ? 'proposal' : 'proposals'} for ${where}` : `Proposals for ${where}`}
+      <Sheet label={`Proposals for ${where}`} eyebrow="Ask Eadwyn" title={rows.length ? `${rows.length} ${rows.length === 1 ? 'proposal' : 'proposals'} for ${where}` : `Proposals for ${where}`}
         width={520} onClose={onClose} returnFocusTo={returnFocusTo} footer={footer} testId="fill-rows-panel">
         <div className="flex flex-col gap-3">
           {report ? (

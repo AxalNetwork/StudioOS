@@ -175,7 +175,7 @@ export const EMPTY = {
 };
 
 /** Eadwyn's draft (DL14) is AUTOFILL's proposal (#2431); nothing reads it yet. */
-export const EADWYN_DRAFT_WAITS = 'Eadwyn’s draft summary of this deal is not read here yet. It arrives with AUTOFILL (#2431) as a proposal: nothing lands until you save it as your note.';
+export const EADWYN_DRAFT_WAITS = 'Eadwyn’s draft summary of this deal is not read here yet. It will arrive through Ask as a proposal: nothing lands until you save it as your note.';
 
 /** DL24a: the scorecard strip's slot until SCORING's per-deal read exists (#2428). */
 export const DECK_SLOT = {
