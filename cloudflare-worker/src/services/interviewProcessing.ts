@@ -70,7 +70,7 @@ export const STALE_MINUTES = 15;
  * it at done; a member's Retry clears it too.
  */
 export const RESTARTED_NOTE = 'Processing stalled, so Axal restarted it from where it stopped.';
-export const STALLED_TWICE = 'Processing stalled twice, so Axal stopped restarting it. Nothing was lost; try again.';
+export const STALLED_TWICE = 'Processing stalled twice, so Axal stopped restarting it. Try again to resume processing.';
 /** At done the restart note has served its purpose; any other note (missing parts, a placement refusal) stays. */
 const doneNote = (session: SessionRow) => (session.processing_error === RESTARTED_NOTE ? { error: null } : {});
 /**
@@ -633,9 +633,16 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
     }
     return session.processing_stage as Stage;
   } catch (e) {
-    if (session.submitted_via === 'meeting_bot') console.warn('[processing] bot job failed');
-    else console.warn('[processing] job failed', sessionId, (e as Error)?.message);
-    await failProcessing(env, session, 'Processing stopped unexpectedly. Nothing was lost; try again.');
+    // Persist the failed step without copying provider errors, meeting data or
+    // transcript text into either logs or the member's error sentence.
+    let stage = session.processing_stage;
+    try { stage = (await loadSession(env, session.id))?.processing_stage ?? stage; }
+    catch { /* A failed diagnostic read must not prevent the failure write. */ }
+    const step = stage === 'placing' ? 'Placing findings' : stage === 'summarising' ? 'Summarising' : 'Transcribing';
+    const safeCodes = new Set(['bot_audio_incomplete', 'bot_transcript_incomplete', 'bot_stage_invalid', 'bot_manifest_invalid', 'bot_assembly_unreadable', 'bot_not_ready']);
+    const code = e instanceof Error && safeCodes.has(e.message) ? e.message : 'processing_exception';
+    console.warn('[processing] job failed', { session_id: session.id, stage, code });
+    await failProcessing(env, session, `${step} stopped unexpectedly. Try again to resume this step.`);
     return 'failed';
   }
 }
@@ -692,13 +699,30 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
     const max = await env.DB.prepare('SELECT MAX(seq) AS m FROM interview_session_chunks WHERE session_id = ?').bind(session.id).first<{ m: number | null }>();
     lastSeq = max?.m ?? null;
   }
-  if (lastSeq == null) return { ok: false, detail: 'no_audio', message: 'This session has no recorded audio yet.' };
+  const transcribed = !voiceNotes && (session.status === 'transcribed' || session.status === 'structured');
+  if (!transcribed && (lastSeq == null || lastSeq < 0 || !(await sessionHasAudio(env, session.id)))) {
+    return { ok: false, detail: 'no_audio', message: 'No recorded audio is available for this session. Start a new recording.' };
+  }
   // Resume where it stopped. D765 (#2090), D720 §6: a transcript already in
   // goes on to the summary only when the member chose it at Stop
   // (`processing_auto = 1`); otherwise, and for a row that never recorded a
   // choice, a retry is transcribe only and there is nothing left to run.
-  const transcribed = !voiceNotes && (session.status === 'transcribed' || session.status === 'structured');
-  const resumeAt: Stage = !transcribed ? 'transcribing' : session.processing_auto === 1 ? 'summarising' : 'done';
+  // The summary already records the transcript hash (D757). Reuse it only
+  // when it belongs to the current final transcript; a later placement failure
+  // must not charge for that completed summary again, even after a reload.
+  let summarised = false;
+  let digest: { hash?: unknown } | null = null;
+  if (transcribed && session.summary && session.digest_json) {
+    try { digest = JSON.parse(session.digest_json); }
+    catch { /* An unreadable summary is not proof that the step completed. */ }
+  }
+  if (digest?.hash) {
+    const { transcriptHash } = await import('./validateEngine');
+    const rows = await env.DB.prepare("SELECT id, start_ms, end_ms, speaker_label, text FROM interview_transcript_segments WHERE session_id = ? AND source = 'final' ORDER BY COALESCE(start_ms, 0), id")
+      .bind(session.id).all<SegmentRow>();
+    summarised = digest.hash === await transcriptHash(toSegments(rows.results ?? []));
+  }
+  const resumeAt: Stage = !transcribed ? 'transcribing' : session.processing_auto === 1 ? (summarised ? 'placing' : 'summarising') : 'done';
   const claimed = await env.DB.prepare(
     `UPDATE interview_sessions
         SET expected_last_seq = ?, processing_auto = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(processing_auto, 0) END,

@@ -198,7 +198,7 @@ export function ProcessingStages({ processing = null, stageAt = -1, onRetry }) {
       {!failed && <p className="m-0 text-[12.5px] text-gray-500 dark:text-gray-400">Then it lands in Interviews.</p>}
       {failed && (
         <div role="alert" data-testid="processing-failed" className="mx-auto max-w-[360px] space-y-2">
-          <p className="m-0 text-[13.5px] font-semibold text-red-700 dark:text-red-300">{processing?.error || 'Processing stopped. Nothing was lost; try again.'}</p>
+          <p className="m-0 text-[13.5px] font-semibold text-red-700 dark:text-red-300">{processing?.error || 'Processing stopped. Try again to resume processing.'}</p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             {/* D1363: stopped for want of AI tokens: the Add tokens sheet opens over this page, and processing continues by itself once they land. */}
             {processing?.top_up === true && <>

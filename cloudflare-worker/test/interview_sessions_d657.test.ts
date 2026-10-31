@@ -1184,7 +1184,7 @@ test('D685 §5.9.3: the sweeper resumes runs that stopped moving, and fails the 
   const text = await sessionIn(f, 'stopped', ", channel = 'text'");
   // Stale in transcribing: the job died partway. Manual mode, so its run ends after the transcript.
   backdate(tr, "processing_stage = 'transcribing', processing_auto = 0, processing_updated_at = datetime('now', '-20 minutes')");
-  // Stale in placing, with the transcript in: it resumes at the summary.
+  // Stale in placing, with a matching saved summary: it resumes placing.
   backdate(pl, "processing_stage = 'placing', processing_updated_at = datetime('now', '-20 minutes')");
   // Left in transcribing by the old synchronous route, an hour ago.
   backdate(legacy, "status = 'transcribing', processing_stage = NULL, updated_at = datetime('now', '-1 hour')");
@@ -1209,13 +1209,13 @@ test('D685 §5.9.3: the sweeper resumes runs that stopped moving, and fails the 
   assert.equal(new Set(sent.map((m) => m.idempotency_key)).size, 4, 'each with a fresh key');
   assert.equal(f.aiCalls.length, aiBefore, 'the sweep itself runs no AI');
   assert.deepEqual([stage(f, tr).s, stage(f, tr).e], ['transcribing', RESTARTED_NOTE], 'a restarted run says so while it runs');
-  assert.equal(stage(f, pl).s, 'summarising', 'the transcript is in, so it resumes at the summary');
+  assert.equal(stage(f, pl).s, 'placing', 'the completed summary matches this transcript, so it resumes placing');
   assert.deepEqual([stage(f, legacy).s, stage(f, legacy).status], ['transcribing', 'stopped']);
   assert.deepEqual([stage(f, fresh).s, stage(f, fresh).status], [null, 'transcribing'], 'a legacy row still inside 15 minutes is left alone');
   assert.equal(stage(f, moving).s, 'transcribing');
   assert.equal(stage(f, uploading).s, 'uploading', 'an upload waits for its own 30 minutes');
   assert.deepEqual([stage(f, noConsent).s, stage(f, noConsent).e], ['failed', NO_CONSENT_SENTENCE]);
-  assert.deepEqual([stage(f, noAudio).s, stage(f, noAudio).e, stage(f, noAudio).status], ['failed', 'This session has no recorded audio yet.', 'stopped']);
+  assert.deepEqual([stage(f, noAudio).s, stage(f, noAudio).e, stage(f, noAudio).status], ['failed', 'No recorded audio is available for this session. Start a new recording.', 'stopped']);
   assert.equal(stage(f, noTime).s, 'transcribing');
   assert.deepEqual([stage(f, text).s, stage(f, text).status], [null, 'transcribing'], 'a text session is left alone');
   // The resumed runs finish, and the note goes with them: in Manual mode and in full.

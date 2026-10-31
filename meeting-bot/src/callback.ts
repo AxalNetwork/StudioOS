@@ -86,8 +86,9 @@ export function httpTransport(opts: HttpTransportOptions): CallbackTransport {
     async status(report: StatusReport) {
       // B6 owns done after assembly; the runtime ends at processing after its
       // queued audio/events have been acknowledged.
-      const status=report.reason==='interrupted'?'failed':report.state==='left'?(recorded?'processing':'stopped'):report.state;
-      const failure_code=report.reason==='interrupted'?'runtime_failed':report.code?failures[report.code]:null;
+      const noAudio=recorded && report.state==='left' && report.chunks===0 && report.chunks_failed===0;
+      const status=report.reason==='interrupted' || noAudio?'failed':report.state==='left'?(recorded?'processing':'stopped'):report.state;
+      const failure_code=report.reason==='interrupted'?'runtime_failed':noAudio?'no_audio':report.code?failures[report.code]:null;
       const failure_detail=failureDetail(report);
       const data=await event({type:'status',status,failure_code,...(failure_detail?{failure_detail}:{}),
         ...(report.chunks===undefined?{}:{chunks:report.chunks}),

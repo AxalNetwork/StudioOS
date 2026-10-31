@@ -54,7 +54,7 @@ export async function boundedBotBody(req: Request, max: number): Promise<ArrayBu
 }
 const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), {status,headers:{'content-type':'application/json'}});
 const int = (v: unknown, max: number) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= max;
-const FAILED_CODES = new Set(['admission_refused','meeting_ended','runtime_failed','notice_failed','unsupported_platform','processing_failed']);
+const FAILED_CODES = new Set(['admission_refused','meeting_ended','runtime_failed','notice_failed','unsupported_platform','processing_failed','no_audio']);
 /** D1368: the bot's `<code>` or `<code>@<step>[:<state>]`, the same shape meeting-bot/src/callback.ts sends. */
 export const BOT_FAILURE_DETAIL = /^[a-z_]{1,40}(@[a-z_]{1,40}(:[a-z_]{1,20})?)?$/;
 interface BillingBlock { uid: string; index: number; start: number; end: number; settled: boolean; minutes: number }
@@ -204,6 +204,10 @@ export class MeetingBotRun implements DurableObject {
       await this.queueAssembly(run,true);
     }
     if (!terminal(run.status)) await this.update(run,status,code);
+    if (code==='no_audio') await this.env.DB.prepare(`UPDATE interview_sessions SET status='stopped', processing_stage=NULL,
+      processing_error=NULL, recording_since=NULL, stopped_at=COALESCE(stopped_at,datetime('now'))
+      WHERE id=? AND submitted_via='meeting_bot' AND status NOT IN ('transcribed','structured')
+      AND NOT EXISTS (SELECT 1 FROM interview_session_chunks WHERE session_id=?)`).bind(run.session_id,run.session_id).run();
     // Always retain an alarm until the runtime stop AND ledger settlement have succeeded.
     await this.state.storage.setAlarm(Date.now()+BOT_HEARTBEAT_MS);
     await this.endClock(run);
@@ -296,6 +300,8 @@ export class MeetingBotRun implements DurableObject {
     const tickets = await this.state.storage.list<UploadTicket>({prefix:'chunk:'});
     const unfinished = [...tickets.values()].filter(ticket=>!ticket.used);
     if (unfinished.length && !force && unfinished.some(ticket=>ticket.expires>Date.now())) return;
+    const audio = await this.env.DB.prepare('SELECT COUNT(*) AS n FROM interview_session_chunks WHERE session_id=?').bind(run.session_id).first<{n:number}>();
+    if (!unfinished.length && !audio?.n && !run.participants_enc) return this.finish(run,'failed','no_audio');
     const { queueBotAssembly } = await import('../services/meetingBotAssembly');
     try {
       if (unfinished.length) {
@@ -338,8 +344,21 @@ export class MeetingBotRun implements DurableObject {
     if (event.type === 'status') {
       if (typeof event.status !== 'string' || event.status !== run.status && !NEXT[run.status].includes(event.status as BotStatus)) throw new BotError(409,'invalid_bot_transition','That bot status change is not available.');
       const status=event.status as BotStatus;
+      // A zero-audio failure from the runtime must survive a user Stop drain.
+      // Validate its declaration before the drain reason can replace its code.
+      if (status==='failed' && event.failure_code==='no_audio') {
+        const empty=await this.uploadsComplete(run,event) && await this.state.storage.get('upload_count')===0;
+        await this.finish(run,'failed',empty?'no_audio':'processing_failed');
+        return json({bot:botView(run)});
+      }
       if ((status==='processing' || status==='done' || status==='stopped' && ['recording','processing'].includes(run.status)) && !await this.uploadsComplete(run,event)) {
         await this.finish(run,'failed','processing_failed');
+        return json({bot:botView(run)});
+      }
+      // A complete empty upload is not a recording. Keep it out of assembly,
+      // including callbacks from older runtimes that report processing here.
+      if (['processing','stopped','done'].includes(status) && await this.state.storage.get('upload_count')===0 && ['recording','processing'].includes(run.status)) {
+        await this.finish(run,'failed','no_audio');
         return json({bot:botView(run)});
       }
       if (status==='done' && !await this.state.storage.get('drain_until')) {

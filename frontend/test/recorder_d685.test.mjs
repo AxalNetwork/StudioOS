@@ -379,7 +379,7 @@ test('a dropped read keeps polling; a stale run fails in words; a chunk left on 
   const r2 = createRecorder({ api: w2.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()), wait: async () => {} });
   await r2.begin({ session: draft() });
   assert.equal(await r2.confirmStop(), 'failed');
-  assert.equal(r2.getSnapshot().processing.error, 'Processing has not moved for 15 minutes. Nothing was lost; try again.');
+  assert.equal(r2.getSnapshot().processing.error, 'Processing has not moved for 15 minutes. Try again to resume processing.');
 });
 
 test('after a reload the view follows the Worker\'s processing state; sign-out ends the poll', async () => {
