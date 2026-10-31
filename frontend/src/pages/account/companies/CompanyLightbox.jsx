@@ -12,7 +12,7 @@ import {
 } from './LifecycleDialogs';
 
 /**
- * D1139 (#3019) — the company lightbox (CMP2), at `/account/companies/<uid>`.
+ * D1139 (#3019) — the company lightbox (CMP2), at `/account/portfolio/<uid>`.
  *
  * Reads `GET /api/company/:uid` (facts and members) and, for an editor, its
  * invitations; the ventures come from the page's own `GET /api/account/projects`.

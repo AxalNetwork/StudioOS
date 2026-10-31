@@ -21,14 +21,14 @@ import {
  * D1134 (#2422), completed by D1138 (#3018) — Account › Companies and
  * projects, built to the owner's canvas (CMP1, CMP3, CMP5, CMP9–CMP18).
  *
- * Each tab is its own address (`/account/companies`, `/projects`, `/funds`,
+ * Each tab is its own address (`/account/portfolio`, `/projects`, `/funds`,
  * `/engagements`, `/invitations`); which ones a member sees is their
  * profile's (`tabsFor`). Each read is its own block: one that fails reads
  * Unreadable with Try again and never blanks another. The writes here are
  * New company and answering an invitation addressed to you, each in an
  * in-page dialog that says what it changes.
  *
- * D1139 (#3019): `/account/companies/<uid>` opens that company's lightbox
+ * D1139 (#3019): `/account/portfolio/<uid>` opens that company's lightbox
  * (CMP2) over the Companies tab, and a venture's Open its lightbox (CMP4);
  * the lifecycle dialogs (CMP6–CMP8) open from them.
  */
@@ -167,7 +167,7 @@ function CompaniesTab({ read, retry, profile, cards, funds, phone, onNew }) {
       <Empty title="You don’t belong to a company yet." note="A company keeps your ventures, deals and team together. Create one, or accept an invitation." testId="companies-none">
         <span className="flex flex-wrap justify-center gap-2">
           {canCreate(profile) ? <button type="button" className={actionPrimary} onClick={onNew} data-testid="companies-none-new">New company</button> : null}
-          <Link className={BTN} to="/account/companies/invitations">See invitations</Link>
+          <Link className={BTN} to="/account/portfolio/invitations">See invitations</Link>
         </span>
       </Empty>
     );
@@ -398,11 +398,11 @@ export default function CompaniesProjects({ role, entityRecords = null }) {
       <CompaniesMovedNotice />
 
       <nav className="flex gap-4 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" aria-label={TITLE} data-testid="companies-tabs">
-        {visible.includes('companies') && <HeaderTab to="/account/companies" count={counts.companies} data-testid="companies-tab-companies">{TAB_LABELS.companies}</HeaderTab>}
-        {visible.includes('projects') && <HeaderTab to="/account/companies/projects" count={counts.projects} data-testid="companies-tab-projects">{TAB_LABELS.projects}</HeaderTab>}
-        {visible.includes('funds') && <HeaderTab to="/account/companies/funds" count={counts.funds} data-testid="companies-tab-funds">{TAB_LABELS.funds}</HeaderTab>}
-        {visible.includes('engagements') && <HeaderTab to="/account/companies/engagements" count={counts.engagements} data-testid="companies-tab-engagements">{TAB_LABELS.engagements}</HeaderTab>}
-        {visible.includes('invitations') && <HeaderTab to="/account/companies/invitations" count={counts.invitations} data-testid="companies-tab-invitations">{TAB_LABELS.invitations}</HeaderTab>}
+        {visible.includes('companies') && <HeaderTab to="/account/portfolio" count={counts.companies} data-testid="companies-tab-companies">{TAB_LABELS.companies}</HeaderTab>}
+        {visible.includes('projects') && <HeaderTab to="/account/portfolio/projects" count={counts.projects} data-testid="companies-tab-projects">{TAB_LABELS.projects}</HeaderTab>}
+        {visible.includes('funds') && <HeaderTab to="/account/portfolio/funds" count={counts.funds} data-testid="companies-tab-funds">{TAB_LABELS.funds}</HeaderTab>}
+        {visible.includes('engagements') && <HeaderTab to="/account/portfolio/engagements" count={counts.engagements} data-testid="companies-tab-engagements">{TAB_LABELS.engagements}</HeaderTab>}
+        {visible.includes('invitations') && <HeaderTab to="/account/portfolio/invitations" count={counts.invitations} data-testid="companies-tab-invitations">{TAB_LABELS.invitations}</HeaderTab>}
       </nav>
 
       {done ? <p role="status" className={`m-0 rounded-[9px] bg-axal-ground px-3 py-2 text-[12.5px] ${INK} dark:bg-gray-800`} data-testid="companies-done">{done}</p> : null}
@@ -445,7 +445,7 @@ export default function CompaniesProjects({ role, entityRecords = null }) {
           projects={projects.status === 'ready' ? projects.data : null} meId={meId}
           active={activeUid === openUid} row={(known || []).find((c) => c.uid === openUid) || null}
           switchTo={switchTo} leave={leave} onChanged={changed} onOpenVenture={setVenture}
-          onClose={() => navigate('/account/companies')} />
+          onClose={() => navigate('/account/portfolio')} />
       ) : null}
       {venture ? (
         <VentureLightbox venture={venture} companies={cards} meId={meId}

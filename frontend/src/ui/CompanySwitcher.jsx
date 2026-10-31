@@ -331,7 +331,7 @@ function CompanySwitcher({ collapsed, role }) {
       </div>
       {/* D1140 (#3020, CMP19a): every company and its ventures, in one place under Account. */}
       <Link
-        to="/account/companies"
+        to="/account/portfolio"
         onClick={() => setOpen(false)}
         className="flex items-center px-3 py-2.5 text-xs font-semibold text-violet-700 dark:text-violet-300 hover:bg-gray-50 dark:hover:bg-gray-800"
         data-testid="switcher-manage"

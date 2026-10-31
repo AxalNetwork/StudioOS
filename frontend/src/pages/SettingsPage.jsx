@@ -285,7 +285,7 @@ export default function SettingsPage() {
   const builderView = active === 'builder' ? builderViewFor(location.pathname) : null;
   // D1138 — Companies and projects' tabs are addresses of their own; the canonicalising effect keeps them.
   const companiesTab = active === 'companies' ? companiesTabFor(location.pathname) : null;
-  // D1139 — `/account/companies/<uid>` is that company's lightbox, kept by the same effect.
+  // D1139 — `/account/portfolio/<uid>` (D1415 part 4) is that company's lightbox, kept by the same effect.
   const companyUid = active === 'companies' ? companyUidFor(location.pathname) : null;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1644,7 +1644,7 @@ function YourCompaniesSection({ flash }) {
                     </button>
                     {/* D1140: Manage opens this row's company, not the one active on this device (#2422 item 3). */}
                     <Link
-                      to={c.uid ? companyPathFor(c.uid) : '/account/companies'}
+                      to={c.uid ? companyPathFor(c.uid) : '/account/portfolio'}
                       className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap"
                       data-testid={`company-manage-${id}`}
                     >

@@ -296,7 +296,7 @@ export const SHELLS = {
       { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Go deep before money moves',
         zones: RESEARCH_ZONES.investor },
       { kind: 'link', label: 'Trust', to: '/trust/me' },
-      { kind: 'link', label: 'Firm Settings', to: '/account/companies/settings' },
+      { kind: 'link', label: 'Firm Settings', to: '/account/portfolio/settings' },
     ],
   },
 
@@ -359,7 +359,7 @@ export const SHELLS = {
       { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Know more than the room',
         zones: RESEARCH_ZONES.advisor },
       { kind: 'link', label: 'Trust', to: '/trust/me' },
-      { kind: 'link', label: 'Practice Settings', to: '/account/companies/settings' },
+      { kind: 'link', label: 'Practice Settings', to: '/account/portfolio/settings' },
     ],
   },
 
@@ -402,7 +402,7 @@ export const SHELLS = {
       { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work our relationships', zones: NETWORK_ZONES },
       { kind: 'bucket', label: 'Research', prefix: '/research', tagline: "Know the client's world", zones: RESEARCH_ZONES.partner },
       { kind: 'link', label: 'Trust', to: '/trust/me' },
-      { kind: 'link', label: 'Firm Settings', to: '/account/companies/settings' },
+      { kind: 'link', label: 'Firm Settings', to: '/account/portfolio/settings' },
     ],
   },
 };
