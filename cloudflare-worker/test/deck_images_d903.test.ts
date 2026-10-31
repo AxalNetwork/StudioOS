@@ -188,6 +188,35 @@ test('the balance must cover every image asked for before the first one runs, no
   } finally { f.close(); }
 });
 
+test('D1478 (#3721): a stored FLUX.2 Klein 4B pick is what the quote prices and the image names; with the gate shut, Schnell', async () => {
+  const KLEIN = '@cf/black-forest-labs/flux-2-klein-4b';
+  const pick = (f: F) => f.db.prepare('INSERT INTO ai_rail_preferences(uid, user_id, section, task, model) VALUES (?, 2, ?, ?, ?)')
+    .run(crypto.randomUUID(), 'founder · raise · pitch deck', 'deck:image', KLEIN);
+  const on = await fixture();
+  try {
+    on.env.AI_PARTNER_MODELS = 'on';
+    pick(on);
+    const q = await call(on, 2, '/api/decks/7/images/quote', { json: { ...BODY, count: 1 } });
+    assert.equal(q.status, 200, JSON.stringify(q.body));
+    assert.deepEqual([q.body.model, q.body.model_label], [KLEIN, 'FLUX.2 Klein 4B']);
+    assert.deepEqual(q.body.models.map((m: any) => m.id), [KLEIN]);
+    const r = await call(on, 2, '/api/decks/7/images', { json: { ...BODY, count: 1 } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(on.calls.map((x) => x.model), [KLEIN], 'the pick reached the router');
+    assert.equal(on.rows()[0].model, KLEIN, 'the image records the model that ran');
+    assert.equal(r.body.images[0].model_label, 'FLUX.2 Klein 4B');
+  } finally { on.close(); }
+  const off = await fixture();
+  try {
+    pick(off);
+    const q = await call(off, 2, '/api/decks/7/images/quote', { json: { ...BODY, count: 1 } });
+    assert.equal(q.body.model, IMAGE_MODEL, 'a gated pick reads as none');
+    const r = await call(off, 2, '/api/decks/7/images', { json: { ...BODY, count: 1 } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(off.calls.map((x) => x.model), [IMAGE_MODEL]);
+  } finally { off.close(); }
+});
+
 // ─────────────────────────────────────────────────────────── the run
 
 test('every image keeps its usage row and its charge, lives in R2, and is read at an https app URL', async () => {

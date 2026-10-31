@@ -29,6 +29,16 @@ export const IMAGE_PAGE = 'Founder · Raise · Pitch deck';
 export const IMAGE_OPTION = 'deck:image';
 export const IMAGE_MODEL = '@cf/black-forest-labs/flux-1-schnell';
 export const IMAGE_MODEL_LABEL = 'FLUX.1 Schnell';
+/** D1478 (#3721): each draw model's name, so a picked model's quote and image say which model it was. */
+export const IMAGE_MODEL_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  [IMAGE_MODEL]: IMAGE_MODEL_LABEL,
+  '@cf/black-forest-labs/flux-2-klein-4b': 'FLUX.2 Klein 4B',
+  '@cf/black-forest-labs/flux-2-klein-9b': 'FLUX.2 Klein 9B',
+  '@cf/black-forest-labs/flux-2-dev': 'FLUX.2 Dev',
+  '@cf/leonardo/lucid-origin': 'Lucid Origin',
+  '@cf/leonardo/phoenix-1.0': 'Phoenix 1.0',
+});
+export const imageModelLabel = (id: string | null | undefined): string | null => (id ? IMAGE_MODEL_LABELS[id] ?? null : null);
 
 export const USES = ['content', 'card', 'deck'] as const;
 export const STYLES = ['line', 'isometric', 'flat', 'scene', 'diagram'] as const;
