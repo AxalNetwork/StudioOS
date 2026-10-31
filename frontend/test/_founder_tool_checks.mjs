@@ -40,10 +40,6 @@ export const RETURNS = [
   ['/execution','/build/product-roadmap','← Build › Product roadmap'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
   ['/comarketing','/grow/distribution','← Grow › Distribution'],
-  ['/raise/pitch','/raise/pitch-deck','← Raise › Pitch deck'],
-  ['/raise/pitch/review','/raise/pitch-deck','← Raise › Pitch deck'],
-  ['/raise/pitch/edit','/raise/pitch-deck','← Raise › Pitch deck'],
-  ['/raise/pitch/analytics','/raise/pitch-deck','← Raise › Pitch deck'],
   // D1180 (#3107) and D1194 (#3128): /raise/capital, /raise/capital/model and
   // /raise/capital/pipeline only forward, so none has a module return.
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],
@@ -98,7 +94,7 @@ export const checks = {
       ['?project_id=41','?project_id=9','','','']);
   },
   otherRoles(m=actual) {
-    assert.deepEqual(['partner','investor','advisor','exploring'].map(role=>render(m.FounderModuleBackLink,{user:{role}},'/raise/pitch')),['','','','']);
+    assert.deepEqual(['partner','investor','advisor','exploring'].map(role=>render(m.FounderModuleBackLink,{user:{role}},'/execution')),['','','','']);
   },
   cleanup(m=actual) {
     assert.deepEqual([m.oldTabsExist, /<FounderWorkspaceTabs\b|import\([^)]*FounderWorkspaceTabs/.test(codeOnly(m.sources.app))],[false,false]);

@@ -196,7 +196,7 @@ test('the editor draws the rail with its stale dot, the card on its blocks, and 
   let saved = null;
   const m = await mount({ deckUpdate: async (id, body) => { saved = { id, body }; return { ...DECK, id: 32, version: 4, slides: body.slides, created_at: '2026-10-24 10:05:00' }; } });
   try {
-    assert.match(m.text(m.by('pitch-editor-rail')), /01 Synthetic problem.*02 Synthetic traction/);
+    assert.match(m.text(m.by('pitch-editor-cards')), /01 Synthetic problem.*02 Synthetic traction/);
     assert.ok(m.by('pitch-editor-stale-1'), 'card 2 has a figure its store moved past');
     assert.ok(!m.by('pitch-editor-stale-0'));
     assert.match(m.text(m.by('pitch-editor-card')), /Synthetic pain/, 'a card from before D898 draws its fields');

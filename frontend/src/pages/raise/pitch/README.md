@@ -43,6 +43,8 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 | `PitchWorkspaceMoved.jsx` | The old addresses. `/raise/pitch?mode=workspace` opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`; the retired builder's `/raise/pitch/builder` opens the studio with `?moved=pitch-builder` (D898 group E). The venture and the hash are kept, and `PitchMovedNotice` draws the notice once on the page it lands on. |
 | `StudioActions.jsx` | D898 group E (#2676): the retired builder's actions, now the studio's. `FillFromProject` on the Decks tab's current deck (`POST /api/decks/:id/autofill`; the proposal is reviewed at New deck's step 4), `SpinoutReadiness` for a Spin-Out deck (a read), and `BrandingCard` (the plan, the footer and the watermark, saved behind a dialog). New deck's Start from marks the recommended template. |
 | `studioActionsModel.js` | D898 group E: pure words and derivations of those actions — which deck is a Spin-Out deck, a refused fill, why a template is recommended, the readiness lines, the branding lines and the watermark's dialog. |
+| `PitchPage.jsx` | #3717: shared cycle gutter, one project-aware breadcrumb and the edge-docked rail for the studio, New deck and editor. |
+| `PitchPage.css` | #3717: scopes the app-main flex height to PitchPage so its rail reaches the footer on short pages. |
 
 The old template builder retired with D898 group E: its four actions are
 `StudioActions.jsx` and New deck's Recommended mark, and `/raise/pitch/builder`
