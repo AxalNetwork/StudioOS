@@ -18,6 +18,8 @@ import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { hashInviteToken } from '../services/projectAccess';
 import { refuse } from '../util/refusal';
+// D1592 (#3860): the two company gates live in one place; company_documents.ts imports them too.
+import { canEdit, viewerIsMember } from '../services/companyAccess';
 import {
   validatePerson, validateCoverage, validatePlan, personDto,
 } from '../services/companyTeam';
@@ -61,14 +63,6 @@ async function memberCount(env: Env, companyId: number): Promise<number> {
   const r = await env.DB.prepare('SELECT COUNT(*) c FROM user_company_links WHERE company_id = ?')
     .bind(companyId).first<{ c: number }>();
   return Number(r?.c || 0);
-}
-
-async function viewerIsMember(env: Env, companyId: number, viewer: User): Promise<boolean> {
-  if (isAdmin(viewer)) return true;
-  const link = await env.DB.prepare(
-    'SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?'
-  ).bind(companyId, viewer.id).first();
-  return !!link;
 }
 
 async function summaryDto(env: Env, c: Company): Promise<any> {
@@ -133,13 +127,6 @@ async function getCompanyOr404(env: Env, uid: string): Promise<Company | null> {
 async function getLink(env: Env, companyId: number, userId: number): Promise<Link | null> {
   return env.DB.prepare('SELECT * FROM user_company_links WHERE company_id = ? AND user_id = ?')
     .bind(companyId, userId).first<Link>();
-}
-
-async function canEdit(env: Env, c: Company, user: User): Promise<boolean> {
-  if (isAdmin(user)) return true;
-  const link = await getLink(env, c.id, user.id);
-  if (!link) return false;
-  return !!link.is_primary_admin || ['Owner', 'Admin', 'Founder'].includes(link.role_in_company);
 }
 
 // /company/me

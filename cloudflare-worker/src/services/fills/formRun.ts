@@ -105,6 +105,8 @@ export async function gatherForm(env: Env, projectId: number, fields: readonly F
  * its table, all literal statements on rows the route has already scoped:
  * the record's own title and kind, the advisor's own recorded outcomes and
  * services, the event's sessions. Never an amount, a term, a vote or a decision.
+ * D1595 (#3868): a support entry's company and the caller's own last entries
+ * on it; the caller's own offering titles; the caller's own perk offers.
  */
 export async function gatherScoped(env: Env, userId: number, table: string, row: Record<string, unknown> | null, parentId: number | null = null): Promise<FormGather> {
   const out: FormGather = { choices: new Map(), existing: [], context: [] };
@@ -123,6 +125,16 @@ export async function gatherScoped(env: Env, userId: number, table: string, row:
     out.existing = await list('SELECT title AS value FROM event_agenda_items WHERE event_id = ? ORDER BY display_order, id LIMIT 40', eventId ?? null);
     const ev = await env.DB.prepare('SELECT title FROM events WHERE id = ?').bind(eventId ?? null).first<{ title: string }>();
     out.context = ev ? [`Event: ${ev.title}`] : [];
+  } else if (table === 'portfolio_support_entries') {
+    const projectId = row ? row.project_id : parentId;
+    const company = await env.DB.prepare('SELECT name FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId ?? null).first<{ name: string }>();
+    out.context = [`Company: ${company?.name ?? 'not recorded'}`];
+    out.existing = await list(`SELECT summary AS value FROM portfolio_support_entries
+      WHERE project_id = ? AND recorded_by = ? ORDER BY id DESC LIMIT 10`, projectId ?? null, userId);
+  } else if (table === 'service_offerings') {
+    out.existing = await list('SELECT title AS value FROM service_offerings WHERE owner_user_id = ? ORDER BY id DESC LIMIT 40', userId);
+  } else if (table === 'perks') {
+    out.existing = await list('SELECT offer AS value FROM perks WHERE partner_user_id = ? ORDER BY id DESC LIMIT 40', userId);
   } else if (table === 'admin_publications' && row) {
     out.context = [`Publication: ${String(row.title ?? 'title not recorded')}`, `Section: ${String(row.section ?? 'not recorded')}`];
   }

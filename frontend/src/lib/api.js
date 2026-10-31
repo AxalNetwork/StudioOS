@@ -52,6 +52,7 @@ export * from './api/closings.js';
 export * from './api/community.js';
 export * from './api/communityTasks.js';
 export * from './api/companyActions.js';
+export * from './api/companyDocuments.js';
 export * from './api/companyEin.js';
 export * from './api/companyLegal.js';
 export * from './api/companyReceivingAccounts.js';
