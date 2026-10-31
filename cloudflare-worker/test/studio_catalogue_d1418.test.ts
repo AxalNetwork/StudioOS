@@ -60,8 +60,10 @@ test('the 27 founder cycle rows are the four Worker lists, in order, with their 
 });
 
 test('every module: a purpose of at most 80 characters, a group of its profile, an Open link that is a real route or none, and a title that is never a key', () => {
+  // A route matches when every segment is equal or the route's is a `:param`.
   const routes = [...APP.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]).filter((p) => p.startsWith('/') && !p.includes('*'))
-    .map((p) => new RegExp(`^${p.replace(/:[A-Za-z]+/g, '[^/]+')}$`));
+    .map((p) => p.split('/'))
+    .map((segs) => ({ test: (href: string) => { const h = href.split('/'); return h.length === segs.length && segs.every((s, i) => s.startsWith(':') ? h[i] !== '' : s === h[i]); } }));
   assert.ok(routes.length > 100, 'App.jsx routes were read');
   for (const m of STUDIO_MODULES) {
     assert.ok(m.purpose.trim().length > 0 && m.purpose.length <= 80, `${m.key}: purpose`);
