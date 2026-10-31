@@ -42,6 +42,7 @@ import scoring from './routes/scoring';
 import labReportShares from './routes/lab_report_shares';
 import projects from './routes/projects';
 import accountCompanies from './routes/account_companies';
+import accountPortfolio from './routes/account_portfolio';
 import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
@@ -937,6 +938,8 @@ app.route('/api/lab-report-shares', labReportShares);
 // D1136 (#3016): the caller's own companies, ventures and invitations, and answering an invitation signed in.
 // Before `projects` and `companyRoutes`; the answer paths are literal `invitations/<id>/accept|decline`.
 app.route('/api', accountCompanies);
+// D1415: the Portfolio reads — switcher, settings scope, path resolution.
+app.route('/api', accountPortfolio);
 // D1137 — a venture's move to a company and its owner transfer.
 app.route('/api/projects', projectLifecycle);
 app.route('/api/projects', projects);
