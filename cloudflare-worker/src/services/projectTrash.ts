@@ -27,7 +27,7 @@ import type { Env } from '../types';
 // batch; a real write error must roll back the entire deletion (#3747).
 const CHILD_TABLES = [
   'round_calls', // D653: recipients and questions cascade before the project is removed.
-  'score_snapshots', 'documents', 'deal_memos', 'deals',
+  'deal_memos', 'score_snapshots', 'documents', 'deals', // Memos reference snapshots.
   'capital_calls', 'tickets', 'discovery_interviews', 'roadmap_okrs',
   'fund_reserve_allocations', 'financial_models',
   'compliance_events', 'cap_table_scenarios', 'founder_checkins',
@@ -129,19 +129,18 @@ export async function hardDeleteProject(env: Env, projectId: number): Promise<vo
 
 async function retryDeckImagePurges(env: Env): Promise<void> {
   if (!(await tables(env)).has('platform_settings')) return;
-  let after = PURGE_PREFIX;
-  for (;;) {
-    const page = await env.DB.prepare(`SELECT key FROM platform_settings
-      WHERE key LIKE ? AND key > ? ORDER BY key LIMIT 100`)
-      .bind(PURGE_PREFIX + '%', after).all<{ key: string }>();
-    if (!page.success) throw new Error('Cannot read pending deck image cleanup');
-    for (const { key } of page.results) {
-      const suffix = key.slice(PURGE_PREFIX.length);
-      const id = Number(suffix);
-      if (/^[1-9][0-9]*$/.test(suffix) && Number.isSafeInteger(id)) await tryPurgeDeckImages(env, id);
-    }
-    if (page.results.length < 100) break;
-    after = page.results[page.results.length - 1].key;
+  // Bound work per cron and rotate failures behind older attempts. Retry work
+  // runs after the trash sweep, so an R2 outage cannot starve SQL deletion.
+  const page = await env.DB.prepare(`SELECT key FROM platform_settings
+    WHERE key LIKE ? ORDER BY updated_at, key LIMIT 25`)
+    .bind(PURGE_PREFIX + '%').all<{ key: string }>();
+  if (!page.success) throw new Error('Cannot read pending deck image cleanup');
+  for (const { key } of page.results) {
+    const touched = await env.DB.prepare('UPDATE platform_settings SET updated_at = CURRENT_TIMESTAMP WHERE key = ?').bind(key).run();
+    if (!touched.success) throw new Error('Cannot record deck image cleanup attempt');
+    const suffix = key.slice(PURGE_PREFIX.length);
+    const id = Number(suffix);
+    if (/^[1-9][0-9]*$/.test(suffix) && Number.isSafeInteger(id)) await tryPurgeDeckImages(env, id);
   }
 }
 
@@ -154,7 +153,6 @@ export interface SweepResult {
 // 30-day hard-sweep — physically remove projects whose deleted_at is older
 // than `daysOld`. Idempotent (re-running over a clean DB returns zeros).
 export async function sweepTrashedProjects(env: Env, daysOld = 30): Promise<SweepResult> {
-  await retryDeckImagePurges(env);
   // SQLite-flavored: datetime('now', '-30 days')
   const res: any = await env.DB.prepare(
     `SELECT id FROM projects WHERE deleted_at IS NOT NULL AND datetime(deleted_at) < datetime('now', ?)`,
@@ -171,5 +169,6 @@ export async function sweepTrashedProjects(env: Env, daysOld = 30): Promise<Swee
       console.error('[projectTrash.sweep] hard-delete failed for', id, (e as Error).message);
     }
   }
+  await retryDeckImagePurges(env);
   return { scanned: ids.length, deleted, failed };
 }

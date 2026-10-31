@@ -168,13 +168,21 @@ test('a marker write failure rolls back the venture and all children before any 
   assert.equal(f.lists.length, 0);
 });
 
-test('cron scans multiple marker pages; malformed marker keys cannot broaden a purge', async t => {
+test('cron bounds retry work and eventually drains the backlog; malformed keys cannot broaden a purge', async t => {
   const f = fixture(); t.after(() => f.db.close());
   const insert = f.db.prepare('INSERT INTO platform_settings(key,value) VALUES(?,?)');
   for (let id = 100; id < 202; id++) insert.run('project-deck-images-purge:' + id, String(id));
   for (const suffix of ['../', '0', '-1', '9007199254740992']) insert.run('project-deck-images-purge:' + suffix, '1');
   f.db.exec('UPDATE projects SET deleted_at = NULL');
   assert.deepEqual(await sweepTrashedProjects(f.env), { scanned: 0, deleted: 0, failed: 0 });
+  assert.ok(f.lists.length <= 25);
+  for (let pass = 0; pass < 5; pass++) {
+    // Advance old failed/malformed attempts to a prior second without sleeping.
+    f.db.exec("UPDATE platform_settings SET updated_at = '2000-01-01' WHERE key NOT IN ('project-deck-images-purge:../','project-deck-images-purge:0','project-deck-images-purge:-1','project-deck-images-purge:9007199254740992')");
+    const before = f.lists.length;
+    await sweepTrashedProjects(f.env);
+    assert.ok(f.lists.length - before <= 25);
+  }
   assert.equal(f.lists.length, 102);
   assert.ok(f.lists.every(page => /^deck-images\/(1\d\d|20[01])\/$/.test(page.prefix)));
   assert.equal((f.db.prepare("SELECT COUNT(*) n FROM platform_settings WHERE key LIKE 'project-deck-images-purge:%'").get() as any).n, 4);
@@ -188,4 +196,61 @@ test('a non-advancing R2 cursor retains the marker instead of looping or claimin
   assert.ok(f.pending());
   assert.equal(f.n('projects'), 1);
   assert.equal(f.objects.size, 6);
+});
+
+test('populated existing children and their cascade dependants delete in order over the full schema', async t => {
+  const f = fixture(); t.after(() => f.db.close());
+  f.db.exec(`INSERT INTO score_snapshots(id,project_id,total_score,tier) VALUES(1,1,50,'synthetic');
+    INSERT INTO deal_memos(project_id,score_snapshot_id,startup_name,founders,total_score,tier) VALUES(1,1,'Synthetic venture','Synthetic founder',50,'synthetic');
+    INSERT INTO deals(id,project_id) VALUES(1,1);
+    INSERT INTO deal_notes(deal_id,author_user_id,body) VALUES(1,2,'Synthetic deal note');
+    INSERT INTO cap_table_holders(id,user_id,project_id,name) VALUES(1,2,1,'Synthetic holder');
+    INSERT INTO founder_contributions(project_id,holder_id,text) VALUES(1,1,'Synthetic contribution');
+    INSERT INTO round_calls(id,uid,project_id,name,amount_cents,instrument,terms,minimum_cheque_cents,target_close,deck_id,terms_hash,created_by)
+      VALUES(1,'synthetic-call',1,'Synthetic call',100,'safe','Synthetic terms',10,'2099-01-01',7,'synthetic',2);
+    INSERT INTO round_call_recipients(call_id,investor_user_id,origin) VALUES(1,2,'chosen');
+    INSERT INTO round_call_questions(uid,call_id,investor_user_id,question) VALUES('synthetic-question',1,2,'Synthetic question');
+    INSERT INTO activity_logs(project_id,user_id,action) VALUES(1,2,'synthetic-action');`);
+  await hardDeleteProject(f.env, 1);
+  for (const table of ['score_snapshots','deal_memos','deals','deal_notes','cap_table_holders','founder_contributions','round_calls','round_call_recipients','round_call_questions']) assert.equal(f.n(table), 0, table);
+  assert.equal(f.n('activity_logs'), 1);
+  assert.equal((f.db.prepare('SELECT project_id FROM activity_logs').get() as any).project_id, null);
+  assert.equal(f.n('pitch_decks'), 1);
+  assert.equal(f.objects.size, 2);
+});
+
+test('an existing non-cascading financial/deal reference refuses atomically rather than losing other children', async t => {
+  const f = fixture(); t.after(() => f.db.close());
+  f.db.exec(`INSERT INTO deals(id,project_id) VALUES(1,1);
+    INSERT INTO ic_meetings(uid,title,start_at,deal_id,organizer_user_id) VALUES('synthetic-meeting','Synthetic meeting','2099-01-01',1,2)`);
+  await assert.rejects(hardDeleteProject(f.env, 1), /FOREIGN KEY/);
+  assert.equal(f.n('projects'), 2);
+  assert.equal(f.n('pitch_decks'), 3);
+  assert.equal(f.n('deck_notes'), 3);
+  assert.equal(f.n('deck_images'), 4);
+  assert.equal(f.n('deals'), 1);
+  assert.equal(f.n('ic_meetings'), 1);
+  assert.equal(f.pending(), undefined);
+  assert.equal(f.lists.length, 0);
+});
+
+test('SQL sweep precedes capped retries and older failures rotate behind unattempted markers', async t => {
+  const f = fixture(); t.after(() => f.db.close());
+  for (let id = 100; id < 126; id++) f.db.prepare("INSERT INTO platform_settings(key,value,updated_at) VALUES(?,?,'2000-01-01')").run('project-deck-images-purge:' + id, String(id));
+  const list = f.env.FILES.list;
+  const attempts: string[] = [];
+  f.env.FILES.list = async (options: any) => {
+    assert.equal(f.db.prepare('SELECT id FROM projects WHERE id=1').get(), undefined, 'SQL sweep must run before retry storage calls');
+    attempts.push(options.prefix);
+    if (options.prefix !== 'deck-images/1/') throw new Error('Synthetic retry failure');
+    return list(options);
+  };
+  assert.deepEqual(await sweepTrashedProjects(f.env), { scanned: 1, deleted: 1, failed: 0 });
+  assert.equal(attempts.length, 26, 'one immediate venture purge plus 25 retries');
+  assert.equal(attempts.includes('deck-images/125/'), false);
+  const before = attempts.length;
+  await sweepTrashedProjects(f.env);
+  assert.equal(attempts[before], 'deck-images/125/');
+  assert.equal(attempts.length - before, 25);
+  assert.equal((f.db.prepare("SELECT COUNT(*) n FROM platform_settings WHERE key LIKE 'project-deck-images-purge:%'").get() as any).n, 26);
 });

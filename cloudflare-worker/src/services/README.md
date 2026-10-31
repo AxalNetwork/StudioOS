@@ -637,4 +637,5 @@ D1421 (#3699): `studioModules.ts` is the one registry of Studio blocks (`STUDIO_
 #3747: `projectTrash.ts` batches existing venture cleanup with deck dependencies
 and a content-free image purge marker in `platform_settings`. It removes the
 venture’s R2 image prefix in pages of 500 after SQL commits; the existing trash
-cron retries markers without requiring a project row. Soft deletion is unchanged.
+cron retries up to 25 markers after its SQL sweep, rotating older attempts and
+requiring no project row. Soft deletion is unchanged.
