@@ -147,7 +147,8 @@ test('D816: with no yearly price, catalog_price_missing names the interval and n
     assert.equal(r.body.interval, 'year');
     assert.match(r.body.detail, /interval=year/);
     assert.equal(s.sessions.length, 0);
-    const inv = await call(f, 'POST', '/api/billing/investor/checkout', INVESTOR, { plan: 'investor_inst_monthly', interval: 'year' });
+    f.db.prepare("UPDATE stripe_products SET prices_json = ? WHERE id = 'prod_pro'").run(JSON.stringify([{ id: 'price_pro_m', active: true, unit_amount: 15000, currency: 'usd', interval: 'month', interval_count: 1 }]));
+    const inv = await call(f, 'POST', '/api/billing/investor/checkout', INVESTOR, { plan: 'investor_pro_monthly', interval: 'year' });
     assert.deepEqual([inv.status, inv.body.error, inv.body.interval], [502, 'catalog_price_missing', 'year']);
   } finally { s.restore(); f.db.close(); }
 });
@@ -231,5 +232,24 @@ test('D816: the public plans read gives each plan its two prices and saving, omi
       assert.ok(!keys.has(k), `no ${k}`);
     assert.deepEqual([...keys].filter((k) => k.endsWith('_id')).sort(), ['price_id', 'product_id'], 'only the ids the catalogue page builds its cart from');
     assert.equal(s.sessions.length, 0, 'a public read never reaches Stripe');
+  } finally { s.restore(); f.db.close(); }
+});
+
+// D1430: a mirrored legacy price cannot turn negotiated Institutional into checkout.
+test('Institutional monthly/yearly checkout is refused before Stripe, even with an active old price', async () => {
+  const f = world(); await seed(f); const s = stripeStub();
+  f.db.prepare("INSERT INTO stripe_products (id, name, active, kind, metadata_json, prices_json) VALUES (?, ?, 1, 'subscription', ?, ?)")
+    .run('prod_inst', 'Institutional', JSON.stringify({ investor_tier: 'institutional' }), JSON.stringify([
+      { id: 'price_inst_m', active: true, unit_amount: 59900, currency: 'usd', interval: 'month', interval_count: 1 },
+      { id: 'price_inst_y', active: true, unit_amount: 574800, currency: 'usd', interval: 'year', interval_count: 1 },
+    ]));
+  try {
+    for (const plan of ['investor_inst_monthly', 'investor_inst_yearly']) {
+      const r = await call(f, 'POST', '/api/billing/investor/checkout', INVESTOR, { plan });
+      assert.equal(r.status, 409, r.text);
+      assert.equal(r.body.error, 'not_sellable');
+      assert.match(r.body.message, /Contact Axal VC/);
+    }
+    assert.equal(s.sessions.length, 0, 'no Stripe checkout for a negotiated plan');
   } finally { s.restore(); f.db.close(); }
 });

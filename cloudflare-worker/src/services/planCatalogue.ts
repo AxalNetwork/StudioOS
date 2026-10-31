@@ -50,7 +50,7 @@ export type CatalogueEntry = {
 
 export const NOT_SOLD = {
   free: 'A free plan: nothing to buy.',
-  custom: 'Priced by our sales team: Contact Sales.',
+  custom: 'Priced by Axal VC for each firm: Contact Axal VC.',
   lp: 'Free with an investment in an Axal VC fund.',
   staff: 'Staff accounts hold no plan.',
   other: 'Choose a profile first.',

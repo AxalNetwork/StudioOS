@@ -65,7 +65,7 @@ export const TIER_PLANS = {
     key: 'investor:institutional',
     label: 'Institutional',
     blurb: 'For institutional investors, family offices and investment teams.',
-    plan: 'investor_inst_monthly',
+    custom: true,
     features: ['Shared research workspaces', 'Team access controls and permissions', 'Advanced reporting and analytics', 'Custom integrations and workflows', 'Organization-wide administration', 'Negotiated usage limits and support'],
   },
 };
@@ -242,7 +242,7 @@ export default function PaywallModal({ user }) {
                     </span>
                   )}
                 </div>
-                <PlanPrice read={prices} planKey={plan.key} />
+                {plan.custom ? <div className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">Custom</div> : <PlanPrice read={prices} planKey={plan.key} />}
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{plan.blurb}</p>
                 {plan.lead ? <p className="mt-4 text-sm font-semibold text-gray-800 dark:text-gray-200">{plan.lead}</p> : null}
                 <ul className={`${plan.lead ? 'mt-2' : 'mt-4'} space-y-1.5 flex-1`}>
@@ -253,7 +253,7 @@ export default function PaywallModal({ user }) {
                     </li>
                   ))}
                 </ul>
-                <button
+                {plan.custom ? <Link to="/contact" onClick={() => setOpen(false)} className="mt-5 w-full py-2.5 rounded-lg font-medium text-sm text-center text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700">Contact Axal VC</Link> : <button
                   type="button"
                   onClick={() => startCheckout(tier)}
                   data-testid={`paywall-upgrade-${tier}`}
@@ -264,7 +264,7 @@ export default function PaywallModal({ user }) {
                   }`}
                 >
                   {`Upgrade to ${plan.label}`}
-                </button>
+                </button>}
               </div>
             );
           })}
