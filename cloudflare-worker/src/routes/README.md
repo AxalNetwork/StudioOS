@@ -49,6 +49,10 @@ read-only drawer; numeric account IDs continue to the standing router.
 D1136's reads of the caller's own companies, ventures and invitations, and
 answering an invitation while signed in, live in `account_companies.ts`,
 mounted at `/api` with full paths before `projects.ts` and `company.ts`.
+D1415's Portfolio reads (the switcher, the settings scope for a selection,
+and `/c/…/p/…` address resolution) live in `account_portfolio.ts`, mounted
+at `/api` with full paths beside it. A project's slug is set in
+`project_lifecycle.ts` (`PUT /api/projects/:id/slug`), beside its move.
 
 D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 `/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
