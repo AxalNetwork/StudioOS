@@ -309,6 +309,7 @@ export function createMcpOauthRouter(deps: McpOauthDeps = {}) {
     return back(c, record.key, returnTo, 'ok');
   });
 
+  const CIMD_CORE = new Set(['client_id', 'client_name', 'client_uri', 'redirect_uris', 'grant_types', 'response_types', 'token_endpoint_auth_method', 'scope']);
   /** The client ID metadata document: public, no secret, for a record that publishes one here. */
   router.get('/:key/client.json', (c) => {
     const key = c.req.param('key') || '';
@@ -325,6 +326,8 @@ export function createMcpOauthRouter(deps: McpOauthDeps = {}) {
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
       scope: record.scopes.join(' '),
+      // D1385: a provider's own members (PostHog's scope ceiling); never one of the fields above.
+      ...Object.fromEntries(Object.entries(record.cimd_fields ?? {}).filter(([k]) => !CIMD_CORE.has(k))),
     });
   });
 

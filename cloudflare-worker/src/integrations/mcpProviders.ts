@@ -71,6 +71,16 @@ export interface McpProvider {
   readonly registration: readonly McpRegistration[];
   /** The client ID metadata document's https URL on axal.vc, or null when none is published. */
   readonly cimd_url: string | null;
+  /**
+   * D1385: extra members of that document, as a provider names them (PostHog's
+   * scope ceiling, `com.posthog.scopes`). Each value is a space-separated list.
+   */
+  readonly cimd_fields?: Readonly<Record<string, string>>;
+  /**
+   * D1385: the request headers a connection may set for itself (PostHog's
+   * project), by name, each checked against its own pattern before it is sent.
+   */
+  readonly connection_headers?: Readonly<Record<string, RegExp>>;
   readonly era: McpEra;
   /** POSTs per session, the era probe and the handshake included. */
   readonly budget: number;
@@ -103,6 +113,8 @@ export function mcpProvider(p: McpProvider): McpProvider {
     setup_issue: p.setup_issue ?? null,
     registration: Object.freeze([...p.registration]),
     headers: Object.freeze({ ...p.headers }),
+    cimd_fields: Object.freeze({ ...(p.cimd_fields ?? {}) }),
+    connection_headers: Object.freeze({ ...(p.connection_headers ?? {}) }),
     tool_pins: p.tool_pins ? Object.freeze({ ...p.tool_pins }) : null,
   });
 }
@@ -229,11 +241,66 @@ const WHATSAPP_BUSINESS = mcpProvider({
   callback_path: '/api/integrations/mcp/whatsapp_business/callback',
 });
 
+/**
+ * D1385 (#3731, #2409 part 1): a founder's own PostHog, read only, through
+ * PostHog's hosted MCP server. PostHog's facts (#2409 "The provider today",
+ * read from PostHog's docs and MCP source on 2026-10-21):
+ * - One host, `mcp.posthog.com`; PostHog routes it to the account's US or EU
+ *   Cloud on its side. Auth and discovery sit on `*.posthog.com`.
+ * - `x-posthog-read-only: true` drops every tool that changes anything, and
+ *   `x-posthog-mcp-mode: tools` registers each tool by name, so the allowlist
+ *   below is what is offered. Both are fixed: no connection can change them.
+ * - `x-posthog-project-id` pins one project. It is the connection's own
+ *   header (a venture's linked project), digits only, sent by
+ *   `services/posthog/reads.ts` and nowhere else.
+ * - CIMD first (decision A, the plan's recommendation), DCR as the fallback.
+ *   The document declares the scope ceiling under `com.posthog.scopes`.
+ * - SCOPES: the six read scopes the plan names. PostHog's identity scopes
+ *   ride every authorize, so a grant may report them; nothing else is
+ *   accepted (UNVERIFIED which ones come back, D1385.md §4).
+ * - `read_tools`: the 19 read tools in #2409's table. No person list
+ *   (`*-actors`), no `execute-sql` (decision I), no `exec`, no write tool.
+ */
+const POSTHOG_READ_SCOPES = [
+  'organization:read', 'insight:read', 'query:read', 'experiment:read', 'survey:read', 'feature_flag:read',
+] as const;
+const POSTHOG = mcpProvider({
+  key: 'posthog',
+  resources: ['https://mcp.posthog.com/mcp'],
+  hosts: ['posthog.com'],
+  scopes: [...POSTHOG_READ_SCOPES],
+  accepted_scopes: [...POSTHOG_READ_SCOPES, 'openid', 'profile', 'email'],
+  read_tools: [
+    'organizations-get', 'projects-get',
+    'insights-list', 'insight-get',
+    'insight-query', 'query-trends', 'query-funnel', 'query-retention', 'query-lifecycle', 'query-web-overview',
+    'experiment-list', 'experiment-get', 'experiment-results-get',
+    'surveys-get-all', 'survey-get', 'survey-stats', 'surveys-responses-list',
+    'feature-flag-get-all', 'feature-flag-get-definition',
+  ],
+  write_tools: [],
+  publish_issue: null,
+  registration: ['cimd', 'dcr'],
+  cimd_url: 'https://axal.vc/api/integrations/mcp/posthog/client.json',
+  cimd_fields: { 'com.posthog.scopes': POSTHOG_READ_SCOPES.join(' ') },
+  connection_headers: { 'x-posthog-project-id': /^[0-9]{1,18}$/ },
+  era: 'auto',
+  budget: 24,
+  headers: { 'x-posthog-read-only': 'true', 'x-posthog-mcp-mode': 'tools' },
+  session: 'per_request',
+  tool_pins: null,
+  lease: 'mcp:posthog',
+  state_provider: 'mcp_posthog',
+  client_key_prefix: 'mcp_client:posthog:',
+  callback_path: '/api/integrations/mcp/posthog/callback',
+});
+
 /** Every MCP provider, Mercury first. */
 export const MCP_PROVIDERS: Readonly<Record<string, McpProvider>> = Object.freeze({
   mercury: MERCURY,
   notion: NOTION,
   whatsapp_business: WHATSAPP_BUSINESS,
+  posthog: POSTHOG,
 });
 
 export function mcpProviderFor(key: string): McpProvider | null {

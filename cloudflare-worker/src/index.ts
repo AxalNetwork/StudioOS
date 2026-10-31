@@ -198,6 +198,7 @@ import './integrations/providers/vercel';
 import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
 import './integrations/providers/notion';
+import './integrations/providers/posthog';
 // D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
 import './services/notion/build';
 import crunchbaseRoutes from './routes/crunchbase';
@@ -434,6 +435,7 @@ import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 // D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
 import notionRoutes, { notionCycleRoutes } from './routes/notion';
+import posthogRoutes from './routes/posthog';
 // D1325 (#3486): the Fill with Eadwyn sheet's read.
 import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
@@ -1496,6 +1498,8 @@ app.route('/api/integrations/mcp', connectorMcpOauthRoutes);
 app.route('/api/connectors/notion', notionRoutes);
 // D1096 (#2961): Vercel signs every installation's events to one URL; ahead of the per-connection receiver.
 app.route('/api/connectors/webhook/vercel', vercelWebhook);
+// D1385 (#3731): "Your PostHog projects" (`/:uid/posthog-projects`), ahead of the generic routes.
+app.route('/api/connectors', posthogRoutes);
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
