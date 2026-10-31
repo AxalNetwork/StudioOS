@@ -1,6 +1,6 @@
 # frontend/src/lib/api — one file per new API domain
 
-D1409: `articleAuthoring.js` is the article editor's Eadwyn client (`/api/articles/:id/assist…`): a quote and a run per option, each leaving a proposal. Nothing it sends writes the article.
+D1409: `articleAuthoring.js` is the article editor's Eadwyn client (`/api/articles/:id/assist…`, `/images…`): a quote and a run per option, each leaving a proposal; the image quote, generate and discard; and the cover from one of the article's images. Only `coverFromImage` writes the article (its cover).
 
 D1256: `ventureScores.js` is the venture scorecard's client (`/api/venture-scores`): the reads, the deal list's strip, reviews, corrections, weighting and sharing. It sends no computed field.
 
