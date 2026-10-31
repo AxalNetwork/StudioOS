@@ -444,6 +444,7 @@ import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
+import teamAgentsRoutes from './routes/team_agents';
 import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
@@ -1648,6 +1649,8 @@ app.route('/api', companyLifecycle);
 // D1415: the company's legal record, officers, locations, sealed tax ID and slug.
 app.route('/api', companyLegal);
 app.route('/api', companyRoutes);
+// D1496 (#3840): team agents, their rule books and their audit; 404 `team_agents_off` until TEAM_AGENTS_ENABLED is "true".
+app.route('/api/teams', teamAgentsRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);

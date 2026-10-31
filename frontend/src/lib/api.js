@@ -157,6 +157,7 @@ export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
 export * from './api/studioLayout.js';
+export * from './api/teamAgents.js';
 export * from './api/ticketReviews.js';
 export * from './api/tokenPacks.js';
 export * from './api/trustContent.js';

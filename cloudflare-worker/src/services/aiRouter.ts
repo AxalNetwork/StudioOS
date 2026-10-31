@@ -1140,7 +1140,8 @@ async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | nu
 }
 
 // ---------------------------------------------------------------------------
-// Schema bootstrap for ai_usage_logs (mirrors migration 040). Cheap, gated
+// Schema bootstrap for ai_usage_logs (mirrors migration 040, with 493's columns
+// and 712's `agent_id`, D1496). Cheap, gated
 // per D1 BINDING so dev/SQLite is self-healing and a second database in the
 // same isolate is not told the work is already done (#204).
 //
@@ -1163,7 +1164,7 @@ async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT)",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER)",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");

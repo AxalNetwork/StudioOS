@@ -133,7 +133,8 @@ async function getLink(env: Env, companyId: number, userId: number): Promise<Lin
     .bind(companyId, userId).first<Link>();
 }
 
-async function canEdit(env: Env, c: Company, user: User): Promise<boolean> {
+/** The company edit gate (D1496 reuses it for agents: one rule, one place). */
+export async function canEdit(env: Env, c: Company, user: User): Promise<boolean> {
   if (isAdmin(user)) return true;
   const link = await getLink(env, c.id, user.id);
   if (!link) return false;
