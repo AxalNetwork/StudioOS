@@ -100,6 +100,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/scoring       → scoring.ts
 /api/company/…     → company_lifecycle.ts (D1137: archive, restore and the primary-admin transfer in one batch, primary admin only, each with its membership event; mounted at /api before company.ts)
 /api/company/…     → company_legal.ts (D1415: the legal record, sealed tax ID, officers (ceased, never deleted), locations (one open registered address; closed, never deleted) and the company slug with its history; member reads, editor writes; mounted at /api after company_lifecycle.ts, before company.ts)
+/api/company/…     → company_documents.ts (D1592: a company's documents, `GET`/`POST /company/:uid/documents` and `GET /company/:uid/documents/:docUid/file`; the four named slots, other, and the ventures' documents the caller may already read; R2 before the row; member reads, editor uploads; mounted at /api after company_legal.ts, before company.ts)
 /api/projects      → project_lifecycle.ts (D1137: POST /:id/move to a company the owner belongs to, or out of one; POST /:id/transfer the owner seat to a co-founder with a founder account; each with its membership event; mounted before projects.ts)
 /api/projects      → projects.ts
 /api/cycles/build  → cycle_build.ts      (Build overview, six module reads, D662 field writes, and D686 system mappings)
@@ -488,3 +489,5 @@ D1351 (#3566): `contact_imports.ts` is mounted at `/api/contacts` ahead of `cont
 #3626: `ai_modules.ts`, mounted by `ai.ts` at `/api/ai/modules`, lists the caller's module/model connections (`GET /?page=`), quotes (`POST /quote`) and runs (`POST /run`) bounded operations over supplied material. The authenticated member supplies the persona and charged account; no record ids or cross-user store reads. Every run uses the shared AI router, guard, switches and budget settlement.
 
 D1421 (#3699): `studio_layout.ts` is mounted at `/api/studio`: `GET /modules` (this profile's Studio modules, each with `locked_by_plan`), `GET`/`PUT /layout` and `POST /layout/reset` (the member's saved layout in `studio_layouts`, or the default when there is no row). The member is the session's; an admin names the previewed profile with `?profile=`. The registry and its derived locks are `../services/studioModules.ts`.
+
+D1594 (#3863): `studio_layout.ts`'s layout reads carry `revision` (migration 750) and name every saved module that left in `dropped` (`not_offered` with its last known title from `RETIRED_TITLES`, or null; `plan` with its title and plan), so a locked module never blocks Done; `PUT /layout` requires `expected_revision` and answers 409 `stale_layout` to a stale copy, writing nothing. See `documentation/architecture/decisions/D1594.md`.

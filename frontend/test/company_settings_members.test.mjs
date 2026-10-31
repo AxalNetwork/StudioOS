@@ -279,12 +279,14 @@ test('a preset covers exactly the events the user can see', () => {
 
 test('the client edit rule is the worker rule, name for name', () => {
   // TWO COPIES OF AN AUTHORISATION RULE DRIFT. This is the only thing standing
-  // between them. `canEdit` in company.ts is the boundary — a non-editor who
+  // between them. `canEdit` in services/companyAccess.ts is the boundary — a non-editor who
   // gets past the UI still gets a 403 — but a client list that says something
   // different draws inputs nobody can use, or hides inputs that would work.
-  const worker = read('cloudflare-worker/src/routes/company.ts');
+  const route = read('cloudflare-worker/src/routes/company.ts');
+  assert.match(route, /import \{[^}]*\bcanEdit\b[^}]*\} from '\.\.\/services\/companyAccess';/, 'the company route uses the shared edit gate');
+  const worker = read('cloudflare-worker/src/services/companyAccess.ts');
   const m = worker.match(/\[([^\]]*)\]\.includes\(link\.role_in_company\)/);
-  assert.ok(m, 'company.ts must still gate on a literal list of role_in_company values');
+  assert.ok(m, 'companyAccess.ts must still gate on a literal list of role_in_company values');
   const workerRoles = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
 
   const page = read(PAGE);

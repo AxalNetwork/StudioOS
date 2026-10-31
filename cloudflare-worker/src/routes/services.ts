@@ -14,6 +14,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { offeringOwned } from '../services/profileWriteGates';
 
 const services = new Hono<{ Bindings: Env }>();
 
@@ -92,7 +93,6 @@ function priceFrom(input: unknown): { cents: number | null; usd: number | null }
   return { cents, usd: cents / 100 };
 }
 
-function isAdmin(u: User): boolean { return u.role === 'admin'; }
 
 services.get('/offerings', async (c) => {
   const user = await requireAuth(c);
@@ -194,14 +194,8 @@ services.post('/offerings', async (c) => {
 async function ensureOwnerOr404(
   env: Env, id: number, user: User, companyId: number | null,
 ): Promise<Offering | null> {
-  const row = await env.DB.prepare('SELECT * FROM service_offerings WHERE id = ?')
-    .bind(id).first<Offering>();
-  if (!row) return null;
-  if (isAdmin(user)) return row;
-  if (row.owner_user_id !== user.id) return null;
-  const owning = (row as Offering & { company_id?: number | null }).company_id ?? null;
-  if (companyId !== null && owning !== null && owning !== companyId) return null;
-  return row;
+  // D1595 (#3868): the rule lives in services/profileWriteGates.ts, shared with Fill's scope for this table.
+  return offeringOwned<Offering & { id: number; owner_user_id: number }>(env, id, user, companyId);
 }
 
 services.put('/offerings/:id', async (c) => {

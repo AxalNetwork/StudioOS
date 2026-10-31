@@ -19,6 +19,10 @@ const SERVICES = 'Advisor · Expertise · Services';
 const REPORTING = 'Operating Partner · Delivery · Reporting';
 const EVENTS = 'Admin · Approvals · Events';
 const PUBLICATIONS = 'Super Admin · Content · Publications';
+// D1595 (#3868): three forms the profiles canvas draws (PH5, PH15).
+const VALUE_ADD = 'Investor · Portfolio · Value-add';
+const CATALOG = 'Operating Partner · Offers · Catalog';
+const PERK_DEALS = 'Operating Partner · Offers · Perk deals';
 const SOLUTION_DESIGN = 'Founder · Build · Solution design';
 const REVENUE = 'Founder · Grow · Revenue and traction';
 const PROBLEM = 'Founder · Validate · Problem discovery';
@@ -68,6 +72,10 @@ export const FILL_FIELDS = Object.freeze([
   { page: EVENTS, form: 'agenda-item', field: 'description', label: 'What happens', table: 'event_agenda_items', column: 'description', class: 'composition', sources: ['eadwyn'] },
   // AF21: a publication's summary (H20's draft, in the shared sheet).
   { page: PUBLICATIONS, form: 'publication', field: 'summary_text', label: 'Summary', table: 'admin_publications', column: 'summary_text', class: 'composition', sources: ['eadwyn'] },
+  // D1595 (#3868): the words only; no outcome, hours, detail, price, value, credit, cap, title, offer or partner name.
+  { page: VALUE_ADD, form: 'support', field: 'summary', label: 'What happened', table: 'portfolio_support_entries', column: 'summary', class: 'composition', sources: ['eadwyn'] },
+  { page: CATALOG, form: 'offering', field: 'summary', label: 'Summary (what the founder gets)', table: 'service_offerings', column: 'summary', class: 'composition', sources: ['eadwyn'] },
+  { page: PERK_DEALS, form: 'perk', field: 'blurb', label: 'One line founders see on the card', table: 'perks', column: 'blurb', class: 'composition', sources: ['eadwyn'] },
 ].map((f) => Object.freeze({ ...f, sources: Object.freeze([...f.sources]) })));
 
 /** The fields of one form, in the form's order. */

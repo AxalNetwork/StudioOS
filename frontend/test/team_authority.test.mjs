@@ -25,6 +25,7 @@ import { codeOnly } from './_codeOnly.mjs';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const service = read('cloudflare-worker/src/services/teamAuthority.ts');
 const route = read('cloudflare-worker/src/routes/company.ts');
+const access = read('cloudflare-worker/src/services/companyAccess.ts');
 const migration = read('cloudflare-worker/sql/migrations/191_team_authority.sql');
 const page = read('frontend/src/pages/CompanySettingsPage.jsx');
 
@@ -36,7 +37,8 @@ test('the migration adds three columns and drops nothing', () => {
   // role_in_company still backs canEdit(); retiring an access check in the same
   // migration that adds its replacement is how a permissions bug ships.
   assert.doesNotMatch(migration, /role_in_company\s*=/i, 'the migration must not rewrite the old axis');
-  assert.match(route, /\['Owner', 'Admin', 'Founder'\]\.includes\(link\.role_in_company\)/);
+  assert.match(route, /import \{[^}]*\bcanEdit\b[^}]*\} from '\.\.\/services\/companyAccess';/);
+  assert.match(access, /\['Owner', 'Admin', 'Founder'\]\.includes\(link\.role_in_company\)/);
 });
 
 test('carry is basis points, integer, and bounded', () => {
