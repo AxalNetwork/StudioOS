@@ -40,3 +40,5 @@ D895: founder decks hide internal readiness scores; the Lab assembler keeps them
 by default. Ask runway comes only from stored model/Mercury records. AI-written
 fields do not count as record coverage. Exports use the venture owner's branding,
 and the newest live landing page supplies voice and both logo variants.
+
+D1599 (#3877): `inferBrief.ts` infers New deck's stage, audience and length from `projects.stage` and the active round (one rule table, `BRIEF_RULES`; a missing or zero target is null, never 0). `freshness.ts` says how fresh each connected deck connector is (`FRESHNESS_CADENCE_DAYS`, `PROVIDER_ADAPTERS`) and names its sync route; it never starts one. Neither runs a model or writes.
