@@ -33,15 +33,16 @@ function fixture() {
   db.exec(`INSERT INTO users(id, role, name, email, founder_id) VALUES(2,'founder','Synthetic founder','delete@example.invalid',100);
     INSERT INTO projects(id,name,founder_id,deleted_at) VALUES(1,'Synthetic venture',100,'2000-01-01'),(10,'Other venture',100,NULL);`);
   for (const [deck, project] of [[7, 1], [8, 1], [9, 10]]) {
-    db.prepare('INSERT INTO pitch_decks(id,project_id,slides) VALUES(?,?,?)').run(deck, project, '[]');
+    const version = deck === 8 ? 2 : 1;
+    db.prepare('INSERT INTO pitch_decks(id,project_id,version,is_current,slides) VALUES(?,?,?,?,?)').run(deck, project, version, deck === 7 ? 0 : 1, '[]');
     db.prepare("INSERT INTO pitch_deck_share_tokens(id,deck_id,token_hash,expires_at) VALUES(?,?,?, '2099-01-01')").run(deck, deck, 'synthetic-' + deck);
     db.prepare('INSERT INTO deck_share_views(id,share_token_id,deck_id) VALUES(?,?,?)').run(deck, deck, deck);
     // Deliberately no project_id: deck ownership, not a nullable copy, scopes these.
     db.prepare("INSERT INTO deck_share_conversions(view_id,share_token_id,deck_id,type) VALUES(?,?,?,'synthetic')").run(deck, deck, deck);
     db.prepare("INSERT INTO deck_share_feedback(view_id,deck_id,overall_note) VALUES(?,?,'Synthetic feedback')").run(deck, deck);
     db.prepare('INSERT INTO deck_view_slides(view_id,slide_index,seconds) VALUES(?,0,5)').run(deck);
-    db.prepare("INSERT INTO deck_notes(project_id,deck_id,deck_version,author_user_id,author_kind,body) VALUES(?,?,1,2,'founder','Synthetic note')").run(project, deck);
-    db.prepare("INSERT INTO deck_exports(deck_id,version,format,content_hash,created_by) VALUES(?,1,'pdf','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',2)").run(deck);
+    db.prepare("INSERT INTO deck_notes(project_id,deck_id,deck_version,author_user_id,author_kind,body) VALUES(?,?,?,2,'founder','Synthetic note')").run(project, deck, version);
+    db.prepare("INSERT INTO deck_exports(deck_id,version,format,content_hash,created_by) VALUES(?,?,'pdf','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',2)").run(deck, version);
     db.prepare("INSERT INTO deck_checks(deck_id,project_id,surface_version) VALUES(?,?,'synthetic')").run(deck, project);
     db.prepare("INSERT INTO pitch_deck_proposals(project_id,base_deck_id,slides) VALUES(?,?,'[]')").run(project, deck);
   }
