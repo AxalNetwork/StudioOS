@@ -38,6 +38,14 @@ test('SY1 status chips from an account (for D1490 wiring)', () => {
   assert.deepEqual(channelStatus({ status: 'error', last_error: 'Token revoked' }, { now }).line, 'Token revoked');
 });
 
+test('once D1490 serves reads: no account is "Not connected" only where the adapter exists', () => {
+  assert.equal(channelStatus(null, { serviceReady: true, adapterReady: true }).label, 'Not connected');
+  assert.deepEqual(channelStatus(null, { serviceReady: true }), { key: 'not_available', label: 'Not available yet', tone: 'muted', line: 'Waiting for the platform’s approval.' });
+  assert.equal(channelStatus({ status: 'disconnected' }, { serviceReady: true, adapterReady: true }).key, 'not_connected');
+  assert.equal(syndicateNote('public', { serviceReady: true }), 'Posts when an admin approves this event.');
+  assert.equal(syndicateNote('unlisted', { serviceReady: true }), 'Unlisted and private events are never posted to other channels.');
+});
+
 test('SY3 and SY5 words; a count the service did not import is "Not recorded", never 0', () => {
   assert.equal(ROW_STATUS.selected.label, 'Will post on approval');
   assert.equal(ROW_STATUS.failed.tone, 'red');

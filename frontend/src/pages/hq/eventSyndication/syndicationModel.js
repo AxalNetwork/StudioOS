@@ -39,10 +39,11 @@ export const channelOf = (key) => CHANNELS.find((c) => c.key === key) || null;
 
 /**
  * SY1's status chip for one channel. `account` is Part A's account read, or
- * null; `adapterReady` is whether the channel's adapter exists.
+ * null; `serviceReady` is whether D1490's reads exist (defaults to the flag);
+ * `adapterReady` is whether the channel's adapter exists.
  */
-export function channelStatus(account, { adapterReady = false, now = Date.now() } = {}) {
-  if (!SYNDICATION_SERVICE_READY && !account) {
+export function channelStatus(account, { serviceReady = SYNDICATION_SERVICE_READY, adapterReady = false, now = Date.now() } = {}) {
+  if (!serviceReady && !account) {
     return { key: 'not_available', label: 'Not available yet', tone: 'muted', line: 'The syndication service is being built.' };
   }
   if (!account || account.status === 'disconnected') {
@@ -117,9 +118,9 @@ export function approveLabel(channelsOn = 0) {
  * SY2a: what the event editor says under Visibility. Only a public event can
  * syndicate; unlisted and private never post (Part A's eligibility rule).
  */
-export function syndicateNote(visibility) {
+export function syndicateNote(visibility, { serviceReady = SYNDICATION_SERVICE_READY } = {}) {
   if (visibility !== 'public') return 'Unlisted and private events are never posted to other channels.';
-  if (!SYNDICATION_SERVICE_READY) {
+  if (!serviceReady) {
     return 'Other channels: none yet. A public event is listed on axal.vc when an admin approves it. Listing it on Luma, Eventbrite, Google, LinkedIn and Facebook as well is being built.';
   }
   return 'Posts when an admin approves this event.';

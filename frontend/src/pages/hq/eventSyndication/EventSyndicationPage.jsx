@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { ArrowLeft, Landmark } from 'lucide-react';
 import { Card } from '../../../ui';
 import {
-  CAPABILITY_LABEL, CHANNELS, LOG_ACTION, PROPOSED_SETTINGS, SETTINGS_TYPES, SKIP_REASONS, SYNDICATION_SERVICE_READY,
+  CAPABILITY_LABEL, CHANNELS, LOG_ACTION, PROPOSED_SETTINGS, SETTINGS_TYPES, SKIP_REASONS,
   TABS, channelStatus, tabFor,
 } from './syndicationModel';
 
@@ -138,7 +138,7 @@ export default function EventSyndicationPage() {
   const { pathname } = useLocation();
   const tab = tabFor(pathname);
   return (
-    <div className="min-w-0 space-y-4" data-testid="hq-event-syndication-page" data-service-ready={SYNDICATION_SERVICE_READY ? 'yes' : 'no'}>
+    <div className="min-w-0 space-y-4" data-testid="hq-event-syndication-page">
       <div>
         <Link to="/admin/platform" className="inline-flex min-h-[32px] items-center gap-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100">
           <ArrowLeft size={13} /> Platform
