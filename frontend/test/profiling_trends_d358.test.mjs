@@ -47,5 +47,5 @@ test('#3734 member best-fit, its archetype consumer and project deep links remai
 test('D358 profile re-ask and aggregate trends API are retained independently of the retired page', () => {
   const source = read('../src/lib/api.js');
   assert.match(source, /profileReask: \(\) => request\('\/profile\/reask'\),/);
-  assert.match(source, /adminProfilingTrends: \(months\) =>/);
+  assert.match(source, /adminProfilingTrends: \(months\) =>\s*\n\s*request\(`\/admin\/profiling\/trends\$\{months \? `\?months=\$\{encodeURIComponent\(months\)\}` : ''\}`\),/);
 });
