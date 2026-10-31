@@ -17,6 +17,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { HOLDS_PLAN, NOT_CHARGED, checkoutRefusal, heldCard, needsPlanStatus } from '../src/lib/pricingModel.js';
+import { resetPlansRead } from '../src/lib/planPrices.js';
 import PaywallModal from '../src/components/PaywallModal.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -112,6 +113,8 @@ async function mountedPaywall(handle) {
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   return {
     requests,
+    has: id => nodes().some(n => props(n)['data-testid'] === id),
+    hrefs: () => nodes().filter(n => n.tagName === 'A').map(n => props(n).href || props(n).to),
     text: () => text(container),
     textOf: (id) => text(nodes().find((n) => props(n)['data-testid'] === id)),
     async open(required) { await act(async () => { for (const fn of listeners.get('studioos:tier_required') || []) fn({ detail: { required } }); }); await flush(); },
@@ -163,4 +166,18 @@ test('D1054 mounted: a feature named by openPaywall is what the sheet unlocks an
     await view.press('Upgrade to Raise + Grow');
     assert.deepEqual(opened[0], { plan_key: 'founder:studio', interval: 'monthly', from: { label: 'Cap table', href: '/' }, unlocks: 'Cap table' });
   } finally { globalThis.dispatchEvent = prevDispatch; await view.close(); }
+});
+
+test('D1430 mounted: Institutional offers Custom and Contact Axal VC even when the mirror has an old price', async () => {
+  resetPlansRead();
+  const view = await mountedPaywall(u => response(u.includes('/plans-and-packs') ? { plans: [{ licence_key: 'investor:institutional', prices: [{ unit_amount: 59900, currency: 'usd', interval: 'month', interval_count: 1 }] }] } : {}));
+  try {
+    await view.open('institutional');
+    assert.match(view.text(), /Custom/); assert.match(view.text(), /Contact Axal VC/);
+    assert.ok(view.hrefs().includes('/contact'));
+    assert.ok(!view.has('paywall-upgrade-institutional'));
+    assert.ok(!view.has('paywall-price-investor:institutional'));
+    assert.doesNotMatch(view.text(), /\$599|Upgrade to Institutional/);
+    assert.ok(!view.requests.some(r => r.method === 'POST'), 'only read requests');
+  } finally { await view.close(); resetPlansRead(); }
 });

@@ -66,7 +66,7 @@ export const PLAN_CARDS = Object.freeze({
       feats: ['Advanced investment research and screening', 'Portfolio tracking and analytics', 'Investment memo generation', 'Data exports and integrations', 'Higher AI research usage limits', 'More advanced investment workflows'],
     },
     {
-      id: 'institutional', name: 'Institutional', kick: 'Research subscription', custom: true, storage: 'investor:institutional', cta: 'Contact Sales',
+      id: 'institutional', name: 'Institutional', kick: 'Research subscription', custom: true, storage: 'investor:institutional', cta: 'Contact Axal VC',
       tag: 'For institutional investors, family offices and investment teams.',
       feats: ['Shared research workspaces', 'Team access controls and permissions', 'Advanced reporting and analytics', 'Custom integrations and workflows', 'Organization-wide administration', 'Negotiated usage limits and support'],
     },
@@ -82,11 +82,6 @@ export const PLAN_CARDS = Object.freeze({
       tag: 'More reach, better matches.',
       feats: ['More reach in matching', 'Paid sessions through your booking links', 'Deliverables and the client access log', 'Earnings and payouts'],
     },
-    {
-      id: 'firm', name: 'Advisory Firm', kick: 'Practice subscription', custom: true, cta: 'Contact Sales',
-      tag: 'For advisory firms.',
-      feats: ['Several advisors under one practice', 'Team access controls and permissions', 'Shared clients and deliverables', 'Negotiated usage limits and support'],
-    },
   ],
   'operating-partner': [
     {
@@ -99,11 +94,6 @@ export const PLAN_CARDS = Object.freeze({
       id: 'pro', name: 'Operating Partner Pro', kick: 'Delivery subscription', match: 'partner', storage: 'partner:pro', lane: 'partner', cta: 'Get Operating Partner Pro', highlight: true,
       tag: 'Inbound demand on tap.',
       feats: ['Proposals, pipeline and delivery', 'Partner insights: views, leads and conversion', 'Client status reports', 'Payouts through Stripe Connect'],
-    },
-    {
-      id: 'firm', name: 'Partner Firm', kick: 'Delivery subscription', custom: true, cta: 'Contact Sales',
-      tag: 'For firms and agencies.',
-      feats: ['One firm account for every delivery team', 'Team access controls and permissions', 'Featured placement, curated by Axal VC', 'Negotiated usage limits and support'],
     },
   ],
 });
@@ -152,14 +142,12 @@ export const COMPARE = Object.freeze({
     ['Teams', [['Shared research workspaces', 0, 0, 0, 1], ['Team access controls and permissions', 0, 0, 0, 1], ['Advanced reporting and analytics', 0, 0, 0, 1], ['Custom integrations and workflows', 0, 0, 0, 1], ['Organization-wide administration', 0, 0, 0, 1]]],
   ],
   advisor: [
-    ['Profile and reach', [['Public advisor profile', 1, 1, 1], ['Advisor directory listing', 1, 1, 1], ['Reach in matching', 'Standard', 'More', 'More']]],
-    ['Practice', [['Office hours and session types', 1, 1, 1], ['Booking links', 1, 1, 1], ['Paid sessions', 0, 1, 1], ['Deliverables and the client access log', 0, 1, 1], ['Earnings and payouts', 0, 1, 1]]],
-    ['Firm', [['Several advisors under one practice', 0, 0, 1], ['Team access controls and permissions', 0, 0, 1], ['Negotiated usage limits and support', 0, 0, 1]]],
+    ['Profile and reach', [['Public advisor profile', 1, 1], ['Advisor directory listing', 1, 1], ['Reach in matching', 'Standard', 'More']]],
+    ['Practice', [['Office hours and session types', 1, 1], ['Booking links', 1, 1], ['Paid sessions', 0, 1], ['Deliverables and the client access log', 0, 1], ['Earnings and payouts', 0, 1]]],
   ],
   'operating-partner': [
-    ['Listing', [['Provider profile and directory listing', 1, 1, 1], ['Verification badges', 1, 1, 1], ['Live founder requests', 1, 1, 1]]],
-    ['Delivery', [['Proposals, pipeline and delivery', 0, 1, 1], ['Partner insights', 0, 1, 1], ['Client status reports', 0, 1, 1], ['Payouts through Stripe Connect', 0, 1, 1]]],
-    ['Firm', [['One firm account for every delivery team', 0, 0, 1], ['Team access controls and permissions', 0, 0, 1], ['Featured placement, curated by Axal VC', 0, 0, 1]]],
+    ['Listing', [['Provider profile and directory listing', 1, 1], ['Verification badges', 1, 1], ['Live founder requests', 1, 1]]],
+    ['Delivery', [['Proposals, pipeline and delivery', 0, 1], ['Partner insights', 0, 1], ['Client status reports', 0, 1], ['Payouts through Stripe Connect', 0, 1]]],
   ],
 });
 

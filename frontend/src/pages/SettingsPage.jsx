@@ -4569,8 +4569,6 @@ const PERSONA_PLANS = {
       features: ['Marketplace + directory listing', 'Manage up to 3 service offers', 'Respond to Needs Board posts', 'Stripe Connect payouts'] },
     pro: { name: 'Pro', tagline: 'For partners who want inbound demand on tap.',
       features: ['Unlimited service offers', 'Priority placement in search + directory', 'Full partner analytics dashboard', 'Verified partner badge', 'Partner deal portal access'] },
-    enterprise: { name: 'Enterprise / Custom', tagline: 'Firms and agencies scaling across the network.',
-      features: ['Featured marketplace placement', 'Multiple seats + team profiles', 'Dedicated partner manager'] },
   },
   advisor: {
     label: 'Advisor',
@@ -4578,8 +4576,6 @@ const PERSONA_PLANS = {
       features: ['Public advisor profile + expertise tags', 'Founder matching', 'Office Hours workspace', 'Ratings + trust badge'] },
     pro: { name: 'Pro', tagline: 'For advisors who want more reach and better matches.',
       features: ['Priority founder matching', 'Boosted directory visibility', 'Featured advisor placement'] },
-    enterprise: { name: 'Enterprise / Custom', tagline: 'Advisory firms and expert networks.',
-      features: ['Multiple advisor seats + team profiles', 'Programmatic founder matching', 'Dedicated relationship manager'] },
   },
 };
 
@@ -4590,7 +4586,7 @@ const PERSONA_PLANS = {
 // (the persona subscription lives on the general Stripe customer, which
 // scope="founder" reads). Falls back to the saved-cards view for any role that
 // has no persona plan.
-function PersonaBillingPanel({ flash, billing }) {
+export function PersonaBillingPanel({ flash, billing }) {
   // D568 — the plan read is BillingTab's (`billing`, GET /billing/plan/status),
   // shared with the plan line above. A failed read leaves `status` null, which
   // falls back to the saved-cards view exactly as the panel's own read did.
@@ -4665,8 +4661,8 @@ function PersonaBillingPanel({ flash, billing }) {
         </Card>
       ) : (
         <Card title="Plans" description="Upgrade any time. Manage or cancel from this page once subscribed.">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[['starter', defs.starter], ['pro', defs.pro], ['enterprise', defs.enterprise]].map(([key, plan]) => {
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[['starter', defs.starter], ['pro', defs.pro]].map(([key, plan]) => {
               const current = key === 'starter' && !isSubscribed;
               return (
                 <div key={key}
@@ -4692,12 +4688,6 @@ function PersonaBillingPanel({ flash, billing }) {
                         className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
                         {busy ? 'Starting…' : 'Subscribe'}
                       </button>
-                    )}
-                    {key === 'enterprise' && (
-                      <a href="mailto:hello@axal.vc"
-                        className="block text-center w-full px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md text-sm font-medium">
-                        Talk to us
-                      </a>
                     )}
                   </div>
                 </div>
@@ -4984,7 +4974,7 @@ function EmbeddedCheckoutCard({ flash, onPaid }) {
 //      toggle and Stripe-checkout buttons.
 //   3. Quotas card — warm intros / quarter (used vs cap) and deal-room cap.
 //   4. Seat management — only for Institutional plans (list/invite/revoke).
-function InvestorBillingPanel({ flash, billing }) {
+export function InvestorBillingPanel({ flash, billing }) {
   // D568 — the status read is BillingTab's (`billing`, GET
   // /billing/investor/status), shared with the plan line above. A failed read
   // used to raise a toast and then draw the Free ladder and zero quotas below
@@ -5015,8 +5005,7 @@ function InvestorBillingPanel({ flash, billing }) {
   const hasCustomer = !!status.has_customer;
   const quotas = status.quotas || {};
 
-  // D1054 (#2905): Upgrade opens the checkout sheet over Billing, in the cycle shown; Institutional
-  // opens it on the sales line (PAYX13), since the catalogue does not sell it here.
+  // Paid tiers open the sheet in the chosen cycle; Institutional links to Contact Axal VC.
   const upgrade = (target) => openCheckout({ plan_key: `investor:${target}`, interval: billingCycle === 'yearly' ? 'yearly' : 'monthly', from: { label: 'Billing', href: '/account/billing' } });
 
   const TIER_LABEL = {
@@ -5024,7 +5013,7 @@ function InvestorBillingPanel({ flash, billing }) {
     // D1050: the names are the plan catalogue's and the prices the plans read's, per the cycle shown.
     plus: `${TIER_PLANS.plus.label} — ${priceText(prices, TIER_PLANS.plus.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
     professional: `${TIER_PLANS.professional.label} — ${priceText(prices, TIER_PLANS.professional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
-    institutional: `${TIER_PLANS.institutional.label} — ${priceText(prices, TIER_PLANS.institutional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
+    institutional: `${TIER_PLANS.institutional.label} — Custom`,
   };
   const ladder = ['free', 'plus', 'professional', 'institutional'];
   const RANK = { free: 0, plus: 1, professional: 2, institutional: 3 };
@@ -5077,7 +5066,7 @@ function InvestorBillingPanel({ flash, billing }) {
         <Card title="Plans" description="Switch plan or change billing cycle. Manage or cancel from this page once subscribed.">
           <div className="flex justify-end mb-3">
             <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-white dark:bg-gray-900 text-xs">
-              {[{id:'monthly',label:'Monthly'},{id:'yearly',label:'Annual · save 2 mo'}].map((b) => (
+              {[{id:'monthly',label:'Monthly'},{id:'yearly',label:'Annual'}].map((b) => (
                 <button key={b.id} type="button" onClick={() => setBillingCycle(b.id)}
                   className={`px-3 py-1 rounded-md transition-colors ${
                     billingCycle === b.id ? 'bg-violet-600 text-white font-medium' : 'text-gray-600 dark:text-gray-300'
@@ -5088,7 +5077,7 @@ function InvestorBillingPanel({ flash, billing }) {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {ladder.map((t) => {
               const current = t === tier;
-              const upgradable = t !== 'free' && RANK[t] !== RANK[tier];
+              const upgradable = t !== 'free' && t !== 'institutional' && RANK[t] !== RANK[tier];
               return (
                 <div key={t}
                   className={`rounded-lg border p-4 ${current ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
@@ -5103,6 +5092,7 @@ function InvestorBillingPanel({ flash, billing }) {
                     {current && (
                       <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
                     )}
+                    {t === 'institutional' && <Link to="/contact" className="text-sm text-violet-700 dark:text-violet-300 underline">Contact Axal VC</Link>}
                     {upgradable && (
                       <button type="button" disabled={busy === t} onClick={() => upgrade(t)}
                         className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">

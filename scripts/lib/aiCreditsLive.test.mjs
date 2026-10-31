@@ -1,8 +1,10 @@
 // D755 CR10 (#1987) — the read-only AI credits live check: a good answer
 // passes, a missing route warns, and a malformed one fails.
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { OWNER_PLAN_PRICES } from './ownerPlanPrices.mjs';
 import assert from 'node:assert/strict';
-import { judgePlansBody, judgePlansResponse, judgePricingShell } from './aiCreditsLive.mjs';
+import { judgePlansBody, judgePlansResponse, judgePricingShell, judgePlanPrices } from './aiCreditsLive.mjs';
 
 /** The public read as CR2 (#1919) serves it. */
 const good = () => ({
@@ -86,4 +88,46 @@ test('/plans-and-pricing must be the SPA shell', () => {
     [{ status: 200, contentType: 'application/json', text: '{"detail":"Not found"}' }, /not HTML/],
     [{ status: 200, contentType: 'text/html', text: '<html>maintenance</html>' }, /not the SPA shell/],
   ]) assert.match(judgePricingShell(res).errors.join('\n'), want);
+});
+
+const ownerBody = () => ({ ...good(), plans: [
+  ...OWNER_PLAN_PRICES.map(p => ({ licence_key: p.licence_key, family: p.metadata_key === 'plan_group' ? p.metadata_value : p.licence_key.split(':')[0], free: false, prices: [],
+    monthly: { unit_amount: p.month, currency: 'usd' }, yearly: { unit_amount: p.year, currency: 'usd' }, allowance: { source: 'plan', share: .25, monthly_microusd: p.month * 2500 } })),
+  { family: 'investor', licence_key: 'investor:institutional', free: false, prices: [], monthly: null, yearly: null, allowance: null, catalogue: { key: 'investor:institutional', sellable: false } },
+  { family: 'lp', licence_key: 'lp_access', free: true, prices: [], monthly: null, yearly: null, allowance: { source: 'none', share: .25, monthly_microusd: 0 } },
+] });
+
+test('D1430: current public allowance shape and correct owner prices pass', () => {
+  assert.deepEqual(judgePlanPrices(ownerBody()), { errors: [], warnings: [], findings: [] });
+  assert.deepEqual(judgePlansBody(ownerBody()), { errors: [], warnings: [] });
+});
+
+test('D1430: price drift, missing records, currency, duplicate and unsold plan rules are reported', () => {
+  const cases = [
+    [b => { b.plans.find(p => p.licence_key === 'investor:plus').monthly.unit_amount = 4900; }, /investor:plus month: expected 5000 usd cents; actual 4900 usd cents/],
+    [b => { b.plans = b.plans.filter(p => p.licence_key !== 'advisor'); }, /advisor month: expected 2000 usd cents; actual Not recorded/],
+    [b => { b.plans[0].yearly = null; }, /founder:growth year: expected 20400 usd cents; actual Not recorded/],
+    [b => { b.plans[0].monthly.currency = 'eur'; }, /actual 2000 eur cents/],
+    [b => { b.plans.push({ ...b.plans[0] }); }, /expected one plan; actual 2 plans/],
+    [b => { b.plans.find(p => p.licence_key === 'investor:institutional').monthly = { unit_amount: 59900, currency: 'usd' }; }, /investor:institutional price: expected custom; actual priced/],
+    [b => { b.plans.find(p => p.licence_key === 'investor:institutional').catalogue.sellable = true; }, /expected Custom, not sold/],
+    [b => { b.plans.push({ licence_key: 'admin', prices: [] }); }, /admin offer: expected no public plan/],
+    [b => { b.plans.find(p => p.licence_key === 'lp_access').monthly = { unit_amount: 1, currency: 'usd' }; }, /lp_access price: expected free; actual priced/],
+  ];
+  for (const [change, expected] of cases) {
+    const body = ownerBody(); change(body); assert.match(judgePlanPrices(body).errors.join('\n'), expected);
+  }
+  const missing = ownerBody(); missing.plans = missing.plans.filter(p => p.licence_key !== 'advisor');
+  assert.equal(judgePlanPrices(missing).findings.find(p => p.licence_key === 'advisor').actual, 'Not recorded');
+  assert.match(judgePlanPrices(null).errors[0], /Not recorded/);
+});
+
+test('D1430: the actual read-only CLI fails on owner-price drift and passes a correct catalogue', () => {
+  for (const bad of [false, true]) {
+    const body = ownerBody(); if (bad) body.plans[0].monthly.unit_amount++;
+    const code = `globalThis.fetch = async u => new Response(String(u).endsWith('/api/public/plans-and-packs') ? ${JSON.stringify(JSON.stringify(body))} : '<div id="root"></div>', {status:200,headers:{'content-type':String(u).endsWith('/api/public/plans-and-packs')?'application/json':'text/html','cache-control':'max-age=60'}}); await import('./scripts/check-ai-credits-live.mjs');`;
+    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', code], { encoding: 'utf8', env: { ...process.env, SMOKE_HOSTS: 'https://fixture.example.test' } });
+    assert.equal(result.status, bad ? 1 : 0, result.stderr);
+    if (bad) assert.match(result.stderr, /founder:growth month: expected 2000 usd cents; actual 2001 usd cents/);
+  }
 });

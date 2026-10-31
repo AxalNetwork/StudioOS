@@ -27,17 +27,17 @@ test('Pricing hero carries Learning artwork and a decorative, readable overlay',
     assert.match(block, /--p-hero: linear-gradient\(90deg, rgba\(/, 'image remains visible beneath both palettes');
 });
 
-test('offline catalogue plan creates $20/$100 monthly and $204/$1020 yearly before archiving old USD prices', () => {
+test('offline catalogue plan changes old monthly prices and creates the missing yearly prices', () => {
   const plan = planFounderPrices(catalog);
-  assert.deepEqual(plan.create.map(a => [a.method, a.path, a.body.unit_amount, a.body.interval, a.body.currency, a.body.type, a.body.interval_count]), [
-    ['POST', '/api/admin/catalog/products/prod_growth/prices', 2000, 'month', 'usd', 'recurring', 1],
-    ['POST', '/api/admin/catalog/products/prod_growth/prices', 20400, 'year', 'usd', 'recurring', 1],
-    ['POST', '/api/admin/catalog/products/prod_studio/prices', 10000, 'month', 'usd', 'recurring', 1],
-    ['POST', '/api/admin/catalog/products/prod_studio/prices', 102000, 'year', 'usd', 'recurring', 1],
+  assert.deepEqual(plan.change.map(a => [a.path, a.body.unit_amount]), [
+    ['/api/admin/catalog/prices/price_oldgrowth/change', 2000], ['/api/admin/catalog/prices/price_oldstudio/change', 10000],
   ]);
-  assert.deepEqual(plan.archive_after_verification.map(a => a.path), ['/api/admin/catalog/prices/price_oldgrowth/archive', '/api/admin/catalog/prices/price_oldstudio/archive']);
-  const plans = catalog.products.map(p => ({ licence_key: `founder:${p.metadata.tier}`, product_id: p.id, free: false,
-    prices: plan.create.filter(a => a.path.includes(`/${p.id}/`)).map(a => a.body) }));
+  assert.deepEqual(plan.create.map(a => [a.path, a.body.unit_amount, a.body.interval]), [
+    ['/api/admin/catalog/products/prod_growth/prices', 20400, 'year'], ['/api/admin/catalog/products/prod_studio/prices', 102000, 'year'],
+  ]);
+  assert.deepEqual(plan.archive_after_verification, [], 'single old prices use the existing change route');
+  const plans = [{ licence_key: 'founder:growth', free: false, prices: [{ unit_amount: 2000, currency: 'usd', interval: 'month' }, plan.create[0].body] },
+    { licence_key: 'founder:studio', free: false, prices: [{ unit_amount: 10000, currency: 'usd', interval: 'month' }, plan.create[1].body] }];
   const monthly = planCards({ plans }, PLAN_CARDS.founder);
   assert.deepEqual(monthly.cards.map(c => c.price), ['Free', '$20', '$100']);
   assert.equal(monthly.cards[2].lead, 'Everything in Validate + Build, plus:');
@@ -49,7 +49,7 @@ test('offline catalogue plan creates $20/$100 monthly and $204/$1020 yearly befo
 test('replanning is a no-op once prices match; other currencies and products are untouched', () => {
   const input = { products: [product('growth', [price('gm', 2000, 'month'), price('gy', 20400, 'year'), price('eur', 7900, 'month', { currency: 'eur' }), price('multi', 7900, 'month', { interval_count: 3 })]),
     product('studio', [price('sm', 10000, 'month'), price('sy', 102000, 'year')]), product('unrelated')] };
-  assert.deepEqual(planFounderPrices(input), { create: [], archive_after_verification: [] });
+  assert.deepEqual(planFounderPrices(input), { change: [], create: [], archive_after_verification: [] });
 });
 
 test('missing, ambiguous and malformed catalogue entries fail closed', () => {
