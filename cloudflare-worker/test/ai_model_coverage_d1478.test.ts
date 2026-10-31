@@ -16,7 +16,7 @@ import { CATALOGUE, isOffered, modelById } from '../src/services/ai/catalogue.ts
 import { MODEL_CONNECTIONS } from '../src/services/ai/moduleConnections.ts';
 import { AI_MARKUP, billedMicro } from '../src/services/ai/pricing.ts';
 import {
-  COVERAGE_MODULES, DECK_V2_ROLES, FITS, FIXED_JOBS, SWITCHES_ALL_ON, coverageCell, moduleOfPage,
+  COVERAGE_MODULES, DECK_V2_ROLES, FITS, FIXED_JOBS, SWITCHES_ALL_ON, coverageCell, mdCell, moduleOfPage,
   notOfferedReason, optionMismatches, outsideFit, renderCoverage,
 } from '../src/services/ai/coverage.ts';
 import { ROUTE } from '../src/services/aiRouter.ts';
@@ -129,4 +129,10 @@ test('the Pitch deck v2 table prints billedMicro for each role, and each role\'s
   }
   // FLUX.1 Schnell at 4 tiles and 4 steps: (4 × 4.80 + 4 × 9.60) neurons × $0.000011 × 1.25, rounded up once.
   assert.equal(billedMicro('@cf/black-forest-labs/flux-1-schnell', { tiles: 4, steps: 4 }, AI_MARKUP), 792);
+});
+
+test('a table cell escapes backslashes before pipes, so no value can end its own column', () => {
+  assert.equal(mdCell('a|b'), 'a\\|b');
+  assert.equal(mdCell('a\\|b'), 'a\\\\\\|b');
+  assert.equal(mdCell('plain'), 'plain');
 });

@@ -318,7 +318,8 @@ function plan(m: CatalogueModel): string {
   return [m.paid_only ? 'paid' : 'all', partnerGated(m) ? 'partner gate' : ''].filter(Boolean).join(', ');
 }
 
-const esc = (s: string) => s.replace(/\|/g, '\\|');
+/** A table cell: backslashes first, then pipes, so no cell can end its own column. */
+export const mdCell = (s: string): string => s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 
 /** The committed Markdown, exactly. */
 export function renderCoverage(): string {
@@ -353,7 +354,7 @@ export function renderCoverage(): string {
   out.push(`| --- | --- | --- | --- | --- | --- | ${COVERAGE_MODULES.map(() => '---').join(' | ')} |`);
   for (const m of CATALOGUE) {
     const row = COVERAGE_MODULES.map(({ key }) => SYMBOL[cells.get(m.id)!.get(key)!.state]);
-    out.push(`| \`${m.id}\` | ${m.kind} | ${m.status} | ${esc(priceLine(m))} | ${m.context_window ?? 'Not recorded'} | ${plan(m)} | ${row.join(' | ')} |`);
+    out.push(`| \`${m.id}\` | ${m.kind} | ${m.status} | ${mdCell(priceLine(m))} | ${m.context_window ?? 'Not recorded'} | ${plan(m)} | ${row.join(' | ')} |`);
   }
   out.push('');
   out.push('## Where each offered model is wired and offered');
