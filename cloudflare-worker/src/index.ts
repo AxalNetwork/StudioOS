@@ -409,7 +409,6 @@ import adminCirclesRoutes from './routes/admin_circles';
 import assessmentRoutes from './routes/assessment';
 import adminAssessmentRoutes from './routes/admin_assessment';
 import consultations, { adminConsultations } from './routes/consultations';
-import adminBestFit from './routes/admin_bestfit';
 // Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
 import adminExploring from './routes/admin_exploring';
 import adminLpApplications from './routes/admin_lp_applications';
@@ -1169,7 +1168,6 @@ app.route('/api/admin/assessment', adminAssessmentRoutes);
 // Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
 // the specific prefixes resolve here, not in the generic admin router.
 app.route('/api/admin/consultations', adminConsultations);
-app.route('/api/admin/best-fit', adminBestFit);
 // Task #9 — Exploring-users review queue. Mount BEFORE the catch-all
 // /api/admin so /api/admin/exploring/* resolves here. requireAdmin per-route.
 app.route('/api/admin/exploring', adminExploring);

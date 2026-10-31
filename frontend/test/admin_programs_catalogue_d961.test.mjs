@@ -323,8 +323,9 @@ test('the catalogue for an Admin: header, period, four tiles, the three charts, 
     assert.ok(!view.has('programs-card-product-testing-figure'));
     assert.equal(view.textOf('programs-card-referral-partners-grant'), '⌂HQ-held');
     const hrefs = view.hrefs();
+    assert.ok(!hrefs.includes('/admin/profiling-trends'), 'retired Profiling trends has no catalogue door');
     for (const d of ['/admin/programs/spinout-lab', '/admin/programs/mentor-cohorts', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning',
-      '/admin/programs/refer-and-earn/queue', '/admin/programs/perks/queue', '/admin/programs/spinout-lab/applications', '/admin/programs/spinout-lab/hosts', '/admin/profiling-trends']) assert.ok(hrefs.includes(d), `no door onto ${d}`);
+      '/admin/programs/refer-and-earn/queue', '/admin/programs/perks/queue', '/admin/programs/spinout-lab/applications', '/admin/programs/spinout-lab/hosts']) assert.ok(hrefs.includes(d), `no door onto ${d}`);
     assert.ok(!view.has('programs-studio'), 'no studio filter for an Admin');
     assert.ok(!view.requests.some((u) => u.startsWith('/api/admin/insights')), 'R12 is the Super Admin\'s');
     await view.click('programs-group-Access');

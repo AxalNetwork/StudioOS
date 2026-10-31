@@ -170,8 +170,8 @@ test('the canvas draws 204 pages: the 200 boards and four homes, each key once',
 });
 
 test('every page draws one rail with its page key, matrix row and switch, or is listed, and no listed page is done', async () => {
-  // The owner removed the editor on 2026-10-21; frozen canvas keys stay historical.
-  const retired = new Set(['Admin · Programs · Assessment runs', 'Super Admin · Content · Assessment Studio']);
+  // Owner removals include the editor (2026-10-21) and #3734 admin pages; frozen canvas keys stay historical.
+  const retired = new Set(['Admin · Programs · Assessment runs', 'Super Admin · Content · Assessment Studio', 'Admin · Approvals · Best fit', 'Admin · Programs · Profiling trends']);
   const problems = ratchet(KEYS.filter((key) => !retired.has(key)), NOT_YET, await repoParts());
   assert.deepEqual(problems, [], problems.join('\n'));
 });

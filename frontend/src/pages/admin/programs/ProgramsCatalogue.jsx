@@ -31,7 +31,7 @@ import { ProgramsTabs, useWaitingProposals } from './ProposalsPage';
 import NewProgramDialog from './NewProgramDialog';
 import { NEW_PROGRAM } from './proposalsModel';
 import {
-  ASSIGNED_TO_YOU, COULD_NOT_READ, FOOT_PROFILING, GROUPS, INCLUDING_MEMBER, LINE_ADMIN, LINE_SUPER, NOT_READ_YET,
+  ASSIGNED_TO_YOU, COULD_NOT_READ, GROUPS, INCLUDING_MEMBER, LINE_ADMIN, LINE_SUPER, NOT_READ_YET,
   NOT_RECORDED, PRODUCT_TESTING_FOOT, READING, TITLE, asOfState, clockLabel, movedNotice, plural, scopeChip, withoutMoved,
 } from './programsModel';
 import {
@@ -384,11 +384,6 @@ function CatalogueBody() {
 
       {superAdmin ? <ProposalsFromStudios onDecided={waitingProposals.reload} /> : <YourProposals />}
 
-      {/* O-PRF: one literal door until Profiling trends' home is decided. */}
-      <p className={`m-0 flex flex-wrap items-center gap-x-2 ${SUB}`} data-testid="programs-foot">
-        <span>{FOOT_PROFILING}</span>
-        <Link to="/admin/profiling-trends" className={LINK}>Open profiling trends</Link>
-      </p>
       {newOpen ? (
         <NewProgramDialog onClose={() => setNewOpen(false)} onCreated={(c) => { setNewOpen(false); setCreated(c); }} />
       ) : null}

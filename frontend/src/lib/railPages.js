@@ -274,7 +274,6 @@ const ADMIN = [
   own('/admin/partner-profiles', key(AD, 'Approvals', 'Entity profiles')),
   own('/admin/lp-applications', key(AD, 'Approvals', 'LP applications')),
   own('/admin/refer-earn', key(AD, 'Approvals', 'Referrals')),
-  own('/admin/best-fit', key(AD, 'Approvals', 'Best fit')),
   own('/admin/due-diligence', key(AD, 'Approvals', 'Due diligence')),
   alias('/due-diligence', key(AD, 'Approvals', 'Due diligence'), 'The same Due diligence list and cases at the path the other profiles share (D774).'),
   // D937 (#2374): the Lab left the Admin Console for Programs. The keys keep
@@ -302,7 +301,6 @@ const ADMIN = [
   alias('/admin/programs/propose', key(AD, 'Programs'), 'Programs › Propose a program, a studio’s proposal (D964).'),
   alias('/admin/programs/proposals', key(AD, 'Programs'), 'Programs › Proposals, HQ’s queue of studio proposals (D964).'),
   own('/admin/programs/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),
-  own('/admin/profiling-trends', key(AD, 'Programs', 'Profiling trends')),
   own('/admin/community', key(AD, 'Community')),
   alias('/branch/community', key(AD, 'Community'), 'The branch’s Community page.'),
   // D938: the roster's own address; the prefix covers its resource library.

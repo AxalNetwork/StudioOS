@@ -48,7 +48,7 @@ const LEGACY_ROWS = [
   // home
   '/studio', '/email',
   // admin
-  '/admin', '/admin/due-diligence', '/admin/best-fit', '/admin/events',
+  '/admin', '/admin/due-diligence', '/admin/events',
   '/admin/jobs', '/admin/circles', '/admin/advisor-cohorts', '/admin/exploring',
   '/admin/lp-applications', '/monitoring', '/admin/telegram', '/admin/articles',
   '/admin/publications', '/admin/partners', '/admin/refer-earn', '/admin/team',
@@ -122,8 +122,9 @@ test('the question is the size it was measured at', () => {
   // Needs Board (#2337, #2338), and the Assessment editor (direct request),
   // and /legal-capital (#2354, #2297 §3) forwards to /raise/legal. D1384
   // (#3692) moved /compliance into Calendar's Compliance layer.
-  assert.equal(LEGACY_ROWS.length, 33);
-  assert.equal(new Set(LEGACY_ROWS).size, 33, 'a legacy route is listed twice');
+  assert.equal(LEGACY_ROWS.length, 32);
+  assert.ok(!ADMIN_PLACEMENT.some((row) => row.key === '/admin/best-fit'), 'retired Best-Fit has no placement');
+  assert.equal(new Set(LEGACY_ROWS).size, 32, 'a legacy route is listed twice');
   // Fourteen tabs when the map was drawn. Integration keys and GitHub Sync
   // left for HQ's own Super Admin page (the owner's ruling, 2026-10-20);
   // D708's Bank accounts and D815's Product testing joined.

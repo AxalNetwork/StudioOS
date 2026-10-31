@@ -50,7 +50,6 @@ export const ADMIN_BOARDS = [
   { id: 'S7', section: 'Approvals', module: 'Entity profiles', route: '/admin/partner-profiles', files: ['pages/admin/profiles/ProfileRecord.jsx'], rail: FRAME, host: 'pages/admin/profiles/PartnerProfiles.jsx' },
   { id: 'S8', section: 'Approvals', module: 'LP applications', route: '/admin/lp-applications', files: ['pages/admin/AdminLpApplications.jsx'], rail: FRAME },
   { id: 'S9', section: 'Approvals', module: 'Referrals', route: '/admin/programs/refer-and-earn/queue', files: ['pages/admin/programs/ReferAndEarn.jsx'], rail: FRAME },
-  { id: 'S10', section: 'Approvals', module: 'Best fit', route: '/admin/best-fit', files: ['pages/admin/AdminBestFitPage.jsx'], rail: FRAME },
   { id: 'S11', section: 'Approvals', module: 'Due diligence', route: '/admin/due-diligence', files: ['pages/AdminDueDiligencePage.jsx', 'pages/AdminDueDiligenceCasePage.jsx'], rail: FRAME },
   { id: 'S12', section: 'Approvals', module: 'Spin-Out applications', route: '/admin/programs/spinout-lab', files: ['pages/admin/lab/AdminLab.jsx', 'pages/admin/AdminSpinoutLab.jsx'], rail: null, noRail: SPINOUT },
   { id: 'S13', section: 'Approvals', module: 'Spin-Out moderation', route: '/admin/spinout-moderation', files: ['pages/admin/SpinoutModerationPage.jsx'], rail: null, noRail: SPINOUT },
@@ -63,7 +62,6 @@ export const ADMIN_BOARDS = [
   { id: 'S20', section: 'Programs', module: 'Spin-Out Lab', route: '/admin/programs/spinout-lab', files: ['pages/admin/lab/AdminLab.jsx', 'pages/admin/AdminSpinoutLab.jsx'], rail: null, noRail: SPINOUT, alias: 'S12' },
   { id: 'S21', section: 'Programs', module: 'Advisor cohorts', route: '/admin/programs/mentor-cohorts/people', files: ['pages/admin/programs/MentorCohortAccess.jsx'], rail: FRAME, alias: 'S18' },
   // S22: Assessment Studio was removed at the owner's request (2026-10-21); its ID stays retired.
-  { id: 'S23', section: 'Programs', module: 'Profiling trends', route: '/admin/profiling-trends', files: ['pages/admin/AdminProfilingTrends.jsx'], rail: FRAME },
   { id: 'S24', section: 'Community', module: null, route: '/admin/community', files: ['pages/admin/community/AdminCommunity.jsx', 'pages/admin/community/communityModel.js'], rail: 'pages/admin/community/AdminCommunity.jsx' },
   { id: 'S25', section: 'Community', module: 'Events', route: '/admin/events', files: ['pages/admin/AdminEventsPage.jsx'], rail: FRAME, alias: 'S15' },
   { id: 'S26', section: 'Community', module: 'Jobs', route: '/admin/jobs', files: ['pages/admin/AdminJobsPage.jsx'], rail: FRAME, alias: 'S16' },
