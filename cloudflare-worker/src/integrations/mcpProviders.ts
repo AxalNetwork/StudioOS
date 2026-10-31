@@ -40,6 +40,12 @@
  * `null` means the provider's schemas have not been read from a live server
  * yet; its first live sign-in records them.
  *
+ * SPENT LIMITS (D855 §4, #3733). `rate_limit_headers` names the response
+ * headers a provider uses to say a grant's budget is gone (Linear's
+ * remaining-requests and remaining-complexity counters). An answer that is
+ * not a success and reads `0` in any of them is `rate_limited`, whatever its
+ * status, so a spent complexity budget is not mistaken for a bad request.
+ *
  * This file imports types only, and names no provider's write tool.
  */
 
@@ -76,6 +82,8 @@ export interface McpProvider {
   readonly budget: number;
   /** Fixed request headers, from this record only. */
   readonly headers: Readonly<Record<string, string>>;
+  /** D855 §4: headers whose `0` on a failed answer means the grant's limit is spent (`rate_limited`). */
+  readonly rate_limit_headers?: readonly string[];
   readonly session: 'per_request';
   readonly tool_pins: Readonly<Record<string, string>> | null;
   /** `acquireRefreshLease`'s provider name. */
@@ -103,6 +111,7 @@ export function mcpProvider(p: McpProvider): McpProvider {
     setup_issue: p.setup_issue ?? null,
     registration: Object.freeze([...p.registration]),
     headers: Object.freeze({ ...p.headers }),
+    rate_limit_headers: list(p.rate_limit_headers ?? []),
     tool_pins: p.tool_pins ? Object.freeze({ ...p.tool_pins }) : null,
   });
 }
@@ -229,11 +238,53 @@ const WHATSAPP_BUSINESS = mcpProvider({
   callback_path: '/api/integrations/mcp/whatsapp_business/callback',
 });
 
+/**
+ * D855 §4 row 2 (#3733 part 1): a member's own Linear, READ-ONLY THREE TIMES
+ * OVER. Linear's `/readonly` server exposes no write tool; the grant is `read`
+ * alone, and a token so granted cannot reach Linear's write API; and this
+ * record lists six read tools and no write tool, so the session refuses any
+ * other name before a request. Any of the three alone would hold.
+ *
+ * It signs in through the generic routes (D1080) by dynamic client
+ * registration, which Linear's server offers (D855 §3.5). Linear's complexity
+ * budget answers with its remaining counters at `0`, which the client reads as
+ * `rate_limited` (`rate_limit_headers`).
+ *
+ * UNVERIFIED until the first live sign-in (D855.md §7): linear.app did not
+ * resolve from the build environment on 2026-10-31, so the tool names and
+ * their arguments come from D855's sources and search coverage read that day.
+ * Linear's write tools are absent by design; the schemas
+ * (`tool_pins`) and the era wait for that sign-in.
+ */
+const LINEAR = mcpProvider({
+  key: 'linear',
+  resources: ['https://mcp.linear.app/mcp/readonly'],
+  hosts: ['linear.app'],
+  scopes: ['read'],
+  accepted_scopes: ['read'],
+  read_tools: ['list_issues', 'get_issue', 'list_comments', 'list_projects', 'get_project', 'list_teams'],
+  write_tools: [],
+  publish_issue: null,
+  registration: ['dcr'],
+  cimd_url: null,
+  era: 'auto',
+  budget: 16,
+  headers: {},
+  rate_limit_headers: ['X-RateLimit-Requests-Remaining', 'X-RateLimit-Complexity-Remaining'],
+  session: 'per_request',
+  tool_pins: null,
+  lease: 'mcp:linear',
+  state_provider: 'mcp_linear',
+  client_key_prefix: 'mcp_client:linear:',
+  callback_path: '/api/integrations/mcp/linear/callback',
+});
+
 /** Every MCP provider, Mercury first. */
 export const MCP_PROVIDERS: Readonly<Record<string, McpProvider>> = Object.freeze({
   mercury: MERCURY,
   notion: NOTION,
   whatsapp_business: WHATSAPP_BUSINESS,
+  linear: LINEAR,
 });
 
 export function mcpProviderFor(key: string): McpProvider | null {

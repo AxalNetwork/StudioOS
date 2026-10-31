@@ -82,7 +82,7 @@ export function cardView(card) {
  *   timeline  steps: [{ label, date, done }]
  *   tiles     items: [{ label, state: 'connected' | 'failing' | 'not_connected' }]
  *   dots      values: boolean[], label?
- *   rows      items: [{ label, value, tone? }]
+ *   rows      items: [{ label, value, tone?, note?, next?: { text, href } }]
  *   progress  items: [{ label, pct }]
  *   big       value: string, label: string
  *   heat      rows: [{ label, cells: number[] (0–1) }], axis?: string

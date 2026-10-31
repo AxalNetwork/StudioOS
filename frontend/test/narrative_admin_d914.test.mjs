@@ -21,11 +21,15 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import { NarrativeAdminGate } from '../src/pages/raise/narrative/NarrativeAdmin.jsx';
+import { NarrativeAdminGate, narrativeFormAccess } from '../src/pages/raise/narrative/NarrativeAdmin.jsx';
 import { NarrativeTabPage } from '../src/pages/raise/narrative/NarrativeTool.jsx';
 import {
   BOUNDARY, BOUNDARY_ROLES, NOT_RECORDED, OTHER_VENTURE, READ_ONLY, isNarrativeAdmin, kindLabel, noteRow, notePosts, openedLine, readRow, reasonProblem,
 } from '../src/pages/raise/narrative/narrativeModel.js';
+
+import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
+import { formsFor } from '../src/pages/cycles/forms.js';
+import { cyclesWrite } from '../src/lib/api/cycles.js';
 
 const h = React.createElement;
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -243,6 +247,58 @@ test('merged Versions keeps reads visible to admins and creation controls for fo
       assert.equal(page.testIds().includes('narrative-duplicate'), !admin);
       assert.equal(page.testIds().includes('narrative-start-from'), !admin);
       assert.ok(page.requests.every(([method]) => method === 'GET'));
+    } finally { await page.close(); }
+  }
+});
+
+
+// #3712: the actual New version form, loader and recovery shared with CycleRoute.
+function versionDialog(user, onSubmit = () => {}) {
+  const form = formsFor('raise', 'investor-narrative')[0];
+  return h(FormLightbox, { form, cycle: 'raise', slug: 'investor-narrative',
+    ...narrativeFormAccess(1, user), loadOptions: () => form.loadOptions(cyclesWrite, 1), onSubmit, onClose() {} });
+}
+
+test('#3712 founder New version reads choices without a reason, including a founder shell preview', async () => {
+  for (const user of [{ role: 'founder', founder_id: 1001 }, { role: 'founder', founder_id: 1001, shellRole: 'founder', viewMode: 'founder' }]) {
+    const page = await mounted(versionDialog(user), () => response(OPTIONS));
+    try {
+      assert.ok(page.byId('cycle-form-save') && !page.props(page.byId('cycle-form-save')).disabled);
+      assert.ok(!page.byId('narrative-reason'));
+      assert.deepEqual(page.requests.map(([method, url]) => [method, url.replace(/^.*\/api/, '')]),
+        [['GET', '/cycles/raise/modules/investor-narrative/form-options?project=1']]);
+    } finally { await page.close(); }
+  }
+});
+
+test('#3712 admin New version collects a reason, retries the read and never permits creation', async () => {
+  for (const user of [{ role: 'admin' }, { role: 'admin', shellRole: 'founder', viewMode: 'founder', founder_id: 1001 }]) {
+    let opened = false, submitted = 0;
+    const page = await mounted(versionDialog(user, () => { submitted += 1; }), (url, options) => {
+      if (url.includes('/narrative/reads') && options.method === 'POST') { opened = true; return response({ read: REASON }, 201); }
+      return opened ? response(OPTIONS) : response({ detail: 'Give a reason for reading this narrative first. The founder sees it.', code: 'read_reason_required' }, 403);
+    });
+    try {
+      assert.ok(page.byId('narrative-reason') && !page.byId('cycle-form-read-again') && !page.byId('cycle-form-refusal'));
+      assert.match(page.text(), /The founder sees this reason/);
+      assert.equal(page.props(page.byId('narrative-reason-open')).children, 'Continue');
+      assert.ok(!page.byId('cycle-form-save'));
+      await act(async () => page.props(page.byId('narrative-reason-input')).onChange({ target: { value: REASON.reason } }));
+      await act(async () => page.props(page.byId('narrative-reason')).onSubmit({ preventDefault() {} }));
+      await page.flush();
+      assert.deepEqual(page.requests.map(([method, url]) => [method, url.replace(/^.*\/api/, '')]), [
+        ['GET', '/cycles/raise/modules/investor-narrative/form-options?project=1'],
+        ['POST', '/cycles/raise/narrative/reads?project=1'],
+        ['GET', '/cycles/raise/modules/investor-narrative/form-options?project=1'],
+      ]);
+      assert.ok(!page.byId('narrative-reason') && !page.byId('cycle-form-save'));
+      assert.match(page.text(), /Only the venture’s founders create or change versions/);
+      assert.equal(page.props(page.byId('cycle-form-one_liner')).disabled, true);
+      // A synthetic form submit cannot get around the hidden creation button.
+      const walk = n => [n, ...(n.childNodes || []).flatMap(walk)];
+      const actual = walk(page.byId('cycle-form')).find(n => n.tagName === 'FORM');
+      await act(async () => page.props(actual).onSubmit({ preventDefault() {} }));
+      assert.equal(submitted, 0);
     } finally { await page.close(); }
   }
 });

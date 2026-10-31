@@ -98,6 +98,8 @@ import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import { NOT_YET, VIEWS, WAITS, chipCount, viewOf, windowFor } from './calendarViews';
 import CalendarItemDrawer, { CancelDialog } from './CalendarItemDrawer';
 import { NewCheckinDialog, NewIcDialog, NewMenu } from './CalendarNewDialogs';
+import { NewComplianceDialog } from './CalendarComplianceSheet';
+import { COMPLIANCE_KIND, stateLine, stateOf } from './calendarComplianceModel';
 import { itemOf, itemPath } from './calendarItemModel';
 import { DayPopover, KindsPanel, MonthGrid, WeekGrid } from './CalendarGrids';
 import { ConnectedPanel, ConnectedSummary, GooglePanel, SubscribeDialog } from './CalendarConnected';
@@ -111,6 +113,9 @@ import './calendarPage.css';
  * The six kinds, in the canvas's reading order. `src` is the store the events
  * come from, which is what the rail's legend shows — a reader who wonders why
  * something is or is not here can see where each row originates.
+ * D1384 (#3692): `compliance_due` is the Compliance layer, which replaced the
+ * /compliance page; the canvas draws no deadline kind, so its mark is derived
+ * in the same idiom as the others (calendarPage.css).
  */
 const KINDS = [
   { id: 'ic_meeting', label: 'IC meeting', src: 'ic_meetings' },
@@ -122,6 +127,7 @@ const KINDS = [
   { id: 'event_ticket', label: 'Event ticket', src: 'event_registrations' },
   { id: 'event_hosted', label: 'Hosting', src: 'events' },
   { id: 'investor_meeting', label: 'Investor meeting', src: 'raise_prospect_events' },
+  { id: 'compliance_due', label: 'Compliance', src: 'compliance_events' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 
@@ -381,6 +387,7 @@ export default function CalendarPage() {
   const [microsoftResult, setMicrosoftResult] = useState(null);
   const [showIc, setShowIc] = useState(false);
   const [showCk, setShowCk] = useState(false);
+  const [showCompliance, setShowCompliance] = useState(false);
 
   const me = safeReadJSON('user', {});
   const role = String(me?.role || 'founder').toLowerCase();
@@ -552,7 +559,7 @@ export default function CalendarPage() {
         <div className="cal-head-actions">
           {/* D1211 (CAL8 A): one New menu. IC meeting is in it only where
               canScheduleIc allows (`newMenu`), so the gate strip below says why. */}
-          {!explorer && <NewMenu role={role} onPick={(k) => (k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />}
+          {!explorer && <NewMenu role={role} onPick={(k) => (k === 'compliance' ? setShowCompliance(true) : k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />}
           {/* D1212 (CAL11): Subscribe opens its dialog: the private whole-calendar link, and the one-off .ics. */}
           <button type="button" className="cal-btn cal-btn-o" onClick={() => setSubscribing(true)} data-testid="cal-subscribe-open">
             <Download className="w-4 h-4" aria-hidden="true" /> Subscribe
@@ -769,6 +776,7 @@ export default function CalendarPage() {
 
       {dayOpen && <DayPopover date={dayOpen} items={pool} read={Array.isArray(inRange)} from={pathname} onClose={() => setDayOpen(null)} />}
       {showIc && <NewIcDialog meetAvailable={gState === 'connected'} onClose={() => setShowIc(false)} onSaved={() => { setShowIc(false); load(); }} />}
+      {showCompliance && <NewComplianceDialog onClose={() => setShowCompliance(false)} onDone={() => { setShowCompliance(false); load(); }} />}
       {showCk && <NewCheckinDialog role={role} meetAvailable={gState === 'connected'} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
       {connected === 'list' && (
         <ConnectedPanel google={google} microsoft={microsoft} gState={gState} mState={mState}
@@ -844,6 +852,8 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
   const isOrganiser = !!myEmail && String(ev.organizer_email || '').toLowerCase() === myEmail;
   const isAdmin = role === 'admin';
   const pushed = Array.isArray(ev.pushed_to) ? ev.pushed_to : [];
+  // D1384: a compliance deadline is a whole day with a state, changed in its Sheet.
+  const deadline = ev.kind === COMPLIANCE_KIND;
 
   const mayRsvp = !cancelled && ev.kind === 'ic_meeting' && isAttendee;
   const mayCancel = !cancelled && (
@@ -855,7 +865,7 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
   // for the kinds where a connection is the only thing missing — a Calendly
   // event has no push route at all, which is a different sentence.
   const pushNote = !cancelled && PUSHABLE_KINDS.has(ev.kind) && !canPush ? pushRemedy : null;
-  const unpushable = !cancelled && !PUSHABLE_KINDS.has(ev.kind);
+  const unpushable = !cancelled && !deadline && !PUSHABLE_KINDS.has(ev.kind);
 
   // `ok` rather than the returned value: a cancel that answers with an empty
   // body is a success, and gating the reload on truthiness would silently skip
@@ -886,8 +896,8 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
   return (
     <div className="cal-row">
       <div className="cal-when">
-        <strong>{fmtTime(ev.start_at)}</strong>
-        {duration ? <span>{duration}</span> : <span className="cal-nr">Not recorded</span>}
+        {deadline ? <strong>All day</strong> : <strong>{fmtTime(ev.start_at)}</strong>}
+        {deadline ? null : duration ? <span>{duration}</span> : <span className="cal-nr">Not recorded</span>}
       </div>
       <div className="cal-ev" data-kind={ev.kind} data-cancelled={cancelled ? 'true' : 'false'}
            data-testid={`calendar-event-${ev.id}`}>
@@ -896,6 +906,7 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
           <span className="cal-ev-kind" style={{ color: `var(--k-${ev.kind})` }}>
             {KIND_LABEL[ev.kind] || ev.kind}
           </span>
+          {deadline && <span className="cal-nr" data-state={stateOf(ev)} data-testid={`calendar-state-${ev.id}`}>{stateLine(ev)}</span>}
           {cancelled && <span className="cal-nr">Cancelled by organiser</span>}
           {tentative && <span className="cal-nr cal-nr-warn">Tentative</span>}
           {pushed.length > 0 && (
@@ -905,15 +916,21 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
           )}
         </div>
         <h3><Link to={itemPath(ev.kind, ev.source_id)} state={{ from }} data-testid={`calendar-open-${ev.id}`}>{ev.title}</Link></h3>
-        <div className="cal-ev-where">
-          {where.uri
-            ? <a href={where.uri} target="_blank" rel="noreferrer">{where.text}</a>
-            : <span>{where.text}</span>}
-          {where.missing && <span className="cal-nr">Not recorded</span>}
-          {rsvp && <span>{rsvp}</span>}
-          {ev.url && <a href={ev.url}>Event page</a>}
-        </div>
-        {where.why && <p className="cal-ev-why">{where.why}</p>}
+        {deadline ? (
+          <div className="cal-ev-where">
+            <span>{ev.project_name || 'Venture not recorded'}</span>
+          </div>
+        ) : (
+          <div className="cal-ev-where">
+            {where.uri
+              ? <a href={where.uri} target="_blank" rel="noreferrer">{where.text}</a>
+              : <span>{where.text}</span>}
+            {where.missing && <span className="cal-nr">Not recorded</span>}
+            {rsvp && <span>{rsvp}</span>}
+            {ev.url && <a href={ev.url}>Event page</a>}
+          </div>
+        )}
+        {!deadline && where.why && <p className="cal-ev-why">{where.why}</p>}
         {ev.notes && <p className="cal-ev-why">{ev.notes}</p>}
 
         {(mayRsvp || mayPush || mayCancel) && (

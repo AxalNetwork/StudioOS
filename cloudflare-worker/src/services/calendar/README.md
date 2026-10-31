@@ -13,6 +13,9 @@ when adding a kind.
   founder's own calendar, without inviting anyone.
 - `sourceReaders.ts`: personal interview calls, cohort dates, compliance due
   dates and deal closings as read-only calendar sources; no provider calls.
+  D1384 wires compliance into `READERS` as `compliance_due`, the Compliance
+  layer that replaced /compliance: done deadlines on the page read only, the
+  active company passed in, and never in a feed (`PAGE_ONLY_KINDS`).
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
   projections keep their separate, smaller event shape.
 - `itemRead.ts`: one item for the drawer (the page read's own reader and

@@ -158,15 +158,19 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 }
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
-export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
+export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing' | 'Unreadable'; tone: 'ok' | 'amb' | 'bad' | 'muted'; note?: string; next?: { text: string; href: string } };
 export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[] };
-const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
+const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'muted' });
+/** Display current or previously stored source labels without storage identifiers. */
+const sourceWords = (source: string | null | undefined) => String(source ?? 'source not recorded')
+  .replaceAll('project_metrics.mrr', 'MRR').replaceAll('project_metrics.paying_accounts', 'paying accounts')
+  .replaceAll('raise_rounds.target_amount (active round)', 'active round target').replaceAll('_', ' ');
 
 type MetricProof = { figure: 'mrr' | 'paying_customers'; value: number; source: string; connector: boolean; measured: boolean; fresh: boolean; observed_on: string };
 type RevenueProof = { source: string; verification: string; has_document: number; month: string; observed_on: string; cents: number };
 const revenueSource = (r: RevenueProof) => (r.source === 'stripe' && r.verification === 'verified') || (r.source === 'mercury' && ['verified', 'supported'].includes(r.verification))
   ? `Connector · ${r.source === 'stripe' ? 'Stripe' : 'Mercury'}`
-  : r.verification === 'supported' && r.has_document ? 'Document · revenue proof' : `Typed · ${r.source} · Founder's figure`;
+  : r.verification === 'supported' && r.has_document ? 'Document · revenue proof' : `Typed · ${sourceWords(r.source)} · Founder's figure`;
 
 /** Latest recorded value of each kind, separately for every stored source. */
 async function metricProofs(env: Env, projectId: number): Promise<MetricProof[]> {
@@ -184,7 +188,7 @@ async function metricProofs(env: Env, projectId: number): Promise<MetricProof[]>
     .bind(projectId, today).all<{ paying_accounts: number; snapshot_date: string; source: string }>();
   const fact = (figure: MetricProof['figure'], value: number, row: { source: string; snapshot_date: string }): MetricProof => ({
     figure, value: Number(value), connector: ['stripe', 'mercury'].includes(row.source), measured: row.source === 'stripe', fresh: row.snapshot_date >= cutoff, observed_on: row.snapshot_date,
-    source: `${row.source === 'stripe' ? 'Stripe (measured)' : row.source === 'mercury' ? 'Mercury (stated)' : `Metrics (stated: ${row.source || 'source not recorded'})`} · project_metrics.${figure === 'mrr' ? 'mrr' : 'paying_accounts'} on ${row.snapshot_date}`,
+    source: `${row.source === 'stripe' ? 'Stripe (measured)' : row.source === 'mercury' ? 'Mercury (stated)' : `Metrics (stated: ${sourceWords(row.source || 'source not recorded')})`} · ${figure === 'mrr' ? 'MRR' : 'paying accounts'} on ${row.snapshot_date}`,
   });
   return [...(mrr.results || []).map(r => fact('mrr', r.mrr, r)), ...(paying.results || []).map(r => fact('paying_customers', r.paying_accounts, r))];
 }
@@ -211,10 +215,13 @@ export async function teamReadiness(env: Env, projectId: number): Promise<Comput
     // D1264: the label of what was read. A holding a connector did not feed was typed by a founder.
     const founders = Number(team?.founders ?? 0), fed = Number(team?.fed ?? 0);
     const label = founders === 0 ? '' : fed === 0 ? ' · Typed' : fed === founders ? ' · Connector' : ' · Connector and Typed';
-    reads.push({ a: 'Build · Founding team', b: `${founders} founders recorded · cap_table_holders${label}`, ...met(founders > 0) });
-    reads.push({ a: 'Founders with vesting', b: `${Number(team?.vesting ?? 0)} recorded · cap_table_vesting${Number(team?.vesting ?? 0) > 0 ? label : ''}`, ...met(Number(team?.vesting ?? 0) > 0) });
+    const vesting = Number(team?.vesting ?? 0);
+    reads.push({ a: 'Build · Founding team', b: founders ? `${plural(founders, 'founder', 'founders')} recorded${label}` : 'No founders recorded yet', ...met(founders > 0),
+      next: { text: founders ? 'Open founding team' : 'Add founders', href: `/build/founding-team?project=${projectId}` } });
+    reads.push({ a: 'Founders with vesting', b: vesting ? `${plural(vesting, 'founder', 'founders')} with vesting${label}` : 'No vesting recorded', ...met(vesting > 0),
+      next: { text: vesting ? 'Open cap table' : 'Add vesting', href: `/raise/cap-table?project=${projectId}` } });
   } catch {
-    reads.push({ a: 'Build · Founding team and vesting', b: 'Unreadable · Try again', ...met(false) });
+    reads.push({ a: 'Build · Founding team and vesting', b: 'Could not be read · Try again', c: 'Unreadable', tone: 'bad' });
   }
   try {
     const github = await env.DB.prepare(`SELECT COUNT(DISTINCT login) AS contributors, SUM(commits) AS commits FROM (
@@ -226,9 +233,11 @@ export async function teamReadiness(env: Env, projectId: number): Promise<Comput
           WHERE p.id = g.project_id AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
             OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted')))
     ) WHERE position = 1`).bind(projectId).first<{ contributors: number; commits: number | null }>();
-    reads.push({ a: 'Connector · GitHub contributors', b: `${Number(github?.contributors ?? 0)} contributors · ${Number(github?.commits ?? 0)} commits in the stored 90-day snapshot · activity dates Not recorded`, ...met(Number(github?.contributors ?? 0) > 0) });
+    const contributors = Number(github?.contributors ?? 0);
+    reads.push({ a: 'GitHub activity', b: `GitHub · ${plural(contributors, 'contributor', 'contributors')} in the last 90 days`,
+      note: `${plural(Number(github?.commits ?? 0), 'commit', 'commits')} · dates not available`, ...met(contributors > 0) });
   } catch {
-    reads.push({ a: 'Connector · GitHub contributors', b: 'Unreadable · Try again', ...met(false) });
+    reads.push({ a: 'GitHub activity', b: 'Could not be read · Try again', c: 'Unreadable', tone: 'bad' });
   }
   return { key: 'team', score: null, evidence: null, missing: 'Team is assessed by a person; recorded counts are not a score.', reads };
 }
@@ -312,7 +321,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     key: 'traction', score: traction ? 10 : 0, evidence: measured ? 'measured' : documented ? 'pattern' : 'stated', missing: traction ? null : 'Log revenue or update your proof fields.',
     reads: [
       { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month} · ${[...new Set(revenueRows.filter(r => r.verification === 'verified').map(revenueSource))].join(', ')}` : 'not recorded', ...met(measuredRevenue) },
-      ...revenueRows.map(r => ({ a: `Revenue entries · ${revenueSource(r)}`, b: `${usd(r.cents / 100)} · ${r.month} · received_on ${r.observed_on} · ${r.verification} · ${r.has_document ? 'proof document recorded' : 'no proof document recorded'}`, ...met(r.cents > 0) })),
+      ...revenueRows.map(r => ({ a: `Revenue entries · ${revenueSource(r)}`, b: `${usd(r.cents / 100)} · ${r.month} · received on ${r.observed_on} · ${sourceWords(r.verification)} · ${r.has_document ? 'proof document recorded' : 'no proof document recorded'}`, ...met(r.cents > 0) })),
       ...metricRows.map(r => ({ a: `${r.figure === 'mrr' ? 'MRR' : 'Paying customers'} · ${r.connector ? 'Connector' : 'Typed'}`, b: `${r.figure === 'mrr' ? usd(r.value) : r.value} · ${r.source}${r.fresh ? '' : ' · Outside the current 90-day window'}`, ...met(r.fresh && r.value > 0, true) })),
       { a: 'Revenue (stated)', b: num(p?.revenue) != null ? `${usd(Number(p!.revenue))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.revenue), num(p?.revenue) != null) },
       { a: 'MRR (stated)', b: num(p?.mrr) != null ? `${usd(Number(p!.mrr))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.mrr), num(p?.mrr) != null) },
@@ -420,7 +429,7 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
     }
     series.push(await benchmarkSpec(ctx));
     const team = await teamReadiness(ctx.env, ctx.projectId);
-    series.push({ kind: 'rows', items: team.reads.map(r => ({ label: r.a, value: r.b, tone: r.tone })) });
+    series.push({ kind: 'rows', items: team.reads.map(r => ({ label: r.a, value: r.b, tone: r.tone, ...(r.note ? { note: r.note } : {}), ...(r.next ? { next: r.next } : {}) })) });
     const unscored = items.filter((i) => !latest.has(Number(i.id)));
     const gap = items.map((i) => latest.get(Number(i.id))).find((s) => s && s.missing);
     const next = gap
@@ -648,7 +657,7 @@ async function narrativeMetrics(env: Env, projectId: number) {
   const round = await env.DB.prepare(
     `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' AND target_amount IS NOT NULL LIMIT 1`,
   ).bind(projectId).first<{ target_amount: number }>();
-  if (round) metrics.raise = { value: Number(round.target_amount), source: 'Pipeline · raise_rounds.target_amount (active round)' };
+  if (round) metrics.raise = { value: Number(round.target_amount), source: 'Pipeline · active round target' };
   const verified = await verifiedMonthlyRevenue(env, projectId);
   if (verified) {
     const sources = (await revenueProofs(env, projectId)).filter(r => r.verification === 'verified').map(revenueSource);
@@ -735,7 +744,7 @@ export const fmtFigure = (f: FigureKey, v: number) => {
 };
 /** One mismatch as a sentence that names both figures and both sources. */
 export function mismatchSentence(m: Mismatch): string {
-  return `${FIGURE_LABEL[m.figure]}: ${fmtFigure(m.figure, m.stated_value)} in ${m.stated_source}, ${fmtFigure(m.figure, m.metric_value)} in ${m.metric_source}`;
+  return `${FIGURE_LABEL[m.figure]}: ${fmtFigure(m.figure, m.stated_value)} in ${sourceWords(m.stated_source)}, ${fmtFigure(m.figure, m.metric_value)} in ${sourceWords(m.metric_source)}`;
 }
 
 export async function narrativeCard(ctx: Ctx): Promise<Card> {
@@ -1493,7 +1502,7 @@ export async function capitalCard(ctx: Ctx): Promise<Card> {
     const fu = followUps(prospects, ctx.today);
     const series = [
       { kind: 'funnel', steps: funnelOf(prospects) },
-      { kind: 'rows', items: [{ label: 'Follow-ups overdue', value: fu.overdue, tone: fu.overdue ? 'bad' : 'ok' }, { label: 'Due in 7 days', value: fu.due }] },
+      { kind: 'rows', items: [{ label: 'Follow-ups overdue', value: fu.overdue, tone: fu.overdue ? 'warn' : 'ok' }, { label: 'Due in 7 days', value: fu.due }] },
     ];
     // Shown only while round calls are on: with the flag off no call can be
     // sent, so a "0 responders" row would describe a feature nobody has.
@@ -1669,7 +1678,7 @@ async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
 const sparkOrNone = (points: number[]) => (points.filter((p) => Number.isFinite(p)).length >= 3 ? points : []);
 
 async function readinessFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'readiness_score', label: 'Readiness score', unit: 'score', source: 'readiness_scores' }, async () => {
+  return safeFigure({ key: 'readiness_score', label: 'Readiness score', unit: 'score', source: 'Readiness scores' }, async () => {
     const { scores } = await loadReadiness(ctx);
     const latest = latestScores(scores);
     const coverage = { scored: [...latest.values()].filter(s => s.score != null && Number.isFinite(Number(s.score))).length, total: READINESS_ITEMS.length };
@@ -1685,7 +1694,7 @@ async function readinessFigure(ctx: Ctx): Promise<Figure> {
 }
 
 async function committedFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'committed', label: 'Received, wired and signed against target', unit: 'of', source: 'Confirmed raise receipts · typed raise_prospects · raise_rounds' }, async () => {
+  return safeFigure({ key: 'committed', label: 'Received, wired and signed against target', unit: 'of', source: 'Confirmed raise receipts · typed commitments · active round' }, async () => {
     // The confirmed target index permits only one receipt for each prospect.
     const res = await ctx.env.DB.prepare(`SELECT p.commit_status, p.amount, m.id AS receipt_id
       FROM raise_prospects p LEFT JOIN mercury_personal_matches m ON m.target_kind = 'raise_prospect' AND m.target_id = p.id AND m.state = 'confirmed'
@@ -1732,7 +1741,7 @@ async function committedFigure(ctx: Ctx): Promise<Figure> {
 }
 
 async function conversationFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'investors_in_conversation', label: 'Investors in conversation', unit: 'count', source: 'raise_prospects' }, async () => {
+  return safeFigure({ key: 'investors_in_conversation', label: 'Investors in conversation', unit: 'count', source: 'Capital relationships' }, async () => {
     const r = await ctx.env.DB.prepare(
       `SELECT COUNT(*) AS total, SUM(CASE WHEN stage IN ('contacted', 'meeting', 'diligence') THEN 1 ELSE 0 END) AS live
          FROM raise_prospects WHERE project_id = ?`,
@@ -1750,7 +1759,7 @@ export function runwayMonths(cash: number | null, burn: number | null): number |
 }
 
 async function runwayFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'runway_months', label: 'Months of runway', unit: 'months', source: 'project_metrics · stated' }, async () => {
+  return safeFigure({ key: 'runway_months', label: 'Months of runway', unit: 'months', source: 'Project metrics · stated' }, async () => {
     const bank = await mercuryRunway(ctx.env, ctx.projectId);
     if (bank && bank.as_of >= daysBefore(ctx.today, 90) && bank.as_of.slice(0, 10) <= ctx.today) {
       const value = runwayMonths(bank.amount_cents, bank.burn_cents);
@@ -1772,7 +1781,7 @@ async function runwayFigure(ctx: Ctx): Promise<Figure> {
       return { value, source: 'Connector · Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: `Stale · the newest runway observation is older than 90 days.${value == null ? ' Mercury has no positive recorded net burn.' : ''}` };
     }
     if (snaps.length === 0) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: bank?.as_of ?? null, reason: bank ? 'Stored Mercury runway fact is outside the current 90-day window; no eligible metrics snapshot records cash and net burn' : 'No metrics snapshot records cash and net burn' };
-    const source = snaps[0].source === 'mercury' ? 'Connector · Mercury · project_metrics (measured cash and net burn)' : `project_metrics · stated: ${snaps[0].source || 'source not recorded'} · Founder's figure`;
+    const source = snaps[0].source === 'mercury' ? 'Connector · Mercury · measured cash and net burn' : `Project metrics · stated: ${sourceWords(snaps[0].source || 'source not recorded')} · Founder's figure`;
     const now = runwayMonths(Number(snaps[0].cash_balance), Number(snaps[0].net_burn));
     if (now == null) return { value: null, source, delta_30d: null, spark: [], state: 'not_recorded', as_of: snaps[0].snapshot_date, reason: 'Net burn is zero or negative, so burn sets no runway' };
     const spark = snaps.map((s) => runwayMonths(Number(s.cash_balance), Number(s.net_burn))).filter((v): v is number => v != null).reverse();

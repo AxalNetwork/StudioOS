@@ -97,7 +97,7 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // (measured 2026-09-21 against baseline + post-cutoff migrations). The step
     // stays and the user ticks it via POST /checklist/:item/complete — a step
     // whose only possible answer is 'no' is worse than one you confirm yourself.
-    { key: 'ef.ip',         label: 'Confirm IP assignments signed',      route: '/compliance',                 autoDetect: false },
+    { key: 'ef.ip',         label: 'Confirm IP assignments signed',      route: '/calendar?layer=compliance',  autoDetect: false },
     { key: 'ef.okrs',       label: 'Add 3 quarterly OKRs',               route: '/build/roadmap',              autoDetect: true },
     { key: 'ef.scoring',    label: 'Run scoring with verified evidence', route: '/projects',                   autoDetect: true },
     { key: 'ef.nda',        label: 'Send first NDA to an investor',      route: '/trust',                      autoDetect: true },

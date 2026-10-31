@@ -42,6 +42,7 @@ const THEIR_PROJECT = 901;
 
 const STATED = 'Narrative · traction.summary';
 const STORED = 'Metrics · project_metrics.mrr on 2026-09-30';
+const STORED_WORDS = 'Metrics · MRR on 2026-09-30';
 const ROW: Mismatch = { figure: 'mrr', stated_value: 12000, stated_source: STATED, metric_value: 9500, metric_source: STORED };
 
 function freshDb() {
@@ -172,7 +173,7 @@ test('what is stored cites both figures and both sources, whatever the model wro
   assert.equal(r.status, 201);
   const body = String(r.json?.item?.body);
   assert.ok(body.startsWith('Bring the traction sentence in line with the stored metrics.'));
-  for (const part of ['$12,000', '$9,500', STATED, STORED]) assert.ok(body.includes(part), `the stored draft does not cite ${part}`);
+  for (const part of ['$12,000', '$9,500', STATED, STORED_WORDS]) assert.ok(body.includes(part), `the stored draft does not cite ${part}`);
   assert.deepEqual(stored(db), [body]);
 });
 
@@ -198,7 +199,7 @@ test('unfoundFigures accepts both figures in any written form, and the sources\'
 
 test('finishNarrativeFix appends the check\'s sentence, or refuses', () => {
   const kept = finishNarrativeFix('  Use one of the two.  ', ROW);
-  assert.equal(kept, `Use one of the two.\n\nAs the check found them: MRR: $12,000 in ${STATED}, $9,500 in ${STORED}.`);
+  assert.equal(kept, `Use one of the two.\n\nAs the check found them: MRR: $12,000 in ${STATED}, $9,500 in ${STORED_WORDS}.`);
   assert.equal(finishNarrativeFix('Say $11,000.', ROW), null);
   // D912 (map E5): a number that agrees with either figure is refused too; the figures come from the check alone.
   assert.equal(finishNarrativeFix('Say $12,000.', ROW), null);
