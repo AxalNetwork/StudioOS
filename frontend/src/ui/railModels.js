@@ -120,11 +120,12 @@ const tail = (id) => String(id).split('/').pop();
  *   state    'loading'; 'unreadable' (the read failed: never an empty list);
  *            'none' (no page key, or the matrix has no row for it: the rail
  *            says "Not recorded" and why); or 'ready'.
- *   cards    { id, name, role, line, price, checked }, the row's models,
+ *   cards    at most three { id, name, role, line, price, checked }, the row's models,
  *            default first, as the Worker orders them.
+ *   morePick the selected overflow model's display name, else null.
  *   current  the model the next run takes: the member's pick, else the
  *            row's first, its default.
- *   pickable whether the row offers a choice (more than one model).
+ *   pickable whether suggestions plus All models offer a choice.
  *   options  "On this page": { key, label, model, open } per option the page
  *            registers, `model` the name of its pick or default.
  *   groups   All models: [{ title, chips: [{ id, name, isNew, pickable,
@@ -132,17 +133,23 @@ const tail = (id) => String(id).split('/').pop();
  *            where the row offers it, the guard never.
  */
 export function railView({ reading, page, option = null, pick = null, price = () => null } = {}) {
-  const empty = { cards: [], current: null, pickable: false, options: [], groups: [] };
+  const empty = { cards: [], current: null, morePick: null, pickable: false, options: [], groups: [] };
   if (!page) return { ...empty, state: 'none', reason: 'This page has no row in the rail\'s model list.' };
   if (!reading || reading.loading) return { ...empty, state: 'loading' };
   if (reading.status === 404) return { ...empty, state: 'none', reason: 'The rail\'s model list has no row for this page yet.' };
   const data = reading.data;
   if (reading.error || !data || !Array.isArray(data.models)) return { ...empty, state: 'unreadable' };
 
-  const models = data.models.filter((m) => m && typeof m.id === 'string');
-  const offered = (id) => models.some((m) => m.id === id);
+  const supplied = data.models.filter((m) => m && typeof m.id === 'string');
+  const models = supplied.slice(0, 3);
+  // Older/cached answers can contain extra cards: keep them selectable in All models.
+  const choices = [...models, ...supplied.slice(3), ...(Array.isArray(data.more) ? data.more : [])]
+    .filter((m, i, all) => m && typeof m.id === 'string' && all.findIndex(x => x?.id === m.id) === i);
+  const offered = (id) => choices.some((m) => m.id === id);
   const chosen = [pick, data.pick].find((id) => typeof id === 'string' && offered(id));
   const current = chosen ?? models[0]?.id ?? null;
+  const chosenMore = choices.find(m => m.id === current && !models.some(card => card.id === m.id));
+  const morePick = chosenMore ? chosenMore.name || modelName(chosenMore.id) || tail(chosenMore.id) : null;
   const cards = models.map((m) => ({
     id: m.id,
     name: m.name || modelName(m.id) || tail(m.id),
@@ -152,7 +159,7 @@ export function railView({ reading, page, option = null, pick = null, price = ()
     checked: m.id === current,
   }));
   const options = (Array.isArray(data.options) ? data.options : []).filter((o) => o && o.key).map((o) => {
-    const list = Array.isArray(o.models) ? o.models : [];
+    const list = [...(Array.isArray(o.models) ? o.models : []), ...(Array.isArray(o.more) ? o.more : [])];
     const runs = list.find((m) => m.id === o.pick) || list[0];
     return {
       key: o.key,
@@ -168,5 +175,10 @@ export function railView({ reading, page, option = null, pick = null, price = ()
     }));
     if (chips.length) groups.push({ title, chips });
   }
-  return { state: 'ready', cards, current, pickable: models.length > 1, options, groups };
+  const grouped = new Set(groups.flatMap(g => g.chips.map(c => c.id)));
+  const additional = choices.filter(m => !grouped.has(m.id) && m.id !== GUARD_MODEL).map(m => ({
+    id: m.id, name: m.name || modelName(m.id) || tail(m.id), isNew: false, pickable: true, selected: m.id === current,
+  }));
+  if (additional.length) groups.push({ title: 'Other models for this page', chips: additional });
+  return { state: 'ready', cards, current, morePick, pickable: choices.length > 1, options, groups };
 }

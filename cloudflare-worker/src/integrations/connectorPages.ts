@@ -702,6 +702,39 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://developers.notion.com/docs/mcp' },
     verified_on: null,
   },
+  // D1385 (#3731, #2409 part 1): each tool is one of `POSTHOG_READ_TOOLS`, by its call site in `services/posthog/reads.ts`.
+  posthog: {
+    tagline: 'Read your PostHog product analytics, read only, through PostHog’s own sign-in: one project per company.',
+    long_description: [
+      'Sign in with PostHog, and choose the one PostHog project each of your companies reads. Axal VC reads it through PostHog’s MCP server, in read-only mode.',
+      'Axal VC calls 19 read tools only, from a fixed list: organisations and projects, saved insights and their results, experiments, surveys and feature flags. Every other tool is refused before any request is made.',
+      'Nothing lands in a module yet. The PostHog parts that follow add what lands, and where, one at a time.',
+    ],
+    tools: [
+      tool('projects', 'your organisations and projects', 'read', 'Lists the organisations and projects your PostHog sign-in can open, so you can choose one per company.', null, ["call('organizations-get'", "call('projects-get'"]),
+      tool('insights', 'saved insights', 'read', 'Lists the saved insights in the linked project and reads the one you choose, without its results.', null, ["call('insights-list'", "call('insight-get'"]),
+      tool('insight_results', 'insight results', 'read', 'Runs a saved insight you track, or a trends, funnel, retention or lifecycle query of that kind only. Never SQL or HogQL.', null, ["call('insight-query'", "call('query-trends'", "call('query-funnel'", "call('query-retention'", "call('query-lifecycle'"]),
+      tool('web_overview', 'website totals', 'read', 'Reads visitors, pageviews, sessions, session length and bounce rate for a window.', null, ["call('query-web-overview'"]),
+      tool('experiments', 'experiments and results', 'read', 'Reads your experiments, their variants and their results.', null, ["call('experiment-list'", "call('experiment-get'", "call('experiment-results-get'"]),
+      tool('surveys', 'surveys and answers', 'read', 'Reads your surveys, their response counts and their answers, without who gave them.', null, ["call('surveys-get-all'", "call('survey-get'", "call('survey-stats'", "call('surveys-responses-list'"]),
+      tool('flags', 'feature flags', 'read', 'Reads your feature flags, whether each is on and its rollout.', null, ["call('feature-flag-get-all'", "call('feature-flag-get-definition'"]),
+    ],
+    never_does: [
+      'Nothing is created, edited or deleted in PostHog: every request is in PostHog’s read-only mode.',
+      'No person, recording, cohort or raw event is read, and no SQL or HogQL is sent.',
+      'No person identifier is kept: survey answers arrive without who gave them.',
+      'No PostHog token or API key is pasted or shown: Sign in with PostHog only.',
+    ],
+    prompts: [],
+    prompts_reason: notRead('PostHog'),
+    made_by: AXAL,
+    service: { name: 'PostHog', href: 'https://posthog.com' },
+    sign_in: { kind: 'mcp', label: 'Sign in with PostHog', key_help_href: null },
+    endpoints: { sign_in: 'https://mcp.posthog.com/mcp', api: null },
+    added: '2026-10',
+    links: { ...NO_LINKS, developer_docs: 'https://posthog.com/docs/model-context-protocol' },
+    verified_on: null,
+  },
 };
 
 /** Connectors with a page but no registry row (D753 decision 2). */
@@ -820,7 +853,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
 
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
-  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting',
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting', 'Analytics',
 ] as const);
 
 /** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */

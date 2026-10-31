@@ -138,6 +138,15 @@ export default {
     ],
     "purpose": "Compare evidence, work through scenarios and explain planning assumptions"
   },
+  "@cf/deepseek-ai/deepseek-v4.1-flash-1017": {
+    "operation": "chat",
+    "kinds": [
+      "reason",
+      "plan",
+      "numbers"
+    ],
+    "purpose": "Compare evidence, work through scenarios and explain planning assumptions"
+  },
   "@cf/nvidia/nemotron-3-120b-a12b": {
     "operation": "chat",
     "kinds": [

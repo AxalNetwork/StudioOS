@@ -515,8 +515,12 @@ ai.get('/rail', async (c) => {
   const view = (r: RailRow) => r.models.map((m) => ({
     id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, role: m.role, line: m.line, price: unitPrices(m.id, multiplier),
   }));
+  // Stable overflow shape: { id, name, line, price }; no suggested role or optional flag.
+  const more = (r: RailRow) => (r.more ?? []).map(m => ({
+    id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, line: m.line, price: unitPrices(m.id, multiplier),
+  }));
   const options = railOptionsOn(row.pageKey).map((o) => ({
-    key: o.optionKey, label: o.optionLabel, kind: o.kind, handler: o.handler, models: view(o), pick: pickFor(o.optionKey, o),
+    key: o.optionKey, label: o.optionLabel, kind: o.kind, handler: o.handler, models: view(o), more: more(o), pick: pickFor(o.optionKey, o),
   }));
   for (const task of stale) {
     await c.env.DB.prepare(
@@ -530,6 +534,7 @@ ai.get('/rail', async (c) => {
     kind: active.kind,
     connections: moduleConnections(active, c.env),
     models: view(active),
+    more: more(active),
     options,
     pick,
     mode: rows.find((r) => r.task === '')?.mode ?? null,
@@ -560,7 +565,7 @@ ai.put('/rail/pick', async (c) => {
     return refuse(c, 400, {
       code: 'model_not_offered',
       message: 'That model is not offered on this page.',
-      extra: { models: on.models.map((m) => m.id) },
+      extra: { models: [...on.models, ...(on.more ?? [])].map((m) => m.id) },
     });
   }
   const task = option ?? 'page';

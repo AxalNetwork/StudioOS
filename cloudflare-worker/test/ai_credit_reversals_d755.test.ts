@@ -15,20 +15,20 @@ const now = new Date();
 const PI = 'pi_pack25';
 async function world(opts: { total?: number; bonus?: number } = {}) {
   const f = aiBudgetFixture();
-  const env = { DB: f.DB, JWT_SECRET: 'd755-rev-fixture-only-secret', STRIPE_WEBHOOK_SECRET: 'd755-rev-fixture-only-webhook', ENVIRONMENT: 'development' } as any;
+  const env = { DB: f.DB, JWT_SECRET: 'd755-rev-fixture-only-secret', STRIPE_WEBHOOK_SECRET: 'd755-rev-fixture-only-webhook', STRIPE_SECRET_KEY: 'sk_test_fixture', ENVIRONMENT: 'development' } as any;
   f.db.prepare("INSERT INTO ai_token_packs(uid,price_id,product_id,face_cents,bonus_microusd,on_sale,origin) VALUES('pack25','price_pack25','prod_pack25',2500,?,1,'created')").run(opts.bonus ?? 2500000);
   const total = opts.total ?? 2500;
   await recordAiTopupPurchase(env, { paymentIntentId: PI, orderRef: 'MRD-pack25', userId: 2, totalCents: total, currency: 'usd',
     quote: { priceId: 'price_pack25', creditMicrousd: 25000000, packUid: 'pack25', bonusMicrousd: opts.bonus ?? 2500000 } });
   await ensureCatalogSchema(env);
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_pack25','$25 of tokens','token_pack',1,'{}',?)")
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_pack25','$25 of tokens','token_pack',1,'{}',?,0)")
     .run(JSON.stringify([{ id: 'price_pack25', currency: 'usd', unit_amount: 2500, interval: null, interval_count: null, nickname: null, type: 'one_time', active: true }]));
   const pi = { id: PI, status: 'succeeded', currency: 'usd', amount_received: total, metadata: { kind: 'cart_order', order_ref: 'MRD-pack25', user_id: '2' } };
   return { ...f, env, pi, total };
 }
 async function credit(f: any) { assert.equal(await creditAiTopupFromPayment(f.env, f.pi), true); }
 async function hook(f: any, type: string, object: Record<string, unknown>, secret = f.env.STRIPE_WEBHOOK_SECRET) {
-  const body = JSON.stringify({ id: `evt_${Math.random().toString(36).slice(2)}`, type, data: { object } });
+  const body = JSON.stringify({ id: `evt_${Math.random().toString(36).slice(2)}`, livemode: false, type, data: { object } });
   const timestamp = Math.floor(Date.now() / 1000);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))).map((n) => n.toString(16).padStart(2, '0')).join('');
@@ -235,8 +235,8 @@ test('a charge that is not a token pack is untouched, a bad signature is refused
   const f = await world();
   try {
     // Before the credit: Stripe is asked to retry, and nothing is written.
-    assert.equal((await refund(f, 2500)).status, 500);
-    assert.equal((await dispute(f, 'charge.dispute.created', 'needs_response')).status, 500);
+    assert.equal((await refund(f, 2500)).status, 503);
+    assert.equal((await dispute(f, 'charge.dispute.created', 'needs_response')).status, 503);
     assert.deepEqual(rows(f), []); assert.deepEqual(purchase(f), { reversed_microusd: 0, dispute_state: null });
     await credit(f);
     // An ordinary order, an incorporation and an intro-credit purchase have no ai_topup_purchases row.
@@ -255,8 +255,8 @@ test('a charge that is not a token pack is untouched, a bad signature is refused
     const g = await world();
     try {
       await credit(g); delete g.env.STRIPE_WEBHOOK_SECRET;
-      const body = JSON.stringify({ type: 'charge.refunded', data: { object: { id: 'ch_pack25', payment_intent: PI, currency: 'usd', amount_captured: 2500, amount_refunded: 2500 } } });
-      assert.equal((await billingRoute.request('/stripe/webhook', { method: 'POST', headers: { 'content-type': 'application/json' }, body }, g.env)).status, 500);
+      const body = JSON.stringify({ id: 'evt_unsigned_reversal', livemode: false, type: 'charge.refunded', data: { object: { id: 'ch_pack25', payment_intent: PI, currency: 'usd', amount_captured: 2500, amount_refunded: 2500 } } });
+      assert.equal((await billingRoute.request('/stripe/webhook', { method: 'POST', headers: { 'content-type': 'application/json' }, body }, g.env)).status, 503);
       assert.deepEqual(rows(g), []);
       await invariant(g);
     } finally { g.db.close(); }

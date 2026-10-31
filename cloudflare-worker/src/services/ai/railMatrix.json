@@ -13,7 +13,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -21,7 +21,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Validate",
@@ -35,7 +36,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -43,7 +44,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Problem discovery",
@@ -57,7 +59,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -65,7 +67,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Customer research",
@@ -79,17 +82,18 @@
     },
     {
      "id": "@cf/deepgram/nova-3",
-     "role": "Speakers",
+     "role": "Alternative",
      "line": "Labels who said what"
     },
     {
      "id": "@cf/deepgram/flux",
-     "role": "Live",
+     "role": "Deeper",
      "line": "Captions while you talk"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
     }
    ]
@@ -106,7 +110,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -114,7 +118,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Market intelligence",
@@ -128,17 +133,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -160,10 +166,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Experiments and evidence",
@@ -177,15 +184,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Verdict",
@@ -199,15 +207,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build",
@@ -229,7 +238,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Solution design",
@@ -251,7 +261,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Prototype / MVP",
@@ -268,7 +279,8 @@
      "role": "Alternative",
      "line": "Reviews and writes code"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Product roadmap",
@@ -290,7 +302,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Founding team",
@@ -312,7 +325,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Company creation",
@@ -326,10 +340,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Operating systems",
@@ -351,7 +366,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise",
@@ -365,15 +381,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Fundraising readiness",
@@ -387,15 +404,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Investor narrative",
@@ -409,15 +427,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -436,10 +455,11 @@
     },
     {
      "id": "@cf/moondream/moondream3.1-9B-A2B",
-     "role": "Extract",
+     "role": "Deeper",
      "line": "Pulls figures out of images"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Data room",
@@ -458,10 +478,11 @@
     },
     {
      "id": "@cf/moondream/moondream3.1-9B-A2B",
-     "role": "Extract",
+     "role": "Deeper",
      "line": "Pulls figures out of images"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Cap table",
@@ -480,10 +501,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Use of funds",
@@ -502,10 +524,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Capital relationships",
@@ -519,15 +542,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow",
@@ -549,7 +573,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Product improvement",
@@ -563,7 +588,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -571,7 +596,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Distribution",
@@ -585,15 +611,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Revenue and traction",
@@ -612,10 +639,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Team expansion",
@@ -637,7 +665,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Partner network",
@@ -651,15 +680,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Market expansion",
@@ -673,15 +703,16 @@
     },
     {
      "id": "@cf/meta/m2m100-1.2b",
-     "role": "Translate",
+     "role": "Alternative",
      "line": "Translates, keeping the original"
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "European",
+     "role": "Deeper",
      "line": "Reads European-language sources"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Durable company-building",
@@ -695,10 +726,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Network",
@@ -712,15 +744,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Network · Relationships",
@@ -734,15 +767,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Network · Introductions",
@@ -756,15 +790,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Network · Organizations",
@@ -778,15 +813,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Research",
@@ -800,17 +836,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -827,17 +864,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -854,17 +892,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -881,15 +920,16 @@
     },
     {
      "id": "@cf/meta/m2m100-1.2b",
-     "role": "Translate",
+     "role": "Alternative",
      "line": "Translates, keeping the original"
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "European",
+     "role": "Deeper",
      "line": "Reads European-language sources"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Research · Companies",
@@ -903,17 +943,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -930,17 +971,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -957,10 +999,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Home",
@@ -974,7 +1017,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -982,7 +1025,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Deals",
@@ -996,15 +1040,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Deals · Pipeline",
@@ -1018,15 +1063,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Deals · Screening",
@@ -1040,15 +1086,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Deals · Commit",
@@ -1062,15 +1109,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Deals · Closing",
@@ -1084,10 +1132,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Portfolio",
@@ -1106,10 +1155,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Portfolio · Positions",
@@ -1128,10 +1178,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Portfolio · Performance",
@@ -1150,10 +1201,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Portfolio · Updates",
@@ -1167,7 +1219,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -1175,7 +1227,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Portfolio · Value-add",
@@ -1189,15 +1242,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Axal VC Fund",
@@ -1211,17 +1265,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -1243,10 +1298,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Fund · Overview",
@@ -1265,10 +1321,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Fund · LPs",
@@ -1282,15 +1339,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Fund · Capital calls",
@@ -1309,10 +1367,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Fund · Distributions",
@@ -1331,10 +1390,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Fund · Reporting",
@@ -1348,15 +1408,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Network",
@@ -1370,15 +1431,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Network · Relationships",
@@ -1392,15 +1454,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Network · Introductions",
@@ -1414,15 +1477,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Network · Organizations",
@@ -1436,15 +1500,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Research",
@@ -1458,17 +1523,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -1485,17 +1551,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -1517,10 +1584,11 @@
     },
     {
      "id": "@cf/moondream/moondream3.1-9B-A2B",
-     "role": "Extract",
+     "role": "Deeper",
      "line": "Pulls figures out of images"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Research · Benchmarking",
@@ -1539,10 +1607,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Research · Markets",
@@ -1556,17 +1625,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -1583,10 +1653,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Home",
@@ -1600,7 +1671,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -1608,7 +1679,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Practice",
@@ -1630,7 +1702,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Practice · Opportunities",
@@ -1644,15 +1717,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Practice · Engagements",
@@ -1674,7 +1748,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Practice · Delivery",
@@ -1696,7 +1771,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Practice · Sessions",
@@ -1710,17 +1786,18 @@
     },
     {
      "id": "@cf/deepgram/nova-3",
-     "role": "Speakers",
+     "role": "Alternative",
      "line": "Labels who said what"
     },
     {
      "id": "@cf/deepgram/flux",
-     "role": "Live",
+     "role": "Deeper",
      "line": "Captions while you talk"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
     }
    ]
@@ -1742,10 +1819,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Cohorts",
@@ -1759,7 +1837,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -1767,7 +1845,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Cohorts · Founders",
@@ -1781,15 +1860,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Cohorts · Guidance",
@@ -1803,15 +1883,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Cohorts · This week",
@@ -1833,7 +1914,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Cohorts · Calendar",
@@ -1855,7 +1937,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Cohorts · Outcomes",
@@ -1869,7 +1952,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -1877,7 +1960,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Expertise",
@@ -1891,15 +1975,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Expertise · Profile",
@@ -1913,15 +1998,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Expertise · Services",
@@ -1935,15 +2021,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Expertise · Proof",
@@ -1957,7 +2044,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -1965,7 +2052,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Expertise · Thinking",
@@ -1979,15 +2067,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Expertise · Visibility",
@@ -2001,15 +2090,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Network",
@@ -2023,15 +2113,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Network · Relationships",
@@ -2045,15 +2136,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Network · Introductions",
@@ -2067,15 +2159,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Network · Organizations",
@@ -2089,15 +2182,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Research",
@@ -2111,17 +2205,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -2138,17 +2233,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -2165,17 +2261,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -2192,17 +2289,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -2219,17 +2317,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -2246,10 +2345,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Home",
@@ -2263,7 +2363,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -2271,7 +2371,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline",
@@ -2285,15 +2386,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Leads",
@@ -2307,15 +2409,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Proposals",
@@ -2329,15 +2432,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Negotiations",
@@ -2351,10 +2455,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Retainers",
@@ -2373,10 +2478,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Analytics",
@@ -2395,10 +2501,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery",
@@ -2420,7 +2527,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Engagements",
@@ -2442,7 +2550,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Deliverables",
@@ -2456,15 +2565,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Capacity",
@@ -2486,7 +2596,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Reporting",
@@ -2500,15 +2611,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Health",
@@ -2522,7 +2634,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -2530,7 +2642,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers",
@@ -2544,15 +2657,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Catalog",
@@ -2566,15 +2680,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Perk deals",
@@ -2588,15 +2703,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Visibility",
@@ -2610,15 +2726,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Proof",
@@ -2632,7 +2749,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -2640,7 +2757,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Audience fit",
@@ -2654,15 +2772,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Network",
@@ -2676,15 +2795,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Network · Relationships",
@@ -2698,15 +2818,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Network · Introductions",
@@ -2720,15 +2841,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Network · Organizations",
@@ -2742,15 +2864,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Research",
@@ -2764,17 +2887,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -2791,17 +2915,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -2818,17 +2943,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -2845,17 +2971,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -2872,10 +2999,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Accounts",
@@ -2889,15 +3017,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Accounts · Users",
@@ -2911,15 +3040,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Accounts · Exploring members",
@@ -2933,15 +3063,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Accounts · Trash",
@@ -2963,7 +3094,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals",
@@ -2977,15 +3109,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Identity checks",
@@ -3004,10 +3137,11 @@
     },
     {
      "id": "@cf/moondream/moondream3.1-9B-A2B",
-     "role": "Extract",
+     "role": "Deeper",
      "line": "Pulls figures out of images"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Entity profiles",
@@ -3026,10 +3160,11 @@
     },
     {
      "id": "@cf/moondream/moondream3.1-9B-A2B",
-     "role": "Extract",
+     "role": "Deeper",
      "line": "Pulls figures out of images"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · LP applications",
@@ -3043,15 +3178,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Referrals",
@@ -3065,15 +3201,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Best fit",
@@ -3087,15 +3224,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Due diligence",
@@ -3114,10 +3252,11 @@
     },
     {
      "id": "@cf/moondream/moondream3.1-9B-A2B",
-     "role": "Extract",
+     "role": "Deeper",
      "line": "Pulls figures out of images"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Spin-Out applications",
@@ -3131,15 +3270,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Spin-Out moderation",
@@ -3153,15 +3293,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Exploring members",
@@ -3175,15 +3316,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Events",
@@ -3205,7 +3347,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Jobs",
@@ -3219,15 +3362,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Communities",
@@ -3241,15 +3385,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Approvals · Advisor cohort access",
@@ -3271,7 +3416,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Programs",
@@ -3293,7 +3439,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Programs · Spin-Out Lab",
@@ -3315,7 +3462,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Programs · Advisor cohorts",
@@ -3337,7 +3485,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Programs · Assessment runs",
@@ -3351,7 +3500,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -3359,7 +3508,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Programs · Profiling trends",
@@ -3378,10 +3528,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Community",
@@ -3395,15 +3546,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Community · Events",
@@ -3425,7 +3577,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Community · Jobs",
@@ -3439,15 +3592,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Community · Communities",
@@ -3461,15 +3615,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Community · Wellbeing experts",
@@ -3483,15 +3638,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Community · Advisors and partners",
@@ -3505,15 +3661,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Community · Directory",
@@ -3527,15 +3684,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Community · Partner invitations",
@@ -3549,15 +3707,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Contracts",
@@ -3571,10 +3730,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Contracts · Agreements",
@@ -3588,10 +3748,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Contracts · NDAs",
@@ -3605,10 +3766,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Contracts · Partner deals",
@@ -3622,10 +3784,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Contracts · Templates",
@@ -3639,10 +3802,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Contracts · Forms",
@@ -3656,10 +3820,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Insights",
@@ -3678,10 +3843,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Licences",
@@ -3703,7 +3869,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Licences",
@@ -3717,10 +3884,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Funds",
@@ -3734,17 +3902,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -3761,10 +3930,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Contracts · Agreements",
@@ -3778,10 +3948,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Contracts · NDAs",
@@ -3795,10 +3966,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Contracts · Partner deals",
@@ -3812,10 +3984,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Contracts · Templates",
@@ -3829,10 +4002,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Contracts · Forms",
@@ -3846,10 +4020,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Contracts · Document types",
@@ -3863,10 +4038,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Team",
@@ -3880,15 +4056,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Team · Users",
@@ -3902,15 +4079,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Revenue",
@@ -3929,10 +4107,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Revenue · Overview",
@@ -3951,10 +4130,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Revenue · Disputes",
@@ -3968,10 +4148,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Revenue · Refunds",
@@ -3990,10 +4171,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Revenue · Statements",
@@ -4012,10 +4194,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Revenue · Promotions",
@@ -4029,15 +4212,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Content",
@@ -4051,15 +4235,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Content · Content queue",
@@ -4073,15 +4258,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Content · Publications",
@@ -4095,15 +4281,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Content · Assessment Studio",
@@ -4117,15 +4304,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Content · Personas",
@@ -4139,7 +4327,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -4147,7 +4335,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Content · Advisors and partners",
@@ -4161,15 +4350,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Content · Directory",
@@ -4183,15 +4373,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Content · Public team page",
@@ -4205,15 +4396,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Platform",
@@ -4230,7 +4422,8 @@
      "role": "Alternative",
      "line": "Reviews and writes code"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Platform · Integration keys",
@@ -4247,7 +4440,8 @@
      "role": "Alternative",
      "line": "Reviews and writes code"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Platform · GitHub sync",
@@ -4264,7 +4458,8 @@
      "role": "Alternative",
      "line": "Reviews and writes code"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Platform · Payments catalogue",
@@ -4283,10 +4478,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Platform · Promo codes",
@@ -4305,10 +4501,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Platform · Credit rules",
@@ -4327,10 +4524,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Platform · AI allowances",
@@ -4349,10 +4547,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Platform · Monitoring",
@@ -4369,7 +4568,8 @@
      "role": "Alternative",
      "line": "Reviews and writes code"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Platform · Telegram channels",
@@ -4383,15 +4583,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Support",
@@ -4405,15 +4606,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Security",
@@ -4427,10 +4629,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Settings",
@@ -4452,7 +4655,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Admin · Home",
@@ -4466,7 +4670,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -4474,7 +4678,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   }
  ],
  "options": [
@@ -4493,7 +4698,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -4501,7 +4706,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Studio",
@@ -4518,7 +4724,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -4526,7 +4732,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Studio",
@@ -4543,17 +4750,18 @@
     },
     {
      "id": "@cf/deepgram/nova-3",
-     "role": "Speakers",
+     "role": "Alternative",
      "line": "Labels who said what"
     },
     {
      "id": "@cf/deepgram/flux",
-     "role": "Live",
+     "role": "Deeper",
      "line": "Captions while you talk"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
     }
    ]
@@ -4573,7 +4781,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -4581,7 +4789,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Customer research",
@@ -4598,17 +4807,18 @@
     },
     {
      "id": "@cf/deepgram/nova-3",
-     "role": "Speakers",
+     "role": "Alternative",
      "line": "Labels who said what"
     },
     {
      "id": "@cf/deepgram/flux",
-     "role": "Live",
+     "role": "Deeper",
      "line": "Captions while you talk"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
     }
    ]
@@ -4628,17 +4838,18 @@
     },
     {
      "id": "@cf/deepgram/nova-3",
-     "role": "Speakers",
+     "role": "Alternative",
      "line": "Labels who said what"
     },
     {
      "id": "@cf/deepgram/flux",
-     "role": "Live",
+     "role": "Deeper",
      "line": "Captions while you talk"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
     }
    ]
@@ -4658,17 +4869,18 @@
     },
     {
      "id": "@cf/deepgram/nova-3",
-     "role": "Speakers",
+     "role": "Alternative",
      "line": "Labels who said what"
     },
     {
      "id": "@cf/deepgram/flux",
-     "role": "Live",
+     "role": "Deeper",
      "line": "Captions while you talk"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
     }
    ]
@@ -4688,7 +4900,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -4696,7 +4908,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Customer research",
@@ -4713,7 +4926,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -4721,7 +4934,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Customer research",
@@ -4738,17 +4952,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -4768,15 +4983,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build",
@@ -4793,15 +5009,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Product roadmap",
@@ -4826,7 +5043,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Operating systems",
@@ -4851,7 +5069,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Operating systems",
@@ -4868,7 +5087,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -4876,7 +5095,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Build · Operating systems",
@@ -4898,10 +5118,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Use of funds",
@@ -4918,15 +5139,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Use of funds",
@@ -4948,10 +5170,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Use of funds",
@@ -4968,15 +5191,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Fundraising readiness",
@@ -4993,15 +5217,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Fundraising readiness",
@@ -5018,15 +5243,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Fundraising readiness",
@@ -5043,15 +5269,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Fundraising readiness",
@@ -5068,10 +5295,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Investor narrative",
@@ -5088,15 +5316,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Investor narrative",
@@ -5113,15 +5342,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Investor narrative",
@@ -5138,15 +5368,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Investor narrative",
@@ -5163,15 +5394,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5188,15 +5420,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5213,15 +5446,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5238,15 +5472,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5263,15 +5498,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5288,15 +5524,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5313,15 +5550,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5338,15 +5576,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5363,15 +5602,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5388,15 +5628,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5413,15 +5654,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5438,15 +5680,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5463,15 +5706,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5493,10 +5737,11 @@
     },
     {
      "id": "@cf/moondream/moondream3.1-9B-A2B",
-     "role": "Extract",
+     "role": "Deeper",
      "line": "Pulls figures out of images"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5518,10 +5763,11 @@
     },
     {
      "id": "@cf/moondream/moondream3.1-9B-A2B",
-     "role": "Extract",
+     "role": "Deeper",
      "line": "Pulls figures out of images"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5538,15 +5784,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5563,15 +5810,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -5588,15 +5836,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Cap table",
@@ -5618,10 +5867,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Raise · Cap table",
@@ -5643,10 +5893,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow",
@@ -5663,15 +5914,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Product improvement",
@@ -5688,7 +5940,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -5696,7 +5948,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Distribution",
@@ -5713,15 +5966,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Distribution",
@@ -5738,15 +5992,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Distribution",
@@ -5768,10 +6023,11 @@
     },
     {
      "id": "@cf/moondream/moondream3.1-9B-A2B",
-     "role": "Extract",
+     "role": "Deeper",
      "line": "Pulls figures out of images"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Distribution",
@@ -5788,15 +6044,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Distribution",
@@ -5813,15 +6070,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Grow · Team expansion",
@@ -5838,15 +6096,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Network",
@@ -5863,15 +6122,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Network",
@@ -5888,15 +6148,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Network · Relationships",
@@ -5913,15 +6174,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Network · Introductions",
@@ -5938,15 +6200,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Research",
@@ -5963,17 +6226,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -5993,17 +6257,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6023,17 +6288,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6053,10 +6319,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Research · Library",
@@ -6073,10 +6340,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Research · Library",
@@ -6093,10 +6361,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Founder · Research · Funds",
@@ -6113,17 +6382,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6143,17 +6413,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6173,17 +6444,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6203,17 +6475,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6233,17 +6506,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6263,17 +6537,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6293,15 +6568,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Deals · Closing",
@@ -6318,15 +6594,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Portfolio · Positions",
@@ -6348,10 +6625,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Portfolio · Updates",
@@ -6368,7 +6646,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -6376,7 +6654,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Portfolio · Value-add",
@@ -6393,15 +6672,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Fund · Capital calls",
@@ -6418,15 +6698,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Research",
@@ -6443,17 +6724,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6473,17 +6755,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6503,7 +6786,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -6511,7 +6794,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Research · Diligence",
@@ -6528,15 +6812,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Research · Library",
@@ -6553,10 +6838,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Research · Library",
@@ -6573,10 +6859,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Investor · Research · Library",
@@ -6593,7 +6880,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -6601,7 +6888,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Home",
@@ -6618,7 +6906,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -6626,7 +6914,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Home",
@@ -6643,7 +6932,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -6651,7 +6940,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Home",
@@ -6668,17 +6958,18 @@
     },
     {
      "id": "@cf/deepgram/nova-3",
-     "role": "Speakers",
+     "role": "Alternative",
      "line": "Labels who said what"
     },
     {
      "id": "@cf/deepgram/flux",
-     "role": "Live",
+     "role": "Deeper",
      "line": "Captions while you talk"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
     }
    ]
@@ -6698,15 +6989,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Practice · Earnings",
@@ -6728,10 +7020,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Research · Ask",
@@ -6748,17 +7041,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6778,7 +7072,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -6786,7 +7080,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Research · Client prep",
@@ -6803,7 +7098,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -6811,7 +7106,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Research · Companies",
@@ -6828,17 +7124,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6858,17 +7155,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6888,17 +7186,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -6918,10 +7217,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Research · Library",
@@ -6938,10 +7238,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Advisor · Research · Library",
@@ -6958,7 +7259,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -6966,7 +7267,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Home",
@@ -6983,7 +7285,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -6991,7 +7293,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Home",
@@ -7008,7 +7311,7 @@
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Longer",
+     "role": "Alternative",
      "line": "Fuller answers and drafts"
     },
     {
@@ -7016,7 +7319,8 @@
      "role": "Deeper",
      "line": "Hard questions that need reasoning"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Home",
@@ -7033,17 +7337,18 @@
     },
     {
      "id": "@cf/deepgram/nova-3",
-     "role": "Speakers",
+     "role": "Alternative",
      "line": "Labels who said what"
     },
     {
      "id": "@cf/deepgram/flux",
-     "role": "Live",
+     "role": "Deeper",
      "line": "Captions while you talk"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Structure",
      "line": "Places quotes on themes and hypotheses"
     }
    ]
@@ -7071,7 +7376,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Leads",
@@ -7088,15 +7394,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Proposals",
@@ -7113,7 +7420,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -7121,7 +7428,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Negotiations",
@@ -7138,10 +7446,11 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Checks the first reading"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Retainers",
@@ -7163,10 +7472,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Pipeline · Analytics",
@@ -7188,10 +7498,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Engagements",
@@ -7216,7 +7527,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Deliverables",
@@ -7233,15 +7545,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Capacity",
@@ -7266,7 +7579,8 @@
      "role": "Deeper",
      "line": "Trade-offs and dependencies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Reporting",
@@ -7283,15 +7597,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Delivery · Health",
@@ -7308,7 +7623,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -7316,7 +7631,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Catalog",
@@ -7333,15 +7649,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Perk deals",
@@ -7358,15 +7675,16 @@
     },
     {
      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
-     "role": "Second view",
+     "role": "Alternative",
      "line": "Reviews the first answer"
     },
     {
      "id": "@cf/qwen/qwq-32b",
-     "role": "Challenge",
+     "role": "Deeper",
      "line": "Argues the other side"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Visibility",
@@ -7388,10 +7706,11 @@
     },
     {
      "id": "@cf/ibm-granite/granite-4.0-h-micro",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Reads figures out of documents"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Proof",
@@ -7408,15 +7727,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Offers · Audience fit",
@@ -7433,15 +7753,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Network · Relationships",
@@ -7458,15 +7779,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Network · Introductions",
@@ -7483,15 +7805,16 @@
     },
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
+     "role": "Alternative",
      "line": "Orders them by fit"
     },
     {
      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "role": "Draft",
+     "role": "Deeper",
      "line": "Writes the introduction, for you to send"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Network · Organizations",
@@ -7508,7 +7831,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -7516,7 +7839,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Research · Ask",
@@ -7533,17 +7857,18 @@
     },
     {
      "id": "@cf/openai/gpt-oss-120b",
-     "role": "Deeper",
+     "role": "Alternative",
      "line": "Weighs conflicting sources"
     },
     {
      "id": "@cf/baai/bge-base-en-v1.5",
-     "role": "Search",
+     "role": "Deeper",
      "line": "Finds the right records first"
-    },
+    }
+   ],
+   "more": [
     {
      "id": "@cf/baai/bge-reranker-base",
-     "role": "Rank",
      "line": "Puts the most relevant on top"
     }
    ]
@@ -7563,7 +7888,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -7571,7 +7896,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Research · Client prep",
@@ -7588,7 +7914,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -7596,7 +7922,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Research · Library",
@@ -7613,10 +7940,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Research · Library",
@@ -7633,10 +7961,11 @@
     },
     {
      "id": "@cf/moonshotai/kimi-k2.6",
-     "role": "Answer",
+     "role": "Alternative",
      "line": "Answers from the documents, cited"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Research · Library",
@@ -7653,7 +7982,7 @@
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Alternative",
      "line": "Quick tagging at a lower cost"
     },
     {
@@ -7661,7 +7990,8 @@
      "role": "Deeper",
      "line": "Checks a theme against all the evidence"
     }
-   ]
+   ],
+   "more": []
   },
   {
    "pageKey": "Super Admin · Content · Publications",
@@ -7678,15 +8008,16 @@
     },
     {
      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
-     "role": "Polished",
+     "role": "Alternative",
      "line": "Tighter, more formal drafts"
     },
     {
      "id": "@cf/zai-org/glm-4.7-flash",
-     "role": "Faster",
+     "role": "Deeper",
      "line": "Short drafts and replies"
     }
-   ]
+   ],
+   "more": []
   }
  ]
 }

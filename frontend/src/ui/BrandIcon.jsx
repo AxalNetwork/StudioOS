@@ -1258,6 +1258,8 @@ const MS_TERMS = 'Microsoft\'s Trademark and Brand Guidelines (https://www.micro
 /** Initials on purpose, each with why. */
 export const BRAND_MONOGRAM = Object.freeze({
   teams: Object.freeze({ name: 'Microsoft Teams', reason: MS_TERMS }),
+  // D1385 (#3731): PostHog's connector. Its mark is on Simple Icons, but the path data was not reachable from the build environment; initials until it is recorded from the package.
+  posthog: Object.freeze({ name: 'PostHog', reason: 'PostHog publishes its logo at https://posthog.com/handbook/company/brand-assets and on Simple Icons; neither was reachable from the build environment on 2026-10-31, so the mark is not copied by hand. Initials until the Simple Icons path is recorded.' }),
   affinity: Object.freeze({ name: 'Affinity', reason: 'Affinity CRM is affinity.co, not the Affinity design suite. The vendor newsroom (https://www.affinity.co/company/newsroom, read 2026-10-16) has no downloadable icon kit. Brandfetch and an n8n SVG were located, but their current vendor provenance and permitted treatment remain unverified. Initials until that is recorded.' }),
 });
 

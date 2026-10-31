@@ -106,7 +106,7 @@ async function world(opts: { packs?: boolean; mirror?: boolean; env?: Record<str
     const kindOf = (p: any) => p.metadata.kind === 'token_pack' ? 'token_pack' : p.metadata.kind === 'alacarte' ? 'alacarte'
       : SEED_PRICES.some((x) => x.product === p.id && x.type === 'recurring') ? 'subscription' : 'alacarte';
     for (const p of SEED_PRODUCTS)
-      f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES(?,?,?,?,?,?)')
+      f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES(?,?,?,?,?,?,0)')
         .run(p.id, p.name, kindOf(p), 1, JSON.stringify(p.metadata), JSON.stringify(SEED_PRICES.filter((x) => x.product === p.id)
           .map((x) => ({ id: x.id, currency: x.currency, unit_amount: x.unit_amount, interval: x.recurring?.interval ?? null, interval_count: x.recurring?.interval_count ?? null, nickname: null, type: x.type, active: x.active }))));
   }

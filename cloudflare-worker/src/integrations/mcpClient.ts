@@ -287,6 +287,25 @@ function fixedHeaders(...sets: Array<Readonly<Record<string, string>> | undefine
   return out;
 }
 
+/**
+ * D1385: a connection's own headers. Each must be one the record names in
+ * `connection_headers`, match that name's pattern, and never stand in for a
+ * fixed header (PostHog's read-only mode stays the record's). Anything else
+ * is refused before any request.
+ */
+function connectionHeaders(provider: McpProvider, set: Readonly<Record<string, string>> | undefined): Record<string, string> {
+  const allowed = provider.connection_headers ?? {};
+  const fixedNames = new Set(Object.keys(provider.headers).map((n) => n.toLowerCase()));
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(set ?? {})) {
+    const lower = name.toLowerCase();
+    const pattern = Object.entries(allowed).find(([n]) => n.toLowerCase() === lower)?.[1];
+    if (!pattern || fixedNames.has(lower) || typeof value !== 'string' || !pattern.test(value)) throw new McpClientError('path_not_allowed');
+    out[name] = value;
+  }
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────── the session
 
 export type McpDriftReason = 'unknown' | 'changed' | 'annotated' | 'invalid';
@@ -392,7 +411,7 @@ export async function openMcpSession(provider: McpProvider, opts: McpSessionOpti
   const url = opts.resource ?? provider.resources[0];
   if (!provider.resources.includes(url) || !onProviderHosts(url, provider.hosts)) throw new McpClientError('path_not_allowed');
   const budget = Math.min(opts.budget ?? provider.budget, provider.budget);
-  const fixed = fixedHeaders(provider.headers, opts.headers);
+  const fixed = fixedHeaders(provider.headers, connectionHeaders(provider, opts.headers));
   const limitHeaders = provider.rate_limit_headers ?? [];
   const limitSpent = (res: Response): boolean => limitHeaders.some((h) => res.headers.get(h)?.trim() === '0');
   const wallEnd = Date.now() + MCP_SESSION_WALL_MS;

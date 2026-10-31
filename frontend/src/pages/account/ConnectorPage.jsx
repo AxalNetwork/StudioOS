@@ -22,6 +22,7 @@ import GithubRepositoriesSection from './GithubRepositoriesSection';
 import NotionSourcesSection from './NotionSourcesSection';
 import GoogleWorkspaceFiles from './GoogleWorkspaceFiles';
 import VercelProjectsSection from './VercelProjectsSection';
+import PosthogProjectsSection from './PosthogProjectsSection';
 import LinkedInSection, { LinkedInDisconnectChoice } from './LinkedInSection';
 import { HQ_ACCOUNTS, MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
@@ -297,6 +298,8 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false,
       {p.key === 'notion' && <NotionSourcesSection p={p} phone={phone} />}
       {/* D1096 (#2961): Vercel's Choose projects. */}
       {p.key === 'vercel' && <VercelProjectsSection p={p} onChanged={onChanged} />}
+      {/* D1385 (#3731): the one PostHog project each venture reads. */}
+      {p.key === 'posthog' && <PosthogProjectsSection p={p} onChanged={onChanged} />}
       {/* D1352 (#3567): what LinkedIn granted, and the Connections.csv import. */}
       {p.key === 'linkedin' && <LinkedInSection onChanged={onChanged} />}
       <div className="-mx-5">

@@ -60,9 +60,10 @@ test('the catalogue matches the fixture: every id, status and raw price string',
   }
   // The pricing page's paid-only note, and nothing else, sets paid_only.
   assert.deepEqual(CATALOGUE.filter((m) => m.paid_only).map((m) => m.id).sort(), [...FIXTURE.paid_only_note.models].sort());
-  // The counts as read on the day (recorded in D760.md).
-  assert.equal(CATALOGUE.length, 92);
-  assert.equal(CATALOGUE.filter(isPriced).length, 68);
+  // The counts as read on the day: 92 and 68 on 2026-10-19 (D760.md); the
+  // 2026-10-31 re-read (D1478) added DeepSeek V4.1 Flash and Clairic, both priced.
+  assert.equal(CATALOGUE.length, 94);
+  assert.equal(CATALOGUE.filter(isPriced).length, 70);
 });
 
 // ── offered ──────────────────────────────────────────────────────────────────
@@ -77,8 +78,11 @@ test('offered means status ga or partner, with a price; an unpriced GA model nev
   for (const id of unpricedGa) assert.equal(isOffered(modelById(id), GATE_ON), false, id);
   // A priced model that is retired is not offered: its row stays for past runs.
   assert.equal(isOffered(modelById('@cf/meta/llama-3.1-8b-instruct'), GATE_ON), false);
-  assert.equal(CATALOGUE.filter((m) => isOffered(m, GATE_ON)).length, 60);
-  assert.equal(CATALOGUE.filter((m) => isOffered(m, GATE_OFF)).length, 52);
+  // D1478: DeepSeek V4.1 Flash is GA and offered; Clairic is a preview, held as beta, and is not.
+  assert.equal(CATALOGUE.filter((m) => isOffered(m, GATE_ON)).length, 61);
+  assert.equal(CATALOGUE.filter((m) => isOffered(m, GATE_OFF)).length, 53);
+  assert.equal(isOffered(modelById('@cf/cloudflare/clairic'), GATE_ON), false);
+  assert.equal(refusalFor('@cf/cloudflare/clairic', GATE_ON), 'model_not_offered');
 });
 
 test('the partner gate: new partner models only with AI_PARTNER_MODELS on; Nova-3 and Flux always', () => {
@@ -138,7 +142,11 @@ test('AI_MARKUP is defined in exactly one source file, and no price is multiplie
 
 // ── neurons are what is billed ───────────────────────────────────────────────
 
-const PRICING_MD = readFileSync(resolve(__dirname, '../../design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md'), 'utf8');
+// S1's copy of the 2026-10-15 page, and the rows the 2026-10-31 re-read (D1478) added to it.
+const PRICING_MD = [
+  readFileSync(resolve(__dirname, '../../design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md'), 'utf8'),
+  readFileSync(resolve(__dirname, 'fixtures/workers_ai_pricing_rows_2026-10-31.md'), 'utf8'),
+].join('\n');
 /** The md's row for a model: the WebSocket row for a websocket unit, else the plain one. */
 function mdRow(id, unit) {
   const ws = unit === 'audio_minutes_websocket';
@@ -168,7 +176,7 @@ test('every priced row carries the neuron figure Cloudflare prints, and its pric
     }
     rows += 1;
   }
-  assert.equal(rows, 68);
+  assert.equal(rows, 70);
   // Smart Turn v2 is the one row whose two columns disagree: 0.51 neurons is
   // $0.00000561, where the dollar column prints $0.00033795. It is priced from
   // the neurons, as every row is (D760.md).
@@ -346,7 +354,7 @@ test('/catalogue serves the offered models, cost and billed, ordered by kind wit
   assert.equal(status, 200);
   assert.equal(body.billing, 'cost');
   assert.deepEqual(body.guard, { every_run: false });
-  assert.equal(body.models.length, 52, 'the gate is off, so the eight new partner models are not offered');
+  assert.equal(body.models.length, 53, 'the gate is off, so the eight new partner models are not offered');
   assert.equal(body.models.at(-1).id, ROUTE.safety.model, 'Safety is last');
   assert.ok(!body.models.some((m) => m.id === '@cf/deepgram/aura-1'));
   const kinds = body.models.slice(0, -1).map((m) => m.kind);
@@ -364,7 +372,7 @@ test('/catalogue serves the offered models, cost and billed, ordered by kind wit
   assert.equal(v4.cost.tokens_cached, 0.014003);
 
   const on = await get('/catalogue', 41, 'founder', GATE_ON);
-  assert.equal(on.body.models.length, 60);
+  assert.equal(on.body.models.length, 61);
   assert.ok(on.body.models.some((x) => x.id === '@cf/deepgram/aura-1'));
 });
 

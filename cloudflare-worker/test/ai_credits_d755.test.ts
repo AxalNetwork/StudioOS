@@ -19,7 +19,7 @@ const MESSAGE = /ai_credit_ledger is append-only \(D755\)\./;
 
 function fixture() {
   const f = aiBudgetFixture();
-  return { ...f, env: { DB: f.DB, JWT_SECRET: 'd755-fixture-only-signing-secret', STRIPE_WEBHOOK_SECRET: 'd755-fixture-only-webhook-secret', ENVIRONMENT: 'development' } as any };
+  return { ...f, env: { DB: f.DB, JWT_SECRET: 'd755-fixture-only-signing-secret', STRIPE_WEBHOOK_SECRET: 'd755-fixture-only-webhook-secret', STRIPE_SECRET_KEY: 'sk_test_fixture', ENVIRONMENT: 'development' } as any };
 }
 const rows = (db: any, sql: string, ...binds: unknown[]) => db.prepare(sql).all(...binds).map((r: any) => ({ ...r }));
 const ledger = (db: any) => rows(db, 'SELECT kind,delta_microusd,source_ref,reservation_uid,payment_intent_id FROM ai_credit_ledger ORDER BY rowid');
@@ -273,13 +273,13 @@ const price = (id: string, product: string, unit_amount: number) => ({ id, produ
 async function shop(opts: { env?: Record<string, unknown>; mirrored?: number; onSale?: number; pack?: boolean } = {}) {
   resetAiTopupMirrorWindow();
   const f = fixture();
-  Object.assign(f.env, { STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000', ...opts.env });
+  Object.assign(f.env, { STRIPE_PUBLISHABLE_KEY: 'pk_test_fixture', STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000', ...opts.env });
   await ensureCatalogSchema(f.env);
   await ensureOrdersSchema(f.env);
   for (const t of ['promo_codes', 'user_sessions']) f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   f.db.exec("ALTER TABLE users ADD COLUMN uid TEXT; ALTER TABLE users ADD COLUMN stripe_customer_id TEXT; ALTER TABLE users ADD COLUMN investor_stripe_customer_id TEXT; UPDATE users SET uid='uid-'||id, stripe_customer_id='cus_member'||id");
   const product = (id: string, name: string, prices: unknown[], metadata = {}) =>
-    f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES(?,?,'alacarte',1,?,?)").run(id, name, JSON.stringify(metadata), JSON.stringify(prices));
+    f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES(?,?,'alacarte',1,?,?,0)").run(id, name, JSON.stringify(metadata), JSON.stringify(prices));
   product('prod_pack25', '$25 of tokens', [price(PACK, 'prod_pack25', opts.mirrored ?? 2500)]);
   product('prod_other', 'Other', [price(OTHER, 'prod_other', 1000)], { feature_key: 'other_feature' });
   product('prod_env', 'AI tokens', [price(FALLBACK, 'prod_env', 1500)]);
@@ -314,7 +314,7 @@ async function intent(f: any, items: unknown[], extra: Record<string, unknown> =
   return { status: r.status, body: await r.json() as any };
 }
 async function webhook(f: any, pi: Record<string, unknown>) {
-  const body = JSON.stringify({ id: `evt_${pi.id}`, type: 'payment_intent.succeeded', data: { object: pi } });
+  const body = JSON.stringify({ id: `evt_${pi.id}`, livemode: false, type: 'payment_intent.succeeded', data: { object: pi } });
   const timestamp = Math.floor(Date.now() / 1000);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(f.env.STRIPE_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))).map((n) => n.toString(16).padStart(2, '0')).join('');

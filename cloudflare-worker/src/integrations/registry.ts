@@ -21,6 +21,7 @@ import type { Tier } from '../middleware/requireTier';
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
 import { MERCURY_FEEDS, mercuryFedModules } from './mercuryFeeds';
 import { NOTION_FEEDS } from './notionFeeds';
+import { POSTHOG_FEEDS } from './posthogFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
 import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
@@ -31,7 +32,7 @@ export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 /** `oauth_mcp`: a member's sign-in through a provider's MCP server (D840's Mercury, D847's shared client). */
 export type AuthType = 'none' | 'api_key' | 'oauth2' | 'webhook' | 'oauth_mcp';
 export type IntegrationType = 'crm' | 'scheduling' | 'cap_table' | 'messaging' | 'e_sign' | 'data_feed' | 'custom';
-export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build' | 'Hosting';
+export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build' | 'Hosting' | 'Analytics';
 export interface ConnectorMetadata {
   category: ConnectorCategory;
   verified: boolean;
@@ -611,6 +612,13 @@ export const REGISTRY: ProviderDescriptor[] = [
     status: 'beta', tier: 'free', auth_type: 'oauth_mcp', capabilities: ['Read-only'],
     audience_rule: 'venture', docs_url: 'https://developers.notion.com/docs/mcp', icon: 'FileText',
   },
+  // D1385 (#3731, #2409 part 1): a founder's own PostHog, read only, signed in through PostHog's MCP server (D1080).
+  {
+    key: 'posthog', display_name: 'PostHog', integration_type: 'data_feed',
+    description: 'Your own PostHog, read only, through PostHog’s own sign-in: each company reads one PostHog project you choose. It never creates, edits or deletes anything in PostHog.',
+    status: 'beta', tier: 'free', auth_type: 'oauth_mcp', capabilities: ['Read-only'],
+    audience_rule: 'venture', docs_url: 'https://posthog.com/docs/model-context-protocol', icon: 'BarChart3',
+  },
 ];
 
 // A catalogue entry describes only behaviour that the shipping provider has.
@@ -656,6 +664,14 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
     sends: [],
     feeds: [...new Set(NOTION_FEEDS.map((f) => f.module))],
     permissions: ['Sign in with Notion: search and read the pages and databases you share, through Notion’s MCP server; it never creates, edits, moves or deletes anything.'],
+  },
+  // D1385: what lands is `posthogFeeds.ts`'s, empty until PostHog parts 3–6 build a feed.
+  posthog: {
+    category: 'Analytics', verified: false,
+    pulls: POSTHOG_FEEDS.map((f) => ({ what: f.what, module: f.module })),
+    sends: [],
+    feeds: [...new Set(POSTHOG_FEEDS.map((f) => f.module))],
+    permissions: ['Sign in with PostHog: read your organisations and projects, saved insights and their results, experiments, surveys and feature flags, read only, through PostHog’s MCP server; it never reads a person, a recording or raw events, and never creates, edits or deletes anything.'],
   },
   microsoft_365: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };
