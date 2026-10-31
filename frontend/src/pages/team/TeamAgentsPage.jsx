@@ -326,7 +326,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
       ? { text: 'A new link was made and the old one no longer works. The email did not send: copy this link and send it yourself.', link }
       : { text: 'The invitation was resent. The old link no longer works.' });
   };
-  const badges = { approvals: countBadge(queueBlock?.available ? queueBlock.value?.counts?.open : null) };
+  const badges = { approvals: countBadge(queueBlock?.available ? queueBlock.value?.counts?.proposed : null) };
 
   return (
     <div className="flex flex-col gap-[18px] px-4 pb-8 pt-6 md:px-7" data-testid="team-page" data-scope={scope.kind}>
