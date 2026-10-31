@@ -84,22 +84,35 @@ const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py
 const idle = { status: 'idle', data: null };
 const loading = { status: 'loading', data: null };
 
+/**
+ * One read. `retry` reads again from a blank (loading) state; `refresh` reads
+ * again keeping what is on screen until the answer comes, and keeps it when
+ * that read fails, so nothing keyed to the data unmounts (D1604: a decision
+ * in the header Ask must not drop the editor's unsaved cards).
+ */
 function useRead(key, run, deps) {
   const [state, setState] = useState(key == null ? idle : loading);
   const [tick, setTick] = useState(0);
+  const quietly = useRef(false);
   useEffect(() => {
+    const quiet = quietly.current;
+    quietly.current = false;
     if (key == null) { setState(idle); return undefined; }
     let live = true;
-    setState(loading);
+    if (!quiet) setState(loading);
     run().then(
       (data) => { if (live) setState({ status: 'ok', data }); },
-      (e) => { if (live) setState({ status: 'error', data: null, error: e }); reportError('pitch-editor:read', e); },
+      (e) => {
+        if (live) setState((was) => (quiet && was.status === 'ok' ? was : { status: 'error', data: null, error: e }));
+        reportError('pitch-editor:read', e);
+      },
     );
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, tick, ...deps]);
   const retry = useCallback(() => setTick((t) => t + 1), []);
-  return { ...state, retry };
+  const refresh = useCallback(() => { quietly.current = true; setTick((t) => t + 1); }, []);
+  return { ...state, retry, refresh };
 }
 
 function ReadFailed({ text, onRetry, testId }) {
@@ -150,7 +163,12 @@ export default function PitchEditor() {
   // D1604: the header Ask places a waiting card edit through the open editor.
   const placeRef = useRef(null);
   const onPlace = useCallback((edit) => (placeRef.current ? placeRef.current(edit) : { error: 'The deck is still loading. Try again in a moment.' }), []);
-  const shell = { query: ventureQuery(projectId || requested), title, ask: { projectId, readOnly, onPlace, versions, onChanged: versions.retry } };
+  // A card run or a decision in the editor's own bar changes what waits: the header reads it again.
+  const [proposalsTick, setProposalsTick] = useState(0);
+  const onProposals = useCallback(() => setProposalsTick((t) => t + 1), []);
+  // A decision in the header re-reads the versions without blanking them, so the
+  // open Editor (keyed to the version) keeps its unsaved cards.
+  const shell = { query: ventureQuery(projectId || requested), title, ask: { projectId, readOnly, onPlace, versions, onChanged: versions.refresh, editsKey: proposalsTick } };
 
   if (projects.status === 'error') return <Shell {...shell}><ReadFailed text="Your ventures could not be read." onRetry={projects.retry} testId="pitch-editor-ventures-error" /></Shell>;
   if (projects.status === 'ok' && !project) return <Shell {...shell}><div className={`${CARD} p-5 ${MUTED}`}>Start a venture first, then build its deck.</div></Shell>;
@@ -186,6 +204,7 @@ export default function PitchEditor() {
         onTitle={setReportedTitle}
         onSaved={() => versions.retry()}
         placeRef={placeRef}
+        onProposals={onProposals}
       />
     </Shell>
   );
@@ -226,7 +245,7 @@ export function sourcesCard(model, lines) {
   return text ? updateBlock(card, text.id, { style: 'list', text: lines.join('\n') }) : { ...card, notes: lines.join('\n') };
 }
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly, phone, onTitle, onSaved, placeRef }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly, phone, onTitle, onSaved, placeRef, onProposals }) {
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
   const [cards, setCards] = useState(base.cards);
   const [theme, setTheme] = useState(base.theme);
@@ -256,8 +275,11 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
   const setCard = (i, c) => setCards((cs) => cs.map((x, j) => (j === i ? c : x)));
 
   // D1604: a card edit accepted from the header Ask. Checked against the cards
-  // on screen first; placed after the decision is recorded, against the cards
-  // as they are then, and held until Save like every other edit.
+  // on screen first; `commit()` then places it, synchronously, against the
+  // cards as they are at that moment and answers `{ error }` or `{ undo }`.
+  // The sheet records the decision only after the edit is placed, and undoes
+  // the placement when that decision is refused. Held until Save like every
+  // other edit.
   const cardsNow = useRef(cards);
   cardsNow.current = cards;
   useEffect(() => {
@@ -275,8 +297,18 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
       if (check.error) return { error: check.error };
       return {
         commit: () => {
-          setCards((cs) => { const r = place(cs); return r.error ? cs : cs.map((x, j) => (j === edit.card ? r.card : x)); });
+          const r = place(cardsNow.current);
+          if (r.error) return { error: r.error };
+          const was = cardsNow.current[edit.card];
+          const put = (from, to) => (cs) => cs.map((x, j) => (j === edit.card && x === from ? to : x));
+          // The next check (Accept all's next edit) sees this one at once.
+          cardsNow.current = put(was, r.card)(cardsNow.current);
+          setCards(put(was, r.card));
           setSel(edit.card); setSelBlock(null);
+          return {
+            // Back to the card as it was, unless something changed it since.
+            undo: () => { cardsNow.current = put(r.card, was)(cardsNow.current); setCards(put(r.card, was)); },
+          };
         },
       };
     };
@@ -368,7 +400,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
                 })() : (
                   <CardAssistBar deckId={base.deck.id} cardIndex={sel} items={sources.data?.items || []}
                     block={(card.blocks || []).find((b) => b.id === selBlock) || null}
-                    onPlace={(id, text) => setCard(sel, updateBlock(card, id, { text }))} />
+                    onPlace={(id, text) => setCard(sel, updateBlock(card, id, { text }))} onProposals={onProposals} />
                 )}
               </>
             ) : null}

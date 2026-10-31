@@ -75,6 +75,20 @@ test('pd40 states: running, AI off, unreadable and out of tokens keep the name "
   assert.doesNotMatch(render(h(AskButtonView, {})), /aria-describedby/);
 });
 
+test('a muted Ask (AI off, unreadable) carries the muted text colour only, never the violet one under it', () => {
+  const cls = (state) => /<button[^>]*class="([^"]+)"/.exec(render(h(AskButtonView, { state })))[1].split(/\s+/);
+  for (const state of ['off', 'unreadable']) {
+    const c = cls(state);
+    assert.ok(c.includes('text-axal-muted') && c.includes('dark:text-gray-400'), `${state}: muted`);
+    assert.ok(!c.includes('text-axal-violet-deep') && !c.includes('dark:text-violet-300'), `${state}: two text colours stacked; the CSS order, not the state, would pick one`);
+  }
+  for (const state of ['rest', 'running', 'out']) {
+    const c = cls(state);
+    assert.ok(c.includes('text-axal-violet-deep') && c.includes('dark:text-violet-300'), `${state}: violet`);
+    assert.ok(!c.includes('text-axal-muted'), state);
+  }
+});
+
 test('Team re-imports the shared button: one component, one name', () => {
   assert.equal(TeamAskButtonView, AskButtonView);
   assert.match(read('frontend/src/pages/team/AskButton.jsx'), /from '\.\.\/\.\.\/ui\/AskButton\.jsx'/);
@@ -120,16 +134,15 @@ test('a text edit lands only on the block whose text is still its "before"', () 
 
 // ---------------------------------------------------------------- DeckAsk, mounted
 
-function fakeSource({ versions, lists = {}, failList = false } = {}) {
+function fakeSource({ versions, lists = {}, failList = false, failDecide = false } = {}) {
   const calls = [];
   return {
     calls,
     versions: async (pid) => { calls.push(['versions', pid]); if (versions instanceof Error) throw versions; return versions; },
-    keepAll: async (id) => { calls.push(['keepAll', id]); return { deck: { id: 99 } }; },
     discardDeck: async (id) => { calls.push(['discardDeck', id]); return {}; },
     proposals: {
       list: async (q) => { calls.push(['list', q]); if (failList) throw Object.assign(new Error('boom'), { status: 500 }); return { proposals: lists[q.option] || [] }; },
-      decide: async (uid, decision) => { calls.push(['decide', uid, decision]); return { proposal: { uid } }; },
+      decide: async (uid, decision) => { calls.push(['decide', uid, decision]); if (failDecide) throw Object.assign(new Error('gone'), { status: 409 }); return { proposal: { uid } }; },
     },
   };
 }
@@ -218,7 +231,7 @@ test('a failed read draws no count and says Eadwyn could not be reached; never "
   } finally { await m.close(); }
 });
 
-test('"Waiting for you": no input, no thread; Review, Accept all and Discard on the routes that exist', async () => {
+test('"Waiting for you": no input, no thread; Review and Discard for the deck, on the routes that exist', async () => {
   const source = fakeSource({ versions: VERSIONS, lists: EDITS });
   const m = await mount();
   try {
@@ -239,8 +252,10 @@ test('"Waiting for you": no input, no thread; Review, Accept all and Discard on 
     assert.equal(m.all('pitch-ask-edit-open').length, 2);
     await m.press(m.all('pitch-ask-edit-discard')[1]);
     assert.deepEqual(source.calls.filter((c) => c[0] === 'decide'), [['decide', 'e1', 'discard']]);
-    await m.press(m.by('pitch-ask-deck-accept'));
-    assert.deepEqual(source.calls.filter((c) => c[0] === 'keepAll'), [['keepAll', 77]]);
+    // No whole-deck Accept all: it would keep placeholder cards and skip the
+    // theme, which the review's missing-data cut decides (plan §3.4).
+    assert.ok(!m.by('pitch-ask-deck-accept'), 'the deck is accepted in Review only');
+    assert.doesNotMatch(m.text(m.by('pitch-ask-deck')), /Accept/);
     await m.press(m.by('pitch-ask-deck-discard'));
     assert.deepEqual(source.calls.filter((c) => c[0] === 'discardDeck'), [['discardDeck', 77]]);
     // The verbs are the one set.
@@ -248,10 +263,18 @@ test('"Waiting for you": no input, no thread; Review, Accept all and Discard on 
   } finally { await m.close(); }
 });
 
-test('with a placer, Accept checks the edit fits, records the decision, then places it; a misfit records nothing', async () => {
+test('the sheet never keeps a whole deck unreviewed: no keep-slides, no "all"', () => {
+  const code = codeOnly(read(`${PITCH}/DeckAsk.jsx`));
+  assert.doesNotMatch(code, /keepSlides|keep-slides'|all:\s*true/);
+});
+
+test('with a placer, Accept checks the edit fits, places it, then records the decision; a misfit records nothing', async () => {
   const source = fakeSource({ versions: VERSIONS, lists: EDITS });
   const placed = [];
-  const onPlace = (edit) => (edit.uid === 'e2' ? { error: 'No free 6 × 3 range on card 1. Remove a block, then accept.' } : { commit: () => placed.push(edit.uid) });
+  const order = [];
+  const decide = source.proposals.decide;
+  source.proposals.decide = async (...a) => { order.push('decide'); return decide(...a); };
+  const onPlace = (edit) => (edit.uid === 'e2' ? { error: 'No free 6 × 3 range on card 1. Remove a block, then accept.' } : { commit: () => { order.push('place'); placed.push(edit.uid); return { undo() {} }; } });
   const m = await mount();
   try {
     await m.render(h(DeckAsk, { projectId: 7, source, onPlace }));
@@ -263,7 +286,58 @@ test('with a placer, Accept checks the edit fits, records the decision, then pla
     await m.press(text);
     assert.deepEqual(source.calls.filter((c) => c[0] === 'decide'), [['decide', 'e1', 'accept']]);
     assert.deepEqual(placed, ['e1']);
+    assert.deepEqual(order, ['place', 'decide'], 'placed first, so a decision is never recorded for an edit that did not land');
     assert.ok(m.by('pitch-ask-accept-all'), 'Accept all with more than one edit');
+  } finally { await m.close(); }
+});
+
+test('an edit that no longer fits when it is placed says so and records nothing; a refused decision takes the placement back', async () => {
+  // The cards changed between the check and the placement.
+  const late = fakeSource({ versions: VERSIONS, lists: { 'deck:shorten': EDITS['deck:shorten'] } });
+  let m = await mount();
+  try {
+    await m.render(h(DeckAsk, { projectId: 7, source: late, onPlace: () => ({ commit: () => ({ error: 'Card 2 changed since Eadwyn proposed this. Select the area and ask again.' }) }) }));
+    await m.press(m.by('pitch-ask'));
+    await m.press(m.by('pitch-ask-edit-accept'));
+    assert.deepEqual(late.calls.filter((c) => c[0] === 'decide'), [], 'not accepted on the server');
+    assert.match(m.text(m.by('pitch-ask-edit')), /Card 2 changed since Eadwyn proposed this/, 'an error line, not a silent no-op');
+  } finally { await m.close(); }
+  // The server refuses the decision: the placed edit is taken back.
+  const refused = fakeSource({ versions: VERSIONS, lists: { 'deck:shorten': EDITS['deck:shorten'] }, failDecide: true });
+  const undone = [];
+  m = await mount();
+  try {
+    await m.render(h(DeckAsk, { projectId: 7, source: refused, onPlace: (edit) => ({ commit: () => ({ undo: () => undone.push(edit.uid) }) }) }));
+    await m.press(m.by('pitch-ask'));
+    await m.press(m.by('pitch-ask-edit-accept'));
+    assert.deepEqual(undone, ['e1']);
+    assert.match(m.text(m.by('pitch-ask-edit')), /Accept Discard gone$/, 'the refusal is said on the edit');
+  } finally { await m.close(); }
+});
+
+test('the edits are read again when the sheet opens and when the page says they changed', async () => {
+  const source = fakeSource({ versions: VERSIONS, lists: {} });
+  const reads = () => source.calls.filter((c) => c[0] === 'list').length;
+  const EDITS_LATER = {};
+  const m = await mount();
+  try {
+    await m.render(h(DeckAsk, { projectId: 7, source, editsKey: 0 }));
+    const first = reads();
+    assert.equal(first, DECK_ASK_OPTIONS.length);
+    assert.equal(m.pr(m.by('pitch-ask'))['aria-label'], 'Ask Eadwyn, 1 waiting');
+    // A card run in the editor's own bar left a proposal: the next open lists it.
+    source.calls.length = 0;
+    Object.assign(EDITS_LATER, { 'deck:shorten': EDITS['deck:shorten'] });
+    const lists = source.proposals.list;
+    source.proposals.list = async (q) => { source.calls.push(['list', q]); return { proposals: EDITS_LATER[q.option] || [] }; };
+    await m.press(m.by('pitch-ask'));
+    assert.equal(reads(), DECK_ASK_OPTIONS.length, 'opening reads again');
+    assert.equal(m.all('pitch-ask-edit').length, 1);
+    assert.equal(m.pr(m.by('pitch-ask'))['aria-label'], 'Ask Eadwyn, 2 waiting');
+    source.calls.length = 0;
+    await m.render(h(DeckAsk, { projectId: 7, source, editsKey: 1 }));
+    assert.equal(reads(), DECK_ASK_OPTIONS.length, 'the page\'s signal reads again');
+    source.proposals.list = lists;
   } finally { await m.close(); }
 });
 
@@ -294,18 +368,22 @@ const DECK = { id: 31, project_id: 7, version: 3, title: 'Synthetic deck', creat
 const FOUNDER = { id: 2, role: 'founder', founder_id: 20, name: 'Synthetic Founder' };
 const ORIGINAL = { api: { ...api }, editor: { ...deckEditorApi }, sources: { ...deckSourcesApi }, images: { ...deckImagesApi }, proposals: { ...railProposalsApi } };
 
-async function mountEditor({ before = 'Synthetic customers love it', user = FOUNDER } = {}) {
+async function mountEditor({ before = 'Synthetic customers love it', user = FOUNDER, proposal = null, failDecide = false } = {}) {
   const decided = [];
+  const discarded = [];
+  let deckReads = 0;
   Object.assign(api, {
     getMe: async () => user, listProjects: async () => [{ id: 7, name: 'Synthetic Labs' }],
-    deckListVersions: async () => ({ versions: [{ id: 31, version: 3, is_current: true }] }), deckGet: async () => DECK,
+    deckListVersions: async () => ({ versions: [{ id: 31, version: 3, is_current: true }], ...(proposal && !discarded.length ? { proposal } : {}) }),
+    deckGet: async () => { deckReads += 1; return DECK; },
+    deckDiscardProposal: async (id) => { discarded.push(id); return {}; },
   });
   Object.assign(deckEditorApi, { model: async () => MODEL, brandKit: async () => ({ kit: null }), chartSeries: async () => ({ series: [] }) });
   Object.assign(deckSourcesApi, { list: async () => ({ project_id: 7, items: [], coverage: { slots: 0, filled: 0, by_grade: {}, not_recorded: 0, unreadable: 0 } }), refresh: async () => ({ rows: [] }) });
   deckImagesApi.list = async () => ({ images: [] });
   Object.assign(railProposalsApi, {
     list: async ({ option, record }) => ({ proposals: option === 'deck:shorten' && record === 'deck:31' && !decided.length ? [row('s1', { deck_id: 31, card: 0, action: 'shorten', before, after: 'Synthetic customers stay' }, { rail_option: 'deck:shorten' })] : [] }),
-    decide: async (uid, decision) => { decided.push([uid, decision]); return { proposal: { uid } }; },
+    decide: async (uid, decision) => { if (failDecide) throw Object.assign(new Error('not open'), { status: 409 }); decided.push([uid, decision]); return { proposal: { uid } }; },
   });
   const fetchBefore = globalThis.fetch;
   const m = await mount();
@@ -320,6 +398,8 @@ async function mountEditor({ before = 'Synthetic customers love it', user = FOUN
     Object.assign(deckImagesApi, ORIGINAL.images); Object.assign(railProposalsApi, ORIGINAL.proposals);
   };
   m.decided = decided;
+  m.discarded = discarded;
+  m.deckReads = () => deckReads;
   return m;
 }
 
@@ -345,6 +425,39 @@ test('in the editor, an edit whose card changed is refused before anything is re
     assert.deepEqual(m.decided, []);
     assert.match(m.text(m.by('pitch-ask-edit')), /changed since Eadwyn proposed this/);
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers love it/);
+  } finally { await m.close(); }
+});
+
+test('in the editor, discarding the deck proposal from Ask keeps the unsaved card changes on screen', async () => {
+  const m = await mountEditor({ proposal: { id: 77, slides: [{}, {}] } });
+  try {
+    const notes = () => m.by('pitch-editor-notes');
+    await act(async () => { m.pr(notes()).onChange({ target: { value: 'Synthetic unsaved note' } }); });
+    assert.equal(m.pr(m.by('pitch-editor-save')).disabled, false, 'dirty');
+    // An accepted card edit, held until Save, is unsaved work too.
+    await m.press(m.by('pitch-ask'));
+    await m.press(m.by('pitch-ask-edit-accept'));
+    assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers stay/);
+    const reads = m.deckReads();
+    await m.press(m.by('pitch-ask-deck-discard'));
+    assert.deepEqual(m.discarded, [77]);
+    assert.ok(!m.by('pitch-editor-loading'), 'the editor never drops to its skeleton');
+    assert.equal(m.deckReads(), reads, 'the open version is not read again, so the Editor is not remounted');
+    assert.equal(m.pr(notes()).value, 'Synthetic unsaved note', 'the unsaved note survives');
+    assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers stay/, 'the accepted edit survives');
+    assert.equal(m.pr(m.by('pitch-editor-save')).disabled, false);
+    assert.ok(!m.by('pitch-ask-deck'), 'the discarded proposal is gone from the sheet');
+  } finally { await m.close(); }
+});
+
+test('in the editor, a refused decision takes the placed edit back and says so', async () => {
+  const m = await mountEditor({ failDecide: true });
+  try {
+    await m.press(m.by('pitch-ask'));
+    await m.press(m.by('pitch-ask-edit-accept'));
+    assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers love it/, 'back as it was');
+    assert.equal(m.pr(m.by('pitch-editor-save')).disabled, true, 'nothing left to save');
+    assert.match(m.text(m.by('pitch-ask-edit')), /Accept Discard not open$/, 'the refusal is said on the edit');
   } finally { await m.close(); }
 });
 

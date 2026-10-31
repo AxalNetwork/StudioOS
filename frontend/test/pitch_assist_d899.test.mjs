@@ -213,8 +213,13 @@ test('PD7: a text block\'s bar shows each cost, a press shows its cost first, an
   const m = await mount({
     'assist.run': async (id, card, body) => ({ proposal: { uid: 'p1' }, action: body.action, option: 'deck:rewrite', before: body.text, after: 'Synthetic founders keep coming back', cost: { charged_microusd: 900, usage_log_id: 5 } }),
     deckUpdate: async (id, body) => { saved = body; return { ...DECK, id: 32, version: 4, slides: body.slides }; },
+    'proposals.list': async () => ({ proposals: [] }),
   });
   try {
+    // D1604: the header Ask reads what waits once per deck option; the bar's run and decision each make it read again.
+    const asks = () => m.named('proposals.list').length;
+    const perRead = asks();
+    assert.ok(perRead > 0, 'the header read what waits');
     assert.ok(!m.by('pitch-assist-bar'), 'no bar until a block is selected');
     await m.press(m.by('pitch-editor-block-b1'));
     assert.ok(m.by('pitch-assist-bar'));
@@ -225,6 +230,7 @@ test('PD7: a text block\'s bar shows each cost, a press shows its cost first, an
     assert.match(m.text(m.by('pitch-assist-dialog-cost')), /Up to \$0\.0012 in AI tokens, charged to you when it runs\./, 'the cost before it runs');
     assert.equal(m.named('assist.run').length, 0, 'opening the dialog runs nothing');
     await m.press(m.by('pitch-assist-dialog-run'));
+    assert.equal(asks(), 2 * perRead, 'a card run left a proposal: the header reads again');
     const [, deckId, card, body, headers] = m.named('assist.run')[0];
     assert.equal(deckId, 31); assert.equal(card, 0);
     assert.deepEqual(body, { action: 'rewrite', block: { id: 'b1', kind: 'text' }, text: 'Synthetic customers love it' });
@@ -234,6 +240,7 @@ test('PD7: a text block\'s bar shows each cost, a press shows its cost first, an
     assert.match(m.text(m.by('pitch-editor-save-state')), /Saved/, 'a proposal is not a change');
     await m.press(m.by('pitch-assist-proposal-accept'));
     assert.deepEqual(m.named('proposals.decide').map((c) => c.slice(1)), [['p1', 'accept']]);
+    assert.equal(asks(), 3 * perRead, 'decided in the bar: the header reads again');
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic founders keep coming back/, 'Accept places it on the card');
     assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/);
     await m.press(m.by('pitch-editor-save'));

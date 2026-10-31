@@ -350,7 +350,8 @@ test('company Team: people and invitations on the routes that exist; agents unav
     assert.ok(text.includes('a•••@example.com') && !text.includes('avery.new@example.com'), 'invitation addresses masked');
     assert.match(text, /AI agents aren’t switched on yet\. That is not the same as having none\./);
     assert.doesNotMatch(text, /No agent works here yet|\bFill\b/);
-    assert.equal(v.has('team-ask'), false, 'no panel serves this page, so no Ask button (and no rail)');
+    // The shared button's own test id is 'ask-eadwyn' (D1604 lifted it); Team's was 'team-ask'. Neither may draw.
+    assert.ok(!v.has('team-ask') && !v.has('ask-eadwyn'), 'no panel serves this page, so no Ask button (and no rail)');
     await v.click('invitation-resend-i1');
     await v.click('invitation-revoke-i1');
     assert.deepEqual(v.keys().filter((k) => !k.startsWith('GET ')), ['POST /api/company/nw1/invitations/i1/resend', 'DELETE /api/company/nw1/invitations/i1']);

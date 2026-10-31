@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { newDeckApi } from '../../../lib/api/newDeck';
 import { railProposalsApi } from '../../../lib/api/railProposals';
 import { reportError } from '../../../lib/log';
 import useAssistMode from '../../../hooks/useAssistMode';
@@ -26,15 +25,21 @@ import {
  *                stays "Ask Eadwyn" and the mark greys (owner question H).
  *   The sheet    what Eadwyn proposed for this deck and nobody decided yet:
  *                1. the whole-deck proposal (`GET /api/decks/by-project/:pid`
- *                   → `proposal`): Review (New deck's proposal review), Accept
- *                   all (`POST /api/decks/proposals/:id/keep-slides`, every
- *                   card, saved as a version) and Discard
- *                   (`DELETE /api/decks/proposals/:id`);
+ *                   → `proposal`): Review (New deck's proposal review) and
+ *                   Discard (`DELETE /api/decks/proposals/:id`). No Accept all
+ *                   here: keeping every card would save placeholder cards
+ *                   ("Not recorded on StudioOS yet: …") and skip the brand
+ *                   theme, which the plan's §3.4 cut (`oneClickModel.js`,
+ *                   build step 13) decides in the review. Review is that path.
  *                2. card edits a card run left (`GET /api/ai/rail/proposals`
  *                   per deck option, `record=deck:<id>`): in the editor,
  *                   Accept places the edit in its card (held until Save, like
- *                   every edit) and records the decision; elsewhere, "Open in
- *                   the editor ›". Discard records the decision.
+ *                   every edit), then records the decision, and takes the
+ *                   placement back when the decision is refused; elsewhere,
+ *                   "Open in the editor ›". Discard records the decision.
+ *                The edits are read again each time the sheet opens, and
+ *                whenever the page says they changed (`editsKey`: the
+ *                editor's own bar ran or decided one).
  *
  * IT HAS NO INPUT. No thread, no composer, no Run chips: typed instructions
  * live only in the editor, scoped to the selection (the owner's rule). Nothing
@@ -48,10 +53,15 @@ import {
  * `versions` is the page's own `GET /api/decks/by-project/:pid` read
  * (`{ status, data }`) when it has one, so the header never reads it twice;
  * a decision on the deck's proposal then asks the page to read again
- * (`onChanged`). Without it, Ask reads it itself.
+ * (`onChanged`, which must keep what is on screen while it reads: the editor
+ * passes its quiet `refresh`). Without it, Ask reads it itself.
  *
  * `onPlace(edit)` is the editor's: it answers `{ error }` or `{ commit }`, and
- * `commit()` places the edit after the decision is recorded. #3706's platform
+ * `commit()` places the edit at once, answering `{ error }` or `{ undo }`.
+ *
+ * Out of tokens (pd40's amber dot) is not drawn here: Ask runs no model, so
+ * nothing on this sheet can be refused for tokens. That state belongs to the
+ * selection's Ask, whose run's refusal says it (plan §4.3, a later step). #3706's platform
  * Ask panel will hold this sheet as the deck's section (owner question F).
  */
 
@@ -67,7 +77,6 @@ const EYE = 'font-mono text-[10.5px] font-bold uppercase tracking-[.08em] text-a
 /** The live reads and writes; a test hands its own. One object, so a render never makes a new read. */
 const SOURCE = Object.freeze({
   versions: (projectId) => api.deckListVersions(projectId),
-  keepAll: (proposalId) => newDeckApi.keepSlides(proposalId, { all: true, save: true }),
   discardDeck: (proposalId) => api.deckDiscardProposal(proposalId),
   proposals: railProposalsApi,
 });
@@ -86,7 +95,7 @@ async function readEdits(source, deckId) {
   return items.sort((a, b) => a.card - b.card || String(a.at || '').localeCompare(String(b.at || '')));
 }
 
-export default function DeckAsk({ projectId, versions, readOnly = false, onPlace = null, onChanged, source = SOURCE }) {
+export default function DeckAsk({ projectId, versions, readOnly = false, onPlace = null, onChanged, editsKey = 0, source = SOURCE }) {
   const [aiOn] = useAssistMode('raise');
   const [own, setOwn] = useState({ status: 'loading', data: null });
   const [edits, setEdits] = useState({ status: 'loading', items: [] });
@@ -127,7 +136,7 @@ export default function DeckAsk({ projectId, versions, readOnly = false, onPlace
       (e) => { reportError('pitch-ask:proposals', e); if (live) setEdits({ status: 'unreadable', items: [] }); },
     );
     return () => { live = false; };
-  }, [deck.status, deck.deckId, source, editsTick]);
+  }, [deck.status, deck.deckId, source, editsTick, editsKey]);
 
   /** After a decision: the card edits again; the versions again only when the deck's proposal changed. */
   const reload = useCallback(({ deck: deckChanged = false } = {}) => {
@@ -142,7 +151,7 @@ export default function DeckAsk({ projectId, versions, readOnly = false, onPlace
   const sub = unreadable ? ASK_UNREADABLE : null;
   return (
     <>
-      <AskButtonView buttonRef={opener} waiting={waiting} state={state} sub={sub} expanded={open} onClick={() => setOpen(true)} testId="pitch-ask" />
+      <AskButtonView buttonRef={opener} waiting={waiting} state={state} sub={sub} expanded={open} onClick={() => { setOpen(true); setEditsTick((t) => t + 1); }} testId="pitch-ask" />
       {open ? (
         <WaitingSheet projectId={projectId} deck={deck} edits={edits} aiOn={aiOn} onPlace={onPlace} source={source}
           reload={reload} onClose={() => setOpen(false)} returnFocusTo={opener} />
@@ -169,20 +178,33 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
     } finally { setBusy(null); reload?.({ deck: key === 'deck' }); }
   };
 
-  /** Place one card edit: check it still fits, record Accept, then place it (held until Save). */
-  const acceptEdit = (edit) => act(edit.uid, async () => {
+  const refuse = (uid, line) => setProblem((p) => ({ ...p, [uid]: line }));
+  /**
+   * Accept one card edit: check it fits, place it (held until Save), then
+   * record the decision; a refused decision takes the placement back. A
+   * placement that fails records nothing. True when it was placed and decided.
+   */
+  const place = async (edit) => {
     const plan = onPlace?.(edit);
-    if (!plan || plan.error) { setProblem((p) => ({ ...p, [edit.uid]: plan?.error || 'Open the editor to accept this.' })); return; }
-    await source.proposals.decide(edit.uid, 'accept');
-    plan.commit();
-  });
-  const acceptAll = () => act('all', async () => {
-    for (const edit of items) {
-      const plan = onPlace?.(edit);
-      if (!plan || plan.error) { setProblem((p) => ({ ...p, [edit.uid]: plan?.error || 'Open the editor to accept this.' })); continue; }
-      // One decision per proposal (D777 part 3): there is no bulk decision.
+    if (!plan || plan.error) { refuse(edit.uid, plan?.error || 'Open the editor to accept this.'); return false; }
+    const placed = plan.commit();
+    if (!placed || placed.error) { refuse(edit.uid, placed?.error || 'That did not work. Nothing was changed.'); return false; }
+    try {
       await source.proposals.decide(edit.uid, 'accept');
-      plan.commit();
+    } catch (e) {
+      placed.undo?.();
+      throw e;
+    }
+    return true;
+  };
+  const acceptEdit = (edit) => act(edit.uid, () => place(edit));
+  const acceptAll = () => act('all', async () => {
+    // One decision per proposal (D777 part 3): there is no bulk decision.
+    for (const edit of items) {
+      try { await place(edit); } catch (e) {
+        reportError('pitch-ask:accept', e);
+        refuse(edit.uid, refusalOf(e)?.message || 'That did not work. Nothing was changed.');
+      }
     }
   });
 
@@ -211,12 +233,9 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
             <span className={EYE}>Your deck</span>
             <div className={`${CARD} flex flex-col gap-2`}>
               <span className={`text-[13.5px] font-bold ${INK}`}>A proposed deck · {Array.isArray(proposal.slides) && proposal.slides.length ? `${proposal.slides.length} cards` : 'not built yet'}</span>
-              <span className={MUTED}>Nothing is a version until you accept it. Review shows every card, what it was filled from and what was left out.</span>
+              <span className={MUTED}>Nothing is a version until you accept it, in Review: it shows every card, what it was filled from and what was left out.</span>
               <div className="flex flex-wrap gap-2">
                 <Link className={BTN} to={`${NEW_PATH}${q}${q ? '&' : '?'}proposal=${encodeURIComponent(proposal.id)}`} data-testid="pitch-ask-review">Review</Link>
-                {Array.isArray(proposal.slides) && proposal.slides.length ? (
-                  <button type="button" className={GHOST} disabled={Boolean(busy)} onClick={() => act('deck', () => source.keepAll(proposal.id))} data-testid="pitch-ask-deck-accept">{ACCEPT_ALL}</button>
-                ) : null}
                 <button type="button" className={GHOST} disabled={Boolean(busy)} onClick={() => act('deck', () => source.discardDeck(proposal.id))} data-testid="pitch-ask-deck-discard">{DISCARD}</button>
               </div>
               {problem.deck ? <p className={BAD} role="alert">{problem.deck}</p> : null}

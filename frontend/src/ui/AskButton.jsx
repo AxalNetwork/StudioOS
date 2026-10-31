@@ -30,6 +30,11 @@ export function askButtonName(waiting) {
   return Number.isInteger(waiting) && waiting > 0 ? `${ASK_NAME}, ${waiting} waiting` : ASK_NAME;
 }
 
+// One text colour per state, never two stacked: two colour utilities of the
+// same weight resolve by their order in the built CSS, not in this string.
+const INK = 'text-axal-violet-deep dark:text-violet-300';
+const MUTED_INK = 'text-axal-muted dark:text-gray-400';
+
 export function AskButtonView({ onClick, disabled = false, expanded, waiting = null, state = 'rest', sub = null, testId = 'ask-eadwyn', buttonRef }) {
   const subId = useId();
   const running = state === 'running';
@@ -46,7 +51,7 @@ export function AskButtonView({ onClick, disabled = false, expanded, waiting = n
       aria-expanded={expanded}
       aria-describedby={sub ? subId : undefined}
       data-state={state}
-      className={`relative inline-flex h-10 items-center gap-2 rounded-[9px] border border-axal-lavender-edge bg-transparent px-3.5 text-[13.5px] font-semibold text-axal-violet-deep hover:bg-axal-lavender focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet disabled:opacity-45 max-sm:min-h-[44px] dark:border-violet-700/60 dark:text-violet-300 dark:hover:bg-violet-900/30 ${muted ? 'text-axal-muted dark:text-gray-400' : ''}`}
+      className={`relative inline-flex h-10 items-center gap-2 rounded-[9px] border border-axal-lavender-edge bg-transparent px-3.5 text-[13.5px] font-semibold hover:bg-axal-lavender focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet disabled:opacity-45 max-sm:min-h-[44px] dark:border-violet-700/60 dark:hover:bg-violet-900/30 ${muted ? MUTED_INK : INK}`}
       data-testid={testId}
     >
       {running

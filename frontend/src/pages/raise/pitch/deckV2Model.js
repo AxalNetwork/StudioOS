@@ -164,7 +164,6 @@ export function askAreaName(n) {
 
 export const ASKING = 'Asking…';
 export const ASK_UNREADABLE = 'Eadwyn could not be reached. Try again.';
-export const ASK_OUT = 'The included AI allowance and top-up balance cannot cover this run.';
 export const ASK_OFF = 'AI is paused. What is waiting can still be accepted or discarded.';
 export const WAITING_TITLE = 'Waiting for you';
 export const WAITING_NONE = 'Nothing is waiting. What Eadwyn proposes for this deck appears here until you accept or discard it.';

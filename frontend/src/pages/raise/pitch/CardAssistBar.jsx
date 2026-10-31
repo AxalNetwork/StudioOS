@@ -22,7 +22,7 @@ import { COST, EYE, FIELD, GHOST, MUTED, PressDialog, RefusalLine, TextProposal,
  * AI assistance off on the page the bar is greyed with the sentence that says
  * so. Mounted by `PitchEditor.jsx`.
  */
-export default function CardAssistBar({ deckId, cardIndex, block, items, onPlace }) {
+export default function CardAssistBar({ deckId, cardIndex, block, items, onPlace, onProposals }) {
   const [on] = useAssistMode('raise');
   const [off, setOff] = useState(false);
   const [tone, setTone] = useState(TONES[0][0]);
@@ -74,7 +74,7 @@ export default function CardAssistBar({ deckId, cardIndex, block, items, onPlace
   const run = () => {
     setBusy(true); setRefusal(null);
     deckAssistApi.run(deckId, cardIndex, textBody(action, block, extra), railPressHeaders(press.option)).then(
-      (r) => { setBusy(false); setProposal({ ...textProposal(r), blockId: block.id }); close(); },
+      (r) => { setBusy(false); setProposal({ ...textProposal(r), blockId: block.id }); close(); onProposals?.(); },
       (e) => {
         setBusy(false);
         const r = refusalOf(e);
@@ -93,10 +93,11 @@ export default function CardAssistBar({ deckId, cardIndex, block, items, onPlace
         setDeciding(false);
         if (decision === 'accept') onPlace(proposal.blockId, proposal.after);
         setProposal(null);
+        onProposals?.();
       },
       (e) => {
         setDeciding(false);
-        if (decision === 'discard') { setProposal(null); return; }
+        if (decision === 'discard') { setProposal(null); onProposals?.(); return; }
         setPlaceError(refusalOf(e));
         reportError('pitch-assist:decide', e);
       },
