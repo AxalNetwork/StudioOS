@@ -314,6 +314,8 @@ const HqPlatformAllowancesPage = lazy(() => import('./pages/hq/PlatformAllowance
 const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
 // D1172 (#3085, STG20): what members store, totals only.
 const HqPlatformStoragePage = lazy(() => import('./pages/hq/PlatformStoragePage'));
+// D1491 (#3725): HQ › Platform › Event syndication (SY1, SY5, SY6).
+const HqEventSyndicationPage = lazy(() => import('./pages/hq/eventSyndication/EventSyndicationPage'));
 // D1253 (#2428): the venture scorecard's method, the founder's page and HQ › Platform › Scoring.
 const ScoringMethodPage = lazy(() => import('./pages/scoring/ScoringMethodPage'));
 const FounderScorecardPage = lazy(() => import('./pages/scoring/FounderScorecardPage'));
@@ -3094,6 +3096,9 @@ function AppInner() {
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
       <Route path="/admin/platform/ai-usage" element={guard(['admin'], hqOnly(<HqAiUsagePage />))} />
       <Route path="/admin/platform/storage" element={guard(['admin'], hqOnly(<HqPlatformStoragePage />))} />
+      <Route path="/admin/platform/event-syndication" element={guard(['admin'], hqOnly(<HqEventSyndicationPage />))} />
+      <Route path="/admin/platform/event-syndication/log" element={guard(['admin'], hqOnly(<HqEventSyndicationPage />))} />
+      <Route path="/admin/platform/event-syndication/settings" element={guard(['admin'], hqOnly(<HqEventSyndicationPage />))} />
       <Route path="/admin/platform/scoring" element={guard(['admin'], hqOnly(<HqScoringPage />))} />
       <Route path="/scoring/method" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ScoringMethodPage />)} />
       {/* The owner's ruling (2026-10-20) — Integration keys, with GitHub Sync as
