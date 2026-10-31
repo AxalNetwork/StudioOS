@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { act } from 'react';
-import { h, mountForm, sourceModule, mutationCheck } from './_form_d695.mjs';
+import { h, mountForm, sourceModule, mutationCheck, textOf } from './_form_d695.mjs';
 import { normalizePhoneInput, phoneCountry, phonePlaceholder, PHONE_COUNTRIES, PHONE_ERROR } from '../src/lib/phoneNumber.js';
 
 // Entirely synthetic Swiss subscriber digits; US 555, UK 07700 900 and
@@ -46,9 +46,11 @@ test('#2639: national, 00 and international formats agree; invalid input stays r
 });
 
 const settings = readFileSync(new URL('../src/pages/SettingsPage.jsx', import.meta.url), 'utf8');
-const prelude = `import React, { useState, useEffect } from 'react';
+const prelude = `import React, { useState, useEffect, useRef } from 'react';
 import { normalizePhoneInput, phoneCountry, phonePlaceholder, PHONE_COUNTRIES, PHONE_ERROR } from '../lib/phoneNumber';
 const inputCls = '';
+const loadRecaptcha = async () => {};
+const invisibleToken = async () => 'synthetic-token';
 const Card = ({ children }) => <div>{children}</div>;
 const Field = ({label,hint,children}) => <label>{label}{hint}{children}</label>;
 const CompletionRing = () => null;
@@ -57,7 +59,7 @@ const isSuperAdminUser = () => false;
 export const api = {
  profile: {country:'CH'}, calls: [],
  async getPersonalProfile() { return this.profile; },
- async smsStatus() { return {configured:false,sms_available:true}; },
+ async smsStatus() { return {configured:false,sms_available:true,sms_ready:true,recaptcha_site_key:'synthetic-key',allowed_countries:null}; },
  async smsStartEnrollment(...args) { this.calls.push(args); return {session_info:'synthetic-session'}; },
  async updatePersonalProfile(patch) { this.calls.push(patch); return this.profile; }
 };
@@ -77,9 +79,8 @@ async function smsCase(module, input = cases[0][0], country = 'CH', expected = C
     await act(async () => f.props(f.by('sms-phone-input')).onChange({target:{value:input}}));
     assert.equal(f.props(f.by('sms-phone-input')).value,input,'typing must not truncate or erase punctuation');
     if (expected) assert.ok(f.text().includes("We'll text " + normalizePhoneInput(input,country).international));
-    await f.click('Send verification code');
-    if (expected) assert.deepEqual(module.api.calls, [[expected,expectedCountry,null]]);
-    else { assert.equal(module.api.calls.length,0); assert.equal(messages.at(-1)[0],PHONE_ERROR); }
+    if (expected) { await f.click('Send verification code'); assert.deepEqual(module.api.calls, [[expected,expectedCountry,'synthetic-token']]); }
+    else { const send = f.nodes().find(n => n.tagName === 'BUTTON' && textOf(n).trim() === 'Send verification code'); assert.equal(f.props(send).disabled,true); assert.equal(module.api.calls.length,0); assert.ok(f.text().includes(PHONE_ERROR)); }
   } finally { await f.unmount(); }
 }
 test('#2639: SMS country defaults from profile (else US), previews and sends canonical destinations', async () => {
@@ -89,16 +90,16 @@ test('#2639: SMS country defaults from profile (else US), previews and sends can
   await smsCase(module,'123','CH',null);
   await mutationCheck(smsSource, 'pages/SettingsPage.jsx', smsCase, [
     ['setCountry(phoneCountry(profile?.country))', "setCountry('US')"],
-    ['normalizedPhone.e164, normalizedPhone.country, null', 'phone, country, null'],
+    ['normalizedPhone.e164, normalizedPhone.country, token', 'phone, country, token'],
     ["We'll text {normalizedPhone.international}.", ''],
     ['setPhone(e.target.value)', "setPhone(e.target.value.slice(0, 5))"],
     ['placeholder={phonePlaceholder(country)}', 'placeholder="+1…"'],
   ]);
   await mutationCheck(smsSource, 'pages/SettingsPage.jsx', module => smsCase(module, '123', 'CH', null), [
-    ["if (!normalizedPhone) { flash(PHONE_ERROR, 'error'); return; }", ''],
+    ['&& !!normalizedPhone &&', '&&'],
   ]);
   await mutationCheck(smsSource, 'pages/SettingsPage.jsx', module => smsCase(module, '+33 (0)6 39 98 01 23', 'CH', '+33639980123', 'FR'), [
-    ['normalizedPhone.e164, normalizedPhone.country, null', 'normalizedPhone.e164, country, null'],
+    ['normalizedPhone.e164, normalizedPhone.country, token', 'normalizedPhone.e164, country, token'],
   ]);
 });
 test('#2639: SMS selection changes national parsing and a late/unreadable profile cannot silently overwrite it', async () => {
@@ -113,7 +114,7 @@ test('#2639: SMS selection changes national parsing and a late/unreadable profil
     await act(async () => f.props(f.by('sms-phone-country')).onChange({target:{value:'GB'}}));
     await act(async () => f.props(f.by('sms-phone-input')).onChange({target:{value:'07700 900123'}}));
     await f.click('Send verification code');
-    assert.deepEqual(module.api.calls, [['+447700900123','GB',null]]);
+    assert.deepEqual(module.api.calls, [['+447700900123','GB','synthetic-token']]);
   } finally { await f.unmount(); }
   module.api.getPersonalProfile = async () => {throw new Error('synthetic read failure');};
   const broken = await mountForm(h(module.SmsPanel, {data:{},flash(){}}));
