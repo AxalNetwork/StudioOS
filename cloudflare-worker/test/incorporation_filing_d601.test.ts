@@ -368,3 +368,14 @@ test('the order reads carry the company the filing linked, never the venture\'s 
   assert.equal((await call(db, FOUNDER, 'GET', '/legal/incorporate/status?id=7')).body.company_uid, uid);
   assert.equal((await call(db, FOUNDER, 'GET', '/legal/incorporate/orders')).body.orders.find((o: any) => o.id === 7).company_uid, uid);
 });
+
+test('a venture with a slug keeps its old address when the filing moves it into its new company', async () => {
+  // Mutation checked: the move's retireSlug left out of projectMoveStatements.
+  const db = fixture();
+  db.prepare("UPDATE projects SET slug = 'acme' WHERE id = 1").run();
+  await readyWithAgent(db);
+  const out = await filed(db, 7, '2026-09-03');
+  assert.equal(out.status, 200, JSON.stringify(out.body));
+  const hist = db.prepare("SELECT kind, scope_company_id, slug, target_id FROM slug_history WHERE kind = 'project'").all().map((x: any) => ({ ...x }));
+  assert.deepEqual(hist, [{ kind: 'project', scope_company_id: null, slug: 'acme', target_id: 1 }], 'the standalone address is retired, so it still resolves');
+});
