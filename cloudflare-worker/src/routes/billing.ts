@@ -1,3 +1,4 @@
+import { NOT_SOLD } from '../services/planCatalogue';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { heldInterval, markSubscriptionAmountCanceled, recordSubscriptionAmount } from '../services/planAllowance';
@@ -506,7 +507,7 @@ billing.all('/tier/dev-upgrade', async (c) => {
 // Task #6 (W-1) — Investor paywall checkout / portal / status / dev-upgrade.
 // Distinct customer + subscription columns from MI Pro and from founder-tier
 // so an investor can carry independent billing state. Free → Professional
-// ($149/mo or yearly) → Institutional ($599/mo or yearly).
+// → Institutional (custom terms; Contact Axal VC).
 // ---------------------------------------------------------------------------
 
 // The investor `plan` string encodes both the tier (professional |
@@ -545,6 +546,9 @@ billing.post('/investor/checkout', async (c) => {
   }
   const body = await c.req.json().catch(() => ({} as { plan?: string; interval?: string }));
   if (!isValidInvestorPlan(body.plan)) return c.json({ error: 'invalid_plan' }, 400);
+  // D1430: Institutional is negotiated, never a self-service subscription.
+  if (INVESTOR_PLAN_TO_PRICE[body.plan].tier === 'institutional')
+    return refuse(c, 409, { code: 'not_sellable', message: NOT_SOLD.custom });
   // D816 (#2262): an explicit interval chooses the price, as on the founder and
   // persona checkouts; with none, the plan key's own interval stands.
   const interval = body.interval === undefined ? INVESTOR_PLAN_TO_PRICE[body.plan].interval : checkoutInterval(body.interval);

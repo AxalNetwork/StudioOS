@@ -3,6 +3,7 @@ import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api, refusalError } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
 import { normalizePhoneInput, phoneCountry, phonePlaceholder, PHONE_COUNTRIES, PHONE_ERROR } from '../lib/phoneNumber';
+import { loadRecaptcha, invisibleToken } from '../lib/recaptcha';
 import { useToast } from '../components/useToast';
 import {
   User,
@@ -1846,11 +1847,6 @@ function EmailSection({ data, flash, reload }) {
   );
 }
 
-// Task #6 — SMS 2FA panel. Only renders the enrolment UI when the worker
-// reports `sms_available=true` (GCIP API key configured); otherwise falls
-// back to a quiet "not available" notice so single-tenant deployments
-// without GCIP don't see a broken form. Phone numbers are stored encrypted
-// at rest server-side; the UI only ever sees the last 4 digits.
 // BLOCK-AUTH-02 — passkey (WebAuthn) management. Register a platform/roaming
 // authenticator, list registered passkeys, and remove them. A passkey is a
 // strong factor: signing in with one mints a full-assurance session that also
@@ -1976,12 +1972,37 @@ function SmsPanel({ data, flash, onChanged }) {
   const [session, setSession] = useState(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [checkReady, setCheckReady] = useState(false);
+  const [last4, setLast4] = useState('');
+  const [resendAt, setResendAt] = useState(0);
+  const [now, setNow] = useState(Date.now);
+  const [checking, setChecking] = useState(false);
+  const recaptchaRef = useRef(null);
+  const pendingCheck = useRef(null);
+  useEffect(() => () => pendingCheck.current?.abort(), []);
 
   const refresh = async () => {
     try { setStatus(await api.smsStatus()); }
-    catch { setStatus({ configured: false, sms_available: false }); }
+    catch { setStatus({ unreadable: true }); }
   };
   useEffect(() => { refresh(); }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCheckReady(false);
+    if (!status?.sms_ready || step === 'idle') return;
+    if (!status.recaptcha_site_key) { setCheckReady(true); return; }
+    loadRecaptcha().then(() => { if (!cancelled) setCheckReady(true); })
+      .catch(e => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
+  }, [status?.sms_ready, status?.recaptcha_site_key, step]);
+
+  useEffect(() => {
+    if (step !== 'verify') return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [step]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1993,23 +2014,46 @@ function SmsPanel({ data, flash, onChanged }) {
   }, []);
 
   const normalizedPhone = normalizePhoneInput(phone, country);
+  const countryOk = !normalizedPhone || status?.allowed_countries === null || (Array.isArray(status?.allowed_countries) && status.allowed_countries.includes(normalizedPhone.country));
+  const canSend = countryReady && !busy && !!normalizedPhone && countryOk && checkReady;
+  const resendSeconds = Math.max(0, Math.ceil((resendAt - now) / 1000));
+  const refusal = async (e, fallback) => {
+    const message = e?.message || fallback;
+    setError(message);
+    flash(message, 'error');
+    if (e?.code === 'session_expired') { setCode(''); setResendAt(0); }
+    if (e?.code === 'sms_unavailable' || e?.code === 'phone_auth_disabled') await refresh();
+  };
   const start = async () => {
     if (!countryReady) return;
     if (!normalizedPhone) { flash(PHONE_ERROR, 'error'); return; }
+    if (!canSend || (step === 'verify' && resendSeconds > 0)) return;
+    const controller = new AbortController();
+    pendingCheck.current = controller;
     setBusy(true);
+    setChecking(true);
+    setError('');
     try {
-      const res = await api.smsStartEnrollment(normalizedPhone.e164, normalizedPhone.country, null);
+      const token = status.recaptcha_site_key ? await invisibleToken(recaptchaRef.current, status.recaptcha_site_key, controller.signal) : null;
+      setChecking(false);
+      if (controller.signal.aborted) return;
+      const res = await api.smsStartEnrollment(normalizedPhone.e164, normalizedPhone.country, token);
       setSession(res.session_info);
+      setLast4(res.last4);
+      setCode('');
+      setNow(Date.now());
+      setResendAt(Date.now() + (res.resend_after_s ?? 60) * 1000);
       setStep('verify');
       flash('Verification code sent.');
     } catch (e) {
-      flash(e?.message || 'Could not send verification code.', 'error');
-    } finally { setBusy(false); }
+      if (!controller.signal.aborted) await refusal(e, 'Could not send verification code.');
+    } finally { pendingCheck.current = null; setChecking(false); setBusy(false); }
   };
 
   const confirm = async () => {
     if (code.length !== 6) return;
     setBusy(true);
+    setError('');
     try {
       await api.smsConfirmEnrollment(session, code);
       flash('SMS 2FA enabled.');
@@ -2017,7 +2061,7 @@ function SmsPanel({ data, flash, onChanged }) {
       await refresh();
       onChanged?.();
     } catch (e) {
-      flash(e?.message || 'Verification failed.', 'error');
+      await refusal(e, 'Verification failed.');
     } finally { setBusy(false); }
   };
 
@@ -2038,12 +2082,15 @@ function SmsPanel({ data, flash, onChanged }) {
     } finally { setBusy(false); }
   };
 
+  const errorNotice = error && <p role="alert" data-testid="sms-error" className="text-sm text-red-700 dark:text-red-300 mb-3">{error}</p>;
   if (!status) {
     return <Card title="SMS as a backup factor" description="Loading…"><div className="text-sm text-gray-500">…</div></Card>;
   }
+  if (status.unreadable) return <Card title="SMS as a backup factor" description="SMS status could not be read.">{errorNotice}<button onClick={refresh} className="text-sm text-violet-700">Try again</button></Card>;
   if (!status.sms_available) {
     return (
       <Card title="SMS as a backup factor" description="SMS verification is not enabled on this server yet.">
+        {errorNotice}
         <div className="text-xs text-gray-500 dark:text-gray-400 space-y-2">
           <p>
             A Super Admin needs to add Google Cloud Identity Platform credentials
@@ -2065,11 +2112,21 @@ function SmsPanel({ data, flash, onChanged }) {
     );
   }
 
+  if (!status.sms_ready && !status.configured) return (
+    <Card title="SMS as a backup factor" description="SMS backup isn't available yet — set-up isn't finished on this server.">
+      {errorNotice}
+      <button onClick={refresh} className="text-sm text-violet-700 mr-3">Try again</button>
+      {isSuperAdmin && <a href="/admin/integration-keys" data-testid="sms-admin-keys-link" className="text-sm text-violet-700">Open Integration Keys</a>}
+    </Card>
+  );
+
   return (
     <Card
       title="SMS as a backup factor"
       description="Add a phone number as a backup verification factor. You'll receive a 6-digit code by text to confirm the number — used only for account recovery, never as a primary sign-in method."
     >
+      <div ref={recaptchaRef} data-testid="sms-recaptcha" />
+      {errorNotice}
       <div className="text-xs text-amber-800 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900 rounded-lg p-3 mb-3">
         <strong>SIM-swap warning:</strong> SMS is less secure than your authenticator app — anyone who takes over your phone number can use it to sign in.
         Billing changes, impersonation and other sensitive actions will always still require your authenticator code.
@@ -2107,14 +2164,17 @@ function SmsPanel({ data, flash, onChanged }) {
           <Field label="Phone" hint="Your mobile number, any country">
             <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={busy || !countryReady}
               placeholder={phonePlaceholder(country)} className={`${inputCls} font-mono`} data-testid="sms-phone-input" />
+            {phone.trim() && !normalizedPhone && <p className="text-xs text-red-700 mt-1">{PHONE_ERROR}</p>}
+            {normalizedPhone && !countryOk && <p className="text-xs text-amber-700 mt-1">Texts to {PHONE_COUNTRIES.find(c => c.country === normalizedPhone.country)?.label.split(' (+')[0] || normalizedPhone.country} aren't offered yet.</p>}
             {normalizedPhone && <p className="text-xs text-gray-500 mt-1" role="status">We'll text {normalizedPhone.international}.</p>}
           </Field>
+          {!checkReady && !error && <p className="text-xs text-gray-500">Loading the security check…</p>}
           <div className="flex gap-2">
-            <button onClick={start} disabled={busy || !phone || !countryReady}
+            <button onClick={start} disabled={!canSend}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium">
-              {busy ? 'Sending…' : 'Send verification code'}
+              {busy ? (checking ? 'Checking…' : 'Sending…') : 'Send verification code'}
             </button>
-            <button onClick={() => { setStep('idle'); setPhone(''); }}
+            <button disabled={busy && !checking} onClick={() => { pendingCheck.current?.abort(); setStep('idle'); setPhone(''); setError(''); }}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm">
               Cancel
             </button>
@@ -2124,17 +2184,20 @@ function SmsPanel({ data, flash, onChanged }) {
 
       {step === 'verify' && (
         <div className="space-y-3">
-          <div className="text-sm text-gray-700 dark:text-gray-300">Enter the 6-digit code we just texted to your phone.</div>
+          <div className="text-sm text-gray-700 dark:text-gray-300">We texted a 6-digit code to the number ending {last4}.</div>
           <div className="flex gap-2">
             <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="000000" inputMode="numeric"
+              placeholder="000000" inputMode="numeric" autoComplete="one-time-code" aria-label="Six-digit SMS code" data-testid="sms-code-input"
               className={`${inputCls} font-mono text-center tracking-widest`} />
             <button onClick={confirm} disabled={busy || code.length !== 6}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium whitespace-nowrap">
-              {busy ? 'Verifying…' : 'Confirm'}
+              {busy ? 'Verifying…' : 'Verify'}
             </button>
           </div>
-          <button onClick={() => { setStep('enroll'); setCode(''); setSession(null); }}
+          <button onClick={start} disabled={busy || resendSeconds > 0 || !checkReady} className="text-sm text-violet-700 disabled:text-gray-500 mr-3" data-testid="sms-resend">
+            {resendSeconds > 0 ? `Resend in ${Math.floor(resendSeconds / 60)}:${String(resendSeconds % 60).padStart(2, '0')}` : 'Resend'}
+          </button>
+          <button disabled={busy && !checking} onClick={() => { pendingCheck.current?.abort(); setStep('enroll'); setCode(''); setSession(null); setError(''); setResendAt(0); }}
             className="text-xs text-gray-500 hover:text-gray-700">Use a different number</button>
         </div>
       )}
@@ -4506,8 +4569,6 @@ const PERSONA_PLANS = {
       features: ['Marketplace + directory listing', 'Manage up to 3 service offers', 'Respond to Needs Board posts', 'Stripe Connect payouts'] },
     pro: { name: 'Pro', tagline: 'For partners who want inbound demand on tap.',
       features: ['Unlimited service offers', 'Priority placement in search + directory', 'Full partner analytics dashboard', 'Verified partner badge', 'Partner deal portal access'] },
-    enterprise: { name: 'Enterprise / Custom', tagline: 'Firms and agencies scaling across the network.',
-      features: ['Featured marketplace placement', 'Multiple seats + team profiles', 'Dedicated partner manager'] },
   },
   advisor: {
     label: 'Advisor',
@@ -4515,8 +4576,6 @@ const PERSONA_PLANS = {
       features: ['Public advisor profile + expertise tags', 'Founder matching', 'Office Hours workspace', 'Ratings + trust badge'] },
     pro: { name: 'Pro', tagline: 'For advisors who want more reach and better matches.',
       features: ['Priority founder matching', 'Boosted directory visibility', 'Featured advisor placement'] },
-    enterprise: { name: 'Enterprise / Custom', tagline: 'Advisory firms and expert networks.',
-      features: ['Multiple advisor seats + team profiles', 'Programmatic founder matching', 'Dedicated relationship manager'] },
   },
 };
 
@@ -4527,7 +4586,7 @@ const PERSONA_PLANS = {
 // (the persona subscription lives on the general Stripe customer, which
 // scope="founder" reads). Falls back to the saved-cards view for any role that
 // has no persona plan.
-function PersonaBillingPanel({ flash, billing }) {
+export function PersonaBillingPanel({ flash, billing }) {
   // D568 — the plan read is BillingTab's (`billing`, GET /billing/plan/status),
   // shared with the plan line above. A failed read leaves `status` null, which
   // falls back to the saved-cards view exactly as the panel's own read did.
@@ -4602,8 +4661,8 @@ function PersonaBillingPanel({ flash, billing }) {
         </Card>
       ) : (
         <Card title="Plans" description="Upgrade any time. Manage or cancel from this page once subscribed.">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[['starter', defs.starter], ['pro', defs.pro], ['enterprise', defs.enterprise]].map(([key, plan]) => {
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[['starter', defs.starter], ['pro', defs.pro]].map(([key, plan]) => {
               const current = key === 'starter' && !isSubscribed;
               return (
                 <div key={key}
@@ -4629,12 +4688,6 @@ function PersonaBillingPanel({ flash, billing }) {
                         className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">
                         {busy ? 'Starting…' : 'Subscribe'}
                       </button>
-                    )}
-                    {key === 'enterprise' && (
-                      <a href="mailto:hello@axal.vc"
-                        className="block text-center w-full px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md text-sm font-medium">
-                        Talk to us
-                      </a>
                     )}
                   </div>
                 </div>
@@ -4921,7 +4974,7 @@ function EmbeddedCheckoutCard({ flash, onPaid }) {
 //      toggle and Stripe-checkout buttons.
 //   3. Quotas card — warm intros / quarter (used vs cap) and deal-room cap.
 //   4. Seat management — only for Institutional plans (list/invite/revoke).
-function InvestorBillingPanel({ flash, billing }) {
+export function InvestorBillingPanel({ flash, billing }) {
   // D568 — the status read is BillingTab's (`billing`, GET
   // /billing/investor/status), shared with the plan line above. A failed read
   // used to raise a toast and then draw the Free ladder and zero quotas below
@@ -4952,8 +5005,7 @@ function InvestorBillingPanel({ flash, billing }) {
   const hasCustomer = !!status.has_customer;
   const quotas = status.quotas || {};
 
-  // D1054 (#2905): Upgrade opens the checkout sheet over Billing, in the cycle shown; Institutional
-  // opens it on the sales line (PAYX13), since the catalogue does not sell it here.
+  // Paid tiers open the sheet in the chosen cycle; Institutional links to Contact Axal VC.
   const upgrade = (target) => openCheckout({ plan_key: `investor:${target}`, interval: billingCycle === 'yearly' ? 'yearly' : 'monthly', from: { label: 'Billing', href: '/account/billing' } });
 
   const TIER_LABEL = {
@@ -4961,7 +5013,7 @@ function InvestorBillingPanel({ flash, billing }) {
     // D1050: the names are the plan catalogue's and the prices the plans read's, per the cycle shown.
     plus: `${TIER_PLANS.plus.label} — ${priceText(prices, TIER_PLANS.plus.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
     professional: `${TIER_PLANS.professional.label} — ${priceText(prices, TIER_PLANS.professional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
-    institutional: `${TIER_PLANS.institutional.label} — ${priceText(prices, TIER_PLANS.institutional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
+    institutional: `${TIER_PLANS.institutional.label} — Custom`,
   };
   const ladder = ['free', 'plus', 'professional', 'institutional'];
   const RANK = { free: 0, plus: 1, professional: 2, institutional: 3 };
@@ -5014,7 +5066,7 @@ function InvestorBillingPanel({ flash, billing }) {
         <Card title="Plans" description="Switch plan or change billing cycle. Manage or cancel from this page once subscribed.">
           <div className="flex justify-end mb-3">
             <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-white dark:bg-gray-900 text-xs">
-              {[{id:'monthly',label:'Monthly'},{id:'yearly',label:'Annual · save 2 mo'}].map((b) => (
+              {[{id:'monthly',label:'Monthly'},{id:'yearly',label:'Annual'}].map((b) => (
                 <button key={b.id} type="button" onClick={() => setBillingCycle(b.id)}
                   className={`px-3 py-1 rounded-md transition-colors ${
                     billingCycle === b.id ? 'bg-violet-600 text-white font-medium' : 'text-gray-600 dark:text-gray-300'
@@ -5025,7 +5077,7 @@ function InvestorBillingPanel({ flash, billing }) {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {ladder.map((t) => {
               const current = t === tier;
-              const upgradable = t !== 'free' && RANK[t] !== RANK[tier];
+              const upgradable = t !== 'free' && t !== 'institutional' && RANK[t] !== RANK[tier];
               return (
                 <div key={t}
                   className={`rounded-lg border p-4 ${current ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
@@ -5040,6 +5092,7 @@ function InvestorBillingPanel({ flash, billing }) {
                     {current && (
                       <span className="text-xs uppercase tracking-wider text-violet-700 dark:text-violet-300 font-semibold">Current plan</span>
                     )}
+                    {t === 'institutional' && <Link to="/contact" className="text-sm text-violet-700 dark:text-violet-300 underline">Contact Axal VC</Link>}
                     {upgradable && (
                       <button type="button" disabled={busy === t} onClick={() => upgrade(t)}
                         className="w-full px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md text-sm font-medium disabled:opacity-50">

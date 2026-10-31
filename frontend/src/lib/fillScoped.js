@@ -4,13 +4,13 @@
  * No React and no fetch; `ui/useScopedFill.jsx` draws it.
  *
  *   AF15  a reader reads the marks with no trigger and no Undo; a support
- *         session reads "Fill is off in a support session."
+ *         session reads "Ask is off in a support session."
  *   AF17  Commit's IC memo: "Not filled here: Commitment amount".
  *   AF18  a service; its price is never filled.
  *   AF19  a status report's Done and Next, from the engagement record.
  *   AF20  an event's content; an approval has no trigger.
  *   AF21  a publication's summary; who wrote it is never filled.
- *   AF22  the Explorer: "Fill opens once you hold a venture or a profile."
+ *   AF22  the Explorer: "Ask opens once you hold a venture or a profile."
  */
 
 /** The pages and forms FILL_FIELDS lists for the other profiles (D1329), by board. */
@@ -23,8 +23,8 @@ export const SCOPED_FORMS = Object.freeze({
   publication: Object.freeze({ page: 'Super Admin · Content · Publications', form: 'publication', table: 'admin_publications' }),
 });
 
-export const SUPPORT_OFF = 'Fill is off in a support session.';
-export const EXPLORER_OFF = 'Fill opens once you hold a venture or a profile.';
+export const SUPPORT_OFF = 'Ask is off in a support session.';
+export const EXPLORER_OFF = 'Ask opens once you hold a venture or a profile.';
 
 /**
  * Why a form shows no trigger, in words, or null when it needs no line: a

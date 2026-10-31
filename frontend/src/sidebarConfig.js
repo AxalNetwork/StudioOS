@@ -238,12 +238,11 @@ export const SIDEBAR_GROUPS = {
       // is the complete statement of what the row owns (SidebarNav), so a
       // door the landing draws without a `match` entry lights no row.
       { to: '/admin/approvals', icon: Inbox, label: 'Approvals',
-        match: ['/admin/approvals', '/admin/kyc', '/admin/lp-applications', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation', '/admin/partner-profiles'] },
+        match: ['/admin/approvals', '/admin/kyc', '/admin/lp-applications', '/admin/due-diligence', '/admin/spinout-moderation', '/admin/partner-profiles'] },
       // D953 (#2371): the catalogue and every program page under it, the three
       // old addresses that redirect into it, and, as before, the Lab console
-      // and Profiling trends, whose one door is the catalogue's foot (O-PRF).
       { to: '/admin/programs', icon: Calendar, label: 'Programs',
-        match: ['/admin/programs', '/admin/held/programs', '/admin/advisor-cohorts', '/admin/refer-earn', '/admin/spinout-lab', '/admin/profiling-trends'] },
+        match: ['/admin/programs', '/admin/held/programs', '/admin/advisor-cohorts', '/admin/refer-earn', '/admin/spinout-lab'] },
       // D930 (#2367): Community's own address; /admin/held/community redirects here.
       { to: '/admin/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/partner-invitations', '/admin/advisors-partners', '/admin/directory', '/admin/wellbeing'] },
 
@@ -790,6 +789,8 @@ export const ONBOARDING_CANVAS_PATHS = [
 ];
 
 export const SHARED_FULL_BLEED = [
+  // #3717: the studio home also owns its gutter when read by an admin.
+  '/raise/pitch',
   // Pricing and Learning own their hero and body gutters, like Help.
   '/pricing', '/pricing/', '/learning', '/learning/',
   '/referrals',
@@ -841,6 +842,8 @@ export const SHARED_FULL_BLEED = [
  */
 export const SHARED_FULL_BLEED_PREFIXES = [
   '/spinout-lab/',
+  // Pitch pages own the cycle gutter and dock their rail for founders and admins.
+  '/raise/pitch/',
   // A researched fund's own page. The list `/research/funds` is already full
   // bleed because it is a shell zone; the child is not in that derived list,
   // and without this prefix the dossier would sit inside App's padding on top

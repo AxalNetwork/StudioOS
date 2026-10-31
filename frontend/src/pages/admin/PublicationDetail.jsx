@@ -171,7 +171,7 @@ export default function PublicationDetail() {
         {!published && <FillFormBar fill={fill} />}
         {!published && proposal && fromProposal == null && (
           <p className="mb-3 text-xs text-gray-600 dark:text-gray-300" data-testid="publication-summary-proposal">
-            Eadwyn&rsquo;s earlier draft waits in Fill, not saved.{' '}
+            Eadwyn&rsquo;s earlier draft waits in Ask, not saved.{' '}
             <button type="button" onClick={discardProposal} className="font-medium text-violet-700 hover:underline dark:text-violet-300" data-testid="action-discard-summary-proposal">Discard it</button>
           </p>
         )}

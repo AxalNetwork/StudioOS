@@ -5,7 +5,8 @@ import { api } from '../../../lib/api';
 import { cyclesApi } from '../../../lib/api/cycles';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { Lightbox, Pill, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
+import { Lightbox, Pill, WorkerRail, usePhoneWidth } from '../../../ui';
+import PitchPage from './PitchPage';
 import ExportDialog from './ExportDialog';
 import PitchNotes from './PitchNotes';
 import PitchReview from './PitchReview';
@@ -182,7 +183,7 @@ export default function PitchStudio({ tab = 'decks' }) {
   );
 
   return (
-    <RailFrame rail={rail} data-testid="pitch-studio">
+    <PitchPage rail={rail} crumb={{ query: q }} testId="pitch-studio">
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid={`pitch-studio-${tab}`}>
         <StudioHeader tab={tab} q={q} readOnly={readOnly} showNew={tab === 'decks' && !readOnly && Boolean(projectId)} />
         {tab === 'review' ? (
@@ -205,7 +206,7 @@ export default function PitchStudio({ tab = 'decks' }) {
           <StudioDecks reads={reads} readOnly={readOnly} q={q} />
         )}
       </div>
-    </RailFrame>
+    </PitchPage>
   );
 }
 
@@ -299,12 +300,12 @@ export function StudioDecks({ reads, readOnly, q }) {
   return (
     // A proportional aside, not a fixed track: the rail already takes its own
     // column beside the frame, and a fixed 300px here would read as a second one.
-    <div className="grid gap-3.5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+    <div className="grid gap-3.5 2xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
       <div className="flex min-w-0 flex-col gap-3.5">
         {!readOnly && !busy && reads.versions.status === 'ok' && reads.project?.id ? <FastPath projectId={reads.project.id} q={q} /> : null}
         {left}
       </div>
-      <aside className="flex flex-col gap-3.5" aria-label="Readers">
+      <aside className="grid items-start gap-3.5 md:grid-cols-2 2xl:grid-cols-1" aria-label="Readers">
         {current?.id && reads.versions.status === 'ok' ? <NewInData current={current} q={q} /> : null}
         {/* D898 group E: the builder's Spin-Out readiness and Branding, now the studio's. */}
         {reads.deck.status === 'ok' ? <SpinoutReadiness projectId={reads.project?.id ?? null} deck={reads.deck.data} /> : null}

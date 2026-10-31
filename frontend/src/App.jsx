@@ -365,9 +365,7 @@ const FounderTeamPage = lazy(() => import('./pages/founder/FounderTeamPage'));
 // Task #20 — /skills and /values are consolidated into the advisor flow, and
 // their routes redirect to /studio, where the profile band draws both. The two
 // pages were imported by nothing and were deleted in D323.
-const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 // D358 — aggregates of how profiles move over time (counts only).
-const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTrends'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const TrustCenter = lazy(() => import('./pages/site/TrustCenter'));
@@ -429,7 +427,6 @@ const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'));
 // since before any route answered it.
 const InboxPage = lazy(() => import('./pages/InboxPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
-const AcademyLessonPage = lazy(() => import('./pages/AcademyLessonPage'));
 const OnboardingFounderPage = lazy(() => import('./pages/OnboardingFounderPage'));
 const ChooseLicencePage = lazy(() => import('./pages/ChooseLicencePage'));
 // Task #178 — rendered in place by RequireAuth rather than routed to, so it
@@ -3159,9 +3156,6 @@ function AppInner() {
       <Route path="/admin/spinout-lab/preview" element={<LabPreviewRedirect />} />
       <Route path="/admin/telegram" element={guard(['admin'], hqOnly(<AdminTelegram />))} />
       <Route path="/admin/x" element={guard(['admin'], hqOnly(<AdminX />))} />
-      {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}
-      <Route path="/admin/best-fit" element={guard(['admin'], <AdminBestFitPage />)} />
-      <Route path="/admin/profiling-trends" element={guard(['admin'], <AdminProfilingTrends />)} />
       {/* Task #3 — News & Articles admin queues merged into one Content Queue. Legacy routes redirect. */}
       <Route path="/admin/news" element={<Navigate to="/admin/articles" replace />} />
       <Route path="/news" element={<Navigate to="/articles/draft" replace />} />
@@ -3279,22 +3273,22 @@ function AppInner() {
            ? <PitchBoundary role={effectiveRole} />
            : new URLSearchParams(location.search).get('mode') === 'workspace'
            ? <PitchWorkspaceMoved />
-           : founderEditor(<PitchStudio tab="decks" />))} />
+           : <PitchStudio tab="decks" />)} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
       {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. The
           template builder retired with group E: its four actions are the
           studio's, and /raise/pitch/builder opens the studio with a moved notice. */}
-      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchEditor />)))} />
+      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), <PitchEditor />)} />
       <Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />
       {/* D897 (#2677), PD3–PD6: New deck. A static path, so `/raise/:slug/new` never takes it. */}
-      <Route path="/raise/pitch/new" element={guard(labRoles(['admin', 'founder']), founderEditor(<NewDeck />))} />
-      <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />
+      <Route path="/raise/pitch/new" element={guard(labRoles(['admin', 'founder']), <NewDeck />)} />
+      <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="analytics" />)} />
       {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
       <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />
-      <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="review" />))} />
+      <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="review" />)} />
       {/* D901 (#2680) — present mode (PD16): full screen, reads one version, writes nothing. */}
       <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchPresent />))} />
-      <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="notes" />))} />
+      <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="notes" />)} />
       {/* D1180 (#3107): the workspace's default tab was the financial model, now retired, so
           ?mode=workspace lands on Use of funds › Runway › Forecast as /raise/capital/model does,
           counting itself (the address is also the Capital page). */}
@@ -4096,8 +4090,6 @@ function AppInner() {
       <Route path="/changelog" element={<ChangelogPage />} />
       {/* Public credential verification — unauthenticated by design. */}
       <Route path="/verify/:token" element={<PublicCertificateVerifyPage />} />
-      <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
-      <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       {/* #2321 — the retired audience pages forward to their door pages.
           Keep external links working and count the redirects in #2301. */}
       <Route path="/lp/founder" element={<Navigate to="/for-founders" replace />} />

@@ -62,14 +62,14 @@ function linesOf(file, needle) {
 const nameOf = (b) => b.module || b.section;
 const byId = (id) => ADMIN_BOARDS.find((b) => b.id === id);
 
-test('the active boards preserve canvas IDs, excluding retired S22', () => {
+test('the active boards preserve canvas IDs, excluding retired S10, S22 and S23', () => {
   const profile = CANVAS.profiles[ADMIN_PROFILE];
   const expected = Object.entries(profile).flatMap(([section, modules]) => [
     { section, module: null }, ...modules.map((module) => ({ section, module })),
   ]);
   assert.equal(expected.length, 39, 'the canvas no longer draws 39 Admin boards');
-  // The owner's page removal retires S22; frozen canvas IDs never shift.
-  const active = expected.map((b, i) => ({ ...b, id: `S${i + 1}` })).filter((b) => b.id !== 'S22');
+  // Owner removals retire S22 and #3734's S10/S23; frozen canvas IDs never shift.
+  const active = expected.map((b, i) => ({ ...b, id: `S${i + 1}` })).filter((b) => !['S10', 'S22', 'S23'].includes(b.id));
   assert.deepEqual(ADMIN_BOARDS.map(({ id, section, module }) => ({ id, section, module })), active);
 });
 
@@ -108,7 +108,7 @@ test('the boards with a page of their own sit in AdminBoardFrame under their own
   const framed = ADMIN_BOARDS.filter((b) => b.rail === FRAME && !b.alias && !b.host);
   // D953 (#2371): S19, the Programs catalogue, left HeldZone for the frame.
   // D1038 (#2390): so did S5, Approvals, with its lane boards.
-  assert.deepEqual(framed.map((b) => b.id), ['S3', 'S4', 'S5', 'S8', 'S9', 'S10', 'S11', 'S15', 'S16', 'S17', 'S18', 'S19', 'S23', 'S31', 'S39']);
+  assert.deepEqual(framed.map((b) => b.id), ['S3', 'S4', 'S5', 'S8', 'S9', 'S11', 'S15', 'S16', 'S17', 'S18', 'S19', 'S31', 'S39']);
   for (const b of framed) {
     for (const f of b.files) {
       assert.deepEqual(frames(f), [nameOf(b)], `${f}: the frame is not named "${nameOf(b)}", once`);

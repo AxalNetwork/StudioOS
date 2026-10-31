@@ -35,6 +35,8 @@ export async function ensureIncorporationsSchema(env: Env): Promise<void> {
     'ALTER TABLE incorporations ADD COLUMN filed_on TEXT',
     'ALTER TABLE incorporations ADD COLUMN filed_recorded_at TEXT',
     'ALTER TABLE incorporations ADD COLUMN filed_by INTEGER',
+    // Migration 685 (D1415) — the company a filed incorporation created or filled.
+    'ALTER TABLE incorporations ADD COLUMN company_id INTEGER',
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); }

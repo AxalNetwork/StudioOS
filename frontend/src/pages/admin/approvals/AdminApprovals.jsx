@@ -85,7 +85,7 @@ export function LaneDoor({ k }) {
     case 'referrals': return <Link to="/admin/programs/refer-and-earn/queue" className={LINK}>Refer & Earn › Queue</Link>;
     case 'strategic_access': return <Link to="/admin/programs/refer-and-earn" className={LINK}>Refer & Earn</Link>;
     case 'perk_listings': return <Link to="/admin/programs/perks" className={LINK}>Perks</Link>;
-    case 'best_fit': return <Link to="/admin/best-fit" className={LINK}>Best-Fit</Link>;
+    case 'best_fit': return <span className={SUB}>Here</span>;
     case 'events': return <Link to="/admin/events/review" className={LINK}>Events › Review</Link>;
     case 'jobs': return <Link to="/admin/jobs" className={LINK}>Jobs</Link>;
     case 'wellbeing_experts': return <Link to="/admin/approvals/wellbeing-experts" className={LINK}>Here</Link>;

@@ -14,7 +14,6 @@ export const FOUNDER_TOOLS = [
   { path: '/execution', cycle: 'build', module: 'product-roadmap' },
   { path: '/build/team', cycle: 'grow', module: 'team-expansion' },
   { path: '/comarketing', cycle: 'grow', module: 'distribution' },
-  { path: '/raise/pitch', cycle: 'raise', module: 'pitch-deck' },
   // D1180 (#3107) and D1194 (#3128): the capital workspace is gone. The model
   // forwards to Use of funds › Forecast, and the pipeline to Capital relationships.
   { path: '/raise/legal-engine', cycle: 'build', module: 'company-creation' },

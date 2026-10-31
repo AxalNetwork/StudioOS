@@ -64,7 +64,6 @@ export const ADMIN_PLACEMENT = [
   // reachable. Its 14 tabs are placed individually". Since D938 it is a
   // redirect, and each tab is a page of its own, placed below.
   row('Due Diligence', '/admin/due-diligence', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
-  row('Best-Fit Console', '/admin/best-fit', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
   row('Event Admin', '/admin/events', admin('Community', 'card link'), false,
     { how: 'Card link. Its approvals are also an Approvals lane.', also: [admin('Approvals', 'lane')] }),
   row('Job Board Admin', '/admin/jobs', admin('Community', 'card link'), false,

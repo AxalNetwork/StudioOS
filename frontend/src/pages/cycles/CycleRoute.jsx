@@ -33,7 +33,7 @@ import { personOfRecord } from '../email/emailModel.js';
 import { prototypeLovable } from './lovable/lovableModel';
 import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
-import { RECORD_ID } from './cyclePaths';
+import { CYCLE_GUTTER, RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
 import CycleModulePage from './CycleModulePage';
@@ -1252,7 +1252,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           content, so neither the size container nor the body is drawn. */}
       {!actionPage && (
       <div className="@container/cycle min-w-0">
-      <div className="min-w-0 px-[22px] pt-[14px] pb-[18px] lg:px-6 lg:pt-[22px] lg:pb-[30px] lg:@max-[760px]/cycle:px-[14px] lg:@max-[760px]/cycle:pt-[14px] lg:@max-[760px]/cycle:pb-[40px]" data-testid="cycle-route-body">
+      <div className={CYCLE_GUTTER} data-testid="cycle-route-body">
         <LightboxBarProvider bar={phone ? phoneBar(pageBack) : null}>
         {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}
         </LightboxBarProvider>

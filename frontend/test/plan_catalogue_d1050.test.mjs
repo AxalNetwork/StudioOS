@@ -42,6 +42,8 @@ const code = (src) => src.split('\n')
 const TYPED = /\$[1-9][\d,]*(?:\.\d+)?(?![\d,.]*[MKB])/;
 
 const SURFACES = [
+  'frontend/src/pages/PricingPage.jsx',
+  'cloudflare-worker/src/routes/billing.ts',
   'frontend/src/components/PaywallModal.jsx',
   'frontend/src/pages/SettingsPage.jsx',
   'cloudflare-worker/src/middleware/requireTier.ts',

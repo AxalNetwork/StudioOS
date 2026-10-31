@@ -46,7 +46,7 @@ const search = new Hono<{ Bindings: Env }>();
  * `research_doc` ever appears in this list, or disappears from the sweep's.
  */
 const VALID_TYPES: EntityType[] = [
-  'project', 'deal', 'founder', 'partner', 'document', 'academy_lesson', 'advisor', 'investor',
+  'project', 'deal', 'founder', 'partner', 'document', 'advisor', 'investor',
 ];
 
 /**
@@ -76,7 +76,7 @@ export async function ensureAcademySchema(env: Env): Promise<void> {
 /**
  * Role-based scope:
  *  - admin/partner/investor → every entity type
- *  - founder/other          → projects + academy lessons (their own learning surface)
+ *  - founder/other          → their reachable project/document surfaces
  *
  * Founders requesting a restricted type get an empty result with a
  * `warning`, not a 403 — keeps the UI simple and avoids leaking the
@@ -92,13 +92,13 @@ const ROLE_ALLOWED: Record<string, EntityType[]> = {
   // able to enumerate other founders via search, and no founder-role
   // -accessible founder profile page exists yet.
   admin:    VALID_TYPES,
-  founder:  ['project', 'document', 'academy_lesson'],
-  partner:  ['project', 'deal', 'document', 'academy_lesson'],
-  investor: ['project', 'deal', 'document', 'academy_lesson'],
+  founder:  ['project', 'document'],
+  partner:  ['project', 'deal', 'document'],
+  investor: ['project', 'deal', 'document'],
 };
 
 function allowedTypes(role: string): EntityType[] {
-  return ROLE_ALLOWED[role] || ['project', 'academy_lesson'];
+  return ROLE_ALLOWED[role] || ['project'];
 }
 
 function scrubSnippet(h: SearchHit): SearchHit {
@@ -146,7 +146,8 @@ search.get('/', async (c) => {
     hits = wide.filter(h => allowed.includes(h.type));
     if (!grouped) hits = hits.slice(0, limit);
   }
-  hits = hits.map(scrubSnippet);
+  // #3734: stale Academy vectors must not leak through the all-types admin path.
+  hits = hits.filter(h => allowed.includes(h.type)).map(scrubSnippet);
   // D702 — an investor does not get a project hit for a venture whose founder
   // chose "through introductions only" unless they have an introduction to it.
   hits = await keepFindable(c.env, user, hits, (h) => (h.type === 'project' ? h.entity_id : null));
@@ -188,7 +189,6 @@ const TABLE_BY_TYPE: Partial<Record<EntityType, string>> = {
   founder: 'founders',
   partner: 'users',
   document: 'legal_documents',
-  academy_lesson: 'academy_lessons',
   advisor: 'advisors',
   investor: 'users',
 };

@@ -6,8 +6,9 @@ import { newDeckApi } from '../../../lib/api/newDeck';
 import { reportError } from '../../../lib/log';
 import { railPressHeaders } from '../../../lib/railPage';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { Lightbox, RailFrame, WorkerRail } from '../../../ui';
+import { Lightbox, WorkerRail } from '../../../ui';
 import { useRailOption } from '../../../ui/railCrumbs';
+import PitchPage from './PitchPage';
 import { SourcesStep, useDeckSources } from './SourcesBoards';
 import { EDIT_PATH, READ_ONLY, STUDIO_PATH, asList, isReadOnly, ventureQuery } from './pitchStudioModel';
 import {
@@ -99,17 +100,16 @@ export default function NewDeck() {
   else body = <Flow key={projectId} projectId={projectId} q={q} navigate={navigate} params={params} setParams={setParams} />;
 
   return (
-    <RailFrame rail={rail} data-testid="pitch-new">
+    <PitchPage rail={rail} crumb={{ query: q, trail: 'New deck' }} testId="pitch-new">
       <div className="flex flex-col gap-5 pb-24 lg:pb-10">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">
-            <Link to={`${STUDIO_PATH}${q}`} className={LINK}>‹ Pitch deck studio</Link>
             <h1 className={`m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] ${INK}`}>New deck</h1>
           </div>
         </header>
         {body}
       </div>
-    </RailFrame>
+    </PitchPage>
   );
 }
 
@@ -470,7 +470,7 @@ function StepBuild({ built, proposal, items, quote, audienceLabel, onKeep, onKee
   if (!cards.length) return <Failed text="This proposal has no cards yet." />;
   const worded = built?.wording?.by === 'Eadwyn' || (!built && cards.some((c) => c.headline && c.headline !== c.title));
   return (
-    <div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+    <div className="grid min-w-0 items-start gap-3.5">
       {built?.progress ? (
         <section className={`${CARD} flex flex-col gap-2 p-4`} aria-label="Building" data-testid="pitch-new-progress">
           <span className={`text-[14px] font-extrabold ${INK}`}>Built {built.progress.length} cards</span>
@@ -483,7 +483,7 @@ function StepBuild({ built, proposal, items, quote, audienceLabel, onKeep, onKee
             ))}
           </ul>
           {built.wording?.reason ? <span className={MUTED}>{built.wording.reason}</span> : null}
-          <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-axal-hairline pt-2 text-[12px] dark:border-gray-700">
+          <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 md:auto-cols-max md:grid-flow-col md:grid-cols-none md:grid-rows-2 md:justify-start md:gap-x-6 border-t border-axal-hairline pt-2 text-[12px] dark:border-gray-700">
             {costRows(built.cost, quote).map((r) => <React.Fragment key={r.label}><dt className="text-axal-muted dark:text-gray-400">{r.label}</dt><dd className={`m-0 font-mono ${INK}`}>{r.value}</dd></React.Fragment>)}
           </dl>
           <span className={MUTED}>{PAID_LINE}</span>
@@ -498,7 +498,7 @@ function StepBuild({ built, proposal, items, quote, audienceLabel, onKeep, onKee
             <button type="button" className={PRIMARY} onClick={() => onSave(keptCount, cards.length)} disabled={!keptCount} data-testid="pitch-new-save">Save as version ({keptCount})</button>
           </span>
         </div>
-        <ol className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
+        <ol className="m-0 grid list-none items-stretch gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {cards.filter((c) => !hidden.has(c.index)).map((c) => (
             <li key={c.index} className={`${CARD} flex flex-col gap-1.5 p-3`} data-testid={`pitch-new-card-${c.index}`}>
               <span className="font-mono text-[11px] text-axal-muted">{c.n} · {c.title}</span>

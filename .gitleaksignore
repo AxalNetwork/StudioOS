@@ -195,3 +195,7 @@ f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_complia
 # never a credential. The next commit (daba115f) generates it at run time, so no
 # later commit carries it. Scoped to the one finding, as D334's entry is.
 9cb2388051552c6512b718c43b516fb7acbf767b:cloudflare-worker/test/meeting_bot_diagnose_3708.test.ts:generic-api-key:21
+# D1445 (#3707): deterministic signing seed for an in-memory test database,
+# never a deployed credential. The follow-up expands a short fixture seed at
+# runtime. Pin only the already-published finding, as in D334.
+122a14aa2bb671ea2df0794f79fa0db42e30677f:cloudflare-worker/test/sms_enrolment_3707.test.ts:generic-api-key:12

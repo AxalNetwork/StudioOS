@@ -148,7 +148,7 @@ test('AF3: the trigger is drawn where the read gives one, and only while the box
   const m = await mount(form({ onSubmit: async () => ({ id: 1 }) }), { routes: { '/api/fills/sheet': () => json(SHEET) } });
   try {
     assert.ok(m.byTestId('fill-trigger-title'), 'the field’s trigger');
-    assert.match(m.props(m.byTestId('fill-trigger-title'))['aria-label'], /^Fill Theme with Eadwyn$/);
+    assert.match(m.props(m.byTestId('fill-trigger-title'))['aria-label'], /^Ask Eadwyn to fill Theme$/);
     assert.ok(m.byTestId('fill-form-trigger'), 'the form’s Fill');
     assert.equal(m.byTestId('fill-trigger-severity'), undefined, 'a judgement the read does not list has none');
     assert.equal(m.calls.filter((c) => c.url.includes('/api/fills/sheet')).length, 1, 'read once');
@@ -239,7 +239,7 @@ test('an unreadable read says so, draws no trigger, and Try again reads it again
   let n = 0;
   const m = await mount(form({ onSubmit: async () => ({ id: 1 }) }), { routes: { '/api/fills/sheet': () => { n += 1; return n === 1 ? json({ detail: 'x' }, 500) : json(SHEET); } } });
   try {
-    assert.match(m.text(m.byTestId('fill-form-unreadable')), /^Unreadable: Fill with Eadwyn could not be read for this form\./);
+    assert.match(m.text(m.byTestId('fill-form-unreadable')), /^Unreadable: Eadwyn's suggestions for this form could not be read\./);
     assert.equal(m.byTestId('fill-trigger-title'), undefined);
     await m.press('fill-form-retry');
     assert.equal(n, 2);
@@ -255,7 +255,7 @@ test('a form with no fill reads nothing and draws no trigger; AI off draws the n
   } finally { await m.unmount(); }
   const k = await mount(form({ fill: { page: PROBLEM, form: 'theme', project: 7, aiOff: true }, onSubmit: async () => ({ id: 1 }) }), { routes: { '/api/fills/sheet': () => json(SHEET) } });
   try {
-    assert.equal(k.props(k.byTestId('fill-trigger-title'))['aria-label'], 'Fill Theme from your sources');
+    assert.equal(k.props(k.byTestId('fill-trigger-title'))['aria-label'], 'Ask to fill Theme from your sources');
   } finally { await k.unmount(); }
 });
 
@@ -282,10 +282,12 @@ test('AF1: "N waiting" counts this venture’s rows; an unreadable read draws no
   try {
     assert.match(m.calls[0].url, /\/api\/ai\/rail\/proposals\?option=form%3Afeature&status=proposed/);
     assert.equal(m.text(m.byTestId('fill-module-waiting')), '2 waiting');
+    assert.equal(m.props(m.byTestId('fill-module-trigger'))['aria-label'], 'Ask Eadwyn, 2 waiting');
   } finally { await m.unmount(); }
   const k = await mount(module(), { routes: { '/api/ai/rail/proposals?': () => json({ detail: 'x' }, 500) } });
   try {
     assert.equal(k.byTestId('fill-module-waiting'), undefined, 'never "0 waiting" for a failed read');
+    assert.equal(k.props(k.byTestId('fill-module-trigger'))['aria-label'], 'Ask Eadwyn');
     await k.press('fill-module-trigger');
     assert.match(k.text(k.byTestId('fill-rows-unreadable')), /This is not a claim that none is waiting\./);
   } finally { await k.unmount(); }

@@ -6,6 +6,8 @@ import { reportError } from '../lib/log.js';
 import { activeSupportSession } from '../lib/supportSession.js';
 import { placeValues, placedProposals, stillPlaced } from '../lib/fillForms.js';
 import { NOT_FILLED_HERE, fillOffLine } from '../lib/fillScoped.js';
+import useAssistMode from '../hooks/useAssistMode.js';
+import { railPageHeaders } from '../lib/railPage.js';
 
 /**
  * D1329 (#3490, part 6 of #2431) — Fill with Eadwyn on a form whose record is
@@ -13,20 +15,24 @@ import { NOT_FILLED_HERE, fillOffLine } from '../lib/fillScoped.js';
  * event and its agenda, a publication, Commit's IC memo.
  *
  * One read of `GET /api/fills/sheet` per form (`record`, or `parent` for an
- * Add form). A blank field the read gives a trigger draws "Fill [field] with
- * Eadwyn"; the form draws its "Fill". Both open the one `FillSheet`. Accept
+ * Add form). A blank field the read gives a trigger draws "Ask Eadwyn to fill
+ * [field]"; the form draws "Ask". Both open the one `FillSheet`. Accept
  * places the values in the form, each "Not saved" until typed over; the
  * form's own Save writes, then `afterSave(id)` posts `POST /api/fills/record`
  * with the placed proposals, and the Worker keeps only what still equals each.
  *
  * A reader (the read's `can_fill` is false) reads the marks with no trigger
- * and no Undo (AF15). A support session reads "Fill is off in a support
- * session."; an Explorer (refused `no_profile`) reads "Fill opens once you
+ * and no Undo (AF15). A support session reads "Ask is off in a support
+ * session."; an Explorer (refused `no_profile`) reads "Ask opens once you
  * hold a venture or a profile." (AF22). A failed read is Unreadable with Try
- * again, never a form with no Fill.
+ * again, never a form with no Ask.
  */
 export function useScopedFill({ scope, record = null, parent = null, enabled = true, values = {}, onValues }) {
   const { page, form, table } = scope;
+  // The rail's workspace is the switch key; the canonical form page is the
+  // fallback when no rail is mounted (D765).
+  const railPage = railPageHeaders()['X-Rail-Page'];
+  const [aiOn] = useAssistMode(railPage ? decodeURIComponent(railPage) : page);
   const [read, setRead] = useState(enabled ? { status: 'loading', data: null } : { status: 'off', data: null });
   const [tick, setTick] = useState(0);
   const [open, setOpen] = useState(false);
@@ -72,12 +78,12 @@ export function useScopedFill({ scope, record = null, parent = null, enabled = t
 
   const fillable = canFill && fields.some((f) => f.trigger && blank(values[f.field]) && !stillPlaced(placed, f.field, values[f.field]));
   const sheet = open ? (
-    <FillSheet page={page} form={form} record={record ? { id: record, type: table } : null} parent={parent} values={values}
+    <FillSheet page={page} form={form} record={record ? { id: record, type: table } : null} parent={parent} values={values} aiOff={!aiOn}
       onPlace={(list) => { place(list); setOpen(false); }} onClose={() => setOpen(false)} />
   ) : null;
 
   return {
-    status: read.status, canFill, support, explorer: read.status === 'explorer', field, placed, fillable,
+    status: read.status, canFill, support, explorer: read.status === 'explorer', field, placed, fillable, aiOff: !aiOn,
     open: () => setOpen(true), place, afterSave, reload, sheet, notFilledHere: NOT_FILLED_HERE[form] || [],
     offLine: fillOffLine({ support, explorer: read.status === 'explorer' }),
   };
@@ -104,13 +110,13 @@ export function FillLabel({ fill, name, label, value, children }) {
         {placed ? <FillMark mark={null} placed /> : null}
         {mark ? <FillMark mark={mark} readOnly={!fill.canFill} onUndone={fill.reload} /> : null}
       </span>
-      {trigger ? <FillTrigger field={view} label={label} onOpen={fill.open} /> : null}
+      {trigger ? <FillTrigger field={view} label={label} aiOff={fill.aiOff} onOpen={fill.open} /> : null}
     </div>
   );
 }
 
 /**
- * The form's own line: its "Fill" when a field is left to fill, the off line
+ * The form's own line: its "Ask" when a field is left to fill, the off line
  * for a support session or an Explorer, Unreadable with Try again, and what
  * the sheet never fills here.
  */
@@ -119,7 +125,7 @@ export function FillFormBar({ fill }) {
   if (fill.status === 'unreadable') {
     return (
       <p role="status" className="m-0 flex flex-wrap items-center gap-2 text-[12px] text-axal-muted dark:text-gray-400" data-testid="fill-scoped-unreadable">
-        Fill with Eadwyn could not be read. The form works as it is.
+        Eadwyn's suggestions could not be read. The form works as it is.
         <button type="button" className="font-semibold text-axal-violet hover:underline dark:text-violet-300" onClick={fill.reload}>Try again</button>
       </p>
     );
@@ -127,7 +133,7 @@ export function FillFormBar({ fill }) {
   return (
     <div className="flex flex-col gap-1" data-testid="fill-scoped-bar">
       {fill.offLine ? <p className="m-0 rounded-[10px] border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" data-testid="fill-scoped-off">{fill.offLine}</p> : null}
-      {fill.fillable ? <div><FillFormTrigger onOpen={fill.open} /></div> : null}
+      {fill.fillable ? <div><FillFormTrigger aiOff={fill.aiOff} onOpen={fill.open} /></div> : null}
       {fill.canFill && fill.notFilledHere.length ? (
         <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="fill-scoped-not-here">Not filled here: {fill.notFilledHere.join(' ')}</p>
       ) : null}
