@@ -44,6 +44,7 @@ import { readSources, type SourceCtx } from '../services/fills/sources';
 import { acceptRows, fillForUndo, recordKept, undoFill } from '../services/fills/keep';
 import { SCOPED_READS, isExplorer, parentKey, scopeOf, type RecordScope } from '../services/fills/scopes';
 import { logActorAct } from '../services/actorLog';
+import { activeCompanyFor } from '../middleware/activeCompany';
 
 const fills = new Hono<{ Bindings: Env }>();
 
@@ -285,8 +286,9 @@ async function scopedTarget(c: Context<{ Bindings: Env }>, user: User, scope: Re
   } else {
     return refuse(c, 404, 'record_not_found');
   }
-  const access = await scope.access(c.env, user, row, parentId);
-  if (!access.read) return refuse(c, 403, 'record_not_available');
+  const access = await scope.access(c.env, user, row, parentId, { activeCompany: () => activeCompanyFor(c, user) });
+  // D1595: a concealed scope answers a record the caller may not read as one that does not exist.
+  if (!access.read) return scope.concealed ? refuse(c, 404, 'record_not_found') : refuse(c, 403, 'record_not_available');
   const recordRef = recordId ? `${table}:${recordId}` : null;
   return { table, row, recordId, parentId, recordRef, scopeKey: recordRef ?? parentKey(scope, parentId as number), canWrite: access.write };
 }
