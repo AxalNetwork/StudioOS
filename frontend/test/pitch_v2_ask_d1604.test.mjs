@@ -71,7 +71,7 @@ test('pd40 states: running, AI off, unreadable and out of tokens keep the name "
   assert.match(out, /data-testid="ask-eadwyn-out"/);
   const describedBy = /aria-describedby="([^"]+)"/.exec(out)?.[1];
   assert.ok(describedBy, 'the sub-line describes the button');
-  assert.match(out, new RegExp(`id="${describedBy.replace(/[:]/g, '\\:')}"[^>]*>The included AI allowance`));
+  assert.match(out, new RegExp(`id="${describedBy.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*>The included AI allowance`));
   assert.doesNotMatch(render(h(AskButtonView, {})), /aria-describedby/);
 });
 
