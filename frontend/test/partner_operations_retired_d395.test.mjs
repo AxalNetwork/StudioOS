@@ -42,8 +42,8 @@ const routeLine = (path) => APP.split('\n').find(
 ) || null;
 
 const SUCCESSOR = {
-  '/partner/operations': '/account/companies/settings', // D1140 (#3020)
-  '/partner/operations/overview': '/account/companies/settings',
+  '/partner/operations': '/account/portfolio/settings', // D1140 (#3020)
+  '/partner/operations/overview': '/account/portfolio/settings',
   '/partner/operations/capabilities': '/offers/catalog',
   '/partner/operations/portfolio': '/delivery/health',
   '/partner/operations/engagements': '/pipeline/proposals',
