@@ -37,16 +37,16 @@ function fixture() {
     UPDATE users SET role = 'investor' WHERE id = 4; UPDATE users SET role = 'advisor' WHERE id = 6;
     CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'free', subscription_id TEXT UNIQUE, plan TEXT, period_end TEXT, stripe_customer_id TEXT, updated_at TEXT);
     CREATE TABLE account_subscriptions(user_id INTEGER PRIMARY KEY, plan_group TEXT, plan TEXT, status TEXT NOT NULL DEFAULT 'free', subscription_id TEXT UNIQUE, period_end TEXT, trial_end TEXT, stripe_customer_id TEXT, updated_at TEXT);
-    CREATE TABLE stripe_products(id TEXT PRIMARY KEY, name TEXT, kind TEXT, active INTEGER DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]');`);
+    CREATE TABLE IF NOT EXISTS stripe_products(id TEXT PRIMARY KEY, name TEXT, kind TEXT, active INTEGER DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]', livemode INTEGER);`);
   const price = (id: string, cents: number, interval: string) => ({ id, unit_amount: cents, currency: 'usd', interval, interval_count: 1, active: true });
-  const product = db.prepare("INSERT INTO stripe_products(id, name, kind, metadata_json, prices_json) VALUES (?, ?, 'subscription', ?, ?)");
+  const product = db.prepare("INSERT INTO stripe_products(id, name, kind, metadata_json, prices_json,livemode) VALUES (?, ?, 'subscription', ?, ?,0)");
   product.run('prod_growth', 'Founder — Growth', JSON.stringify({ tier: 'growth' }), JSON.stringify([price('price_growth_m', 7900, 'month')]));
   product.run('prod_studio', 'Founder — Studio', JSON.stringify({ tier: 'studio' }), JSON.stringify([price('price_studio_m', 24900, 'month')]));
   product.run('prod_pro', 'Investor — Professional', JSON.stringify({ investor_tier: 'professional' }),
     JSON.stringify([price('price_pro_m', 14900, 'month'), price('price_pro_y', 142800, 'year')]));
   product.run('prod_mi', 'Market Intelligence Pro', JSON.stringify({ plan: 'mi_pro' }), JSON.stringify([price('price_mi_m', 2900, 'month'), price('price_mi_y', 29000, 'year')]));
   product.run('prod_ra', 'Registered Agent', JSON.stringify({}), JSON.stringify([price('price_ra_y', 10000, 'year')]));
-  const env = { DB, JWT_SECRET, ENVIRONMENT: 'test' } as any;
+  const env = { DB, JWT_SECRET, ENVIRONMENT: 'test', STRIPE_SECRET_KEY: 'sk_test_fixture' } as any;
   return { db, env };
 }
 const app = (() => {
@@ -60,7 +60,7 @@ async function call(env: any, method: string, path: string, body?: unknown, id =
   const res = await app.request(path, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }, env);
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
-const hook = (env: any, type: string, object: Record<string, unknown>) => call(env, 'POST', '/api/billing/stripe/webhook', { type, data: { object } });
+const hook = (env: any, type: string, object: Record<string, unknown>) => call(env, 'POST', '/api/billing/stripe/webhook', { id: `evt_${crypto.randomUUID()}`, livemode: false, type, data: { object } });
 const sub = (id: string, meta: Record<string, string>, cents: number, interval: string, extra: Record<string, unknown> = {}) => ({
   id, object: 'subscription', status: 'active', current_period_end: 1_800_000_000, metadata: meta,
   items: { data: [{ quantity: 1, price: { unit_amount: cents, currency: 'usd', recurring: { interval, interval_count: 1 } } }] }, ...extra,

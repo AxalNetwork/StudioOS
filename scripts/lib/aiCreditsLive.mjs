@@ -1,3 +1,5 @@
+import { OWNER_PLAN_PRICES, OWNER_UNPRICED } from './ownerPlanPrices.mjs';
+
 /**
  * D755 CR10 (#1987) — the rules of the read-only AI credits live check
  * (`scripts/check-ai-credits-live.mjs`), kept here so they are tested without
@@ -14,7 +16,7 @@
 export const PLANS_PATH = '/api/public/plans-and-packs';
 export const PRICING_PATH = '/plans-and-pricing';
 
-const FAMILIES = new Set(['founder', 'investor', 'advisor', 'partner', 'market_intelligence', 'other']);
+const FAMILIES = new Set(['founder', 'investor', 'advisor', 'partner', 'market_intelligence', 'other', 'lp']);
 const SOURCES = new Set(['recorded', 'environment']);
 // Keys that would name or identify a person. The public read must carry none.
 const PERSONAL_KEYS = new Set(['recorded_by', 'recorded_by_name', 'user_id', 'member_id', 'email', 'name']);
@@ -33,8 +35,49 @@ function keysOf(value, out = []) {
 
 function judgeAllowance(a, where, errors) {
   if (a === null) return;
+  // Current public plan allowance (D783), plus the earlier CR2 shape.
+  if (a && (a.source === 'plan' || a.source === 'none')) {
+    if (!isCount(a.monthly_microusd) || typeof a.share !== 'number' || a.share < 0 || a.share > 1
+      || (a.source === 'none' && a.monthly_microusd !== 0)) errors.push(`${where}: allowance is not a public plan allowance`);
+    return;
+  }
   if (!a || typeof a !== 'object' || !isCount(a.daily_microusd) || !isCount(a.monthly_microusd) || !SOURCES.has(a.source))
     errors.push(`${where}: allowance is not {daily_microusd, monthly_microusd, source}`);
+}
+
+/** D1430: compare the public runtime catalogue with the owner's offline targets. */
+export function judgePlanPrices(body) {
+  const errors = [], findings = [];
+  if (!Array.isArray(body?.plans)) return { errors: ['Plan prices: Not recorded (no plans array)'], warnings: [], findings };
+  const add = (key, interval, expected, actual) => {
+    findings.push({ licence_key: key, interval, expected, actual });
+    errors.push(`${key} ${interval}: expected ${expected}; actual ${actual}`);
+  };
+  for (const spec of OWNER_PLAN_PRICES) {
+    const rows = body.plans.filter(p => p?.licence_key === spec.licence_key);
+    if (rows.length > 1) add(spec.licence_key, 'catalogue', 'one plan', `${rows.length} plans`);
+    for (const [interval, field] of [['month', 'monthly'], ['year', 'yearly']]) {
+      const price = rows.length === 1 ? rows[0][field] : null;
+      const actual = price && isCount(price.unit_amount) ? `${price.unit_amount} ${String(price.currency || '').toLowerCase()} cents` : 'Not recorded';
+      const expected = `${spec[interval]} usd cents`;
+      if (actual !== expected) add(spec.licence_key, interval, expected, actual);
+    }
+    if (rows.length === 1 && (rows[0].free === true || rows[0].catalogue?.sellable === false))
+      add(spec.licence_key, 'offer', 'sold plan', 'not sold');
+  }
+  for (const [key, mode] of Object.entries(OWNER_UNPRICED)) {
+    const rows = body.plans.filter(p => p?.licence_key === key || p?.catalogue?.key === key);
+    if (mode === 'staff') {
+      if (rows.length) add(key, 'offer', 'no public plan', 'public plan');
+      continue;
+    }
+    const custom = rows[0]?.catalogue ?? body.catalogue?.find(p => p.key === key);
+    if (mode === 'custom' && (!custom || custom.sellable !== false)) add(key, 'offer', 'Custom, not sold', custom ? 'sold' : 'Not recorded');
+    if (mode === 'free' && (rows.length !== 1 || rows[0].free !== true)) add(key, 'offer', 'free', 'Not recorded as free');
+    if (rows.some(p => p.monthly != null || p.yearly != null || (Array.isArray(p.prices) && p.prices.length)))
+      add(key, 'price', mode, 'priced');
+  }
+  return { errors, warnings: [], findings };
 }
 
 /** The body of `GET /api/public/plans-and-packs`, as CR2 (#1919) serves it. */

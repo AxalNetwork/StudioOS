@@ -15,6 +15,7 @@
 //
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/fill_mark_sheet_d1327.test.mjs
 import test from 'node:test';
+import { codeOnly } from './_codeOnly.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
@@ -25,7 +26,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import {
   averageLine, cardLines, errorRef, markView, parseStream, partialLine, planRows, refusalView, sourceRows, topLine,
 } from '../src/lib/fillSheet.js';
-import { ConnectorMark, FillMark, FillTrigger } from '../src/ui/FillMark.jsx';
+import { ConnectorMark, FillFormTrigger, FillMark, FillModuleTrigger, FillTrigger } from '../src/ui/FillMark.jsx';
 import FillSheet from '../src/ui/FillSheet.jsx';
 import { Cell } from '../src/pages/cycles/CycleModulePage.jsx';
 import { RECORDS } from '../src/pages/cycles/adapters/validate.js';
@@ -146,9 +147,9 @@ test('the trigger is drawn only when the read offers it: never on a typed, never
     assert.equal(html({ field: field('x', { trigger: false, why }), onOpen() {} }), '', why);
   }
   const on = html({ field: field('title'), onOpen() {} });
-  assert.match(on, /aria-label="Fill Title with Eadwyn"/);
+  assert.match(on, /aria-label="Ask Eadwyn to fill Title"/);
   assert.match(on, /data-testid="fill-trigger-title"/);
-  assert.match(html({ field: field('title'), aiOff: true, onOpen() {} }), /aria-label="Fill Title from your sources"/);
+  assert.match(html({ field: field('title'), aiOff: true, onOpen() {} }), /aria-label="Ask to fill Title from your sources"/);
 });
 
 // ── The sheet, mounted ──────────────────────────────────────────────────────
@@ -200,6 +201,9 @@ test('loading, then an error with its reference and Try again', async () => {
   const m = await mount(sheet(), { routes: { '/api/fills/sheet': () => new Promise((r) => { release = r; }) } });
   try {
     assert.ok(m.byTestId('fill-sheet'), 'the sheet is D1317’s Sheet');
+    const titleId = m.props(m.byTestId('fill-sheet'))['aria-labelledby'];
+    assert.equal(m.text(m.all().find((n) => m.props(n).id === titleId)), 'Add feature');
+    assert.match(m.text(m.byTestId('fill-sheet')), /Ask Eadwyn\s*Add feature/);
     assert.ok(m.byTestId('fill-sheet-loading'));
     await act(async () => { release(json({ detail: 'boom' }, 500)); }); await m.flush();
     assert.ok(m.byTestId('fill-sheet-error'));
@@ -314,6 +318,7 @@ for (const [name, answer, kind, extra] of [
       assert.ok(m.byTestId('fill-row-title'), 'the sources’ values stay offered');
       if (extra === 'add') {
         assert.equal(m.props(m.byTestId('fill-sheet-add-tokens')).href, '/pricing?for=models#add-tokens');
+        assert.equal(m.text(m.byTestId('fill-sheet-sources-only')), 'Ask from your sources only');
         await m.press('fill-sheet-sources-only');
         assert.equal(m.calls.filter((c) => c.url === '/api/ai/rail/run').length, 1, 'sources only runs nothing');
       }
@@ -381,5 +386,35 @@ test('Validate’s provenance cell is the mark; the From GitHub and From Mercury
   ]) {
     const src = readFileSync(`frontend/src/pages/${file}`, 'utf8');
     assert.match(src, new RegExp(`From ${provider === 'github' ? 'GitHub' : 'Mercury'}\\s*<ConnectorMark provider="${provider}" \\/>\\s*</h2>`), file);
+  }
+});
+
+
+test('Ask controls keep their labels, waiting counts and mode-specific glyphs', () => {
+  const cases = [
+    [FillFormTrigger, {}, 'Ask', 'Ask Eadwyn', 'Ask Eadwyn', false],
+    [FillFormTrigger, { aiOff: true }, 'Ask', 'Ask (from your sources)', 'Ask (from your sources)', true],
+    [FillModuleTrigger, { waiting: 0 }, 'Ask', 'Ask Eadwyn', 'Ask Eadwyn', false],
+    [FillModuleTrigger, { waiting: 2 }, 'Ask 2 waiting', 'Ask Eadwyn, 2 waiting', 'Ask Eadwyn', false],
+    [FillModuleTrigger, { aiOff: true, waiting: 0 }, 'Ask', 'Ask (from your sources)', 'Ask (from your sources)', true],
+    [FillModuleTrigger, { aiOff: true, waiting: 2 }, 'Ask 2 waiting', 'Ask (from your sources), 2 waiting', 'Ask (from your sources)', true],
+    [FillTrigger, { field: field('title') }, '', 'Ask Eadwyn to fill Title', 'Ask Eadwyn', false],
+    [FillTrigger, { field: field('title'), aiOff: true }, '', 'Ask to fill Title from your sources', 'Ask (from your sources)', true],
+  ];
+  for (const [Component, props, text, name, title, neutral] of cases) {
+    const html = renderToStaticMarkup(h(Component, props));
+    assert.deepEqual({
+      text: html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
+      name: /aria-label="([^"]*)"/.exec(html)?.[1], title: /title="([^"]*)"/.exec(html)?.[1],
+      glyph: html.includes('<svg'), neutral: html.includes('stroke="currentColor"'), oldLabel: html.includes('Fill with Eadwyn'),
+    }, { text, name, title, glyph: true, neutral, oldLabel: false });
+  }
+});
+
+test('the shared Ask surfaces contain no retired button copy or internal AUTOFILL name', () => {
+  for (const file of ['ui/FillMark.jsx', 'ui/FillSheet.jsx', 'ui/useScopedFill.jsx', 'pages/cycles/FillRowsPanel.jsx',
+    'pages/cycles/FormLightbox.jsx', 'pages/admin/PublicationDetail.jsx', 'pages/raise/dataroom/checklistModel.js', 'pages/deal/dealFrameModel.js']) {
+    const src = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(codeOnly(src), /Fill with Eadwyn|waits in Fill|AUTOFILL/, file);
   }
 });

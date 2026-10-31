@@ -151,6 +151,8 @@ export interface CatalogProduct {
   categories: AudienceCategory[];
   prices: CatalogPrice[];
   synced_at: string;
+  /** NULL/absent is unrecorded, never inferred from today's key. */
+  livemode?: boolean | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +166,7 @@ interface StripeProductRaw {
   id: string;
   name: string;
   active: boolean;
+  livemode: boolean;
   metadata?: Record<string, string>;
 }
 interface StripePriceRaw {
@@ -178,7 +181,12 @@ interface StripePriceRaw {
 }
 
 const KV_KEY = 'cache:catalog:live';
+export const catalogCacheKey = (env: Env): string => `${KV_KEY}:${stripeMode(env)}`;
 const KV_TTL_SECONDS = 60;
+export const CATALOG_MODE_SYNC_WINDOW_MS = 10 * 60 * 1000;
+let modeSyncAttempts = new WeakMap<object, Map<string, number>>();
+/** Tests may model a fresh isolate without changing a tracked module. */
+export function resetCatalogModeSyncWindow(): void { modeSyncAttempts = new WeakMap(); }
 
 // ---------------------------------------------------------------------------
 // Schema bootstrap (idempotent; mirrors migration 097).
@@ -195,7 +203,8 @@ export async function ensureCatalogSchema(env: Env): Promise<void> {
         'active INTEGER NOT NULL DEFAULT 1, ' +
         "metadata_json TEXT NOT NULL DEFAULT '{}', " +
         "prices_json TEXT NOT NULL DEFAULT '[]', " +
-        "synced_at TEXT NOT NULL DEFAULT (datetime('now'))" +
+        "synced_at TEXT NOT NULL DEFAULT (datetime('now')), " +
+        'livemode INTEGER' +
         ')',
     );
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_stripe_products_kind ON stripe_products(kind)');
@@ -279,6 +288,7 @@ export async function fetchStripeCatalog(env: Env): Promise<CatalogProduct[]> {
       categories: deriveCategories(prod.name, kind, metadata),
       prices: productPrices,
       synced_at: now,
+      livemode: typeof prod.livemode === 'boolean' ? prod.livemode : null,
     };
   });
 }
@@ -290,17 +300,21 @@ export async function getLiveCatalog(
   env: Env,
   opts?: { forceRefresh?: boolean },
 ): Promise<CatalogProduct[]> {
+  if (stripeMode(env) === 'unconfigured') return [];
   if (!opts?.forceRefresh) {
     try {
-      const raw = await env.RATE_LIMITS.get(KV_KEY);
-      if (raw) return JSON.parse(raw) as CatalogProduct[];
+      const raw = await env.RATE_LIMITS.get(catalogCacheKey(env));
+      if (raw) {
+        const cached = JSON.parse(raw) as CatalogProduct[];
+        if (Array.isArray(cached) && cached.every(p => p.livemode === (stripeMode(env) === 'live'))) return cached;
+      }
     } catch {
       /* cache miss / parse error → fall through to live fetch */
     }
   }
-  const fresh = await fetchStripeCatalog(env);
+  const fresh = (await fetchStripeCatalog(env)).filter(p => p.livemode === (stripeMode(env) === 'live'));
   try {
-    await env.RATE_LIMITS.put(KV_KEY, JSON.stringify(fresh), { expirationTtl: KV_TTL_SECONDS });
+    await env.RATE_LIMITS.put(catalogCacheKey(env), JSON.stringify(fresh), { expirationTtl: KV_TTL_SECONDS });
   } catch {
     /* best-effort cache write */
   }
@@ -318,6 +332,7 @@ interface CatalogRow {
   metadata_json: string;
   prices_json: string;
   synced_at: string;
+  livemode: number | null;
 }
 
 function rowToProduct(row: CatalogRow): CatalogProduct {
@@ -343,21 +358,23 @@ function rowToProduct(row: CatalogRow): CatalogProduct {
     categories: deriveCategories(row.name, kind, metadata),
     prices,
     synced_at: row.synced_at,
+    livemode: row.livemode === 1 ? true : row.livemode === 0 ? false : null,
   };
 }
 
 /** One product's mirror row, written the one way both `syncCatalog` and `fetchAndMirrorPrice` write it. */
 async function upsertCatalogRow(env: Env, p: CatalogProduct): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO stripe_products (id, name, kind, active, metadata_json, prices_json, synced_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO stripe_products (id, name, kind, active, metadata_json, prices_json, synced_at, livemode)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        kind = excluded.kind,
        active = excluded.active,
        metadata_json = excluded.metadata_json,
        prices_json = excluded.prices_json,
-       synced_at = excluded.synced_at`,
+       synced_at = excluded.synced_at,
+       livemode = excluded.livemode`,
   )
     .bind(
       p.id,
@@ -367,6 +384,7 @@ async function upsertCatalogRow(env: Env, p: CatalogProduct): Promise<void> {
       JSON.stringify(p.metadata),
       JSON.stringify(p.prices),
       p.synced_at,
+      p.livemode === true ? 1 : p.livemode === false ? 0 : null,
     )
     .run();
 }
@@ -402,10 +420,11 @@ export async function fetchAndMirrorPrice(
   }
   const prod = raw && typeof raw.product === 'object' ? raw.product : null;
   if (!raw || raw.id !== priceId || !prod || typeof prod.id !== 'string') throw new Error('stripe price unreadable');
-  if (typeof raw.livemode === 'boolean' && raw.livemode !== (stripeMode(env) === 'live')) return { state: 'mode_mismatch' };
+  const live = stripeMode(env) === 'live';
+  if (raw.livemode !== live || prod.livemode !== live) return { state: 'mode_mismatch' };
   const price = normalisePrice({ ...raw, product: prod.id });
   await ensureCatalogSchema(env);
-  const existing = await env.DB.prepare('SELECT * FROM stripe_products WHERE id = ?').bind(prod.id).first<CatalogRow>();
+  const existing = await env.DB.prepare('SELECT * FROM stripe_products WHERE id = ? AND livemode = ?').bind(prod.id, live ? 1 : 0).first<CatalogRow>();
   const kept = existing ? rowToProduct(existing).prices.filter((p) => p.id !== price.id) : [];
   const prices = [...kept, price];
   const metadata = prod.metadata ?? {};
@@ -413,6 +432,7 @@ export async function fetchAndMirrorPrice(
   const product: CatalogProduct = {
     id: prod.id, name: prod.name, kind, active: prod.active, metadata,
     categories: deriveCategories(prod.name, kind, metadata), prices, synced_at: new Date().toISOString(),
+    livemode: prod.livemode,
   };
   await upsertCatalogRow(env, product);
   return { state: 'mirrored', product, price };
@@ -428,6 +448,11 @@ export async function syncCatalog(env: Env): Promise<{ synced: number }> {
   const catalog = await getLiveCatalog(env, { forceRefresh: true });
 
   for (const p of catalog) await upsertCatalogRow(env, p);
+  // A successful empty fetch must still remove old-mode and unrecorded rows.
+  if (stripeMode(env) !== 'unconfigured') {
+    await env.DB.prepare('DELETE FROM stripe_products WHERE livemode IS NULL OR livemode <> ?')
+      .bind(stripeMode(env) === 'live' ? 1 : 0).run();
+  }
 
   // Drop rows that no longer exist in Stripe so the mirror stays clean.
   const ids = catalog.map((p) => p.id);
@@ -452,24 +477,35 @@ export async function getCatalog(
   env: Env,
   kind?: ProductKind,
   audience?: AudienceCategory,
+  opts?: { sync?: boolean },
 ): Promise<CatalogProduct[]> {
   await ensureCatalogSchema(env);
 
-  const countRow = await env.DB.prepare('SELECT COUNT(*) AS n FROM stripe_products')
-    .first<{ n: number }>();
-  if ((countRow?.n ?? 0) === 0 && env.STRIPE_SECRET_KEY) {
+  const mode = stripeMode(env);
+  const stamp = mode === 'unconfigured' ? null : mode === 'live' ? 1 : 0;
+  const countRow = opts?.sync === false ? null : await env.DB.prepare(
+    'SELECT COUNT(*) AS n, SUM(CASE WHEN livemode IS NULL OR livemode <> ? THEN 1 ELSE 0 END) AS mismatched FROM stripe_products',
+  ).bind(stamp).first<{ n: number; mismatched: number | null }>();
+  const scope = bindingKey(env);
+  const attempts = modeSyncAttempts.get(scope) ?? new Map<string, number>();
+  const last = attempts.get(mode);
+  const needsSync = (countRow?.n ?? 0) === 0 || Number(countRow?.mismatched) > 0;
+  const due = last === undefined || Date.now() - last >= CATALOG_MODE_SYNC_WINDOW_MS;
+  if (opts?.sync !== false && mode !== 'unconfigured' && needsSync && due) {
+    attempts.set(mode, Date.now());
+    modeSyncAttempts.set(scope, attempts);
     try {
       await syncCatalog(env);
     } catch (e) {
-      console.warn('[catalog] lazy sync failed:', (e as Error).message);
+      console.warn('[catalog] lazy sync failed');
     }
   }
 
   const stmt = kind
     ? env.DB.prepare(
-        'SELECT * FROM stripe_products WHERE kind = ? ORDER BY name COLLATE NOCASE ASC',
-      ).bind(kind)
-    : env.DB.prepare('SELECT * FROM stripe_products ORDER BY name COLLATE NOCASE ASC');
+        'SELECT * FROM stripe_products WHERE kind = ? AND livemode = ? ORDER BY name COLLATE NOCASE ASC',
+      ).bind(kind, stamp)
+    : env.DB.prepare('SELECT * FROM stripe_products WHERE livemode = ? ORDER BY name COLLATE NOCASE ASC').bind(stamp);
   const res = await stmt.all<CatalogRow>();
   const products = (res.results ?? []).map(rowToProduct);
   // Category derivation depends on name/kind/metadata, not a stored column,

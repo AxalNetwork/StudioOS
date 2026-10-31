@@ -18,6 +18,8 @@
 //
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/fill_other_profiles_pages_d1329.test.mjs
 import test from 'node:test';
+import { __resetAssistModeForTest, seedAssistModes } from '../src/hooks/useAssistMode.js';
+import { clearRailPage, setRailPage } from '../src/lib/railPage.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
@@ -39,8 +41,8 @@ test('each board\'s form is one FILL_FIELDS lists, on its table; the off lines a
     assert.ok(fields.length, k);
     assert.ok(fields.every((f) => f.table === s.table), `${k} writes ${s.table}`);
   }
-  assert.equal(fillOffLine({ support: true }), 'Fill is off in a support session.');
-  assert.equal(fillOffLine({ explorer: true }), 'Fill opens once you hold a venture or a profile.');
+  assert.equal(fillOffLine({ support: true }), 'Ask is off in a support session.');
+  assert.equal(fillOffLine({ explorer: true }), 'Ask opens once you hold a venture or a profile.');
   assert.equal(fillOffLine({ explorer: true, support: true }), EXPLORER_OFF);
   assert.equal(fillOffLine({}), null, 'a reader needs no line: the marks are the record\'s');
   assert.match(NOT_FILLED_HERE['ic-memo'][0], /^Commitment amount/);
@@ -86,7 +88,7 @@ async function mount(element, { routes = {}, support = false } = {}) {
   const type = async (id, value) => { const n = byTestId(id); assert.ok(n, `missing ${id}`); await act(async () => { props(n).onChange({ target: { value } }); }); await flush(); };
   await flush();
   return {
-    calls, byTestId, text, flush, press, type,
+    calls, byTestId, text, flush, press, type, props, all,
     async unmount() { await act(async () => root.unmount()); globalThis.fetch = realFetch; globalThis.localStorage = realStorage; restoreDoc(); },
   };
 }
@@ -122,6 +124,7 @@ test('a writer: the read names the parent, never a venture; a trigger while blan
     assert.doesNotMatch(sheetCall.url, /project=/, 'a record that is not a venture\'s names no venture');
     assert.ok(w.byTestId('fill-trigger-shipped'));
     assert.ok(w.byTestId('fill-form-trigger'), 'the form\'s "Fill" while a field is blank');
+    assert.equal(w.props(w.byTestId('fill-form-trigger'))['aria-label'], 'Ask Eadwyn');
     await act(async () => { fill.place([{ field: 'shipped', value: 'Pricing deck v2', source_kind: 'eadwyn', proposal_uid: 'p-1' }, { field: 'price_cents', value: '500', proposal_uid: 'p-2' }]); });
     await w.flush();
     assert.equal(w.byTestId('in-shipped').value, 'Pricing deck v2');
@@ -215,4 +218,33 @@ test('each page mounts the one hook on its own form, and records after its own S
   assert.match(sheet, /\.\.\.\(project != null \? \{ project \} : \{\}\),/);
   assert.match(sheet, /: parent != null \? \{ parent \} : \{\}\),/);
   assert.match(read('lib/api/fills.js'), /\$\{project != null \? `&project=\$\{enc\(project\)\}` : ''\}/);
+});
+
+test('scoped Ask follows the mounted rail switch, including its neutral field mark and sources-only sheet', async () => {
+  for (const workspace of ['Delivery', null]) {
+    __resetAssistModeForTest();
+    const token = setRailPage(workspace || '');
+    const key = workspace || SCOPED_FORMS.statusReport.page;
+    seedAssistModes({ [key]: false });
+    const w = await mount(h(Report, { parent: 401 }), { routes: { '/api/fills/sheet': () => json(SHEET()) } });
+    const walk = (n) => n ? [n, ...(n.childNodes || []).flatMap(walk)] : [];
+    const neutral = (n) => walk(n).some((el) => w.props(el).stroke === 'currentColor');
+    const facts = () => ({
+      text: w.text(w.byTestId('fill-form-trigger')),
+      name: w.props(w.byTestId('fill-form-trigger'))['aria-label'],
+      field: w.props(w.byTestId('fill-trigger-shipped'))['aria-label'],
+      formNeutral: neutral(w.byTestId('fill-form-trigger')), fieldNeutral: neutral(w.byTestId('fill-trigger-shipped')),
+    });
+    const source = () => w.all().find((n) => w.props(n)['aria-label'] === 'Use Eadwyn');
+    try {
+      assert.deepEqual(facts(), { text: 'Ask', name: 'Ask (from your sources)', field: 'Ask to fill shipped from your sources', formNeutral: true, fieldNeutral: true });
+      await w.press('fill-form-trigger');
+      assert.deepEqual({ message: w.text(w.byTestId('fill-source-average')), disabled: w.props(source()).disabled },
+        { message: 'AI assistance is off on this page.', disabled: true });
+      await act(async () => { seedAssistModes({ [key]: true }); });
+      await w.flush();
+      assert.deepEqual(facts(), { text: 'Ask', name: 'Ask Eadwyn', field: 'Ask Eadwyn to fill shipped', formNeutral: false, fieldNeutral: false });
+      assert.equal(w.props(source()).disabled, false);
+    } finally { await w.unmount(); clearRailPage(token); __resetAssistModeForTest(); }
+  }
 });

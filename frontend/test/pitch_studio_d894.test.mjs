@@ -385,7 +385,7 @@ test('the old ?mode=workspace address opens the editor with the moved notice dra
   assert.ok(notice(`/raise/pitch?moved=${BUILDER_MOVED_KEY}`).includes(BUILDER_MOVED_NOTICE));
   assert.equal(notice('/raise/pitch?moved=elsewhere'), '', 'a key the studio does not know draws nothing');
   const editorSrc = read('frontend/src/pages/raise/pitch/PitchEditor.jsx');
-  assert.match(editorSrc, /data-testid="pitch-editor"><PitchMovedNotice \/>\{children\}<\/div>/, 'the editor\'s shell draws the notice');
+  assert.match(editorSrc, /testId="pitch-editor"><PitchMovedNotice \/>\{children\}<\/PitchPage>/, 'the editor\'s shell draws the notice');
   assert.match(read('frontend/src/pages/raise/pitch/PitchStudio.jsx'), /<PitchMovedNotice \/>/, 'the studio\'s header draws the notice');
   // D898 group E: the retired builder opens the studio, query and hash kept.
   assert.equal(BUILDER_PATH, '/raise/pitch/builder');
@@ -679,14 +679,14 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   // D911 (#2695): positioning moved into Investor narrative › Positioning; its old address redirects.
   assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
-  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*founderEditor\(<PitchStudio tab="decks" \/>\)/);
+  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*<PitchStudio tab="decks" \/>/);
   // D898 (#2676): the canvas's editor at /raise/pitch/edit; the template builder retired (group E) and its address opens the studio.
-  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchEditor \/>\)\)\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchEditor \/>\)\} \/>/);
   assert.ok(app.includes('<Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />'), 'the builder\'s address opens the studio');
   assert.doesNotMatch(app, /PitchWorkspacePage|[^b]PitchDeckPage\b/);
   for (const f of ['frontend/src/pages/PitchWorkspacePage.jsx', 'frontend/src/pages/PitchDeckPage.jsx']) assert.ok(!existsSync(resolve(root, f)), `${f} is back`);
-  assert.match(app, /<Route path="\/raise\/pitch\/analytics" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchStudio tab="analytics" \/>\)\)\} \/>/);
-  assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchStudio tab="review" \/>\)\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/analytics" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="analytics" \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="review" \/>\)\} \/>/);
   assert.ok(!existsSync(resolve(root, 'frontend/src/pages/founder/FounderRaisePitch.jsx')), 'the read-only Pitch page is still on disk');
   assert.doesNotMatch(app, /FounderRaisePitch/);
   const moved = read('frontend/src/pages/raise/pitch/PitchWorkspaceMoved.jsx');

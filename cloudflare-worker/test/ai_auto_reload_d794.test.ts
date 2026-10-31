@@ -31,14 +31,14 @@ async function world() {
   n = 0;
   const f = aiBudgetFixture();
   const env = { DB: f.DB, JWT_SECRET: 'd794-fixture-only-signing-secret', STRIPE_WEBHOOK_SECRET: 'd794-fixture-only-webhook-secret',
-    STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000', ENVIRONMENT: 'development' } as any;
+    STRIPE_PUBLISHABLE_KEY: 'pk_test_fixture', STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000', ENVIRONMENT: 'development' } as any;
   await ensureCatalogSchema(env);
   await ensureOrdersSchema(env);
   for (const t of ['user_sessions', 'queue_jobs']) f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   f.db.exec(`ALTER TABLE users ADD COLUMN uid TEXT; ALTER TABLE users ADD COLUMN stripe_customer_id TEXT;
     ALTER TABLE users ADD COLUMN investor_stripe_customer_id TEXT; ALTER TABLE users ADD COLUMN recovery_cooling_off_until TEXT;
     UPDATE users SET uid='uid-'||id, stripe_customer_id='cus_member'||id`);
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_pack25','$25 of tokens','alacarte',1,'{}',?)")
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_pack25','$25 of tokens','alacarte',1,'{}',?,0)")
     .run(JSON.stringify([{ id: PACK, product: 'prod_pack25', active: true, currency: 'usd', unit_amount: 2500, nickname: null, type: 'one_time', recurring: null }]));
   f.db.prepare("INSERT INTO ai_token_packs(uid,price_id,product_id,face_cents,bonus_microusd,on_sale,origin) VALUES('pack25',?,'prod_pack25',2500,2500000,1,'created')").run(PACK);
   f.db.exec(M511);
@@ -95,7 +95,7 @@ function stripeStub(opts: { confirm?: () => Response | Promise<Response>; setupI
 }
 const declined = () => new Response(JSON.stringify({ error: { type: 'card_error', code: 'card_declined', message: 'Your card was declined.' } }), { status: 402 });
 async function webhook(f: any, type: string, object: Record<string, unknown>) {
-  const body = JSON.stringify({ id: `evt_${Math.random().toString(36).slice(2)}`, type, data: { object } });
+  const body = JSON.stringify({ id: `evt_${Math.random().toString(36).slice(2)}`, livemode: false, type, data: { object } });
   const timestamp = Math.floor(Date.now() / 1000);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(f.env.STRIPE_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))).map((x) => x.toString(16).padStart(2, '0')).join('');

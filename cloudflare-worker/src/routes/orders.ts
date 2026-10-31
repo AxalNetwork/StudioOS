@@ -39,6 +39,7 @@ import {
 import { refuse } from '../util/refusal';
 import { recordAiTopupPurchase } from '../services/aiTopups';
 import { isTokenPackPrice, packRefusalBody, TOKEN_PACK_REFUSALS, tokenPackQuote } from '../services/aiCredits';
+import { keyReadiness, CHECKOUT_NOT_READY_MESSAGE } from '../services/stripeReadiness';
 
 const orders = new Hono<{ Bindings: Env }>();
 
@@ -79,7 +80,6 @@ orders.post('/intent', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
   await ensureTierSchema(c.env);
   await ensureOrdersSchema(c.env);
-  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
 
   const body = (await c.req.json().catch(() => ({}))) as {
     items?: unknown;
@@ -88,6 +88,18 @@ orders.post('/intent', async (c) => {
     nonce?: string;
   };
   const items = normItems(body.items);
+  // Identify packs before priceCart: an empty/stale mirror may otherwise call
+  // Stripe before this readiness refusal. Support sessions remain first.
+  const packCart = (await Promise.all(items.map(item => isTokenPackPrice(c.env, item.price_id)))).some(Boolean);
+  if (packCart && (await selectJwt(c))?.payload.impersonated_by) {
+    return c.json({ error: 'support_session_refused', message: 'A support session cannot buy AI tokens.' }, 403);
+  }
+  if (packCart) {
+    const readiness = await keyReadiness(c.env);
+    if (readiness.state === 'not_ready') return refuse(c, 409, { code: 'checkout_not_ready', message: CHECKOUT_NOT_READY_MESSAGE,
+      audience: 'member', extra: { reason: readiness.reason } });
+  }
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
   const billingCountry =
     typeof body.billing_country === 'string' && body.billing_country.trim()
@@ -112,14 +124,6 @@ orders.post('/intent', async (c) => {
   const priorById = await c.env.DB.prepare('SELECT order_ref FROM orders WHERE id = ?')
     .bind(orderId)
     .first<{ order_ref: string }>();
-
-  // D849 (#2472): a support session never buys AI tokens with the member's
-  // card, as it never answers assistant consent (mcp_consent.ts). Judged
-  // before the pack's own refusals, so it answers the same for every pack.
-  const packCart = (await Promise.all(cart.lines.map((l) => isTokenPackPrice(c.env, l.price_id)))).some(Boolean);
-  if (packCart && (await selectJwt(c))?.payload.impersonated_by) {
-    return c.json({ error: 'support_session_refused', message: 'A support session cannot buy AI tokens.' }, 403);
-  }
 
   // D755 §5: a token pack is bought alone, at face value, with no promo and
   // within the limits. Judged before the promo, so it never takes the free path.

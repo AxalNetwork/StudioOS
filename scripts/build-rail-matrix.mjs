@@ -11,12 +11,18 @@
  * shape, and the page rows the canvas has no board for), and writes
  * `cloudflare-worker/src/services/ai/railMatrix.json`.
  *
- * One row per page: `{ pageKey, kind, routeTask, models: [{ id, role, line }] }`.
+ * One row per page: `{ pageKey, kind, routeTask, models: [{ id, role, line }], more: [{ id, line }] }`.
+ * #3741 keeps the first three choices as Default/Alternative/Deeper cards;
+ * remaining canvas choices are kept under All models, without changing ids.
  *
  * PR 3: one row per registered option too, from each profile's list in
  * `frontend/src/lib/railOptions/` (D771–D775): `{ pageKey, optionKey,
  * optionLabel, kind, handler, routeTask, models }`. An option takes its own
- * kind's models; `handler: "none"` runs no model and gets no row. The advisor
+ * kind's models; `handler: "none"` runs no model and gets no row. D1478
+ * (#3721): an option may take a kind no page row has (`optionKinds`, today
+ * `image`, the draw models), with `routeTask` the fixed job its list names
+ * (`task` on the option); an option with handler `transcribe` lists only
+ * `transcribeModels`, the models the `transcribe` task can run. The advisor
  * and partner lists name a board by its bare canvas name, which is resolved to
  * its page key inside that profile.
  * The page key is `<Profile> · <Section>` or `<Profile> · <Section> · <Module>`
@@ -76,6 +82,12 @@ export function optionPageKey(canvas, profile, page) {
 
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
+// #3741: preserve the existing order/default; surplus choices remain selectable.
+const curated = (models) => ({
+  models: models.slice(0, 3).map((m, i) => ({ ...m, role: ['Default', 'Alternative', 'Deeper'][i] })),
+  more: models.slice(3).map(({ id, line }) => ({ id, line })),
+});
+
 /** Every `@cf/…` id the pricing file prices, and its "Paid billing only" list. */
 export function readPricing(md) {
   const priced = new Set();
@@ -121,14 +133,23 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
     kindModels[kind] = out;
   }
 
+  // D1478: kinds only an option takes, each with its own list, Default first.
+  const optionKinds = overrides.optionKinds ?? {};
+  for (const [kind, ok] of Object.entries(optionKinds)) {
+    if (kindModels[kind]) { problems.push(`option kind ${kind} is also a canvas kind`); continue; }
+    kindModels[kind] = ok.models.map((s, i) => ({ id: modelOf(s.t)?.id, role: i === 0 ? 'Default' : 'Alternative', line: s.line })).filter((m) => m.id);
+  }
+  const transcribeModels = (overrides.transcribeModels ?? []).map((s, i) => ({ id: modelOf(s.t)?.id, role: i === 0 ? 'Default' : 'Alternative', line: s.line })).filter((m) => m.id);
+
   if (overrides.searchIndexModel !== SEARCH_INDEX_MODEL) {
     problems.push(`searchIndexModel is ${overrides.searchIndexModel}: axal-search is 768-dimensional and only ${SEARCH_INDEX_MODEL} reads it`);
   }
   const rows = [];
   const add = (pageKey, kind) => {
+    if (kind in optionKinds) { problems.push(`${pageKey}: ${kind} is an option kind, never a page's`); return; }
     const models = kindModels[kind];
     if (!models) { problems.push(`${pageKey}: kind ${kind} has no models`); return; }
-    rows.push({ pageKey, kind, routeTask: `rail_${kind}`, models: models.map((m) => ({ ...m })) });
+    rows.push({ pageKey, kind, routeTask: `rail_${kind}`, ...curated(models) });
   };
   for (const [profile, sections] of Object.entries(canvas.profiles)) {
     for (const [section, modules] of Object.entries(sections)) {
@@ -148,7 +169,7 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
     if (onCanvas && o.keepKind) {
       const models = kindModels[o.kind];
       if (!models) problems.push(`${pageKey}: kind ${o.kind} has no models`);
-      else Object.assign(onCanvas, { kind: o.kind, routeTask: `rail_${o.kind}`, models: models.map((m) => ({ ...m })) });
+      else Object.assign(onCanvas, { kind: o.kind, routeTask: `rail_${o.kind}`, ...curated(models) });
     } else if (onCanvas) problems.push(`${pageKey} is on the canvas; drop its override`);
     else add(pageKey, o.kind);
   }
@@ -167,12 +188,13 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
     if (!pages.has(page.key)) { problems.push(`${where}: ${page.key} has no page row`); continue; }
     if (!/^[a-z]{1,24}:[a-z0-9_/-]{1,80}$/.test(String(o.key))) problems.push(`${where}: the key is not <verb>:<object>`);
     if (VOICE_BANNED.test(String(o.label))) problems.push(`${where}: "${o.label}" breaks the voice rule`);
-    const models = kindModels[o.kind];
-    if (!models) { problems.push(`${where}: kind ${o.kind} has no models`); continue; }
+    const models = o.handler === 'transcribe' ? transcribeModels : kindModels[o.kind];
+    if (!models?.length) { problems.push(`${where}: kind ${o.kind} has no models`); continue; }
+    if ((o.kind in optionKinds) !== (typeof o.task === 'string')) problems.push(`${where}: an option of kind ${o.kind} ${o.kind in optionKinds ? 'names the job it runs (task)' : 'runs its kind\'s rail task, not a task of its own'}`);
     if (options.some((x) => x.pageKey === page.key && x.optionKey === o.key)) { problems.push(`${where}: the key is used twice on ${page.key}`); continue; }
     const row = {
       pageKey: page.key, optionKey: o.key, optionLabel: o.label, kind: o.kind, handler: o.handler,
-      routeTask: `rail_${o.kind}`, models: models.map((m) => ({ ...m })),
+      routeTask: o.task ?? `rail_${o.kind}`, ...curated(models),
     };
     problems.push(...rowProblems({ ...row, pageKey: `${page.key} [${o.key}]` }, overrides, pricing, capsOf));
     options.push(row);
@@ -183,17 +205,24 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
 /** D720 §5's rules for one page row; an empty list when it holds. */
 export function rowProblems(row, overrides, pricing, capsOf) {
   const out = [];
-  const shape = overrides.kinds[row.kind];
+  const shape = overrides.kinds[row.kind] ?? overrides.optionKinds?.[row.kind];
   const at = row.pageKey;
   if (!row.models.length) out.push(`${at}: no models`);
+  if (row.models.length > 3) out.push(`${at}: more than 3 suggested models`);
+  const choices = [...row.models, ...(row.more ?? [])];
+  if (new Set(choices.map(m => m.id)).size !== choices.length) out.push(`${at}: a model is offered twice`);
   row.models.forEach((m, i) => {
+    if (m.role !== ['Default', 'Alternative', 'Deeper'][i]) out.push(`${at}: suggested roles must be Default, Alternative, Deeper in order`);
+    if ('optional' in m) out.push(`${at}: a suggestion cannot be optional`);
+  });
+  choices.forEach((m, i) => {
     if (!pricing.priced.has(m.id)) out.push(`${at}: ${m.id} is not in the pricing file`);
     const caps = capsOf(m.id);
     if (!caps.some((c) => shape.allow.includes(c))) out.push(`${at}: ${m.id} does not fit ${row.kind}`);
     if (i === 0 && !caps.includes(shape.defaultNeeds)) out.push(`${at}: the default ${m.id} cannot do ${shape.defaultNeeds}`);
     if (shape.allow.length === 1 && !caps.includes(shape.allow[0])) out.push(`${at}: ${m.id} cannot do ${shape.allow[0]}`);
-    if ((m.role === 'Default') !== (i === 0)) out.push(`${at}: only models[0] says Default`);
-    for (const s of [m.role, m.line]) if (VOICE_BANNED.test(s)) out.push(`${at}: "${s}" breaks the voice rule`);
+    if (i < row.models.length && (m.role === 'Default') !== (i === 0)) out.push(`${at}: only models[0] says Default`);
+    for (const s of [m.role ?? '', m.line]) if (VOICE_BANNED.test(s)) out.push(`${at}: "${s}" breaks the voice rule`);
     if (overrides.searchIndexKinds.includes(row.kind) && caps.includes('embedding') && m.id !== overrides.searchIndexModel) {
       out.push(`${at}: ${m.id} cannot read axal-search`);
     }

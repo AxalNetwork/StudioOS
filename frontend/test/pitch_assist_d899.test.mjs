@@ -391,7 +391,7 @@ test('PD9d: connectors with their last sync, figures by connector, a headline fr
     await m.type(m.by('pitch-connector-headline'), 'Synthetic momentum');
     await m.press(m.by('pitch-connector-add'));
     assert.ok(!m.by('pitch-connector'), 'the lightbox closes');
-    assert.match(m.text(m.by('pitch-editor-rail')), /02 Synthetic momentum/, 'a new card, selected');
+    assert.match(m.text(m.by('pitch-editor-cards')), /02 Synthetic momentum/, 'a new card, selected');
     assert.match(m.text(m.by('pitch-editor-card')), /Commits, 90 days.*311.*MRR.*4200/, 'tiles read the records');
   } finally { await m.unmount(); }
 });

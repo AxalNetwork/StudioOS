@@ -11,14 +11,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { CYCLE_GUTTER } from '../src/pages/cycles/cyclePaths.js';
 
 test('the cycle route body carries the canvas gutter, not WorkspaceShell\'s p-5', () => {
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  const body = /<div className="([^"]*)" data-testid="cycle-route-body">/.exec(route);
+  const body = /<div className=\{CYCLE_GUTTER\} data-testid="cycle-route-body">/.exec(route);
   assert.ok(body, 'the cycle route body is found');
-  const classes = body[1].split(/\s+/);
+  const classes = CYCLE_GUTTER.split(/\s+/);
   for (const c of ['px-[22px]', 'pt-[14px]', 'pb-[18px]', 'lg:px-6', 'lg:pt-[22px]', 'lg:pb-[30px]']) {
-    assert.ok(classes.includes(c), `${c} in the cycle route body: ${body[1]}`);
+    assert.ok(classes.includes(c), `${c} in the cycle route body: ${CYCLE_GUTTER}`);
   }
   assert.ok(!classes.includes('p-5'), 'the body has one gutter, not p-5 as well');
 });

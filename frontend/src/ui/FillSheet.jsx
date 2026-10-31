@@ -193,7 +193,7 @@ export default function FillSheet({ page, form, project = null, record = null, p
             <span className="flex flex-wrap gap-2">
               {refused.kind === 'off' && turnOnHref ? <Link className={LINK} to={turnOnHref}>Turn it on</Link> : null}
               {refused.addTokens ? <Link className={BTN} to={ADD_TOKENS_PATH} data-testid="fill-sheet-add-tokens">Add tokens</Link> : null}
-              {refused.kind === 'tokens' ? <button type="button" className={GHOST} onClick={() => preview({ sourcesOnly: true })} data-testid="fill-sheet-sources-only">Fill from your sources only</button> : null}
+              {refused.kind === 'tokens' ? <button type="button" className={GHOST} onClick={() => preview({ sourcesOnly: true })} data-testid="fill-sheet-sources-only">Ask from your sources only</button> : null}
               {refused.again ? <button type="button" className={GHOST} onClick={() => preview()} data-testid="fill-sheet-again">Preview again</button> : null}
             </span>
           </div>
@@ -290,7 +290,7 @@ export default function FillSheet({ page, form, project = null, record = null, p
   }
 
   return (
-    <Sheet label={`Fill ${title} with Eadwyn`} eyebrow="Fill with Eadwyn" title={`Fill ${title}`} width={520} onClose={onClose} footer={footer} testId="fill-sheet"
+    <Sheet label={`Ask Eadwyn about ${title}`} eyebrow="Ask Eadwyn" title={title} width={520} onClose={onClose} footer={footer} testId="fill-sheet"
       phone={step === 'sources' && read.status !== 'error' && !nothingToFill ? 'sheet' : 'full'}>
       <div className="flex flex-col gap-3">
         <img src="/eadwyn-ai.png" alt="" width={24} height={24} className="h-6 w-6" />

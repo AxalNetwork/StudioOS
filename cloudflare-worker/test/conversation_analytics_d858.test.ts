@@ -221,6 +221,42 @@ test('2. a store this build lacks reads null and names it, never 0', async () =>
   assert.equal(r.body.messages.value.total, 6, 'the transcript still counts');
 });
 
+// ── 2b. Text languages from W2's source_lang (#3732) ─────────────────────
+
+const placeLine = (db: any, sessionId: number, text: string, lang: string | null) =>
+  db.prepare('UPDATE interview_transcript_segments SET source_lang = ? WHERE session_id = ? AND text = ?').run(lang, sessionId, text);
+
+test('2b. a chat in two languages and an unplaced line: typed lines counted by language, the unplaced one under null', async () => {
+  const w = await venture();
+  placeLine(w.db, 1, Q.friday, 'en');
+  placeLine(w.db, 1, Q.ask, 'ES');
+  // Q.xero stays NULL. The voice notes' lines carry a language too; they are not typed text.
+  placeLine(w.db, 1, Q.day, 'fr'); placeLine(w.db, 1, Q.pay, 'fr');
+  const chat = (await get(w.env, ME, '/sessions/1/analytics')).body;
+  assert.deepEqual(chat.text_languages, {
+    value: [{ language: 'en', messages: 1 }, { language: 'es', messages: 1 }, { language: null, messages: 1 }], sources: ['Typed'], reason: null,
+  });
+
+  placeLine(w.db, 3, 'It hurts.', 'fr');
+  const rec = (await get(w.env, ME, '/sessions/3/analytics')).body;
+  assert.deepEqual(rec.text_languages, { value: null, sources: [], reason: REASONS.textLanguageNotChat }, 'a recording has no typed text');
+});
+
+test('2b. the venture read sums text languages across its chats, and only its chats', async () => {
+  const w = await venture();
+  const none = (await get(w.env, ME, `/conversations/analytics?project_id=${PROJECT}`)).body;
+  assert.deepEqual(none.text_languages, { value: null, sources: [], reason: REASONS.textLanguage }, 'no placed line is unknown, never []');
+
+  placeLine(w.db, 1, Q.friday, 'en'); placeLine(w.db, 1, Q.ask, 'es');
+  placeLine(w.db, 2, Q.sheets, 'en');
+  placeLine(w.db, 3, 'It hurts.', 'fr'); // a recording, not one of the venture's chats
+  placeLine(w.db, 4, 'Not yours to read.', 'de'); // another venture
+  const r = await get(w.env, ME, `/conversations/analytics?project_id=${PROJECT}`);
+  assert.deepEqual(r.body.text_languages, {
+    value: [{ language: 'en', messages: 2 }, { language: 'es', messages: 1 }, { language: null, messages: 1 }], sources: ['Typed'], reason: null,
+  });
+});
+
 // ── 3. Tenant ────────────────────────────────────────────────────────────
 
 test("3. another founder's venture and session answer 404; HQ staff read; bad input is 400; signed out is 401", async () => {

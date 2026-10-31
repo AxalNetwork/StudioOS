@@ -1,3 +1,4 @@
+import { NOT_SOLD } from '../services/planCatalogue';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { heldInterval, markSubscriptionAmountCanceled, recordSubscriptionAmount } from '../services/planAllowance';
@@ -15,6 +16,10 @@ import {
 } from '../middleware/requireInvestorTier';
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
 import { priceForPlanMetadata, getCatalog } from '../services/catalog';
+import { planByKey } from '../services/planCatalogue';
+import { priceForEntry } from '../services/planCheckout';
+import { keyReadiness, planReadiness, CHECKOUT_NOT_READY_MESSAGE } from '../services/stripeReadiness';
+import { stripeMode, type CatalogPrice } from '../services/catalog';
 import { isTokenPackPrice } from '../services/aiCredits';
 import {
   ensureAccountPlanSchema,
@@ -290,6 +295,21 @@ export function checkoutInterval(v: unknown): 'month' | 'year' | null {
   return v === 'month' || v === 'year' ? v : null;
 }
 
+/** Legacy entry points use the same mode/key rule as the checkout sheet. */
+async function legacyPlanPrice(c: Context<{ Bindings: Env }>, key: string, interval: 'month' | 'year'): Promise<CatalogPrice | Response> {
+  const keys = await keyReadiness(c.env);
+  if (keys.state === 'not_ready') return refuse(c, 409, { code: 'checkout_not_ready', message: CHECKOUT_NOT_READY_MESSAGE,
+    audience: 'member', extra: { reason: keys.reason } });
+  const entry = planByKey(key);
+  let products;
+  try { products = await getCatalog(c.env, 'subscription', undefined, { sync: false }); }
+  catch { return refuse(c, 503, { code: 'catalogue_unreadable', message: 'The plan catalogue could not be read. Nothing was charged.', audience: 'member' }); }
+  const readiness = entry ? await planReadiness(c.env, products, entry, interval) : { state: 'not_ready' as const, reason: 'price_missing' as const };
+  if (readiness.state === 'not_ready') return refuse(c, 409, { code: 'checkout_not_ready', message: CHECKOUT_NOT_READY_MESSAGE,
+    audience: 'member', extra: { reason: readiness.reason } });
+  return priceForEntry(products, entry!, interval)!.price;
+}
+
 billing.post('/tier/checkout', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
   await ensureTierSchema(c.env);
@@ -300,28 +320,10 @@ billing.post('/tier/checkout', async (c) => {
   const interval = checkoutInterval(body.interval);
   if (!interval) return c.json({ error: 'invalid_interval', allowed: ['month', 'year'] }, 400);
 
-  const stripeKey = c.env.STRIPE_SECRET_KEY;
-  // Resolve the SKU from the catalog instead of STRIPE_PRICE_GROWTH/STUDIO.
-  // Each founder-tier product carries `metadata.tier === 'growth' | 'studio'`;
-  // the interval selects its monthly or yearly recurring price.
-  const price = stripeKey ? await priceForPlanMetadata(c.env, 'tier', tier, interval) : null;
-  const priceId = price?.id;
+  const price = await legacyPlanPrice(c, `founder:${tier}`, interval);
+  if (price instanceof Response) return price;
+  const priceId = price.id;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
-
-  // No resolvable SKU. Keyless dev → simulated dev-upgrade; otherwise fail loud.
-  if (!priceId) {
-    if (devPaymentFallbackAllowed(c.env)) {
-      return c.json({
-        url: `${appUrl}/api/billing/tier/dev-upgrade?tier=${tier}`,
-        dev: true,
-      });
-    }
-    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
-    return c.json(
-      { error: 'catalog_price_missing', interval, detail: `No active Stripe price for tier=${tier} interval=${interval}` },
-      502,
-    );
-  }
 
   const params: Record<string, string> = {
     mode: 'subscription',
@@ -369,7 +371,7 @@ billing.post('/tier/portal', async (c) => {
   try {
     const session = await stripeCall<{ url: string }>(c.env, '/billing_portal/sessions', {
       customer: user.stripe_customer_id,
-      return_url: `${appUrl}/settings?tab=billing`,
+      return_url: `${appUrl}/account/billing`,
     });
     return c.json({ url: session.url });
   } catch (e) {
@@ -505,7 +507,7 @@ billing.all('/tier/dev-upgrade', async (c) => {
 // Task #6 (W-1) — Investor paywall checkout / portal / status / dev-upgrade.
 // Distinct customer + subscription columns from MI Pro and from founder-tier
 // so an investor can carry independent billing state. Free → Professional
-// ($149/mo or yearly) → Institutional ($599/mo or yearly).
+// → Institutional (custom terms; Contact Axal VC).
 // ---------------------------------------------------------------------------
 
 // The investor `plan` string encodes both the tier (professional |
@@ -544,6 +546,9 @@ billing.post('/investor/checkout', async (c) => {
   }
   const body = await c.req.json().catch(() => ({} as { plan?: string; interval?: string }));
   if (!isValidInvestorPlan(body.plan)) return c.json({ error: 'invalid_plan' }, 400);
+  // D1430: Institutional is negotiated, never a self-service subscription.
+  if (INVESTOR_PLAN_TO_PRICE[body.plan].tier === 'institutional')
+    return refuse(c, 409, { code: 'not_sellable', message: NOT_SOLD.custom });
   // D816 (#2262): an explicit interval chooses the price, as on the founder and
   // persona checkouts; with none, the plan key's own interval stands.
   const interval = body.interval === undefined ? INVESTOR_PLAN_TO_PRICE[body.plan].interval : checkoutInterval(body.interval);
@@ -552,30 +557,10 @@ billing.post('/investor/checkout', async (c) => {
   // D1334: a tier with no plan key at this interval is refused, never priced as another tier.
   if (!plan) return c.json({ error: 'invalid_interval', allowed: ['month', 'year'] }, 400);
   const cfg = INVESTOR_PLAN_TO_PRICE[plan];
-  const stripeKey = c.env.STRIPE_SECRET_KEY;
-  // Resolve the SKU from the catalog instead of STRIPE_PRICE_INVESTOR_*.
-  // The investor product carries `metadata.investor_tier === cfg.tier`; the
-  // plan-derived interval selects the matching recurring price.
-  const price = stripeKey
-    ? await priceForPlanMetadata(c.env, 'investor_tier', cfg.tier, cfg.interval)
-    : null;
-  const priceId = price?.id;
+  const price = await legacyPlanPrice(c, `investor:${cfg.tier}`, cfg.interval);
+  if (price instanceof Response) return price;
+  const priceId = price.id;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
-
-  // No resolvable SKU. Keyless dev → simulated dev-upgrade; otherwise fail loud.
-  if (!priceId) {
-    if (devPaymentFallbackAllowed(c.env)) {
-      return c.json({
-        url: `${appUrl}/api/billing/investor/dev-upgrade?plan=${plan}`,
-        dev: true,
-      });
-    }
-    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
-    return c.json(
-      { error: 'catalog_price_missing', interval: cfg.interval, detail: `No active Stripe price for investor_tier=${cfg.tier} interval=${cfg.interval}` },
-      502,
-    );
-  }
 
   const params: Record<string, string> = {
     mode: 'subscription',
@@ -632,7 +617,7 @@ billing.post('/investor/portal', async (c) => {
   try {
     const session = await stripeCall<{ url: string }>(c.env, '/billing_portal/sessions', {
       customer: user.investor_stripe_customer_id,
-      return_url: `${appUrl}/settings?tab=billing`,
+      return_url: `${appUrl}/account/billing`,
     });
     return c.json({ url: session.url });
   } catch (e) {
@@ -773,22 +758,9 @@ billing.post('/plan/checkout', async (c) => {
   const body = await c.req.json().catch(() => ({} as { interval?: string }));
   const interval = body.interval === 'year' ? 'year' : 'month';
 
-  const stripeKey = c.env.STRIPE_SECRET_KEY;
-  const price = stripeKey ? await priceForPlanMetadata(c.env, 'plan_group', group, interval) : null;
-  const priceId = price?.id;
-
-  // No resolvable SKU. Keyless dev → simulated dev-upgrade; otherwise fail loud.
-  if (!priceId) {
-    if (devPaymentFallbackAllowed(c.env)) {
-      const appUrl = c.env.APP_URL || 'http://localhost:5000';
-      return c.json({ url: `${appUrl}/api/billing/plan/dev-upgrade`, dev: true });
-    }
-    if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
-    return c.json(
-      { error: 'catalog_price_missing', interval, detail: `No active Stripe price for plan_group=${group} interval=${interval}` },
-      502,
-    );
-  }
+  const price = await legacyPlanPrice(c, `${group}:pro`, interval);
+  if (price instanceof Response) return price;
+  const priceId = price.id;
 
   const customer = await ensureGeneralCustomer(c.env, user);
   // Create an incomplete subscription and hand back the first invoice's
@@ -1568,50 +1540,90 @@ billing.post('/stripe/webhook', async (c) => {
     const ok = await verifyStripeSignature(raw, sig, secret);
     if (!ok) return c.json({ error: 'invalid_signature' }, 400);
   }
-  let event: { id?: string; type: string; data: { object: Record<string, unknown> } };
+  let event: { id: string; type: string; livemode: boolean; data: { object: Record<string, unknown> } };
   try {
     event = JSON.parse(raw);
+    if (!event || typeof event.id !== 'string' || !event.id || typeof event.type !== 'string'
+      || typeof event.livemode !== 'boolean' || !event.data || !event.data.object || typeof event.data.object !== 'object') {
+      return c.json({ error: 'invalid_payload' }, 400);
+    }
   } catch {
     return c.json({ error: 'invalid_payload' }, 400);
   }
-  // Schema bootstrap AFTER verification, and non-fatal (see safeEnsure).
-  await safeEnsure('mi', () => ensureMiPaywallSchema(c.env));
-  await safeEnsure('tier', () => ensureTierSchema(c.env));
-  await safeEnsure('investor', () => ensureInvestorPaywallSchema(c.env));
-  await safeEnsure('account_plans', () => ensureAccountPlanSchema(c.env));
-  await safeEnsure('incorporations', async () => {
-    const { ensureIncorporationsSchema } = await import('../services/incorporations');
-    await ensureIncorporationsSchema(c.env);
-  });
-  await handleStripeEvent(c.env, event);
-  // `account.updated` still mirrors Connect flags onto experts.* — Task #4's
-  // paid-bookings gate depends on it, and Expert Connect accounts are a
-  // SEPARATE Connect integration from the retired Refer & Earn payouts.
-  //
-  // The Refer & Earn dispatch that used to sit here (`applyConnectAccountUpdated`
-  // onto users.*, plus the `transfer.paid` / `transfer.failed` handlers closing
-  // the referral_payouts lifecycle) went with Stripe Connect in the referrals
-  // redesign. There is no referral payout ledger left for a transfer event to
-  // close, so those event types are simply no longer dispatched here.
-  try {
-    const ev = event as { type: string; account?: string; data: { object: Record<string, unknown> } };
-    if (ev.type === 'account.updated') {
-      const acct = ev.data.object as { id?: string; charges_enabled?: boolean; payouts_enabled?: boolean };
-      if (acct?.id) {
-        await c.env.DB.prepare(
-          `UPDATE experts SET stripe_charges_enabled = ?, stripe_payouts_enabled = ?
-             WHERE stripe_account_id = ?`,
-        ).bind(
-          acct.charges_enabled ? 1 : 0,
-          acct.payouts_enabled ? 1 : 0,
-          acct.id,
-        ).run();
-      }
-    }
-  } catch (e: any) {
-    console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
+  // The authenticated event id is the receipt. A failed dispatch leaves the
+  // receipt unfinished, so a signed retry can run the existing handlers again.
+  await c.env.DB.prepare('INSERT OR IGNORE INTO stripe_webhook_events (event_id, type, livemode) VALUES (?, ?, ?)')
+    .bind(event.id, event.type, event.livemode ? 1 : 0).run();
+  const receipt = await c.env.DB.prepare('SELECT handled_at FROM stripe_webhook_events WHERE event_id = ?')
+    .bind(event.id).first<{ handled_at: string | null }>();
+  if (!receipt) return c.json({ error: 'webhook_unreadable' }, 503);
+  if (receipt.handled_at !== null) return c.json({ received: true, duplicate: true });
+  if (stripeMode(c.env) === 'unconfigured' || event.livemode !== (stripeMode(c.env) === 'live')) {
+    return c.json({ ignored: 'mode_mismatch' });
   }
-  return c.json({ received: true });
+  const processingUid = crypto.randomUUID();
+  const claim = await c.env.DB.prepare(`UPDATE stripe_webhook_events
+    SET processing_uid = ?, processing_until = datetime('now', '+5 minutes')
+    WHERE event_id = ? AND handled_at IS NULL
+      AND (processing_uid IS NULL OR processing_until <= datetime('now'))`)
+    .bind(processingUid, event.id).run();
+  if (Number(claim.meta?.changes ?? 0) !== 1) {
+    const completed = await c.env.DB.prepare('SELECT handled_at FROM stripe_webhook_events WHERE event_id = ?')
+      .bind(event.id).first<{ handled_at: string | null }>();
+    if (completed?.handled_at) return c.json({ received: true, duplicate: true });
+    return c.json({ error: 'webhook_processing' }, 409);
+  }
+  try {
+    // Schema bootstrap AFTER verification, and non-fatal (see safeEnsure).
+    await safeEnsure('mi', () => ensureMiPaywallSchema(c.env));
+    await safeEnsure('tier', () => ensureTierSchema(c.env));
+    await safeEnsure('investor', () => ensureInvestorPaywallSchema(c.env));
+    await safeEnsure('account_plans', () => ensureAccountPlanSchema(c.env));
+    await safeEnsure('incorporations', async () => {
+      const { ensureIncorporationsSchema } = await import('../services/incorporations');
+      await ensureIncorporationsSchema(c.env);
+    });
+    await handleStripeEvent(c.env, event);
+    // `account.updated` still mirrors Connect flags onto experts.* — Task #4's
+    // paid-bookings gate depends on it, and Expert Connect accounts are a
+    // SEPARATE Connect integration from the retired Refer & Earn payouts.
+    //
+    // The Refer & Earn dispatch that used to sit here (`applyConnectAccountUpdated`
+    // onto users.*, plus the `transfer.paid` / `transfer.failed` handlers closing
+    // the referral_payouts lifecycle) went with Stripe Connect in the referrals
+    // redesign. There is no referral payout ledger left for a transfer event to
+    // close, so those event types are simply no longer dispatched here.
+    try {
+      const ev = event as { type: string; account?: string; data: { object: Record<string, unknown> } };
+      if (ev.type === 'account.updated') {
+        const acct = ev.data.object as { id?: string; charges_enabled?: boolean; payouts_enabled?: boolean };
+        if (acct?.id) {
+          await c.env.DB.prepare(
+            `UPDATE experts SET stripe_charges_enabled = ?, stripe_payouts_enabled = ?
+               WHERE stripe_account_id = ?`,
+          ).bind(
+            acct.charges_enabled ? 1 : 0,
+            acct.payouts_enabled ? 1 : 0,
+            acct.id,
+          ).run();
+        }
+      }
+    } catch (e: any) {
+      console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
+    }
+    const completed = await c.env.DB.prepare(`UPDATE stripe_webhook_events
+      SET handled_at = datetime('now'), processing_uid = NULL, processing_until = NULL
+      WHERE event_id = ? AND processing_uid = ? AND handled_at IS NULL`)
+      .bind(event.id, processingUid).run();
+    if (Number(completed.meta?.changes ?? 0) !== 1) throw new Error('webhook completion unavailable');
+    return c.json({ received: true });
+  } catch {
+    try {
+      await c.env.DB.prepare(`UPDATE stripe_webhook_events SET processing_uid = NULL, processing_until = NULL
+        WHERE event_id = ? AND processing_uid = ? AND handled_at IS NULL`).bind(event.id, processingUid).run();
+    } catch { console.error('[billing] event processing claim could not be released'); }
+    return c.json({ error: 'webhook_processing_failed' }, 503);
+  }
 });
 
 async function handleStripeEvent(
@@ -2261,6 +2273,8 @@ async function verifyStripeSignature(body: string, header: string, secret: strin
   const t = parts['t'];
   const v1 = parts['v1'];
   if (!t || !v1) return false;
+  const timestamp = Number(t);
+  if (!/^\d+$/.test(t) || !Number.isSafeInteger(timestamp) || Math.abs(Math.floor(Date.now() / 1000) - timestamp) > 300) return false;
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],

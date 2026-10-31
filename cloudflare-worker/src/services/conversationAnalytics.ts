@@ -22,8 +22,10 @@
  *   - a WhatsApp voice note arrives without its length, and the note's
  *     placeholder (where Telegram's length sat) goes with the append, so voice
  *     minutes are known for a recording, not for a chat;
- *   - chat text carries no language until W2's translation (#2502) lands; a
- *     voice note's language is the one its speech-to-text detected.
+ *   - a voice note's language is the one its speech-to-text detected; a chat's
+ *     typed text has the language W2's translation pass (D857, #2502) detected
+ *     on each line (`source_lang`), and a line it has not placed yet counts
+ *     under `language: null`, never as a language.
  *
  * WHAT A SUGGESTION COUNTS. The structure pass's proposals
  * (`validate_proposals`, D658) are where a conversation's findings live until
@@ -75,7 +77,8 @@ export const REASONS = {
   replyTime: "Not recorded: a chat message's send time is not kept once the chat moves into a session.",
   replyTimeNotChat: 'Not recorded: reply time is measured on chats only.',
   chatVoiceMinutes: 'Not recorded: WhatsApp and Telegram voice notes are stored without their length.',
-  textLanguage: 'Not recorded: chat text carries no language until translation (W2, #2502) lands.',
+  textLanguage: 'Not recorded: no chat message has a detected language yet; the translation pass (D857) places each one when it reads the chat.',
+  textLanguageNotChat: 'Not recorded: text languages are measured on chats only.',
   recordingLanguage: 'Not recorded: the recorder did not record a language for this session.',
   notChat: 'Not recorded: this session is not a chat, so it has no voice notes.',
   callMinutes: "Not recorded: this call's transcript carries no times, so its length is unknown.",
@@ -199,10 +202,10 @@ const ids = (rows: readonly { id: number }[]) => JSON.stringify(rows.map((r) => 
 /** The sessions' final transcript lines, in the structure pass's own order. */
 async function finalSegments(env: Env, sessionIds: string) {
   return (await env.DB.prepare(
-    `SELECT id, session_id, start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
+    `SELECT id, session_id, start_ms, end_ms, speaker_label, text, source_lang FROM interview_transcript_segments
       WHERE source = 'final' AND session_id IN (SELECT value FROM json_each(?))
       ORDER BY session_id, COALESCE(start_ms, 0), id`,
-  ).bind(sessionIds).all<SegmentRow & { session_id: number }>()).results ?? [];
+  ).bind(sessionIds).all<SegmentRow & { session_id: number; source_lang?: string | null }>()).results ?? [];
 }
 
 async function voiceNotes(env: Env, sessions: readonly AnalyticsSession[]) {
@@ -242,6 +245,53 @@ function noteSide(segmentsJson: string | null): 'founder' | 'customer' | null {
   const first = Array.isArray(segs) ? segs.find((s) => String((s as { text?: unknown })?.text ?? '').trim()) : null;
   if (!first) return null;
   return (first as { speaker_label?: unknown }).speaker_label === ME ? 'founder' : 'customer';
+}
+
+/** A voice note's appended text, the one segment its transcript holds, so it is told apart from typed lines. */
+function noteText(segmentsJson: string | null): string | null {
+  let segs: unknown;
+  try { segs = JSON.parse(String(segmentsJson ?? '[]')); } catch { return null; }
+  const first = Array.isArray(segs) ? segs.find((s) => String((s as { text?: unknown })?.text ?? '').trim()) : null;
+  return first ? String((first as { text: unknown }).text).trim() : null;
+}
+
+export interface TextLanguageCount { language: string | null; messages: number }
+
+/**
+ * #3732: the languages of a chat's typed lines, from the language W2's
+ * translation pass detected on each (`source_lang`, D857). A voice note's line
+ * is not typed text and is left out. A line with no detected language counts
+ * under `language: null`, last, never as the working language. When no typed
+ * line has a language at all the figure is unknown, never `[]`.
+ */
+function textLanguages(
+  sessions: readonly AnalyticsSession[], segments: readonly (SegmentRow & { session_id: number; source_lang?: string | null })[],
+  notes: readonly { session_id: number; segments_json: string | null }[],
+): Figure<TextLanguageCount[]> {
+  const chats = new Set(sessions.filter((s) => kindOf(s) === 'chat').map((s) => s.id));
+  if (!chats.size) return unknown(REASONS.textLanguageNotChat);
+  const noteLines = new Map<string, number>();
+  for (const n of notes) {
+    const text = noteText(n.segments_json);
+    if (text && chats.has(n.session_id)) noteLines.set(`${n.session_id}\u0000${text}`, (noteLines.get(`${n.session_id}\u0000${text}`) ?? 0) + 1);
+  }
+  const by = new Map<string, number>();
+  let unplaced = 0;
+  for (const seg of segments) {
+    const text = String(seg.text ?? '').trim();
+    if (!text || !chats.has(seg.session_id)) continue;
+    const key = `${seg.session_id}\u0000${text}`;
+    const left = noteLines.get(key) ?? 0;
+    if (left > 0) { noteLines.set(key, left - 1); continue; }
+    const lang = String(seg.source_lang ?? '').trim().toLowerCase();
+    if (lang) by.set(lang, (by.get(lang) ?? 0) + 1); else unplaced += 1;
+  }
+  if (!by.size && !unplaced) return known([], []);
+  if (!by.size) return unknown(REASONS.textLanguage);
+  const rows: TextLanguageCount[] = [...by].map(([language, messages]) => ({ language, messages }))
+    .sort((a, b) => b.messages - a.messages || String(a.language).localeCompare(String(b.language)));
+  if (unplaced) rows.push({ language: null, messages: unplaced });
+  return known(rows, ['Typed']);
 }
 
 const noMessages = (): MessageCounts => ({
@@ -478,7 +528,7 @@ export interface SessionAnalytics {
   voice_notes: Figure<number>;
   voice_minutes: Figure<number>;
   languages: Figure<{ language: string; count: number }[]>;
-  text_languages: Figure<{ language: string; messages: number }[]>;
+  text_languages: Figure<TextLanguageCount[]>;
   median_reply_seconds: Figure<number>;
   suggestion_reach: Figure<Reach>;
   pain_themes: Figure<ThemeCount[]>;
@@ -512,7 +562,7 @@ async function figures(env: Env, projectId: number, sessions: readonly Analytics
       voice_notes: v.notes,
       voice_minutes: v.minutes,
       languages: notes ? languages(sessions, notes) : unknown<{ language: string; count: number }[]>(REASONS.unreadable('voice-note store')),
-      text_languages: unknown<{ language: string; messages: number }[]>(REASONS.textLanguage),
+      text_languages: notes ? textLanguages(sessions, segments, notes) : unknown<TextLanguageCount[]>(REASONS.unreadable('voice-note store')),
       median_reply_seconds: unknown<number>(anyChat ? REASONS.replyTime : REASONS.replyTimeNotChat),
       suggestion_reach: props ? reach(segments, props, sources) : unknown<Reach>(suggestionsMissing),
       pain_themes: props
@@ -637,7 +687,7 @@ export async function ventureAnalytics(
       messages: known<MessageCounts>(noMessages(), []),
       voice_notes: kind === 'calls' ? unknown<number>(REASONS.notChat) : known(0, []),
       voice_minutes: kind === 'calls' ? known(0, []) : unknown<number>(REASONS.chatVoiceMinutes),
-      languages: known<{ language: string; count: number }[]>([], []), text_languages: unknown<{ language: string; messages: number }[]>(REASONS.textLanguage),
+      languages: known<{ language: string; count: number }[]>([], []), text_languages: kind === 'calls' ? unknown<TextLanguageCount[]>(REASONS.textLanguageNotChat) : known<TextLanguageCount[]>([], []),
       median_reply_seconds: unknown<number>(kind === 'calls' ? REASONS.replyTimeNotChat : REASONS.replyTime), suggestion_reach: unknown<Reach>(none),
       pain_themes: known<ThemeCount[]>([], []), objections: known<ObjectionCount[]>([], []),
       wtp_mentions: known<WtpCount>({ suggested: 0, accepted: 0, by_kind: {} }, []), competitor_mentions: known<CompetitorCount[]>([], []),

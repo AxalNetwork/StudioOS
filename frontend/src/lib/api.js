@@ -30,6 +30,7 @@ export * from './api/adminStorage.js';
 export * from './api/adminSubAccounts.js';
 export * from './api/aiBudget.js';
 export * from './api/approvalBoards.js';
+export * from './api/articleAuthoring.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
 export * from './api/billingAlerts.js';
@@ -51,6 +52,7 @@ export * from './api/community.js';
 export * from './api/communityTasks.js';
 export * from './api/companyActions.js';
 export * from './api/companyEin.js';
+export * from './api/companyLegal.js';
 export * from './api/companyReceivingAccounts.js';
 export * from './api/companySheet.js';
 export * from './api/connectorClients.js';
@@ -129,6 +131,7 @@ export * from './api/partnerSettlements.js';
 export * from './api/payments.js';
 export * from './api/personaSegments.js';
 export * from './api/pmfExplain.js';
+export * from './api/posthog.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/programGrants.js';
@@ -153,6 +156,7 @@ export * from './api/roundCalls.js';
 export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
+export * from './api/studioLayout.js';
 export * from './api/ticketReviews.js';
 export * from './api/tokenPacks.js';
 export * from './api/trustContent.js';
@@ -929,7 +933,6 @@ export const api = {
     request(`/admin/consultations${status ? `?status=${status}` : ''}`),
   adminUpdateConsultationStatus: (id, data) =>
     request(`/admin/consultations/${id}/status`, { method: 'POST', body: JSON.stringify(data || {}) }),
-  adminGetBestFitReport: (userId) => request(`/admin/best-fit/${userId}`),
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
   // D120 — the branch half of an HQ support session. The code comes from the

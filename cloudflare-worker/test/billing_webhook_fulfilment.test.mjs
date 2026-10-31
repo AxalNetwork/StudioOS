@@ -55,6 +55,8 @@ const SEED_FILES = [
   resolve(SQL_DIR, 'migrations', '011_subscription_tiers.sql'),
   resolve(SQL_DIR, 'migrations', '027_investor_paywall.sql'),
   resolve(SQL_DIR, 'migrations', '103_mi_pro_subscriptions.sql'),
+  resolve(SQL_DIR, 'migrations', '097_stripe_products.sql'),
+  resolve(SQL_DIR, 'migrations', '691_stripe_mode_stamps.sql'),
 ];
 
 /**
@@ -198,7 +200,7 @@ async function postWebhook(worker, event) {
   return worker.fetch('/api/billing/stripe/webhook', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(event),
+    body: JSON.stringify({ id: event.id ?? `evt_${crypto.randomUUID()}`, livemode: false, ...event }),
   });
 }
 
@@ -237,7 +239,7 @@ test('Stripe webhook fulfilment invariants (MI Pro)', { skip: !process.env.RUN_B
     persistTo,
     local: true,
     ip: '127.0.0.1',
-    vars: { ENVIRONMENT: 'test' },
+    vars: { ENVIRONMENT: 'test', STRIPE_SECRET_KEY: 'sk_test_fixture' },
     d1Databases: [{ binding: 'DB', database_name: DB_NAME, database_id: DB_ID }],
     experimental: { disableExperimentalWarning: true },
   });
@@ -391,7 +393,7 @@ test('Stripe webhook fulfilment invariants (founder tier + investor)', { skip: !
     persistTo,
     local: true,
     ip: '127.0.0.1',
-    vars: { ENVIRONMENT: 'test' },
+    vars: { ENVIRONMENT: 'test', STRIPE_SECRET_KEY: 'sk_test_fixture' },
     d1Databases: [{ binding: 'DB', database_name: DB_NAME, database_id: DB_ID }],
     experimental: { disableExperimentalWarning: true },
   });

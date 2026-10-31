@@ -18,8 +18,8 @@ const cls = (n, c) => (props(n).className || '').split(' ').includes(c);
 const expected = [
   ['Founder', ['Free', 'Validate + Build', 'Raise + Grow'], 'Customer interviews', ['5', 'Unlimited', 'Unlimited']],
   ['Investor', ['Investor Basic', 'Investor Plus', 'Investor Pro', 'Institutional'], 'AI-assisted research', ['—', 'Standard limits', 'Higher limits', 'Negotiated']],
-  ['Advisors', ['Advisor Basic', 'Advisor Pro', 'Advisory Firm'], 'Reach in matching', ['Standard', 'More', 'More']],
-  ['Operating Partners', ['Partner Basic', 'Operating Partner Pro', 'Partner Firm'], 'Proposals, pipeline and delivery', ['—', '', '']],
+  ['Advisors', ['Advisor Basic', 'Advisor Pro'], 'Reach in matching', ['Standard', 'More']],
+  ['Operating Partners', ['Partner Basic', 'Operating Partner Pro'], 'Proposals, pipeline and delivery', ['—', '']],
 ];
 
 for (const member of [false, true]) {
@@ -77,6 +77,12 @@ for (const member of [false, true]) {
       const grid = nodes().find(n => cls(n, 'axp-grid'));
       const lp = nodes().find(n => cls(n, 'axp-lp'));
       assert.equal(grid.childNodes.length, 4, 'four investor plans');
+      assert.ok(!walk(lp).some(n => n.tagName === 'BUTTON'), 'LP access never offers a purchase');
+      assert.ok(walk(lp).some(n => n.tagName === 'A' && props(n).href.includes('lp')), 'LP access links to its login');
+      const inst = walk(grid).find(n => props(n)['data-testid'] === 'pricing-card-institutional');
+      assert.ok(inst); assert.ok(text(inst).includes('Contact Axal VC'));
+      assert.ok(!walk(inst).some(n => props(n)['data-testid'] === 'pricing-checkout-institutional'));
+      assert.ok(walk(inst).some(n => n.tagName === 'A' && props(n).href === '/contact'));
       assert.ok(grid.parentNode === lp.parentNode && grid.parentNode.childNodes.indexOf(grid) < grid.parentNode.childNodes.indexOf(lp), 'LP Access is below the four investor plans');
       await click('Founder');
       assert.equal(nodes().filter(n => cls(n, 'axp-lp')).length, 0, 'LP Access belongs only to Investor');

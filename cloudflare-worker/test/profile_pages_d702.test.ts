@@ -689,3 +689,21 @@ test('8c. PUT with visibility stamps the choice; without it does not; GET return
   assert.equal(gate.status, 400);
   assert.equal(gate.body.field, 'matching_opt_in');
 });
+
+// #3734: old indexed Academy hits must be hidden, including the admin-wide path.
+test('#3734 global search excludes retired Academy hits for every role and preserves project hits', async () => {
+  const db = freshDb();
+  const original = searchEnv.VECTORIZE.query;
+  searchEnv.VECTORIZE.query = async () => ({ matches: [
+    { id: `project:${V}`, score: 0.9, metadata: { type: 'project', entity_id: V, title: 'Testventure Labs', url: `/projects/${V}`, snippet: 'Test project' } },
+    { id: 'academy_lesson:1', score: 0.9, metadata: { type: 'academy_lesson', entity_id: 1, title: 'Legacy lesson', url: '/academy/legacy', snippet: 'Retired' } },
+  ] });
+  try {
+    for (const as of [ADA, FAY, IAN]) {
+      const result = await get(db, as, '/api/search?q=test&grouped=1');
+      assert.equal(result.status, 200);
+      assert.ok(result.body.hits.some((hit: any) => hit.type === 'project'));
+      assert.ok(!JSON.stringify(result.body).includes('academy'));
+    }
+  } finally { searchEnv.VECTORIZE.query = original; db.close(); }
+});

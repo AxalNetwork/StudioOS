@@ -376,7 +376,7 @@ export const LANE_CONSOLES = {
   jobs: '/admin/jobs',
   // D1038 (#2390): the lane opens the desk's Review tab, its queue.
   events: '/admin/events/review',
-  best_fit: '/admin/best-fit',
+  best_fit: '/admin/approvals',
   due_diligence: '/admin/due-diligence',
   // D1041 (#2889): part 3's lanes, each by the door Approvals draws for it (D1038's LaneDoor).
   kyb: '/admin/kyc',

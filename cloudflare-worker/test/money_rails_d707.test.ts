@@ -217,8 +217,8 @@ test('POST /api/payments/intent refuses a raw amount before any Stripe call; a p
   // A mirrored one-time price.
   db.exec(`CREATE TABLE IF NOT EXISTS stripe_products (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'alacarte',
     active INTEGER NOT NULL DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]',
-    synced_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  db.prepare('INSERT INTO stripe_products (id, name, kind, metadata_json, prices_json) VALUES (?, ?, ?, ?, ?)').run(
+    synced_at TEXT NOT NULL DEFAULT (datetime('now')), livemode INTEGER)`);
+  db.prepare('INSERT INTO stripe_products (id, name, kind, metadata_json, prices_json,livemode) VALUES (?, ?, ?, ?, ?,0)').run(
     'prod_test_guide', 'Fundraising guide', 'alacarte', '{}',
     JSON.stringify([{ id: 'price_test_guide', currency: 'usd', unit_amount: 4900, interval: null, interval_count: null, nickname: null, type: 'one_time', active: true }]));
   db.prepare('UPDATE users SET stripe_customer_id = ? WHERE id = ?').run('cus_test_41', BUYER);

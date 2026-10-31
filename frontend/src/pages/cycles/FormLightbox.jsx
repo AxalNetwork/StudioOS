@@ -350,7 +350,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
       </div> : <>
         {loaded === undefined && <p data-testid="cycle-form-loading" className="m-0 text-xs text-axal-muted dark:text-gray-400">Reading the choices…</p>}
         {loaded && fill && fillRead?.status === 'unreadable' ? <p role="status" data-testid="fill-form-unreadable" className="m-0 flex flex-wrap items-center gap-2 text-xs text-axal-muted dark:text-gray-400">
-          Unreadable: Fill with Eadwyn could not be read for this form. Type the values, or
+          Unreadable: Eadwyn's suggestions for this form could not be read. Type the values, or
           <button type="button" onClick={() => setFillTick((n) => n + 1)} className="font-semibold text-axal-violet underline dark:text-violet-300" data-testid="fill-form-retry">Try again</button>
         </p> : null}
         {/* D1329 (#3490, AF15): a support session reads the form, its marks and no trigger, and says why. */}
@@ -359,7 +359,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
         {loaded && fillCtl && (fillable || placedCount > 0) ? <div className="flex flex-wrap items-center justify-between gap-2" data-testid="fill-form-bar">
           <span className="text-xs text-axal-muted dark:text-gray-400" data-testid="fill-form-placed">{placedCount
             ? `${placedCount} ${placedCount === 1 ? 'value' : 'values'} placed. Nothing is saved until you press ${cleanFormCopy(base.cta || base.button || 'Save')}.`
-            : fill.aiOff ? 'Fill from your sources.' : 'Fill the blank fields from your sources or with Eadwyn.'}</span>
+            : fill.aiOff ? 'Ask fills the blank fields from your sources only.' : 'Ask Eadwyn to fill the blank fields, or fill them from your sources.'}</span>
           {fillable ? <FillFormTrigger aiOff={!!fill.aiOff} disabled={busy} onOpen={() => setFillOpen(true)} /> : null}
         </div> : null}
         {loaded && fields.map((field) => <Field key={field.name} field={readOnly ? { ...field, note: null, hint: null } : field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy || !!readOnly} search={finder} fill={fillCtl} />)}

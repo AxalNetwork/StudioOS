@@ -66,6 +66,8 @@ export const AI_SURFACE = {
   studio: '/studio',
   /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */
   onboardingChat: '/onboarding/chat',
+  /** Articles · the editor — Eadwyn's writing options (`POST /api/articles/:id/assist`), D1409. */
+  articles: '/articles/draft',
   /** HQ · Publications — the drafted headline summary (`/api/admin/publications/draft`). */
   adminPublications: '/admin/publications',
   /** Grow · Share an update — Eadwyn's draft of the highlights and lowlights (D654, `/api/portfolio-updates/share/draft-lines`). */

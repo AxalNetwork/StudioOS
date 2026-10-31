@@ -54,7 +54,7 @@ const TIER_COPY: Record<Exclude<InvestorTier, 'free'>, string> = {
  * catalogue key and name; the price is Stripe's, read from the D1 mirror on
  * `GET /api/public/plans-and-packs`.
  */
-const PLAN_KEY: Record<Exclude<InvestorTier, 'free'>, string> = {
+export const PLAN_KEY: Record<Exclude<InvestorTier, 'free'>, string> = {
   plus: 'investor:plus',
   professional: 'investor:professional',
   institutional: 'investor:institutional',

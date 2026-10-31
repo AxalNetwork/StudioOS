@@ -199,7 +199,7 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
       card.unit = card.price === 'Free' ? '' : '/ month';
     } else if (spec.custom) {
       card.price = 'Custom';
-      card.note = 'Pricing agreed with our sales team';
+      card.note = 'Pricing agreed with Axal VC';
     } else if (offered) {
       const shown = yearly && year ? year : month ?? year;
       if (shown.interval === 'year') {
@@ -214,7 +214,7 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
     }
     if (current) card.button = { label: 'Current plan', to: null, disabled: true };
     else if (!offered) card.button = { label: 'Not offered yet', to: null, disabled: true };
-    else if (spec.custom) card.button = { label: spec.cta || 'Contact Sales', to: '/contact', disabled: false };
+    else if (spec.custom) card.button = { label: spec.cta || 'Contact Axal VC', to: '/contact', disabled: false };
     else if (!signedIn) card.button = { label: spec.cta || 'Get started', to: REGISTER(spec.lane), disabled: false };
     else if (spec.free) card.button = { label: held ? 'Manage plan' : 'Get started', to: held ? '/account/billing' : REGISTER(spec.lane), disabled: false };
     // D1048 (#2451): a signed-in member's paid card opens the checkout sheet in place,

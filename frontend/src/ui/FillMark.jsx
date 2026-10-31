@@ -12,11 +12,11 @@ import { cardLines, markView } from '../lib/fillSheet.js';
  *                    star points), or the neutral "arrow into a box" while AI
  *                    is off and another source can fill
  *   FillTrigger      the 20px round trigger at the end of a blank field's
- *                    label row: "Fill [field] with Eadwyn". Drawn only when
+ *                    label row: "Ask Eadwyn to fill [field]". Drawn only when
  *                    the sheet read says so (`field.trigger`): never on a typed,
  *                    never-fill or decision field, never for a reader
- *   FillFormTrigger  the form or section's ghost "Fill"; `FillModuleTrigger`
- *                    the module's "Fill with Eadwyn", with "4 waiting"
+ *   FillFormTrigger  the form or section's ghost "Ask"; `FillModuleTrigger`
+ *                    the module's "Ask", with "4 waiting"
  *   FillMark         the provenance pill after a filled value's label:
  *                    "Eadwyn", "Eadwyn · edited", "Eadwyn · sourced",
  *                    "Connector · Mercury · 12 Oct", "Recorded · From
@@ -61,13 +61,13 @@ export function FillGlyph({ size = 12, neutral = false }) {
 
 /**
  * The field's trigger (AF2). `field` is the sheet read's: no trigger unless
- * `field.trigger`. `aiOff` draws the neutral glyph, "Fill from your sources".
+ * `field.trigger`. `aiOff` draws the neutral glyph, "Ask (from your sources)".
  */
 export function FillTrigger({ field, label, aiOff = false, running = false, busyElsewhere = false, onOpen }) {
   if (field && !field.trigger) return null;
   const name = label || field?.label || 'this field';
-  const words = aiOff ? `Fill ${name} from your sources` : `Fill ${name} with Eadwyn`;
-  const title = busyElsewhere ? 'Another fill is running' : aiOff ? 'Fill from your sources' : 'Fill with Eadwyn';
+  const words = aiOff ? `Ask to fill ${name} from your sources` : `Ask Eadwyn to fill ${name}`;
+  const title = busyElsewhere ? 'Another fill is running' : aiOff ? 'Ask (from your sources)' : 'Ask Eadwyn';
   return (
     <button type="button" aria-label={words} title={title} disabled={busyElsewhere || running} onClick={onOpen}
       data-testid={`fill-trigger-${field?.field || 'field'}`}
@@ -80,21 +80,23 @@ export function FillTrigger({ field, label, aiOff = false, running = false, busy
   );
 }
 
-/** The form or section's "Fill" (AF3). */
+/** The form or section's "Ask" (AF3). */
 export function FillFormTrigger({ aiOff = false, onOpen, disabled = false }) {
+  const words = aiOff ? 'Ask (from your sources)' : 'Ask Eadwyn';
   return (
-    <button type="button" className={GHOST} onClick={onOpen} disabled={disabled} title={aiOff ? 'Fill from your sources' : 'Fill with Eadwyn'} data-testid="fill-form-trigger">
-      <span className={aiOff ? 'text-axal-muted dark:text-gray-400' : VIOLET}><FillGlyph size={14} neutral={aiOff} /></span>Fill
+    <button type="button" className={GHOST} onClick={onOpen} disabled={disabled} aria-label={words} title={words} data-testid="fill-form-trigger">
+      <span className={aiOff ? 'text-axal-muted dark:text-gray-400' : VIOLET}><FillGlyph size={14} neutral={aiOff} /></span>Ask
     </button>
   );
 }
 
-/** The module's "Fill with Eadwyn", with the count of proposals waiting (AF2). */
+/** The module's "Ask", with the count of proposals waiting (AF2). */
 export function FillModuleTrigger({ waiting = 0, onOpen, aiOff = false }) {
+  const words = aiOff ? 'Ask (from your sources)' : 'Ask Eadwyn';
   return (
-    <button type="button" className={GHOST} onClick={onOpen} data-testid="fill-module-trigger">
+    <button type="button" className={GHOST} onClick={onOpen} aria-label={`${words}${waiting > 0 ? `, ${waiting} waiting` : ''}`} title={words} data-testid="fill-module-trigger">
       <span className={aiOff ? 'text-axal-muted dark:text-gray-400' : VIOLET}><FillGlyph size={14} neutral={aiOff} /></span>
-      {aiOff ? 'Fill from your sources' : 'Fill with Eadwyn'}
+      Ask
       {waiting > 0 ? (
         <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-bold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" data-testid="fill-module-waiting">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400" aria-hidden="true" />{`${waiting} waiting`}
