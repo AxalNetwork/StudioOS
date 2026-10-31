@@ -14,8 +14,8 @@ const Card = ({title,description,children}) => <section><h2>{title}</h2><p>{desc
 const Field = ({label,hint,children}) => <label>{label}{hint}{children}</label>;
 const useAuth = () => ({user:null});
 const isSuperAdminUser = () => false;
-export const control = {load:Promise.resolve()};
-const loadRecaptcha = () => control.load.then(realLoad);
+export const control = {load:Promise.resolve(),loads:0};
+const loadRecaptcha = () => { control.loads++; return control.load.then(realLoad); };
 export const api = {
  status:{configured:false,sms_available:true,sms_ready:true,recaptcha_site_key:'synthetic-key',allowed_countries:['CH','US','GB']},
  sends:[], confirms:[], statusReads:0, sendError:null, confirmError:null,
@@ -45,6 +45,22 @@ async function panel(module, holdCheck = false) {
   return f;
 }
 async function numberStep(f) { await f.click('Add a phone number'); await change(f, 'sms-phone-input', '079 000 00 00'); }
+
+async function lazyCheck(module) {
+  const f = await panel(module);
+  try {
+    const idleReads = module.control.loads;
+    await f.click('Add a phone number');
+    const enrollingReads = module.control.loads;
+    await f.click('Cancel');
+    assert.deepEqual([idleReads, enrollingReads, module.control.loads], [0, 1, 1]);
+  } finally { await f.unmount(); }
+}
+test('the third-party check loads only when a member opens enrollment', async () => {
+  await mutationCheck(source, 'pages/SettingsPage.jsx', lazyCheck, [[
+    "if (!status?.sms_ready || step === 'idle') return;", 'if (!status?.sms_ready) return;',
+  ]]);
+});
 
 async function validity(module) {
   let ready;

@@ -1991,12 +1991,12 @@ function SmsPanel({ data, flash, onChanged }) {
   useEffect(() => {
     let cancelled = false;
     setCheckReady(false);
-    if (!status?.sms_ready) return;
+    if (!status?.sms_ready || step === 'idle') return;
     if (!status.recaptcha_site_key) { setCheckReady(true); return; }
     loadRecaptcha().then(() => { if (!cancelled) setCheckReady(true); })
       .catch(e => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
-  }, [status?.sms_ready, status?.recaptcha_site_key]);
+  }, [status?.sms_ready, status?.recaptcha_site_key, step]);
 
   useEffect(() => {
     if (step !== 'verify') return;
