@@ -32,6 +32,7 @@
  * the active company alone.
  */
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { accountPortfolioApi } from './api/accountPortfolio.js';
 
 export const COMPANY_SETTINGS = 'Company settings';
 export const PROJECT_SETTINGS = 'Project settings';
@@ -203,11 +204,22 @@ export function fromSettingsScope(answer) {
 }
 
 /**
- * THE SEAM for `GET /api/account/settings-scope` (#3697 part 2). Unavailable
- * until that route and its client exist; the caller then derives the scope.
+ * `GET /api/account/settings-scope` (#3697 part 2, D1415), read through
+ * `accountPortfolioApi.settingsScope` and turned into the same shape
+ * `scopeFor` returns. With no company and no project there is nothing to ask
+ * (the Worker refuses that with `scope_missing`), and a failed read is
+ * reported as unavailable so the caller keeps deriving the scope itself.
  */
-export async function readSettingsScope(/* { company, project } */) {
-  return { available: false, reason: 'The settings scope is derived on this page until the account read exists.' };
+export async function readSettingsScope({ company, project, api = accountPortfolioApi } = {}) {
+  if (!company && project == null) {
+    return { available: false, reason: 'Name a company, a project, or both.' };
+  }
+  try {
+    const value = fromSettingsScope(await api.settingsScope({ company, project }));
+    return value ? { available: true, value } : { available: false, reason: 'The settings scope could not be read.' };
+  } catch {
+    return { available: false, reason: 'The settings scope could not be read.' };
+  }
 }
 
 // ---------------------------------------------------------------- the scope in view

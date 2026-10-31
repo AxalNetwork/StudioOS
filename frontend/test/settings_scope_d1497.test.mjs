@@ -73,6 +73,16 @@ test('#3697 part 2\'s answer maps onto the same shape, and the seam is closed un
   assert.ok(!entryLabels(solo).includes('Legal'));
   assert.deepEqual(solo.companyEditors, { available: false });
   assert.equal((await readSettingsScope()).available, false);
+  // #3697 part 2 is on main: the seam reads the route through its client.
+  const asked = [];
+  const api = { settingsScope: async (q) => { asked.push(q); return { scope: 'project', label: 'Project settings', company: null, project: { id: 9, name: '[Lantern]' } }; } };
+  const read = await readSettingsScope({ project: 9, api });
+  assert.deepEqual(asked, [{ company: undefined, project: 9 }]);
+  assert.equal(read.available, true);
+  assert.equal(read.value.label, PROJECT_SETTINGS);
+  assert.ok(!entryLabels(read.value).includes('Legal'));
+  const broken = await readSettingsScope({ company: 'nw1', api: { settingsScope: async () => { throw new Error('500'); } } });
+  assert.equal(broken.available, false);
 });
 
 function sidebar(company) {

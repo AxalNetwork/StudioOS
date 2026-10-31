@@ -244,7 +244,6 @@ test('the Eadwyn button is "Ask", its accessible name "Ask Eadwyn", and no Team 
 test('no client method exists for a route that does not exist', () => {
   const sources = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
   assert.doesNotMatch(sources, /['"`]\/teams\//, 'the agent routes are #3840–#3844');
-  assert.doesNotMatch(sources, /\/account\/settings-scope/, '#3697 part 2');
   assert.doesNotMatch(sources, /\/account\/people\/search/, '#3841');
   assert.doesNotMatch(sources, /\/projects\/[^'"`]*\/invitations\/[^'"`]*\/resend/, '#3841');
   assert.ok(!existsSync('frontend/src/lib/api/teamAgents.js') && !existsSync('frontend/src/lib/api/teams.js'));
