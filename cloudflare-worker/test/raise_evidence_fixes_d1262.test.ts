@@ -5,7 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
-import { checkInputs, computeReadiness, dataRoomCard, figures, loadReadiness, latestScores, readinessCard, teamReadiness } from '../src/services/raiseCycle.ts';
+import { cards, checkInputs, computeReadiness, dataRoomCard, figures, loadReadiness, latestScores, mismatchSentence, readinessCard, teamReadiness } from '../src/services/raiseCycle.ts';
 import { runCheck, scoreReadinessItem, rescoreReadiness } from '../src/services/raiseWriters.ts';
 const migrations = new URL('../sql/migrations/', import.meta.url);
 const ddl = (() => {
@@ -34,6 +34,72 @@ function narrative(db: DatabaseSync, selected: string | null) {
   db.exec("INSERT INTO spinout_deck_overrides(project_id,field_key,value,version) VALUES(1,'traction.takeaway','$900 MRR and $600 monthly revenue',1)");
   db.prepare('INSERT INTO narrative_version_meta(project_id,version,check_against_json) VALUES(1,1,?)').run(selected);
 }
+
+test('#3715: empty team inputs use plain words, muted tones and venture-scoped next steps', async () => {
+  const f = fixture();
+  try {
+    const result = await teamReadiness(f.env, 1);
+    assert.deepEqual(result.reads.map(({ b, c, tone, note, next }) => ({ b, c, tone, note, next })), [
+      { b: 'No founders recorded yet', c: 'Missing', tone: 'muted', note: undefined,
+        next: { text: 'Add founders', href: '/build/founding-team?project=1' } },
+      { b: 'No vesting recorded', c: 'Missing', tone: 'muted', note: undefined,
+        next: { text: 'Add vesting', href: '/raise/cap-table?project=1' } },
+      { b: 'GitHub · 0 contributors in the last 90 days', c: 'Missing', tone: 'muted',
+        note: '0 commits · dates not available', next: undefined },
+    ]);
+    assert.deepEqual((await teamReadiness(f.env, 2)).reads.flatMap(r => r.next ? [r.next.href] : []),
+      ['/build/founding-team?project=2', '/raise/cap-table?project=2']);
+  } finally { f.db.close(); }
+});
+
+/** Collect display values, excluding record keys, routes and other protocol identifiers. */
+function memberWords(value: any): string[] {
+  if (Array.isArray(value)) return value.flatMap(memberWords);
+  if (value == null || typeof value !== 'object') return [];
+  const display = new Set(['a', 'b', 'c', 'label', 'caption', 'source', 'reason', 'missing', 'text', 'title', 'note', 'value']);
+  return Object.entries(value).flatMap(([key, item]) => typeof item === 'string'
+    ? display.has(key) ? [item] : [] : memberWords(item));
+}
+
+test('#3715: every Raise card and headline uses display words rather than a snake_case table name', async () => {
+  const f = fixture();
+  try {
+    const tables = (f.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as Array<{ name: string }>)
+      .map(r => r.name).filter(name => /^[a-z][a-z0-9_]*$/.test(name) && name.includes('_'));
+    const internalName = new RegExp(`\\b(?:${tables.join('|')})\\b`, 'i');
+    for (const state of ['empty', 'populated', 'unreadable']) {
+      if (state === 'populated') {
+        team(f.db); narrative(f.db, '["metrics"]');
+        f.db.exec(`INSERT INTO project_metrics(project_id,snapshot_date,source,mrr,paying_accounts,cash_balance,net_burn)
+          VALUES(1,date('now'),'stripe',1000,10,12000,1000);
+          INSERT INTO raise_rounds(uid,project_id,name,status,target_amount) VALUES('guard-round',1,'Seed','active',100000);
+          INSERT INTO revenue_entries(uid,project_id,customer,amount_cents,currency,revenue_type,received_on,source,verification)
+          VALUES('guard-revenue',1,'Synthetic customer',10000,'usd','one_time',date('now','start of month','-1 month','+2 days'),'stripe','verified');`);
+        f.db.exec("UPDATE spinout_deck_overrides SET value = value || ' Raising $150k with 15 paying customers.' WHERE project_id = 1 AND version = 1");
+        await runCheck(f.env, 1, 1);
+        await scoreReadinessItem(f.env, { projectId: 1, userId: 1, key: 'team', score: 7, evidence: 'pattern', missing: null });
+      }
+      if (state === 'unreadable') f.env.DB.prepare = () => { throw new Error('Synthetic cap_table_holders/project_metrics read failure'); };
+      const surface = { cards: await cards(f.ctx), figures: await figures(f.ctx),
+        checks: state === 'unreadable' ? await teamReadiness(f.env, 1) : await computeReadiness(f.env, 1),
+        legacy: [
+          { note: mismatchSentence({ figure: 'mrr', stated_value: 1500, stated_source: 'Narrative · traction.takeaway', metric_value: 1000, metric_source: 'Stripe (measured) · project_metrics.mrr on 2026-09-30' }) },
+          { note: mismatchSentence({ figure: 'raise', stated_value: 150000, stated_source: 'Narrative · why_now', metric_value: 100000, metric_source: 'Pipeline · raise_rounds.target_amount (active round)' }) },
+        ] };
+      assert.deepEqual(surface.legacy.map(row => row.note), [
+        'MRR: $1,500 in Narrative · traction.takeaway, $1,000 in Stripe (measured) · MRR on 2026-09-30',
+        'The raise: $150,000 in Narrative · why now, $100,000 in Pipeline · active round target',
+      ], 'previously stored checks keep both values, provenance and dates in display words');
+      assert.equal(surface.cards.length, 7, 'the guard covers all seven Raise cards');
+      assert.doesNotMatch(memberWords(surface).join('\n'), internalName, `${state}: visible labels, values, sources and reasons`);
+      if (state === 'populated') {
+        const rows = (surface.cards.find(card => card.slug === 'fundraising-readiness')!.series as any[]).find(spec => spec.kind === 'rows' && spec.items.some((r: any) => r.label === 'Founders with vesting'));
+        assert.deepEqual(rows.items.map((r: any) => r.next?.href).filter(Boolean), ['/build/founding-team?project=1', '/raise/cap-table?project=1']);
+        assert.match(rows.items.find((r: any) => r.label === 'GitHub activity')?.note ?? '', /dates not available/);
+      }
+    }
+  } finally { f.db.close(); }
+});
 
 test('the stored check selection controls reads and clears old mismatches without inventing a deck', async () => {
   const f = fixture(); try {
@@ -118,20 +184,20 @@ test('Team reads real founders, matching vesting and scoped GitHub facts without
   const f = fixture(); try {
     team(f.db); const result = await teamReadiness(f.env,1);
     assert.equal(result.score,null); const rows = JSON.stringify(result.reads);
-    assert.match(rows,/2 founders recorded/); assert.match(rows,/1 recorded · cap_table_vesting/); assert.match(rows,/2 contributors · 15 commits/);
-    assert.match(rows,/activity dates Not recorded/); assert.doesNotMatch(rows,/Private founder|private-login|foreign-owner|2099|999/);
+    assert.match(rows,/2 founders recorded/); assert.match(rows,/1 founder with vesting/); assert.match(rows,/2 contributors in the last 90 days.*15 commits/);
+    assert.match(rows,/dates not available/); assert.doesNotMatch(rows,/Private founder|private-login|foreign-owner|2099|999/);
     f.db.exec('UPDATE users SET is_active=0 WHERE id=1');
-    assert.match((await teamReadiness(f.env,1)).reads.find(r=>r.a.includes('GitHub'))!.b,/1 contributors · 8 commits/);
+    assert.match(JSON.stringify((await teamReadiness(f.env,1)).reads.find(r=>r.a.includes('GitHub'))),/1 contributor in the last 90 days.*8 commits/);
     f.db.exec('UPDATE users SET is_active=1 WHERE id=1');
     f.db.exec("INSERT INTO project_members(project_id,user_id,status) VALUES(1,3,'accepted')");
-    assert.match((await teamReadiness(f.env,1)).reads.find(r=>r.a.includes('GitHub'))!.b,/3 contributors · 1014 commits/);
+    assert.match(JSON.stringify((await teamReadiness(f.env,1)).reads.find(r=>r.a.includes('GitHub'))),/3 contributors in the last 90 days.*1014 commits/);
     f.db.exec("UPDATE project_members SET status='removed' WHERE user_id=3");
-    assert.match((await teamReadiness(f.env,1)).reads.find(r=>r.a.includes('GitHub'))!.b,/2 contributors · 15 commits/);
+    assert.match(JSON.stringify((await teamReadiness(f.env,1)).reads.find(r=>r.a.includes('GitHub'))),/2 contributors in the last 90 days.*15 commits/);
     await scoreReadinessItem(f.env,{projectId:1,userId:1,key:'team',score:7,evidence:'pattern',missing:null});
     const rescored=await rescoreReadiness(f.env,{projectId:1,userId:1}); assert.equal(rescored.items.includes('team'),false);
     const stored=await loadReadiness(f.ctx); const id=stored.items.find(i=>i.item_key==='team')!.id;
     assert.equal(latestScores(stored.scores).get(id)!.score,7);
-    assert.match(JSON.stringify((await readinessCard(f.ctx)).series),/2 contributors · 15 commits/);
+    assert.match(JSON.stringify((await readinessCard(f.ctx)).series),/2 contributors in the last 90 days.*15 commits/);
   } finally { f.db.close(); }
 });
 
@@ -139,9 +205,11 @@ test('a failed Team source stays Unreadable while its other source remains avail
   const f=fixture();try {
     team(f.db); const prepare=f.env.DB.prepare.bind(f.env.DB);
     f.env.DB.prepare=(sql:string)=>{if(sql.includes('FROM github_contributors'))throw new Error('Synthetic refusal');return prepare(sql);};
-    let result=await teamReadiness(f.env,1); assert.match(result.reads.find(r=>r.a.includes('GitHub'))!.b,/Unreadable/); assert.match(result.reads[0].b,/2 founders/);
+    let result=await teamReadiness(f.env,1); assert.match(result.reads.find(r=>r.a.includes('GitHub'))!.b,/Could not be read/); assert.match(result.reads[0].b,/2 founders/);
+    assert.deepEqual(result.reads.filter(r => r.c === 'Unreadable').map(r => r.tone), ['bad']);
     f.env.DB.prepare=(sql:string)=>{if(sql.includes('FROM cap_table_holders'))throw new Error('Synthetic refusal');return prepare(sql);};
-    result=await teamReadiness(f.env,1); assert.match(result.reads[0].b,/Unreadable/); assert.match(result.reads.find(r=>r.a.includes('GitHub'))!.b,/2 contributors/);
+    result=await teamReadiness(f.env,1); assert.match(result.reads[0].b,/Could not be read/); assert.match(result.reads.find(r=>r.a.includes('GitHub'))!.b,/2 contributors/);
+    assert.deepEqual(result.reads.filter(r => r.c === 'Unreadable').map(r => r.tone), ['bad']);
   }finally{f.db.close();}
 });
 

@@ -234,7 +234,7 @@ test('readiness cells say what each check read', async () => {
     const rows = Object.fromEntries((await computeReadiness(w.env, 1)).map((c) => [c.key, c.reads.map((r) => r.b).join(' | ')]));
     assert.match(rows.deck, /1 deck saved · Typed/);
     assert.match(rows.use_of_funds, /\$1,000,000 · Typed \| split stored · Typed/);
-    assert.match(rows.team, /1 founders recorded · cap_table_holders · Typed/);
+    assert.match(rows.team, /1 founder recorded · Typed/);
     assert.match(rows.traction, /Typed · Founder's figure/);
     assert.equal(checkedLabels({ mrr: { source: 'Stripe (measured) · project_metrics.mrr on 2026-09-01' }, raise: { source: 'Pipeline · raise_rounds.target_amount' } } as any,
       [{ figure: 'mrr', value: 1, source: '' }, { figure: 'raise', value: 1, source: '' }]), 'Connector and Typed');
