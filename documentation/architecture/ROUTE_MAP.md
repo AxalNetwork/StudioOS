@@ -1004,6 +1004,7 @@ The server part of Studio modularity (#3698). No screen yet: the four Studio hom
 
 - GET `/api/studio/modules`: `routes/studio_layout.ts`; this profile's modules from `services/studioModules.ts`, each with `locked_by_plan` derived from `middleware/paywallPrefixes.ts` and the existing plan gates.
 - GET/PUT `/api/studio/layout`, POST `/api/studio/layout/reset`: the member's saved layout in `studio_layouts` (migration 687), or the profile's default when there is no row. At most 12 modules; unknown, removed, fixed, other-profile and locked keys are refused, and nothing is written.
+  D1594 (#3863): every read carries `revision` (migration 750; null with no row) and `dropped: [{ key, title, reason: 'not_offered' | 'plan', plan }]` — a saved module no longer offered (its last known title, or null) or now plan-locked (its title and plan) leaves `layout`, which then holds only modules the member can place; a read never rewrites the row. `PUT` takes `{ layout, expected_revision }` (`null` when the read had no row; required): a save from a stale copy is 409 `stale_layout` with `extra.revision` (the current one, or null after a reset) and writes nothing.
 - An admin names the profile they preview with `?profile=`; a member's role names theirs. See `decisions/D1421.md`.
 
 ### Payments change log and webhook hours Worker contract (D1011, #2830)
