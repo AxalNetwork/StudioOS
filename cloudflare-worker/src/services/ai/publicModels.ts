@@ -109,7 +109,7 @@ export interface PublicModel {
 export function publicModels(env: CatalogueSwitches): PublicModel[] {
   const pages = new Map<string, string[]>();
   for (const row of [...railRows(), ...railOptionRows()]) {
-    for (const m of row.models) {
+    for (const m of [...row.models, ...(row.more ?? [])]) {
       const list = pages.get(m.id) ?? [];
       if (!list.includes(row.pageKey)) list.push(row.pageKey);
       pages.set(m.id, list);

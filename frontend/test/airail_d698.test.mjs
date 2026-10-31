@@ -105,7 +105,8 @@ function railAnswer(page, option, { pick = null, mode = null, picks = {} } = {})
     crumbs: [...row.pageKey.split(' · '), ...(option ? [open?.optionLabel ?? option] : [])],
     kind: (open ?? row).kind,
     models: view(open ?? row),
-    options: opts.map((o) => ({ key: o.optionKey, label: o.optionLabel, kind: o.kind, handler: o.handler, models: view(o), pick: picks[o.optionKey] ?? null })),
+    more: (open ?? row).more.map(m => ({ ...m, name: modelName(m.id), price: STUB_PRICE })),
+    options: opts.map((o) => ({ key: o.optionKey, label: o.optionLabel, kind: o.kind, handler: o.handler, models: view(o), more: o.more.map(m => ({ ...m, name: modelName(m.id), price: STUB_PRICE })), pick: picks[o.optionKey] ?? null })),
     pick,
     mode,
     billing: 'cost',
@@ -404,14 +405,14 @@ test('All models is the new canvas\'s ten groups, and its ids are the router\'s'
   assert.ok(listed.every((id) => modelName(id)), 'a row has no name');
 });
 
-test('12 · Customer research draws its row: Whisper, Nova-3, Flux and the 70B, in the matrix\'s order, with role and line', async () => {
+test('12 · Customer research draws three cards: Whisper, Nova-3 and Flux, in the matrix\'s order, with role and line', async () => {
   const m = await mount(onPage('/validate/customer-research', h(WorkerRail, { workspace: 'Validate' })));
   try {
     assert.deepEqual(m.stub.page, [['Founder · Validate · Customer research', null]]);
-    assert.deepEqual(cardIds(m), [WHISPER, NOVA, '@cf/deepgram/flux', L70].map((id) => `card-worker-rail-model-${id.split('/').pop()}`));
+    assert.deepEqual(cardIds(m), [WHISPER, NOVA, '@cf/deepgram/flux'].map((id) => `card-worker-rail-model-${id.split('/').pop()}`));
     const whisper = m.by('card-worker-rail-model-whisper-large-v3-turbo');
     assert.equal(m.text(whisper), 'Whisper Large v3 Turbo Default Turns each recording into a transcript $0.293 in · $2.253 out per 1M tokens');
-    // Four models: a choice, so each card is a radio, the default checked.
+    // Three suggestions: a choice, so each card is a radio, the default checked.
     assert.equal(m.pr(whisper).role, 'radio');
     assert.equal(m.pr(whisper)['aria-checked'], true);
     assert.equal(m.pr(m.by('card-worker-rail-model-nova-3'))['aria-checked'], false);
@@ -448,7 +449,7 @@ test('12 · "Default" is the matrix\'s role word; the checked card is the member
   const ready = (over) => railView({ reading: { loading: false, data: { ...answer, ...over } }, page: answer.page });
   const v = ready({});
   assert.deepEqual(v.cards.map((c) => [c.name, c.role, c.checked]), [
-    ['Llama 3.3 70B Fast', 'Default', true], ['GLM-4.7 Flash', 'Faster', false], ['GPT-OSS 120B', 'Deeper', false],
+    ['Llama 3.3 70B Fast', 'Default', true], ['GLM-4.7 Flash', 'Alternative', false], ['GPT-OSS 120B', 'Deeper', false],
   ]);
   assert.equal(v.cards[0].line, 'Groups notes and quotes into themes');
   assert.deepEqual(ready({ pick: '@cf/openai/gpt-oss-120b' }).cards.map((c) => c.checked), [false, false, true]);
@@ -880,4 +881,51 @@ test('the new modules are exported through ui/index.js', () => {
     /export \{ openEadwynPanel, closeEadwynPanel, useEadwynPanel, useEadwynTrigger \} from '\.\/eadwynPanel(\.js)?';/,
     /export \{ RailCrumbsProvider, useRailCrumbs, useSetRailCrumbs \} from '\.\/railCrumbs(\.js)?';/,
   ]) assert.match(index, line);
+});
+
+
+const MORE_3741 = [
+  { id: '@cf/deepseek-ai/deepseek-v4-flash-0731', name: 'DeepSeek V4 Flash', line: 'A further reasoning choice.', price: STUB_PRICE },
+  { id: '@cf/deepseek-ai/deepseek-v4-pro-0813', name: 'DeepSeek V4 Pro', line: 'A further reasoning choice.', price: STUB_PRICE },
+  { id: '@cf/synthetic/future-model', name: 'Future suitable model', line: 'A newly offered choice.', price: STUB_PRICE },
+];
+const answer3741 = () => ({ ...railAnswer('Founder · Build · Solution design'), more: MORE_3741 });
+
+test('#3741: six suitable choices produce three cards, with every extra pickable under All models', () => {
+  const data = answer3741();
+  for (const supplied of [data, { ...data, models: [...data.models, ...data.more], more: [] }]) {
+    const v = railView({ reading: { data: { ...supplied, pick: MORE_3741[0].id } }, page: data.page });
+    assert.equal(v.cards.length, 3);
+    assert.deepEqual(v.cards.map(c => c.id), data.models.map(m => m.id));
+    assert.equal(v.current, MORE_3741[0].id);
+    assert.equal(v.morePick, 'DeepSeek V4 Flash');
+    assert.equal(v.cards.some(c => c.checked), false);
+    for (const model of MORE_3741) {
+      const chip = v.groups.flatMap(g => g.chips).find(c => c.id === model.id);
+      assert.ok(chip?.pickable, model.id);
+      assert.equal(chip.selected, model.id === MORE_3741[0].id);
+    }
+  }
+  const v = railView({ reading: { data: { ...data, options: [{ key: 'draft:example', models: data.models, more: data.more, pick: MORE_3741[2].id }] } }, page: data.page });
+  assert.equal(v.options[0].model, 'Future suitable model');
+});
+
+test('#3741: All models selects overflow without adding a fourth card, including a saved pick', async () => {
+  const answer = answer3741();
+  for (const saved of [null, MORE_3741[0].id]) {
+    const m = await mount(onPage('/build/solution-design', h(WorkerRail, { workspace: 'Build' })), { reads: { rail: () => ({ ...answer, pick: saved }) } });
+    try {
+      assert.equal(cardIds(m).length, 3);
+      assert.equal(!!m.by('text-worker-rail-more-pick'), !!saved);
+      await m.click('button-worker-rail-all-models');
+      const id = 'chip-worker-rail-model-deepseek-v4-flash-0731';
+      assert.equal(m.by(id).tagName, 'BUTTON');
+      await m.click(id);
+      assert.deepEqual(m.stub.setPagePick.at(-1), ['Founder · Build · Solution design', MORE_3741[0].id, null]);
+      assert.equal(m.pr(m.by(id))['aria-pressed'], true);
+      assert.equal(m.text(m.by('text-worker-rail-more-pick')), 'Using DeepSeek V4 Flash from All models');
+      assert.equal(cardIds(m).length, 3);
+      assert.equal(m.by('card-worker-rail-model-deepseek-v4-flash-0731'), undefined);
+    } finally { await m.unmount(); }
+  }
 });

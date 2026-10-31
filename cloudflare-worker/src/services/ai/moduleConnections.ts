@@ -8,7 +8,7 @@ import { isOffered, modelById, type CatalogueSwitches } from './catalogue';
 export type ModuleOperation = 'chat' | 'vision' | 'decision' | 'image_labels' | 'embed' | 'rerank' | 'sentiment' | 'translate' | 'stream' | 'transcribe' | 'turn' | 'voice' | 'draw' | 'guard';
 export type ModelConnection = { operation: ModuleOperation; kinds: string[]; purpose: string };
 export const MODEL_CONNECTIONS = assignments as Record<string, ModelConnection>;
-type Page = { pageKey: string; kind: string; models: Array<{ id: string; role: string; line: string; optional?: boolean }> };
+type Page = { pageKey: string; kind: string; models: Array<{ id: string; role: string; line: string }>; more?: Array<{ id: string; line: string }> };
 
 export function connectionOnPage(id: string, page: Pick<Page, 'pageKey' | 'kind'>): boolean {
   const c = MODEL_CONNECTIONS[id];
@@ -19,13 +19,15 @@ export function connectionOnPage(id: string, page: Pick<Page, 'pageKey' | 'kind'
   return c.kinds.includes(page.kind);
 }
 
-export function withModuleModels<T extends Page>(row: T): T {
+/** #3741: connected models are explicit choices under All models, never extra cards. */
+export function withModuleModels<T extends Page>(row: T): T & { more: Array<{ id: string; line: string }> } {
   const models = row.models.filter(m => MODEL_CONNECTIONS[m.id]?.operation !== 'vision').map(m => ({ ...m }));
+  const more = (row.more ?? []).map(({ id, line }) => ({ id, line }));
   for (const [id, c] of Object.entries(MODEL_CONNECTIONS)) {
-    if (c.operation !== 'chat' || !connectionOnPage(id, row) || models.some(m => m.id === id)) continue;
-    models.push({ id, role: 'Alternative', line: c.purpose, optional: true });
+    if (c.operation !== 'chat' || !connectionOnPage(id, row) || [...models, ...more].some(m => m.id === id)) continue;
+    more.push({ id, line: c.purpose });
   }
-  return { ...row, models };
+  return { ...row, models, more };
 }
 
 /** A specialist never goes to chat just because the catalogue says Text Generation. */
@@ -39,7 +41,7 @@ export function moduleConnections(page: Page, env: CatalogueSwitches) {
   return Object.entries(MODEL_CONNECTIONS).filter(([id, c]) => {
     const m = modelById(id);
     return m && isOffered(m, env) && c.operation !== 'guard' && c.operation !== 'stream'
-      && (connectionOnPage(id, page) || page.models.some(m => m.id === id));
+      && (connectionOnPage(id, page) || [...page.models, ...(page.more ?? [])].some(m => m.id === id));
   }).map(([id, c]) => ({ id, operation: c.operation, purpose: c.purpose }));
 }
 
