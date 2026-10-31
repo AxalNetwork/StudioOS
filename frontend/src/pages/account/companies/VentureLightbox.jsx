@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import Sheet from '../../../ui/Sheet.jsx';
-import { api } from '../../../lib/api';
+import { teamsApi } from '../../../lib/api/teams';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { day, seatWord, ventureTeam } from './companiesModel';
 import {
@@ -33,7 +33,7 @@ const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:te
 export default function VentureLightbox({ venture, companies, meId, onClose, onChanged }) {
   const [tick, setTick] = useState(0);
   const [read, setRead] = useState({ status: 'loading', data: null });
-  const load = useCallback(() => api.listProjectMembers(venture.id), [venture.id]);
+  const load = useCallback(() => teamsApi.listProjectMembers(venture.id), [venture.id]);
   useEffect(() => {
     let alive = true;
     setRead((x) => ({ status: 'loading', data: x.data }));
@@ -140,7 +140,7 @@ export default function VentureLightbox({ venture, companies, meId, onClose, onC
       {dialog?.revoke ? (
         <ActionDialog testId="revoke-dialog"
           copy={{ title: `Revoke the invitation to ${dialog.revoke.invitee_email || 'this address'}?`, body: ['The link stops working. You can invite them again.'], button: 'Revoke', cancel: 'Cancel', danger: true }}
-          run={() => api.revokeProjectInvitation(venture.id, dialog.revoke.id)} onClose={() => setDialog(null)} onDone={() => done('The invitation is revoked.')} />
+          run={() => teamsApi.revokeProjectInvitation(venture.id, dialog.revoke.id)} onClose={() => setDialog(null)} onDone={() => done('The invitation is revoked.')} />
       ) : null}
     </>
   );

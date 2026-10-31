@@ -74,7 +74,9 @@ test('D431: the member’s own figure reads as a value, and null reads as not re
 test('D431: the rights the page draws from are the server’s (EDIT_ROLES), and the server gate is the same rule', () => {
   assert.match(PAGE, /const EDIT_ROLES = \['Owner', 'Admin', 'Founder'\];/);
   const route = codeOnly(read('cloudflare-worker/src/routes/company.ts'));
-  assert.match(route, /\['Owner', 'Admin', 'Founder'\]\.includes\(link\.role_in_company\)/, 'canEdit’s role list moved');
+  assert.match(route, /import \{[^}]*\bcanEdit\b[^}]*\} from '\.\.\/services\/companyAccess';/, 'the route uses the shared company gates');
+  const access = codeOnly(read('cloudflare-worker/src/services/companyAccess.ts'));
+  assert.match(access, /\['Owner', 'Admin', 'Founder'\]\.includes\(link\.role_in_company\)/, 'canEdit’s roles must stay Owner, Admin and Founder');
   assert.match(route, /const editor = await canEdit\(env, c, viewer\);/, 'the server’s read gate is not canEdit');
   // The note names the same three roles, so the page cannot promise a wider
   // audience than the server serves.

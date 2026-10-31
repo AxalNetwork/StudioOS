@@ -614,8 +614,10 @@ decks.get('/by-project/:pid', async (c) => {
   try { await projectOwned(c, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const rows = await c.env.DB.prepare(
-    // `*`, then drop the slides: a database that has not run 539 still lists its versions.
-    'SELECT * FROM pitch_decks WHERE project_id = ? ORDER BY version DESC'
+    // Read metadata only: historical slide payloads can exceed D1's result limit.
+    `SELECT id, project_id, version, title, is_current, created_at,
+            created_by, audience, round_ref, content_hash
+       FROM pitch_decks WHERE project_id = ? ORDER BY version DESC`
   ).bind(pid).all<any>();
   const proposal = await c.env.DB.prepare(
     'SELECT * FROM pitch_deck_proposals WHERE project_id = ? ORDER BY id DESC LIMIT 1',

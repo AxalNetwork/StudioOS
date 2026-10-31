@@ -808,7 +808,7 @@ function CompanyKybCard() {
       {/* This page reports; Account Settings is where an entity record is
           changed. The canvas puts the way out at the foot of the list. */}
       <a
-        href="/account/companies"
+        href="/account/portfolio"
         className="mt-3 inline-block text-xs font-semibold text-violet-700 hover:underline dark:text-violet-400"
       >
         Edit in Account Settings &rarr;

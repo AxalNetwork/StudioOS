@@ -19,6 +19,8 @@ const RAIL = resolve(SRC, 'ui/WorkerRail.jsx');
 const EXTS = ['', '.jsx', '.js', '/index.jsx', '/index.js'];
 const HELPERS = { founderWorkspace: 'FounderWorkspacePage', investorWorkspace: 'InvestorWorkspacePage', investorFundWorkspace: 'InvestorWorkspacePage' };
 const NOT_COMPONENTS = new Set(['Route', 'Navigate', 'Suspense', 'Fragment']);
+/** The member roles `authOnly` admits (any signed-in member). */
+const AUTH_ONLY_ROLES = ['founder', 'investor', 'advisor', 'partner', 'admin', 'exploring'];
 
 function resolveImport(from, spec) {
   if (!spec.startsWith('.')) return null;
@@ -88,8 +90,10 @@ export function railRoutes() {
       const body = b.split(/\n\s*<\/?Routes?\b/)[0];
       const names = [...new Set([...body.matchAll(/<([A-Z]\w*)/g)].map((m) => m[1]))].filter((n) => !NOT_COMPONENTS.has(n));
       for (const [h, c] of Object.entries(HELPERS)) if (new RegExp(`\\b${h}\\(`).test(body)) names.push(c);
-      const roles = [...new Set([...body.matchAll(/(?:guard|labRoles)\(\s*\[([^\]]*)\]/g)]
+      let roles = [...new Set([...body.matchAll(/(?:guard|labRoles)\(\s*\[([^\]]*)\]/g)]
         .flatMap((m) => m[1].split(',').map((x) => x.trim().replace(/['"]/g, '')).filter(Boolean)))];
+      // D1408: `authOnly(…)` admits every signed-in member, so its rail is keyed for each profile.
+      if (!roles.length && /\bauthOnly\(/.test(body)) roles = [...AUTH_ONLY_ROLES];
       rows.push({ path: pm[1], roles, rail: names.some((n) => comp.get(n) && reachesRail(comp.get(n))) });
     }
   }

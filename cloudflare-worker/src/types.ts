@@ -350,6 +350,8 @@ export interface Env {
   KEK_PII?: string;
   /** D852 (#2475): `true` turns on remote MCP servers a member adds; anything else leaves them off. */
   CUSTOM_MCP_ENABLED?: string;
+  /** D1496 (#3840): `true` turns on team agents (`/api/teams`); anything else answers 404 `team_agents_off`. */
+  TEAM_AGENTS_ENABLED?: string;
   KEK_R2?: string;
   // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
   // Kept distinct from KEK_PII so a key rotation on PII columns never

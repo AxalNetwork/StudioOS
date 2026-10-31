@@ -4,7 +4,7 @@
  * pressed, with Raise › Pitch deck's page and option on the usage row. Neither
  * reaches OpenAI.
  *
- *  - A fill makes one `rail_vision` run and writes one usage row naming the
+ *  - A fill makes one `rail_write` run (D1478; it was `rail_vision`) and writes one usage row naming the
  *    founder, `/raise/pitch` (surface and rail page), the option and the
  *    project; its answer fills the AI-only fields.
  *  - The draft does the same with option `deck_draft`.
@@ -79,7 +79,8 @@ function noNetwork() {
   return () => { globalThis.fetch = real; };
 }
 
-const ROW = (option: string) => ({ user_id: 2, task: 'rail_vision', surface: '/raise/pitch', rail_page: '/raise/pitch', rail_option: option, record_ref: 'project:1' });
+// D1478 (#3721): the fill is text-only, so it runs and records the write task.
+const ROW = (option: string) => ({ user_id: 2, task: 'rail_write', surface: '/raise/pitch', rail_page: '/raise/pitch', rail_option: option, record_ref: 'project:1' });
 
 test('a fill is one router run, charged to the founder, with the page and the option on its one usage row', async () => {
   const f = fixture();
@@ -185,7 +186,11 @@ test('both runs use Raise › Pitch deck\'s row in D764\'s matrix', () => {
   assert.ok(row, 'the matrix has the page\'s row');
   assert.deepEqual([row.kind, row.routeTask], ['vision', 'rail_vision']);
   const autofill = readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/decks/autofill.ts'), 'utf8');
-  assert.equal((autofill.match(new RegExp(`task: '${row.routeTask}'`, 'g')) || []).length, 1, 'the fill runs the row\'s task');
+  // D1478 (#3721): the fill is text-only work on the `form:deck` option, a write option, so it runs that option's task.
+  const fill = matrix.options.find((r: any) => r.pageKey === 'Founder · Raise · Pitch deck' && r.optionKey === 'form:deck');
+  assert.deepEqual([fill.kind, fill.routeTask], ['write', 'rail_write']);
+  assert.equal((autofill.match(new RegExp(`task: '${fill.routeTask}'`, 'g')) || []).length, 1, 'the fill runs its option\'s task');
+  assert.doesNotMatch(autofill, /task: 'rail_vision'/);
   // D897: the New deck's two runs are writing work, each on its own option row.
   const fresh = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/deck_new.ts'), 'utf8');
   assert.equal((fresh.match(/task: 'rail_write'/g) || []).length, 1, 'deck_new.ts runs one task');

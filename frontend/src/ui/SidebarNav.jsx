@@ -304,7 +304,7 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
     <div className="flex-none border-t border-gray-200 dark:border-gray-700">
       {/* D1140 (#3020, CMP19a): the last row is Companies and projects; Company Settings moved under it. */}
       <NavLink
-        to="/account/companies"
+        to="/account/portfolio"
         onClick={onNavigate}
         className={({ isActive }) =>
           collapsed

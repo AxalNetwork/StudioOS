@@ -148,7 +148,9 @@ test('a spend can never take a balance below zero', () => {
 
 test('a partner route 404s for a listing they do not own', () => {
   const s = read(ROUTE);
-  assert.match(s, /AND partner_user_id = \?/, 'ownership is part of the lookup, not a later check');
+  // D1595 (#3868): `myPerk` moved to services/profileWriteGates.ts, shared with Fill's scope; the route delegates to it.
+  assert.match(s, /return sharedMyPerk<PerkRow>\(env, uid, userId, companyId\)/, 'the route no longer reads the shared lookup');
+  assert.match(read('cloudflare-worker/src/services/profileWriteGates.ts'), /AND partner_user_id = \?/, 'ownership is part of the lookup, not a later check');
   const patch = s.slice(s.indexOf("r.patch('/partner/:uid'"), s.indexOf("r.get('/partner/:uid/stats'"));
   assert.match(patch, /'not_found' \}, 404/, 'a 403 would confirm the listing exists');
   // Against the code alone: the handler's own comment explains why 403 is

@@ -27,7 +27,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | 6 | Network | `* · Network` pages and the search index |
 | 7 | Research | `* · Research` pages, the search index and `research_ask` |
 | 8 | Calendar | none (`frontend/src/lib/railPages.js`, `off`) |
-| 9 | Articles | none on main (D1409, #3695) |
+| 9 | Articles | D1409 (#3695): `article_image`, and the writing options as they land |
 | 10 | Email | `mail_draft` |
 | 11 | Studio / Eadwyn | `* · Studio` and `* · Home` pages, Eadwyn's jobs |
 | 12 | Admin consoles | `Admin · *` and `Super Admin · *` pages, the admin jobs |
@@ -61,7 +61,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/lykon/dreamshaper-8-lcm` | Text-to-Image | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/embeddinggemma-300m` | Text Embeddings | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | O | O | · | · | · | · | · | · | · | · | G | · | · | O |
-| `@cf/black-forest-labs/flux-1-schnell` | Text-to-Image | ga | tiles 0.0000528, steps 0.0001056 | Not recorded | all | · | · | G | W | W | · | · | · | G | · | · | O | · | G |
+| `@cf/black-forest-labs/flux-1-schnell` | Text-to-Image | ga | tiles 0.0000528, steps 0.0001056 | Not recorded | all | · | · | G | W | W | · | · | · | W | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-dev` | Text-to-Image | partner | input_tile_steps 0.00021, output_tile_steps 0.00041 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-klein-4b` | Text-to-Image | partner | input_tiles 0.000059, output_tiles 0.000287 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-klein-9b` | Text-to-Image | partner | first_megapixels 0.015, subsequent_megapixels 0.002, input_image_megapixels 0.002 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
@@ -396,7 +396,7 @@ draw: Generate pitch-deck visuals and brand-image drafts.
 - Build: **gap**, `#3721`
 - Raise: **wired**, `routes/deck_images.ts (deck_image)`
 - Grow: **wired**, `routes/brand.ts (brand_logo)`
-- Articles: **gap**, `#3721`
+- Articles: **wired**, `routes/article_assist.ts (article_image)`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 

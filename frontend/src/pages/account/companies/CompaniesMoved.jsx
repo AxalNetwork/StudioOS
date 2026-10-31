@@ -9,7 +9,13 @@
  *                            path-only entry of `redirectRoutes.ts`.
  *   (`CompanySettingsAt.jsx`, lazily loaded, holds the full settings at their
  *   new address, so the Account pane never carries that page.)
- *   CompaniesMovedNotice     Companies and projects' line after the forward.
+ *   CompaniesMovedRedirect   D1415 part 4 (#3856): every old
+ *                            `/account/companies…` address forwards to the same
+ *                            place under `/account/portfolio`, the query and
+ *                            hash kept and `moved=companies` added
+ *                            (`movedCompaniesTarget`). Counted by the router's
+ *                            beacon: each old pattern is in `redirectRoutes.ts`.
+ *   CompaniesMovedNotice     Companies and projects' line after either forward.
  *   ProfileMovedNotice       Profile and identity's line where "Your
  *                            companies" was, until dismissed on this device.
  */
@@ -19,7 +25,7 @@ import { Info } from 'lucide-react';
 import { api, initActiveCompanyId } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { useMovedNotice } from '../../../ui';
-import { MOVED_NOTICES, PROFILE_MOVED_STORE, PROFILE_MOVED_TEXT, TAB_PATHS, activeUidFrom, forwardTarget } from './companiesModel';
+import { MOVED_NOTICES, PROFILE_MOVED_STORE, PROFILE_MOVED_TEXT, TAB_PATHS, activeUidFrom, forwardTarget, movedCompaniesTarget } from './companiesModel';
 
 const NOTE = 'flex items-center gap-2.5 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-1.5 text-[13px] text-axal-ink dark:border-[#4c3a8a] dark:bg-[#211f3d] dark:text-gray-200';
 const DISMISS = 'inline-flex min-h-[44px] shrink-0 items-center rounded-[9px] px-2.5 text-[13px] font-bold text-axal-violet-deep sm:min-h-[40px] dark:text-violet-400';
@@ -45,7 +51,16 @@ export function CompanySettingsRedirect({ list = () => api.listMyCompanies(), sa
   return to ? <Navigate replace to={to} /> : null;
 }
 
-/** Companies and projects' notice after `/company-settings` forwarded here. */
+/**
+ * D1415 part 4: an old `/account/companies…` address, forwarded in one hop to
+ * the same place under `/account/portfolio`. Nothing is read first.
+ */
+export function CompaniesMovedRedirect() {
+  const { pathname, search, hash } = useLocation();
+  return <Navigate replace to={movedCompaniesTarget(pathname, search, hash) || TAB_PATHS.companies} />;
+}
+
+/** Companies and projects' notice after an old address forwarded here. */
 export function CompaniesMovedNotice() {
   const notice = useMovedNotice(MOVED_NOTICES);
   if (!notice.text) return null;

@@ -146,7 +146,8 @@ test('D431: a non-editor reads their own carry and nobody else’s — the field
   }
   // The rest of the row is intact: withholding one figure hides nobody.
   assert.equal(rowOf(r.body, OWNER).role_in_company, 'Owner');
-  assert.equal(rowOf(r.body, OWNER).email, 'owner@example.test');
+  // #3841: another member's email is never sent (only the caller's own row carries one).
+  assert.equal('email' in rowOf(r.body, OWNER), false);
 });
 
 test('D431: the not-recorded member sees their own null, not an absent field', async () => {
