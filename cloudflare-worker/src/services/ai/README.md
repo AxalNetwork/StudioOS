@@ -28,4 +28,5 @@ a new shape in `shapes.ts`, with its case in
 | --- | --- |
 | `moduleModels.ts` | #3626: capability, purpose and suitable work kinds for each offered model; no prices or runtime switches. |
 | `moduleConnections.ts` | #3626: additional explicit rail choices and specialist module connections. Preserves canvas defaults and automatic fallback chains; supplies the dispatch allowlists and public use-case copy. |
+| `coverage.ts` | D1478 (#3721): the coverage matrix, generated: every catalogue model against the 14 platform modules (`COVERAGE_MODULES`), each cell `wired`, `offered`, `gap` or `n/a` (`coverageCell`), built from the catalogue, `MODEL_CONNECTIONS`, `railMatrix.json`, the router's `ROUTE` reached from `FIXED_JOBS` (each a cited line) and `STT_MODELS`. `renderCoverage()` is `documentation/architecture/AI_MODEL_COVERAGE.md`, written by `cloudflare-worker/scripts/render-ai-coverage.mjs` and held by `cloudflare-worker/test/ai_model_coverage_d1478.test.ts`. |
 | `moduleShapes.ts` | #3626: bounded typed questions, sentiment/image-label requests, PCM16 duration and turn detection; validates specialist responses before release. |

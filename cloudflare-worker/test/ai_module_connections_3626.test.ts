@@ -42,7 +42,7 @@ test('every offered model has a purpose and real module connection; no backend d
   const models = publicModels(switches);
   const failures = models.filter(m => !m.used_for || m.used_for === 'Use not recorded' || !m.pages.length
     || /@cf|cloudflare|worker|neuron|provider|infrastructure/i.test(m.used_for));
-  assert.deepEqual({ count: models.length, failures: failures.map(m => m.id) }, { count: 60, failures: [] });
+  assert.deepEqual({ count: models.length, failures: failures.map(m => m.id) }, { count: 61, failures: [] });
   assert.deepEqual(models.map(m => m.id).sort(), CATALOGUE.filter(m => isOffered(m, switches)).map(m => m.id).sort());
 });
 

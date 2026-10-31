@@ -112,6 +112,8 @@ const SOURCES: Record<string, string[]> = {
   telegram: ['services/channels/telegram.ts', 'services/channels/outbound.ts'],
   // D1085: a member's sign-in reads through Notion's typed reads; its provider revokes on disconnect.
   notion: ['services/notion/reads.ts', 'integrations/providers/notion.ts'],
+  // D1385 (#3731): PostHog's typed reads and provider.
+  posthog: ['services/posthog/reads.ts', 'integrations/providers/posthog.ts'],
   // D1096: Vercel's only transport is its typed client; the provider calls it.
   vercel: ['services/vercel/api.ts', 'integrations/providers/vercel.ts'],
 };
@@ -294,7 +296,7 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 const ADDED: Record<string, string | null> = {
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
-  github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10', notion: '2026-10', vercel: '2026-10',
+  github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10', notion: '2026-10', vercel: '2026-10', posthog: '2026-10',
   google_workspace: null,
 
   lovable: null,
@@ -354,6 +356,7 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
   telegram: { file: 'services/channels/telegram.ts', sign_in: null, api: 'TELEGRAM_API' },
   // D1085: the page names the MCP server a member's sign-in reads through.
   notion: { file: 'services/notion/reads.ts', sign_in: ['NOTION_MCP_URL', ''], api: null },
+  posthog: { file: 'services/posthog/reads.ts', sign_in: ['POSTHOG_MCP_URL', ''], api: null },
   // D1096: the install page is built from the Integration's slug, so there is no sign-in constant.
   vercel: { file: 'services/vercel/api.ts', sign_in: null, api: 'VERCEL_API' },
 };

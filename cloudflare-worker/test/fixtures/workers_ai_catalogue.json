@@ -1,12 +1,12 @@
 {
-  "read_on": "2026-10-19",
+  "read_on": "2026-10-31",
   "read_with": "Cloudflare Developer Platform connector, search_cloudflare_documentation (developers.cloudflare.com does not resolve from the build sandbox)",
   "pricing_page": {
     "url": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
-    "last_updated": "2026-10-15",
+    "last_updated": "2026-10-20",
     "billed_in": "neurons",
     "usd_per_1000_neurons": "0.011",
-    "neurons_source": "design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md (S1, #2085), which agrees with this read row for row",
+    "neurons_source": "the pricing table's neuron column as the connector returned it on 2026-10-31 (page updated 2026-10-20); the 2026-10-19 read agreed with design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md (S1, #2085) row for row, and no row of it moved in this re-read",
     "billing": "Cloudflare bills in neurons; the exact price of a unit is neurons × 0.011 / 1000, and the dollar column is that figure rounded for display"
   },
   "models_page": {
@@ -23,6 +23,7 @@
       "@cf/zai-org/glm-5.3",
       "@cf/zai-org/glm-5.3-flash",
       "@cf/deepseek-ai/deepseek-v4-flash-0731",
+      "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
       "@cf/deepseek-ai/deepseek-v4-pro-0813"
     ]
   },
@@ -325,6 +326,31 @@
       "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
     },
     {
+      "id": "@cf/cloudflare/clairic",
+      "name": "clairic",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Vision"
+      ],
+      "context_window": 65536,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.100"
+      },
+      "neurons": {
+        "tokens_in": "9091"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/clairic/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/clairic/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-10-19-clairic-workers-ai/"
+      ],
+      "note": "added 2026-10-31. Its page and the 2026-10-19 changelog call it a preview (\"an early checkpoint\"); held as beta, so it is never offered until it leaves preview. Not on the models page (updated 2026-08-12)."
+    },
+    {
       "id": "@cf/daily-co/phonellm-mini-alpha-2",
       "name": "phonellm-mini-alpha-2",
       "kind": "Text Generation",
@@ -436,6 +462,37 @@
         "https://developers.cloudflare.com/changelog/post/2026-08-14-deepseek-v4-workers-ai/"
       ],
       "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+      "name": "deepseek-v4.1-flash-1017",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning",
+        "Vision"
+      ],
+      "context_window": 1048576,
+      "status": "ga",
+      "paid_only": true,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.300",
+        "tokens_cached": "0.006",
+        "tokens_out": "1.200"
+      },
+      "neurons": {
+        "tokens_in": "27273",
+        "tokens_cached": "545",
+        "tokens_out": "109091"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/deepseek-v4.1-flash-1017/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/deepseek-v4.1-flash-1017/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-10-19-deepseek-v4.1-flash-workers-ai/"
+      ],
+      "note": "added 2026-10-31; not on the models page (updated 2026-08-12); has its own model page, a pricing row and the paid-only note"
     },
     {
       "id": "@cf/facebook/detr-resnet-50",

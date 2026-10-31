@@ -224,6 +224,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `fundPositionsHistory.ts` | D1158 (#3065): `readFundPositions`, each position with its latest dated mark or `marked: false` and a reason; `readFundHistory`, `readFundPerformance` point in time at each quarter end since the first call. Computed on every read, never stored. |
 | `linear/` | D855 §4 (#3733): a member's own Linear, read-only, through Linear's read-only MCP server. `reads.ts` is the only file that opens a Linear session: issues, one issue with its comments, projects and teams, each identifier checked before it is sent. Not connectable until Linear's directory entry lands. Its README has the rules. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
+| `posthog/` | D1385 (#3731): a founder's own PostHog, read only, through PostHog's MCP server. `reads.ts` is the only file that opens a PostHog session: the 19 typed reads, the venture's project pinned by header, every answer scrubbed of person and visit identifiers. Its README has the rules. |
 | `notion/` | D1085: a founder's own Notion, read-only, through Notion's MCP server. `reads.ts` is the only file that opens a Notion session: search, a page with its fingerprint, children, a data source's schema and its rows, each id checked before it is sent, never SQL. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
@@ -631,3 +632,5 @@ is not an empty source. Studio reads each allowed source once for active members
 deployment, excluding private Calendly/wellbeing items, with read-only
 projections; All studios requires HQ Super Admin and explicitly reports unread
 remote coverage. Neither reader is used by sync or exports (D1206).
+
+D1421 (#3699): `studioModules.ts` is the one registry of Studio blocks (`STUDIO_MODULES`), each profile's default layout (`STUDIO_DEFAULTS`), whose Studio a caller arranges (`studioProfile`) and each module's plan lock (`lockOf`). The lock reads the paywall prefixes in `../middleware/paywallPrefixes.ts` and the existing gate functions; no tier is written in the registry.
