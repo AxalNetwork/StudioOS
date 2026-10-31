@@ -18,6 +18,7 @@
  *        --test cloudflare-worker/test/deck_notes_d905.test.ts
  */
 import test from 'node:test';
+import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -165,7 +166,7 @@ test('the thread spans the deck\'s versions; a note keeps the version it was wri
   assert.equal((await call(f, ADMIN, 'POST', '/api/decks/12/notes', { body: 'Synthetic.', card_index: 2 })).body.error, 'invalid_card', "v2 has two cards");
 });
 
-test("a note never leaves through the deck's own read, a share or an export: only routes/deck_notes.ts reads deck_notes", async () => {
+test("a note never leaves through the deck's own read, a share or an export: only routes/deck_notes.ts reads deck_notes and hard-delete only erases", async () => {
   const f = await fixture();
   await call(f, ADMIN, 'POST', '/api/decks/10/notes', { body: LINE });
   const deck = await call(f, OWNER, 'GET', '/api/decks/10');
@@ -177,8 +178,14 @@ test("a note never leaves through the deck's own read, a share or an export: onl
   const readers: string[] = [];
   const walk = (dir: string) => { for (const e of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, e.name); if (e.isDirectory()) walk(p); else if (e.isFile() && /\.ts$/.test(p) && /deck_notes/.test(readFileSync(p, 'utf8'))) readers.push(p.slice(src.length)); } };
   walk(src);
-  assert.deepEqual(readers.sort(), ['index.ts', 'routes/deck_notes.ts'], 'index.ts only mounts it');
+  assert.deepEqual(readers.sort(), ['index.ts', 'routes/deck_notes.ts', 'services/projectTrash.ts'], 'index.ts mounts it; #3747 hard-delete only erases it');
   assert.equal(/FROM\s+deck_notes|JOIN\s+deck_notes/i.test(readFileSync(join(src, 'index.ts'), 'utf8')), false);
+  const cleanupSQL = sqlStrings(readFileSync(join(src, 'services/projectTrash.ts'), 'utf8'))
+    .filter(({ body }) => /\bdeck_notes\b/i.test(body)).map(({ body }) => body.trim());
+  assert.deepEqual(cleanupSQL.sort(), [
+    'DELETE FROM deck_notes WHERE deck_id IN (SELECT id FROM pitch_decks WHERE project_id = ?)',
+    'DELETE FROM deck_notes WHERE project_id = ?',
+  ].sort(), 'hard-delete may erase notes but cannot read or export their contents');
 });
 
 test('only the Super Admin on HQ sets the default template by sector and stage; an Admin still reads it', async () => {

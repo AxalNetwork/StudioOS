@@ -1030,10 +1030,7 @@ projects.delete('/:id', async (c) => {
   }
 
   if (hard) {
-    // Migration 039 added ON DELETE CASCADE to every project FK we ship,
-    // so a single DELETE is enough on a migrated DB. The legacy manual
-    // cascade (kept for stale installs that haven't applied 039 yet) lives
-    // in services/projectTrash.ts:hardDeleteProject.
+    // The service performs the explicit, atomic cascade and durable image purge.
     const { hardDeleteProject } = await import('../services/projectTrash');
     try {
       await hardDeleteProject(c.env, id);
