@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, Sparkles, X } from 'lucide-react';
-import { articleAuthoringApi, railProposalsApi } from '../../lib/api';
+import { articleAuthoringApi } from '../../lib/api/articleAuthoring.js';
+import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { railPressHeaders } from '../../lib/railPage';
 import { reportError } from '../../lib/log';
 import {
