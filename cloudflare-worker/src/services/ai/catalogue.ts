@@ -4,7 +4,9 @@
  *
  * WHERE THE ROWS COME FROM. Cloudflare's models page and pricing page, read on
  * 2026-10-19 through the Cloudflare docs connector (the pricing page says it was
- * updated on 2026-10-15). What was read is committed as
+ * updated on 2026-10-15), and re-read on 2026-10-31 for D1478 (#3721): the page
+ * updated on 2026-10-20 moved no price and added two rows, DeepSeek V4.1 Flash
+ * and Clairic, a preview held as beta. What was read is committed as
  * `test/fixtures/workers_ai_catalogue.json`, each row with its source URLs, and
  * `test/ai_catalogue_d760.test.mjs` holds every row here equal to it. A price
  * that moves is changed in both files in the same commit.
@@ -82,7 +84,7 @@ export interface CatalogueModel {
 }
 
 /** When the catalogue was read, and the date the pricing page gave. */
-export const CATALOGUE_READ = Object.freeze({ read_on: '2026-10-19', pricing_page_updated: '2026-10-15' });
+export const CATALOGUE_READ = Object.freeze({ read_on: '2026-10-31', pricing_page_updated: '2026-10-20' });
 
 export const CATALOGUE: readonly CatalogueModel[] = Object.freeze([
   { id: '@cf/deepgram/aura-1', name: 'aura-1', kind: 'Text-to-Speech', capabilities: ['Batch', 'Real-time'], context_window: null, status: 'partner', paid_only: false, partner: true, prices: { characters: '0.015' }, neurons: { characters: '1363.64' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/aura-1/' },
@@ -97,10 +99,12 @@ export const CATALOGUE: readonly CatalogueModel[] = Object.freeze([
   { id: '@cf/cloudflare/clef', name: 'clef', kind: 'Text Generation', capabilities: [], context_window: null, status: 'ga', paid_only: false, partner: false, prices: { tokens_in: '0.240' }, neurons: { tokens_in: '21818' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/clef/' },
   { id: '@cf/cloudflare/clef-flash', name: 'clef-flash', kind: 'Text Generation', capabilities: [], context_window: null, status: 'ga', paid_only: false, partner: false, prices: { tokens_in: '0.038' }, neurons: { tokens_in: '3455' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/clef-flash/' },
   { id: '@cf/cloudflare/clef-omni', name: 'clef-omni', kind: 'Text Generation', capabilities: ['Vision'], context_window: 64000, status: 'ga', paid_only: false, partner: false, prices: { tokens_in: '0.150' }, neurons: { tokens_in: '13636' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/clef-omni/' },
+  { id: '@cf/cloudflare/clairic', name: 'clairic', kind: 'Text Generation', capabilities: ['Vision'], context_window: 65536, status: 'beta', paid_only: false, partner: false, prices: { tokens_in: '0.100' }, neurons: { tokens_in: '9091' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/clairic/' },
   { id: '@cf/daily-co/phonellm-mini-alpha-2', name: 'phonellm-mini-alpha-2', kind: 'Text Generation', capabilities: ['Function calling'], context_window: 262140, status: 'ga', paid_only: false, partner: false, prices: { tokens_in: '0.060', tokens_out: '0.240' }, neurons: { tokens_in: '5455', tokens_out: '21818' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/phonellm-mini-alpha-2/' },
   { id: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', name: 'deepseek-r1-distill-qwen-32b', kind: 'Text Generation', capabilities: ['Reasoning'], context_window: null, status: 'ga', paid_only: false, partner: false, prices: { tokens_in: '0.497', tokens_out: '4.881' }, neurons: { tokens_in: '45170', tokens_out: '443756' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/deepseek-r1-distill-qwen-32b/' },
   { id: '@cf/deepseek-ai/deepseek-v4-flash-0731', name: 'deepseek-v4-flash-0731', kind: 'Text Generation', capabilities: ['Batch', 'Function calling', 'Reasoning'], context_window: 1048576, status: 'ga', paid_only: true, partner: false, prices: { tokens_in: '0.440', tokens_cached: '0.014', tokens_out: '1.320' }, neurons: { tokens_in: '40000', tokens_cached: '1273', tokens_out: '120000' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/deepseek-v4-flash-0731/' },
   { id: '@cf/deepseek-ai/deepseek-v4-pro-0813', name: 'deepseek-v4-pro-0813', kind: 'Text Generation', capabilities: ['Function calling', 'Reasoning'], context_window: 1048576, status: 'ga', paid_only: true, partner: false, prices: { tokens_in: '1.320', tokens_cached: '0.044', tokens_out: '3.960' }, neurons: { tokens_in: '120000', tokens_cached: '4000', tokens_out: '360000' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/deepseek-v4-pro-0813/' },
+  { id: '@cf/deepseek-ai/deepseek-v4.1-flash-1017', name: 'deepseek-v4.1-flash-1017', kind: 'Text Generation', capabilities: ['Function calling', 'Reasoning', 'Vision'], context_window: 1048576, status: 'ga', paid_only: true, partner: false, prices: { tokens_in: '0.300', tokens_cached: '0.006', tokens_out: '1.200' }, neurons: { tokens_in: '27273', tokens_cached: '545', tokens_out: '109091' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/deepseek-v4.1-flash-1017/' },
   { id: '@cf/facebook/detr-resnet-50', name: 'detr-resnet-50', kind: 'Object Detection', capabilities: [], context_window: null, status: 'beta', paid_only: false, partner: false, prices: {}, docs_url: 'https://developers.cloudflare.com/workers-ai/models/detr-resnet-50/' },
   { id: '@cf/huggingface/distilbert-sst-2-int8', name: 'distilbert-sst-2-int8', kind: 'Text Classification', capabilities: [], context_window: null, status: 'ga', paid_only: false, partner: false, prices: { tokens_in: '0.026' }, neurons: { tokens_in: '2394' }, docs_url: 'https://developers.cloudflare.com/workers-ai/models/distilbert-sst-2-int8/' },
   { id: '@cf/lykon/dreamshaper-8-lcm', name: 'dreamshaper-8-lcm', kind: 'Text-to-Image', capabilities: [], context_window: null, status: 'ga', paid_only: false, partner: false, prices: {}, docs_url: 'https://developers.cloudflare.com/workers-ai/models/dreamshaper-8-lcm/' },

@@ -63,6 +63,8 @@ export const REASONING_CONTROLS: Readonly<Record<string, ReasoningControl>> = Ob
   '@cf/openai/gpt-oss-20b': { via: 'reasoning_effort' },
   '@cf/deepseek-ai/deepseek-v4-flash-0731': { via: 'reasoning_effort' },
   '@cf/deepseek-ai/deepseek-v4-pro-0813': { via: 'reasoning_effort' },
+  // D1478 (#3721): read 2026-10-31; its page lists none, low, high (default) and max.
+  '@cf/deepseek-ai/deepseek-v4.1-flash-1017': { via: 'reasoning_effort' },
   '@cf/zai-org/glm-5.3': { via: 'reasoning_effort' },
   '@cf/zai-org/glm-5.3-flash': { via: 'reasoning_effort' },
   '@cf/moonshotai/kimi-k2.6': { via: 'reasoning_effort' },
@@ -86,6 +88,8 @@ export const VISION_MODELS: ReadonlySet<string> = new Set([
   '@cf/meta/llama-4-scout-17b-16e-instruct',
   '@cf/meta/llama-3.2-11b-vision-instruct',
   '@cf/moonshotai/kimi-k2.6',
+  // D1478 (#3721): the Vision flag on its page, read 2026-10-31.
+  '@cf/deepseek-ai/deepseek-v4.1-flash-1017',
 ]);
 
 /**
