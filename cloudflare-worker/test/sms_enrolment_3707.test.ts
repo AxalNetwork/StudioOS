@@ -95,7 +95,7 @@ async function refusals(t: any, route = sms) {
     ['OPERATION_NOT_ALLOWED', 503, 'phone_auth_disabled'], ['OPERATION_NOT_ALLOWED: SMS region disabled', 400, 'region_blocked'],
     ['INVALID_PHONE_NUMBER', 400, 'invalid_phone'], ['UNRECOGNIZED', 502, 'upstream_error'],
   ] as const;
-  for (const [provider, status, code] of cases) {
+  for (const [provider] of cases) {
     f.kv.clear(); f.sendError = provider + ' PROVIDER_DIAGNOSTIC';
     const r = await post(f, 'start-enrollment', startBody, route);
     results.push([r.status, r.body.error, r.body.message, JSON.stringify(r.body).includes('PROVIDER_DIAGNOSTIC')]);
