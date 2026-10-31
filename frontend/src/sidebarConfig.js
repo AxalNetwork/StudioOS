@@ -790,6 +790,8 @@ export const ONBOARDING_CANVAS_PATHS = [
 ];
 
 export const SHARED_FULL_BLEED = [
+  // #3717: the studio home also owns its gutter when read by an admin.
+  '/raise/pitch',
   // Pricing and Learning own their hero and body gutters, like Help.
   '/pricing', '/pricing/', '/learning', '/learning/',
   '/referrals',
@@ -841,6 +843,8 @@ export const SHARED_FULL_BLEED = [
  */
 export const SHARED_FULL_BLEED_PREFIXES = [
   '/spinout-lab/',
+  // Pitch pages own the cycle gutter and dock their rail for founders and admins.
+  '/raise/pitch/',
   // A researched fund's own page. The list `/research/funds` is already full
   // bleed because it is a shell zone; the child is not in that derived list,
   // and without this prefix the dossier would sit inside App's padding on top

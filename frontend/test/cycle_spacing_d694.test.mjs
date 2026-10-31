@@ -10,7 +10,7 @@ import * as espree from 'espree';
 import { transformWithOxc } from 'vite';
 import { Chart } from '../src/pages/cycles/CycleCharts.jsx';
 import { MODULES } from '../src/pages/cycles/modules.js';
-import { ACTION_PATHS, RECORD_ID, STATIC_CHILDREN, isCyclePath } from '../src/pages/cycles/cyclePaths.js';
+import { ACTION_PATHS, CYCLE_GUTTER, RECORD_ID, STATIC_CHILDREN, isCyclePath } from '../src/pages/cycles/cyclePaths.js';
 
 const read = (path) => readFileSync(path, 'utf8');
 
@@ -136,7 +136,7 @@ function assertBody(source) {
 }
 
 test('the cycle body takes the canvas gutter in a cycle size container, and no overlay sits inside it', () => {
-  const source = read(routePath);
+  const source = read(routePath).replace('className={CYCLE_GUTTER}', `className="${CYCLE_GUTTER}"`);
   assertBody(source);
   // D703 (#1665's PR 2c): the container and body sit in the one `!actionPage` condition, which closes with them.
   const close = '      </div>\n      </div>\n      )}\n';

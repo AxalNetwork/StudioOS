@@ -3279,22 +3279,22 @@ function AppInner() {
            ? <PitchBoundary role={effectiveRole} />
            : new URLSearchParams(location.search).get('mode') === 'workspace'
            ? <PitchWorkspaceMoved />
-           : founderEditor(<PitchStudio tab="decks" />))} />
+           : <PitchStudio tab="decks" />)} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
       {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. The
           template builder retired with group E: its four actions are the
           studio's, and /raise/pitch/builder opens the studio with a moved notice. */}
-      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchEditor />)))} />
+      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), <PitchEditor />)} />
       <Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />
       {/* D897 (#2677), PD3–PD6: New deck. A static path, so `/raise/:slug/new` never takes it. */}
-      <Route path="/raise/pitch/new" element={guard(labRoles(['admin', 'founder']), founderEditor(<NewDeck />))} />
-      <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />
+      <Route path="/raise/pitch/new" element={guard(labRoles(['admin', 'founder']), <NewDeck />)} />
+      <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="analytics" />)} />
       {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
       <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />
-      <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="review" />))} />
+      <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="review" />)} />
       {/* D901 (#2680) — present mode (PD16): full screen, reads one version, writes nothing. */}
       <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchPresent />))} />
-      <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="notes" />))} />
+      <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="notes" />)} />
       {/* D1180 (#3107): the workspace's default tab was the financial model, now retired, so
           ?mode=workspace lands on Use of funds › Runway › Forecast as /raise/capital/model does,
           counting itself (the address is also the Capital page). */}

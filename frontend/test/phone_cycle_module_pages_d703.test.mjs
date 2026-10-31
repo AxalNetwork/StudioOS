@@ -21,6 +21,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { h, mountForm, propsOf, textOf } from './_form_d695.mjs';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER, phoneRow } from '../src/pages/cycles/PhoneModulePage.jsx';
+import { CYCLE_GUTTER } from '../src/pages/cycles/cyclePaths.js';
 import RecordView, { RecordPhoneProvider } from '../src/pages/cycles/RecordView.jsx';
 import { PhoneBar } from '../src/ui/phone/PhoneBar.jsx';
 import { __resetEadwynPanelForTest, useEadwynPanel, useEadwynRailServes } from '../src/ui/eadwynPanel.js';
@@ -263,7 +264,8 @@ test('15: PhoneBar\'s back.onClick is a button that calls it, never the no-histo
   const bar = tag(ssr(h(CycleBar, { back: { label: 'Validate', to: `/validate${Q}` }, title: 'Problem discovery' })), 'cycle-bar');
   for (const cls of ['sticky', 'top-0', '-mx-[22px]', '-mt-[14px]', 'mb-[14px]']) assert.ok(bar.includes(cls), cls);
   const body = read('frontend/src/pages/cycles/CycleRoute.jsx').split('\n').find((l) => l.includes('data-testid="cycle-route-body"'));
-  for (const cls of PHONE_GUTTER.split(' ')) assert.ok(body.includes(cls), `PHONE_GUTTER's ${cls} is the body's below lg`);
+  assert.match(body, /className=\{CYCLE_GUTTER\}/);
+  for (const cls of PHONE_GUTTER.split(' ')) assert.ok(CYCLE_GUTTER.includes(cls), `PHONE_GUTTER's ${cls} is the body's below lg`);
 });
 
 // ── 14. One breakpoint (this PR's part) ───────────────────────────────────

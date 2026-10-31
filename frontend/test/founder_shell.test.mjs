@@ -102,7 +102,7 @@ test('A4 owns the founder Raise landing while workspace mode retains its detaile
   // D661 (#1474): the landing a founder gets is the Raise cycle overview now.
   assert.match(zone, /founderRaiseLanding\s*\?\s*guard\([^)]*\), <CycleRoute cycle="raise" \/>\)/);
   // D898 group E: the template builder retired; the editor is the studio's, at /raise/pitch/edit.
-  assert.match(app, /founderEditor\(<PitchEditor \/>\)/);
+  assert.match(app, /guard\(labRoles\(\['admin', 'founder'\]\), <PitchEditor \/>\)/);
   assert.doesNotMatch(app, /PitchWorkspacePage/);
   // The desk is an overview OVER the sections, not instead of them. D894:
   // the Pitch section page is the Pitch deck studio's home now.
