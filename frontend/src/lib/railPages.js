@@ -87,6 +87,11 @@ const SHARED = (P) => [
   off('/wellbeing', key(P, 'Wellbeing')),
   off('/perks', key(P, 'Perks')),
   off('/projects', key(P, 'Projects')),
+  // D1408 (#3694): the member's own articles, the library and the editor. The
+  // Worker files an article's runs under this key (D1409, `articlePage`).
+  // `/articles` itself is the public feed and has no rail.
+  off('/articles/draft', key(P, 'Articles')),
+  alias('/articles/edit', key(P, 'Articles'), 'An article open in the editor is the Articles page, under the library’s key.'),
 ];
 
 const F = 'Founder';
@@ -476,7 +481,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/studio', railCount: 0, pageTestIds: ['advisor-studio-home'], roles: ['advisor'], why: 'Owner request: Advisor Studio has no AI side rail; its interview and practice modules remain.' },
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },
   { route: '/spinout-lab/investor-workspace', railCount: 0, pageTestIds: ['investor-workspace-axal-vc-fund'], roles: ['investor'], why: 'Owner request: the LP investor workspace has no AI side rail; its content and access gates remain.' },
-  { route: '/spinout-lab/apply', roles: [], why: 'The Spin-Out Lab application, before a lane is chosen: no profile yet.' },
+  { route: '/spinout-lab/apply', roles: ['investor', 'advisor', 'partner'], why: 'The Spin-Out Lab application, before a lane is chosen: a founder’s or an exploring member’s page, keyed under their own profile; the other profiles have no key for it (D1408: `authOnly` routes are now checked for every profile).' },
   { route: '/spinout-lab/brief', roles: [], why: 'The public Spin-Out Lab brief.' },
   { route: '/advisors/:uid', roles: [], why: 'An advisor’s public profile.' },
   { route: '/b/*', roles: [], why: 'A public booking page.' },
