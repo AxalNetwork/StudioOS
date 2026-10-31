@@ -311,7 +311,7 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
       {settingsScope ? <SettingsScopeBlock scope={settingsScope} collapsed={collapsed} onNavigate={onNavigate} activeUid={activeCompany?.uid || null} /> : null}
       {/* D1140 (#3020, CMP19a): the last row is Companies and projects; Company Settings moved under it. */}
       <NavLink
-        to="/account/companies"
+        to="/account/portfolio"
         onClick={onNavigate}
         className={({ isActive }) =>
           collapsed

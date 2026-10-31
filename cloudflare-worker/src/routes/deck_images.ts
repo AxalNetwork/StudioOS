@@ -44,7 +44,7 @@ import { requireAuth } from '../auth';
 import { quoteRun, run, type RunOptions } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import {
-  ALT_MAX, EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_MODEL, IMAGE_MODEL_LABEL, IMAGE_OPTION, IMAGE_PAGE, MIMES, NOT_ILLUSTRATIVE_MESSAGE,
+  ALT_MAX, EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_MODEL, IMAGE_OPTION, IMAGE_PAGE, MIMES, NOT_ILLUSTRATIVE_MESSAGE, imageModelLabel,
   OVERLAYS, PERSON_CONSENT_MESSAGE, REAL_PERSON_MESSAGE, UPLOAD_MAX_BYTES, USES, asksForChart, askOf, balanceRefusal, overlayContrast,
   personIn, promptOf, readable, sniffMime, ventureNames, type ImageAsk, type Overlay, type Use,
 } from '../services/decks/images';
@@ -95,7 +95,7 @@ function view(c: any, r: any) {
     uid: r.uid, url: imageUrl(c.req.url, r.uid), state: r.state, use: r.use, source: r.source, card: r.card ?? null,
     style: r.style ?? null, aspect: r.aspect ?? null, overlay: r.overlay ?? null, alt: r.alt ?? '',
     width: r.width ?? null, height: r.height ?? null, model: r.model ?? null,
-    model_label: r.model === IMAGE_MODEL ? IMAGE_MODEL_LABEL : null,
+    model_label: imageModelLabel(r.model),
     usage_log_id: r.ai_usage_log_id ?? null, charged_microusd: r.charged_microusd ?? null,
     shows_person: r.shows_person === 1, created_at: r.created_at, kept_at: r.kept_at ?? null,
   };
@@ -126,7 +126,7 @@ async function chargedOf(env: Env, usageLogId: number | null | undefined, userId
   return row?.charged_microusd == null ? null : Number(row.charged_microusd);
 }
 
-type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; per: number; total: number };
+type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; model: string; per: number; total: number };
 
 /** The checked request and its price, or the response that refuses it. Shared by the quote and the run. */
 async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response> {
@@ -143,7 +143,7 @@ async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response
     const stop = refuseRun(c, { refusal: q.refusal, error: q.error });
     return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
   }
-  return { ask: read.ask, colours, opts, per: q.hold_microusd, total: q.hold_microusd * read.ask.count };
+  return { ask: read.ask, colours, opts, model: q.model, per: q.hold_microusd, total: q.hold_microusd * read.ask.count };
 }
 
 deckImages.post('/:id/images/quote', async (c) => {
@@ -159,8 +159,9 @@ deckImages.post('/:id/images/quote', async (c) => {
   }
   const short = await balanceRefusal(c.env, Number(user.id), p.total);
   return c.json({
-    ai: true, model: IMAGE_MODEL, model_label: IMAGE_MODEL_LABEL,
-    models: [{ id: IMAGE_MODEL, label: IMAGE_MODEL_LABEL, per_image_microusd: p.per }],
+    // D1478 (#3721): the model the run will use (the member's pick, when offered), not a fixed one.
+    ai: true, model: p.model, model_label: imageModelLabel(p.model),
+    models: [{ id: p.model, label: imageModelLabel(p.model), per_image_microusd: p.per }],
     per_image_microusd: p.per, count: p.ask.count, total_microusd: p.total,
     balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true },
   });

@@ -107,7 +107,10 @@ export const PATH_TO_SECTION = {
   onboarding: 'onboarding',
   profile: 'account',
   account: 'account',
-  // D1134 (#2422) — Companies and projects.
+  // D1134 (#2422) — Companies and projects. D1415 part 4 (#3856): its address is
+  // `/account/portfolio`; `/account/companies…` forwards there (App.jsx), so
+  // `companies` resolves only for the one render a forward takes.
+  portfolio: 'companies',
   companies: 'companies',
   security: 'security-privacy',
   privacy: 'security-privacy',
@@ -174,17 +177,18 @@ export function connectorKeyFor(pathname = '') {
  * phone bare `/account` is the index, so the profile pane is `/account/profile`.
  * D753 — Connectors with a valid `key` is that connector's page.
  * D807 — Usage with `usagePage` is that Usage page (`/account/usage/limits`).
- * D1138 — Companies and projects with `companiesTab` is that tab (`/account/companies/invitations`).
- * D1139 — with `companyUid` it is that company's lightbox (`/account/companies/<uid>`).
+ * D1138 — Companies and projects with `companiesTab` is that tab (`/account/portfolio/invitations`);
+ * D1415 part 4 — with neither, the section's own address, `/account/portfolio`.
+ * D1139 — with `companyUid` it is that company's lightbox (`/account/portfolio/<uid>`).
  * D1315 — Builder with `builderView` is that page or drawer (`/account/builder/keys`).
  */
 export function accountPathFor({ section, phone = false, key = null, usagePage = null, companiesTab = null, companyUid = null, builderView = null } = {}) {
   if (section === 'builder') return builderPathFor(builderView ?? {});
   if (section === 'connectors' && key && connectorKeyFor(`/account/connectors/${key}`) === key) return `/account/connectors/${key}`;
   if (section === 'usage' && usagePage) return usagePathFor(usagePage);
-  // D1138 — Companies and projects with a tab is that tab's own address (`/account/companies/projects`).
+  // D1138 — Companies and projects with a tab is that tab's own address (`/account/portfolio/projects`).
   if (section === 'companies' && companyUid) return companyPathFor(companyUid);
-  if (section === 'companies' && companiesTab) return companiesPathFor(companiesTab);
+  if (section === 'companies') return companiesPathFor(companiesTab || 'companies');
   if (section === 'index') return '/account';
   if (section === 'account' || section === 'profile') return phone ? '/account/profile' : '/account';
   return `/account/${section}`;
@@ -248,7 +252,7 @@ export function accountIndexGroups({ role, follows, billing } = {}) {
       label: 'Settings',
       rows: [
         { title: 'Profile and identity', description: 'Personal details, identity, company profile', to: accountPathFor({ section: 'account', phone: true }) },
-        { title: 'Companies and projects', description: 'Your companies, projects and invitations', to: '/account/companies' },
+        { title: 'Companies and projects', description: 'Your companies, projects and invitations', to: '/account/portfolio' },
         { title: 'Notifications', description: 'Each type, in-app, email and push', to: '/account/notifications' },
         { title: 'Sign-in and security', description: 'Password, authenticator app, SMS', to: '/account/security-privacy' },
         { title: 'Billing and orders', description: planLine(role, billing), to: '/account/billing' },

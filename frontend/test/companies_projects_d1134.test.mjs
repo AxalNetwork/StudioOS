@@ -11,7 +11,7 @@ import { PATH_TO_SECTION, accountIndexGroups } from '../src/pages/account/accoun
 
 const read = (path) => readFileSync(path, 'utf8');
 
-test('the section is second in Account, at /account/companies, with its phone index row', () => {
+test('the section is second in Account, at /account/portfolio, with its phone index row', () => {
   const page = read('frontend/src/pages/SettingsPage.jsx');
   const block = page.slice(page.indexOf('const SECTIONS = ['), page.indexOf('];', page.indexOf('const SECTIONS = [')));
   const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
@@ -21,7 +21,7 @@ test('the section is second in Account, at /account/companies, with its phone in
   assert.ok(page.includes("{safeActive === 'companies' && <CompaniesProjects role={role} entityRecords={<><YourCompaniesSection flash={flash} /><CorporateEntityCard flash={flash} /></>} />}"));
   assert.equal(PATH_TO_SECTION.companies, 'companies');
   const rows = accountIndexGroups({ role: 'founder' })[0].rows.map((r) => [r.title, r.to]);
-  assert.deepEqual(rows.slice(0, 2), [['Profile and identity', '/account/profile'], ['Companies and projects', '/account/companies']]);
+  assert.deepEqual(rows.slice(0, 2), [['Profile and identity', '/account/profile'], ['Companies and projects', '/account/portfolio']]);
 });
 
 test('the canvas and decision are in', () => {

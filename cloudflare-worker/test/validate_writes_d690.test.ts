@@ -617,7 +617,14 @@ test('17: 460 adds no column that any other migration or the baseline already ha
   db.prepare('DELETE FROM hypotheses WHERE id = ?').run(h2);
   assert.equal(one(db, "SELECT COUNT(*) AS n FROM hypothesis_experiments WHERE uid = 'ex-2'").n, 0);
   assert.equal(one(db, "SELECT COUNT(*) AS n FROM hypothesis_evidence_links WHERE uid = 'ev-2'").n, 0);
-  await hardDeleteProject(envOf(db), P);
+  // #3747: the bucket-backed hard-delete now journals its image purge in the
+  // existing settings table, even when this Validate fixture has no decks.
+  db.exec(tableFromBaseline(sqlOf('241_advisor_money_model.sql'), 'platform_settings'));
+  const env = envOf(db);
+  env.FILES = { ...FILES, list: async ({ prefix }: { prefix: string }) => ({
+    objects: [...objects.keys()].filter(key => key.startsWith(prefix)).map(key => ({ key })), truncated: false,
+  }) };
+  await hardDeleteProject(env, P);
   assert.equal(one(db, 'SELECT COUNT(*) AS n FROM projects WHERE id = ?', P).n, 0);
   for (const t of ['hypothesis_experiments', 'hypothesis_evidence_links', 'competitor_tracking']) {
     assert.equal(one(db, `SELECT COUNT(*) AS n FROM ${t}`).n, 0, t);

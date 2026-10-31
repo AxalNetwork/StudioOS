@@ -330,8 +330,8 @@ test('D699 census: every destination a founder\'s phone had keeps a phone home (
   const want = (to, from) => wanted.set(to, from);
   for (const row of SIDEBAR_GROUPS.founder.flatMap(group => group.items)) want(row.to, 'sidebar');
   // D1140 (#3020): the drawer's pinned footer is Companies and projects.
-  assert.match(read('frontend/src/ui/SidebarNav.jsx'), /to="\/account\/companies"/);
-  want('/account/companies', 'drawer');
+  assert.match(read('frontend/src/ui/SidebarNav.jsx'), /to="\/account\/portfolio"/);
+  want('/account/portfolio', 'drawer');
   const dropdownLinks = [...dropdown.matchAll(/to="([^"]+)"/g)].map(match => match[1]);
   assert.ok(dropdownLinks.length >= 10, 'the census no longer reads UserDropdown');
   for (const to of dropdownLinks) want(to, 'UserDropdown');
@@ -342,7 +342,7 @@ test('D699 census: every destination a founder\'s phone had keeps a phone home (
   const offered = new Set(['/studio', ...mobilePlan('founder').tabs.map(row => row.to)]);
   // More opens the drawer (#2297), which holds every sidebar row and the Companies and projects link.
   for (const row of SIDEBAR_GROUPS.founder.flatMap(group => group.items)) offered.add(row.to);
-  offered.add('/account/companies');
+  offered.add('/account/portfolio');
   const sheets = read('frontend/src/ui/phone/CompanySheet.jsx') + read('frontend/src/ui/phone/AccountSheet.jsx');
   for (const [, to] of sheets.matchAll(/'(\/[a-z][a-z/-]*)'/g)) offered.add(to);
   for (const [, to] of sheets.matchAll(/to="(\/[a-z][a-z/-]*)"/g)) offered.add(to);
