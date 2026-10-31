@@ -634,3 +634,5 @@ projections; All studios requires HQ Super Admin and explicitly reports unread
 remote coverage. Neither reader is used by sync or exports (D1206).
 
 D1421 (#3699): `studioModules.ts` is the one registry of Studio blocks (`STUDIO_MODULES`), each profile's default layout (`STUDIO_DEFAULTS`), whose Studio a caller arranges (`studioProfile`) and each module's plan lock (`lockOf`). The lock reads the paywall prefixes in `../middleware/paywallPrefixes.ts` and the existing gate functions; no tier is written in the registry.
+
+D1418 (#3862): `studioModules.ts` also holds the canvas's catalogue: `STUDIO_GROUPS` (each profile's groups, in order), a `purpose` and `href` on every module, the 27 founder cycle modules derived from `cycleValidate.ts`, `../routes/cycle_build.ts` (`BUILD_MODULES`), `raiseCycle.ts` and `growCycle.ts` with `CYCLE_PURPOSE`, and the canvas's defaults. `catalogueOf(profile, user)` leaves Grow out for a Spin-Out Lab member.
