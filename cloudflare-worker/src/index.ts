@@ -355,6 +355,7 @@ import comarketingRoutes from './routes/comarketing';
 import companyRoutes from './routes/company';
 import companyLifecycle from './routes/company_lifecycle';
 import companyLegal from './routes/company_legal';
+import companyDocuments from './routes/company_documents';
 import projectLifecycle from './routes/project_lifecycle';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 // #45 — the partner workspace's own stores (migrations 208/209). Mounted under
@@ -445,6 +446,7 @@ import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
+import teamAgentsRoutes from './routes/team_agents';
 import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
@@ -1650,7 +1652,11 @@ app.route('/api/comarketing', comarketingRoutes);
 app.route('/api', companyLifecycle);
 // D1415: the company's legal record, officers, locations, sealed tax ID and slug.
 app.route('/api', companyLegal);
+// D1592 (#3860): the company's documents (the four named slots, other, its ventures'), upload and download.
+app.route('/api', companyDocuments);
 app.route('/api', companyRoutes);
+// D1496 (#3840): team agents, their rule books and their audit; 404 `team_agents_off` until TEAM_AGENTS_ENABLED is "true".
+app.route('/api/teams', teamAgentsRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);

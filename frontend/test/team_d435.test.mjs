@@ -268,7 +268,7 @@ test('the six owner decisions are drawn, Send document is not live, and the invi
   assert.match(d, /The record stays with today’s date as the offboarding date/);
   // The workspace invitation is the existing one, sent only when asked and only with an email.
   const inv = slice(CODE, 'function InviteDrawer(', 'export const OPEN_DECISIONS');
-  assert.match(inv, /if \(sendInvite && payload\.email\) \{[\s\S]*?api\.inviteCompanyMember\(company\.uid, \{ email: payload\.email, role_in_company: 'Member' \}\)/);
+  assert.match(inv, /if \(sendInvite && payload\.email\) \{[\s\S]*?teamsApi\.inviteCompanyMember\(company\.uid, \{ email: payload\.email, role_in_company: 'Member' \}\)/);
   assert.match(inv, /is recorded, but the workspace invitation failed/, 'the two outcomes are reported apart');
   // Eadwyn's voice: nothing on this page is called advice or a recommendation.
   assert.doesNotMatch(PAGE, /recommend|advice|fiduciary/i);

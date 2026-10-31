@@ -221,7 +221,8 @@ Hints: ${JSON.stringify(hints)}`;
 
   try {
     const res = await aiRun(env, {
-      task: 'rail_vision',
+      // D1478 (#3721): a text-only fill, so the write task; `form:deck` is a write option.
+      task: 'rail_write',
       userId: who.userId,
       surface: AI_SURFACE.raisePitch,
       // D765: the member's rail context; run() records it as D767's page, option and record.

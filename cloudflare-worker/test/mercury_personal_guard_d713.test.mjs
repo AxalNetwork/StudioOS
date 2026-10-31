@@ -21,7 +21,9 @@ const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPers
   // D1263: founder-owned cached evidence and confirmed receipts, scoped by project and connection owner; no provider call or credential read.
   'services/raiseEvidenceSources.ts',
   // D1176 (#3103): cached facts from the founder caller's own active row, after company/support checks; no provider/credential read.
-  'services/useOfFunds/read.ts']);
+  'services/useOfFunds/read.ts',
+  // D1599 (#3877): the founder's own row only (the id `mercuryFor` returns), its uid and last sync date; no provider call or credential read.
+  'services/decks/freshness.ts']);
 const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts','services/capitalAttestations.ts',
   // D840 part 3: the founder's confirmed raise receipts are financing in their Grow months.
   'services/mercury/growFeeds.ts']);

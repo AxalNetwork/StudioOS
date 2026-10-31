@@ -29,6 +29,10 @@ type Bucket = {
   failClosed?: boolean;
 };
 
+// #3841: the account search, and a project invitation's resend.
+export const PEOPLE_SEARCH = /^\/api\/account\/people\/search\/?$/;
+export const PROJECT_INVITE_RESEND = /^\/api\/projects\/\d+\/invitations\/\d+\/resend\/?$/;
+
 // The two company-invitation routes that put a link in somebody's inbox:
 // `/api/company/<uid>/invitations` and `.../invitations/<inviteUid>/resend`.
 // Anchored at both ends so it cannot widen to a path that merely contains
@@ -90,6 +94,17 @@ export const MCP_CLIENT_METADATA = /^\/api\/integrations\/mcp\/[A-Za-z0-9_]{1,64
 export const LP_PAY_INSTRUCTIONS = /^\/api\/funds\/[^/]+\/capital-calls\/lines\/[^/]+\/pay-instructions$/;
 
 const BUCKETS: Bucket[] = [
+  // #3841: the member-facing account search reads names across the caller's companies and connections;
+  // 30 a minute is a person typing, not a crawl. A project invitation's resend mails a link again, like
+  // the company's (`company_invite_send`): 10 an hour, fail-closed.
+  {
+    name: 'people_search', limit: 30, windowSec: 60, scope: 'user', failClosed: true,
+    test: (p, m) => m === 'GET' && PEOPLE_SEARCH.test(p),
+  },
+  {
+    name: 'project_invite_resend', limit: 10, windowSec: 3600, scope: 'user', failClosed: true,
+    test: (p, m) => m === 'POST' && PROJECT_INVITE_RESEND.test(p),
+  },
   // D1100: Confirm can read a payment intent from Stripe; budget all alert IDs together.
   {
     name: 'billing_alert_confirm', limit: 10, windowSec: 60, scope: 'user', failClosed: true,

@@ -5,6 +5,7 @@ import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle, PieChart, Users, UserPlus, Link2, Copy, Lock, Mail, Check } from 'lucide-react';
 import SectorSelect from '../components/SectorSelect';
 import { api } from '../lib/api';
+import { teamsApi } from '../lib/api/teams';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
 import Sheet from '../ui/Sheet.jsx';
@@ -50,7 +51,7 @@ export default function ProjectDetail() {
       // D1260 (#3283): the Lab scorer is practice. An investor reads a venture's scores in its scorecard, through a deal.
       (isInvestor ? Promise.resolve([]) : api.getScores(id).catch(() => [])),
       api.listDocuments(id).catch(() => []),
-      api.listProjectMembers(id).catch(() => null),
+      teamsApi.listProjectMembers(id).catch(() => null),
     ]).then(([p, s, d, m]) => {
       setProject(p); setScores(s); setDocs(d); setPerm(m);
     }).catch((e) => {
@@ -1055,7 +1056,7 @@ function ProjectMembersSection({ projectId, onError }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await api.listProjectMembers(projectId));
+      setData(await teamsApi.listProjectMembers(projectId));
     } catch (e) {
       onError(e?.message || 'Failed to load the team roster');
     } finally {
@@ -1085,7 +1086,7 @@ function ProjectMembersSection({ projectId, onError }) {
     if (!Number.isInteger(idNum) || idNum <= 0) { onError('Enter a valid user ID'); return; }
     setBusy(true); setNotice(''); setGeneratedLink('');
     try {
-      await api.addProjectMember(projectId, { mode: 'user_id', user_id: idNum, role });
+      await teamsApi.addProjectMember(projectId, { mode: 'user_id', user_id: idNum, role });
       setNotice('Member added.'); resetInputs(); await load();
     } catch (e) { onError(e?.message || 'Failed to add member'); }
     finally { setBusy(false); }
@@ -1095,7 +1096,7 @@ function ProjectMembersSection({ projectId, onError }) {
     if (!selectedConn) { onError('Choose a connection'); return; }
     setBusy(true); setNotice(''); setGeneratedLink('');
     try {
-      await api.addProjectMember(projectId, { mode: 'cofounder_match', connection_uid: selectedConn, role });
+      await teamsApi.addProjectMember(projectId, { mode: 'cofounder_match', connection_uid: selectedConn, role });
       setNotice('Co-founder added from your match.'); resetInputs(); await load();
     } catch (e) { onError(e?.message || 'Failed to add co-founder'); }
     finally { setBusy(false); }
@@ -1106,7 +1107,7 @@ function ProjectMembersSection({ projectId, onError }) {
     if (!e) { onError('Enter an email address'); return; }
     setBusy(true); setNotice(''); setGeneratedLink('');
     try {
-      const res = await api.createProjectInvitation(projectId, { mode: 'email', email: e, role });
+      const res = await teamsApi.createProjectInvitation(projectId, { mode: 'email', email: e, role });
       setGeneratedLink(absoluteLink(res.accept_path));
       setNotice('Invitation created — share the link below.'); setEmail(''); await load();
     } catch (err) { onError(err?.message || 'Failed to create invitation'); }
@@ -1116,7 +1117,7 @@ function ProjectMembersSection({ projectId, onError }) {
   const inviteByLink = async () => {
     setBusy(true); setNotice(''); setGeneratedLink('');
     try {
-      const res = await api.createProjectInvitation(projectId, { mode: 'link', role });
+      const res = await teamsApi.createProjectInvitation(projectId, { mode: 'link', role });
       setGeneratedLink(absoluteLink(res.accept_path));
       setNotice('Share link created.'); await load();
     } catch (e) { onError(e?.message || 'Failed to create link'); }
@@ -1125,14 +1126,14 @@ function ProjectMembersSection({ projectId, onError }) {
 
   const revoke = async (invId) => {
     setBusy(true);
-    try { await api.revokeProjectInvitation(projectId, invId); await load(); }
+    try { await teamsApi.revokeProjectInvitation(projectId, invId); await load(); }
     catch (e) { onError(e?.message || 'Failed to revoke invitation'); }
     finally { setBusy(false); }
   };
 
   const removeMember = async (uid) => {
     setBusy(true);
-    try { await api.removeProjectMember(projectId, uid); await load(); }
+    try { await teamsApi.removeProjectMember(projectId, uid); await load(); }
     catch (e) { onError(e?.message || 'Failed to remove member'); }
     finally { setBusy(false); }
   };

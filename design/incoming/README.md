@@ -123,6 +123,18 @@ visualiser points at `ring-viz.js` instead of its asset id. No other value was e
 the grid does not draw; they are not landed here.
 
 **Grade: UPGRADE.** D1330 ports `ring-viz.js`'s maths into `frontend/src/lib/ringViz.js`.
+## Landed 2026-10-31 — Article Authoring (#3694)
+
+The owner's artifacts on #3694:
+- `Article Authoring Page.dc.html` (`1jEzUxXLkhRhSyqs66T4uJ`) is the page, boards AR1 to AR6 with their variants;
+- `Article Authoring · Boards.dc.html` (`4dRuio91aWp2zWC1166jWy`) is the board grid; it imports the page by name.
+
+Decoded by `scripts/read-canvas.mjs`. **No value was edited.**
+
+**Grade: UPGRADE.** `/articles/draft` and `/articles/edit/:id` were live. D1408 builds the
+library, the editor, Eadwyn's writing panel, the image sheet and Publish… on them, and
+lists what the canvas draws that no store holds yet (its §3) and the slot tasks for it (§4).
+
 ## Landed 2026-10-27 — Fill with Eadwyn (#2431)
 
 The owner's artifacts came from the prompt on #2431:
