@@ -47,7 +47,8 @@ const r = new Hono<{ Bindings: Env }>();
 export const LEGAL_FORMS = ['c_corp', 's_corp', 'llc', 'lp', 'ltd', 'plc', 'gmbh', 'sas', 'bv', 'other'] as const;
 export const TAX_ID_KINDS = ['ein', 'vat', 'other'] as const;
 export const OFFICES = ['director', 'officer'] as const;
-export const LOCATION_KINDS = ['registered', 'headquarters', 'office', 'other'] as const;
+// D1593 (#3861, migration 749): `mailing`, one open per company, as `registered` is.
+export const LOCATION_KINDS = ['registered', 'headquarters', 'office', 'mailing', 'other'] as const;
 
 const TAX_TABLE = 'company_tax_ids';
 const TAX_COLUMN = 'tax_id_enc';
@@ -65,7 +66,7 @@ const TAX_SHAPES: Record<(typeof TAX_ID_KINDS)[number], RegExp> = {
 type CompanyRow = {
   id: number; uid: string; company_name: string; archived_at: string | null; slug: string | null;
   legal_name: string | null; legal_form: string | null; jurisdiction: string | null;
-  registration_number: string | null; incorporation_date: string | null;
+  registration_number: string | null; incorporation_date: string | null; registered_agent_name: string | null;
 };
 type Access = { company: CompanyRow; member: boolean; editor: boolean; admin: boolean };
 type Block<T> = { available: true; value: T } | { available: false; reason: string };
@@ -73,7 +74,7 @@ const ok = <T>(value: T): Block<T> => ({ available: true, value });
 const failed = (what: string): Block<never> => ({ available: false, reason: `${what} could not be read. That is not the same as none.` });
 
 const COMPANY_SQL = `SELECT id, uid, company_name, archived_at, slug, legal_name, legal_form, jurisdiction,
-  registration_number, incorporation_date FROM company_profiles WHERE uid = ?`;
+  registration_number, incorporation_date, registered_agent_name FROM company_profiles WHERE uid = ?`;
 
 /** The company and what the caller may do with it, or null when the caller may not see it. */
 async function accessOf(env: Env, uid: string, user: User): Promise<Access | null> {
@@ -133,7 +134,7 @@ const MESSAGES: Record<string, string> = {
   ceased_on_invalid: 'Enter the date as a real date, YYYY-MM-DD.',
   ceased_on_before_appointed: 'A person cannot leave office before they were appointed.',
   user_not_member: 'That account is not a member of this company.',
-  kind_invalid: 'Choose registered, headquarters, office or other.',
+  kind_invalid: 'Choose registered, headquarters, office, mailing or other.',
   country_invalid: 'Enter the country as a two-letter code, for example GB.',
   closed_on_invalid: 'Enter the date as a real date, YYYY-MM-DD.',
   slug_invalid: 'A slug is 1 to 50 lower-case letters, digits and hyphens, and starts and ends with a letter or digit.',
@@ -143,7 +144,8 @@ const bad = (c: any, code: string) => refuse(c, 400, { code, message: MESSAGES[c
 
 // ── Legal record ────────────────────────────────────────────────────────────
 
-const LEGAL_FIELDS = ['legal_name', 'legal_form', 'jurisdiction', 'registration_number', 'incorporation_date'] as const;
+// D1593 (#3861): the registered agent's name, free text of at most TEXT_MAX characters; null clears it.
+const LEGAL_FIELDS = ['legal_name', 'legal_form', 'jurisdiction', 'registration_number', 'incorporation_date', 'registered_agent_name'] as const;
 
 /** Validate a partial legal body: the columns to set, or the first error code. */
 function legalPatch(body: any): { sets: Record<string, string | null> } | { error: string } {
@@ -213,12 +215,16 @@ r.get('/company/:uid/legal', async (c) => {
     const registered = locations.available
       ? ok(locations.value.find((l) => l.kind === 'registered' && !l.closed_on) ?? null)
       : locations;
+    // D1593: the open mailing address beside it; a failed read is unavailable, never null.
+    const mailing = locations.available
+      ? ok(locations.value.find((l) => l.kind === 'mailing' && !l.closed_on) ?? null)
+      : locations;
     const out: Record<string, unknown> = { uid: a.company.uid, company_name: a.company.company_name };
     for (const f of LEGAL_FIELDS) out[f] = a.company[f];
     return c.json({
       ...out,
       slug: a.company.slug, path: companyPath(a.company),
-      registered_address: registered, tax_id, officers, locations,
+      registered_address: registered, mailing_address: mailing, tax_id, officers, locations,
       archived: a.company.archived_at != null,
       can_edit: a.editor && a.company.archived_at == null,
     });
@@ -239,8 +245,9 @@ r.put('/company/:uid/legal', async (c) => {
       const next = { ...a.company, ...p.sets } as CompanyRow;
       await c.env.DB.prepare(
         `UPDATE company_profiles SET legal_name = ?, legal_form = ?, jurisdiction = ?, registration_number = ?,
-           incorporation_date = ?, updated_at = ? WHERE id = ?`,
-      ).bind(next.legal_name, next.legal_form, next.jurisdiction, next.registration_number, next.incorporation_date, nowIso(), a.company.id).run();
+           incorporation_date = ?, registered_agent_name = ?, updated_at = ? WHERE id = ?`,
+      ).bind(next.legal_name, next.legal_form, next.jurisdiction, next.registration_number, next.incorporation_date,
+        next.registered_agent_name, nowIso(), a.company.id).run();
       if (a.admin) await logAdminAction(c.env, user.id, user.email, 'company_legal_updated', { company_id: a.company.id, fields: keys });
     }
     const fresh = await c.env.DB.prepare(COMPANY_SQL).bind(a.company.uid).first<CompanyRow>();
@@ -431,6 +438,13 @@ const openRegistered = (env: Env, companyId: number, exceptUid: string | null) =
   env.DB.prepare("SELECT uid FROM company_locations WHERE company_id = ? AND kind = 'registered' AND closed_on IS NULL AND uid != ?")
     .bind(companyId, exceptUid ?? '').first();
 const registeredExists = (c: any) => refuse(c, 409, { code: 'registered_exists', message: 'This company already has a registered address. Close it before you add another.' });
+/** D1593: another open mailing address on this company, other than `exceptUid`. */
+const openMailing = (env: Env, companyId: number, exceptUid: string | null) =>
+  env.DB.prepare("SELECT uid FROM company_locations WHERE company_id = ? AND kind = 'mailing' AND closed_on IS NULL AND uid != ?")
+    .bind(companyId, exceptUid ?? '').first();
+const mailingExists = (c: any) => refuse(c, 409, { code: 'mailing_exists', message: 'This company already has a mailing address. Close it before you add another.' });
+/** The one-open-per-company kind a write collided on: the index decides when two writes race. */
+const clashOf = (c: any, kind: unknown) => (kind === 'mailing' ? mailingExists(c) : registeredExists(c));
 const isUniqueClash = (e: unknown) => /UNIQUE constraint failed/i.test(String((e as Error)?.message ?? e));
 
 r.get('/company/:uid/locations', async (c) => {
@@ -452,6 +466,7 @@ r.post('/company/:uid/locations', async (c) => {
     const f = locationFields(await c.req.json().catch(() => ({})), false);
     if ('error' in f) return bad(c, f.error);
     if (f.sets.kind === 'registered' && await openRegistered(c.env, a.company.id, null)) return registeredExists(c);
+    if (f.sets.kind === 'mailing' && await openMailing(c.env, a.company.id, null)) return mailingExists(c);
     const uid = newUid();
     try {
       await c.env.DB.prepare(
@@ -459,8 +474,8 @@ r.post('/company/:uid/locations', async (c) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(uid, a.company.id, f.sets.kind, ...ADDRESS_FIELDS.map((k) => f.sets[k] ?? null), f.sets.country, user.id).run();
     } catch (e) {
-      // Two writes racing for the one open registered address: the index decides.
-      if (isUniqueClash(e)) return registeredExists(c);
+      // Two writes racing for the one open registered or mailing address: the index decides.
+      if (isUniqueClash(e)) return clashOf(c, f.sets.kind);
       throw e;
     }
     return c.json(await locationByUid(c.env, a.company.id, uid), 201);
@@ -478,6 +493,7 @@ r.patch('/company/:uid/locations/:locUid', async (c) => {
     const f = locationFields(await c.req.json().catch(() => ({})), true);
     if ('error' in f) return bad(c, f.error);
     if (f.sets.kind === 'registered' && await openRegistered(c.env, a.company.id, loc.uid)) return registeredExists(c);
+    if (f.sets.kind === 'mailing' && await openMailing(c.env, a.company.id, loc.uid)) return mailingExists(c);
     if (Object.keys(f.sets).length) {
       const next = { ...loc, ...f.sets } as LocationRow;
       try {
@@ -487,7 +503,7 @@ r.patch('/company/:uid/locations/:locUid', async (c) => {
         ).bind(next.kind, next.label, next.line1, next.line2, next.city, next.region, next.postal_code, next.country,
           user.id, a.company.id, loc.uid).run();
       } catch (e) {
-        if (isUniqueClash(e)) return registeredExists(c);
+        if (isUniqueClash(e)) return clashOf(c, f.sets.kind ?? loc.kind);
         throw e;
       }
     }
