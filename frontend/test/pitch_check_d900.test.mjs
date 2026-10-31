@@ -212,10 +212,13 @@ test('a failed check says so with Try again, never an empty panel', async () => 
   } finally { await v.close(); }
 });
 
-test('the source: the editor draws the Check tab, PD2 draws the pills and the Checks column, the dialogs are in-page', () => {
+test('the source: the editor opens Check from ⋯ › Check claims, PD2 draws the pills and the Checks column, the dialogs are in-page', () => {
+  // D1604 (#3716): the right panel's Check tab moved behind ⋯, a sheet that mounts the same panel.
   const editor = read('../src/pages/raise/pitch/PitchEditor.jsx');
-  assert.match(editor, /\['check', 'Check'\]/);
-  assert.match(editor, /<CheckPanel /);
+  assert.doesNotMatch(editor, /\['check', 'Check'\]/, 'no Check tab');
+  assert.match(editor, /\{sheet === 'check' && base\.deck\?\.id \? \(\s*<CheckSheet deck=\{base\.deck\}/);
+  assert.match(read('../src/pages/raise/pitch/DeckSheets.jsx'), /<CheckPanel key=\{deck\.id\} deck=\{deck\} projectId=\{projectId\} readOnly=\{readOnly\} dirty=\{dirty\} onReplaced=\{onReplaced\} \/>/);
+  assert.match(read('../src/pages/raise/pitch/deckV2Model.js'), /\{ id: 'check', label: 'Check claims', note: 'Free checks' \}/);
   const studio = read('../src/pages/raise/pitch/PitchStudio.jsx');
   assert.match(studio, /<CheckPills /);
   assert.match(studio, />Checks<\/th>/);

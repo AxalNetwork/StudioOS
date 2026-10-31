@@ -374,7 +374,7 @@ function FastPath({ projectId, q }) {
  * while it reads, `'error'` when it failed (the cells then say Not read, never
  * Not checked), else a Map by deck id.
  */
-function useDeckChecks(projectId, count) {
+export function useDeckChecks(projectId, count) {
   const [state, setState] = useState(null);
   useEffect(() => {
     if (projectId == null) { setState(null); return undefined; }
@@ -501,7 +501,7 @@ function NewInData({ current, q }) {
 
 const SELECT = 'min-h-[30px] rounded-[8px] border border-axal-hairline bg-white px-2 font-mono text-[11px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
-function Versions({ versions, phone, onCompare, checks }) {
+export function Versions({ versions, phone, onCompare, checks }) {
   const checkCell = (id) => (checks == null ? '…' : checks === 'error' ? 'Not read' : checksCell(checks.get(Number(id))));
   const [audience, setAudience] = useState('all');
   const [sort, setSort] = useState('newest');

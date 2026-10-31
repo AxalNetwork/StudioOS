@@ -407,12 +407,12 @@ test('in the editor, Accept places the waiting edit on its card and holds it unt
   const m = await mountEditor();
   try {
     assert.equal(m.pr(m.by('pitch-ask'))['aria-label'], 'Ask Eadwyn, 1 waiting');
-    assert.equal(m.pr(m.by('pitch-editor-save')).disabled, true, 'nothing to save yet');
+    assert.ok(!m.by('pitch-editor-save'), 'nothing to save yet'); // D1604: Save version shows only while there is something to save
     await m.press(m.by('pitch-ask'));
     await m.press(m.by('pitch-ask-edit-accept'));
     assert.deepEqual(m.decided, [['s1', 'accept']]);
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers stay/);
-    assert.equal(m.pr(m.by('pitch-editor-save')).disabled, false, 'held until Save, like every edit');
+    assert.ok(m.by('pitch-editor-save'), 'held until Save, like every edit');
     assert.equal(m.pr(m.by('pitch-ask'))['aria-label'], 'Ask Eadwyn', 'decided, so no longer waiting');
   } finally { await m.close(); }
 });
@@ -433,7 +433,7 @@ test('in the editor, discarding the deck proposal from Ask keeps the unsaved car
   try {
     const notes = () => m.by('pitch-editor-notes');
     await act(async () => { m.pr(notes()).onChange({ target: { value: 'Synthetic unsaved note' } }); });
-    assert.equal(m.pr(m.by('pitch-editor-save')).disabled, false, 'dirty');
+    assert.ok(m.by('pitch-editor-save'), 'dirty');
     // An accepted card edit, held until Save, is unsaved work too.
     await m.press(m.by('pitch-ask'));
     await m.press(m.by('pitch-ask-edit-accept'));
@@ -445,7 +445,7 @@ test('in the editor, discarding the deck proposal from Ask keeps the unsaved car
     assert.equal(m.deckReads(), reads, 'the open version is not read again, so the Editor is not remounted');
     assert.equal(m.pr(notes()).value, 'Synthetic unsaved note', 'the unsaved note survives');
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers stay/, 'the accepted edit survives');
-    assert.equal(m.pr(m.by('pitch-editor-save')).disabled, false);
+    assert.ok(m.by('pitch-editor-save'));
     assert.ok(!m.by('pitch-ask-deck'), 'the discarded proposal is gone from the sheet');
   } finally { await m.close(); }
 });
@@ -456,7 +456,7 @@ test('in the editor, a refused decision takes the placed edit back and says so',
     await m.press(m.by('pitch-ask'));
     await m.press(m.by('pitch-ask-edit-accept'));
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers love it/, 'back as it was');
-    assert.equal(m.pr(m.by('pitch-editor-save')).disabled, true, 'nothing left to save');
+    assert.ok(!m.by('pitch-editor-save'), 'nothing left to save'); // D1604: Save version shows only while there is something to save
     assert.match(m.text(m.by('pitch-ask-edit')), /Accept Discard not open$/, 'the refusal is said on the edit');
   } finally { await m.close(); }
 });

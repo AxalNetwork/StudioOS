@@ -283,3 +283,14 @@ test('PD2: the current-deck card mounts the coverage meter from the sources read
   assert.match(studio, /import \{ CoverageMeter, useDeckSources \} from '\.\/SourcesBoards';/);
   assert.match(read('frontend/src/pages/raise/pitch/pitchStudioModel.js'), /export const LINE = 'Build your deck from what StudioOS already knows\. Every figure shows its source\.';/);
 });
+
+test('D1604 (#3716): the editor mounts the Sources panel from ⋯ › Sources and coverage, with the slide’s evidence', () => {
+  const editor = read('frontend/src/pages/raise/pitch/PitchEditor.jsx');
+  const at = editor.indexOf("{sheet === 'sources' ? (");
+  assert.ok(at > 0, 'a ⋯ sheet, not a right-panel tab');
+  const sheet = editor.slice(at, editor.indexOf('</SourcesSheet>', at));
+  assert.match(sheet, /<SourcesPanel items=\{items\} status=\{sources\.status\} onRetry=\{sources\.retry\} stale=\{staleMap\} \/>/);
+  assert.match(sheet, /<SlideEvidence /);
+  assert.doesNotMatch(editor, /\['sources', 'Sources'\]/, 'no Sources tab');
+  assert.match(read('frontend/src/pages/raise/pitch/deckV2Model.js'), /\{ id: 'sources', label: 'Sources and coverage' \}/);
+});

@@ -11,6 +11,8 @@
  *   askName, …           the Ask button's accessible names (pd40, §0 row 6)
  *   DECK_ASK_OPTIONS     the rail options whose proposals Ask lists
  *   cardEdit, …          a waiting card edit, read from its rail proposal
+ *   saveChip, MORE_MENU  the editor header's save state and its ⋯ menu, with
+ *   moreState, moreName  why each item is greyed and the ", N off" name
  *
  * The owner's rules this file carries: the button is "Ask" and its name
  * "Ask Eadwyn", never "Fill"; every generated element is a proposal decided
@@ -228,3 +230,102 @@ export function placeTextEdit(cards, edit) {
   if (!hit) return { error: `Card ${edit.card + 1} changed since Eadwyn proposed this. Select the area and ask again.` };
   return { card: { ...card, blocks: blocks.map((b) => (b === hit ? { ...b, text: edit.after } : b)) }, blockId: hit.id };
 }
+
+// ---------------------------------------------------------------------------
+// The editor's header (DeckToolbar, pd0 · pd13) and its ⋯ menu (DeckMoreMenu)
+// ---------------------------------------------------------------------------
+
+/** The ⋯ button's name, before the off suffix. */
+export const MORE_NAME = 'More deck actions';
+export const SAVED = '✓ Saved';
+export const UNSAVED = '● Unsaved changes';
+export const SAVE_VERSION = 'Save version';
+export const READ_ONLY_LINE = 'Read only';
+
+/**
+ * The save state the header draws. With no autosave on main (#3751), Save
+ * version shows only while there is something to save (owner question G,
+ * S1's pick (a)). `when` is editorModel's `saveState` line ("Saved · 2 min
+ * ago"), whose time becomes the title.
+ */
+export function saveChip({ dirty, readOnly, when, version = null }) {
+  if (readOnly) return { text: version == null ? READ_ONLY_LINE : `${READ_ONLY_LINE} · v${version}`, title: 'You can read this deck. Changes are the founder’s.', save: false };
+  if (dirty) return { text: UNSAVED, title: 'Nothing is saved until you save a version.', save: true };
+  const at = /^Saved · (.+)$/.exec(String(when || ''))?.[1];
+  // "Saved · v3" names the version, not a time: no time is drawn then.
+  if (at && /^v\S+$/.test(at)) return { text: SAVED, title: 'All changes saved', save: false };
+  return { text: SAVED, title: at ? `All changes saved · ${at}` : 'All changes saved', save: false };
+}
+
+/**
+ * The ⋯ menu, in its three sections (plan §2.2). An item is wired on main
+ * (`write` when it changes the deck, so a reader sees it greyed), or it names
+ * the `deckV2Adapter.js` method (`adapter`) that answers unavailable until its
+ * issue merges: drawn greyed "Coming later", titled with the adapter's
+ * reason, still reachable by keyboard. `ai` marks an item that runs a model.
+ */
+export const MORE_MENU = Object.freeze([
+  { id: 'deck', label: 'This deck', items: [
+    { id: 'stage', label: 'Stage', adapter: 'stagePlan' },
+    { id: 'size', label: 'Slide size 16:9 · 4:3', adapter: 'grid' },
+    { id: 'theme', label: 'Theme', write: true },
+    { id: 'brand', label: 'Brand kit' },
+    { id: 'reorder', label: 'Reorder for stage', adapter: 'deckActions' },
+    { id: 'sources', label: 'Sources and coverage' },
+    { id: 'versions', label: 'Versions…' },
+    { id: 'save_named', label: 'Save as a named version…', write: true },
+    // Kept from v1's editor bar and Notes tab: the thread with the venture's admins (D905).
+    { id: 'notes', label: 'Notes from your admins' },
+  ] },
+  { id: 'card', label: 'This card', items: [
+    { id: 'structure', label: 'Structure', write: true },
+    { id: 'remix', label: 'Remix this slide', note: 'Free', adapter: 'remix' },
+    { id: 'duplicate', label: 'Duplicate', write: true },
+    { id: 'hide', label: 'Hide', adapter: 'media' },
+    { id: 'section', label: 'Move to section', adapter: 'media' },
+    { id: 'appendix', label: 'Mark as appendix', write: true },
+    { id: 'background', label: 'Background image', write: true },
+  ] },
+  { id: 'ai', label: 'Whole deck · uses AI', items: [
+    { id: 'replace_images', label: 'Replace all images', adapter: 'deckActions', ai: true },
+    { id: 'check', label: 'Check claims', note: 'Free checks' },
+    { id: 'critique', label: 'Fix with critique', adapter: 'critique', ai: true },
+  ] },
+]);
+
+/** On a phone, Share's two items move into ⋯ (plan §2.1). */
+export const SHARE_ITEMS = Object.freeze([
+  { id: 'share', label: 'Share link…' },
+  { id: 'export', label: 'Export…' },
+]);
+
+/**
+ * Why each item is greyed, or null when it can be pressed: the adapter's
+ * reason ("Coming later"), read only for a write, or AI paused / out of
+ * tokens for a wired item that runs a model. `off` counts only the last kind:
+ * the items that would work but for AI.
+ */
+export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens = false, availability = () => null } = {}) {
+  let off = 0;
+  let why = null;
+  const out = sections.map((s) => ({
+    ...s,
+    items: s.items.map((it) => {
+      if (it.adapter) {
+        const a = availability(it.adapter);
+        return { ...it, disabled: true, later: true, why: a?.reason || NOT_ON };
+      }
+      if (readOnly && it.write) return { ...it, disabled: true, why: 'Read only' };
+      if (it.ai && (!aiOn || outOfTokens)) {
+        off += 1;
+        why = why || (!aiOn ? 'AI is paused' : 'out of AI tokens');
+        return { ...it, disabled: true, why: !aiOn ? 'AI is paused for your studio.' : 'Out of AI tokens. Add tokens to run it.' };
+      }
+      return { ...it, disabled: false, why: null };
+    }),
+  }));
+  return { sections: out, off, why };
+}
+
+/** "More deck actions", with ", N off: <why>" when items are off for AI. */
+export const moreName = (off, why) => (off > 0 ? `${MORE_NAME}, ${off} off: ${why}` : MORE_NAME);

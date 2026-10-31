@@ -120,12 +120,16 @@ test('studio, New deck and editor render one crumb, no nested founder frame, and
       assert.equal(nodes.some(n=>['founder-module-back','founder-workspace-raise','heading-founder-raise'].includes(m.pr(n)['data-testid'])),false);
       if(id==='pitch-editor') {
         assert.ok(m.by('pitch-editor-rail'));
-        const bar=m.by('pitch-editor-bar');
-        const title=m.walk(bar).find(n=>String(m.pr(n).className).includes('truncate text-[15px]'));
-        assert.equal(m.text(title),current);
-        const grid=nodes.find(n=>String(m.pr(n).className).includes('lg:grid-cols-[180px_minmax(0,1fr)]'));
-        assert.match(m.pr(grid).className,/2xl:grid-cols-\[200px_minmax\(0,1fr\)_320px\]/);
-        assert.ok(nodes.some(n=>String(m.pr(n).className).includes('lg:col-start-2 2xl:col-start-auto')));
+        // D1604: the header holds the h1, DeckToolbar and DeckAsk; the old editor bar and right panel are gone.
+        assert.equal(m.text(m.by('pitch-heading')),current);
+        assert.equal(m.by('pitch-heading').tagName,'H1');
+        const tools=m.by('pitch-header-tools');
+        assert.ok(m.walk(tools).includes(m.by('deck-toolbar')));
+        assert.ok(m.walk(tools).includes(m.by('pitch-header-ask')));
+        assert.ok(!m.by('pitch-editor-bar')&&!m.by('pitch-editor-panel'));
+        const body=m.by('pitch-editor-body');
+        assert.match(m.pr(body).className,/lg:grid-cols-\[150px_minmax\(0,1fr\)\]/);
+        assert.ok(m.walk(body).includes(m.by('pitch-editor-cards'))&&m.walk(body).includes(m.by('pitch-editor-stage')));
       }
       if(id==='pitch-new') {
         const proposal=m.by('pitch-new-proposal');
@@ -156,7 +160,7 @@ test('editor keeps the same frame, dock and moved notice when its deck finishes 
     assert.ok(notice);
     await act(async()=>{resolveDeck(DECK);});
     await m.settle();
-    assert.ok(m.by('pitch-editor-bar'));
+    assert.ok(m.by('deck-toolbar'));
     assert.equal(m.by('pitch-editor')===frame,true);
     assert.equal(m.by('worker-rail-frame')===dock,true);
     assert.equal(m.by('pitch-moved')===notice,true);

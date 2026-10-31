@@ -222,6 +222,8 @@ test('PD7: a text block\'s bar shows each cost, a press shows its cost first, an
     assert.ok(perRead > 0, 'the header read what waits');
     assert.ok(!m.by('pitch-assist-bar'), 'no bar until a block is selected');
     await m.press(m.by('pitch-editor-block-b1'));
+    assert.ok(!m.by('pitch-assist-bar'), 'D1604: selected, the bar waits for the area\'s Ask');
+    await m.press(m.by('pitch-editor-ask-area'));
     assert.ok(m.by('pitch-assist-bar'));
     assert.match(m.text(m.by('pitch-assist-rewrite-cost')), /up to \$0\.0012/, 'each tool shows its cost on the bar');
     assert.match(m.text(m.by('pitch-assist-shorten-cost')), /up to \$0\.0010/);
@@ -256,6 +258,7 @@ test('PD7: Change tone, Translate and Ask send their choice; Discard places noth
   });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
+    await m.press(m.by('pitch-editor-ask-area'));
     await m.type(m.by('pitch-assist-tone-choice'), 'formal');
     await m.press(m.by('pitch-assist-tone'));
     await m.press(m.by('pitch-assist-dialog-run'));
@@ -283,10 +286,12 @@ test('PD7: a bound figure takes no tool, a refused run shows its sentence, and a
   const m = await mount({ 'assist.run': async () => { throw fail; } });
   try {
     await m.press(m.by('pitch-editor-block-b2'));
-    assert.equal(m.pr(m.by('pitch-assist-rewrite')).disabled, true, 'no tool on a metric tile');
-    assert.match(m.text(m.by('pitch-assist-why')), /Figures come from your records\. Update Grow › Revenue to change this one\./);
+    await m.press(m.by('pitch-editor-ask-area'));
+    assert.ok(!m.by('pitch-assist-bar'), 'no tool on a metric tile');
+    assert.match(m.text(m.by('pitch-editor-ask-line')), /Figures come from your records\. Update Grow › Revenue to change this one\./);
     assert.equal(m.named('assist.quote').length, 0, 'a bound figure is not even quoted');
     await m.press(m.by('pitch-editor-block-b1'));
+    await m.press(m.by('pitch-editor-ask-area'));
     await m.press(m.by('pitch-assist-rewrite'));
     await m.press(m.by('pitch-assist-dialog-run'));
     assert.match(m.text(m.by('pitch-assist-dialog-refusal')), /named a figure your text did not/);
@@ -303,9 +308,13 @@ test('AI off: the bar is greyed with the sentence, and the records still fill', 
   const m = await mount({}, { aiOff: true });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
-    assert.ok(m.text(m.by('pitch-assist-off')).includes(AI_OFF_LINE));
-    for (const t of TEXT_TOOLS) assert.equal(m.pr(m.by(`pitch-assist-${t.action}`)).disabled, true, t.action);
+    // D1604: the area's Ask is off, titled why, and opens nothing.
+    assert.equal(m.pr(m.by('pitch-editor-ask-area'))['aria-disabled'], true);
+    assert.equal(m.pr(m.by('pitch-editor-ask-area')).title, 'AI is paused for your studio.');
+    await m.press(m.by('pitch-editor-ask-area'));
+    assert.ok(!m.by('pitch-assist-bar'), 'nothing opens');
     assert.equal(m.named('assist.quote').length, 0, 'nothing is quoted while it is off');
+    await m.press(m.by('pitch-editor-area-free:1-2'));
     await m.press(m.by('pitch-add-menu-open'));
     await m.press(m.by('pitch-add-chart'));
     assert.match(m.text(m.by('pitch-add-off')), /AI assistance is off on this page/);
@@ -314,9 +323,10 @@ test('AI off: the bar is greyed with the sentence, and the records still fill', 
 });
 
 // D903 (#2682): Image and Background open the image lightbox, as a content image and as a card background.
-test('the Add menu: Text opens Add a block, Image and Background open the image lightbox, Layout opens Design', async () => {
+test('the Add menu, on a selected empty range: Text opens Add a block, Image and Background open the image lightbox, Layout opens Structure', async () => {
   const m = await mount();
   try {
+    await m.press(m.by('pitch-editor-area-free:1-2'));
     await m.press(m.by('pitch-add-menu-open'));
     assert.deepEqual(['text', 'chart', 'image', 'background', 'connector', 'layout'].map((id) => Boolean(m.by(`pitch-add-${id}`))), [true, true, true, true, true, true]);
     await m.press(m.by('pitch-add-image'));
@@ -325,22 +335,25 @@ test('the Add menu: Text opens Add a block, Image and Background open the image 
   } finally { await m.unmount(); }
   const n = await mount();
   try {
+    await n.press(n.by('pitch-editor-area-free:1-2'));
     await n.press(n.by('pitch-add-menu-open'));
     await n.press(n.by('pitch-add-text'));
     assert.equal(n.pr(n.by('pitch-editor-kind-text'))['aria-checked'], true);
   } finally { await n.unmount(); }
   const o = await mount();
   try {
+    await o.press(o.by('pitch-editor-area-free:1-2'));
     await o.press(o.by('pitch-add-menu-open'));
     await o.press(o.by('pitch-add-background'));
     assert.equal(o.pr(o.by('pitch-image-use-card'))['aria-checked'], true, 'PD12b: set to Card background');
   } finally { await o.unmount(); }
   const p = await mount();
   try {
-    assert.equal(p.pr(p.by('pitch-editor-tab-design'))['aria-selected'], false);
+    assert.ok(!p.by('pitch-sheet-structure'));
+    await p.press(p.by('pitch-editor-area-free:1-2'));
     await p.press(p.by('pitch-add-menu-open'));
     await p.press(p.by('pitch-add-layout'));
-    assert.equal(p.pr(p.by('pitch-editor-tab-design'))['aria-selected'], true);
+    assert.ok(p.by('pitch-sheet-structure'), 'D1604: Layout opens ⋯ › Structure');
   } finally { await p.unmount(); }
 });
 
@@ -350,6 +363,7 @@ test('the Add menu\'s Chart: costs and the rail row first, then a block whose se
     'assist.run': async (id, card, body) => ({ proposal: { uid: 'c1' }, action: body.action, block: { kind: 'chart', chart_type: 'columns', series, range: 'all', previous: false, labels: true }, title: 'Synthetic growth', cost: { charged_microusd: 700 } }),
   });
   try {
+    await m.press(m.by('pitch-editor-area-free:1-2'));
     await m.press(m.by('pitch-add-menu-open'));
     await m.press(m.by('pitch-add-chart'));
     assert.match(m.text(m.by('pitch-add-chart-cost')), /up to \$0\.0008/);
@@ -373,6 +387,7 @@ test('PD9d: connectors with their last sync, figures by connector, a headline fr
     'assist.run': async (id, card, body) => ({ proposal: { uid: 'h1' }, action: body.action, before: '', after: 'Synthetic momentum, shipped weekly', cost: { charged_microusd: 400 } }),
   });
   try {
+    await m.press(m.by('pitch-editor-area-free:1-2'));
     await m.press(m.by('pitch-add-menu-open'));
     await m.press(m.by('pitch-add-connector'));
     assert.ok(m.by('pitch-connector'));
@@ -410,6 +425,8 @@ test('no tool writes a number: the components never build a value from a model\'
     assert.ok(src.includes('deckAssistApi.quote('), `${f} shows the cost first`);
     assert.ok(!/value:\s*r\./.test(src) && !/binding:\s*r\./.test(src), `${f} takes no value or binding from a run`);
   }
-  const editor = read('frontend/src/pages/raise/pitch/PitchEditor.jsx');
-  for (const f of ['AddMenu', 'CardAssistBar']) assert.ok(editor.includes(`import ${f} from './${f}';`), `PitchEditor mounts ${f}`);
+  // D1604: the editor's block tools (`BlockTools.jsx`) mount them, on a selection.
+  const tools = read('frontend/src/pages/raise/pitch/BlockTools.jsx');
+  for (const f of ['AddMenu', 'CardAssistBar']) assert.ok(tools.includes(`import ${f} from './${f}';`), `BlockTools mounts ${f}`);
+  assert.ok(read('frontend/src/pages/raise/pitch/PitchEditor.jsx').includes("import BlockTools, { SpeakerNotes } from './BlockTools';"));
 });
