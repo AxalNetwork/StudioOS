@@ -58,6 +58,10 @@ only its registry controls and routes require the elevation.
 
 D647 (#1441): `ContractsPage.jsx` is reachable at `/admin/contracts` in both shells, rendering the K1–K8 desk in `pages/admin/contracts/`. `ContractRegistry.jsx` retains D622 registry behavior and compatible exports. Plain admins do not load or render the document-type registry. The legacy Legal deep link redirects before console mounting; `moved=legal` shows its notice.
 
+#3708: `MeetingBotDiagnosePanel.jsx`, under the page's live check, starts the
+owner's staged diagnostic from a Meet or Zoom link and polls its table
+(stage, result, code, facts, fix) and the owner-only screenshot.
+
 D886 B10 (#2588): `MeetingBotsPage.jsx` is the Super Admin's counts-only meeting
 bot operations screen, linked from Platform. The existing HQ look is authorised
 by S1 on the issue. Bot/audio minutes, measured costs/charges, markup/gross

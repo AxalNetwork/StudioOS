@@ -173,6 +173,43 @@ period or keep-until-deleted and can delete sooner. Retention removes audio,
 not the transcript. Names and speaker timing belong to the session's cleanup.
 Already accepted research findings may remain after the source is deleted.
 
+## 4a. Staged diagnostic: where the bot stops (#3708)
+
+Before changing more code, find the stage that fails. HQ › Platform ›
+Meeting bots › **Diagnose Eadwyn AI** (`POST /api/admin/platform/meeting-bots/diagnose`,
+Super Admin, TOTP and a recent step-up) takes the link of a Google Meet or
+Zoom call **you host and are in**. It is not a meeting run: no session,
+consent, AI tokens, notice or recording. It works with `MEETING_BOT = "off"`.
+
+| # | Stage | Read by | Passes when | Typical failures |
+|---|---|---|---|---|
+| 1 | The site reaches the bot | Worker | `MEETING_BOT_CONTAINER` bound, `MEETING_BOT_SECRET` set, `APP_URL` https, the host's `/health` answers with its commit | `binding_missing`, `secret_missing`, `containers_disabled`, `binding_no_answer` |
+| 2 | Google or Zoom setup | Worker | Meet: the OAuth client, your Google connection and its scopes, the Meet REST API answering. Zoom: the Meeting SDK app, your Zoom connection, an OBF mint for this meeting | `oauth_client_missing`, `not_connected`, `meet_api_disabled` (Google's `SERVICE_DISABLED`), `meet_api_scope_missing`, `zoom_waiting_for_host`, `zoom_obf_scope_missing` |
+| 3 | The container starts | container host | the image boots and the runtime holds the signed command | `image_unavailable`, `container_start_failed`, `runtime_no_answer` (no boot in 20 s), `runtime_refused` (secrets differ) |
+| 4 | The browser launches | container | Chromium starts (Meet only) | `launch_failed` |
+| 5 | Egress | container | `meet.google.com` and `accounts.google.com` (Zoom: `zoom.us`, `api.zoom.us`) answer | `host_unreachable` |
+| 6 | Join attempt | container | the bot asked to join (lobby) or is in | `signin_wall`, `cannot_join` ("You can't join this video call"), `page_unread`, `page_unsupported`, `join_click_unanswered` |
+| 7 | Admission | container | you admit it within 3 minutes | `admission_timed_out`, `not_admitted` |
+| 8 | Audio | container | frames arrive within 20 s and one probe chunk uploads | `no_frames`, `upload_failed` |
+| 9 | Your last real run | Worker | its stored `failure_code` and D1368's `failure_detail` | `last_run_failed` |
+
+- **Where it stops** is the first failing row among 1 and 3–8. Rows 2 and 9 are
+  read beside it: Google's setup does not gate a guest join, and the consent
+  screen's verification state is not readable through an API (check it in
+  the Cloud console). The Workspace guest policy is answered by row 6.
+- **Zoom** joins through the native SDK with a run's own credentials, so its
+  container rows stop after egress; row 2's OBF mint and row 9's last Zoom
+  run (with D1381's detail) say where Zoom fails.
+- **Each failing row names its fix** (`DIAGNOSE_FIXES` in
+  `services/meetingBotDiagnose.ts`). A code with none says so.
+- **Privacy:** codes and counts only. The probe chunk is silence the length
+  of the first frames; the Worker keeps its size. The screenshot of the
+  stopping point is stored in `FILES` and shown only to the Super Admin who
+  started the check; never post it, the link or anything it shows on #1008.
+- **On #1008,** post the platform, the row it stops at and its code, and the
+  owner step its fix names. A container that goes quiet shows its rows as
+  `never_reported` after ten minutes.
+
 ## 5. Failure codes and operator response
 
 The merged runtime's `FailureCode` in `meeting-bot/src/types.ts` has seven

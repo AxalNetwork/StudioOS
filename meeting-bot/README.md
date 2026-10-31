@@ -44,6 +44,7 @@ folder's lockfile. No TypeScript compilation step is needed in the image.
 | `src/index.ts` | The public library exports. |
 | `src/runtime.ts` | One authenticated, idempotent run per container; start/stop acknowledge without waiting on callbacks. |
 | `src/runtimeAdapters.ts` | Packaged adapter factory: Chromium/Meet and Teams, plus the packaged Zoom sidecar with run-scoped credential bootstrap. |
+| `src/diagnose.ts` | #3708: the owner's staged diagnostic, inside the container: container, browser, egress, where the Meet page stops, admission, frames and one silent probe chunk; each stage a code, plus a screenshot of the stopping point. Never enters `runBot`: no notice, no recording. `runtimeAdapters.ts`'s `runtimeDiagnose` supplies Chromium and the Meet adapter. |
 | `src/entry.ts` | Private HTTP entry, bounded command bodies, fixed logs, SIGTERM/SIGINT shutdown and a hard 28-second exit bound. |
 | `Dockerfile`, `.dockerignore` | Linux image; its build runs the fake-adapter command smoke test before producing the runtime stage. |
 | `package.json`, `package-lock.json` | Pinned browser dependency and isolated runtime install. |

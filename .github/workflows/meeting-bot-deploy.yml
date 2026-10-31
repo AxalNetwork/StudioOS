@@ -44,5 +44,5 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: 'false'
         run: |
-          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env preview
-          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env ""
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env preview --var "MEETING_BOT_VERSION:${GITHUB_SHA}"
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env "" --var "MEETING_BOT_VERSION:${GITHUB_SHA}"

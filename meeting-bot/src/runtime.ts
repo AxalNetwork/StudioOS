@@ -14,7 +14,10 @@ export interface RuntimeOptions {
   /** Tests inject the publication decision and the callback, never an env bypass. */
   notice?: (ventureName?:string)=>string;
   transport?: (uid:string)=>CallbackTransport;
+  /** #3708: the owner's staged diagnostic; absent, `/diagnose` is not served. */
+  diagnose?: (platform: Platform, meetingUrl: string, context: RuntimeDiagnoseContext)=>Promise<void>;
 }
+export interface RuntimeDiagnoseContext {uid:string;secret:string;callbackOrigin:string;stop:AbortSignal}
 export interface RuntimeAdapterContext {uid:string;secret:string;callbackOrigin:string;transport:CallbackTransport}
 const reply=(body:object,status=200)=>Response.json(body,{status});
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
@@ -31,7 +34,7 @@ export class RuntimeHost {
   async fetch(request:Request):Promise<Response>{
     const path=new URL(request.url).pathname,now=this.options.now?.()??Date.now();
     if(request.method==='GET'&&path==='/healthz')return reply({ready:MEETING_BOT_NOTICE_PUBLISHED});
-    if(request.method!=='POST'||!['/start','/stop'].includes(path))return reply({code:'not_found'},404);
+    if(request.method!=='POST'||!['/start','/stop','/diagnose'].includes(path))return reply({code:'not_found'},404);
     let raw='';
     try{
       const reader=request.body?.getReader(),decoder=new TextDecoder();let size=0;
@@ -52,6 +55,16 @@ export class RuntimeHost {
     if(this.shutdownController.signal.aborted)return reply({code:'runtime_stopping'},503);
     const fingerprint=createHash('sha256').update(raw).digest('hex');
     if(this.active)return this.active.uid===command.uid&&this.active.fingerprint===fingerprint?reply({accepted:true}):reply({code:'runtime_busy'},409);
+    if(path==='/diagnose'){
+      const diagnose=this.options.diagnose;
+      if(!diagnose)return reply({code:'not_found'},404);
+      if(!['zoom','google_meet'].includes(command.platform)||typeof command.meeting_url!=='string'||command.meeting_url.length>2048)return reply({code:'invalid_command'},400);
+      const stop=new AbortController(),active={uid:command.uid,fingerprint,stop,done:Promise.resolve(),ended:false};this.active=active;
+      // A diagnostic records nothing and sends no notice: it never enters runBot.
+      active.done=Promise.resolve().then(()=>diagnose(command.platform,command.meeting_url,{uid:command.uid,secret:this.options.secret,callbackOrigin:this.options.callbackOrigin,stop:AbortSignal.any([stop.signal,this.shutdownController.signal])}))
+        .catch(()=>logLine(this.options.log??(()=>{}),'diagnose_failed')).finally(()=>{active.ended=true;});
+      return reply({accepted:true,mode:'diagnose'},202);
+    }
     if(!['zoom','google_meet','teams'].includes(command.platform)||![30,120].includes(command.limit_minutes)
       ||typeof command.meeting_url!=='string'||command.meeting_url.length>2048)return reply({code:'invalid_command'},400);
     let cfg:RunConfig;

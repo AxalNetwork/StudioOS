@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminMeetingBotsApi } from '../../lib/api/adminMeetingBots';
 import { Card } from '../../ui';
+import MeetingBotDiagnosePanel from './MeetingBotDiagnosePanel';
 
 const platforms = { zoom: 'Zoom', google_meet: 'Google Meet', teams: 'Microsoft Teams' };
 const number = (n) => n == null ? 'Not recorded' : new Intl.NumberFormat('en', { maximumFractionDigits: 2 }).format(n);
@@ -88,5 +89,6 @@ export default function MeetingBotsPage() {
       {error && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300">{error}</p>}
       {live && <div className="mt-4 rounded-lg border border-axal-hairline p-3"><h3 className="text-sm font-bold">{platforms[live.platform]} · {label(live.status)}</h3>{live.failure_code && <p className="mt-1 text-xs text-axal-muted dark:text-gray-300">{label(live.failure_code)}</p>}<ol className="mt-3 space-y-2 text-sm">{live.stages.map((s,i) => <li key={`${s.stage}:${i}`} className="flex flex-wrap justify-between gap-2"><span className="capitalize">{label(s.stage)}</span><span className="text-xs tabular-nums text-axal-muted dark:text-gray-300">Reached +{number(s.elapsed_ms / 1000)}s · {s.duration_ms == null ? 'complete' : `${number(s.duration_ms / 1000)}s in stage`}</span></li>)}</ol><p className="mt-3 text-xs text-axal-faint dark:text-gray-400">{live.timing_basis}</p><p className="mt-2 text-xs text-axal-faint dark:text-gray-400">Stop the bot from the session’s bot controls.</p></div>}
     </Card>
+    <MeetingBotDiagnosePanel />
   </div>;
 }

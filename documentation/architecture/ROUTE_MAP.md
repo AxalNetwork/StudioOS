@@ -1779,6 +1779,13 @@ address is returned. These links remain usable when `MAIL_LINK_SECRET` is unset.
 - `MeetingBotRun` controls transitions, alarms, runtime leases and ledger blocks.
   Interface implementation only; no live runtime or public switch enabled by B1.
   B7 owns the UI. D886 §12 is the request/response contract.
+- POST `/api/meeting-bots/diagnostics/:id/{report,screenshot,probe}`:
+  `meeting_bot_callbacks.ts`; #3708's diagnostic callbacks, signed with the
+  diagnostic's own derived key (`services/meetingBotDiagnose.ts`).
+- POST `/api/admin/platform/meeting-bots/diagnose`, GET `…/diagnose/:id`,
+  GET `…/diagnose/:id/screenshot`: `admin_platform.ts`; #3708's owner-run
+  staged diagnostic. Super Admin only, the start behind TOTP and recent
+  step-up; a diagnostic and its screenshot are read only by who started it.
 
 D886 B7 (#2585): Record a Session dispatches through the bot member routes, and
 its session page polls status/Stop plus GET `…/sessions/:id/bot/participants`
