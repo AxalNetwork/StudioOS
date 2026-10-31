@@ -631,3 +631,5 @@ is not an empty source. Studio reads each allowed source once for active members
 deployment, excluding private Calendly/wellbeing items, with read-only
 projections; All studios requires HQ Super Admin and explicitly reports unread
 remote coverage. Neither reader is used by sync or exports (D1206).
+
+D1421 (#3699): `studioModules.ts` is the one registry of Studio blocks (`STUDIO_MODULES`), each profile's default layout (`STUDIO_DEFAULTS`), whose Studio a caller arranges (`studioProfile`) and each module's plan lock (`lockOf`). The lock reads the paywall prefixes in `../middleware/paywallPrefixes.ts` and the existing gate functions; no tier is written in the registry.

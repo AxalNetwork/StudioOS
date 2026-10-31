@@ -116,7 +116,9 @@ function makeEnv(user: any, stubs: Array<{ match: (s: string, b: any[]) => boole
 
 test('index.ts mounts requireInvestorTier(professional) on /api/ic', async () => {
   const src = await readFile(resolve(__dirname, '../src/index.ts'), 'utf8');
-  assert.match(src, /INVESTOR_PRO_PREFIXES\s*=\s*\[[\s\S]*?'\/api\/ic'/,
+  // D1421: the arrays live in middleware/paywallPrefixes.ts; index.ts imports and mounts them.
+  const prefixes = await readFile(resolve(__dirname, '../src/middleware/paywallPrefixes.ts'), 'utf8');
+  assert.match(prefixes, /INVESTOR_PRO_PREFIXES[^=]*=\s*\[[\s\S]*?'\/api\/ic'/,
     '/api/ic must be in INVESTOR_PRO_PREFIXES');
   // This matched any `requireInvestorTier('professional')` in the file, and
   // the one it found was the Market-Intel export gate (retired by D670). The
@@ -127,23 +129,24 @@ test('index.ts mounts requireInvestorTier(professional) on /api/ic', async () =>
 
 test('index.ts mounts STUDIO_PREFIXES with /api/lp-reports and /api/positions', async () => {
   const src = await readFile(resolve(__dirname, '../src/index.ts'), 'utf8');
-  assert.match(src, /STUDIO_PREFIXES\s*=\s*\[[\s\S]*?'\/api\/lp-reports'/,
+  const prefixes = await readFile(resolve(__dirname, '../src/middleware/paywallPrefixes.ts'), 'utf8');
+  assert.match(prefixes, /STUDIO_PREFIXES[^=]*=\s*\[[\s\S]*?'\/api\/lp-reports'/,
     '/api/lp-reports must be in STUDIO_PREFIXES');
-  assert.match(src, /STUDIO_PREFIXES\s*=\s*\[[\s\S]*?'\/api\/positions'/,
+  assert.match(prefixes, /STUDIO_PREFIXES[^=]*=\s*\[[\s\S]*?'\/api\/positions'/,
     '/api/positions must be in STUDIO_PREFIXES');
   assert.match(src, /requireTier\('studio'\)/,
     'STUDIO_PREFIXES loop must apply requireTier(studio)');
 });
 
 test('index.ts mounts portfolio-updates outside any prefix gate (dual-audience)', async () => {
-  const src = await readFile(resolve(__dirname, '../src/index.ts'), 'utf8');
+  const src = await readFile(resolve(__dirname, '../src/middleware/paywallPrefixes.ts'), 'utf8');
   // It must NOT appear in STUDIO_PREFIXES or INVESTOR_PRO_PREFIXES.
-  const studioMatch = src.match(/STUDIO_PREFIXES\s*=\s*\[[\s\S]*?\]/);
+  const studioMatch = src.match(/STUDIO_PREFIXES[^=]*=\s*\[[\s\S]*?\];/);
   assert.ok(studioMatch, 'STUDIO_PREFIXES array missing');
   assert.ok(!studioMatch![0].includes('/api/portfolio-updates'),
     '/api/portfolio-updates must NOT be in STUDIO_PREFIXES');
 
-  const proMatch = src.match(/INVESTOR_PRO_PREFIXES\s*=\s*\[[\s\S]*?\]/);
+  const proMatch = src.match(/INVESTOR_PRO_PREFIXES[^=]*=\s*\[[\s\S]*?\];/);
   assert.ok(proMatch, 'INVESTOR_PRO_PREFIXES array missing');
   assert.ok(!proMatch![0].includes('/api/portfolio-updates'),
     '/api/portfolio-updates must NOT be in INVESTOR_PRO_PREFIXES');
