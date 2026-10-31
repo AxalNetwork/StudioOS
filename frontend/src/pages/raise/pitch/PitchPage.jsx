@@ -24,7 +24,7 @@ export function PitchCrumb({ trail = null, query }) {
         </nav>
         <Link to={trail ? studio : raise} className="inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet dark:text-violet-300 sm:hidden" data-testid="pitch-back">‹ {trail ? 'Pitch deck' : 'Raise'}</Link>
       </div>
-      <EadwynButton label={trail ? `Pitch deck · ${trail}` : 'Pitch deck'} className="shrink-0 lg:hidden" />
+      <div className="shrink-0 lg:hidden"><EadwynButton label={trail ? `Pitch deck · ${trail}` : 'Pitch deck'} /></div>
     </div>
   );
 }

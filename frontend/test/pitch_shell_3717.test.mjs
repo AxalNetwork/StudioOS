@@ -53,7 +53,7 @@ async function mount(Component,url,over={}) {
   const walk=n=>[n,...(n.childNodes||[]).flatMap(walk)];
   const pr=n=>Object.entries(n||{}).find(([key])=>key.startsWith('__reactProps$'))?.[1]||{};
   const text=n=>(!n?'':n.nodeType===3?n.textContent||'':n.childNodes?.length?n.childNodes.map(text).join(' '):n.textContent||'').replace(/\s+/g,' ').trim();
-  return {container,walk,pr,text,by:id=>walk(container).find(n=>pr(n)['data-testid']===id),
+  return {container,walk,pr,text,settle,by:id=>walk(container).find(n=>pr(n)['data-testid']===id),
     async close(){await act(async()=>root.unmount());restore();globalThis.fetch=fetchBefore;for(const [key,value]of Object.entries(groups))Object.assign(value,originals[key]);}};
 }
 
@@ -88,7 +88,7 @@ test('the common frame is outermost, with the cycle gutter and responsive back p
   assert.ok(out.includes(CYCLE_GUTTER));
   assert.match(read('pages/cycles/CycleRoute.jsx'),/className=\{CYCLE_GUTTER\}/);
   assert.match(read('pages/raise/pitch/PitchPage.jsx'),/\$\{CYCLE_GUTTER\}/);
-  assert.match(read('pages/raise/pitch/PitchPage.jsx'),/EadwynButton[^>]*lg:hidden/);
+  assert.match(read('pages/raise/pitch/PitchPage.jsx'),/className="shrink-0 lg:hidden">\s*<EadwynButton/);
 });
 
 test('studio, New deck and editor render one crumb, no nested founder frame, and one rail',async()=>{
@@ -133,4 +133,24 @@ test('studio, New deck and editor render one crumb, no nested founder frame, and
       }
     } finally {await m.close();}
   }
+});
+
+
+test('editor keeps the same frame, dock and moved notice when its deck finishes loading',async()=>{
+  let resolveDeck;
+  const pending=new Promise(resolve=>{resolveDeck=resolve;});
+  const m=await mount(PitchEditor,'/raise/pitch/edit?project_id=7&moved=pitch-workspace',{deckGet:()=>pending});
+  try {
+    const frame=m.by('pitch-editor'),dock=m.by('worker-rail-frame'),notice=m.by('pitch-moved');
+    assert.ok(m.by('pitch-editor-loading'));
+    assert.ok(dock);
+    assert.ok(notice);
+    await act(async()=>{resolveDeck(DECK);});
+    await m.settle();
+    assert.ok(m.by('pitch-editor-bar'));
+    assert.equal(m.by('pitch-editor')===frame,true);
+    assert.equal(m.by('worker-rail-frame')===dock,true);
+    assert.equal(m.by('pitch-moved')===notice,true);
+    assert.match(m.text(m.by('pitch-crumb')),/Synthetic venture · v3/);
+  } finally {await m.close();}
 });

@@ -122,6 +122,7 @@ export default function PitchEditor() {
   const phone = usePhoneWidth();
   const [params, setParams] = useSearchParams();
   const requested = params.get('project_id');
+  const [reportedTitle, setReportedTitle] = useState(null);
 
   const projects = useRead('ventures', () => api.listProjects(), []);
   const list = asList(projects.data, 'items', 'projects');
@@ -142,7 +143,10 @@ export default function PitchEditor() {
   // D898 group C: the dated series a chart plots (PD9–PD9c).
   const charts = useRead(projectId, () => deckEditorApi.chartSeries(projectId), []);
 
-  const shell = { query: ventureQuery(projectId || requested), title: 'Your venture' };
+  const title = reportedTitle?.deckId === deck.data?.id && reportedTitle?.projectId === projectId
+    ? reportedTitle.title
+    : deck.data ? `${String(project?.name || '').trim() || 'Your venture'} · v${deck.data.version ?? '?'}` : 'Your venture';
+  const shell = { query: ventureQuery(projectId || requested), title };
 
   if (projects.status === 'error') return <Shell {...shell}><ReadFailed text="Your ventures could not be read." onRetry={projects.retry} testId="pitch-editor-ventures-error" /></Shell>;
   if (projects.status === 'ok' && !project) return <Shell {...shell}><div className={`${CARD} p-5 ${MUTED}`}>Start a venture first, then build its deck.</div></Shell>;
@@ -163,20 +167,22 @@ export default function PitchEditor() {
   if (deck.status !== 'ok' || model.status !== 'ok') return <Shell {...shell}><EditorSkeleton /></Shell>;
 
   return (
-    <Editor
-      key={deck.data.id}
-      project={project}
-      deck={deck.data}
-      model={model.data}
-      kit={kit}
-      refresh={refresh}
-      sources={sources}
-      charts={charts}
-      readOnly={readOnly}
-      phone={phone}
-      query={shell.query}
-      onSaved={() => versions.retry()}
-    />
+    <Shell {...shell}>
+      <Editor
+        key={deck.data.id}
+        project={project}
+        deck={deck.data}
+        model={model.data}
+        kit={kit}
+        refresh={refresh}
+        sources={sources}
+        charts={charts}
+        readOnly={readOnly}
+        phone={phone}
+        onTitle={setReportedTitle}
+        onSaved={() => versions.retry()}
+      />
+    </Shell>
   );
 }
 
@@ -215,7 +221,7 @@ export function sourcesCard(model, lines) {
   return text ? updateBlock(card, text.id, { style: 'list', text: lines.join('\n') }) : { ...card, notes: lines.join('\n') };
 }
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly, phone, query, onSaved }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly, phone, onTitle, onSaved }) {
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
   const [cards, setCards] = useState(base.cards);
   const [theme, setTheme] = useState(base.theme);
@@ -253,10 +259,11 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
   };
 
   const title = `${String(project?.name || '').trim() || 'Your venture'} · v${base.deck.version ?? '?'}`;
+  useEffect(() => { onTitle({ deckId: deck.id, projectId: project?.id, title }); }, [deck.id, project?.id, title, onTitle]);
   const state = saveState({ dirty, savedAt: base.deck.created_at, readOnly, version: base.deck.version });
 
   return (
-    <Shell query={query} title={title}>
+    <>
       <div className={`${CARD} flex flex-wrap items-center justify-between gap-3 px-4 py-3`} data-testid="pitch-editor-bar">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className={`truncate text-[15px] font-extrabold ${INK}`}>{title}</span>
@@ -413,7 +420,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
         <AddBlockDialog card={card} model={model} sources={sources} initialKind={dialog.initial} onClose={() => setDialog(null)}
           onAdd={(c) => { setCard(sel, c); setDialog(null); }} />
       ) : null}
-    </Shell>
+    </>
   );
 }
 
