@@ -128,7 +128,12 @@ came from the prompt on #3727:
 `Team Agents Page`), so the grid resolves its sibling. No other value was
 edited.
 
-**Grade: set when #3727 is triaged.**
+**Grade: UPGRADE for people, NEW for agents (D1497).** The Team page is built
+at four routes (`frontend/src/routes/team.jsx`) with people, invitations and
+Move under or out of a company wired; agents, rule books, approvals and agent
+settings draw their unavailable state through `frontend/src/pages/team/agentsAdapter.js`
+until #3840–#3844 land. Both files stay here: the bar is the bodies, and the
+agent bodies are outstanding. No file moved, so no count changed.
 
 ## Landed 2026-10-27 — Validate › Record a session › the ring visualiser (D1330)
 

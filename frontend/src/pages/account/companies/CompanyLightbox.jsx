@@ -4,6 +4,7 @@ import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import Sheet from '../../../ui/Sheet.jsx';
 import { api } from '../../../lib/api';
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { companyTeamPath } from '../../../lib/settingsScope.js';
 import {
   ACTIVE_HERE, companyPowers, companySettingsPathFor, day, memberLine, projectGroups, sentInvitationLine, stageWord,
 } from './companiesModel';
@@ -93,6 +94,7 @@ export default function CompanyLightbox({
       <span className={`text-[12px] ${MUTED}`}>
         {active ? <Link className={LINK} to={companySettingsPathFor(uid)} data-testid="company-full-settings">Full company settings ›</Link> : 'Full company settings open for the active company.'}
         {' '}The profile and team editors keep their own page.
+        {' '}<Link className={LINK} to={companyTeamPath(uid)} data-testid="company-team">Team ›</Link>
       </span>
       <span className="flex flex-wrap gap-2">
         {powers.primary && !powers.archived ? <button type="button" className={SMALL} onClick={() => setDialog('transfer')} data-testid="company-transfer">Transfer primary admin</button> : null}

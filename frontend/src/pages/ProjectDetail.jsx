@@ -12,6 +12,8 @@ import { getPitchCopyLengthStatus } from '../lib/pitchCopyLength';
 import { StatusBadge } from '../components/StatusBadges';
 import VentureRiskPanel from '../components/VentureRiskPanel';
 import CompetitorAnalysis from '../components/CompetitorAnalysis';
+import { useActiveCompany } from '../contexts/ActiveCompanyContext';
+import { projectCompany, scopeFor, usePublishScope } from '../lib/settingsScope.js';
 
 const weekLabels = {
   week_1: { name: 'Week 1 — Validation Sprint', tasks: ['Define problem + ICP', 'Run user interviews', 'Validate willingness to pay', 'Draft 1-page concept'] },
@@ -42,6 +44,12 @@ export default function ProjectDetail() {
   // Task #1 — caller's membership permissions ({ can_edit, can_manage, my_role }).
   // 403 (e.g. investors) resolves to null → no edit rights.
   const [perm, setPerm] = useState(null);
+  // D1497 (#3727, owner rule): the sidebar's bottom block names this project's
+  // own scope: "Project settings" when it is standalone, its company's
+  // "Company settings" when it sits under one; never the device's active
+  // company for a project that is not under it. Published once the project is read.
+  const { companies } = useActiveCompany();
+  usePublishScope(project && project.id != null ? scopeFor({ project: { id: project.id, name: project.name, company: projectCompany(project, { companies }) } }) : null);
 
   const load = () => {
     setLoadError('');
@@ -1161,6 +1169,8 @@ function ProjectMembersSection({ projectId, onError }) {
       <div className="mb-3 flex items-center gap-2">
         <Users size={16} className="text-gray-500 dark:text-gray-400" />
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Team</h3>
+        {/* D1497 (#3727): the full Team page; it forwards to the company form when the project sits under one. */}
+        <Link to={`/projects/${encodeURIComponent(projectId)}/settings/team`} className="ml-auto text-xs font-semibold text-violet-700 hover:underline dark:text-violet-300" data-testid="project-team-link">Team ›</Link>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
         Co-founders can read &amp; edit startup data; advisors have read-only access.
