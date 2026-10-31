@@ -18,6 +18,13 @@
  *
  * A failed area is unknown, never an invented empty store; the other areas
  * still resolve, and no total is shown. A missing size is unknown, never 0.
+ *
+ * D1411 (#3894) — ARTICLES. An article's objects (body uploads, generated
+ * images, covers) live under `articles/<id>/` in R2 and count to the article's
+ * author (`articles.author_user_id`), whoever pressed or uploaded. No row
+ * records their sizes, so this one area is read from R2: one `list` of each of
+ * the member's articles' prefixes, cached for a minute per article in the
+ * isolate and forgotten by the routes that write there (`forgetArticleStorage`).
  */
 import type { Env, User } from '../types';
 import { storagePlan, storagePlanKey } from './storagePlans';
@@ -25,7 +32,7 @@ import { storagePlan, storagePlanKey } from './storagePlans';
 export type StorageAreaKey =
   | 'data_room' | 'diligence_files' | 'research_library' | 'interview_recordings'
   | 'data_room_versions' | 'session_audio' | 'deck_reviews' | 'validate_evidence' | 'build_proofs'
-  | 'grow_minutes' | 'brand_files' | 'csv_imports';
+  | 'grow_minutes' | 'brand_files' | 'csv_imports' | 'articles';
 export type StorageKindKey = 'data_room' | 'documents' | 'recordings' | 'decks_exports' | 'brand' | 'other';
 export type StorageState = 'ok' | 'near_80' | 'near_95' | 'full' | 'over' | 'no_allowance';
 export type StorageArea = {
@@ -318,6 +325,105 @@ async function readArea(db: D1Database, def: Def, userId: number, ventures: Vent
   }
 }
 
+/**
+ * D1411 — the `articles` area, from R2. Bounded: only the member's own
+ * articles (at most `ARTICLE_AREA_MAX`), each prefix at most
+ * `ARTICLE_LIST_PAGES` pages. Past either bound, or without the bucket, or on
+ * any failed list, the area is unknown, never an invented empty store.
+ */
+export const ARTICLE_AREA_MAX = 200;
+const ARTICLE_LIST_PAGES = 10;
+const ARTICLE_CACHE_MS = 60_000;
+type ArticleObject = { size: number; uploaded: string | null };
+const articleObjects = new Map<number, { at: number; objects: ArticleObject[] }>();
+
+/** Called by every route that writes or deletes under `articles/<id>/`, so this isolate reads it afresh. */
+export function forgetArticleStorage(articleId: number): void {
+  articleObjects.delete(Number(articleId));
+}
+
+/** One article's stored objects, under its own prefix only. */
+async function listArticle(bucket: R2Bucket, articleId: number): Promise<ArticleObject[]> {
+  const hit = articleObjects.get(articleId);
+  if (hit && Date.now() - hit.at < ARTICLE_CACHE_MS) return hit.objects;
+  const objects: ArticleObject[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < ARTICLE_LIST_PAGES; page++) {
+    const res = await bucket.list({ prefix: `articles/${articleId}/`, cursor, limit: 1000 });
+    for (const o of res.objects) {
+      if (!count(o.size)) throw new Error(UNREADABLE);
+      objects.push({ size: o.size, uploaded: o.uploaded ? new Date(o.uploaded).toISOString() : null });
+    }
+    if (!res.truncated) {
+      articleObjects.set(articleId, { at: Date.now(), objects });
+      return objects;
+    }
+    cursor = (res as { cursor?: string }).cursor;
+  }
+  throw new Error(UNREADABLE);
+}
+
+async function readArticleArea(env: Env, userId: number, withLargest = true): Promise<AreaRead> {
+  const blank: StorageArea = { key: 'articles', kind: 'other', files: null, bytes: null, measured_bytes: null, unknown_size_files: null, recorded: false };
+  try {
+    const rows = await env.DB.prepare('SELECT id, title FROM articles WHERE author_user_id = ? ORDER BY id LIMIT ?')
+      .bind(userId, ARTICLE_AREA_MAX + 1).all<{ id: number; title: string | null }>();
+    if (rows.success !== true || !Array.isArray(rows.results) || rows.results.length > ARTICLE_AREA_MAX) throw new Error(UNREADABLE);
+    if (rows.results.length && !env.FILES) throw new Error(UNREADABLE);
+    for (const a of rows.results) if (!id(a.id) || !text(a.title)) throw new Error(UNREADABLE);
+    const lists = await Promise.all(rows.results.map((a) => listArticle(env.FILES!, a.id)));
+    let files = 0, bytes = 0;
+    const top: Largest[] = [];
+    rows.results.forEach((a, i) => {
+      for (const o of lists[i]) {
+        files += 1; bytes += o.size;
+        if (withLargest) top.push({ area: 'articles', kind: 'other', name: a.title, version: null, bytes: o.size, added_at: o.uploaded, project_id: null, ref: String(a.id) });
+      }
+    });
+    if (!count(bytes)) throw new Error(UNREADABLE);
+    const area: StorageArea = { key: 'articles', kind: 'other', files, bytes, measured_bytes: bytes, unknown_size_files: 0, recorded: true };
+    const largest = withLargest ? top.sort((x, y) => y.bytes - x.bytes).slice(0, 10) : null;
+    return { area, groups: files ? [{ project_id: null, files, bytes, unknown: 0 }] : [], largest };
+  } catch {
+    return { area: blank, groups: [], largest: null };
+  }
+}
+
+/**
+ * D1411 — every author's article bytes at once, for HQ's totals: one list of
+ * the whole `articles/` prefix (at most `ARTICLE_OWNER_PAGES` pages), each
+ * object counted to its article's author. Null when it cannot be read.
+ */
+const ARTICLE_OWNER_PAGES = 100;
+async function readArticleOwners(env: Env): Promise<Array<{ user_id: number; files: number; bytes: number }> | null> {
+  try {
+    const rows = await env.DB.prepare('SELECT id, author_user_id FROM articles WHERE author_user_id IS NOT NULL')
+      .all<{ id: number; author_user_id: number }>();
+    if (rows.success !== true || !Array.isArray(rows.results)) return null;
+    if (!rows.results.length) return [];
+    if (!env.FILES) return null;
+    const author = new Map(rows.results.map((r) => [Number(r.id), Number(r.author_user_id)]));
+    const totals = new Map<number, { user_id: number; files: number; bytes: number }>();
+    let cursor: string | undefined;
+    for (let page = 0; page < ARTICLE_OWNER_PAGES; page++) {
+      const res = await env.FILES.list({ prefix: 'articles/', cursor, limit: 1000 });
+      for (const o of res.objects) {
+        if (!count(o.size)) return null;
+        const who = author.get(Number(o.key.match(/^articles\/(\d+)\//)?.[1]));
+        if (!who || !id(who)) continue; // an object of no article on record counts to no one
+        const t = totals.get(who) ?? { user_id: who, files: 0, bytes: 0 };
+        t.files += 1; t.bytes += o.size;
+        totals.set(who, t);
+      }
+      if (!res.truncated) return [...totals.values()];
+      cursor = (res as { cursor?: string }).cursor;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function readVentures(db: D1Database, userId: number): Promise<Venture[] | null> {
   try {
     const rows = await db.prepare(OWNED).bind(userId).all<Venture>();
@@ -412,7 +518,7 @@ export async function readStorageUsage(env: Env, user: User) {
   const db = env.DB;
   const ventures = await readVentures(db, user.id);
   const [reads, plan] = await Promise.all([
-    Promise.all(AREAS.map((def) => readArea(db, def, user.id, ventures))),
+    Promise.all([...AREAS.map((def) => readArea(db, def, user.id, ventures)), readArticleArea(env, user.id)]),
     readPlan(env, user),
   ]);
   const areas = reads.map((r) => r.area);
@@ -455,7 +561,7 @@ export async function readStorageUsage(env: Env, user: User) {
 export async function storageUsedBytes(env: Env, userId: number): Promise<{ measured_bytes: number; unknown_size_files: number } | null> {
   const ventures = await readVentures(env.DB, userId);
   if (ventures === null) return null;
-  const reads = await Promise.all(AREAS.map((def) => readArea(env.DB, def, userId, ventures, false)));
+  const reads = await Promise.all([...AREAS.map((def) => readArea(env.DB, def, userId, ventures, false)), readArticleArea(env, userId, false)]);
   const total = sum(reads.map((r) => r.area));
   if (total.measured_bytes === null || total.unknown_size_files === null) return null;
   return { measured_bytes: total.measured_bytes, unknown_size_files: total.unknown_size_files };
@@ -486,6 +592,9 @@ export async function readStorageByOwner(env: Env): Promise<{ owners: Map<number
       return { def, rows: null };
     }
   }));
+  // D1411 — the articles area, from R2, attributed to each article's author.
+  const articleRows = await readArticleOwners(env);
+  reads.push({ def: { key: 'articles', kind: 'other' } as Def, rows: articleRows && articleRows.map((r) => ({ ...r, unknown_size_files: 0 })) });
   for (const { def, rows } of reads) {
     if (rows === null) { unreadable.push(def.key); continue; }
     for (const r of rows) {
