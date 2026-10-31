@@ -58,6 +58,10 @@ call runs at boot.
   Admin adds it per Axal organization, kept in its own store and synced
   read-only by `cloudflare-worker/src/services/mercury/`, behind
   `cloudflare-worker/src/routes/admin_mercury.ts`.
+- D1385 (#3731) — `posthog.ts` is a founder's own PostHog, read only, in
+  Notion's shape: `connect` refuses a support session and a paste (Sign in
+  with PostHog only), `disconnect` revokes at PostHog, best effort, and
+  every read is `cloudflare-worker/src/services/posthog/reads.ts`.
 - D1085 (#2950) — `notion.ts` is a founder's own Notion, read-only, through
   Notion's MCP server. It registers `connect` (a support session is refused;
   a token paste is refused: Sign in with Notion only), `disconnect` (the grant
