@@ -52,7 +52,9 @@ export type ItemOutcome = { ok: true; item: ReadItem } | { ok: false; status: 40
 /** Where to look for the item: around its own start for the two kinds this page writes, else wide. */
 async function windowOf(env: Env, kind: CalendarEvent['kind'], id: number): Promise<{ from: string; to: string } | null> {
   const lookup = kind === 'ic_meeting' ? 'SELECT start_at FROM ic_meetings WHERE id = ?'
-    : kind === 'founder_checkin' ? 'SELECT start_at FROM founder_checkins WHERE id = ?' : null;
+    : kind === 'founder_checkin' ? 'SELECT start_at FROM founder_checkins WHERE id = ?'
+    // D1384: a deadline is found on its own day, however far off.
+    : kind === 'compliance_due' ? 'SELECT date(due_date) AS start_at FROM compliance_events WHERE id = ?' : null;
   if (!lookup) {
     const now = Date.now();
     return { from: new Date(now - WIDE_DAYS * DAY_MS).toISOString(), to: new Date(now + WIDE_DAYS * DAY_MS).toISOString() };
@@ -98,7 +100,9 @@ async function peopleOf(env: Env, userId: number, ev: CalendarEvent): Promise<{ 
 }
 
 /** `GET /calendar/item/:kind/:id`: the reader's own item, or why not. */
-export async function readItem(env: Env, user: { id: number; role: string }, kindRaw: string, idRaw: string): Promise<ItemOutcome> {
+export async function readItem(
+  env: Env, user: { id: number; role: string }, kindRaw: string, idRaw: string, companyId?: number | null,
+): Promise<ItemOutcome> {
   const kind = kindRaw as CalendarEvent['kind'];
   const id = Number(idRaw);
   if (!(KNOWN_KINDS as readonly string[]).includes(kindRaw) || !Number.isSafeInteger(id) || id <= 0) {
@@ -108,7 +112,7 @@ export async function readItem(env: Env, user: { id: number; role: string }, kin
   const span = await windowOf(env, kind, id);
   if (!span) return missing;
   const { events, sources } = await fetchUserEventsWithSources(
-    env, user.id, String(user.role || '').toLowerCase(), span.from, span.to, [kind], { withCancelled: true },
+    env, user.id, String(user.role || '').toLowerCase(), span.from, span.to, [kind], { withCancelled: true, ...(companyId !== undefined ? { companyId } : {}) },
   );
   if (sources.some((s) => s.ok === false)) {
     return { ok: false, status: 503, error: 'unreadable', detail: 'This item could not be read. Try again.' };

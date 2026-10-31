@@ -14,7 +14,8 @@ import type { Env } from '../../types';
 import type { CalendarEvent } from '../calendar';
 
 /** The canvas's five families (D1205's `FAMILIES`), by kind. */
-export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], 'events' | 'meetings' | 'sessions' | 'other'>> = {
+export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'other';
+export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   event_ticket: 'events',
   event_hosted: 'events',
   ic_meeting: 'meetings',
@@ -24,6 +25,8 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], 'events' | 'meeti
   partner_office_hour: 'sessions',
   expert_booking: 'sessions',
   calendly_event: 'other',
+  // D1384: the Compliance layer.
+  compliance_due: 'deadlines',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -41,6 +44,7 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   ticket_holder: 'Ticket holder',
   hosting: 'Host',
   from_calendly: 'From Calendly',
+  venture_deadline: 'Your venture’s deadline',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -50,10 +54,11 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   event_hosted: 'hosting',
   investor_meeting: 'organiser',
   calendly_event: 'from_calendly',
+  compliance_due: 'venture_deadline',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
-  family: 'events' | 'meetings' | 'sessions' | 'other';
+  family: ItemFamily;
   my_role: { code: string; words: string };
   can: { rsvp: boolean; reschedule: boolean; cancel: boolean; copy: boolean };
   all_day: boolean;

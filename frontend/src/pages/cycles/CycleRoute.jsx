@@ -328,7 +328,7 @@ const CYCLE_DEFS = {
     tools: toFnMap({
       'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
       'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
-      'durable-company-building': () => ({ label: 'Open the compliance calendar', href: '/compliance' }),
+      'durable-company-building': () => ({ label: 'Open compliance in Calendar', href: '/calendar?layer=compliance' }),
     }),
     add: toFnMap({}),
     fills: { 'product-improvement': 'feedback_theme' },
