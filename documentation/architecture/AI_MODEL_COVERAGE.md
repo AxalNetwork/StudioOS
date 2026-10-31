@@ -60,14 +60,14 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/huggingface/distilbert-sst-2-int8` | Text Classification | ga | tokens_in 0.026 | Not recorded | all | O | G | · | · | O | · | · | · | · | G | · | O | · | O |
 | `@cf/lykon/dreamshaper-8-lcm` | Text-to-Image | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/embeddinggemma-300m` | Text Embeddings | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | O | O | · | · | · | · | · | · | · | · | O | · | · | O |
+| `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | O | O | · | · | · | · | · | · | · | · | G | · | · | O |
 | `@cf/black-forest-labs/flux-1-schnell` | Text-to-Image | ga | tiles 0.0000528, steps 0.0001056 | Not recorded | all | · | · | G | W | W | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-dev` | Text-to-Image | partner | input_tile_steps 0.00021, output_tile_steps 0.00041 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-klein-4b` | Text-to-Image | partner | input_tiles 0.000059, output_tiles 0.000287 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-klein-9b` | Text-to-Image | partner | first_megapixels 0.015, subsequent_megapixels 0.002, input_image_megapixels 0.002 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/google/gemma-2b-it-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/gemma-3-12b-it` | Text Generation | deprecated | tokens_in 0.345, tokens_out 0.556 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/google/gemma-4-26b-a4b-it` | Text Generation | ga | tokens_in 0.100, tokens_out 0.300 | 256000 | all | G | G | G | W | O | G | W | · | G | G | G | W | · | G |
+| `@cf/google/gemma-4-26b-a4b-it` | Text Generation | ga | tokens_in 0.100, tokens_out 0.300 | 256000 | all | G | G | G | W | G | G | W | · | G | G | G | W | · | G |
 | `@hf/google/gemma-7b-it` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/gemma-7b-it-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/aisingapore/gemma-sea-lion-v4-27b-it` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | G | G | G | O | O | G | O | · | G | G | O | O | · | O |
@@ -99,7 +99,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/meta/llama-3.2-1b-instruct` | Text Generation | ga | tokens_in 0.027, tokens_out 0.201 | 60000 | all | O | G | G | G | O | G | G | · | G | G | O | O | · | O |
 | `@cf/meta/llama-3.2-3b-instruct` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 80000 | all | O | G | G | G | O | G | O | · | G | O | O | O | · | O |
 | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Text Generation | ga | tokens_in 0.293, tokens_out 2.253 | 24000 | all | W | W | O | W | W | O | W | · | G | W | W | W | · | W |
-| `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | Not recorded | all | G | G | G | O | O | G | O | · | G | G | G | W | · | G |
+| `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | Not recorded | all | G | G | G | O | G | G | O | · | G | G | G | W | · | G |
 | `@cf/meta/llama-guard-3-8b` | Text Generation | ga | tokens_in 0.484, tokens_out 0.030 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | W | · |
 | `@cf/llava-hf/llava-1.5-7b-hf` | Image-to-Text | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/leonardo/lucid-origin` | Text-to-Image | partner | tiles 0.006996, steps 0.000132 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
@@ -110,7 +110,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@hf/mistral/mistral-7b-instruct-v0.2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/mistral/mistral-7b-instruct-v0.2-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | Not recorded | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
-| `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | O | · | O | · | · | · | G | O | · | G |
+| `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | · | · | O | · | · | · | G | O | · | G |
 | `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | G | · | · | · | · | · | · | O | · | · | O |
 | `@cf/microsoft/phi-2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -178,7 +178,7 @@ embed: English retrieval and semantic similarity for research and relationship m
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Market intelligence"`; `railMatrix.json "Founder · Validate · Market intelligence"`; `railMatrix.json option ask:transcript`
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Market expansion"`; `/api/ai/modules on "Founder · Grow · Partner network"`
-- Network: **wired**, `services/vectorize.ts:79 (embed)`
+- Network: **wired**, `services/vectorize.ts (embed)`
 - Research: **wired**, `railMatrix.json "Advisor · Research · Library"`; `railMatrix.json "Founder · Research · Library"`; `railMatrix.json "Investor · Research · Library"`; `railMatrix.json "Operating Partner · Research · Library"`; and 1 more
 - Studio / Eadwyn: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 11 more
@@ -323,7 +323,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 chat: Compare evidence, work through scenarios and explain planning assumptions.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
-- Record a Session: **offered**, `services/conversationItems.ts:285 (extract_conversation_items)`; `services/interviewStructuring.ts:556 (structure_interview)`; `services/interviewStructuring.ts:920 (summarise_interview)`
+- Record a Session: **offered**, `services/conversationItems.ts (extract_conversation_items)`; `services/interviewStructuring.ts (structure_interview)`; `services/interviewStructuring.ts (summarise_interview)`
 - Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
@@ -384,9 +384,9 @@ sentiment: English positive and negative sentiment cues in customer and session 
 
 stream: Live conversational transcription in recorded sessions.
 
-- Validate: **offered**, `railMatrix.json "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; `railMatrix.json option transcribe:session`
+- Validate: **offered**, `railMatrix.json "Founder · Validate · Customer research"`
 - Record a Session: **offered**, `services/sttModels.ts (STT_MODELS), live`
-- Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`
+- Studio / Eadwyn: **gap**, `#3721`
 - Investor, Advisor and Partner workspaces: **offered**, `railMatrix.json "Advisor · Practice · Sessions"`
 
 ### `@cf/black-forest-labs/flux-1-schnell`
@@ -394,8 +394,8 @@ stream: Live conversational transcription in recorded sessions.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **wired**, `routes/deck_images.ts:117 (deck_image)`
-- Grow: **wired**, `routes/brand.ts:514 (brand_logo)`
+- Raise: **wired**, `routes/deck_images.ts (deck_image)`
+- Grow: **wired**, `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -405,8 +405,8 @@ draw: Generate pitch-deck visuals and brand-image drafts.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -416,8 +416,8 @@ draw: Generate pitch-deck visuals and brand-image drafts.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -427,8 +427,8 @@ draw: Generate pitch-deck visuals and brand-image drafts.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -441,7 +441,7 @@ chat: Read pitch-deck images, explain screenshots and extract visual evidence.
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
 - Raise: **wired**, `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `railMatrix.json option draft:logo`
+- Grow: **gap**, `#3721`
 - Network: **gap**, `#3721`
 - Research: **wired**, `railMatrix.json "Investor · Research · Diligence"`
 - Articles: **gap**, `#3721`
@@ -591,7 +591,7 @@ chat: Short summaries, labels and lightweight record explanations.
 translate: Translate session excerpts and market-expansion material from English into supported Indic languages.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`
-- Record a Session: **offered**, `services/sessionTranslation.ts:204 (translate_segment)`
+- Record a Session: **offered**, `services/sessionTranslation.ts (translate_segment)`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Market expansion"`
 - Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`
 - Articles: **gap**, `#3721`
@@ -654,25 +654,25 @@ chat: Summarise research, explain records and draft member communications.
 
 chat: Short summaries, labels and lightweight record explanations.
 
-- Validate: **wired**, `services/fills/citations.ts:160 (research_ask)`; `services/fills/registry.ts:174 (validate_draft_hypotheses)`; `services/fills/registry.ts:286 (market_sizing_inputs)`; `services/fills/registry.ts:457 (competitor_scan)`; and 1 more
-- Record a Session: **wired**, `services/conversationItems.ts:285 (extract_conversation_items)`; `services/interviewStructuring.ts:556 (structure_interview)`; `services/interviewStructuring.ts:920 (summarise_interview)`; `services/sessionTranslation.ts:142 (detect_language)`
+- Validate: **wired**, `services/fills/citations.ts (research_ask)`; `services/fills/registry.ts (competitor_scan)`; `services/fills/registry.ts (market_sizing_inputs)`; `services/fills/registry.ts (validate_draft_hypotheses)`; and 1 more
+- Record a Session: **wired**, `services/conversationItems.ts (extract_conversation_items)`; `services/interviewStructuring.ts (structure_interview)`; `services/interviewStructuring.ts (summarise_interview)`; `services/sessionTranslation.ts (detect_language)`
 - Build: **gap**, `#3721`
 - Raise: **gap**, `#3721`
-- Grow: **wired**, `routes/brand.ts:1109 (brand_palette)`; `routes/brand.ts:1145 (brand_taglines)`; `routes/brand.ts:464 (brand_autofill)`; `services/fills/registry.ts:642 (grow_theme_feedback)`
+- Grow: **wired**, `routes/brand.ts (brand_autofill)`; `routes/brand.ts (brand_palette)`; `routes/brand.ts (brand_taglines)`; `services/fills/registry.ts (grow_theme_feedback)`
 - Network: **gap**, `#3721`
-- Research: **wired**, `routes/research.ts:3637 (workspace_explain)`; `routes/research.ts:756 (research_ask)`; `services/market_intel/extractors/index.ts:151 (paraphrase)`
+- Research: **wired**, `routes/research.ts (research_ask)`; `routes/research.ts (workspace_explain)`; `services/market_intel/extractors/index.ts (paraphrase)`
 - Articles: **gap**, `#3721`
-- Email: **wired**, `services/mail/drafts.ts:202 (mail_draft)`
-- Studio / Eadwyn: **wired**, `routes/advisor.ts:2268 (advisor_explain)`; `routes/advisor.ts:2602 (tool_call)`; `routes/ai.ts:720 (workspace_explain)`; `routes/profiling.ts:237 (onboarding_chat)`; and 1 more
-- Admin consoles: **wired**, `routes/monitoring.ts:235 (ops_summary)`
-- Investor, Advisor and Partner workspaces: **wired**, `routes/deal_flow.ts:82 (workspace_explain)`; `services/deckExtract.ts:180 (dd_synthesis)`; `services/publications.ts:120 (publication)`
+- Email: **wired**, `services/mail/drafts.ts (mail_draft)`
+- Studio / Eadwyn: **wired**, `routes/advisor.ts (advisor_explain)`; `routes/advisor.ts (tool_call)`; `routes/ai.ts (workspace_explain)`; `routes/profiling.ts (onboarding_chat)`; and 1 more
+- Admin consoles: **wired**, `routes/monitoring.ts (ops_summary)`
+- Investor, Advisor and Partner workspaces: **wired**, `routes/deal_flow.ts (workspace_explain)`; `services/deckExtract.ts (dd_synthesis)`; `services/publications.ts (publication)`
 
 ### `@cf/meta/llama-3.1-8b-instruct-fp8-fast`
 
 chat: Short summaries, labels and lightweight record explanations.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`
-- Record a Session: **offered**, `services/conversationItems.ts:285 (extract_conversation_items)`; `services/interviewStructuring.ts:556 (structure_interview)`; `services/interviewStructuring.ts:920 (summarise_interview)`
+- Record a Session: **offered**, `services/conversationItems.ts (extract_conversation_items)`; `services/interviewStructuring.ts (structure_interview)`; `services/interviewStructuring.ts (summarise_interview)`
 - Build: **gap**, `#3721`
 - Raise: **gap**, `#3721`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`
@@ -722,15 +722,15 @@ chat: Short summaries, labels and lightweight record explanations.
 
 chat: Short summaries, labels and lightweight record explanations.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `services/fills/registry.ts:63 (validate_tag_pains)`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `services/fills/registry.ts (validate_tag_pains)`
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
 - Raise: **gap**, `#3721`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `services/fills/registry.ts:642 (grow_theme_feedback)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `services/fills/registry.ts (grow_theme_feedback)`
 - Network: **gap**, `#3721`
-- Research: **offered**, `routes/research.ts:3637 (workspace_explain)`
+- Research: **offered**, `routes/research.ts (workspace_explain)`
 - Articles: **gap**, `#3721`
-- Email: **offered**, `services/mail/drafts.ts:202 (mail_draft)`
+- Email: **offered**, `services/mail/drafts.ts (mail_draft)`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 1 more
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Home"`; `/api/ai/modules on "Admin · Programs · Assessment runs"`; `/api/ai/modules on "Super Admin · Content · Personas"`
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; `/api/ai/modules on "Advisor · Expertise · Proof"`; `/api/ai/modules on "Investor · Portfolio · Updates"`; and 3 more
@@ -739,16 +739,16 @@ chat: Short summaries, labels and lightweight record explanations.
 
 chat: Summarise research, explain records and draft member communications.
 
-- Validate: **wired**, `railMatrix.json "Founder · Validate · Ideal customer profile"`; `railMatrix.json "Founder · Validate · Problem discovery"`; `railMatrix.json "Founder · Validate"`; `services/fills/citations.ts:160 (research_ask)`; and 4 more
-- Record a Session: **wired**, `services/conversationItems.ts:285 (extract_conversation_items)`; `services/interviewStructuring.ts:556 (structure_interview)`; `services/interviewStructuring.ts:920 (summarise_interview)`
+- Validate: **wired**, `railMatrix.json "Founder · Validate · Ideal customer profile"`; `railMatrix.json "Founder · Validate · Problem discovery"`; `railMatrix.json "Founder · Validate"`; `services/fills/citations.ts (research_ask)`; and 4 more
+- Record a Session: **wired**, `services/conversationItems.ts (extract_conversation_items)`; `services/interviewStructuring.ts (structure_interview)`; `services/interviewStructuring.ts (summarise_interview)`
 - Build: **offered**, `railMatrix.json option draft:build/plan`; `railMatrix.json option draft:build/retro`
 - Raise: **wired**, `railMatrix.json "Founder · Raise · Investor narrative"`
-- Grow: **wired**, `railMatrix.json "Founder · Grow · Distribution"`; `railMatrix.json "Founder · Grow · Product improvement"`; `routes/brand.ts:1109 (brand_palette)`; `routes/brand.ts:1145 (brand_taglines)`; and 2 more
+- Grow: **wired**, `railMatrix.json "Founder · Grow · Distribution"`; `railMatrix.json "Founder · Grow · Product improvement"`; `routes/brand.ts (brand_autofill)`; `routes/brand.ts (brand_palette)`; and 2 more
 - Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 35 more
-- Research: **wired**, `routes/research.ts:3637 (workspace_explain)`; `routes/research.ts:756 (research_ask)`; `services/market_intel/extractors/index.ts:151 (paraphrase)`
+- Research: **wired**, `routes/research.ts (research_ask)`; `routes/research.ts (workspace_explain)`; `services/market_intel/extractors/index.ts (paraphrase)`
 - Articles: **gap**, `#3721`
-- Email: **wired**, `services/mail/drafts.ts:202 (mail_draft)`
-- Studio / Eadwyn: **wired**, `routes/advisor.ts:2268 (advisor_explain)`; `routes/advisor.ts:2602 (tool_call)`; `routes/ai.ts:720 (workspace_explain)`; `routes/profiling.ts:237 (onboarding_chat)`; and 1 more
+- Email: **wired**, `services/mail/drafts.ts (mail_draft)`
+- Studio / Eadwyn: **wired**, `routes/advisor.ts (advisor_explain)`; `routes/advisor.ts (tool_call)`; `routes/ai.ts (workspace_explain)`; `routes/profiling.ts (onboarding_chat)`; and 1 more
 - Admin consoles: **wired**, `railMatrix.json "Admin · Approvals · Communities"`; `railMatrix.json "Admin · Approvals · Jobs"`; `railMatrix.json "Admin · Community · Communities"`; `railMatrix.json "Admin · Community · Jobs"`; and 12 more
 - Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Cohorts · Guidance"`; `railMatrix.json "Advisor · Cohorts · Outcomes"`; `railMatrix.json "Advisor · Cohorts"`; `railMatrix.json "Advisor · Expertise · Profile"`; and 17 more
 
@@ -759,29 +759,29 @@ chat: Read pitch-deck images, explain screenshots and extract visual evidence.
 - Validate: **gap**, `#3721`
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 2 more
-- Grow: **offered**, `railMatrix.json option draft:logo`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 1 more
+- Grow: **gap**, `#3721`
 - Network: **gap**, `#3721`
 - Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`; `railMatrix.json "Investor · Research · Diligence"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **wired**, `routes/admin_x.ts:746 (image_screen)`; `routes/admin_x.ts:805 (image_alt_text)`
+- Admin consoles: **wired**, `routes/admin_x.ts (image_alt_text)`; `routes/admin_x.ts (image_screen)`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/meta/llama-guard-3-8b`
 
 guard: Check member inputs and generated drafts for unsafe content.
 
-- Moderation and safety: **wired**, `services/advisor/guardrails.ts:150 (safety)`; `services/aiRouter.ts:1592 (safety)`
+- Moderation and safety: **wired**, `services/advisor/guardrails.ts (safety)`; `services/aiRouter.ts (safety)`
 
 ### `@cf/leonardo/lucid-origin`
 
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -791,7 +791,7 @@ draw: Generate pitch-deck visuals and brand-image drafts.
 translate: Translate session excerpts and market-expansion material between supported languages.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`
-- Record a Session: **wired**, `services/sessionTranslation.ts:204 (translate_segment)`
+- Record a Session: **wired**, `services/sessionTranslation.ts (translate_segment)`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Market expansion"`; `railMatrix.json "Founder · Grow · Market expansion"`
 - Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`; `railMatrix.json "Founder · Research · Geographies"`
 - Articles: **gap**, `#3721`
@@ -833,8 +833,7 @@ chat: Investor narratives, distribution copy and multilingual summaries.
 vision: Answer questions about document images and describe visual evidence.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 2 more
-- Grow: **offered**, `railMatrix.json option draft:logo`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 1 more
 - Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`; `railMatrix.json "Investor · Research · Diligence"`
 - Studio / Eadwyn: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Due diligence"`; `/api/ai/modules on "Admin · Approvals · Entity profiles"`; `/api/ai/modules on "Admin · Approvals · Identity checks"`; `railMatrix.json "Admin · Approvals · Due diligence"`; and 2 more
@@ -864,7 +863,7 @@ transcribe: Transcribe member-supplied recordings and interview audio.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `railMatrix.json "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; and 2 more
 - Record a Session: **wired**, `services/sttModels.ts (STT_MODELS), live`
 - Raise: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`; `routes/advisor.ts:2909 (transcribe)`
+- Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`; `routes/advisor.ts (transcribe)`
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`; `railMatrix.json "Advisor · Practice · Sessions"`
 
 ### `@cf/leonardo/phoenix-1.0`
@@ -872,8 +871,8 @@ transcribe: Transcribe member-supplied recordings and interview audio.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -904,7 +903,7 @@ chat: Prototype code, implementation drafts and technical review.
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **wired**, `routes/advisor.ts:2602 (tool_call)`; `services/advisor/rerank.ts:268 (rerank)`
+- Studio / Eadwyn: **wired**, `routes/advisor.ts (tool_call)`; `services/advisor/rerank.ts (rerank)`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Platform · GitHub sync"`; `/api/ai/modules on "Super Admin · Platform · Integration keys"`; `/api/ai/modules on "Super Admin · Platform · Monitoring"`; `/api/ai/modules on "Super Admin · Platform"`; and 4 more
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
@@ -994,42 +993,29 @@ turn: Detect whether a speaker has finished a turn in an audio excerpt.
 
 transcribe: Transcribe member-supplied recordings and interview audio.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `services/interviewProcessing.ts:168 (transcribe)`
-- Record a Session: **offered**, `routes/founder_validate.ts:1136 (transcribe)`; `services/sttModels.ts (STT_MODELS), final`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; `railMatrix.json option transcribe:session`; and 1 more
+- Record a Session: **offered**, `routes/founder_validate.ts (transcribe)`; `services/sttModels.ts (STT_MODELS), final`
 - Raise: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `routes/advisor.ts:2909 (transcribe)`
+- Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`; `routes/advisor.ts (transcribe)`
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`
 
 ### `@cf/openai/whisper-large-v3-turbo`
 
 transcribe: Transcribe member-supplied recordings and interview audio.
 
-- Validate: **wired**, `railMatrix.json "Founder · Validate · Customer research"`; `services/interviewProcessing.ts:168 (transcribe)`
-- Record a Session: **wired**, `routes/founder_validate.ts:1136 (transcribe)`; `services/sttModels.ts (STT_MODELS), final`
+- Validate: **wired**, `railMatrix.json "Founder · Validate · Customer research"`; `services/interviewProcessing.ts (transcribe)`
+- Record a Session: **wired**, `routes/founder_validate.ts (transcribe)`; `services/sttModels.ts (STT_MODELS), final`
 - Raise: **gap**, `#3721`
-- Studio / Eadwyn: **wired**, `routes/advisor.ts:2909 (transcribe)`
+- Studio / Eadwyn: **wired**, `routes/advisor.ts (transcribe)`
 - Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Practice · Sessions"`
 
 ## Picks the run never reads
 
-These options list models their run does not use, so a pick of one changes nothing. Part B of #3721 fixes them.
-
-| Page | Option | The run | Needs | Listed, not usable |
-| --- | --- | --- | --- | --- |
-| Founder · Studio | `transcribe:voice-answer` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Founder · Validate · Customer research | `transcribe:interview` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Founder · Validate · Customer research | `transcribe:session` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Founder · Validate · Customer research | `transcribe:recording` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Founder · Raise · Pitch deck | `deck:image` | `deck_image` (routes/deck_images.ts:117) | draw | `@cf/google/gemma-4-26b-a4b-it`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/moondream/moondream3.1-9B-A2B` |
-| Founder · Grow · Distribution | `draft:logo` | `brand_logo` (routes/brand.ts:514) | draw | `@cf/google/gemma-4-26b-a4b-it`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/moondream/moondream3.1-9B-A2B` |
-| Advisor · Home | `transcribe:voice-answer` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Operating Partner · Home | `transcribe:voice-answer` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+None: every option lists only models its run uses.
 
 ## Connected outside its fit
 
-| Model | Operation | Module | State | Where |
-| --- | --- | --- | --- | --- |
-| `@cf/moondream/moondream3.1-9B-A2B` | vision | Grow | offered | `railMatrix.json option draft:logo` |
+None.
 
 ## Why n/a
 

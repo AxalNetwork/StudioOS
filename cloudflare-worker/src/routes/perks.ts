@@ -60,6 +60,7 @@
  */
 import { Hono } from 'hono';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { myPerk as sharedMyPerk } from '../services/profileWriteGates';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin, requireRole, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
 import { programRefusal } from '../services/programEnforcement';
@@ -313,17 +314,8 @@ async function allowanceConfigured(env: Env): Promise<boolean> {
 async function myPerk(
   env: Env, uid: string, userId: number, companyId: number | null = null,
 ): Promise<PerkRow | null> {
-  // Two full literals, never a clause dropped into the query text.
-  if (companyId === null) {
-    return await env.DB.prepare(
-      'SELECT * FROM perks WHERE uid = ? AND partner_user_id = ?',
-    ).bind(uid, userId).first<PerkRow>();
-  }
-  return await env.DB.prepare(
-    `SELECT * FROM perks
-      WHERE uid = ? AND partner_user_id = ?
-        AND (company_id = ? OR company_id IS NULL)`,
-  ).bind(uid, userId, companyId).first<PerkRow>();
+  // D1595 (#3868): the rule lives in services/profileWriteGates.ts, shared with Fill's scope for this table.
+  return sharedMyPerk<PerkRow>(env, uid, userId, companyId);
 }
 
 /**

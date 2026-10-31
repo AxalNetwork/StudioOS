@@ -266,8 +266,11 @@ test('automatic routes work without switches; explicit module choices are priced
     // Partner module choices are explicit and gated; automatic defaults must
     // still work with no owner switch, as before the module registry existed.
     const env = Object.hasOwn(MODULE_ROUTES, task) ? GATE_ON : GATE_OFF;
-    const routed = new Set([e.model, ...(e.fallbackChain ?? []), ...(e.alternates ?? [])]);
-    for (const id of routed) assert.equal(modelRefusal(env, id), null, `${task}: ${id} would be refused`);
+    const automatic = new Set([e.model, ...(e.fallbackChain ?? [])]);
+    for (const id of automatic) assert.equal(modelRefusal(env, id), null, `${task}: ${id} would be refused`);
+    // An alternate is a member's explicit pick, so a partner model there waits on
+    // the gate like a module choice (D1478: the draw models on brand_logo and deck_image).
+    for (const id of e.alternates ?? []) assert.equal(modelRefusal(GATE_ON, id), null, `${task}: alternate ${id} would be refused`);
   }
 });
 

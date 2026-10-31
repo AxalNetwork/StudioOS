@@ -12,7 +12,8 @@
  *   name: `draft:<surface>` for a `DRAFT_SURFACES` entry, `fill:<kind>` for a
  *   `FILL_KINDS` entry.
  * - `label`: the words on the control the member presses.
- * - `kind`: one of the canvas's fourteen (`FOUNDER_KINDS`).
+ * - `kind`: one of the canvas's fourteen (`FOUNDER_KINDS`), or an option-only
+ *   kind (`OPTION_KINDS`, D1478: `image`), which also names its `task`.
  * - `handler`: `form` (a fill band, or a form Eadwyn fills), `upload` (reads
  *   a file), `draft` (writes text: a draft, an answer, a summary, a review),
  *   `transcribe` (turns audio into text), or `none` (looks like one, runs no
@@ -39,6 +40,8 @@ export const FOUNDER_KINDS = [
 ];
 
 export const FOUNDER_HANDLERS = ['form', 'upload', 'draft', 'transcribe', 'none'];
+/** D1478 (#3721): kinds only an option takes, each run by the fixed job its `task` names. */
+export const OPTION_KINDS = ['image'];
 
 const CYCLE = 'frontend/src/pages/cycles/CycleRoute.jsx';
 const PMF = 'frontend/src/workspaces/PmfExplain.jsx';
@@ -245,9 +248,10 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'deck:timeline', route: '/raise/pitch/edit', label: 'Timeline from your records', kind: 'write', handler: 'draft',
     at: [[ADD_MENU, 'deckAssistApi.run(']],
   },
-  // D903 (#2682): the image lightbox's Generate (PD12), through run() on FLUX.1 Schnell (the `deck_image` task).
+  // D903 (#2682): the image lightbox's Generate (PD12), through run() (the `deck_image` task).
+  // D1478 (#3721): kind `image`, so its list is the draw models and the run reads the pick.
   {
-    page: 'Founder · Raise · Pitch deck', key: 'deck:image', route: '/raise/pitch/edit', label: 'Generate', kind: 'vision', handler: 'draft',
+    page: 'Founder · Raise · Pitch deck', key: 'deck:image', route: '/raise/pitch/edit', label: 'Generate', kind: 'image', task: 'deck_image', handler: 'draft',
     at: [[IMAGE_LIGHTBOX, 'deckImagesApi.generate(']],
   },
   {
@@ -294,7 +298,8 @@ export const FOUNDER_OPTIONS = [
     at: [[BRAND, 'api.brandAutofillLanding(']],
   },
   {
-    page: 'Founder · Grow · Distribution', key: 'draft:logo', route: '/build/brand', label: 'Regenerate logo', kind: 'vision', handler: 'draft',
+    // D1478 (#3721): kind `image`; the `brand_logo` task reads the pick.
+    page: 'Founder · Grow · Distribution', key: 'draft:logo', route: '/build/brand', label: 'Regenerate logo', kind: 'image', task: 'brand_logo', handler: 'draft',
     at: [[BRAND, 'api.brandLogo(']],
   },
   {
