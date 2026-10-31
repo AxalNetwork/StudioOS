@@ -9,6 +9,7 @@ disagrees with the code, the document is the thing to fix.
 | `ROUTE_MAP.md` | Which design canvas maps to which route, what shipped from it, and what deliberately did not. One row per canvas. |
 | `SHELL_MIGRATION.md` | The four workspace shell migrations (Founder, Investor/LP, Advisor, Partner): IA rules, zone inventory, shipped vs open, verification commands. |
 | `PROFILE_ROUTING.md` | **Generated.** Which workspace sees each canvas, under which nav section, as what surface, and how it is reached. |
+| `AI_MODEL_COVERAGE.md` | **Generated** (D1478). Every Workers AI catalogue model against the 14 platform modules: wired, offered, gap or n/a, with the file and line or page that does it, the picks the run never reads, and Pitch deck v2's models priced per run. `cloudflare-worker/test/ai_model_coverage_d1478.test.ts` fails when it differs from `renderCoverage()`. |
 | `PAGE_INVENTORY.md` | **Generated.** The same projection from the nav side: every destination each role sidebar can reach, and which canvas is behind it. |
 | `UNRESOLVED_ITEMS.md` | The routing decisions that cannot be made from the code, what each blocks, and what a wrong guess would cost. |
 | `ASSUMPTIONS_LOG.md` | Routing calls taken without an explicit instruction, what each was decided from, and what would make it wrong. |
