@@ -236,7 +236,9 @@ test('the wiring: mounted before the deal routes, under the Professional gate, a
   const at = (s: string) => index.indexOf(s);
   assert.ok(at("app.route('/api/deals/flow', dealFlow);") > 0);
   assert.ok(at("app.route('/api/deals/flow', dealFlow);") < at("app.route('/api/deals', dealContext);"), 'before dealContext and deals, so flow is never a deal id');
-  assert.match(index, /const INVESTOR_PRO_PREFIXES = \[[^\]]*'\/api\/deals'/);
+  // D1421: the prefix arrays live in middleware/paywallPrefixes.ts; index.ts imports and mounts them.
+  assert.match(readFileSync('cloudflare-worker/src/middleware/paywallPrefixes.ts', 'utf8'), /export const INVESTOR_PRO_PREFIXES[^=]*= \[[^\]]*'\/api\/deals'/);
+  assert.match(index, /import \{ STUDIO_PREFIXES, INVESTOR_PRO_PREFIXES \} from '\.\/middleware\/paywallPrefixes';/);
   for (const [m, p] of [['GET', '/api/deals/flow'], ['GET', '/api/deals/flow/inbox'], ['POST', '/api/deals/flow/101/pass'], ['PATCH', '/api/deals/flow/101']]) {
     assert.ok(!INVESTOR_PRO_EXEMPT.some((e) => e.method === m && e.path.test(p)), `${m} ${p} stays Professional`);
   }

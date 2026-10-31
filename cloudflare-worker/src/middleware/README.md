@@ -8,6 +8,7 @@ ahead of the routers, or applied per-route where the gate is specific.
 | `projectContentAccess.ts` | #2435: shared deck/brand management authorization, accepted-member write rights, a separate owner/cofounder gate for waitlist contacts, an owner company filter and actor audit for member write authorization with route template/method (not a completed-write event) (get-or-create reads audit only when allocating). Shares use separate public gates. |
 | `planSubscription.ts` | D1100: one 21-day, UTC, period-end bound for Stripe retry grace across plan families. |
 | `requireTier.ts` | Plan entitlement. `ensureTier(user, 'growth')` and friends. |
+| `paywallPrefixes.ts` | D1421: the Raise + Grow (`STUDIO_PREFIXES`) and investor Professional (`INVESTOR_PRO_PREFIXES`) path prefixes. `index.ts` mounts the paywalls on them; `../services/studioModules.ts` derives Studio module locks from them. |
 | `requireInvestorTier.ts` | The investor-side equivalent. |
 | `rateLimit.ts` | Request budgets. **Fails closed** — a bucket that cannot be read denies rather than allows. |
 | `csrf.ts` | CSRF protection on state-changing requests. |

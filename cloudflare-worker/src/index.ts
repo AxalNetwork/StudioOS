@@ -467,6 +467,8 @@ import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
 import { csrfMiddleware } from './middleware/csrf';
+import { STUDIO_PREFIXES, INVESTOR_PRO_PREFIXES } from './middleware/paywallPrefixes';
+import studioLayout from './routes/studio_layout';
 import { lastActiveMiddleware } from './middleware/lastActive';
 import { requireCfAccess } from './middleware/cfAccess';
 import filesRoutes from './routes/files';
@@ -905,24 +907,7 @@ app.route('/api/products', products);
 // (admin/partner/investor/mentor) are exempt inside the middleware itself.
 // Growth-tier mutation gates live inline at the specific handler (decks,
 // captable, mentors booking, scoring run, comarketing, compliance create).
-const STUDIO_PREFIXES = [
-  '/api/capital',
-  '/api/funds',
-  '/api/fund-sim',
-  '/api/liquidity',
-  '/api/legalcap',
-  '/api/cofounder',
-  '/api/kyc',
-  '/api/networkfx',
-  '/api/insights',
-  '/api/portfolio',
-  '/api/journal',
-  '/api/watchlist',
-  '/api/antiportfolio',
-  '/api/partner-office-hours',
-  '/api/lp-reports',
-  '/api/positions',
-];
+// D1421: the prefixes live in middleware/paywallPrefixes.ts, shared with the Studio module registry.
 for (const p of STUDIO_PREFIXES) {
   app.use(p, requireTier('studio'));
   app.use(`${p}/*`, requireTier('studio'));
@@ -932,12 +917,6 @@ for (const p of STUDIO_PREFIXES) {
 // the middleware always wraps the handlers. The middleware is a no-op for
 // non-investor callers (admin/partner/mentor bypass; founder/etc. pass
 // through unchanged) and only enforces tier when caller.role === 'investor'.
-const INVESTOR_PRO_PREFIXES = [
-  '/api/dd',
-  '/api/pipeline',
-  '/api/deals',
-  '/api/ic',
-];
 // D614/D1149/D1237: precise exemptions allow Free room quota, join/leave,
 // and an authorized header/key strip. The deal list, child reads and diligence
 // stay Professional; join enforces its one-room allowance in the INSERT.
@@ -1462,6 +1441,8 @@ app.route('/api/help/security-reports', securityReports);
 app.route('/api/help', helpCenterRoutes);
 app.route('/api/admin/help', adminHelpCenter);
 app.route('/api/dashboard', dashboard);
+// D1421 (#3699): the Studio's module catalogue and the member's saved layout.
+app.route('/api/studio', studioLayout);
 // Task #39 — Event engine authed routes (§8.1).
 app.route('/api/events', eventsRoutes);
 // Task #68 — Job Board founder routes (post/manage roles, read applicants).
