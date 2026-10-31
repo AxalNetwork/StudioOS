@@ -273,6 +273,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'services/articleCovers.ts': 'HQ article covers',
   'services/backup.ts': 'platform backups',
   'services/mercury/investorFeeds.ts': 'a GP\'s Mercury statements: fund documents, never counted',
+  'services/meetingBotDiagnose.ts': 'an HQ owner\'s bot diagnostic record and screenshot (#3708), never counted',
 };
 
 test('every R2 write in the Worker is a guarded member upload or named as something else', () => {

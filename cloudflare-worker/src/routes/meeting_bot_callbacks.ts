@@ -3,8 +3,21 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { BotError, botControl } from '../services/meetingBots';
 import { boundedBotBody, validBotCallback, validBotUploadToken } from '../durable-objects/meeting-bot-run';
+import { diagnosisCallback, validDiagnosisCallback, SCREENSHOT_MAX } from '../services/meetingBotDiagnose';
 
 const callbacks = new Hono<{ Bindings: Env }>();
+// #3708: the owner diagnostic's reports, screenshot and probe chunk; signed with the diagnostic's own key.
+callbacks.post('/diagnostics/:id/:kind',async c=>{
+  try {
+    const raw=new TextDecoder().decode(await boundedBotBody(c.req.raw,Math.ceil(SCREENSHOT_MAX/3)*4+64));
+    if (!await validDiagnosisCallback(c.env,c.req.raw,raw,c.req.param('id'))) return c.json({code:'invalid_bot_signature',message:'The runtime signature is invalid.'},401);
+    const status=await diagnosisCallback(c.env,c.req.param('id'),c.req.param('kind'),raw);
+    return c.json({ok:status===200},status as 200|400|404|410);
+  } catch (e) {
+    if (e instanceof BotError) return c.json(e.body(),e.status as 413);
+    return c.json({code:'bot_unavailable',message:'The meeting bot is temporarily unavailable.'},503);
+  }
+});
 callbacks.post('/:uid/zoom-credentials',async c=>{
   try {
     const raw=new TextDecoder().decode(await boundedBotBody(c.req.raw,128));

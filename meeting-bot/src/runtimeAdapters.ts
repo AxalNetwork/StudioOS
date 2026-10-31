@@ -6,7 +6,10 @@ import { TeamsAdapter, type TeamsPage } from './adapters/teams.ts';
 import { ZoomAdapter, type ZoomObf, type ZoomSdkBridge } from './zoomAdapter.ts';
 import { ZoomSidecar } from './zoomSidecar.ts';
 import { signRequest } from './callback.ts';
-import type { RuntimeAdapterContext } from './runtime.ts';
+import type { RuntimeAdapterContext, RuntimeDiagnoseContext } from './runtime.ts';
+import { diagnoseCallbacks, runDiagnosis } from './diagnose.ts';
+import { realClock } from './lifecycle.ts';
+import { consoleSink } from './log.ts';
 import type { MeetPage } from './adapters/meet.ts';
 import { AdapterFailure } from './types.ts';
 import type { MeetingAdapter, Platform } from './types.ts';
@@ -41,4 +44,18 @@ export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterCon
     adapter.leave=()=>leaving??(leaving=(async()=>{await Promise.allSettled([Promise.resolve().then(leave),Promise.resolve().then(()=>browser.close())]);})());
     return adapter;
   }catch{await browser.close();throw new AdapterFailure('platform_blocked');}
+}
+
+/** #3708: the owner's staged diagnostic with the packaged browser and the Meet adapter. */
+export async function runtimeDiagnose(platform:Platform,meetingUrl:string,context:RuntimeDiagnoseContext,factories:RuntimeFactories={}):Promise<void>{
+  const callbacks=diagnoseCallbacks(context.callbackOrigin,context.uid,context.secret,factories.fetch??fetch);
+  await runDiagnosis(platform,meetingUrl,{...callbacks,fetch:factories.fetch??fetch,clock:realClock,stop:context.stop,log:consoleSink,
+    launch:async()=>{
+      const browser=await (factories.launch??(()=>chromium.launch({headless:true,chromiumSandbox:true})))();
+      try{
+        const page=await browser.newPage({locale:'en-US',viewport:{width:1280,height:720}});
+        return {page:{screenshot:()=>page.screenshot({type:'png'}),url:()=>page.url()},
+          meet:new MeetAdapter(page as unknown as MeetPage,{log:consoleSink}),close:()=>browser.close()};
+      }catch(e){await browser.close();throw e;}
+    }});
 }
