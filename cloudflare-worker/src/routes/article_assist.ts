@@ -1,10 +1,16 @@
 /**
- * D1409 (#3695, part 1) — Eadwyn's writing options in the article editor.
+ * D1409 (#3695) — Eadwyn's writing options in the article editor, and its
+ * images.
  *
  *   POST /api/articles/:id/assist/quote   { option, input }
  *        → { option, ai: true, hold_microusd, model } | { option, ai: false, reason, message }
  *   POST /api/articles/:id/assist         (the same body)
  *        → { proposal, option, cost: { charged_microusd | null, usage_log_id } }
+ *   POST /api/articles/:id/images/quote   { prompt, style, aspect, count }
+ *        → { ai: true, model, model_label, per_image_microusd, count, total_microusd, balance: { ok, code?, message? } }
+ *          | { ai: false, reason, message }
+ *   POST /api/articles/:id/images/generate  (the same body) → { images: [image], stopped? }
+ *   POST /api/articles/:id/images/:uid/discard → { ok: true, uid, deleted }
  *
  * `option` is one of `ARTICLE_OPTION_KEYS` (services/articleAssist.ts). Each
  * press runs once through `run()` as that rail option on "<Profile> · Articles",
@@ -19,7 +25,16 @@
  * A run's refusals answer as every rail press does (`refuseRun`): 402 for a
  * budget stop, 403 for the switch or a pause, 422 for the guard.
  *
- * Logs carry codes only: never a brief, the article or a model's answer.
+ * IMAGES (part 2). Each image is one run() of the `article_image` task
+ * (FLUX.1 Schnell) on the rail option `draft:article-image`, charged to the
+ * member who pressed. Its bytes are stored at `articles/<id>/img-<uuid>.<ext>`
+ * and read through `articles.ts`'s `GET /:id/image/:filename`, at an absolute
+ * URL; its proposal row (`kind: 'proposal'`) keeps the run's `usage_log_id`.
+ * Refused before any quote or hold: a real person (422 `real_person`, the
+ * face words or the author's name). Refused before any hold: a balance that
+ * cannot cover every image asked for (402), and no storage room (413).
+ *
+ * Logs carry codes only: never a brief, a prompt, the article or a model's answer.
  *
  * Mounted in index.ts BEFORE `articles`, at `/api/articles`.
  */
@@ -28,12 +43,17 @@ import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { quoteRun, run, type RunOptions } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
+import {
+  EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_MODEL, IMAGE_MODEL_LABEL, MIMES, REAL_PERSON_MESSAGE, balanceRefusal, personIn, sniffMime,
+} from '../services/aiImages';
 import { ensureNewsSchema } from '../services/newsSchema';
 import {
-  ARTICLE_OPTIONS, ARTICLE_OPTION_KEYS, articlePage, articleRecord, guardTextOf, inputOf, isArticleOption, messageOf, payloadOf,
-  type ArticleInput, type ArticleOption,
+  ARTICLE_IMAGE_OPTION, ARTICLE_OPTIONS, ARTICLE_OPTION_KEYS, articlePage, articleRecord, guardTextOf, imageAskOf, imagePromptOf, inputOf,
+  isArticleOption, messageOf, payloadOf, type ArticleImageAsk, type ArticleInput, type ArticleOption,
 } from '../services/articleAssist';
-import { proposeRail } from '../services/railProposals';
+import { isValidArticleImageName } from '../services/newsRender';
+import { decideRail, getRail, proposeRail } from '../services/railProposals';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { loadOwned } from './articles';
@@ -130,6 +150,142 @@ articleAssist.post('/:id/assist', async (c) => {
     return refuse(c, 503, { code: 'proposal_unsaved', message: 'Eadwyn answered, but the proposal could not be kept. It was charged for the run; try again in a moment.', extra: { cost } });
   }
   return c.json({ proposal, option: p.option, cost });
+});
+
+// ── Images (part 2) ──────────────────────────────────────────────────────────
+
+const NO_STORAGE = 'Images cannot be stored here yet. Nothing was run and nothing was charged.';
+const UID = /^[0-9a-f-]{36}$/;
+
+/** The absolute URL an article image is read at, through `articles.ts`'s image route. */
+export const articleImageUrl = (requestUrl: string, id: number, filename: string) => new URL(`/api/articles/${id}/image/${filename}`, requestUrl).toString();
+
+/** The article author's display name: the only person an article names (it has no venture). */
+async function authorNames(env: Env, article: any): Promise<string[]> {
+  const row = await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(Number(article.author_user_id) || 0).first<{ name: string | null }>().catch(() => null);
+  const name = String(row?.name ?? '').trim();
+  return name.length >= 3 ? [name] : [];
+}
+
+function imageRunOptions(c: any, user: User, id: number, ask: ArticleImageAsk): RunOptions {
+  const rail = { ...railFor(c, { page: articlePage(user.role), option: ARTICLE_IMAGE_OPTION }, articleRecord(id)), option: ARTICLE_IMAGE_OPTION };
+  return { task: 'article_image', userId: Number(user.id) || 0, text: imagePromptOf(ask).slice(0, 2048), draw: {}, surface: AI_SURFACE.articles, rail };
+}
+
+type Priced = { id: number; ask: ArticleImageAsk; opts: RunOptions; per: number; total: number };
+
+/**
+ * The checked image press and its price, or the response that refuses it,
+ * shared by the quote and the run. A quote refusal from the run path comes
+ * back as `{ quoteRefusal }`, so the quote can answer `ai: false`.
+ */
+async function pricedImage(c: any, user: User): Promise<Priced | { refused: Response } | { quoteRefusal: { refusal?: string; error?: string } }> {
+  const gate = await gateArticle(c, user);
+  if ('refused' in gate) return gate;
+  const body = await c.req.json().catch(() => ({} as any));
+  const read = imageAskOf(body);
+  if ('field' in read) return { refused: refuse(c, 400, { code: 'invalid_input', message: read.error, extra: { field: read.field } }) };
+  // Before anything is quoted or held: a face, or the author named.
+  if (personIn(read.ask.prompt, await authorNames(c.env, gate.article))) return { refused: refuse(c, 422, { code: 'real_person', message: REAL_PERSON_MESSAGE }) };
+  if (!c.env.FILES) return { refused: refuse(c, 503, { code: 'storage_unavailable', message: NO_STORAGE }) };
+  const opts = imageRunOptions(c, user, gate.id, read.ask);
+  const q = await quoteRun(c.env, opts);
+  if (!q.ok) return { quoteRefusal: { refusal: q.refusal, error: q.error } };
+  return { id: gate.id, ask: read.ask, opts, per: q.hold_microusd, total: q.hold_microusd * read.ask.count };
+}
+
+articleAssist.post('/:id/images/quote', async (c) => {
+  const user = await requireAuth(c);
+  const p = await pricedImage(c, user);
+  if ('refused' in p) return p.refused;
+  if ('quoteRefusal' in p) return c.json({ ai: false, reason: p.quoteRefusal.refusal ?? 'model_unavailable', message: p.quoteRefusal.error ?? 'The image model is not available.' });
+  const short = await balanceRefusal(c.env, Number(user.id), p.total);
+  return c.json({
+    ai: true, model: IMAGE_MODEL, model_label: IMAGE_MODEL_LABEL, per_image_microusd: p.per, count: p.ask.count, total_microusd: p.total,
+    balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true },
+  });
+});
+
+articleAssist.post('/:id/images/generate', async (c) => {
+  const user = await requireAuth(c);
+  const p = await pricedImage(c, user);
+  if ('refused' in p) return p.refused;
+  if ('quoteRefusal' in p) {
+    return refuseRun(c, p.quoteRefusal) ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
+  }
+  const userId = Number(user.id) || 0;
+  // Before any hold: the balance for every image asked for, then room on the presser's storage plan.
+  const short = await balanceRefusal(c.env, userId, p.total);
+  if (short) return refuse(c, 402, { code: short.code, message: short.message });
+  let ticket;
+  try { ticket = await assertStorageRoom(c.env, { userId }, IMAGE_BYTES_ESTIMATE * p.ask.count, user); }
+  catch (e) { if (e instanceof Response) return e; throw e; }
+
+  const images: any[] = [];
+  let stopped: { code: string; message: string } | null = null;
+  for (let i = 0; i < p.ask.count; i += 1) {
+    const r = await run(c.env, { ...p.opts, surface: AI_SURFACE.articles, rail: p.opts.rail });
+    if (!r.ok || !r.image) {
+      const answer = refuseRun(c, r);
+      if (!images.length) return answer ?? refuse(c, 503, { code: 'model_unavailable', message: 'Eadwyn could not draw the image. Nothing was charged and nothing changed.' });
+      const body: any = await answer?.clone().json().catch(() => null);
+      stopped = { code: body?.error || 'model_unavailable', message: body?.message || 'Eadwyn stopped before drawing every image. What it drew is below.' };
+      break;
+    }
+    const charged = await chargedOf(c.env, r.usageLogId, userId);
+    const mime = (MIMES as readonly string[]).includes(r.image.mime) ? r.image.mime as typeof MIMES[number] : sniffMime(r.image.bytes);
+    if (!mime) { stopped = { code: 'image_unreadable', message: 'The image came back in a format the article cannot show. It was charged; nothing was placed.' }; break; }
+    const filename = `img-${crypto.randomUUID()}.${EXTENSION[mime]}`;
+    const key = `articles/${p.id}/${filename}`;
+    try {
+      await c.env.FILES!.put(key, r.image.bytes, { httpMetadata: { contentType: mime }, customMetadata: { articleId: String(p.id), userId: String(userId) } });
+    } catch {
+      stopped = { code: 'image_unsaved', message: 'Eadwyn drew the image, but it could not be stored. It was charged for the run; try again in a moment.' };
+      break;
+    }
+    const url = articleImageUrl(c.req.url, p.id, filename);
+    const payload = { filename, url, width: r.image.width ?? null, height: r.image.height ?? null, style: p.ask.style, aspect: p.ask.aspect, alt: '' };
+    let proposal;
+    try {
+      proposal = await proposeRail(c.env, {
+        userId, page: p.opts.rail!.page, option: ARTICLE_IMAGE_OPTION, record: articleRecord(p.id), kind: 'proposal',
+        payload, model: r.usage?.model ?? IMAGE_MODEL, usageLogId: r.usageLogId ?? null,
+      });
+    } catch {
+      // No proposal names the bytes, so nothing could ever place or discard them.
+      try { await c.env.FILES!.delete(key); } catch { /* the object is unreachable either way */ }
+      stopped = { code: 'proposal_unsaved', message: 'Eadwyn drew the image, but it could not be kept. It was charged for the run; try again in a moment.' };
+      break;
+    }
+    images.push({ uid: proposal.uid, ...payload, charged_microusd: charged, usage_log_id: r.usageLogId ?? null });
+  }
+  await noteStorageLanded(c.env, ticket);
+  return c.json({ images, ...(stopped ? { stopped } : {}) });
+});
+
+articleAssist.post('/:id/images/:uid/discard', async (c) => {
+  const user = await requireAuth(c);
+  const gate = await gateArticle(c, user);
+  if ('refused' in gate) return gate.refused;
+  const uid = String(c.req.param('uid') || '');
+  const userId = Number(user.id) || 0;
+  const open = UID.test(uid) ? await getRail(c.env, userId, uid) : null;
+  const filename = String(open?.payload?.filename ?? '');
+  // Only the presser's own image proposal on this article.
+  if (!open || open.rail_option !== ARTICLE_IMAGE_OPTION || open.record_ref !== articleRecord(gate.id) || !isValidArticleImageName(filename)) {
+    return c.json({ error: 'not_found' }, 404);
+  }
+  const decided = await decideRail(c.env, userId, uid, 'discard');
+  if (!decided) return refuse(c, 409, { code: 'already_decided', message: 'This image was already placed or discarded.' });
+  // The bytes go unless the article already shows them (a body that names the file, or its cover key).
+  const body = String(gate.article.body_markdown ?? '');
+  const cover = String(gate.article.cover_r2_key ?? '');
+  const inUse = body.includes(filename) || cover.endsWith(`/${filename}`);
+  let deleted = false;
+  if (!inUse && c.env.FILES) {
+    try { await c.env.FILES.delete(`articles/${gate.id}/${filename}`); deleted = true; } catch { deleted = false; }
+  }
+  return c.json({ ok: true, uid, deleted });
 });
 
 export default articleAssist;
