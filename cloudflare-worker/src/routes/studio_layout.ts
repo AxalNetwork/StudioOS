@@ -3,7 +3,8 @@
  * their saved layout.
  *
  * - `GET /modules`: this profile's catalogue (`services/studioModules.ts`),
- *   each with `locked_by_plan` from the existing paywalls.
+ *   each with `locked_by_plan` from the existing paywalls; D1418 adds its
+ *   groups, each module's purpose, Open link and `in_default`.
  * - `GET /layout`: the saved layout, or the profile's default when there is
  *   no row. Nothing is written by a read.
  * - `PUT /layout`: replace it. Unknown, removed, fixed, other-profile and
@@ -21,7 +22,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import {
-  STUDIO_DEFAULTS, STUDIO_LAYOUT_MAX, STUDIO_SIZES, catalogueOf, lockOf, studioProfile,
+  STUDIO_DEFAULTS, STUDIO_GROUPS, STUDIO_LAYOUT_MAX, STUDIO_SIZES, catalogueOf, lockOf, studioProfile,
   type StudioProfile, type StudioSize,
 } from '../services/studioModules';
 
@@ -45,7 +46,7 @@ async function savedRow(env: Env, userId: number, profile: StudioProfile): Promi
 
 /** The read every route answers with: saved or default, each entry with its lock, and saved keys no longer offered named in `dropped`. */
 function layoutView(user: User, profile: StudioProfile, row: Row | null) {
-  const catalogue = new Map(catalogueOf(profile).map((m) => [m.key, m]));
+  const catalogue = new Map(catalogueOf(profile, user).map((m) => [m.key, m]));
   const source = row ? 'saved' as const : 'default' as const;
   const entries: Array<{ key: string; size: StudioSize }> = row ? JSON.parse(row.layout) : STUDIO_DEFAULTS[profile].map((e) => ({ ...e }));
   if (!Array.isArray(entries)) throw new Error('layout_not_array');
@@ -65,14 +66,23 @@ async function readLayout(c: Context<{ Bindings: Env }>, w: Who) {
   catch (e) { return refuse(c, 500, { code: 'layout_unreadable', message: 'Your saved Studio layout could not be read. Reset it to start again.', raw: e }); }
 }
 
+// D1418 (#3862): the full catalogue, its groups in order (a group with no
+// module offered is left out), each module's purpose and Open link, and which
+// are in the profile's default (the module map's "Recommended for you").
 r.get('/modules', async (c) => {
   const w = await who(c);
   if (w instanceof Response) return w;
+  const catalogue = catalogueOf(w.profile, w.user);
+  const defaults = new Set(STUDIO_DEFAULTS[w.profile].map((d) => d.key));
   return c.json({
     profile: w.profile,
-    modules: catalogueOf(w.profile).map((m) => {
+    groups: STUDIO_GROUPS[w.profile].filter((g) => catalogue.some((m) => m.group === g.key)).map((g) => ({ key: g.key, label: g.label })),
+    modules: catalogue.map((m) => {
       const plan = lockOf(w.user, m);
-      return { key: m.key, title: m.title, group: m.group, default_size: m.default_size, cohort_only: m.cohort_only === true, locked_by_plan: plan !== null, plan };
+      return {
+        key: m.key, title: m.title, group: m.group, purpose: m.purpose, href: m.href, default_size: m.default_size,
+        in_default: defaults.has(m.key), cohort_only: m.cohort_only === true, locked_by_plan: plan !== null, plan,
+      };
     }),
   });
 });
@@ -93,7 +103,7 @@ r.put('/layout', async (c) => {
   const list: unknown[] = body.layout;
   if (list.length > STUDIO_LAYOUT_MAX)
     return bad('too_many_modules', `A Studio holds at most ${STUDIO_LAYOUT_MAX} modules.`);
-  const catalogue = new Map(catalogueOf(w.profile).map((m) => [m.key, m]));
+  const catalogue = new Map(catalogueOf(w.profile, w.user).map((m) => [m.key, m]));
   const seen = new Set<string>();
   const clean: Array<{ key: string; size: StudioSize }> = [];
   for (const item of list) {
