@@ -29,6 +29,8 @@ const TYPED_READS: Record<string, string> = {
   notion: 'cloudflare-worker/src/services/notion/reads.ts',
   // D856: the guided setup's reads.
   whatsapp_business: 'cloudflare-worker/src/services/channels/whatsappSetup.ts',
+  // D855 §4 (#3733): Linear's read-only reads.
+  linear: 'cloudflare-worker/src/services/linear/reads.ts',
 };
 
 const records = Object.entries(MCP_PROVIDERS) as Array<[string, McpProvider]>;

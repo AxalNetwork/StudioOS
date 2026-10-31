@@ -115,7 +115,7 @@ test('1. records are frozen, write tools need a publishing issue, resources sit 
   assert.ok(Object.isFrozen(MCP_PROVIDERS));
   // D1085 (#2950): Notion is the second, and the first the generic sign-in (D1080) serves.
   // D856 (#2501): WhatsApp Business is the third, for its guided setup only.
-  assert.deepEqual(Object.keys(MCP_PROVIDERS), ['mercury', 'notion', 'whatsapp_business'], 'Mercury, then Notion, then WhatsApp Business');
+  assert.deepEqual(Object.keys(MCP_PROVIDERS), ['mercury', 'notion', 'whatsapp_business', 'linear'], 'Mercury, then Notion, then WhatsApp Business, then Linear');
   for (const [key, p] of Object.entries(MCP_PROVIDERS)) {
     assert.equal(p.key, key);
     for (const f of ['resources', 'hosts', 'scopes', 'accepted_scopes', 'read_tools', 'write_tools', 'setup_tools', 'registration', 'headers'] as const) assert.ok(Object.isFrozen(p[f]), `${key}.${f}`);
@@ -159,13 +159,14 @@ test('2. the client\'s callers are named; the client, the records and src/mcp/ n
   // D852 (#2475): a member's custom servers are the client's second caller.
   // D1080 (#2945): the generic sign-in (its route and its helpers) is the third.
   // D1085 (#2950): Notion's provider (its disconnect and revoke) and its typed reads are the fourth.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]|from\s+['"]\.\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
+  // D855 §4 (#3733): Linear's provider and its typed reads are the fifth, as Notion's are.
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]|from\s+['"]\.\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/linear.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/linear/reads.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
   // D856 (#2501): the setup route mints a setup ticket only after the founder's confirm.
   // D1343 (#3551): `sendThroughCustom` mints one for a member's own mail-send tool, only after the composer's send nonce is spent.
   assert.deepEqual(importers(/\bmintMcpSetupTicket\(/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/routes/channels.ts']);
   // #2549: public status reads provider metadata only. The transport importer
   // assertion above still permits only the two actual client callers.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]|from\s+['"]\.\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]|from\s+['"]\.\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/linear.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/channels.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/channels/whatsappSetup.ts', 'cloudflare-worker/src/services/linear/reads.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
   const client = files.find((f) => f.path.endsWith('integrations/mcpClient.ts'))!.text;
   const records = files.find((f) => f.path.endsWith('integrations/mcpProviders.ts'))!.text;
   assert.doesNotMatch(client, /from\s+['"][^'"]*\/mcp\/|from\s+['"]\.\.\/mcp['"]/, 'the client imports StudioOS\'s own MCP server');
