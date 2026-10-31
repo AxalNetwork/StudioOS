@@ -103,7 +103,7 @@ async function refusals(t: any, route = sms) {
   assert.deepEqual(results, cases.map(([, status, code]) => [status, code, gcip.GCIP_SENTENCES[code], false]));
   f.sendError = null; f.kv.clear();
   const bad = [];
-  for (const body of [{ ...startBody, phone: '079 000 00 00' }, { ...startBody, country: '???' }, { ...startBody, country: 'AQ' }]) {
+  for (const body of [{ ...startBody, phone: '079 000 00 00' }, { ...startBody, country: '???' }, { ...startBody, phone: '+79990000000', country: 'RU' }]) {
     const r = await post(f, 'start-enrollment', body, route); bad.push([r.status, r.body.error, typeof r.body.message === 'string']);
   }
   f.env.GCIP_API_KEY = '';
@@ -111,6 +111,34 @@ async function refusals(t: any, route = sms) {
   assert.deepEqual([bad, unavailable.status, unavailable.body.error], [[[400, 'invalid_phone', true], [400, 'invalid_country', true], [400, 'country_not_allowed', true]], 503, 'sms_unavailable']);
 }
 test('send refusals have the declared statuses and sentences without provider diagnostics', t => refusals(t));
+
+async function destinationValidation(t: any, route = sms) {
+  const f = await fixture(t), results = [];
+  for (const body of [
+    { phone: PHONE, country: 'US' },
+    { phone: '+79990000000', country: 'CH' },
+    { phone: '+99912345678', country: 'CH' },
+    { phone: '+79990000000', country: 'RU' },
+  ]) {
+    const r = await post(f, 'start-enrollment', body, route);
+    results.push([r.status, r.body.error]);
+  }
+  assert.deepEqual([results, f.calls.length], [[[400, 'invalid_country'], [400, 'invalid_country'], [400, 'invalid_phone'], [400, 'country_not_allowed']], 0]);
+  for (const [phone, country] of [[PHONE, 'CH'], ['+14165550123', 'CA'], ['+12025550123', 'US']]) {
+    f.kv.clear();
+    const r = await post(f, 'start-enrollment', { phone, country }, route);
+    const candidate = JSON.parse(f.kv.get('sms-enroll:1:synthetic-session'));
+    assert.deepEqual([r.status, candidate.phone, candidate.country], [200, phone, country]);
+  }
+  f.kv.clear(); f.env.SMS_COUNTRY_ALLOWLIST = '*';
+  const unrestricted = await post(f, 'start-enrollment', { phone: '+79990000000', country: 'RU' }, route);
+  assert.equal(unrestricted.status, 200);
+}
+test('destination parsing agrees with country metadata, the unchanged allowlist, and shared calling codes', async t => {
+  await mutationCheck(new URL('../src/routes/auth_sms.ts', import.meta.url), m => destinationValidation(t, m.default), [
+    ['if (country !== requestedCountry)', 'if (false)'],
+  ]);
+});
 
 test('the sixth request is rate limited; success contains a mask and timing, never the destination', async t => {
   const f = await fixture(t), results = [];

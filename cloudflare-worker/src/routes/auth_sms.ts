@@ -27,6 +27,7 @@
  * are deliberately TOTP-only — see `requireFactor()` in `src/auth.ts`.
  */
 import { Hono } from 'hono';
+import { parsePhoneNumberFromString } from 'libphonenumber-js/min';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { recordSecurityEvent } from '../services/securityEvents';
@@ -123,10 +124,14 @@ sms.post('/sms/start-enrollment', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const phone = String(body?.phone || '').trim();
-  const country = String(body?.country || '').trim().toUpperCase();
+  const requestedCountry = String(body?.country || '').trim().toUpperCase();
   const recaptcha = body?.recaptcha_token ? String(body.recaptcha_token) : null;
   if (!isE164(phone)) return refuse(c, 400, { code: 'invalid_phone', message: gcipSentence('invalid_phone') });
-  if (!/^[A-Z]{2}$/.test(country)) return refuse(c, 400, { code: 'invalid_country', message: 'Choose a country for this phone number.' });
+  if (!/^[A-Z]{2}$/.test(requestedCountry)) return refuse(c, 400, { code: 'invalid_country', message: 'Choose a country for this phone number.' });
+  const destination = parsePhoneNumberFromString(phone, { extract: false });
+  if (!destination?.isPossible() || !destination.country) return refuse(c, 400, { code: 'invalid_phone', message: gcipSentence('invalid_phone') });
+  const country = destination.country;
+  if (country !== requestedCountry) return refuse(c, 400, { code: 'invalid_country', message: 'Choose the country that matches this phone number.' });
   if (!isCountryAllowed(c.env, country)) {
     return refuse(c, 400, { code: 'country_not_allowed', message: `Texts to ${country} aren't offered yet.` });
   }

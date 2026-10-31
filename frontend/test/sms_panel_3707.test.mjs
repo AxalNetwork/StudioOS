@@ -154,6 +154,22 @@ test('missing credentials and incomplete setup have explanations and no dead sen
   await mutationCheck(source, 'pages/SettingsPage.jsx', unavailable, [["if (!status.sms_ready && !status.configured)", 'if (false)']]);
 });
 
+async function retryReadiness(module) {
+  module.api.status.sms_ready = false;
+  const f = await panel(module);
+  try {
+    module.api.status.sms_ready = true;
+    await f.click('Try again');
+    assert.deepEqual([module.api.statusReads, !!button(f, 'Add a phone number')], [2, true]);
+  } finally { await f.unmount(); }
+}
+test('an unavailable setup read can be retried after the provider recovers', async () => {
+  await mutationCheck(source, 'pages/SettingsPage.jsx', retryReadiness, [[
+    '<button onClick={refresh} className="text-sm text-violet-700 mr-3">Try again</button>',
+    '<button onClick={() => {}} className="text-sm text-violet-700 mr-3">Try again</button>',
+  ]]);
+});
+
 const helperSource = readFileSync(new URL('../src/lib/recaptcha.js', import.meta.url), 'utf8');
 test('widget render errors and expired checks reject in words and reset the pending widget', async () => {
   const helper = await sourceModule(helperSource, 'lib/recaptcha.js'), before = globalThis.grecaptcha;

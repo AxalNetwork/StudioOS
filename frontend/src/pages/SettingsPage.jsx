@@ -2115,6 +2115,7 @@ function SmsPanel({ data, flash, onChanged }) {
   if (!status.sms_ready && !status.configured) return (
     <Card title="SMS as a backup factor" description="SMS backup isn't available yet — set-up isn't finished on this server.">
       {errorNotice}
+      <button onClick={refresh} className="text-sm text-violet-700 mr-3">Try again</button>
       {isSuperAdmin && <a href="/admin/integration-keys" data-testid="sms-admin-keys-link" className="text-sm text-violet-700">Open Integration Keys</a>}
     </Card>
   );
