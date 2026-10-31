@@ -55,7 +55,8 @@ import {
   FileSignature, Loader2, Lock, AlertTriangle, FileText, Users,
   CheckCircle2, ExternalLink, Sparkles, Share2, Download, Copy, Eye, Check,
 } from 'lucide-react';
-import { api, spinoutLab, teamsApi } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
+import { teamsApi } from '../lib/api/teams';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import {

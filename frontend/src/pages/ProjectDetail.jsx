@@ -4,7 +4,8 @@ import { NDA_CHOICES, NDA_CHOICE_LABEL, NDA_UNSET_LINE, dataRoomSaveBody, ndaCho
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, FileText, Target, Building, Rocket, Pencil, Trash2, X, Database, Search, ExternalLink, AlertCircle, PieChart, Users, UserPlus, Link2, Copy, Lock, Mail, Check } from 'lucide-react';
 import SectorSelect from '../components/SectorSelect';
-import { api, teamsApi } from '../lib/api';
+import { api } from '../lib/api';
+import { teamsApi } from '../lib/api/teams';
 import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
 import Sheet from '../ui/Sheet.jsx';

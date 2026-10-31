@@ -45,7 +45,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
-import { api, jobs as jobsApi, teamsApi } from '../../lib/api';
+import { api, jobs as jobsApi } from '../../lib/api';
+import { teamsApi } from '../../lib/api/teams';
 import { hasTier } from '../../sidebarConfig';
 import { openPaywall } from '../../components/PaywallModal';
 import PageExplainer from '../../components/PageExplainer';

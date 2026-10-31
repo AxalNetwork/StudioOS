@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
-import { api, teamsApi } from '../../../lib/api';
+import { api } from '../../../lib/api';
+import { teamsApi } from '../../../lib/api/teams';
 import { companyActionsApi } from '../../../lib/api/companyActions.js';
 import { reportError } from '../../../lib/log';
 import { LIFECYCLE, isLastPrimaryAdmin, lifecycleRefusal, roleWord, trashUntil } from './companiesModel';

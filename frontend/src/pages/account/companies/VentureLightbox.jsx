@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import Sheet from '../../../ui/Sheet.jsx';
-import { teamsApi } from '../../../lib/api';
+import { teamsApi } from '../../../lib/api/teams';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { day, seatWord, ventureTeam } from './companiesModel';
 import {

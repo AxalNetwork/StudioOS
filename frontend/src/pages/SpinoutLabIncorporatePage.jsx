@@ -47,7 +47,8 @@ import {
   Landmark, Loader2, Lock, AlertTriangle, FileText, Share2,
   Download, Link2, Eye, Check, X, Shield, Info, PieChart, Handshake, Circle,
 } from 'lucide-react';
-import { api, spinoutLab, teamsApi } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
+import { teamsApi } from '../lib/api/teams';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import AxalCheckout from '../components/AxalCheckout';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';

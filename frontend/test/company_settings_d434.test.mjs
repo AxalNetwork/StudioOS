@@ -155,7 +155,7 @@ test('the Workspace card creates through the switcher\'s own rules and counts ho
   assert.match(w, /api\.createCompany\(\{ company_name \}\)/);
   assert.match(w, /setCompanies\(\[\.\.\.\(companies \|\| \[\]\), created\]\);\s*setActiveCompanyId\(created\.id\);\s*setCompany\(created\);/,
     'append, persist, select — the one-writer rule the switcher keeps');
-  assert.match(PAGE, /import \{ api, setActiveCompanyId, teamsApi \} from '\.\.\/lib\/api';/);
+  assert.match(PAGE, /import \{ api, setActiveCompanyId \} from '\.\.\/lib\/api';/);
   assert.match(w, /data-testid="workspace-count"/);
   assert.match(w, /The number of companies on this account could not be read\./, 'an empty list with an active company is a failed read');
   assert.match(w, /count > 0\s*\?/);
