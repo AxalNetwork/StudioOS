@@ -26,6 +26,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isProjectManager, ensureProjectMembershipSchema } from '../services/projectAccess';
 import { membershipEvent } from '../services/companyMembershipEvents';
+import { ownerUserId, projectMoveStatements } from '../services/projectMove';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -39,13 +40,6 @@ async function managedProject(env: Env, raw: string, user: User): Promise<{ proj
   if (!project) return { status: 404, detail: 'Project not found' };
   if (!isProjectManager(user, project)) return { status: 403, detail: 'Only the venture\'s owner can do this' };
   return { project };
-}
-
-/** The owner's account: the oldest user on the venture's founders row, as `projects.ts` resolves it. */
-async function ownerUserId(env: Env, founderId: number | null): Promise<number | null> {
-  if (founderId == null) return null;
-  const row = await env.DB.prepare('SELECT id FROM users WHERE founder_id = ? ORDER BY id ASC LIMIT 1').bind(founderId).first<{ id: number }>();
-  return row ? Number(row.id) : null;
 }
 
 async function belongs(env: Env, userId: number, companyId: number): Promise<boolean> {
@@ -72,13 +66,8 @@ r.post('/:id/move', async (c) => {
     if (!company || !(await belongs(c.env, owner, to))) return c.json({ detail: 'The venture\'s owner does not belong to that company', code: 'not_owner_company' }, 404);
     if (company.archived_at) return c.json({ detail: 'That company is archived. Restore it before you move a venture to it.', code: 'archived' }, 409);
   }
-  await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE projects SET company_id = ? WHERE id = ?').bind(to, g.project.id),
-    membershipEvent(c.env, {
-      kind: 'project_move', projectId: g.project.id, companyId: to ?? from, actorUserId: user.id,
-      before: { company_id: from }, after: { company_id: to },
-    }),
-  ]);
+  // D1415 Part 3: the one writer of `projects.company_id`, shared with the filing (`services/projectMove.ts`).
+  await c.env.DB.batch(projectMoveStatements(c.env, { projectId: g.project.id, from, to, actorUserId: user.id }));
   return c.json({ project_id: g.project.id, company_id: to, previous_company_id: from });
 });
 
