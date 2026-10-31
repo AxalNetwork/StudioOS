@@ -50,7 +50,8 @@ const ADVISOR = 'frontend/src/components/advisor/PersonalAdvisor.jsx';
 const SESSION = 'frontend/src/pages/founder/InterviewSessionPage.jsx';
 const REVIEWER = 'frontend/src/pages/DeckReviewerPage.jsx';
 const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
-const STUDIO = 'frontend/src/pages/raise/pitch/PitchStudio.jsx';
+// D1604 (#3716, pd1): the one-click moved from PitchStudio.jsx to the studio's home.
+const STUDIO_HOME = 'frontend/src/pages/raise/pitch/StudioHome.jsx';
 const STUDIO_ACTIONS = 'frontend/src/pages/raise/pitch/StudioActions.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
 const AREA_LIGHTBOX = 'frontend/src/pages/raise/pitch/AreaLightbox.jsx';
@@ -214,7 +215,7 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:build', route: '/raise/pitch/new', label: 'Build deck', kind: 'write', handler: 'draft',
-    at: [[NEW_DECK, 'newDeckApi.build('], [STUDIO, 'newDeckApi.build(']],
+    at: [[NEW_DECK, 'newDeckApi.build('], [STUDIO_HOME, 'newDeckApi.build(']],
   },
   // D899 (#2678): Eadwyn's card tools in the editor (PD7, PD9d). Ask and the connector card's headline are rewrites.
   // D1604 (#3716): run from "Generate into N areas" (AreaLightbox) and the instruction box, which retire CardAssistBar.

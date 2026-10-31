@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { GradeDot } from './SourcesBoards';
 import { NOT_RECORDED } from './pitchStudioModel';
-import { readiness } from './sourcesModel';
+import { UNREADABLE_SHARE, readiness } from './sourcesModel';
 
 /**
  * D1604 (#3716, pd1, pd9b, pd9c) — Data ready on the studio's home: how much
@@ -53,10 +53,16 @@ export default function DataReady({ sources }) {
             <li key={r.id} className="flex min-w-0 flex-col gap-1.5" data-testid={`pitch-studio-ready-${r.id}`}>
               <div className="flex items-center gap-2">
                 <span className={`w-[64px] flex-none text-[12.5px] font-bold ${INK}`}>{r.label}</span>
-                <span className="h-2 flex-1 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800" role="img" aria-label={r.aria}>
-                  <span className="block h-full rounded-full bg-axal-violet dark:bg-violet-400" style={{ width: `${r.pc}%` }} />
-                </span>
-                <span className="w-[38px] flex-none text-right font-mono text-[11.5px] text-axal-muted dark:text-gray-400">{r.pc}%</span>
+                {r.pc == null ? (
+                  <span className={`flex-1 italic ${MUTED}`} data-testid={`pitch-studio-ready-unread-${r.id}`}>{UNREADABLE_SHARE}</span>
+                ) : (
+                  <>
+                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800" role="img" aria-label={r.aria}>
+                      <span className="block h-full rounded-full bg-axal-violet dark:bg-violet-400" style={{ width: `${r.pc}%` }} />
+                    </span>
+                    <span className="w-[38px] flex-none text-right font-mono text-[11.5px] text-axal-muted dark:text-gray-400">{r.pc}%</span>
+                  </>
+                )}
               </div>
               <ul className="m-0 flex list-none flex-col gap-0.5 p-0 pl-[72px]">
                 {r.lines.map((l) => (

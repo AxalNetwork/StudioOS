@@ -133,7 +133,8 @@ export function outlineSentence(quote, regenerate) {
 
 export function buildSentence(quote, cards) {
   const price = quote?.ai ? `Eadwyn writes the wording, holding up to ${aiTokens(quote.hold_microusd)} in AI tokens and charging for what it uses.` : 'AI is off on this page, so the cards carry their titles, at no cost.';
-  return `StudioOS builds ${cards} card${cards === 1 ? '' : 's'} from your records. ${price} The deck is a proposal: nothing is a version until you keep cards and save.`;
+  const what = cards == null ? 'the deck' : `${cards} card${cards === 1 ? '' : 's'}`;
+  return `StudioOS builds ${what} from your records. ${price} The deck is a proposal: nothing is a version until you keep cards and save.`;
 }
 
 export const keepSentence = (card) => `Card ${card.n} · ${card.title} joins the cards you keep. Nothing is a version until you save.`;
@@ -142,9 +143,29 @@ export const saveSentence = (kept, total, audience) =>
   `The ${kept} card${kept === 1 ? '' : 's'} you kept, of ${total}, become the new current version${audience ? ` for ${audience}` : ''}. The proposal is then removed; your earlier versions stay as they are.`;
 export const DISCARD_SENTENCE = 'The whole proposal is deleted, with any cards you kept from it. No deck version changes.';
 
-export function fastPathLine(quote, audienceLabel = 'a seed fund') {
+/**
+ * D1604 (#3716, §3.2 step 1) — the one-click's brief, from the context read
+ * (`GET /api/decks/new/context`): #3877's `inferred` when the read carries
+ * it, else the Worker's `fast_path`. `label` is the audience's own label
+ * from the same read and `cards` the standard outline's count for that
+ * length. Null until the read answers: the client never guesses a brief
+ * (never a literal audience or length of its own).
+ */
+export function fastBrief(ctx) {
+  const inf = ctx?.inferred;
+  const pick = inf?.audience && inf?.length ? inf : ctx?.fast_path;
+  if (!pick?.audience || !pick?.length) return null;
+  const label = (Array.isArray(ctx.audiences) ? ctx.audiences : []).find((a) => a?.id === pick.audience)?.label || null;
+  const outline = ctx?.standard?.[pick.length];
+  return { audience: pick.audience, length: pick.length, label, cards: Array.isArray(outline) && outline.length ? outline.length : null, why: (pick === inf && inf.why) || null };
+}
+
+/** The one-click's line under its title: the brief it will build, then the quote's price. Before the context read, no brief is named. */
+export function fastPathLine(quote, brief = null) {
   const price = quote?.ai ? ` About ${aiTokens(quote.hold_microusd)} in AI tokens.` : quote?.ai === false && quote.reason === 'assist_off' ? ' AI is off on this page: figures and titles only, at no cost.' : '';
-  return `Twelve cards from everything on record, for ${audienceLabel}. Review sources afterwards.${price}`;
+  const what = brief?.cards ? `${brief.cards} cards` : 'A deck';
+  const who = brief?.label ? `, for the ${brief.label} audience` : '';
+  return `${what} from everything on record${who}. Review sources afterwards.${price}`;
 }
 
 // ─────────────────────────────────────────────────────────── the proposal

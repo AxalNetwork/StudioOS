@@ -469,7 +469,10 @@ test('no new "Fill" on a pitch page, and exactly one control is named "Ask Eadwy
   const fill = /\bFill\b|Fill with Eadwyn|Fill from project/;
   for (const f of ['DeckAsk.jsx', 'PitchPage.jsx', 'deckV2Model.js', 'deckV2Adapter.js']) assert.doesNotMatch(codeOnly(read(`${PITCH}/${f}`)), fill, f);
   assert.doesNotMatch(codeOnly(read('frontend/src/ui/AskButton.jsx')), fill);
-  // The v1 labels that remain go with the studio-home and New-deck steps (plan §11, 12 and 14); none may be added.
+  // The v1 labels that remain; none may be added. NewDeck.jsx's goes with the New-deck step (plan §11, 14).
+  // StudioActions.jsx keeps the unmounted `FillFromProject` because it is the only press site of the
+  // `form:deck` rail option: retiring it drops that option's row from the Worker's generated
+  // `railMatrix.json`, a Worker change this frontend-only build does not make. No pitch page mounts it.
   const remaining = readdirSync(PITCH).filter((f) => f.endsWith('.jsx') && fill.test(codeOnly(read(`${PITCH}/${f}`)).replace(/import[^;]+;/g, '')));
   assert.deepEqual(remaining.sort(), ['NewDeck.jsx', 'StudioActions.jsx']);
   const named = readdirSync(PITCH).filter((f) => /\.jsx$/.test(f) && /aria-label="Ask Eadwyn"|aria-label=\{?['"`]Ask Eadwyn['"`]/.test(read(`${PITCH}/${f}`)));

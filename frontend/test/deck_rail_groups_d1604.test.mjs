@@ -145,8 +145,12 @@ test('with groups: one block per group, no model read until a group opens, at mo
     assert.equal(m.text(m.by('text-worker-rail-usage-held')), 'Held now $0.06 · 2 runs in progress');
     assert.ok(!m.by('text-worker-rail-usage-estimated') && !m.by('text-worker-rail-usage-spent'));
     assert.doesNotMatch(m.text(m.by('worker-rail-usage')), /Estimated for this deck|Spent on this deck|Held by runs in progress/);
+    // A closed group points aria-controls at nothing: its body is not in the page.
+    assert.equal(m.pr(m.by('button-worker-rail-group-text'))['aria-controls'], undefined, 'a collapsed group names no body');
     await m.click('button-worker-rail-group-text');
     assert.deepEqual(m.calls.page.filter(([, o]) => o), [[DECK_RAIL_PAGE, 'deck:rewrite']], 'the lead option, once opened');
+    const controls = m.pr(m.by('button-worker-rail-group-text'))['aria-controls'];
+    assert.ok(controls && m.nodes().some((n) => m.pr(n).id === controls), 'an open group names the body it shows');
     const cards = m.nodes().filter((n) => /^card-worker-rail-group-text-/.test(String(m.pr(n)['data-testid'] || '')));
     assert.equal(cards.length, 3, 'Suggested shows at most three models');
     assert.match(m.text(m.by('worker-rail-group-text')), /Used by: Title, Kicker, Body, Bullets…/);

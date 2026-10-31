@@ -110,7 +110,7 @@ function RailGroup({ group, page, live, guardLine }) {
   }
   return (
     <div className="fwr-rgroup" data-testid={`worker-rail-group-${group.id}`}>
-      <button type="button" className="fwr-rgroup-head fwr-rgroup-toggle" aria-expanded={open} aria-controls={bodyId}
+      <button type="button" className="fwr-rgroup-head fwr-rgroup-toggle" aria-expanded={open} aria-controls={open ? bodyId : undefined}
         onClick={() => setOpen((o) => !o)} data-testid={`button-worker-rail-group-${group.id}`}>
         <span className="fwr-rgroup-name">{group.label}</span>
         <span className="fwr-rgroup-chev" aria-hidden="true">{open ? '−' : '+'}</span>

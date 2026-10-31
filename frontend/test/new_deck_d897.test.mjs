@@ -28,7 +28,7 @@ import { newDeckApi } from '../src/lib/api/newDeck.js';
 import { deckSourcesApi } from '../src/lib/api/deckSources.js';
 import NewDeck from '../src/pages/raise/pitch/NewDeck.jsx';
 import {
-  NEW_PATH, addRow, aiTokens, buildSentence, chipsFor, costRows, editRow, estimateLine, fastPathLine, keepSentence, moveRow,
+  NEW_PATH, addRow, aiTokens, buildSentence, chipsFor, costRows, editRow, estimateLine, fastBrief, fastPathLine, keepSentence, moveRow,
   numberIn, outlineSentence, progressRows, promptWarning, proposalCards, refusalOf, removeRow, roundLine, rowWarning, saveSentence, startOptions,
 } from '../src/pages/raise/pitch/newDeckModel.js';
 
@@ -152,7 +152,17 @@ test('every write\'s dialog says what it changes and what it costs', () => {
   assert.match(buildSentence({ ai: false, reason: 'assist_off' }, 1), /builds 1 card .*AI is off/);
   assert.match(keepSentence({ n: '03', title: 'Team' }), /Card 03 · Team joins the cards you keep/);
   assert.match(saveSentence(3, 12, 'Seed fund'), /The 3 cards you kept, of 12, become the new current version for Seed fund/);
-  assert.match(fastPathLine({ ai: true, hold_microusd: 6000 }), /^Twelve cards from everything on record, for a seed fund\. Review sources afterwards\. About \$0\.0060 in AI tokens\.$/);
+  // D1604 (#3716, §3.2): the one-click's line names the brief the context read gave, never a guessed one.
+  const brief = fastBrief({ fast_path: { audience: 'pre_seed_fund', length: 'short' }, audiences: [{ id: 'pre_seed_fund', label: 'Pre-seed fund' }], standard: { short: [1, 2, 3, 4, 5, 6] } });
+  assert.deepEqual(brief, { audience: 'pre_seed_fund', length: 'short', label: 'Pre-seed fund', cards: 6, why: null });
+  assert.match(fastPathLine({ ai: true, hold_microusd: 6000 }, brief), /^6 cards from everything on record, for the Pre-seed fund audience\. Review sources afterwards\. About \$0\.0060 in AI tokens\.$/);
+  assert.equal(fastPathLine(null), 'A deck from everything on record. Review sources afterwards.', 'before the read, no audience is named');
+  assert.match(buildSentence(null, null), /^StudioOS builds the deck from your records\./);
+  // #3877's inferred brief wins over fast_path when the read carries it.
+  const inferred = fastBrief({ fast_path: { audience: 'seed_fund', length: 'standard' }, inferred: { audience: 'angel', length: 'short', why: 'Your venture is at idea stage.' }, audiences: [{ id: 'angel', label: 'Angel' }] });
+  assert.deepEqual([inferred.audience, inferred.length, inferred.why], ['angel', 'short', 'Your venture is at idea stage.']);
+  assert.equal(fastBrief(null), null, 'no read, no brief');
+  assert.equal(fastBrief({ audiences: [] }), null, 'a read without fast_path gives no brief');
   for (const s of [outlineSentence(null, false), buildSentence(null, 2), fastPathLine(null)]) assert.doesNotMatch(s, /credit/i);
 });
 
@@ -315,7 +325,14 @@ test('the route is static, the studio opens it, and the fast path builds a propo
   // D1604 (#3716, pd1): the empty state and the one-click are the home's (`StudioHome.jsx`).
   const home = read('frontend/src/pages/raise/pitch/StudioHome.jsx');
   assert.match(home, /to=\{`\$\{NEW_PATH\}\$\{q\}`\} className=\{PRIMARY\} data-testid="pitch-studio-empty-new"/);
-  assert.match(home, /newDeckApi\.build\(\{ project_id: projectId, audience: 'seed_fund', length: 'standard' \}, railPressHeaders\('deck:build'\)\)/);
+  // D1604 (#3716, §3.2): the brief is the context read's, never a literal of the client's.
+  assert.match(home, /newDeckApi\.context\(projectId\)/);
+  assert.match(home, /newDeckApi\.build\(\{ project_id: projectId, audience: brief\.audience, length: brief\.length \}, railPressHeaders\('deck:build'\)\)/);
+  assert.match(home, /newDeckApi\.quote\(\{ project_id: projectId, step: 'build', audience: brief\.audience, length: brief\.length \}\)/);
+  assert.match(home, /disabled=\{!brief\}[^>]*data-testid="pitch-studio-fast-build"/, 'Build waits for the read, never a guessed brief');
+  for (const f of ['StudioHome.jsx', 'PitchStudio.jsx', 'newDeckModel.js']) {
+    assert.doesNotMatch(read(`frontend/src/pages/raise/pitch/${f}`), /seed_fund|'standard'/, `${f}: no hard-coded audience or length for the one-click`);
+  }
   for (const f of ['frontend/src/pages/raise/pitch/NewDeck.jsx', 'frontend/src/pages/raise/pitch/newDeckModel.js']) {
     const src = read(f);
     assert.doesNotMatch(src, /\[\$[\d.,]+\]|\[Northwind|\[Seed\]|\[\d+\] runs/, `${f}: no canvas sample reaches the page`);

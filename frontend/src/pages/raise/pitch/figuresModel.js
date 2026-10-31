@@ -29,7 +29,7 @@
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { dayLabel } from './pitchStudioModel.js';
 import { bindingOf, seriesIndex } from './chartModel.js';
-import { recordLine } from './sourcesModel.js';
+import { recordLine, valueText } from './sourcesModel.js';
 
 export { NOT_RECORDED };
 
@@ -40,6 +40,7 @@ export const OPEN_RECORD = 'Open the record ›';
 export const PROJECTION = 'Projection';
 export const PROJECTED = 'Projected';
 export const PROJECTION_NOTE = 'Forward-looking: a projection from your financial model, not a result.';
+export const TYPED_LINE = 'Typed on the card, no record backs it.';
 export const GONE_LINE = 'Its store no longer holds this figure. The card keeps what it shows until you change it.';
 
 const AREAS = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow', team: 'Team', scoring: 'Scoring' };
@@ -87,12 +88,16 @@ function bindingsIn(block) {
 
 /**
  * The store's answer for one binding: `fresh`, `stale` (another snapshot),
- * `gone` (it holds nothing now) or `unknown` (not read, or not readable).
+ * `gone` (it held a snapshot and holds nothing now) or `unknown` (not read,
+ * or not readable). A binding that never held a snapshot (the one-click
+ * build binds a missing slot as `{ grade: 'Not recorded', snapshot_hash:
+ * null }`) against a store that still records nothing is `fresh`: the
+ * figure never changed.
  */
 function compare(binding, cur) {
   if (!cur) return 'unknown';
   if (cur.state === 'recorded') return (cur.snapshot_hash ?? null) === (binding.snapshot_hash ?? null) ? 'fresh' : 'stale';
-  if (cur.state === 'not_recorded') return 'gone';
+  if (cur.state === 'not_recorded') return binding.snapshot_hash ? 'gone' : 'fresh';
   return 'unknown';
 }
 
@@ -101,8 +106,9 @@ const currentOf = (binding, byKey, series) => byKey.get(binding.source_key) || s
 /**
  * The figures on one card whose store has another snapshot (or none), each
  * `{ blockId, at, label, state, was, now }`. `was` is what the tile shows;
- * `now` what Refresh would put there, in the same words (a series' newest
- * value is the chart's to draw, so it is null there).
+ * `now` what Refresh would put there, in the same words: the unit-formatted
+ * text the worker's build writes (`valueText`), so "$12,400", never 1240000
+ * cents (a series' newest value is the chart's to draw, so it is null there).
  */
 export function staleFigures(card, items, charts = null) {
   const byKey = itemsByKey(items);
@@ -114,19 +120,23 @@ export function staleFigures(card, items, charts = null) {
       const state = compare(f.binding, cur);
       if (state !== 'stale' && state !== 'gone') continue;
       const was = b.kind === 'metric' ? (str(b.value) || NOT_RECORDED) : null;
-      const now = b.kind === 'metric' && state === 'stale' && cur.value != null ? String(cur.value) : null;
+      const now = b.kind === 'metric' && state === 'stale' ? (valueText(cur) ?? NOT_RECORDED) : null;
       out.push({ blockId: b.id, at: f.at, label: f.label, state, was, now });
     }
   }
   return out;
 }
 
-/** A metric tile moved to its store's snapshot, as the Add menu binds one. Unchanged when the store holds no value. */
+/**
+ * A metric tile moved to its store's snapshot, as the Add menu binds one,
+ * its value in the unit-formatted words the worker's build writes
+ * (`valueText`). Unchanged when the store holds no value.
+ */
 export function refreshMetric(block, item) {
   if (!block || block.kind !== 'metric' || !item || item.state !== 'recorded') return block;
   return {
     ...block,
-    value: item.value == null ? null : String(item.value),
+    value: valueText(item),
     binding: { source_key: item.source_key, record_ref: item.record_ref ?? null, as_of: item.as_of ?? null, grade: item.grade ?? null, snapshot_hash: item.snapshot_hash ?? null },
   };
 }
@@ -191,7 +201,10 @@ export function projectionOf(block, today = new Date().toISOString().slice(0, 10
  *
  *   lines    "From Grow › Revenue · as of 1 Oct 2026 · Measured"
  *   link     "Open the record ›" to the module, when the store names it
- *   missing  "Not recorded", with "Add in … ›"
+ *   missing  "Not recorded", with "Add in … ›"; null for a tile whose
+ *            face holds a typed value no record backs, which reads
+ *            TYPED_LINE instead (#3775's Stated and Uncited badges will
+ *            grade it)
  *   changed  the line, and `was → now` for a tile
  *   projection
  */
@@ -201,7 +214,8 @@ export function figureCard(block, items, charts = null, today) {
   const projection = projectionOf(block, today);
   const figures = bindingsIn(block);
   if (block?.kind === 'metric' && !figures.length) {
-    return { title: str(block.label) || 'Figure', lines: [], missing: { text: NOT_RECORDED, link: null }, changed: [], projection: null };
+    const typed = Boolean(str(block.value));
+    return { title: str(block.label) || 'Figure', lines: typed ? [TYPED_LINE] : [], missing: typed ? null : { text: NOT_RECORDED, link: null }, changed: [], projection: null };
   }
   if (!figures.length && !projection) return null;
   const lines = [];

@@ -848,6 +848,12 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
   assert.match(start, /data-testid="pitch-studio-fast"/);
   assert.match(renderedText(between(start, 'pitch-studio-start-pptx')), /Import a \.pptx template ›\s*Coming later/);
   assert.match(start, /title="Not switched on yet\."[^>]*data-testid="pitch-studio-start-pptx"/);
+  // Each item's way in: only Standard outline links to New deck; Browse templates is greyed until the
+  // gallery (step 15) and its filters (#3782), never a second link to the same page.
+  assert.match(start, /data-testid="pitch-studio-start-outline-link" href="\/raise\/pitch\/new\?project_id=7"/);
+  assert.equal((start.match(/href="\/raise\/pitch\/new\?project_id=7"/g) || []).length, 1, 'one Start from link opens New deck');
+  assert.doesNotMatch(start, /data-testid="pitch-studio-start-templates-link"/);
+  assert.match(renderedText(between(start, 'pitch-studio-start-templates', 'pitch-studio-start-pptx')), /Browse templates ›\s*Coming later/);
   // Investor links: the links' total, viewers and median from the reads, and the way to the tab.
   const links = renderedText(between(html, 'pitch-studio-links-summary', 'pitch-studio-weekly'));
   assert.match(links, /Shared links\s*6\s*Unique viewers\s*4\s*Median time per view\s*1:00/);
@@ -857,6 +863,38 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
   const reader = decks(reads(), true);
   assert.match(reader, /data-testid="pitch-studio-present"/);
   assert.doesNotMatch(reader, /data-testid="pitch-studio-(fast|start-outline|start-templates)"/);
+  // §8: a reader's home is the deck and Present; no Start from card, not even its greyed entries.
+  assert.doesNotMatch(reader, /data-testid="pitch-studio-start"/, 'a reader has no Start from');
+  assert.match(reader, /lg:col-span-3[^"]*"[^>]*data-testid="pitch-studio-current"/, 'the deck card takes the row');
+});
+
+test('D1604 one-click: the brief is the context read\'s; Build waits for it, and the quote and build carry it', async () => {
+  const { newDeckApi } = await import('../src/lib/api/newDeck.js');
+  const real = { ...newDeckApi };
+  const sent = { quote: [], build: [] };
+  let answer;
+  const ctx = new Promise((r) => { answer = r; });
+  newDeckApi.context = async () => ctx;
+  newDeckApi.quote = async (b) => { sent.quote.push(b); return { ai: true, hold_microusd: 6000 }; };
+  newDeckApi.build = async (b) => { sent.build.push(b); return { proposal: { id: 'p1' } }; };
+  const m = await mount(h(PitchStudio, { tab: 'decks' }), '/raise/pitch?project_id=7', {
+    listProjects: async () => [{ id: 7, name: 'Acme' }], deckListVersions: async () => ({ versions: [V4, V3] }),
+    deckGet: async (id) => (Number(id) === 39 ? DECK3 : DECK4), deckEngagement: async () => engagement, 'cycles.module': async () => ({ card: cardOk, records }),
+  }, { id: 2, role: 'founder', founder_id: 20 });
+  try {
+    assert.equal(m.pr(m.by('pitch-studio-fast-build')).disabled, true, 'no brief yet: Build is disabled, never a guessed default');
+    assert.deepEqual(sent.quote, [], 'no quote before the brief');
+    answer({ fast_path: { audience: 'seed_fund', length: 'standard' }, inferred: { audience: 'pre_seed_fund', length: 'short', why: 'Synthetic: the venture is pre-seed.' },
+      audiences: [{ id: 'pre_seed_fund', label: 'Pre-seed fund' }], standard: { short: [1, 2, 3, 4, 5, 6] } });
+    await m.settle();
+    assert.equal(m.pr(m.by('pitch-studio-fast-build')).disabled, false);
+    assert.deepEqual(sent.quote.map((b) => [b.audience, b.length]), [['pre_seed_fund', 'short']], 'the inferred brief, not seed_fund');
+    assert.match(m.text(), /6 cards from everything on record, for the Pre-seed fund audience/);
+    await m.press(m.by('pitch-studio-fast-build'));
+    const run = m.all().find((n) => n.tagName === 'BUTTON' && /Build deck/.test(n.textContent || ''));
+    await m.press(run);
+    assert.deepEqual(sent.build.map((b) => [b.audience, b.length]), [['pre_seed_fund', 'short']]);
+  } finally { await m.unmount(); Object.assign(newDeckApi, real); }
 });
 
 test('D1604 home states: loading reads as such; an empty studio offers New deck and the one-click; failed reads say so', async () => {
@@ -897,4 +935,21 @@ test('D1604 Data ready: each area\'s share of recorded slots, its items with gra
   assert.ok(renderedText(failed).includes(SOURCES_FAILED));
   assert.match(renderedText(failed), /Try again/);
   assert.doesNotMatch(failed, /% ready/, 'a failed read draws no bar');
+  // A slot whose read failed is unknown, not missing: it stays out of the share, and an area
+  // with nothing readable draws "Could not be read", never 0%.
+  const unread = [
+    ...items,
+    { source_key: 'grow.cac', area: 'grow', label: 'CAC', state: 'unreadable' },
+    { source_key: 'build.commits', area: 'build', label: 'Commits', state: 'unreadable' },
+    { source_key: 'build.releases', area: 'build', label: 'Releases', state: 'unreadable' },
+  ];
+  const ur = Object.fromEntries(readiness(unread).map((r) => [r.id, r]));
+  assert.equal(ur.build.pc, null, 'nothing readable: no share');
+  assert.equal(ur.grow.pc, 33, 'the failed CAC read does not lower Grow\'s share');
+  assert.equal(ur.validate.pc, 50);
+  const ok = draw(h(DataReady, { sources: { status: 'ok', data: { items: unread } } }));
+  assert.match(renderedText(ok), /BuildCould not be read/);
+  assert.match(renderedText(ok), /2 could not be read\./);
+  assert.doesNotMatch(ok, /Build 0% ready|>0%</, 'an unread area is never drawn as 0%');
+  assert.match(ok, /aria-label="Grow 33% ready"/);
 });

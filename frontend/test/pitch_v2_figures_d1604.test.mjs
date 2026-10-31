@@ -21,7 +21,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
-  CHANGED_LINE, NOT_RECORDED, PROJECTION, PROJECTION_NOTE, REFRESH_FROM_RECORDS,
+  CHANGED_LINE, NOT_RECORDED, PROJECTION, PROJECTION_NOTE, REFRESH_FROM_RECORDS, TYPED_LINE,
   faceOf, figureCard, projectionOf, refreshCard, refreshMetric, staleFigures,
 } from '../src/pages/raise/pitch/figuresModel.js';
 import { BlockView } from '../src/pages/raise/pitch/BlockGrid.jsx';
@@ -62,16 +62,33 @@ test('the hover card: record, as of and grade, Open the record; a missing tile r
   assert.equal(gap.missing.text, NOT_RECORDED);
   assert.deepEqual(gap.missing.link, { text: 'Add in Grow › Runway ›', href: '/grow/runway' });
   assert.equal(figureCard({ id: 't', kind: 'text', text: 'Words' }, [MRR], null), null, 'a text block is not a figure');
+  // A typed tile no record backs is not "Not recorded": its face holds a value.
+  const typed = figureCard({ id: 'm4', kind: 'metric', label: 'Raise', value: '$2M' }, [], null);
+  assert.equal(typed.missing, null, 'the hover does not contradict the face');
+  assert.deepEqual(typed.lines, [TYPED_LINE]);
+});
+
+test('a one-click Not recorded binding against a store that still records nothing is not "changed"', () => {
+  // newDeck.ts binds a missing slot as { source_key, grade: 'Not recorded', snapshot_hash: null }.
+  const tile = { id: 'm9', kind: 'metric', label: 'Runway', value: null, binding: { source_key: 'grow.runway', record_ref: null, as_of: null, grade: 'Not recorded', snapshot_hash: null } };
+  const items = [{ source_key: 'grow.runway', state: 'not_recorded', module: 'Grow › Runway', href: '/grow/runway' }];
+  assert.deepEqual(staleFigures({ blocks: [tile] }, items), [], 'the figure never changed');
+  assert.deepEqual(figureCard(tile, items, null).changed, []);
+  assert.equal(refreshCard({ blocks: [tile] }, items).moved, 0);
+  // Once the store records it, the tile is stale and Refresh fills it, formatted.
+  const now = [{ source_key: 'grow.runway', state: 'recorded', value: 1240000, unit: 'cents', grade: 'Measured', as_of: '2026-10-20', snapshot_hash: 'f'.repeat(24) }];
+  assert.deepEqual(staleFigures({ blocks: [tile] }, now).map((x) => [x.state, x.was, x.now]), [['stale', NOT_RECORDED, '$12,400']]);
+  assert.equal(refreshCard({ blocks: [tile] }, now).card.blocks[0].value, '$12,400', 'cents read as dollars, never 100x off');
 });
 
 test('a changed figure: stale with then and now; gone is never zeroed; Refresh moves only the stale ones', () => {
   const card = { blocks: [TILE, { id: 'm2', kind: 'metric', label: 'Runway', value: '14', binding: { source_key: 'grow.runway', as_of: '2026-09-01', grade: 'Stated', snapshot_hash: 'c'.repeat(24) } }] };
   const items = [MRR, { source_key: 'grow.runway', state: 'not_recorded' }];
   const stale = staleFigures(card, items);
-  assert.deepEqual(stale.map((x) => [x.blockId, x.state, x.was, x.now]), [['m1', 'stale', '17900', '18400'], ['m2', 'gone', '14', null]]);
+  assert.deepEqual(stale.map((x) => [x.blockId, x.state, x.was, x.now]), [['m1', 'stale', '17900', '$18,400'], ['m2', 'gone', '14', null]]);
   const r = refreshCard(card, items);
   assert.equal(r.moved, 1);
-  assert.equal(r.card.blocks[0].value, '18400');
+  assert.equal(r.card.blocks[0].value, '$18,400', 'the unit-formatted words the build writes, not the raw number');
   assert.equal(r.card.blocks[0].binding.snapshot_hash, MRR.snapshot_hash);
   assert.equal(r.card.blocks[0].binding.as_of, '2026-10-12', 'the chip moves with the value');
   assert.equal(r.card.blocks[1], card.blocks[1], 'a figure its store no longer holds is left as the card shows it');
@@ -170,12 +187,12 @@ test('the editor: a figure whose store moved says so, and Refresh from records m
   try {
     const notice = m.by('pitch-figure-changed');
     assert.ok(notice, 'the changed line is drawn');
-    assert.match(m.text(notice), new RegExp(`${CHANGED_LINE} MRR ?: 4200 → 5100`));
+    assert.match(m.text(notice), new RegExp(`${CHANGED_LINE} MRR ?: 4200 → \\$5,100`), 'the store\'s value in the words a card prints');
     assert.equal(m.text(m.by('pitch-figure-refresh')), REFRESH_FROM_RECORDS);
     assert.match(m.text(), /Saved/);
     await m.press(m.by('pitch-figure-refresh'));
     assert.equal(m.by('pitch-figure-changed'), undefined, 'the card now holds the store\'s snapshot');
-    assert.match(m.text(m.by('pitch-editor-block-b3')), /5100/);
+    assert.match(m.text(m.by('pitch-editor-block-b3')), /\$5,100/);
     assert.match(m.text(), /Unsaved changes/, 'held until a version is saved');
     assert.ok(!m.calls.some(([n]) => n === 'deckUpdate'), 'nothing was written');
   } finally { await m.close(); }

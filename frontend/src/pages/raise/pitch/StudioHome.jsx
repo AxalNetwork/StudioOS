@@ -19,7 +19,7 @@ import { LATER } from './deckV2Model';
 import useMenuFocus from './useMenuFocus';
 import { NOT_CHECKED, checkPills } from './checkModel';
 import { presentHref } from './presentExportModel';
-import { FAST_TITLE, NEW_PATH, buildSentence, fastPathLine, refusalOf } from './newDeckModel';
+import { FAST_TITLE, NEW_PATH, buildSentence, fastBrief, fastPathLine, refusalOf } from './newDeckModel';
 import {
   ANALYTICS_PATH, EDIT_PATH, EMPTY_DECK, NOT_RECORDED, NO_VIEWS, NEW_DATA_FAILED, NOTHING_BOUND, NOTHING_NEW, REFRESH_THE_DECK,
   asList, coverOf, currentVersion, dayLabel, linkPage, mmss, newInData, readerStats, slideSeconds, versionLabel, versionRows, viewsState, weeklyViews,
@@ -40,8 +40,10 @@ import {
  *                   Done" (#3826) are not drawn until their routes merge; one
  *                   deck per venture is what main holds.
  *   Start from      Standard outline (New deck), Build a standard deck now
- *                   (the one-click, from your records), Browse templates, and
- *                   Import a .pptx template, greyed "Coming later" (#3809)
+ *                   (the one-click, from your records), Browse templates
+ *                   (greyed "Coming later" until the gallery and #3782) and
+ *                   Import a .pptx template, greyed "Coming later" (#3809).
+ *                   A reader gets no Start from: the deck card takes the row
  *   Data ready      `DataReady.jsx`: each area's share and "Add in … ›"
  *   Investor links  shared links, unique viewers, median time, views by
  *                   week, most read slide and NDA signed (D894), with
@@ -70,13 +72,16 @@ const ITEM = 'flex min-h-[36px] w-full items-center justify-between gap-3 rounde
 
 export const START_FROM = 'Start from';
 export const FAST_LINE = 'One click, from your records';
+export const FAST_UNREAD = 'Your venture\'s brief could not be read, so the one-click cannot build yet. Use New deck, or reload.';
 export const INVESTOR_LINKS = 'Investor links';
 export const OPEN_ANALYTICS = 'Open Share & analytics ›';
 /** pd1's Start from, in its order. `fast` is the one-click; `adapter` greys an entry until its route merges. */
 export const START_ITEMS = Object.freeze([
   { id: 'outline', label: 'Standard outline', line: 'The outline investors expect at your stage' },
   { id: 'fast', label: FAST_TITLE, line: FAST_LINE },
-  { id: 'templates', label: 'Browse templates ›', line: 'Start from a template, by stage and audience' },
+  // The gallery (`/raise/pitch/templates`, step 15) and its stage and audience filters (#3782) are not built:
+  // greyed until then, never a second link to the same New deck page. A template start stays in New deck.
+  { id: 'templates', label: 'Browse templates ›', line: 'Start from a template, by stage and audience', adapter: 'templates' },
   { id: 'pptx', label: 'Import a .pptx template ›', line: 'Map your own layouts to The Grid', adapter: 'pptxImport' },
 ]);
 /** The deck card's ⋯, in its order; `write` items are a writer's. */
@@ -129,14 +134,15 @@ export default function StudioHome({ reads, readOnly, q }) {
       <div className="grid gap-3.5 lg:grid-cols-3">
         {current ? (
           <DeckCard project={reads.project} current={current} deck={reads.deck} engagement={reads.engagement} sources={sources}
-            q={q} phone={phone} readOnly={readOnly} checks={checks} onMenu={setSheet} />
+            q={q} phone={phone} readOnly={readOnly} checks={checks} onMenu={setSheet} wide={readOnly} />
         ) : (
-          <div className={`${CARD} flex flex-col items-center justify-center gap-3 px-5 py-7 text-center lg:col-span-2`} data-testid="pitch-studio-empty">
+          <div className={`${CARD} flex flex-col items-center justify-center gap-3 px-5 py-7 text-center ${readOnly ? 'lg:col-span-3' : 'lg:col-span-2'}`} data-testid="pitch-studio-empty">
             <span className={`text-[15px] font-extrabold ${INK}`}>{EMPTY_DECK}</span>
             {!readOnly ? <Link to={`${NEW_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-empty-new">New deck</Link> : null}
           </div>
         )}
-        <StartFrom projectId={projectId} q={q} readOnly={readOnly} />
+        {/* §8: a reader's home is the deck and Present; Start from is a writer's. */}
+        {!readOnly ? <StartFrom projectId={projectId} q={q} /> : null}
       </div>
       <div className="grid gap-3.5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <DataReady sources={sources} />
@@ -207,14 +213,14 @@ function Fact({ k, children, testId }) {
   );
 }
 
-function DeckCard({ project, current, deck, engagement, sources, q, phone, readOnly, checks, onMenu }) {
+function DeckCard({ project, current, deck, engagement, sources, q, phone, readOnly, checks, onMenu, wide = false }) {
   const cover = deck.status === 'ok' ? coverOf(deck.data) : null;
   const name = String(project?.name || '').trim() || 'Your venture';
   const row = versionRows([current])[0];
   const stats = engagement.status === 'ok' ? readerStats(engagement.data) : null;
   const views = engagement.status === 'error' ? 'Could not be read' : engagement.status !== 'ok' ? '…' : stats ? `${stats.views}${stats.capped ? '+' : ''}` : NOT_RECORDED;
   return (
-    <section className={`${CARD} flex flex-col gap-3 p-4 lg:col-span-2 ${phone ? '' : 'sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start'}`} data-testid="pitch-studio-current">
+    <section className={`${CARD} flex flex-col gap-3 p-4 ${wide ? 'lg:col-span-3' : 'lg:col-span-2'} ${phone ? '' : 'sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start'}`} data-testid="pitch-studio-current">
       <div className="flex aspect-video flex-col justify-end gap-1 rounded-[8px] border border-axal-hairline bg-axal-ground p-3.5 dark:border-gray-700 dark:bg-gray-800" data-testid="pitch-studio-cover">
         {deck.status === 'loading' ? <Skeleton h="h-full" /> : deck.status === 'error' ? (
           <span className={MUTED}>The cover could not be read.</span>
@@ -256,13 +262,13 @@ function DeckCard({ project, current, deck, engagement, sources, q, phone, readO
 }
 
 /** pd1's Start from: four ways to begin, the one-click among them. */
-function StartFrom({ projectId, q, readOnly }) {
+function StartFrom({ projectId, q }) {
   return (
     <section className={`${CARD} flex flex-col gap-1 p-4`} aria-labelledby="pitch-studio-start-title" data-testid="pitch-studio-start">
       <h2 id="pitch-studio-start-title" className={`${EYE} m-0`}>{START_FROM}</h2>
       <ul className="m-0 flex list-none flex-col p-0">
         {START_ITEMS.map((it) => {
-          if (it.id === 'fast') return !readOnly && projectId != null ? <FastPath key={it.id} projectId={projectId} q={q} /> : null;
+          if (it.id === 'fast') return projectId != null ? <FastPath key={it.id} projectId={projectId} q={q} /> : null;
           const off = it.adapter ? availability(it.adapter) : null;
           if (off && off.available !== true) {
             return (
@@ -275,10 +281,9 @@ function StartFrom({ projectId, q, readOnly }) {
               </li>
             );
           }
-          if (readOnly) return null;
           return (
             <li key={it.id} className="flex flex-col gap-0.5 border-t border-axal-hairline py-3 first:border-t-0 dark:border-gray-700" data-testid={`pitch-studio-start-${it.id}`}>
-              <Link to={`${NEW_PATH}${q}`} className={`text-[13.5px] font-bold ${INK} hover:text-axal-violet dark:hover:text-violet-300`}>{it.label}</Link>
+              <Link to={`${NEW_PATH}${q}`} className={`text-[13.5px] font-bold ${INK} hover:text-axal-violet dark:hover:text-violet-300`} data-testid={`pitch-studio-start-${it.id}-link`}>{it.label}</Link>
               <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{it.line}</span>
             </li>
           );
@@ -329,10 +334,13 @@ function CheckPills({ checks, current, q }) {
 }
 
 /**
- * D897 (#2677), PD2 → pd1's Start from: "Build a standard deck now" — twelve cards from everything
- * on record, for a seed fund, skipping source curation. Its estimate is the
- * quote (`POST /api/decks/new/quote`); the build is a proposal, reviewed card
- * by card at /raise/pitch/new.
+ * D897 (#2677), PD2 → pd1's Start from: "Build a standard deck now" — a deck
+ * from everything on record, skipping source curation. D1604 (#3716, §3.2):
+ * its brief is the context read's (`newDeckApi.context`: #3877's `inferred`
+ * when present, else `fast_path`), never a literal of the client's; until
+ * that read answers, Build is drawn disabled and no quote is asked. Its
+ * estimate is the quote (`POST /api/decks/new/quote`); the build is a
+ * proposal, reviewed card by card at /raise/pitch/new.
  */
 function FastPath({ projectId, q }) {
   const navigate = useNavigate();
@@ -340,17 +348,29 @@ function FastPath({ projectId, q }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
+  // The brief: { status, data } from the context read; null data until it answers.
+  const [ctx, setCtx] = useState({ status: 'loading', data: null });
+  const brief = ctx.status === 'ok' ? fastBrief(ctx.data) : null;
   useRailOption(busy ? 'deck:build' : null, 'Build deck');
   useEffect(() => {
     let live = true;
-    newDeckApi.quote({ project_id: projectId, step: 'build', audience: 'seed_fund', length: 'standard' })
-      .then((qt) => { if (live) setQuote(qt); }, (e) => { if (live) setQuote(null); reportError('pitch-studio:fast-quote', e); });
+    setCtx({ status: 'loading', data: null });
+    newDeckApi.context(projectId)
+      .then((c) => { if (live) setCtx({ status: 'ok', data: c }); }, (e) => { if (live) setCtx({ status: 'error', data: null }); reportError('pitch-studio:fast-context', e); });
     return () => { live = false; };
   }, [projectId]);
+  useEffect(() => {
+    if (!brief) return undefined;
+    let live = true;
+    newDeckApi.quote({ project_id: projectId, step: 'build', audience: brief.audience, length: brief.length })
+      .then((qt) => { if (live) setQuote(qt); }, (e) => { if (live) setQuote(null); reportError('pitch-studio:fast-quote', e); });
+    return () => { live = false; };
+  }, [projectId, brief?.audience, brief?.length]);
   const build = async () => {
+    if (!brief) return;
     setBusy(true); setRefusal(null);
     try {
-      const r = await newDeckApi.build({ project_id: projectId, audience: 'seed_fund', length: 'standard' }, railPressHeaders('deck:build'));
+      const r = await newDeckApi.build({ project_id: projectId, audience: brief.audience, length: brief.length }, railPressHeaders('deck:build'));
       navigate(`${NEW_PATH}${q}${q ? '&' : '?'}proposal=${encodeURIComponent(r.proposal.id)}`);
     } catch (e) { setRefusal(refusalOf(e)); setOpen(false); reportError('pitch-studio:fast-build', e); } finally { setBusy(false); }
   };
@@ -359,14 +379,17 @@ function FastPath({ projectId, q }) {
       <div className="flex min-w-0 flex-col gap-1">
         <span className={`text-[13.5px] font-bold ${INK}`}>{FAST_TITLE}</span>
         <span className={MUTED}>{FAST_LINE}</span>
-        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fastPathLine(quote)}</span>
+        <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-fast-line">{fastPathLine(quote, brief)}</span>
+        {brief?.why ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-fast-why">{brief.why}</span> : null}
+        {ctx.status === 'error' ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-fast-unread">{FAST_UNREAD}</span> : null}
         {refusal ? (
           <span role="alert" className="text-[12px] font-semibold text-axal-violet dark:text-violet-300">
             {refusal.message} {refusal.topUp ? <a href={refusal.topUp.href} className="underline">{refusal.topUp.text}</a> : null}
           </span>
         ) : null}
       </div>
-      <button type="button" className={PRIMARY} onClick={() => setOpen(true)} data-testid="pitch-studio-fast-build">Build</button>
+      <button type="button" className={`${PRIMARY} disabled:cursor-not-allowed disabled:opacity-50 dark:disabled:opacity-50`} onClick={() => setOpen(true)} disabled={!brief}
+        aria-busy={ctx.status === 'loading' ? 'true' : undefined} data-testid="pitch-studio-fast-build">Build</button>
       {open ? (
         <Lightbox label={FAST_TITLE} title={FAST_TITLE} width={520} onClose={() => !busy && setOpen(false)} testId="pitch-studio-fast-dialog"
           footer={(
@@ -375,7 +398,7 @@ function FastPath({ projectId, q }) {
               <button type="button" className={PRIMARY} onClick={build} disabled={busy}>{busy ? 'Building…' : 'Build deck'}</button>
             </div>
           )}>
-          <p className={`m-0 ${MUTED}`}>{buildSentence(quote, 12)}</p>
+          <p className={`m-0 ${MUTED}`}>{buildSentence(quote, brief?.cards ?? null)}</p>
         </Lightbox>
       ) : null}
     </li>
