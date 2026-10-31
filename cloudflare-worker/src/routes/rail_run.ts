@@ -42,6 +42,7 @@ import { fieldsOf, type FillField } from '../services/fills/fields';
 import { MAX_RUN_ROWS, fieldsToAsk, formMessages, gatherForm, gatherScoped, parseFields, parseRows, type Dropped } from '../services/fills/formRun';
 import { isExplorer, parentKey, scopeOf } from '../services/fills/scopes';
 import { runRefusalView } from '../util/railContext';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { ROW_READS } from './fills';
 
 /** The form fields an Add form needs before a whole row can be proposed (the writer's own rule). */
@@ -67,6 +68,8 @@ const SENTENCES: Record<string, string> = {
   // D1329 (#3490).
   no_profile: 'Fill opens once you hold a venture or a profile.',
   record_not_available: 'You cannot change this record.',
+  // D1595 (#3868).
+  rows_not_offered: 'This form adds one record at a time.',
 };
 
 export type Runner = (env: Env, input: RunOptions) => Promise<RunResult>;
@@ -122,7 +125,9 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
       } else {
         return refuse(c, 404, 'record_not_found');
       }
-      const access = await recordScope.access(c.env, user, row, parentId);
+      const access = await recordScope.access(c.env, user, row, parentId, { activeCompany: () => activeCompanyFor(c, user) });
+      // D1595: a concealed scope answers a record the caller may not read as one that does not exist.
+      if (!access.read && recordScope.concealed) return refuse(c, 404, 'record_not_found');
       if (!access.write) return refuse(c, 403, 'record_not_available');
       scopeKey = recordId ? `${table}:${recordId}` : parentKey(recordScope, parentId as number);
       scopedParent = parentId;
@@ -149,6 +154,8 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     const filed = scopeKey ? { project: null, scope: scopeKey } : { project: projectId };
     const input = (body?.input && typeof body.input === 'object' ? body.input : {}) as { values?: Record<string, unknown>; text?: unknown; rows?: unknown };
     const rowsWanted = !recordId && Number.isSafeInteger(Number(input.rows)) ? Math.max(0, Math.min(MAX_RUN_ROWS, Number(input.rows))) : 0;
+    // D1595 (#3868): an Add form that offers no "add several rows" (no ROW_REQUIRED entry) refuses them, before any quote.
+    if (rowsWanted && !Object.hasOwn(ROW_REQUIRED, table)) return refuse(c, 400, 'rows_not_offered');
     const asked = rowsWanted ? fields.filter((f) => fieldsToAsk([f]).length) : fieldsToAsk(fields, input.values ?? {}, row);
     if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
 

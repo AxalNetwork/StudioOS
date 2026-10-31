@@ -73,6 +73,8 @@ import {
   sanitizeSlides, themeOfRow,
 } from './decks';
 import { mercuryFor } from './deck_sources';
+import { inferBrief, type InferredBrief } from '../services/decks/inferBrief';
+import { freshnessFor, type Freshness } from '../services/decks/freshness';
 
 const deckNew = new Hono<{ Bindings: Env }>();
 
@@ -193,16 +195,32 @@ deckNew.get('/new/context', async (c) => {
   const got = await venture(c, user, projectId, false);
   if ('refused' in got) return got.refused;
   const userId = Number(user.id) || 0;
+  const round = await activeRound(c.env, projectId);
+  let inferred: InferredBrief | null = null;
+  try {
+    const p = await c.env.DB.prepare('SELECT stage FROM projects WHERE id = ?').bind(projectId).first<{ stage: string | null }>();
+    inferred = inferBrief({ projectStage: p?.stage ?? null, round });
+  } catch { console.warn('[deck_new] inferred brief unreadable', { project_id: projectId }); }
+  let freshness: Freshness[] | null = null;
+  try {
+    const mercury = await mercuryFor(c, user, got.project);
+    const { items } = await readSources({ env: c.env, projectId, today: today(), mercury });
+    freshness = await freshnessFor(c.env, projectId, { mercury, items, today: today() });
+  } catch { console.warn('[deck_new] connector freshness unreadable', { project_id: projectId }); }
   return c.json({
     project_id: projectId,
     audiences: AUDIENCES.map((id) => ({ id, ...AUDIENCE_CARDS[id] })),
     lengths: LENGTHS,
     cards: CARD_CATALOGUE.map(({ card, title, purpose, sources, appendix }) => ({ card, title, purpose, sources, appendix: Boolean(appendix) })),
     standard: Object.fromEntries(LENGTH_IDS.map((l) => [l, standardOutline(l as Length)])),
-    round: await activeRound(c.env, projectId),
+    round,
     averages: { outline: await averageOf(c.env, userId, NEW_DECK_RAIL.outline), build: await averageOf(c.env, userId, NEW_DECK_RAIL.build) },
-    fast_path: { audience: FAST_PATH_AUDIENCE, length: 'standard' },
+    // D1599: the fast path is the inferred brief; FAST_PATH_AUDIENCE only when nothing could be inferred.
+    fast_path: inferred ? { audience: inferred.audience, length: inferred.length } : { audience: FAST_PATH_AUDIENCE, length: 'standard' },
     prompt_max: PROMPT_MAX,
+    // A read that fails leaves its key out: never a guessed brief, never an empty list that reads as "all fresh".
+    ...(inferred ? { inferred } : {}),
+    ...(freshness ? { freshness } : {}),
   });
 });
 

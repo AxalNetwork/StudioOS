@@ -34,6 +34,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 
 | `scoring/` | D1253 (#2428): the venture scorecard's pages — How scoring works, the founder's Investor scorecard, and HQ › Platform › Scoring. |
 | `duediligence/` | D1244 (#2385): the Due diligence desk's tabs as addresses, the list's and the case's, and the model they share. |
+| `articles/` | D1408 (#3694): the member's own articles, from the Article Authoring canvas (AR1–AR6) — the library, Eadwyn's writing panel, the image sheet, Publish… and the pure rules they share. `ArticleAuthorPage.jsx` mounts them at `/articles/draft` and `/articles/edit/:id`. |
 | `email/` | D1344 (#3552): Email, `/email` and `/email/settings`, in every profile's shell: People, the conversation, What Eadwyn knows, the composer, connect and the sent log. |
 | `deal/` | D1152: the deal page's frame for `DealRoomPage.jsx` — the key strip, the stage track and its one next action, the investor's Overview, Notes and Activity, and the states, with the pure model they share. |
 | `partner/` | Partner-side operations (BD console). |

@@ -44,7 +44,7 @@ it, where in their nav, and how do they get there.*
 | Closing room | `/raise/capital-relationships/closing` · `/deals/:dealId/closing` · `/admin/contracts/closings` · `/admin/contracts/closings/:dealId` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
 | Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Co-founder Match | `/spinout-lab/cofounder-match` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Company Settings | `/account/companies/<uid>/settings` · `/account/companies/settings` · `/company-settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Company Settings | `/account/portfolio/<uid>/settings` · `/account/portfolio/settings` · `/account/companies/…` · `/company-settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Compliance | `/spinout-lab/compliance` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Customer Acquisition Landing Page | `/spinout-lab/brand` | Headerless | Full page | Sidebar → Headerless → Spin-Out Lab | CURRENT | High |
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Headerless | Full page | Sidebar → Headerless → Grow | CURRENT | High |
@@ -324,7 +324,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Account | `/account` · `/account/:section` · `/account/connectors/:key` · `/account/usage/limits` · `/account/usage/cost` · `/account/usage/storage` · `/settings` · `/account/companies/projects` · `/account/companies/funds` · `/account/companies/engagements` · `/account/companies/invitations` · `/account/companies/<uid>` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Account | `/account` · `/account/:section` · `/account/connectors/:key` · `/account/usage/limits` · `/account/usage/cost` · `/account/usage/storage` · `/settings` · `/account/portfolio` · `/account/portfolio/projects` · `/account/portfolio/funds` · `/account/portfolio/engagements` · `/account/portfolio/invitations` · `/account/companies…` · `/account/portfolio/<uid>` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\|investor\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Calendar | `/calendar` | — (no nav entry) | Full page | Deep link / in-page action | LIVE (built 2026-09-10) | Medium |
 | Eadwyn Tickets · Eadwyn chat panels (T2, T3, D606) | `/studio` | — (not routed) | Full page (proposed) | Not reachable yet | CURRENT | Low |

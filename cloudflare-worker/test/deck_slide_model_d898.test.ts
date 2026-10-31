@@ -266,7 +266,8 @@ test('8. a kept "Fill from project" proposal is for the audience, round and them
   const r = await call(f, OWNER, 'POST', '/api/decks/proposals/7/keep');
   assert.equal(r.status, 200, JSON.stringify(r.body));
   const kept = (await call(f, OWNER, 'GET', '/api/decks/by-project/1')).body.versions[0];
-  assert.deepEqual([kept.version, kept.audience, kept.round?.uid, kept.theme?.kind], [3, 'series_a_fund', 'round-seed', 'brand']);
+  const opened = (await call(f, OWNER, 'GET', `/api/decks/${kept.id}`)).body;
+  assert.deepEqual([kept.version, kept.audience, kept.round?.uid, opened.theme?.kind], [3, 'series_a_fund', 'round-seed', 'brand']);
 });
 
 test('9. a share link and the print export carry the cards and theme, never the notes, the saver, the audience or the round', async () => {
@@ -353,4 +354,73 @@ test('12. a video link is checked with its provider only, on fixed URLs, with no
     globalThis.fetch = answer(502, {}) as any;
     assert.equal((await call(f, OWNER, 'GET', `/api/decks/video-link?url=${encodeURIComponent('https://youtu.be/AbCdEfGhIjK')}`)).status, 503);
   } finally { globalThis.fetch = real; }
+});
+
+
+// #3746: enforce the query-result budget before the HTTP serializer can hide
+// oversized reads. All SQL still runs against real SQLite; no canned rows.
+test('200 large versions list as metadata under 50 MB; opening one reads only its slides', async () => {
+  const f = await fixture();
+  const limit = 50 * 1024 * 1024;
+  const queryBytes: number[] = [];
+  const queryColumns = new Set<string>();
+  try {
+    f.db.exec('DELETE FROM pitch_decks');
+    const body = 'x'.repeat(1_500_000);
+    const slides = JSON.stringify([{ title: 'Synthetic large card', body, bullets: [] }]);
+    const theme = JSON.stringify({ kind: 'neutral_dark', background: { image_url: 'https://example.test/bg.png' } });
+    const insert = f.db.prepare(`INSERT INTO pitch_decks
+      (id,project_id,version,slides,title,is_current,created_by,audience,round_ref,theme_json,content_hash)
+      VALUES(?,1,?,?,?, ?,?,'seed_fund','round-seed',?,?)`);
+    f.db.exec('BEGIN');
+    for (let v = 1; v <= 200; v++) {
+      insert.run(v, v, slides.replace('Synthetic large card', `Synthetic large card ${v}`), `Synthetic version ${v}`, Number(v === 200), OWNER, theme, v.toString(16).padStart(64, '0'));
+    }
+    f.db.exec('COMMIT');
+    // A different venture must not appear even when it has a newer version.
+    f.db.prepare('INSERT INTO pitch_decks(id,project_id,version,slides,title) VALUES(201,2,999,?,?)').run(slides, 'Other venture');
+    const prepare = f.DB.prepare.bind(f.DB);
+    f.env.DB = {
+      ...f.DB,
+      prepare(sql: string) {
+        let binds: any[] = [];
+        const statement = prepare(sql);
+        const wrapped = {
+          ...statement,
+          bind(...args: any[]) { binds = args; statement.bind(...args); return wrapped; },
+          async all() {
+            const results: any[] = [];
+            let bytes = 2;
+            for (const row of f.db.prepare(sql).iterate(...binds)) {
+              for (const key of Object.keys(row)) queryColumns.add(key);
+              bytes += Buffer.byteLength(JSON.stringify(row)) + 1;
+              if (bytes >= limit) throw new Error('D1 query result exceeds 50 MB');
+              results.push(row);
+            }
+            queryBytes.push(bytes);
+            return { results, success: true };
+          },
+        };
+        return wrapped;
+      },
+    };
+    const listed = await call(f, OWNER, 'GET', '/api/decks/by-project/1');
+    assert.equal(listed.status, 200);
+    assert.deepEqual(listed.body.versions.map((v: any) => v.version), Array.from({ length: 200 }, (_, i) => 200 - i));
+    assert.ok(listed.body.versions.every((v: any) => !('slides' in v) && v.theme === null));
+    assert.ok(!queryColumns.has('slides') && !queryColumns.has('theme_json'));
+    assert.ok(queryBytes.length > 0 && Math.max(...queryBytes) < limit);
+    assert.ok(Buffer.byteLength(JSON.stringify(listed.body)) < limit);
+    assert.deepEqual(listed.body.versions[0], {
+      id: 200, project_id: 1, version: 200, title: 'Synthetic version 200', is_current: true,
+      created_at: (f.db.prepare('SELECT created_at FROM pitch_decks WHERE id=200').get() as any).created_at,
+      audience: 'seed_fund', round: { uid: 'round-seed', name: 'Synthetic seed' }, theme: null,
+      content_hash: (200).toString(16).padStart(64, '0'), by: { id: OWNER, name: `Synthetic ${OWNER}` }, shared_links: 0,
+    });
+    const opened = await call(f, OWNER, 'GET', '/api/decks/73');
+    assert.equal(opened.status, 200);
+    assert.equal(opened.body.version, 73);
+    assert.deepEqual(opened.body.slides, JSON.parse(slides.replace('Synthetic large card', 'Synthetic large card 73')));
+    assert.deepEqual(opened.body.theme, { kind: 'neutral_dark', background: { color: null, image_url: 'https://example.test/bg.png' } });
+  } finally { f.db.close(); }
 });
