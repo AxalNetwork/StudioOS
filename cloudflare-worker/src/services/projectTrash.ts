@@ -75,9 +75,19 @@ async function tryPurgeDeckImages(env: Env, projectId: number): Promise<void> {
   }
 }
 
+interface CleanupSchema {
+  present: Set<string>;
+  columns: Map<string, boolean>;
+}
+
 export async function hardDeleteProject(env: Env, projectId: number): Promise<void> {
+  return hardDeleteWithSchema(env, projectId);
+}
+
+async function hardDeleteWithSchema(env: Env, projectId: number, discovered?: CleanupSchema): Promise<void> {
   if (!Number.isSafeInteger(projectId) || projectId <= 0) throw new Error('Invalid project id');
-  const present = await tables(env);
+  const schema = discovered ?? { present: await tables(env), columns: new Map<string, boolean>() };
+  const { present } = schema;
   const statements: D1PreparedStatement[] = [];
   const add = (sql: string) => statements.push(env.DB.prepare(sql).bind(projectId));
   // Keep the existing receipt and audit retention rules. Missing optional
@@ -88,9 +98,12 @@ export async function hardDeleteProject(env: Env, projectId: number): Promise<vo
   }
   for (const table of CHILD_TABLES) {
     if (!present.has(table)) continue;
-    const columns = await env.DB.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
-    if (!columns.success) throw new Error('Cannot inspect project cleanup columns');
-    if (columns.results.some(column => column.name === 'project_id')) add(`DELETE FROM ${table} WHERE project_id = ?`);
+    if (!schema.columns.has(table)) {
+      const columns = await env.DB.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+      if (!columns.success) throw new Error('Cannot inspect project cleanup columns');
+      schema.columns.set(table, columns.results.some(column => column.name === 'project_id'));
+    }
+    if (schema.columns.get(table)) add(`DELETE FROM ${table} WHERE project_id = ?`);
   }
   // #3747: delete dependants before decks, including stores without FKs.
   // View/feedback rows can omit project_id; resolve ownership through decks.
@@ -131,9 +144,12 @@ export async function hardDeleteProject(env: Env, projectId: number): Promise<vo
       .bind(PURGE_PREFIX + projectId, String(projectId)));
   }
   if (present.has('activity_logs')) {
-    const columns = await env.DB.prepare('PRAGMA table_info(activity_logs)').all<{ name: string }>();
-    if (!columns.success) throw new Error('Cannot inspect audit columns');
-    if (columns.results.some(column => column.name === 'project_id')) add('UPDATE activity_logs SET project_id = NULL WHERE project_id = ?');
+    if (!schema.columns.has('activity_logs')) {
+      const columns = await env.DB.prepare('PRAGMA table_info(activity_logs)').all<{ name: string }>();
+      if (!columns.success) throw new Error('Cannot inspect audit columns');
+      schema.columns.set('activity_logs', columns.results.some(column => column.name === 'project_id'));
+    }
+    if (schema.columns.get('activity_logs')) add('UPDATE activity_logs SET project_id = NULL WHERE project_id = ?');
   }
   add('DELETE FROM projects WHERE id = ?');
   const results = await env.DB.batch(statements);
@@ -174,9 +190,12 @@ export async function sweepTrashedProjects(env: Env, daysOld = 30): Promise<Swee
   const ids: number[] = ((res?.results || []) as any[]).map((r) => r.id as number);
   let deleted = 0;
   let failed = 0;
+  // Invocation-local discovery: never share schema state across databases or cron runs.
+  let schema: CleanupSchema | undefined;
   for (const id of ids) {
     try {
-      await hardDeleteProject(env, id);
+      schema ??= { present: await tables(env), columns: new Map<string, boolean>() };
+      await hardDeleteWithSchema(env, id, schema);
       deleted += 1;
     } catch (e) {
       failed += 1;

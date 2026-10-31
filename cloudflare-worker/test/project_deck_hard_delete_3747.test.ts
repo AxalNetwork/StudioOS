@@ -30,7 +30,8 @@ const stores = ['pitch_decks', 'pitch_deck_proposals', 'pitch_deck_share_tokens'
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   db.exec(schema);
-  db.exec(`INSERT INTO users(id, role, name, email, founder_id) VALUES(2,'founder','Synthetic founder','delete@example.invalid',100);
+  db.exec(`INSERT INTO founders(id,name,email) VALUES(100,'Synthetic founder','founder@example.invalid');
+    INSERT INTO users(id, role, name, email, founder_id) VALUES(2,'founder','Synthetic founder','delete@example.invalid',100);
     INSERT INTO projects(id,name,founder_id,deleted_at) VALUES(1,'Synthetic venture',100,'2000-01-01'),(10,'Other venture',100,NULL);`);
   for (const [deck, project] of [[7, 1], [8, 1], [9, 10]]) {
     const version = deck === 8 ? 2 : 1;
@@ -292,4 +293,25 @@ test('retry SQL failures are logged, retain the marker and preserve the complete
     assert.equal(f.objects.size, 2);
     assert.ok(errors.slice(before).some(args => args[0] === '[projectTrash.deckImages] pending retry scan failed'));
   }
+});
+
+test('a sweep discovers each cleanup table once, with fresh discovery on the next invocation', async t => {
+  const f = fixture(); t.after(() => f.db.close());
+  f.db.exec("INSERT INTO projects(id,name,founder_id,deleted_at) VALUES(2,'Another synthetic trashed venture',100,'2000-01-01')");
+  const prepare = f.env.DB.prepare.bind(f.env.DB);
+  const reads = new Map<string, number>();
+  f.env.DB.prepare = (sql: string) => {
+    if (sql.startsWith('PRAGMA table_info(')) reads.set(sql, (reads.get(sql) ?? 0) + 1);
+    return prepare(sql);
+  };
+  assert.deepEqual(await sweepTrashedProjects(f.env), { scanned: 2, deleted: 2, failed: 0 });
+  assert.ok(reads.has('PRAGMA table_info(activity_logs)'));
+  assert.ok(reads.has('PRAGMA table_info(round_calls)'));
+  assert.ok([...reads.values()].every(count => count === 1), 'metadata round-trips must not multiply by the venture count');
+  assert.equal(f.n('projects'), 1);
+  f.db.exec("INSERT INTO projects(id,name,founder_id,deleted_at) VALUES(3,'Next invocation venture',100,'2000-01-01')");
+  assert.deepEqual(await sweepTrashedProjects(f.env), { scanned: 1, deleted: 1, failed: 0 });
+  assert.ok([...reads.values()].every(count => count === 2), 'schema discovery must be fresh per invocation');
+  assert.equal(f.n('projects'), 1);
+  assert.equal(f.objects.size, 2);
 });
