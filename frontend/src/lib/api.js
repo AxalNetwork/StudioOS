@@ -2991,6 +2991,20 @@ export const api = {
       },
       body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
     }),
+  // D1603 (#3882) — pd8b's "Slides-suite file (.odp)": the version as an
+  // editable OpenDocument Presentation. A raw Response, like deckExportHtml:
+  // the caller reads the blob, or the refusal on a non-200.
+  deckExportOdp: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/odp`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
   // D904 (#2683) — the version as a new presentation in the member's own
   // Google Drive; the answer is `{created, url, converted, …}` or `{error}`.
   // Raw Response, like deckExport: the caller reads the answer or the refusal.

@@ -42,12 +42,13 @@ import { context as workspaceContext, member } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { createPresentation, driveName } from '../services/google/driveCreate';
 import { writeEditableDeck, type ChartShot } from '../services/decks/pptxEditable';
+import { ODP_MIMETYPE, writeOdp } from '../services/decks/odp';
 import { stripTrailingSlashes } from '../util/url';
 import { DECK_PAGE_LOAD_MS, MAX_SLIDE_PNG_BYTES, renderUrl } from '../services/browserRun';
 
 const deckExports = new Hono<{ Bindings: Env }>();
 
-export const EXPORT_FORMATS = ['pdf', 'pptx', 'html', 'google_slides'] as const;
+export const EXPORT_FORMATS = ['pdf', 'pptx', 'html', 'google_slides', 'odp'] as const;
 export type ExportFormat = typeof EXPORT_FORMATS[number];
 
 /** One image: 2 MB; all of them: 12 MB; at most 40 distinct images per file. */
@@ -65,6 +66,7 @@ const AUDIT_SUMMARY: Record<ExportFormat, string> = {
   pptx: 'Deck exported as PowerPoint',
   html: 'Deck exported as HTML',
   google_slides: 'Deck exported to Google Slides',
+  odp: 'Deck exported as a slides-suite file (.odp)',
 };
 
 export async function sha256Hex(bytes: ArrayBuffer | Uint8Array): Promise<string> {
@@ -182,6 +184,74 @@ deckExports.post('/:id/export/html', async (c) => {
 });
 
 /**
+ * A chart pictured from the print page, block by block, when the headless browser is bound;
+ * null otherwise. #3655: through the documented `quickAction` (`renderUrl`), one try each
+ * under one deadline; a chart that cannot be pictured goes in as words.
+ */
+async function chartShotFor(c: any, row: DeckRow, opts: { notes: boolean; sources: boolean }): Promise<ChartShot | null> {
+  if (typeof c.env.BROWSER?.quickAction !== 'function') return null;
+  const token = await signDeckPrintToken(c.env, row.id, 300, opts);
+  const base = stripTrailingSlashes((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc');
+  const deadline = Date.now() + CHART_SHOTS_BUDGET_MS;
+  return async (i, r) => {
+    const shot = await renderUrl(c.env, 'screenshot', {
+      url: `${base}/deck/print-export/${token}?print_mode=single&slide=${i}`,
+      viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
+      gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
+      screenshotOptions: { type: 'png', omitBackground: false, clip: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.w), height: Math.round(r.h) } },
+    }, { kind: 'png', maxBytes: MAX_SLIDE_PNG_BYTES, attempts: 1, deadline });
+    if (!shot.ok) { console.warn('[decks/export] chart as words', shot.code, shot.status ?? ''); return null; }
+    return shot.bytes;
+  };
+}
+
+/**
+ * D1603 (#3882) — pd8b's "Slides-suite file (.odp)": the version as an
+ * OpenDocument Presentation (`odp.ts`), editable at 16:9 in LibreOffice
+ * Impress and the other open suites. The HTML export's rules: the D895 deck
+ * check (founders export; admins, advisors and share-only readers do not), 60
+ * cards, the venture owner's brand, and one `deck_exports` row with one
+ * `raise.pitch-deck` audit row in one batch before the file is handed out.
+ * No model runs; nothing is charged.
+ */
+deckExports.post('/:id/export/odp', async (c) => {
+  const user = await requireAuth(c);
+  const row = await deckRow(c.env, Number(c.req.param('id')));
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const body = await c.req.json().catch(() => ({} as any));
+  const opts = { notes: body?.notes === true, sources: body?.sources === true };
+  const { slides: all, renderable } = exportDeckOf(row, opts);
+  const slides = all.slice(0, 60);
+  const cards = renderable.slides.slice(0, slides.length);
+  const pages = opts.sources && renderable.slides.length > all.length ? [...cards, renderable.slides[renderable.slides.length - 1]] : cards;
+  const brand = await ventureBrand(c.env, Number(row.project_id));
+  const urls = imageUrlsOf(slides);
+  if (brand.watermark_url) urls.push(brand.watermark_url);
+  const images = await fetchImages(urls);
+  const odp = await writeOdp({
+    title: row.title || 'Pitch deck', version: row.version ?? null, slides, renderable: pages, images, brand,
+    notes: opts.notes, chartShot: await chartShotFor(c, row, opts),
+  });
+  const hash = await sha256Hex(odp.bytes);
+  try {
+    await c.env.DB.batch(exportStatements(c.env, { deck: row, format: 'odp', contentHash: hash, userId: Number(user.id), audit: true }));
+  } catch (e) {
+    return refuse(c, 503, { code: 'export_not_recorded', message: NOT_RECORDED_MESSAGE, raw: e, audience: 'member' });
+  }
+  return new Response(odp.bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': ODP_MIMETYPE,
+      'Content-Disposition': `attachment; filename="${fileName(row, 'odp')}"`,
+      'Cache-Control': 'no-store',
+      'X-Content-SHA256': hash,
+    },
+  });
+});
+
+/**
  * D904 (#2683) — PD17's Google Slides: the version as an editable PowerPoint
  * (`pptxEditable.ts`), created as a new presentation in the member's own
  * Drive (`driveCreate.ts`, the one Workspace write), then recorded.
@@ -218,25 +288,7 @@ deckExports.post('/:id/export/google-slides', async (c) => {
   const brand = await ventureBrand(c.env, Number(row.project_id));
   const images = await fetchImages(imageUrlsOf(slides));
 
-  // A chart is pictured from the print page, block by block, when the headless browser is bound.
-  // #3655: through the documented `quickAction` (`renderUrl`), one try each under one deadline;
-  // a chart that cannot be pictured goes in as words, as before.
-  let chartShot: ChartShot | null = null;
-  if (typeof c.env.BROWSER?.quickAction === 'function') {
-    const token = await signDeckPrintToken(c.env, row.id, 300, opts);
-    const base = stripTrailingSlashes((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc');
-    const deadline = Date.now() + CHART_SHOTS_BUDGET_MS;
-    chartShot = async (i, r) => {
-      const shot = await renderUrl(c.env, 'screenshot', {
-        url: `${base}/deck/print-export/${token}?print_mode=single&slide=${i}`,
-        viewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
-        gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
-        screenshotOptions: { type: 'png', omitBackground: false, clip: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.w), height: Math.round(r.h) } },
-      }, { kind: 'png', maxBytes: MAX_SLIDE_PNG_BYTES, attempts: 1, deadline });
-      if (!shot.ok) { console.warn('[decks/export/google-slides] chart as words', shot.code, shot.status ?? ''); return null; }
-      return shot.bytes;
-    };
-  }
+  const chartShot = await chartShotFor(c, row, opts);
   const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot });
   const hash = await sha256Hex(deck.bytes);
 
@@ -282,6 +334,7 @@ deckExports.get('/:id/exports', async (c) => {
 const FORMAT_OF_TYPE: Record<string, ExportFormat> = {
   'application/pdf': 'pdf',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  [ODP_MIMETYPE]: 'odp',
 };
 
 /** The PDF and PowerPoint file `decks.ts` answers, recorded before it is handed out. */
