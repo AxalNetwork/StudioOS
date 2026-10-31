@@ -4754,17 +4754,12 @@
      "line": "Labels who said what"
     },
     {
-     "id": "@cf/deepgram/flux",
+     "id": "@cf/openai/whisper",
      "role": "Deeper",
-     "line": "Captions while you talk"
+     "line": "A plain transcript at the lowest price"
     }
    ],
-   "more": [
-    {
-     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "line": "Places quotes on themes and hypotheses"
-    }
-   ]
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Problem discovery",
@@ -4811,17 +4806,12 @@
      "line": "Labels who said what"
     },
     {
-     "id": "@cf/deepgram/flux",
+     "id": "@cf/openai/whisper",
      "role": "Deeper",
-     "line": "Captions while you talk"
+     "line": "A plain transcript at the lowest price"
     }
    ],
-   "more": [
-    {
-     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "line": "Places quotes on themes and hypotheses"
-    }
-   ]
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Customer research",
@@ -4842,17 +4832,12 @@
      "line": "Labels who said what"
     },
     {
-     "id": "@cf/deepgram/flux",
+     "id": "@cf/openai/whisper",
      "role": "Deeper",
-     "line": "Captions while you talk"
+     "line": "A plain transcript at the lowest price"
     }
    ],
-   "more": [
-    {
-     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "line": "Places quotes on themes and hypotheses"
-    }
-   ]
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Customer research",
@@ -4873,17 +4858,12 @@
      "line": "Labels who said what"
     },
     {
-     "id": "@cf/deepgram/flux",
+     "id": "@cf/openai/whisper",
      "role": "Deeper",
-     "line": "Captions while you talk"
+     "line": "A plain transcript at the lowest price"
     }
    ],
-   "more": [
-    {
-     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "line": "Places quotes on themes and hypotheses"
-    }
-   ]
+   "more": []
   },
   {
    "pageKey": "Founder · Validate · Customer research",
@@ -5721,27 +5701,40 @@
    "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "deck:image",
    "optionLabel": "Generate",
-   "kind": "vision",
+   "kind": "image",
    "handler": "draft",
-   "routeTask": "rail_vision",
+   "routeTask": "deck_image",
    "models": [
     {
-     "id": "@cf/google/gemma-4-26b-a4b-it",
+     "id": "@cf/black-forest-labs/flux-1-schnell",
      "role": "Default",
-     "line": "Reads slides, charts and scans"
+     "line": "Quick drafts at the lowest price"
     },
     {
-     "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+     "id": "@cf/black-forest-labs/flux-2-klein-4b",
      "role": "Alternative",
-     "line": "Mixed text and images"
+     "line": "Sharper detail, still quick"
     },
     {
-     "id": "@cf/moondream/moondream3.1-9B-A2B",
+     "id": "@cf/black-forest-labs/flux-2-klein-9b",
      "role": "Deeper",
-     "line": "Pulls figures out of images"
+     "line": "Finer detail and cleaner lettering"
     }
    ],
-   "more": []
+   "more": [
+    {
+     "id": "@cf/black-forest-labs/flux-2-dev",
+     "line": "The most detailed images, and the slowest"
+    },
+    {
+     "id": "@cf/leonardo/lucid-origin",
+     "line": "Graphic design and crisp text"
+    },
+    {
+     "id": "@cf/leonardo/phoenix-1.0",
+     "line": "Close to the prompt, with clear text"
+    }
+   ]
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
@@ -6007,27 +6000,40 @@
    "pageKey": "Founder · Grow · Distribution",
    "optionKey": "draft:logo",
    "optionLabel": "Regenerate logo",
-   "kind": "vision",
+   "kind": "image",
    "handler": "draft",
-   "routeTask": "rail_vision",
+   "routeTask": "brand_logo",
    "models": [
     {
-     "id": "@cf/google/gemma-4-26b-a4b-it",
+     "id": "@cf/black-forest-labs/flux-1-schnell",
      "role": "Default",
-     "line": "Reads slides, charts and scans"
+     "line": "Quick drafts at the lowest price"
     },
     {
-     "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+     "id": "@cf/black-forest-labs/flux-2-klein-4b",
      "role": "Alternative",
-     "line": "Mixed text and images"
+     "line": "Sharper detail, still quick"
     },
     {
-     "id": "@cf/moondream/moondream3.1-9B-A2B",
+     "id": "@cf/black-forest-labs/flux-2-klein-9b",
      "role": "Deeper",
-     "line": "Pulls figures out of images"
+     "line": "Finer detail and cleaner lettering"
     }
    ],
-   "more": []
+   "more": [
+    {
+     "id": "@cf/black-forest-labs/flux-2-dev",
+     "line": "The most detailed images, and the slowest"
+    },
+    {
+     "id": "@cf/leonardo/lucid-origin",
+     "line": "Graphic design and crisp text"
+    },
+    {
+     "id": "@cf/leonardo/phoenix-1.0",
+     "line": "Close to the prompt, with clear text"
+    }
+   ]
   },
   {
    "pageKey": "Founder · Grow · Distribution",
@@ -6962,17 +6968,12 @@
      "line": "Labels who said what"
     },
     {
-     "id": "@cf/deepgram/flux",
+     "id": "@cf/openai/whisper",
      "role": "Deeper",
-     "line": "Captions while you talk"
+     "line": "A plain transcript at the lowest price"
     }
    ],
-   "more": [
-    {
-     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "line": "Places quotes on themes and hypotheses"
-    }
-   ]
+   "more": []
   },
   {
    "pageKey": "Advisor · Practice · Opportunities",
@@ -7341,17 +7342,12 @@
      "line": "Labels who said what"
     },
     {
-     "id": "@cf/deepgram/flux",
+     "id": "@cf/openai/whisper",
      "role": "Deeper",
-     "line": "Captions while you talk"
+     "line": "A plain transcript at the lowest price"
     }
    ],
-   "more": [
-    {
-     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-     "line": "Places quotes on themes and hypotheses"
-    }
-   ]
+   "more": []
   },
   {
    "pageKey": "Operating Partner · Home",

@@ -44,11 +44,11 @@ test('every catalogue row has exactly one matrix row, and every cell one of the 
   assert.equal(table.split('\n').filter((l) => /^\| `@(cf|hf)\//.test(l)).length, CATALOGUE.length);
 });
 
-test('every fixed job cites a line that names its router task', () => {
+test('every fixed job cites a file that calls its router task', () => {
   for (const job of FIXED_JOBS) {
-    const [file, line] = job.ref.split(':');
-    const text = readFileSync(SRC(file), 'utf8').split('\n')[Number(line) - 1] ?? '';
-    assert.ok(text.includes(String(job.task)), `${job.ref} no longer names ${String(job.task)}: ${text.trim()}`);
+    assert.doesNotMatch(job.ref, /:\d+$/, `${job.ref}: cite the file, not a line that the next edit moves`);
+    const text = readFileSync(SRC(job.ref), 'utf8');
+    assert.ok(new RegExp(`['"]${String(job.task)}['"]`).test(text), `${job.ref} no longer names ${String(job.task)}`);
     assert.ok(ROUTE[job.task], `${String(job.task)} is not a router task`);
   }
 });
@@ -85,7 +85,7 @@ test('every model a job routes to, a page lists or a session can pick is offered
   for (const r of Object.values(ROUTE) as Array<{ model: string; fallbackChain?: string[]; alternates?: string[] }>) {
     for (const id of [r.model, ...(r.fallbackChain ?? []), ...(r.alternates ?? [])]) ids.add(id);
   }
-  for (const row of [...matrix.rows, ...matrix.options]) for (const m of row.models) ids.add(m.id);
+  for (const row of [...matrix.rows, ...matrix.options]) for (const m of [...row.models, ...(row.more ?? [])]) ids.add(m.id);
   for (const s of STT_MODELS) if (isChoosable(s.model, s.kind)) ids.add(s.model);
   const unoffered = [...ids].filter((id) => {
     const m = modelById(id);
@@ -108,15 +108,9 @@ test('every page belongs to one column, and the fixed jobs land where their modu
   assert.equal(coverageCell('@cf/baai/bge-base-en-v1.5', 'research').state, 'wired');
 });
 
-test('the faults Part B fixes are listed, and nothing else is connected outside its fit', () => {
-  const m = optionMismatches();
-  assert.deepEqual(m.filter((x) => x.optionKey === 'deck:image').map((x) => x.listed.sort()), [[
-    '@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/moondream/moondream3.1-9B-A2B',
-  ]]);
-  for (const x of m.filter((y) => y.optionKey.startsWith('transcribe:'))) {
-    assert.ok(x.listed.includes('@cf/meta/llama-3.3-70b-instruct-fp8-fast'), `${x.pageKey} ${x.optionKey}`);
-  }
-  assert.deepEqual(outsideFit().map((x) => `${x.id} ${x.module}`), ['@cf/moondream/moondream3.1-9B-A2B grow']);
+test('Part B: every option lists only models its run uses, and nothing is connected outside its fit', () => {
+  assert.deepEqual(optionMismatches(), [], 'an option lists a model its run never reads');
+  assert.deepEqual(outsideFit().map((x) => `${x.id} ${x.module}`), []);
 });
 
 test('the Pitch deck v2 table prints billedMicro for each role, and each role\'s model is offered', () => {
