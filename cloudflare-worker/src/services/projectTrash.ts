@@ -99,7 +99,7 @@ async function hardDeleteWithSchema(env: Env, projectId: number, discovered?: Cl
   for (const table of CHILD_TABLES) {
     if (!present.has(table)) continue;
     if (!schema.columns.has(table)) {
-      const columns = await env.DB.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+      const columns = await env.DB.prepare('SELECT name FROM pragma_table_info(?)').bind(table).all<{ name: string }>();
       if (!columns.success) throw new Error('Cannot inspect project cleanup columns');
       schema.columns.set(table, columns.results.some(column => column.name === 'project_id'));
     }

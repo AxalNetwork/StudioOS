@@ -301,12 +301,21 @@ test('a sweep discovers each cleanup table once, with fresh discovery on the nex
   const prepare = f.env.DB.prepare.bind(f.env.DB);
   const reads = new Map<string, number>();
   f.env.DB.prepare = (sql: string) => {
-    if (sql.startsWith('PRAGMA table_info(')) reads.set(sql, (reads.get(sql) ?? 0) + 1);
-    return prepare(sql);
+    const statement = prepare(sql);
+    if (sql === 'SELECT name FROM pragma_table_info(?)') {
+      const bind = statement.bind.bind(statement);
+      statement.bind = (table: string) => {
+        reads.set(table, (reads.get(table) ?? 0) + 1);
+        return bind(table);
+      };
+    } else if (sql === 'PRAGMA table_info(activity_logs)') {
+      reads.set('activity_logs', (reads.get('activity_logs') ?? 0) + 1);
+    }
+    return statement;
   };
   assert.deepEqual(await sweepTrashedProjects(f.env), { scanned: 2, deleted: 2, failed: 0 });
-  assert.ok(reads.has('PRAGMA table_info(activity_logs)'));
-  assert.ok(reads.has('PRAGMA table_info(round_calls)'));
+  assert.ok(reads.has('activity_logs'));
+  assert.ok(reads.has('round_calls'));
   assert.ok([...reads.values()].every(count => count === 1), 'metadata round-trips must not multiply by the venture count');
   assert.equal(f.n('projects'), 1);
   f.db.exec("INSERT INTO projects(id,name,founder_id,deleted_at) VALUES(3,'Next invocation venture',100,'2000-01-01')");
