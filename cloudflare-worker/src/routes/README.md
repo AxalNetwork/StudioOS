@@ -54,6 +54,9 @@ and `/c/…/p/…` address resolution) live in `account_portfolio.ts`, mounted
 at `/api` with full paths beside it. A project's slug is set in
 `project_lifecycle.ts` (`PUT /api/projects/:id/slug`), beside its move.
 
+D1591's slug availability read, `GET /api/account/slug-check`, lives in
+`slug_check.ts`, mounted at `/api` right after `account_companies.ts`.
+
 D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 `/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
 sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
@@ -90,6 +93,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752; connected only by Sign in with Mercury since D881. Never Axal VC's own accounts: D879, guarded by D883's `check-mercury-member-surfaces.mjs`)
 /api/integrations/mcp → connector_mcp_oauth.ts (D1080: Sign in with <Provider> for every MCP record but Mercury's: start, callback, and the public client ID metadata document; mounted ahead of the integrations router)
 /api/connectors/custom → connectors_custom.ts (D852: a member's own remote MCP servers behind CUSTOM_MCP_ENABLED: configure, sign in, approve read tools one by one, health and revoke; founders on a paid plan)
+/api/teams → team_agents.ts (D1496: team agents on a company or a project — roles, agents CRUD, versioned rule books within the floor; 404 team_agents_off unless TEAM_AGENTS_ENABLED; manage = canEdit / isProjectManager; adding needs a paid Founder plan)
 /api/mercury/attestations → mercury_attestations.ts (an investor's proof of capital: dated statements from their own Mercury, consented and revocable; read-only, HQ only, D752)
 /api/mercury/investor → mercury_investor.ts (an investor's own Mercury feeding Deals · Commit and Closing and Fund · Calls, Accounting and Reporting: facts written, proposals accepted, Pipeline shown only; read-only, on HQ or in a branch (D884), the caller's own data only, D840 part 4)
 /api/admin/capital-attestations → admin_capital_attestations.ts (HQ admins read an investor's shared proof of funds; audited before it answers; reads capital_attestations only, never a connection; D752)
@@ -329,7 +333,7 @@ D1075 (#2967): `trust_public.ts` mounts the public trust center's reads under `/
 
 D896 (#2675): `deck_sources.ts` mounts `GET /api/decks/sources` and `POST /api/decks/:id/refresh`, after `deck_share_actions.ts` and before `decks.ts`, so that `decks.ts`'s `GET /:id` cannot answer `/sources`. Both read only, through `projectOwned`; Mercury's slots are read only for the venture's own founder. The adapters are `../services/decks/sources.ts`. See `documentation/architecture/decisions/D896.md`.
 
-D897 (#2677): `deck_new.ts` mounts New deck — `GET /api/decks/new/context`, `POST /new/quote`, `POST /outline`, `POST /generate` (moved here from `decks.ts`; it now builds a proposal), `POST /proposals/:id/keep-slides` and, from D897 §9 (#3659), `POST /proposals/:id/regenerate-card` — after `deck_sources.ts` and before `decks.ts`. Code fills every figure from `../services/decks/sources.ts` through `../services/decks/newDeck.ts`; the runs write words only, and their price is `quoteRun`'s before they run. See `documentation/architecture/decisions/D897.md`.
+D897 (#2677): `deck_new.ts` mounts New deck — `GET /api/decks/new/context`, `POST /new/quote`, `POST /outline`, `POST /generate` (moved here from `decks.ts`; it now builds a proposal), `POST /proposals/:id/keep-slides` and, from D897 §9 (#3659), `POST /proposals/:id/regenerate-card` — after `deck_sources.ts` and before `decks.ts`. Code fills every figure from `../services/decks/sources.ts` through `../services/decks/newDeck.ts`; the runs write words only, and their price is `quoteRun`'s before they run. See `documentation/architecture/decisions/D897.md`. D1599 (#3877): `GET /new/context` also answers `inferred` (stage, audience, length, round and a one-line why, from `../services/decks/inferBrief.ts`) and `freshness` (each connected deck connector's `as_of`, `stale` and its `POST /api/connectors/:uid/sync`, from `../services/decks/freshness.ts`; Mercury for the venture's own founder only), and `fast_path` takes the inferred audience and length. Either key is left out when its read fails.
 
 D899 (#2678): `deck_assist.ts` mounts Eadwyn's card tools — `POST /api/decks/:id/cards/:card/assist/quote` and `POST /api/decks/:id/cards/:card/assist` — after `deck_new.ts` and before `decks.ts`. Each press is one rail option on "Founder · Raise · Pitch deck" (`deck:rewrite`, `deck:shorten`, `deck:expand`, `deck:tone`, `deck:translate`, `deck:chart`, `deck:table`, `deck:timeline`), runs through `run()`, and leaves one `ai_rail_proposals` row; nothing writes a version. A bound figure is refused 422 `never_fill` before anything runs. See `documentation/architecture/decisions/D899.md`.
 
@@ -490,4 +494,5 @@ D1351 (#3566): `contact_imports.ts` is mounted at `/api/contacts` ahead of `cont
 
 D1421 (#3699): `studio_layout.ts` is mounted at `/api/studio`: `GET /modules` (this profile's Studio modules, each with `locked_by_plan`), `GET`/`PUT /layout` and `POST /layout/reset` (the member's saved layout in `studio_layouts`, or the default when there is no row). The member is the session's; an admin names the previewed profile with `?profile=`. The registry and its derived locks are `../services/studioModules.ts`.
 
+D901/D904/D1603: `deck_exports.ts` is mounted at `/api/decks` before `decks.ts`. It holds the HTML export (`POST /:id/export/html`), the Google Slides export (`POST /:id/export/google-slides`), the slides-suite export (`POST /:id/export/odp`, an OpenDocument Presentation from `../services/decks/odp.ts`, #3882), the export ledger read (`GET /:id/exports`), and the middleware that records the PDF and PowerPoint files `decks.ts` answers. Every format writes one `deck_exports` row (migration 537, widened by 754) before its file is handed out.
 D1594 (#3863): `studio_layout.ts`'s layout reads carry `revision` (migration 750) and name every saved module that left in `dropped` (`not_offered` with its last known title from `RETIRED_TITLES`, or null; `plan` with its title and plan), so a locked module never blocks Done; `PUT /layout` requires `expected_revision` and answers 409 `stale_layout` to a stale copy, writing nothing. See `documentation/architecture/decisions/D1594.md`.

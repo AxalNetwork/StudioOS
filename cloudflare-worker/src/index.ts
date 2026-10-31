@@ -43,6 +43,7 @@ import labReportShares from './routes/lab_report_shares';
 import projects from './routes/projects';
 import accountCompanies from './routes/account_companies';
 import accountPortfolio from './routes/account_portfolio';
+import slugCheck from './routes/slug_check';
 import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
@@ -446,6 +447,7 @@ import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
+import teamAgentsRoutes from './routes/team_agents';
 import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
@@ -941,6 +943,8 @@ app.route('/api/lab-report-shares', labReportShares);
 app.route('/api', accountCompanies);
 // D1415: the Portfolio reads — switcher, settings scope, path resolution.
 app.route('/api', accountPortfolio);
+// D1591 (#3858): is a company or project address free, while the member types it.
+app.route('/api', slugCheck);
 // D1137 — a venture's move to a company and its owner transfer.
 app.route('/api/projects', projectLifecycle);
 app.route('/api/projects', projects);
@@ -1654,6 +1658,8 @@ app.route('/api', companyLegal);
 // D1592 (#3860): the company's documents (the four named slots, other, its ventures'), upload and download.
 app.route('/api', companyDocuments);
 app.route('/api', companyRoutes);
+// D1496 (#3840): team agents, their rule books and their audit; 404 `team_agents_off` until TEAM_AGENTS_ENABLED is "true".
+app.route('/api/teams', teamAgentsRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);

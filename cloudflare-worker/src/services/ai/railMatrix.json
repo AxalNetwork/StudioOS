@@ -7272,6 +7272,17 @@
    "more": []
   },
   {
+   "pageKey": "Advisor · Practice · Sessions",
+   "optionKey": "sessions:block",
+   "optionLabel": "Find a free afternoon",
+   "kind": "plan",
+   "handler": "none",
+   "routeTask": "none",
+   "models": [],
+   "more": [],
+   "noModel": true
+  },
+  {
    "pageKey": "Operating Partner · Home",
    "optionKey": "answer:interview",
    "optionLabel": "Answer the interview",

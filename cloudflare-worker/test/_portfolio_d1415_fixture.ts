@@ -30,6 +30,8 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8');
 export const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
+// D1593 (#3861): 749 adds the registered agent and the mailing kind, which `routes/company_legal.ts` reads.
+export const M749 = readFileSync(new URL('../sql/migrations/749_company_registered_agent_and_mailing.sql', import.meta.url), 'utf8');
 
 export const ADA = 1, BEN = 2, CY = 3, DEE = 4, EVE = 5;
 export const NORTH = 1, SOUTH = 2, OLD = 3, WEST = 4;
@@ -44,6 +46,7 @@ export function fixture(opts: { migration685?: string } = {}) {
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS uq_project_members_pair ON project_members (project_id, user_id)');
   db.exec(M597);
   db.exec(opts.migration685 ?? M685);
+  db.exec(M749);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADA, 'founder', 'Ada Made-up', 'ada@example.test', 101);
   u.run(BEN, 'founder', 'Ben Made-up', 'ben@example.test', 102);

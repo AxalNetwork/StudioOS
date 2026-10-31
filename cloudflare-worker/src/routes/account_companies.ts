@@ -9,6 +9,8 @@
  *                                     seats, for every profile
  *   GET  /api/account/invitations   — pending company and project invitations
  *                                     addressed to the caller
+ *   GET  /api/account/people/search — #3841: people the caller shares a company
+ *                                     or a connection with, by name, never by email
  *   POST /api/company/invitations/:uid/(accept|decline)
  *   POST /api/projects/invitations/:id/(accept|decline)
  *
@@ -34,7 +36,8 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { cyclesActive, visitsFor, CYCLE_STORES } from '../services/companySheet';
-import { ensureProjectMembershipSchema, normalizeEmail } from '../services/projectAccess';
+import { canAccessProject, ensureProjectMembershipSchema, normalizeEmail } from '../services/projectAccess';
+import { SEARCH_MAX_LEN, SEARCH_MIN, searchPeople } from '../services/peopleReach';
 import { refuse } from '../util/refusal';
 
 type Row = Record<string, any>;
@@ -323,6 +326,47 @@ account.get('/account/invitations', async (c) => {
         can_accept: canJoinVentures,
       }))) : project,
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── GET /api/account/people/search ─────────────────────────────────────────
+
+/**
+ * #3841: find an account to invite by name (TM2b "Link an existing Axal
+ * account"). Only people who share a company or an accepted connection with
+ * the caller (`services/peopleReach.ts`); at most ten; never an email or a
+ * numeric id. `company=<uid>` or `project=<id>` names the team being built:
+ * the caller must belong to it, and its current members are left out. The
+ * per-caller rate limit is `people_search` in `middleware/rateLimit.ts`.
+ */
+account.get('/account/people/search', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const q = String(c.req.query('q') ?? '').trim();
+    if (q.length < SEARCH_MIN) return refuse(c, 400, { code: 'query_too_short', message: `Type at least ${SEARCH_MIN} letters of a name.` });
+    if (q.length > SEARCH_MAX_LEN) return refuse(c, 400, { code: 'query_too_long', message: 'That is longer than a name.' });
+    const exclude = new Set<number>();
+    const companyUid = c.req.query('company');
+    const projectId = c.req.query('project');
+    if (companyUid) {
+      const company = await c.env.DB.prepare('SELECT id FROM company_profiles WHERE uid = ?').bind(companyUid).first<{ id: number }>();
+      const mine = company && await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(company.id, user.id).first();
+      if (!company || (!mine && !isAdmin(user))) return refuse(c, 403, { code: 'not_member', message: 'You can only build a team you belong to.' });
+      const r = await c.env.DB.prepare('SELECT user_id FROM user_company_links WHERE company_id = ?').bind(company.id).all<{ user_id: number }>();
+      for (const row of r.results ?? []) exclude.add(Number(row.user_id));
+    } else if (projectId) {
+      const project = /^[1-9][0-9]{0,15}$/.test(projectId)
+        ? await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(Number(projectId)).first<{ id: number; founder_id: number | null }>()
+        : null;
+      if (!project || !(await canAccessProject(c.env, user, project))) return refuse(c, 403, { code: 'not_member', message: 'You can only build a team you belong to.' });
+      const r = await c.env.DB.prepare(`SELECT user_id FROM project_members WHERE project_id = ? AND status = 'accepted'`).bind(project.id).all<{ user_id: number }>();
+      for (const row of r.results ?? []) exclude.add(Number(row.user_id));
+      if (project.founder_id != null) {
+        const owners = await c.env.DB.prepare('SELECT id FROM users WHERE founder_id = ?').bind(project.founder_id).all<{ id: number }>();
+        for (const row of owners.results ?? []) exclude.add(Number(row.id));
+      }
+    }
+    return c.json({ people: await searchPeople(c.env, user.id, q, exclude) });
   } catch (e) { return mapError(c, e); }
 });
 

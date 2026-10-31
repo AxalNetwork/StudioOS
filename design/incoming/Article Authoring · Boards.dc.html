@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Writing</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Article authoring</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">AR1 to AR6: the library, the editor, the writing panel from the AIRail, image generation, the publish sheet and the states. Desktop boards are 1440 wide, phone frames 390.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="6">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2></div>
+<sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ g.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span>
+<div style="{{ f.wst }}"><dc-import name="Article Authoring Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap, wst: `width:${w}px;${h ? 'height:' + h + 'px;' : ''}border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h || 1100}px` }; };
+    return { groups: [
+      { id: 'AR1', t: 'Library', note: 'Articles opens from the account menu (pending owner). Members and admins write here; an admin’s publish sheet offers Publish now and Schedule instead of Send for review (AR5).', fr: [F('ar1', 'Drafts tab', 1440, 1000), F('ar1p', 'Published tab · views before 1 Oct 2026 read “Not recorded”', 1440, 1000)] },
+      { id: 'AR2', t: 'Editor', note: 'The article is drawn in the public site’s type, as readers will see it. The slash menu and the format bar are both shown open. Version history opens in the shared right Sheet beside the Eadwyn spine.', fr: [F('ar2', 'Editor · slash menu and format bar open', 1440), F('ar2v', 'Version history in the Sheet', 1440, 1100)] },
+      { id: 'AR3', t: 'The writing AIRail', note: 'The rail keeps its spine, models and usage. The writing actions sit in the panel that slides out of its left edge, because the Ask addendum keeps actions out of the AIRail itself. Each action shows its hold before it runs, and each result is a proposal: Insert, Replace or Discard.', fr: [F('ar3', 'Rewrite · Shorter · a proposal waiting', 1440, 1180), F('ar3c', 'Every action’s proposal', 1440)] },
+      { id: 'AR4', t: 'Image generation', note: 'Opened from the cover slot or an image block. The price per image and the hold show before Generate. Eadwyn does not draw real people.', fr: [F('ar4', 'From the cover slot', 1440, 1180), F('ar4b', 'Variants · the inserted cover with alt text · a refused prompt', 1440)] },
+      { id: 'AR5', t: 'Publish sheet', note: 'A member’s public article goes to review first, as in the Content queue, so the date is a request.', fr: [F('ar5', 'Publish sheet · member', 1440, 1320), F('ar5b', 'Confirm and result states', 1440)] },
+      { id: 'AR6', t: 'States', note: 'One failed block costs that block only; the rest of the page renders.', fr: [F('ar6a', 'Out of AI tokens', 1440, 1180), F('ar6b', 'AI paused', 1440, 1180), F('ar6c', 'Empty library', 1440, 900), F('ar6d', 'Loading', 1440, 900), F('ar6e', 'One block could not be read', 1440, 1000), F('ar6f', 'Phone · editor', 390, 844), F('ar6g', 'Phone · writing panel as a bottom sheet', 390, 844), F('ar1-d', 'Dark · library', 1440, 1000), F('ar3-d', 'Dark · editor and writing panel', 1440, 1180)] }
+    ] };
+  }
+}
+</script>
+</body></html>

@@ -23,6 +23,8 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8');
 const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
+// D1593 (#3861): 749 adds the registered agent and the mailing kind, which the routes read.
+const M749 = readFileSync(new URL('../sql/migrations/749_company_registered_agent_and_mailing.sql', import.meta.url), 'utf8');
 
 // Ada is the primary admin of Northwind; Ben is a plain member; Cy is a Founder-role member (an editor);
 // Dee belongs to no company; Eve is a platform admin. Southwind is Dee's own company.
@@ -35,6 +37,7 @@ function fixture() {
   for (const t of ['users', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597);
   db.exec(M685);
+  db.exec(M749);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   for (const [id, n] of [[ADA, 'Ada'], [BEN, 'Ben'], [CY, 'Cy'], [DEE, 'Dee'], [EVE, 'Eve']] as const) u.run(id, ROLE[id], `${n} Made-up`, `${n.toLowerCase()}@example.test`);
   const c = db.prepare("INSERT INTO company_profiles (id, uid, company_name, created_at, updated_at) VALUES (?, ?, ?, '2026-01-01', '2026-01-01')");

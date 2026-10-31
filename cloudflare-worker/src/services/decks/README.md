@@ -12,6 +12,7 @@ Builds the deck payload from the venture's real records and renders it.
 | `render.ts` | The slide types the export writers share. Its CDN-Tailwind `renderDeckHTML` had no caller and was removed (D901). |
 | `offlineHtml.ts` | The HTML export (D901): one self-contained file of a version. The fonts are inline, every image is a `data:` URI, and the CSP is `default-src 'none'`. Its one script is keyboard navigation, admitted by its hash. |
 | `pptx.ts` | PowerPoint export: one picture per card (the download), the text-only fallback, and `notesPackageParts`, the package both writers share. |
+| `odp.ts` | The slides-suite export (D1603): the version as an OpenDocument Presentation (ODF 1.3, `mimetype` first and stored), 16:9, with every block an editable text frame on the 12 × 6 grid, images, chart pictures (or their words) with a label and source line, notes when asked for, and the venture owner's footer and watermark. |
 | `pptxEditable.ts` | The editable PowerPoint for Google Slides (D904): every block at its place on the print card, text as text boxes, PNG/JPEG/GIF images and chart shots as pictures, and words for anything that cannot be pictured. |
 | `branding.ts` | Logo, colours, lock-up. |
 | `recommend.ts` | Slide-level suggestions. |
@@ -40,3 +41,5 @@ D895: founder decks hide internal readiness scores; the Lab assembler keeps them
 by default. Ask runway comes only from stored model/Mercury records. AI-written
 fields do not count as record coverage. Exports use the venture owner's branding,
 and the newest live landing page supplies voice and both logo variants.
+
+D1599 (#3877): `inferBrief.ts` infers New deck's stage, audience and length from `projects.stage` and the active round (one rule table, `BRIEF_RULES`; a missing or zero target is null, never 0). `freshness.ts` says how fresh each connected deck connector is (`FRESHNESS_CADENCE_DAYS`, `PROVIDER_ADAPTERS`) and names its sync route; it never starts one. Neither runs a model or writes.
