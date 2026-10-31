@@ -207,6 +207,8 @@ test('the editor draws the rail with its stale dot, the card on its blocks, and 
     await m.press(m.by('pitch-editor-rail-1'));
     assert.match(m.text(m.by('pitch-editor-card')), /Synthetic heading/);
     assert.match(m.text(m.by('pitch-editor-block-b2')), new RegExp(`Churn ${NOT_RECORDED}`), 'a tile with no figure reads Not recorded');
+    assert.ok(!m.by('pitch-editor-notes'), 'D1604: nothing selected, no speaker notes (plan §2.3)');
+    await m.press(m.by('pitch-editor-block-b1'));
     await m.type(m.by('pitch-editor-notes'), 'Synthetic revised note');
     assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/);
     await m.press(m.by('pitch-editor-save'));

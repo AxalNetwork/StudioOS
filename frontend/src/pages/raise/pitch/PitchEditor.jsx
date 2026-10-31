@@ -8,6 +8,7 @@ import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import useAssistMode from '../../../hooks/useAssistMode';
 import { Lightbox, WorkerRail, usePhoneWidth } from '../../../ui';
+import { BELOW_MD_QUERY } from '../../../ui/phone/usePhoneWidth';
 import { SourcesPanel, useDeckSources } from './SourcesBoards';
 import { SlideEvidence } from '../../cycles/evidence/EvidencePart';
 import { SOURCES_TITLE } from '../../cycles/evidence/moduleEvidence';
@@ -25,8 +26,8 @@ import ShareDialog from './ShareDialog';
 import ExportDialog from './ExportDialog';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 import { availability, SURFACES } from './deckV2Adapter';
-import { LATER, placeTextEdit, saveChip } from './deckV2Model';
-import { areasOf, askTarget } from './gridSelection';
+import { EDITOR_WAITING, LATER, placeTextEdit, saveChip } from './deckV2Model';
+import { areasOf, askTarget, liveFocus } from './gridSelection';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { presentHref } from './presentExportModel';
 import {
@@ -42,25 +43,32 @@ import {
  *
  *   the header   the crumb, the h1 "[Venture] · vN", then `DeckToolbar.jsx`
  *                (the save state, Save version only while there is something
- *                to save, ⋯, ▶ Present, Share ▾) and the deck's Ask. Nothing
+ *                to save, ⋯, ▶ Present, Share ▾) and the deck's Ask, drawn
+ *                as soon as the version is known: Present, Share and Export
+ *                need only the version, so they stay while the deck or the
+ *                model reads or fails (the ⋯ items wait for the editor). Nothing
  *                else: everything else is in ⋯ (`DeckMoreMenu.jsx`), whose
  *                sheets are `DeckSheets.jsx` (Theme, Brand kit, Sources and
  *                coverage, Versions, Check claims, Structure, Background).
  *   the strip    `CardsStrip.jsx`: every card numbered, its thumbnail, a
- *                stale dot, drag or Alt + ↑ / ↓ to reorder, the card's ⋯
+ *                stale dot, drag or Alt + ↑ / ↓ to reorder, the card's ⋯;
+ *                beside the stage from 1024 px, one scrolling row above it
+ *                below that (the tablet, pd9l), so the Grid stays central
  *   the stage    `GridStage.jsx`: the card on The Grid, its areas (blocks and
  *                free ranges) selected by click, shift-click, marquee or the
  *                keyboard (`gridSelection.js`), a block dragged to a free
  *                range, the Ask chip on one area and SELBAR on several
- *   the tools    `BlockTools.jsx`, only while one area is selected; the
- *                card's speaker notes under it
+ *   the tools    `BlockTools.jsx`, only while one area is selected, with
+ *                the card's speaker notes under it; nothing selected or
+ *                several areas: no tools and no notes
  *
  * Every change stays on screen until a version is saved: Save version opens a
  * dialog listing what it changes and writes one new version (`PUT
  * /api/decks/:id`). A refused save shows the Worker's sentence. Each read
  * answers alone: a failed one says so with Try again and blanks nothing else.
- * A reader (read-only HQ) reads, presents and writes nothing. On a phone the
- * editor is notes and order only (PD26 frame 4).
+ * A reader (read-only HQ) reads, presents and writes nothing. On a phone
+ * (below 768 px) the editor is notes and order only (PD26 frame 4); a tablet
+ * keeps the Grid, the full header and the strip as a row.
  *
  * D899 (#2678): an empty range's tools hold the Add menu (`AddMenu.jsx`); a
  * text area's Ask opens Eadwyn's bar (`CardAssistBar.jsx`). What they propose
@@ -90,6 +98,8 @@ const SKEL = 'animate-pulse rounded-[9px] bg-axal-hairline dark:bg-gray-800';
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 
 const idle = { status: 'idle', data: null };
+/** Below `lg` (1024 px): the Cards strip is a row above the stage. */
+const NARROW_QUERY = '(max-width: 1023px)';
 const loading = { status: 'loading', data: null };
 const NO_PICK = { selection: [], focus: null };
 
@@ -142,7 +152,11 @@ const Skeleton = ({ h = 'h-24', testId }) => <div className={`${SKEL} ${h} w-ful
 export default function PitchEditor() {
   const { user } = useAuth();
   const readOnly = isReadOnly(user);
-  const phone = usePhoneWidth();
+  // The phone editor (notes and order) is below 768 px (pd9k). The tablet,
+  // 768 to 1023 px, keeps the desktop header and the Grid, with the Cards
+  // strip as one row above the stage (pd9l, plan §8).
+  const phone = usePhoneWidth(BELOW_MD_QUERY);
+  const narrow = usePhoneWidth(NARROW_QUERY);
   const [params, setParams] = useSearchParams();
   const requested = params.get('project_id');
   const [reportedTitle, setReportedTitle] = useState(null);
@@ -179,15 +193,26 @@ export default function PitchEditor() {
   // D1604: the header's toolbar reports the open editor's state and calls back into it.
   const [chrome, setChrome] = useState(null);
   const actionRef = useRef(null);
-  const onAction = useCallback((id) => actionRef.current?.(id), []);
-  const tools = current?.id && deck.status === 'ok' && model.status === 'ok' ? (
+  // Share and Export need only the version on screen, so the page opens them
+  // itself, editor or not; every other ⋯ item is the editor's.
+  const [shareDialog, setShareDialog] = useState(null);
+  const onAction = useCallback((id) => {
+    if (id === 'share' || id === 'export') { if (!readOnly) setShareDialog(id); return; }
+    actionRef.current?.(id);
+  }, [readOnly]);
+  const tools = current?.id ? (
     <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} readOnly={readOnly} phone={phone}
-      onAction={onAction} labels={chrome?.labels} />
+      onAction={onAction} labels={chrome?.labels} waiting={chrome ? null : EDITOR_WAITING} />
+  ) : null;
+  const overlay = shareDialog === 'share' && projectId != null && current ? (
+    <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}} />
+  ) : shareDialog === 'export' && current ? (
+    <ExportDialog versions={versionList} current={current} onClose={() => setShareDialog(null)} />
   ) : null;
   // A decision in the header re-reads the versions without blanking them, so the
   // open Editor (keyed to the version) keeps its unsaved cards.
   const shell = {
-    query: ventureQuery(projectId || requested), title, tools, heading: deck.status === 'ok' ? title : null,
+    query: ventureQuery(projectId || requested), title, tools, overlay, heading: deck.status === 'ok' ? title : null,
     ask: { projectId, readOnly, onPlace, versions, onChanged: versions.refresh, editsKey: proposalsTick },
   };
 
@@ -221,9 +246,9 @@ export default function PitchEditor() {
         sources={sources}
         charts={charts}
         versions={versionList}
-        current={current}
         readOnly={readOnly}
         phone={phone}
+        narrow={narrow}
         onTitle={setReportedTitle}
         onSaved={() => versions.retry()}
         placeRef={placeRef}
@@ -235,9 +260,9 @@ export default function PitchEditor() {
   );
 }
 
-function Shell({ children, query, title, ask, tools, heading }) {
+function Shell({ children, query, title, ask, tools, heading, overlay = null }) {
   const rail = <WorkerRail workspace="Raise" role="founder" note="The editor reads your deck and its recorded sources. Each Eadwyn run shows its cost first." data-testid="pitch-editor-rail" />;
-  return <PitchPage rail={rail} crumb={{ query, trail: title, tools, heading }} ask={ask} testId="pitch-editor"><PitchMovedNotice />{children}</PitchPage>;
+  return <PitchPage rail={rail} crumb={{ query, trail: title, tools, heading }} ask={ask} testId="pitch-editor"><PitchMovedNotice />{children}{overlay}</PitchPage>;
 }
 
 /** PD24: the header at once; the strip and the card as grey skeletons. */
@@ -271,7 +296,7 @@ export function sourcesCard(model, lines) {
 /** A copy of a card with its own block ids kept (ids are per card). */
 const copyCard = (c) => JSON.parse(JSON.stringify(c));
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, versions, current, readOnly, phone, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef }) {
   const [aiOn] = useAssistMode('raise');
   const navigate = useNavigate();
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
@@ -309,6 +334,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const selection = pickState.selection.filter((id) => (areas || []).some((a) => a.id === id));
   const chosen = (areas || []).filter((a) => selection.includes(a.id));
   const one = chosen.length === 1 ? chosen[0] : null;
+  // The focus too: a free range a block now covers hands it to that block.
+  const focus = liveFocus(areas, pickState.focus);
   const selKey = selection.join('|');
   useEffect(() => { setAsking(null); setAskLine(null); }, [selKey, sel]);
   const choose = (i) => { setSel(i); setPickState(NO_PICK); };
@@ -392,7 +419,6 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const act = (id) => {
     if (id === 'save') { if (!readOnly && dirty) setDialog({ kind: 'save' }); return; }
     if (id === 'save_named') { if (!readOnly) setDialog({ kind: 'save', named: true }); return; }
-    if (id === 'share' || id === 'export') { if (!readOnly) setDialog({ kind: id }); return; }
     if (id === 'duplicate') { if (!readOnly) duplicate(sel); return; }
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
@@ -433,10 +459,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
           onNotes={(v) => setCard(sel, { ...card, notes: v })} notesMax={model.notes_max} />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)]" data-testid="pitch-editor-body">
+        <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
             <CardsStrip cards={cards} sel={sel} stale={stale} readOnly={readOnly} onSelect={choose} move={move}
-              onCardAction={cardAction}
+              onCardAction={cardAction} orientation={narrow ? 'row' : 'column'}
               onAdd={() => {
                 const layout = model.layouts.find((l) => l.id === 'statement') || model.layouts[0];
                 const fresh = applyLayout({ title: 'New card' }, layout).card;
@@ -447,7 +473,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           <div className="flex min-w-0 flex-col gap-3">
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
               <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts}
-                readOnly={readOnly} selection={selection} focus={pickState.focus}
+                readOnly={readOnly} selection={selection} focus={focus}
                 onSelection={setPickState}
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
                 onAsk={ask} askOff={askOff} askLine={askLine} />
@@ -466,7 +492,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 onProposals={onProposals}
                 onAssistPlace={(id, text) => setCard(sel, updateBlock(card, id, { text }))} />
             ) : null}
-            <SpeakerNotes card={card} index={sel} readOnly={readOnly} notesMax={model.notes_max} onNotes={(v) => setCard(sel, { ...card, notes: v })} />
+            {card && (one || !areas) ? (
+              <SpeakerNotes card={card} index={sel} readOnly={readOnly} notesMax={model.notes_max} onNotes={(v) => setCard(sel, { ...card, notes: v })} />
+            ) : null}
           </div>
         </div>
       )}
@@ -504,10 +532,6 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <SaveDialog changes={changes} named={Boolean(dialog.named)} initialName={base.deck.title || ''} onClose={() => setDialog(null)} onSaved={saved}
           save={(name) => api.deckUpdate(base.deck.id, { slides: cards, title: name ?? base.deck.title, theme, audience })} />
       ) : null}
-      {dialog?.kind === 'share' && project?.id && current ? (
-        <ShareDialog projectId={project.id} deck={current} onClose={() => setDialog(null)} onCreated={() => {}} />
-      ) : null}
-      {dialog?.kind === 'export' ? <ExportDialog versions={versions} current={current} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === 'layout' && card ? (() => {
         const r = applyLayout(card, dialog.layout);
         if (r.error) {

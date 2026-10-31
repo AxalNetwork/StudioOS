@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs';
 import { areaLabel, askAreaName } from '../src/pages/raise/pitch/deckV2Model.js';
 import {
   HIDDEN_WHY, KEYS_LINE, LOCKED_WHY, STAGE_HINT,
-  areaTitle, areasOf, askTarget, cellAt, keyStep, marquee, moveTo, nearest, nudge, pick, selectable,
+  areaTitle, areasOf, askTarget, cellAt, keyStep, liveFocus, marquee, moveTo, nearest, nudge, pick, selectable,
 } from '../src/pages/raise/pitch/gridSelection.js';
 import { CARD, MODEL, mountEditor } from './_pitch_editor_mount.mjs';
 
@@ -120,6 +120,45 @@ test('a drag to a free range moves the block; a drop on a taken range is refused
   assert.equal(cellAt(1, 1, null, MODEL), null, 'no box, no cell');
 });
 
+test('one geometry: the pointer is read on the blocks layer\'s own box, its width-based padding and its gutter', () => {
+  // A 16:9 blocks layer, 1600 × 900, p-[3%] (48 px on all four sides: CSS takes a
+  // percentage padding from the width) and gap-2 (8 px). Each row is
+  // (900 − 96 − 5 × 8) / 6 ≈ 127.3 px tall: row 1 spans 48–175.3, the gutter
+  // 175.3–183.3, row 2 183.3–310.7; row 5 starts at 589.3.
+  const box = { left: 0, top: 0, width: 1600, height: 900 };
+  const at = (x, y) => cellAt(x, y, box, MODEL, { gap: 8 });
+  assert.equal(at(800, 185).r, 2, 'just below the visible top edge of row 2');
+  assert.equal(at(800, 172).r, 1, 'just above the visible bottom edge of row 1 is still row 1');
+  assert.equal(at(800, 590).r, 5, 'just below the visible top edge of row 5');
+  assert.equal(at(800, 178).r, 1, 'the upper half of a gutter belongs to the row above');
+  assert.equal(at(800, 181).r, 2, 'the lower half to the row below');
+  // Columns: (1600 − 96 − 11 × 8) / 12 = 118 px; column 2 spans 174–292.
+  assert.equal(at(175, 300).c, 2);
+  assert.equal(at(169, 300).c, 1, 'just right of column 1, in its half of the gutter');
+  assert.deepEqual(at(0, 0), { c: 1, r: 1 }, 'the margin clamps to the edge cell');
+  assert.deepEqual(at(1600, 900), { c: 12, r: 6 });
+  // The stage reads the blocks layer (its ref, its gutter), and the overlay and
+  // the drag layer share the blocks layer's classes: no inset-[3%] anywhere.
+  const stage = read('GridStage.jsx');
+  assert.doesNotMatch(stage, /inset-\[3%\]/, 'no height-based inset');
+  assert.equal((stage.match(/className=\{LAYER\} style=\{TRACKS\}/g) || []).length, 2, 'the overlay cells and the blocks layer');
+  assert.match(stage, /<div ref=\{layer\} className=\{LAYER\} style=\{TRACKS\}/);
+  assert.match(stage, /className=\{`pointer-events-none \$\{LAYER\}`\} style=\{TRACKS\}/, 'the marquee and the ghost');
+  assert.match(stage, /cellAt\(e\?\.clientX, e\?\.clientY, rect\(\), model, \{ gap: layer\.current \? gutterOf\(layer\.current\) : 0 \}\)/);
+});
+
+test('the focus follows the card: a free range a block now covers hands the focus to that block', () => {
+  const areas = areasOf(CARD, MODEL);
+  assert.equal(liveFocus(areas, 'b2'), 'b2');
+  assert.equal(liveFocus(areas, null), null);
+  const moved = areasOf({ ...CARD, blocks: CARD.blocks.map((b) => (b.id === 'b3' ? { ...b, grid: { c1: 8, c2: 10, r1: 4, r2: 5 } } : b)) }, MODEL);
+  assert.ok(!moved.some((a) => a.id === 'free:8-4'), 'the free range is gone');
+  assert.equal(liveFocus(moved, 'free:8-4'), 'b3', 'the block that now covers its cell');
+  assert.equal(liveFocus(moved, 'gone'), null, 'a removed block: no focus, the stage falls back to its first area');
+  const locked = areasOf({ ...CARD, blocks: CARD.blocks.map((b) => (b.id === 'b3' ? { ...b, locked: true, grid: { c1: 8, c2: 10, r1: 4, r2: 5 } } : b)) }, MODEL);
+  assert.equal(liveFocus(locked, 'free:8-4'), null, 'never onto a locked block');
+});
+
 test('what the selection\'s Ask opens on this base', () => {
   const areas = areasOf(CARD, MODEL);
   assert.equal(askTarget(areas, ['b2']).kind, 'text');
@@ -189,6 +228,49 @@ test('the keyboard on the stage: arrows move the focus, Space selects, Shift + a
     assert.ok(m.by('pitch-block-tools'));
     await key('ArrowRight', { shiftKey: true });
     assert.match(m.text(m.by('pitch-editor-selbar')), /2 areas selected/);
+  } finally { await m.close(); }
+});
+
+test('a free range with the focus, then a block dropped on it: exactly one area keeps the tab stop', async () => {
+  const m = await mountEditor();
+  try {
+    const stops = () => m.walk(m.by('pitch-editor-blocks')).filter((n) => n.tagName === 'BUTTON' && m.pr(n).tabIndex === 0).map((n) => m.pr(n)['data-testid']);
+    await m.press(m.by('pitch-editor-area-free:8-4'));
+    assert.deepEqual(stops(), ['pitch-editor-area-free:8-4']);
+    await m.fire(m.by('pitch-editor-block-b3'), 'onDragStart', { dataTransfer: { setData() {} } });
+    await m.fire(m.by('pitch-editor-area-free:8-4'), 'onDrop');
+    assert.ok(!m.by('pitch-editor-area-free:8-4'), 'the block covers it now');
+    assert.deepEqual(stops(), ['pitch-editor-block-b3'], 'the tab stop moved to the block that covers it');
+    await m.fire(m.by('pitch-editor-card'), 'onKeyDown', { key: 'ArrowLeft' });
+    assert.deepEqual(stops(), ['pitch-editor-block-b2'], 'and the keyboard goes on from there');
+  } finally { await m.close(); }
+});
+
+test('after Enter on the stage, the next real click still selects', async () => {
+  const m = await mountEditor();
+  try {
+    const key = (k) => m.fire(m.by('pitch-editor-card'), 'onKeyDown', { key: k });
+    await key('ArrowDown'); await key('ArrowDown');
+    await key('Enter');
+    assert.equal(m.pr(m.by('pitch-editor-block-b2'))['aria-pressed'], true, 'Enter selects the focused area');
+    await m.fire(m.by('pitch-editor-card'), 'onKeyUp', { key: 'Enter' });
+    await m.press(m.by('pitch-editor-block-b1'));
+    assert.equal(m.pr(m.by('pitch-editor-block-b1'))['aria-pressed'], true, 'no click follows Enter, so this one is the user\'s');
+    await key(' ');
+    await m.fire(m.by('pitch-editor-block-b3'), 'onPointerDown', { button: 0 });
+    await m.press(m.by('pitch-editor-block-b3'));
+    assert.equal(m.pr(m.by('pitch-editor-block-b3'))['aria-pressed'], true, 'a press that starts with a pointerdown is never swallowed');
+  } finally { await m.close(); }
+});
+
+test('speaker notes show with one area, never with none or several', async () => {
+  const m = await mountEditor();
+  try {
+    assert.ok(!m.by('pitch-editor-notes'), 'nothing selected: no notes');
+    await m.press(m.by('pitch-editor-block-b2'));
+    assert.equal(m.pr(m.by('pitch-editor-notes')).value, 'Synthetic note');
+    await m.press(m.by('pitch-editor-block-b3'), { shiftKey: true });
+    assert.ok(!m.by('pitch-editor-notes'), 'several areas: no notes');
   } finally { await m.close(); }
 });
 

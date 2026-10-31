@@ -7,7 +7,7 @@ import { cardOf } from './presentExportModel';
 import { KIT_FAILED, NO_KIT } from './editorModel';
 import { areaLabel, askAreaName } from './deckV2Model';
 import {
-  KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, keyStep, marquee, moveTo, nudge, pick, selectable, spanOf,
+  KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, keyStep, liveFocus, marquee, moveTo, nudge, pick, selectable, spanOf,
 } from './gridSelection';
 
 /**
@@ -31,12 +31,21 @@ import {
  *              this area"). Two or more: SELBAR, "N areas selected · Ask ·
  *              Clear". What Ask opens is the editor's (`onAsk`).
  *
+ * One geometry: the blocks, the marquee, the drag ghost and the overlay are
+ * all `LAYER` (`absolute inset-0 grid gap-2 p-[3%]` on `TRACKS`), and
+ * `cellAt` reads a pointer against the blocks layer's own measured box, its
+ * width-based padding and its gutter, so a drop lands where its ghost showed.
+ *
  * Nothing here writes: a move is the editor's `onMove`, held until a version
  * is saved like every other edit.
  */
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const MONO = 'font-mono text-[10.5px] text-axal-muted dark:text-gray-400';
+/** The Grid's one geometry: a CSS percentage padding is taken from the width on all four sides. */
+const LAYER = 'absolute inset-0 grid gap-2 p-[3%]';
+const TRACKS = { gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gridTemplateRows: 'repeat(6, minmax(0, 1fr))' };
+const FRAME = 'absolute inset-0 p-[3%]';
 const CHIP = 'inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-bold max-sm:min-h-[44px]';
 
 /** A card saved before D898 has fields, not blocks: drawn as present mode draws it. */
@@ -57,17 +66,30 @@ function FieldedCard({ card, index, colours }) {
   );
 }
 
-/** "Show the Grid": columns, rows, the safe area and an 8-step baseline. Decoration only. */
+/**
+ * "Show the Grid": columns, rows, the safe area and an 8-step baseline, on the
+ * blocks layer's own geometry (`LAYER`, `FRAME`), so its rows frame the blocks.
+ * Decoration only.
+ */
 function GridOverlay() {
   return (
     <span className="pointer-events-none absolute inset-0" aria-hidden="true" data-testid="pitch-editor-grid-overlay">
-      <span className="absolute inset-[3%] rounded-[4px] outline outline-1 outline-dashed outline-violet-400/70" />
-      <span className="absolute inset-[3%] grid gap-2" style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gridTemplateRows: 'repeat(6, minmax(0, 1fr))' }}>
+      <span className={FRAME}><span className="block h-full w-full rounded-[4px] outline outline-1 outline-dashed outline-violet-400/70" /></span>
+      <span className={LAYER} style={TRACKS} data-testid="pitch-editor-grid-overlay-cells">
         {Array.from({ length: 72 }, (_, i) => <span key={i} className="rounded-[2px] bg-violet-400/10" />)}
       </span>
-      <span className="absolute inset-[3%]" style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 7px, rgba(124,58,237,0.12) 7px, rgba(124,58,237,0.12) 8px)' }} />
+      <span className={FRAME}><span className="block h-full w-full" style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 7px, rgba(124,58,237,0.12) 7px, rgba(124,58,237,0.12) 8px)' }} /></span>
     </span>
   );
+}
+
+/** The gutter the blocks layer really has, in px (`gap-2`, 8 px at the default root size). */
+function gutterOf(node) {
+  try {
+    const css = globalThis.getComputedStyle?.(node);
+    const v = parseFloat(css?.rowGap ?? css?.gap);
+    return Number.isFinite(v) ? v : 8;
+  } catch { return 8; }
 }
 
 export default function GridStage({
@@ -81,34 +103,53 @@ export default function GridStage({
   const [refused, setRefused] = useState(null);
   const [box, setBox] = useState(null);
   const face = useRef(null);
+  const layer = useRef(null);
   const buttons = useRef(new Map());
   const press = useRef(null);
   const swallow = useRef(false);
   // Space and Enter are handled as keys; the click a browser may send after them is not a second press.
   const keyed = useRef(0);
 
+  // The focus names an area on this card, or falls back to the first one, so
+  // there is always exactly one tab stop on the Grid.
+  const first = (areas || []).find((x) => selectable(x).ok)?.id ?? null;
+  const live = liveFocus(areas, focus);
+  const stop = live ?? first;
+
   useEffect(() => { setRefused(null); setGhost(null); }, [index]);
+  // The DOM focus follows the keyboard on the stage; a focus the card changed
+  // under (a block now covers the focused range) never pulls it from a field.
   useEffect(() => {
-    if (focus) buttons.current.get(focus)?.focus?.();
-  }, [focus]);
+    if (!live) return;
+    const node = buttons.current.get(live);
+    const active = globalThis.document?.activeElement;
+    const box = face.current;
+    if (active && active !== node && box && typeof box.contains === 'function' && !box.contains(active)) return;
+    node?.focus?.();
+  }, [live]);
 
   const bg = card?.background?.color || theme?.background?.color || colours.bg;
   const bgImage = card?.background?.image_url || theme?.background?.image_url || null;
   const veil = bgImage ? overlayStyle((card?.background?.image_url ? card.background : theme?.background)?.overlay, ink) : null;
   const chosen = (areas || []).filter((a) => selection.includes(a.id));
-  const rect = () => (typeof face.current?.getBoundingClientRect === 'function' ? face.current.getBoundingClientRect() : null);
-  const cellOf = (e, fallback = null) => cellAt(e?.clientX, e?.clientY, rect(), model) || fallback;
+  // The blocks layer's own box (the face's padding box), its padding and its gutter.
+  const rect = () => {
+    const n = layer.current || face.current;
+    return typeof n?.getBoundingClientRect === 'function' ? n.getBoundingClientRect() : null;
+  };
+  const cellOf = (e, fallback = null) => cellAt(e?.clientX, e?.clientY, rect(), model, { gap: layer.current ? gutterOf(layer.current) : 0 }) || fallback;
 
   const set = (next) => onSelection?.(next);
   const click = (e, area) => {
     if (swallow.current) { swallow.current = false; return; }
     if (keyed.current && Date.now() - keyed.current < 600) { keyed.current = 0; return; }
+    keyed.current = 0;
     const shift = Boolean(e?.shiftKey || e?.metaKey || e?.ctrlKey);
     set({ selection: pick(selection, areas, area.id, { shift }), focus: area.id });
   };
   const keys = (e) => {
     if (!areas) return;
-    const step = keyStep({ selection, focus }, areas, e.key, { shift: e.shiftKey, alt: e.altKey });
+    const step = keyStep({ selection, focus: live }, areas, e.key, { shift: e.shiftKey, alt: e.altKey });
     if (!step) return;
     e.preventDefault?.();
     if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'Enter') keyed.current = Date.now();
@@ -123,8 +164,12 @@ export default function GridStage({
   };
 
   // The marquee: from a press on a free range or the card's margin, across at least one cell.
+  // A real press always starts with a pointerdown: the click after it is the
+  // user's, never the one a browser sends after Space or Enter.
+  const keyUp = (e) => { if (e?.key === 'Enter') keyed.current = 0; };
   const down = (e, area = null) => {
     swallow.current = false;
+    keyed.current = 0;
     if (area?.kind === 'block' || e?.button > 0) return;
     const at = cellOf(e);
     if (at) press.current = { from: at, to: at, moved: false };
@@ -144,7 +189,7 @@ export default function GridStage({
     if (!p?.moved) return;
     swallow.current = true;
     const ids = marquee(areas, spanOf(p.from, p.to));
-    set({ selection: ids, focus: ids[ids.length - 1] ?? focus });
+    set({ selection: ids, focus: ids[ids.length - 1] ?? live });
   };
 
   // Drag a block to a free range.
@@ -213,7 +258,7 @@ export default function GridStage({
         className="relative w-full select-none overflow-hidden rounded-[12px] border border-axal-hairline shadow-sm dark:border-gray-700"
         style={{ aspectRatio: '16 / 9', background: bg, color: colours.ink, backgroundImage: bgImage ? `url("${bgImage}")` : undefined, backgroundSize: 'cover' }}
         role={areas ? 'group' : undefined} aria-label={areas ? `Card ${index + 1} on the Grid` : undefined}
-        onKeyDown={keys}
+        onKeyDown={keys} onKeyUp={keyUp}
         onPointerDown={(e) => { if (e.target === face.current) down(e); }}
         onPointerMove={over} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
         onDragOver={(e) => dragOver(e, null)} onDrop={(e) => drop(e, null)}
@@ -221,12 +266,12 @@ export default function GridStage({
         {veil ? <span className="absolute inset-0" style={{ background: veil }} aria-hidden="true" data-testid="pitch-editor-overlay" /> : null}
         {grid ? <GridOverlay /> : null}
         {areas ? (
-          <div className="absolute inset-0 grid gap-2 p-[3%]" style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gridTemplateRows: 'repeat(6, minmax(0, 1fr))' }}
+          <div ref={layer} className={LAYER} style={TRACKS}
             onPointerDown={(e) => { if (e.target === e.currentTarget) down(e); }} data-testid="pitch-editor-blocks">
             {areas.map((a, i) => {
               const ok = selectable(a);
               const on = selection.includes(a.id);
-              const tab = (focus ?? areas.find((x) => selectable(x).ok)?.id) === a.id ? 0 : -1;
+              const tab = stop === a.id ? 0 : -1;
               const at = { gridColumn: `${a.grid.c1} / ${a.grid.c2 + 1}`, gridRow: `${a.grid.r1} / ${a.grid.r2 + 1}` };
               const block = a.kind === 'block';
               return (
@@ -244,7 +289,7 @@ export default function GridStage({
                   onDrop={(e) => { e.stopPropagation?.(); drop(e, a); }}
                   onPointerDown={(e) => down(e, a)}
                   onClick={(e) => click(e, a)}
-                  className={`relative min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${on ? 'outline outline-2 outline-violet-500 dark:outline-violet-400' : block ? 'outline outline-1 outline-dashed outline-black/10 dark:outline-white/20' : 'outline outline-1 outline-dashed outline-transparent hover:outline-black/15 dark:hover:outline-white/20'} ${a.id === focus ? 'ring-[6px] ring-violet-400/30' : ''} ${ok.ok ? '' : 'cursor-not-allowed opacity-70'}`}
+                  className={`relative min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${on ? 'outline outline-2 outline-violet-500 dark:outline-violet-400' : block ? 'outline outline-1 outline-dashed outline-black/10 dark:outline-white/20' : 'outline outline-1 outline-dashed outline-transparent hover:outline-black/15 dark:hover:outline-white/20'} ${a.id === live ? 'ring-[6px] ring-violet-400/30' : ''} ${ok.ok ? '' : 'cursor-not-allowed opacity-70'}`}
                   style={at}
                   data-testid={block ? `pitch-editor-block-${a.id}` : `pitch-editor-area-${a.id}`}>
                   {block
@@ -256,7 +301,7 @@ export default function GridStage({
           </div>
         ) : <FieldedCard card={card} index={index} colours={colours} />}
         {box || ghost ? (
-          <div className="pointer-events-none absolute inset-0 grid gap-2 p-[3%]" style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gridTemplateRows: 'repeat(6, minmax(0, 1fr))' }} aria-hidden="true">
+          <div className={`pointer-events-none ${LAYER}`} style={TRACKS} aria-hidden="true" data-testid="pitch-editor-drag-layer">
             {box ? <span className="rounded-[6px] border-2 border-dashed border-violet-500 bg-violet-400/10" style={{ gridColumn: `${box.c1} / ${box.c2 + 1}`, gridRow: `${box.r1} / ${box.r2 + 1}` }} data-testid="pitch-editor-marquee" /> : null}
             {ghost ? (
               <span className={`flex items-end rounded-[6px] border-2 border-dashed p-1 font-mono text-[10px] ${ghost.error ? 'border-gray-400 bg-gray-400/15 text-gray-600 dark:text-gray-300' : 'border-violet-500 bg-violet-400/15 text-violet-700 dark:text-violet-300'}`}
@@ -273,7 +318,7 @@ export default function GridStage({
         <div className="flex flex-wrap items-center gap-3 self-center rounded-full bg-gray-900 px-4 py-1.5 text-[12.5px] text-white shadow-lg dark:bg-gray-100 dark:text-gray-900" role="toolbar" aria-label="Selection" data-testid="pitch-editor-selbar">
           <span className="font-bold">{chosen.length} areas selected</span>
           {!readOnly ? askButton(chosen.length, 'pitch-editor-selbar-ask') : null}
-          <button type="button" className="min-h-[36px] font-bold underline" onClick={() => set({ selection: [], focus })} data-testid="pitch-editor-selbar-clear">Clear</button>
+          <button type="button" className="min-h-[36px] font-bold underline" onClick={() => set({ selection: [], focus: live })} data-testid="pitch-editor-selbar-clear">Clear</button>
         </div>
       ) : null}
       {areas ? <span className={MONO}>{KEYS_LINE}</span> : null}

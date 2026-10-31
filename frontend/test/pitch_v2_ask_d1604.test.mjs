@@ -432,6 +432,7 @@ test('in the editor, discarding the deck proposal from Ask keeps the unsaved car
   const m = await mountEditor({ proposal: { id: 77, slides: [{}, {}] } });
   try {
     const notes = () => m.by('pitch-editor-notes');
+    await m.press(m.by('pitch-editor-block-b1'));
     await act(async () => { m.pr(notes()).onChange({ target: { value: 'Synthetic unsaved note' } }); });
     assert.ok(m.by('pitch-editor-save'), 'dirty');
     // An accepted card edit, held until Save, is unsaved work too.
@@ -443,6 +444,7 @@ test('in the editor, discarding the deck proposal from Ask keeps the unsaved car
     assert.deepEqual(m.discarded, [77]);
     assert.ok(!m.by('pitch-editor-loading'), 'the editor never drops to its skeleton');
     assert.equal(m.deckReads(), reads, 'the open version is not read again, so the Editor is not remounted');
+    await m.press(m.by('pitch-editor-block-b1'));
     assert.equal(m.pr(notes()).value, 'Synthetic unsaved note', 'the unsaved note survives');
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers stay/, 'the accepted edit survives');
     assert.ok(m.by('pitch-editor-save'));

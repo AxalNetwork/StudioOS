@@ -301,21 +301,26 @@ export const SHARE_ITEMS = Object.freeze([
 
 /**
  * Why each item is greyed, or null when it can be pressed: the adapter's
- * reason ("Coming later"), read only for a write, or AI paused / out of
- * tokens for a wired item that runs a model. `off` counts only the last kind:
- * the items that would work but for AI.
+ * reason ("Coming later") while its surface answers unavailable, read only
+ * for a write, the editor not on screen yet (`waiting`, for every item but
+ * Share's two), or AI paused / out of tokens for a wired item that runs a
+ * model. An item whose adapter surface answers available is wired like any
+ * other: the seam greys it only until its issue merges. `off` counts only the
+ * last kind: the items that would work but for AI.
  */
-export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens = false, availability = () => null } = {}) {
+export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens = false, availability = () => null, waiting = null } = {}) {
   let off = 0;
   let why = null;
+  const shareIds = new Set(SHARE_ITEMS.map((i) => i.id));
   const out = sections.map((s) => ({
     ...s,
     items: s.items.map((it) => {
       if (it.adapter) {
         const a = availability(it.adapter);
-        return { ...it, disabled: true, later: true, why: a?.reason || NOT_ON };
+        if (!a || a.available !== true) return { ...it, disabled: true, later: true, why: a?.reason || NOT_ON };
       }
       if (readOnly && it.write) return { ...it, disabled: true, why: 'Read only' };
+      if (waiting && !shareIds.has(it.id)) return { ...it, disabled: true, why: waiting };
       if (it.ai && (!aiOn || outOfTokens)) {
         off += 1;
         why = why || (!aiOn ? 'AI is paused' : 'out of AI tokens');
@@ -326,6 +331,9 @@ export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens
   }));
   return { sections: out, off, why };
 }
+
+/** The ⋯ items' line while the editor itself is not on screen (the deck or the model still reading, or failed). */
+export const EDITOR_WAITING = 'Opens once the deck is on screen.';
 
 /** "More deck actions", with ", N off: <why>" when items are off for AI. */
 export const moreName = (off, why) => (off > 0 ? `${MORE_NAME}, ${off} off: ${why}` : MORE_NAME);

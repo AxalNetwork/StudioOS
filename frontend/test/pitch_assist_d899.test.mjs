@@ -40,8 +40,8 @@ import { __resetAssistModeForTest, seedAssistModes } from '../src/hooks/useAssis
 import PitchEditor from '../src/pages/raise/pitch/PitchEditor.jsx';
 import { FIRST_RUN_KEY } from '../src/pages/raise/pitch/editorModel.js';
 import {
-  AI_OFF_LINE, CHART_TOOLS, FIGURE_LINE, RAIL_MODELS, TEXT_TOOLS,
-  blockRefusal, chartProposal, connectorCard, connectorGroups, connectorOf, costLine, railModelRows, syncLine, textBody, textProposal,
+  AI_OFF_LINE, CHART_TOOLS, FIGURE_LINE, TEXT_TOOLS,
+  blockRefusal, chartProposal, connectorCard, connectorGroups, connectorOf, costLine, syncLine, textBody, textProposal,
 } from '../src/pages/raise/pitch/deckAssistModel.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 
@@ -134,16 +134,6 @@ test('connectors group what they feed, and the card they make binds every tile',
   assert.deepEqual(card.blocks.slice(1).map((b) => [b.kind, b.binding.source_key, b.value]), [['metric', 'build.commits_90d', '311'], ['metric', 'grow.mrr', '4200']],
     'each value is the record\'s, each tile bound to it');
   assert.equal(connectorCard([ITEMS[0]], '').title, 'From your records');
-});
-
-test('the rail row lists the four models, priced from the catalogue; FLUX.2 Klein 9B says why it is not routed', () => {
-  assert.deepEqual(RAIL_MODELS.map((m) => m.name), ['Llama 3.3 70B Fast', 'FLUX.2 Klein 9B', 'FLUX.1 Schnell', 'Gemma 4 26B']);
-  const rows = railModelRows(CATALOGUE.models);
-  assert.equal(rows[0].price, '$2.70 per 1M output tokens');
-  assert.equal(rows[2].price, '$0.000063 per tile');
-  assert.equal(rows[1].offered, false);
-  assert.equal(rows[1].price, 'Not offered on your plan', 'a partner model behind AI_PARTNER_MODELS is not in the member catalogue');
-  assert.match(rows[1].unrouted, /Not routed on this page yet/);
 });
 
 /* ------------------------------------------------------------------ *
@@ -357,7 +347,7 @@ test('the Add menu, on a selected empty range: Text opens Add a block, Image and
   } finally { await p.unmount(); }
 });
 
-test('the Add menu\'s Chart: costs and the rail row first, then a block whose series are bindings', async () => {
+test('the Add menu\'s Chart: costs first, no model list (the AIRail holds models), then a block whose series are bindings', async () => {
   const series = [{ label: 'MRR', binding: BINDING }];
   const m = await mount({
     'assist.run': async (id, card, body) => ({ proposal: { uid: 'c1' }, action: body.action, block: { kind: 'chart', chart_type: 'columns', series, range: 'all', previous: false, labels: true }, title: 'Synthetic growth', cost: { charged_microusd: 700 } }),
@@ -367,8 +357,9 @@ test('the Add menu\'s Chart: costs and the rail row first, then a block whose se
     await m.press(m.by('pitch-add-menu-open'));
     await m.press(m.by('pitch-add-chart'));
     assert.match(m.text(m.by('pitch-add-chart-cost')), /up to \$0\.0008/);
-    assert.match(m.text(m.by('pitch-add-models')), /Llama 3\.3 70B Fast.*\$2\.70 per 1M output tokens.*FLUX\.2 Klein 9B.*Not routed on this page yet.*FLUX\.1 Schnell.*Gemma 4 26B/);
-    assert.match(m.text(m.by('pitch-add-charts')), /Figures from your records are free/);
+    assert.ok(!m.by('pitch-add-models'), 'no model list in the editor: models live in the AIRail');
+    assert.ok(!m.named('pricing.aiModels').length, 'the model catalogue is not read here');
+    assert.match(m.text(m.by('pitch-add-charts')), /Figures from your records are free\. The model it uses is set in the AIRail\./);
     await m.press(m.by('pitch-add-chart'));
     assert.match(m.text(m.by('pitch-add-dialog-cost')), /Up to \$0\.0008/);
     await m.press(m.by('pitch-add-dialog-run'));

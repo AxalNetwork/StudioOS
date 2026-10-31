@@ -12,6 +12,8 @@
  *                  extends, Esc clears, Alt + arrow nudges a block one cell
  *   moveTo         a block dragged to a free range, or the drop refused with
  *                  the sentence that says why (never a silent no-op)
+ *   cellAt         the cell under a point, on the blocks layer's own geometry
+ *   liveFocus      the focus after the card changed under it
  *   askTarget      what the selection's Ask opens on this base
  *
  * Areas are the input, so when #3749 brings the 17 structures and divider drag
@@ -126,16 +128,43 @@ export function marquee(areas, rect) {
   return (blocks.length ? blocks : hit).map((a) => a.id);
 }
 
-/** The cell under a point, from the stage's box (`{ left, top, width, height }`) and its inset. */
-export function cellAt(x, y, box, model = null, inset = 0.03) {
+/**
+ * The cell under a point. `box` is the blocks layer's own box (`{ left, top,
+ * width, height }`), the one GridStage draws the blocks, the marquee, the
+ * ghost and the "Show the Grid" overlay in: `p-[3%]` and `gap-2`. A CSS
+ * percentage padding is taken from the box's width on all four sides, so the
+ * top and bottom inset is `inset × width` too, never `inset × height`; `gap`
+ * is the gutter between tracks, in px. A point in a gutter belongs to the
+ * nearer track.
+ */
+export function cellAt(x, y, box, model = null, { inset = 0.03, gap = 0 } = {}) {
   if (!box || !(box.width > 0) || !(box.height > 0)) return null;
   const { cols, rows } = dims(model);
-  const fx = (x - box.left) / box.width;
-  const fy = (y - box.top) / box.height;
-  const inner = 1 - 2 * inset;
-  const c = Math.floor(((fx - inset) / inner) * cols) + 1;
-  const r = Math.floor(((fy - inset) / inner) * rows) + 1;
-  return { c: Math.min(cols, Math.max(1, c)), r: Math.min(rows, Math.max(1, r)) };
+  const pad = inset * box.width;
+  const g = Number.isFinite(gap) && gap > 0 ? gap : 0;
+  const track = (at, size, n) => {
+    const pitch = (size - 2 * pad - (n - 1) * g) / n + g;
+    if (!(pitch > 0)) return 1;
+    return Math.min(n, Math.max(1, Math.floor((at - pad + g / 2) / pitch) + 1));
+  };
+  return { c: track(x - box.left, box.width, cols), r: track(y - box.top, box.height, rows) };
+}
+
+/**
+ * The focus as it stands on this card: the focused area when it is still
+ * there; when a block now covers a free range that had the focus, that block
+ * (or whichever area now holds that cell); otherwise null, so the stage falls
+ * back to its first selectable area and keeps one tab stop.
+ */
+export function liveFocus(areas, focus) {
+  const list = areas || [];
+  if (focus == null) return null;
+  if (list.some((a) => a.id === focus)) return focus;
+  const m = /^free:(\d+)-(\d+)$/.exec(String(focus));
+  if (!m) return null;
+  const c = Number(m[1]); const r = Number(m[2]);
+  const holder = list.find((a) => a.grid.c1 <= c && c <= a.grid.c2 && a.grid.r1 <= r && r <= a.grid.r2);
+  return holder && selectable(holder).ok ? holder.id : null;
 }
 
 const centre = (g) => ({ x: (g.c1 + g.c2) / 2, y: (g.r1 + g.r2) / 2 });
