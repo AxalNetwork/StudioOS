@@ -14,7 +14,7 @@
  *                  the sentence that says why (never a silent no-op)
  *   cellAt         the cell under a point, on the blocks layer's own geometry
  *   liveFocus      the focus after the card changed under it
- *   askTarget      what the selection's Ask opens on this base
+ *   askTarget      what the selection's Ask opens: the area lightbox
  *
  * Areas are the input, so when #3749 brings the 17 structures and divider drag
  * (`deckV2Adapter.grid`), only `areasOf` changes. Locks arrive with #3819;
@@ -257,28 +257,21 @@ export function nudge(card, blockId, dc, dr, model = null) {
 }
 
 /**
- * What the selection's Ask opens on this base, before the area lightbox
- * (plan §11 step 7) and the several-area routes (#3764):
- *   `{ kind: 'text', block }`    Eadwyn's words for the one text block
- *   `{ kind: 'image', block }`   the image lightbox, to replace the one image
- *   `{ kind: 'refused', why }`   a figure bound to a record, an empty text
- *   `{ kind: 'later', issue }`   several areas, an empty range, a chart: the
- *                                adapter's answer, drawn "Coming later"
+ * What the selection's Ask opens (plan §4.2):
+ *   `{ kind: 'areas', ids }`     "Generate into N areas" (`AreaLightbox.jsx`)
+ *                                for one area or several; each row says what
+ *                                runs on main and what waits for its issue
+ *   `{ kind: 'refused', why }`   the one area is a figure bound to a record,
+ *                                which only its record changes
  *   `{ kind: 'off' }`            AI is paused on the page
  */
 export function askTarget(areas, selection, { aiOn = true, items = [] } = {}) {
   const chosen = (selection || []).map((id) => byId(areas, id)).filter(Boolean);
   if (!chosen.length) return null;
   if (!aiOn) return { kind: 'off' };
-  if (chosen.length > 1) return { kind: 'later', adapter: 'areasGenerate', issue: 3764 };
-  const [one] = chosen;
-  if (one.kind === 'free') return { kind: 'later', adapter: 'areasGenerate', issue: 3764 };
-  const b = one.block;
-  if (b.kind === 'image') return { kind: 'image', block: b };
-  if (b.kind === 'text') {
-    const why = blockRefusal(b, items);
-    return why ? { kind: 'refused', why } : { kind: 'text', block: b };
+  if (chosen.length === 1 && chosen[0].kind === 'block') {
+    const b = chosen[0].block;
+    if (b.kind === 'metric' || b.binding?.source_key) return { kind: 'refused', why: blockRefusal(b, items) };
   }
-  if (b.kind === 'metric' || b.binding?.source_key) return { kind: 'refused', why: blockRefusal(b, items) };
-  return { kind: 'later', adapter: 'areasGenerate', issue: 3764 };
+  return { kind: 'areas', ids: chosen.map((a) => a.id) };
 }

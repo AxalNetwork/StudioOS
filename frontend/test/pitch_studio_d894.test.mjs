@@ -385,7 +385,7 @@ test('the old ?mode=workspace address opens the editor with the moved notice dra
   assert.ok(notice(`/raise/pitch?moved=${BUILDER_MOVED_KEY}`).includes(BUILDER_MOVED_NOTICE));
   assert.equal(notice('/raise/pitch?moved=elsewhere'), '', 'a key the studio does not know draws nothing');
   const editorSrc = read('frontend/src/pages/raise/pitch/PitchEditor.jsx');
-  assert.match(editorSrc, /testId="pitch-editor"><PitchMovedNotice \/>\{children\}<\/PitchPage>/, 'the editor\'s shell draws the notice');
+  assert.match(editorSrc, /testId="pitch-editor"><PitchMovedNotice \/>\{children\}\{overlay\}<\/PitchPage>/, 'the editor\'s shell draws the notice');
   assert.match(read('frontend/src/pages/raise/pitch/PitchStudio.jsx'), /<PitchMovedNotice \/>/, 'the studio\'s header draws the notice');
   // D898 group E: the retired builder opens the studio, query and hash kept.
   assert.equal(BUILDER_PATH, '/raise/pitch/builder');

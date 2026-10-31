@@ -25,9 +25,10 @@ import BlockTools, { SpeakerNotes } from './BlockTools';
 import ShareDialog from './ShareDialog';
 import ExportDialog from './ExportDialog';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
-import { availability, SURFACES } from './deckV2Adapter';
-import { EDITOR_WAITING, LATER, placeTextEdit, saveChip } from './deckV2Model';
-import { areasOf, askTarget, liveFocus } from './gridSelection';
+import { EDITOR_WAITING, placeTextEdit, saveChip } from './deckV2Model';
+import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
+import AreaLightbox from './AreaLightbox';
+import InstructionBox from './InstructionBox';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { presentHref } from './presentExportModel';
 import {
@@ -70,9 +71,13 @@ import {
  * (below 768 px) the editor is notes and order only (PD26 frame 4); a tablet
  * keeps the Grid, the full header and the strip as a row.
  *
- * D899 (#2678): an empty range's tools hold the Add menu (`AddMenu.jsx`); a
- * text area's Ask opens Eadwyn's bar (`CardAssistBar.jsx`). What they propose
- * is placed on Accept and written by Save like any other change.
+ * D899 (#2678): an empty range's tools hold the Add menu (`AddMenu.jsx`).
+ * D1604 (plan §4): the selection's Ask opens "Generate into N areas"
+ * (`AreaLightbox.jsx`, its proposals in `AreaResults.jsx`), and the
+ * instruction box (`InstructionBox.jsx`) under the stage is the one place to
+ * type to Eadwyn, scoped to the selection (docked at the bottom on a phone).
+ * What they propose is placed on Accept and written by Save like any other
+ * change.
  *
  * D898 group C: a chart block is drawn from its bound series
  * (`ChartTools.jsx`, `GET /api/decks/chart-series`); a selected chart shows
@@ -305,7 +310,6 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const [audience, setAudience] = useState(base.audience);
   const [sel, setSel] = useState(0);
   const [pickState, setPickState] = useState(NO_PICK);
-  const [asking, setAsking] = useState(null);
   const [askLine, setAskLine] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [sheet, setSheet] = useState(null);
@@ -337,7 +341,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   // The focus too: a free range a block now covers hands it to that block.
   const focus = liveFocus(areas, pickState.focus);
   const selKey = selection.join('|');
-  useEffect(() => { setAsking(null); setAskLine(null); }, [selKey, sel]);
+  useEffect(() => { setAskLine(null); }, [selKey, sel]);
   const choose = (i) => { setSel(i); setPickState(NO_PICK); };
   const selectBlock = (id) => setPickState({ selection: id == null ? [] : [String(id)], focus: id == null ? null : String(id) });
 
@@ -433,18 +437,15 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     else if (id === 'appendix') toggleAppendix(i);
   };
 
-  // The selection's Ask, on this base: Eadwyn's words for one text area, the
-  // image lightbox for one image, and otherwise the line that says why not
-  // yet (the area lightbox and several areas are plan §11 steps 7 and 8).
+  // The selection's Ask opens "Generate into N areas" (`AreaLightbox.jsx`) on
+  // the areas as they are now; a figure bound to a record says why not.
   const askOff = aiOn ? null : 'AI is paused for your studio.';
   const ask = () => {
     const t = askTarget(areas, selection, { aiOn, items });
     if (!t || t.kind === 'off') return;
-    if (t.kind === 'text') { setAsking(t.block.id); setAskLine(null); return; }
-    if (t.kind === 'image') { setDialog({ kind: 'image', use: 'content', replace: t.block.id }); return; }
     if (t.kind === 'refused') { setAskLine(t.why); return; }
-    const a = availability(t.adapter);
-    setAskLine(`${LATER}: ${SURFACES[t.adapter].what}. ${a?.reason || ''}`.trim());
+    setAskLine(null);
+    setDialog({ kind: 'areas', areas: (areas || []).filter((a) => t.ids.includes(a.id)) });
   };
 
   const staleMap = useMemo(() => {
@@ -457,7 +458,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     <>
       {phone ? (
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
-          onNotes={(v) => setCard(sel, { ...card, notes: v })} notesMax={model.notes_max} />
+          onNotes={(v) => setCard(sel, { ...card, notes: v })} notesMax={model.notes_max}
+          deckId={base.deck.id} items={items} aiOn={aiOn} model={model} onPlace={(c) => setCard(sel, c)} onProposals={onProposals} />
       ) : (
         <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
@@ -478,9 +480,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
                 onAsk={ask} askOff={askOff} askLine={askLine} />
             )}
+            {card && !readOnly && chosen.length ? (
+              <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn}
+                onRemove={(id) => setPickState((p) => ({ selection: p.selection.filter((x) => x !== id), focus: p.focus }))}
+                onPlace={(c) => setCard(sel, c)} onProposals={onProposals} />
+            ) : null}
             {card && !readOnly && (one || !areas) ? (
               <BlockTools card={card} cardIndex={sel} area={one} model={model} charts={charts} images={images} items={items}
-                deckId={base.deck.id} asking={Boolean(one && asking && one.id === String(asking))}
+                deckId={base.deck.id}
                 onPatch={(patch) => setCard(sel, updateBlock(card, one.block.id, patch))}
                 onRemove={() => setDialog({ kind: 'remove-block', id: one.block.id })}
                 onChartLibrary={(edit, range) => setDialog({ kind: 'charts', edit: edit || null, range: range || null })}
@@ -488,9 +495,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 onImage={(use, replace) => setDialog({ kind: 'image', use, replace: replace || null })}
                 onDesign={() => setSheet('structure')}
                 onPlace={(c) => setCard(sel, c)}
-                onAddCard={(c) => { setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); }}
-                onProposals={onProposals}
-                onAssistPlace={(id, text) => setCard(sel, updateBlock(card, id, { text }))} />
+                onAddCard={(c) => { setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); }} />
             ) : null}
             {card && (one || !areas) ? (
               <SpeakerNotes card={card} index={sel} readOnly={readOnly} notesMax={model.notes_max} onNotes={(v) => setCard(sel, { ...card, notes: v })} />
@@ -575,6 +580,15 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             if (r.error) { setDialog({ ...dialog, problem: r.error }); return; }
             setCard(sel, r.card); selectBlock(r.card.blocks[r.card.blocks.length - 1].id); setDialog(null);
           }} />
+      ) : null}
+      {dialog?.kind === 'areas' && card ? (
+        <AreaLightbox deckId={base.deck.id} cardIndex={sel} card={card} areas={dialog.areas} model={model} items={items} aiOn={aiOn}
+          onPlace={(c) => setCard(sel, c)} onProposals={onProposals} onClose={() => setDialog(null)}
+          onDialog={(plan, area) => {
+            if (plan.open === 'structure') { setDialog(null); setSheet('structure'); return; }
+            setDialog({ kind: 'add-block', range: area.kind === 'free' ? area.grid : null, initial: plan.kind });
+          }}
+          onImageOptions={(area) => setDialog({ kind: 'image', use: 'content', replace: area.kind === 'block' ? area.block.id : null })} />
       ) : null}
       {dialog?.kind === 'image' && card ? (
         <ImageLightbox deckId={base.deck.id} cardIndex={sel} card={dialog.replace ? removeBlock(card, dialog.replace) : card} theme={theme} model={model}
@@ -798,7 +812,13 @@ function SaveDialog({ changes, save, onSaved, onClose, named = false, initialNam
 // Phone (PD26 frame 4): notes and order, no layout editing
 // ---------------------------------------------------------------------------
 
-function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesMax }) {
+function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesMax, deckId, items, aiOn, model, onPlace, onProposals }) {
+  // pd9k: tap one text area on the card, and the instruction box docks at the bottom.
+  const [tapped, setTapped] = useState(null);
+  useEffect(() => { setTapped(null); }, [sel]);
+  const all = areasOf(card, model) || [];
+  const texts = all.filter((a) => a.kind === 'block' && a.block.kind === 'text');
+  const docked = texts.find((a) => a.id === tapped) || null;
   return (
     <div className="flex flex-col gap-2.5" data-testid="pitch-editor-phone">
       <span className={MUTED}>{PHONE_NOTE}</span>
@@ -823,6 +843,22 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
           <span className={EYE}>Speaker notes · card {sel + 1}</span>
           <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} onChange={(e) => onNotes(e.target.value)} />
         </label>
+      ) : null}
+      {card && !readOnly && texts.length ? (
+        <div className={`${CARD} flex flex-col gap-1.5 p-3 ${docked ? 'mb-[180px]' : ''}`} data-testid="pitch-editor-phone-areas">
+          <span className={EYE}>Ask Eadwyn about an area · card {sel + 1}</span>
+          {texts.map((a) => (
+            <button key={a.id} type="button" aria-pressed={tapped === a.id}
+              className={`flex min-h-[44px] items-center rounded-[9px] border px-3 text-left text-[13px] ${tapped === a.id ? 'border-axal-violet bg-axal-lavender dark:border-violet-500 dark:bg-violet-950/40' : 'border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900'} ${INK}`}
+              onClick={() => setTapped(tapped === a.id ? null : a.id)} data-testid={`pitch-editor-phone-area-${a.id}`}>
+              <span className="truncate">{areaTitle(a, all.indexOf(a), all.length)} · {String(a.block.text || '').slice(0, 40)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {docked ? (
+        <InstructionBox dock deckId={deckId} cardIndex={sel} card={card} areas={[docked]} items={items} aiOn={aiOn}
+          onPlace={onPlace} onProposals={onProposals} onClose={() => setTapped(null)} />
       ) : null}
     </div>
   );

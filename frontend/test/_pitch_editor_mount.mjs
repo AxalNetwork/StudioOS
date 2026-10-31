@@ -12,6 +12,8 @@ import { deckSourcesApi } from '../src/lib/api/deckSources.js';
 import { deckImagesApi } from '../src/lib/api/deckImages.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { railProposalsApi } from '../src/lib/api/railProposals.js';
+import { deckAssistApi } from '../src/lib/api/deckAssist.js';
+import { railPrefsApi } from '../src/lib/api/railPrefs.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import PitchEditor from '../src/pages/raise/pitch/PitchEditor.jsx';
 
@@ -44,7 +46,7 @@ export const ADMIN = { id: 21, role: 'admin', name: 'Synthetic Admin' };
 const SOURCES = { project_id: 7, items: [{ source_key: 'revenue.mrr', label: 'MRR', value: 4200, unit: 'usd', as_of: '2026-10-01', grade: 'Measured', source: 'Connector', state: 'recorded', module: 'Grow › Revenue' }], coverage: { slots: 1, filled: 1, by_grade: {}, not_recorded: 0, unreadable: 0 } };
 const VERSIONS = { versions: [{ id: 31, version: 3, is_current: true, title: 'Synthetic deck', created_at: '2026-10-24 10:00:00' }, { id: 30, version: 2, title: 'Synthetic deck', created_at: '2026-10-20 10:00:00' }] };
 
-const groups = { api, deckEditorApi, deckSourcesApi, deckImagesApi, deckCheckApi, railProposalsApi };
+const groups = { api, deckEditorApi, deckSourcesApi, deckImagesApi, deckCheckApi, railProposalsApi, deckAssistApi, railPrefsApi };
 
 export async function mountEditor({ user = FOUNDER, answers = {} } = {}) {
   const originals = Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, { ...v }]));
@@ -67,7 +69,7 @@ export async function mountEditor({ user = FOUNDER, answers = {} } = {}) {
     'proposals.list': async () => ({ proposals: [] }),
     ...answers,
   };
-  const prefix = { editor: deckEditorApi, sources: deckSourcesApi, images: deckImagesApi, check: deckCheckApi, proposals: railProposalsApi };
+  const prefix = { editor: deckEditorApi, sources: deckSourcesApi, images: deckImagesApi, check: deckCheckApi, proposals: railProposalsApi, assist: deckAssistApi, prefs: railPrefsApi };
   for (const [name, fn] of Object.entries(reads)) {
     const [p, k] = name.includes('.') ? name.split('.') : [null, name];
     (p ? prefix[p] : api)[k] = stub(name, fn);

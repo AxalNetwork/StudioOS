@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import AddMenu from './AddMenu';
-import CardAssistBar from './CardAssistBar';
 import ImageToolbar from './ImageToolbar';
 import { ChartToolbar } from './ChartTools';
 import { FIGURE_LINE } from './deckAssistModel';
@@ -19,9 +18,9 @@ import { NOTES_PLACEHOLDER, placementProblem } from './editorModel';
  *                 says so and changes nothing); for text, Heading · Paragraph
  *                 · List and its words; a chart's toolbar (D898 group C); an
  *                 image's toolbar with its Alt text (D903); a bound figure's
- *                 source, which no tool rewrites; Remove block. Eadwyn's bar
- *                 on the words (D899 `CardAssistBar`) opens from the area's
- *                 Ask, not before.
+ *                 source, which no tool rewrites; Remove block. Eadwyn works
+ *                 on the area from its Ask ("Generate into N areas",
+ *                 `AreaLightbox.jsx`) and the instruction box, not from here.
  *   one empty     "EMPTY · C1–6 × R1": Add a block here (that range, PD8c),
  *   range         the chart library (PD9b) and D899's Add menu.
  *   a card from   the same, for the whole card: its first block or layout
@@ -88,8 +87,8 @@ export function SpeakerNotes({ card, index, readOnly, notesMax, onNotes }) {
 }
 
 export default function BlockTools({
-  card, cardIndex, area, model, charts, images = [], items = [], deckId, asking = false,
-  onPatch, onRemove, onChartLibrary, onAddBlock, onImage, onDesign, onPlace, onAddCard, onProposals, onAssistPlace,
+  card, cardIndex, area, model, charts, images = [], items = [], deckId,
+  onPatch, onRemove, onChartLibrary, onAddBlock, onImage, onDesign, onPlace, onAddCard,
 }) {
   const block = area?.kind === 'block' ? area.block : null;
   if (block) {
@@ -125,9 +124,6 @@ export default function BlockTools({
         {block.kind === 'image' ? (
           <ImageToolbar block={block} image={images.find((x) => x.uid === block.image_id) || null} onPatch={onPatch}
             onReplace={() => onImage('content', block.id)} onUpload={() => onImage('content', block.id)} onRegenerate={() => onImage('content', block.id)} onRemove={onRemove} />
-        ) : null}
-        {asking && block.kind === 'text' ? (
-          <CardAssistBar deckId={deckId} cardIndex={cardIndex} items={items} block={block} onPlace={onAssistPlace} onProposals={onProposals} />
         ) : null}
       </div>
     );

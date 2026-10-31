@@ -53,7 +53,8 @@ const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
 const STUDIO = 'frontend/src/pages/raise/pitch/PitchStudio.jsx';
 const STUDIO_ACTIONS = 'frontend/src/pages/raise/pitch/StudioActions.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
-const ASSIST_BAR = 'frontend/src/pages/raise/pitch/CardAssistBar.jsx';
+const AREA_LIGHTBOX = 'frontend/src/pages/raise/pitch/AreaLightbox.jsx';
+const INSTRUCTION_BOX = 'frontend/src/pages/raise/pitch/InstructionBox.jsx';
 const ADD_MENU = 'frontend/src/pages/raise/pitch/AddMenu.jsx';
 const IMAGE_LIGHTBOX = 'frontend/src/pages/raise/pitch/ImageLightbox.jsx';
 const CONNECTOR_CARD = 'frontend/src/pages/raise/pitch/ConnectorLightbox.jsx';
@@ -216,43 +217,44 @@ export const FOUNDER_OPTIONS = [
     at: [[NEW_DECK, 'newDeckApi.build('], [STUDIO, 'newDeckApi.build(']],
   },
   // D899 (#2678): Eadwyn's card tools in the editor (PD7, PD9d). Ask and the connector card's headline are rewrites.
+  // D1604 (#3716): run from "Generate into N areas" (AreaLightbox) and the instruction box, which retire CardAssistBar.
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:rewrite', route: '/raise/pitch/edit', label: 'Rewrite', kind: 'write', handler: 'draft',
-    at: [[ASSIST_BAR, 'deckAssistApi.run('], [CONNECTOR_CARD, 'deckAssistApi.run(']],
+    at: [[AREA_LIGHTBOX, 'deckAssistApi.run('], [INSTRUCTION_BOX, 'deckAssistApi.run('], [CONNECTOR_CARD, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:shorten', route: '/raise/pitch/edit', label: 'Shorten', kind: 'write', handler: 'draft',
-    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+    at: [[AREA_LIGHTBOX, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:expand', route: '/raise/pitch/edit', label: 'Expand', kind: 'write', handler: 'draft',
-    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+    at: [[AREA_LIGHTBOX, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:tone', route: '/raise/pitch/edit', label: 'Change tone', kind: 'write', handler: 'draft',
-    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+    at: [[AREA_LIGHTBOX, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:translate', route: '/raise/pitch/edit', label: 'Translate', kind: 'write', handler: 'draft',
-    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+    at: [[AREA_LIGHTBOX, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:chart', route: '/raise/pitch/edit', label: 'Chart from your records', kind: 'write', handler: 'draft',
-    at: [[ADD_MENU, 'deckAssistApi.run(']],
+    at: [[AREA_LIGHTBOX, 'deckAssistApi.run('], [ADD_MENU, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:table', route: '/raise/pitch/edit', label: 'Table from your records', kind: 'write', handler: 'draft',
-    at: [[ADD_MENU, 'deckAssistApi.run(']],
+    at: [[AREA_LIGHTBOX, 'deckAssistApi.run('], [ADD_MENU, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:timeline', route: '/raise/pitch/edit', label: 'Timeline from your records', kind: 'write', handler: 'draft',
-    at: [[ADD_MENU, 'deckAssistApi.run(']],
+    at: [[AREA_LIGHTBOX, 'deckAssistApi.run('], [ADD_MENU, 'deckAssistApi.run(']],
   },
   // D903 (#2682): the image lightbox's Generate (PD12), through run() (the `deck_image` task).
   // D1478 (#3721): kind `image`, so its list is the draw models and the run reads the pick.
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:image', route: '/raise/pitch/edit', label: 'Generate', kind: 'image', task: 'deck_image', handler: 'draft',
-    at: [[IMAGE_LIGHTBOX, 'deckImagesApi.generate(']],
+    at: [[AREA_LIGHTBOX, 'deckImagesApi.generate('], [IMAGE_LIGHTBOX, 'deckImagesApi.generate(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-file', route: '/raise/pitch/review', label: 'Drop your deck here or click to browse', kind: 'vision', handler: 'upload',

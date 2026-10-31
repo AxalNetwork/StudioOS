@@ -159,13 +159,14 @@ test('the focus follows the card: a free range a block now covers hands the focu
   assert.equal(liveFocus(locked, 'free:8-4'), null, 'never onto a locked block');
 });
 
-test('what the selection\'s Ask opens on this base', () => {
+test('what the selection\'s Ask opens: the area lightbox, or why not', () => {
   const areas = areasOf(CARD, MODEL);
-  assert.equal(askTarget(areas, ['b2']).kind, 'text');
+  assert.deepEqual(askTarget(areas, ['b2']), { kind: 'areas', ids: ['b2'] }, 'one text area: "Generate into 1 area"');
   assert.equal(askTarget(areas, ['b3']).kind, 'refused', 'a bound figure takes no tool');
   assert.match(askTarget(areas, ['b3'], { items: [{ source_key: 'revenue.mrr', module: 'Grow › Revenue' }] }).why, /Figures come from your records\. Update Grow › Revenue/);
-  assert.deepEqual(askTarget(areas, ['b1', 'b2']), { kind: 'later', adapter: 'areasGenerate', issue: 3764 }, 'several areas wait for #3764');
-  assert.equal(askTarget(areas, ['free:8-4']).issue, 3764, 'an empty range too');
+  assert.deepEqual(askTarget(areas, ['b1', 'b2']), { kind: 'areas', ids: ['b1', 'b2'] }, 'several areas open the one lightbox');
+  assert.deepEqual(askTarget(areas, ['b3', 'b2']), { kind: 'areas', ids: ['b3', 'b2'] }, 'a bound figure among several is a row that says why');
+  assert.deepEqual(askTarget(areas, ['free:8-4']), { kind: 'areas', ids: ['free:8-4'] }, 'an empty range too');
   assert.deepEqual(askTarget(areas, ['b2'], { aiOn: false }), { kind: 'off' });
   assert.equal(askTarget(areas, []), null);
   assert.equal(askAreaName(1), 'Ask Eadwyn about this area');
@@ -311,20 +312,28 @@ test('block tools edit the block in place: words, style, and a span that overlap
   } finally { await m.close(); }
 });
 
-test('Ask on one text area opens Eadwyn\'s words; on several areas it says Coming later, from the adapter', async () => {
+test('Ask on one area or several opens "Generate into N areas"; a bound figure says why', async () => {
   const m = await mountEditor();
   try {
     await m.press(m.by('pitch-editor-block-b2'));
-    assert.ok(!m.by('pitch-assist-bar'), 'Eadwyn\'s bar waits for Ask');
+    assert.ok(!m.by('pitch-areas'), 'the lightbox waits for Ask');
     await m.press(m.by('pitch-editor-ask-area'));
-    assert.ok(m.by('pitch-assist-bar'));
-    await m.press(m.by('pitch-editor-block-b3'));
-    await m.press(m.by('pitch-editor-ask-area'));
-    assert.match(m.text(m.by('pitch-editor-ask-line')), /^Figures come from your records/);
-    await m.press(m.by('pitch-editor-block-b1'), { shiftKey: true });
-    await m.press(m.by('pitch-editor-selbar-ask'));
-    assert.equal(m.text(m.by('pitch-editor-ask-line')), 'Coming later: Generate into several areas, with variants. Not switched on yet.');
+    assert.ok(m.by('pitch-areas'));
+    assert.ok(m.by('pitch-areas-row-b2'), 'one row, for the selected area');
+    assert.match(m.text(m.by('pitch-areas')), /Generate into 1 area/);
   } finally { await m.close(); }
+  const n = await mountEditor();
+  try {
+    await n.press(n.by('pitch-editor-block-b3'));
+    await n.press(n.by('pitch-editor-ask-area'));
+    assert.match(n.text(n.by('pitch-editor-ask-line')), /^Figures come from your records/);
+    assert.ok(!n.by('pitch-areas'), 'nothing opens on a bound figure alone');
+    await n.press(n.by('pitch-editor-block-b2'));
+    await n.press(n.by('pitch-editor-block-b1'), { shiftKey: true });
+    await n.press(n.by('pitch-editor-selbar-ask'));
+    assert.match(n.text(n.by('pitch-areas')), /Generate into 2 areas/);
+    assert.ok(n.by('pitch-areas-row-b1') && n.by('pitch-areas-row-b2'));
+  } finally { await n.close(); }
 });
 
 test('the source: the stage draws through BlockView; the old rail, centre card and its buttons are gone', () => {
