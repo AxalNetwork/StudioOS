@@ -1,6 +1,7 @@
 /**
- * D1409 (#3695, part 1) — Eadwyn's writing options in the article editor:
- * what each option asks a model, and what of its answer becomes a proposal.
+ * D1409 (#3695) — Eadwyn's writing options in the article editor: what each
+ * option asks a model, and what of its answer becomes a proposal; and, part 2,
+ * what an image press may ask for and the prompt it sends.
  * Pure: no binding, no fetch.
  *
  * Each option is one rail option on "<Profile> · Articles" (`ARTICLE_OPTIONS`),
@@ -228,4 +229,49 @@ export function payloadOf(option: ArticleOption, output: unknown, input: Article
       return claims.length ? { claims } : null;
     }
   }
+}
+
+// ── Images (part 2) ──────────────────────────────────────────────────────────
+
+/** The rail option every image press runs as; its proposals are this option's. */
+export const ARTICLE_IMAGE_OPTION = 'draft:article-image';
+/** Owner step A, pick a: `photo` is offered, under the same no-people rule. */
+export const ARTICLE_STYLES = ['photo', 'illustration', 'diagram', 'abstract'] as const;
+export const ARTICLE_ASPECTS = ['16:9', '4:3', '1:1', '3:4'] as const;
+export type ArticleStyle = typeof ARTICLE_STYLES[number];
+export type ArticleAspect = typeof ARTICLE_ASPECTS[number];
+export const IMAGE_COUNT_MAX = 4;
+export const PROMPT_MIN = 3;
+export const PROMPT_MAX = 400;
+
+const STYLE_WORDS: Record<ArticleStyle, string> = {
+  photo: 'a photographic image of objects, places or scenery',
+  illustration: 'an editorial illustration',
+  diagram: 'an abstract diagrammatic illustration without labels',
+  abstract: 'an abstract composition of shapes and colour',
+};
+const ASPECT_WORDS: Record<ArticleAspect, string> = {
+  '16:9': 'a wide 16:9 composition', '4:3': 'a 4:3 composition', '1:1': 'a square composition', '3:4': 'a tall 3:4 composition',
+};
+
+export type ArticleImageAsk = { prompt: string; style: ArticleStyle; aspect: ArticleAspect; count: number };
+
+/** An image press's fields, or the field that refuses it and why. */
+export function imageAskOf(body: any): { ask: ArticleImageAsk } | { field: string; error: string } {
+  const prompt = typeof body?.prompt === 'string' ? body.prompt.replace(/\s+/g, ' ').trim() : '';
+  if (prompt.length < PROMPT_MIN) return { field: 'prompt', error: 'Describe the image first.' };
+  if (prompt.length > PROMPT_MAX) return { field: 'prompt', error: `The description is at most ${PROMPT_MAX} characters.` };
+  const style = body?.style ?? 'illustration';
+  if (!(ARTICLE_STYLES as readonly string[]).includes(style)) return { field: 'style', error: `style must be one of ${ARTICLE_STYLES.join(', ')}` };
+  const aspect = body?.aspect ?? '16:9';
+  if (!(ARTICLE_ASPECTS as readonly string[]).includes(aspect)) return { field: 'aspect', error: `aspect must be one of ${ARTICLE_ASPECTS.join(', ')}` };
+  const count = Number(body?.count ?? 1);
+  if (!Number.isInteger(count) || count < 1 || count > IMAGE_COUNT_MAX) return { field: 'count', error: `Ask for 1 to ${IMAGE_COUNT_MAX} images.` };
+  return { ask: { prompt, style, aspect, count } };
+}
+
+/** The text FLUX.1 Schnell is given: the member's words, the style, and no people, no words, no figures. */
+export function imagePromptOf(ask: ArticleImageAsk): string {
+  return `${ask.prompt}. ${STYLE_WORDS[ask.style]}, ${ASPECT_WORDS[ask.aspect]}. `
+    + 'No identifiable people, no faces, no text, no letters, no numbers.';
 }

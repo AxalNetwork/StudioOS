@@ -137,17 +137,18 @@ test('a saved key the catalogue no longer offers: a retired one by its last titl
   const w = world();
   try {
     w.db.prepare("INSERT INTO studio_layouts(user_id,profile,layout) VALUES(1,'founder',?)").run(JSON.stringify([
-      { key: 'founder_actions', size: '1/2' }, { key: 'chat', size: 'full' }, { key: 'mystery_tile', size: '1/3' }, { key: 'company_progress', size: 'full' },
+      { key: 'founder_actions', size: '1/2' }, { key: 'chat', size: 'full' }, { key: 'module_map', size: '1/2' }, { key: 'mystery_tile', size: '1/3' }, { key: 'company_progress', size: 'full' },
     ]));
     const r = await call(w.env, 1, '/layout');
     assert.deepEqual(r.body.layout, [{ key: 'company_progress', size: 'full' }]);
     assert.deepEqual(r.body.dropped, [
       { key: 'founder_actions', title: 'Do these next', reason: 'not_offered', plan: null },
       { key: 'chat', title: 'Chat', reason: 'not_offered', plan: null },
+      { key: 'module_map', title: 'Module map', reason: 'not_offered', plan: null },
       { key: 'mystery_tile', title: null, reason: 'not_offered', plan: null },
     ]);
     for (const t of Object.values(RETIRED_TITLES)) assert.doesNotMatch(t, /_/, 'a title is never a key');
-    // D1418 (#3862) renames these two; a row still holding one is named by its old title.
+    // D1418 (#3862) renamed these two (module_map is read back above); a row still holding one is named by its old title.
     assert.deepEqual([RETIRED_TITLES.module_map, RETIRED_TITLES.firm_standing], ['Module map', 'Firm standing']);
     // Saving without them succeeds.
     assert.equal((await save(w.env, 1, r.body.layout, r.body.revision)).status, 200);

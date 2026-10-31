@@ -37,6 +37,7 @@ import { hashEmail } from '../util/hashEmail';
 import { countDailyView } from '../services/articleMetrics';
 import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes, isValidArticleImageName } from '../services/newsRender';
 import { SECTORS, isValidSector } from '../data/sectors';
+import { sniffMime } from '../services/aiImages';
 
 const articles = new Hono<{ Bindings: Env }>();
 
@@ -686,13 +687,26 @@ articles.post('/:id/cover', async (c) => {
   if (!row) return c.json({ error: 'not_found_or_forbidden' }, 404);
   if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
   const body: any = await c.req.json().catch(() => ({}));
-  const dataUri = String(body.data_uri || '');
-  const m = dataUri.match(/^data:([\w/+\-.]+);base64,(.+)$/);
-  if (!m) return c.json({ error: 'invalid_data_uri' }, 400);
-  const mime = m[1].toLowerCase();
+  let mime: string;
+  let bytes: Uint8Array;
+  if (typeof body.image === 'string') {
+    // D1409: the cover from one of this article's own images. The bytes are
+    // copied to a cover key, so replacing the cover never deletes a body image.
+    if (!isValidArticleImageName(body.image)) return c.json({ error: 'invalid_image' }, 400);
+    const source = await c.env.FILES.get(`articles/${id}/${body.image}`);
+    if (!source) return c.json({ error: 'image_missing' }, 400);
+    bytes = new Uint8Array(await source.arrayBuffer());
+    mime = sniffMime(bytes) ?? '';
+    if (!COVER_MIME[mime]) return c.json({ error: 'unsupported_mime' }, 400);
+  } else {
+    const dataUri = String(body.data_uri || '');
+    const m = dataUri.match(/^data:([\w/+\-.]+);base64,(.+)$/);
+    if (!m) return c.json({ error: 'invalid_data_uri' }, 400);
+    mime = m[1].toLowerCase();
+    if (!COVER_MIME[mime]) return c.json({ error: 'unsupported_mime' }, 400);
+    bytes = bytesFromBase64(m[2]);
+  }
   const ext = COVER_MIME[mime];
-  if (!ext) return c.json({ error: 'unsupported_mime' }, 400);
-  const bytes = bytesFromBase64(m[2]);
   if (bytes.byteLength > MAX_COVER_BYTES) return c.json({ error: 'too_large', max: MAX_COVER_BYTES }, 413);
   const uuid = crypto.randomUUID();
   const key = `articles/${id}/cover-${uuid}.${ext}`;

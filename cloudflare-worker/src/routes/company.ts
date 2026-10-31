@@ -22,6 +22,8 @@ import {
   validatePerson, validateCoverage, validatePlan, personDto,
 } from '../services/companyTeam';
 import { membershipEvent } from '../services/companyMembershipEvents';
+import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
+import { legalPatch, MESSAGES as LEGAL_MESSAGES } from './company_legal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -285,20 +287,37 @@ r.post('/company/create', async (c) => {
     if (clash) {
       return c.json({ detail: `You already have a company called "${clash.company_name}".` }, 409);
     }
+    // D1415: an optional slug (else one made from the name) and optional legal fields.
+    const legal = legalPatch(body);
+    if ('error' in legal) return refuse(c, 400, { code: legal.error, message: LEGAL_MESSAGES[legal.error] });
+    let slug: string | null;
+    if (body.slug !== undefined && body.slug !== null) {
+      const s = checkSlug(body.slug);
+      if (!s.ok) return refuse(c, 400, { code: s.code, message: LEGAL_MESSAGES[s.code] });
+      if ((await slugHolder(c.env, 'company', s.slug)) != null) {
+        return refuse(c, 409, { code: 'slug_taken', message: 'Another company holds that address. Choose another.' });
+      }
+      slug = s.slug;
+    } else {
+      slug = await generateSlug(c.env, 'company', stored);
+    }
+    const l = legal.sets;
     const uid = newUid();
     const ins = await c.env.DB.prepare(
       `INSERT INTO company_profiles
          (uid, company_name, stage, revenue_range, employee_count, current_products,
           international_presence, expansion_goals, logo_url, website, linkedin_url, description,
-          created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          created_at, updated_at, slug, legal_name, legal_form, jurisdiction, registration_number, incorporation_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(uid, stored,
            body.stage || null, body.revenue_range || null,
            body.employee_count != null ? Number(body.employee_count) : null,
            body.current_products || null, body.international_presence || null,
            body.expansion_goals || null,
            body.logo_url || null, body.website || null, body.linkedin_url || null,
-           body.description || null, nowIso(), nowIso()).run();
+           body.description || null, nowIso(), nowIso(),
+           slug, l.legal_name ?? null, l.legal_form ?? null, l.jurisdiction ?? null,
+           l.registration_number ?? null, l.incorporation_date ?? null).run();
     const newId = (ins as any).meta?.last_row_id as number;
     await c.env.DB.batch([
       c.env.DB.prepare(
