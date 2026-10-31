@@ -3156,7 +3156,6 @@ function AppInner() {
       <Route path="/admin/spinout-lab/preview" element={<LabPreviewRedirect />} />
       <Route path="/admin/telegram" element={guard(['admin'], hqOnly(<AdminTelegram />))} />
       <Route path="/admin/x" element={guard(['admin'], hqOnly(<AdminX />))} />
-      {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}
       {/* Task #3 — News & Articles admin queues merged into one Content Queue. Legacy routes redirect. */}
       <Route path="/admin/news" element={<Navigate to="/admin/articles" replace />} />
       <Route path="/news" element={<Navigate to="/articles/draft" replace />} />

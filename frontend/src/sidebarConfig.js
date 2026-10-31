@@ -241,7 +241,6 @@ export const SIDEBAR_GROUPS = {
         match: ['/admin/approvals', '/admin/kyc', '/admin/lp-applications', '/admin/due-diligence', '/admin/spinout-moderation', '/admin/partner-profiles'] },
       // D953 (#2371): the catalogue and every program page under it, the three
       // old addresses that redirect into it, and, as before, the Lab console
-      // and Profiling trends, whose one door is the catalogue's foot (O-PRF).
       { to: '/admin/programs', icon: Calendar, label: 'Programs',
         match: ['/admin/programs', '/admin/held/programs', '/admin/advisor-cohorts', '/admin/refer-earn', '/admin/spinout-lab'] },
       // D930 (#2367): Community's own address; /admin/held/community redirects here.

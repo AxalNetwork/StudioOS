@@ -18,6 +18,7 @@ const navFiles = ['../src/lib/siteDoors.js', '../src/lib/adminPlacement.js', '..
 test('#3734 retired pages have no route, import, page file or navigation entry', () => {
   assert.deepEqual(RETIRED.filter(path => APP.includes(path)), []);
   assert.doesNotMatch(APP, /AcademyLessonPage|AdminBestFitPage|AdminProfilingTrends/);
+  assert.doesNotMatch(read('../src/lib/siteDoors.js'), /\bAcademy\b/, 'retired Academy is not promised in the feature catalogue');
   assert.deepEqual(pageFiles.filter(path => existsSync(new URL(path, import.meta.url))), []);
   assert.deepEqual(navFiles.flatMap(file => RETIRED.filter(path => read(file).includes(path)).map(path => `${file}: ${path}`)), []);
 });
