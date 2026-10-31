@@ -32,6 +32,7 @@ import {
 import { getDescriptor, getProviderImpl } from '../src/integrations/registry.ts';
 import { GITHUB_SIGN_IN_EXPIRED, classifyGithubError } from '../src/integrations/providers/github.ts';
 import { classifyStripeError } from '../src/integrations/providers/stripe.ts';
+import '../src/integrations/providers/linear.ts';
 import { CONNECTOR_PAGES } from '../src/integrations/connectorPages.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -142,8 +143,8 @@ for (const key of ['github', 'stripe']) {
   });
 }
 
-test('1. only GitHub and Stripe adopt the contract so far', () => {
-  assert.deepEqual(connectorAdapterKeys(), ['github', 'stripe']);
+test('1. GitHub, Stripe and Linear (D855 §4, linear_mcp_d855.test.ts) adopt the contract so far', () => {
+  assert.deepEqual(connectorAdapterKeys(), ['github', 'linear', 'stripe']);
 });
 
 // ── 2. Error mapping ─────────────────────────────────────────────────────
