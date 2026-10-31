@@ -4,6 +4,7 @@ import { Sheet, Unrecorded } from '../../ui';
 import { api } from '../../lib/api';
 import { accountCompaniesApi } from '../../lib/api/accountCompanies.js';
 import { companyActionsApi } from '../../lib/api/companyActions.js';
+import { teamsApi } from '../../lib/api/teams.js';
 import { reportError } from '../../lib/log';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { projectCompany, projectsOfCompany, scopeFor, usePublishScope } from '../../lib/settingsScope.js';
@@ -86,7 +87,7 @@ export default function ProjectSettingsPage() {
   const load = useCallback(async () => {
     try {
       const [project, members, mine] = await Promise.all([
-        api.getProject(id), api.listProjectMembers(id).catch(() => null), accountCompaniesApi.projects().catch(() => null),
+        api.getProject(id), teamsApi.listProjectMembers(id).catch(() => null), accountCompaniesApi.projects().catch(() => null),
       ]);
       const row = (mine?.projects || []).find((p) => String(p.id) === String(id));
       const company = projectCompany(project, { row, companies: known.current });

@@ -8,8 +8,9 @@ board → file map and what waits for which issue are in
 
 ## The rule for adding here
 
-- **People and invitations call routes that exist** (`../../lib/api.js`'s company
-  and project clients; #3841 moves them to a teams.js module in `../../lib/api/`).
+- **People and invitations call routes that exist,** through `teamsApi` in
+  `../../lib/api/teams.js` (#3841), imported from that module. Add no client
+  method from here: a new people route lands its client in teams.js with it.
 - **Everything about agents goes through `agentsAdapter.js`.** It is the one
   seam: today every function answers `{ available: false, reason }`, and the
   screens draw that as the canvas's honest unavailable state. A builder who
@@ -46,8 +47,8 @@ board → file map and what waits for which issue are in
 | `AskButton.jsx` | The "Ask" button (TMA): `AskButtonView`, which renders nowhere until #3706's Ask panel. |
 | `teamUi.jsx` | The card frame, header row, honest block, "pending owner" pill, button classes and `useMenu` (the two pop-up menus' keyboard model) the Team screens share. |
 | `PeopleCard.jsx` | People (TM1a, TM1b), the read-only line (TM9a3), the Lab gate, and Company editors with access (TM1f) when a read supplies it. |
-| `InvitationsBlock.jsx` | Invitations with their states and actions (TM2c); project Resend off until #3841. |
-| `InviteSheet.jsx` | Invite people, company (TM2a, TM9a2) and project (TM2b). |
+| `InvitationsBlock.jsx` | Invitations with their states and actions (TM2c): company and project Resend and Revoke. |
+| `InviteSheet.jsx` | Invite people, company (TM2a, TM9a2) and project (TM2b): by email, by linking an existing account found by name (never by email), or by co-founder match. |
 | `AgentsCard.jsx` | The AI agents card in every state (TM1c, TM1e, TM9b1, TM9c1, TM9c4). |
 | `AddAgentSheet.jsx` | Add an AI agent, three steps (TM3a–TM3c). Reached only when the agents read is available. |
 | `AgentProfileSheet.jsx` | An agent's profile, Pause, Remove, Edit cap and Save name (TM5a, TM5b). |

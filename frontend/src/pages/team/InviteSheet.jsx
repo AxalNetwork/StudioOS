@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Sheet } from '../../ui';
 import { api } from '../../lib/api';
+import { teamsApi } from '../../lib/api/teams.js';
 import { reportError } from '../../lib/log';
 import { BTN_PRIMARY, BTN_SECONDARY, FIELD, MUTED } from './teamUi.jsx';
 import {
-  AUTHORITY_KEYS, COMPANY_ROLES, COMPANY_ROLE_HELP, INVITE_NOTE, SEARCH_OFF, authorityWord, companyInvitationLine, errorWords, maskEmail, meanings,
-  projectInvitationRow, suggestedAuthority,
+  AUTHORITY_KEYS, COMPANY_ROLES, COMPANY_ROLE_HELP, INVITE_NOTE, SEARCH_DEBOUNCE_MS, SEARCH_HINT, SEARCH_MIN, SEARCH_SHORT, accountRefusalWords, authorityWord,
+  companyInvitationLine, errorWords, maskEmail, meanings, projectInvitationRow, sharedLine, suggestedAuthority,
 } from './teamModel.js';
 
 /**
@@ -18,11 +19,17 @@ import {
  * ladder's default for a title is offered as "Suggested for …", never set
  * behind the person's back. A duplicate is said inside the form (TM9a2).
  *
- * PROJECT (wired): By email (`POST /api/projects/:id/invitations`, mode email)
- * and Co-founder match (`POST /api/projects/:id/members`, mode
- * cofounder_match, from the owner's active matches). "Link an existing Axal
- * account" is drawn and off: the name search that hides emails is #3841's.
- * No numeric user-id field, ever.
+ * PROJECT (wired): By email (`POST /api/projects/:id/invitations`, mode email),
+ * Link an existing Axal account (#3841) and Co-founder match
+ * (`POST /api/projects/:id/members`, mode cofounder_match, from the owner's
+ * active matches). Linking an account searches by name
+ * (`GET /api/account/people/search`, debounced, at least `SEARCH_MIN`
+ * letters; 400 query_too_short is the same hint), draws each person's name and
+ * what they share with you, and never an email or a numeric id: a pick is the
+ * account's uid, sent as `{ mode: 'account', user_uid, role }`. 404
+ * account_not_found, 403 not_reachable and 409 already_member /
+ * already_pending come back in words about the person. No numeric user-id
+ * field, ever.
  *
  * PENDING INVITATIONS (TM2b): the ones already waiting are listed under the
  * form, from the invitations the page already read, so an editor sees who is
@@ -85,7 +92,7 @@ function CompanyInvite({ company, pending, onClose, onDone }) {
   const [refusal, setRefusal] = useState('');
   useEffect(() => {
     let alive = true;
-    Promise.resolve().then(() => api.teamVocabulary())
+    Promise.resolve().then(() => teamsApi.teamVocabulary())
       .then((v) => { if (alive) setVocab(v || false); })
       .catch(() => { if (alive) setVocab(false); });
     return () => { alive = false; };
@@ -98,7 +105,7 @@ function CompanyInvite({ company, pending, onClose, onDone }) {
     if (!ready || busy) return;
     setBusy(true); setRefusal('');
     try {
-      const out = await api.inviteCompanyMember(company.uid, { email: email.trim(), role_in_company: role, title: title || null, authority: authority || null });
+      const out = await teamsApi.inviteCompanyMember(company.uid, { email: email.trim(), role_in_company: role, title: title || null, authority: authority || null });
       onDone({ ...out, email: email.trim() });
     } catch (e) {
       reportError('team:invite-company', e);
@@ -160,7 +167,7 @@ function CompanyInvite({ company, pending, onClose, onDone }) {
 
 const METHODS = [
   { key: 'email', label: 'By email' },
-  { key: 'account', label: 'Link an existing Axal account', off: SEARCH_OFF },
+  { key: 'account', label: 'Link an existing Axal account' },
   { key: 'match', label: 'Co-founder match' },
 ];
 
@@ -170,6 +177,7 @@ function ProjectInvite({ project, pending, onClose, onDone }) {
   const [email, setEmail] = useState('');
   const [matches, setMatches] = useState(null);
   const [pick, setPick] = useState('');
+  const [person, setPerson] = useState(null);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
   useEffect(() => {
@@ -180,18 +188,20 @@ function ProjectInvite({ project, pending, onClose, onDone }) {
       .catch(() => { if (alive) setMatches(false); });
     return () => { alive = false; };
   }, [method, matches]);
-  const ready = method === 'email' ? looksLikeEmail(email) : method === 'match' ? !!pick : false;
+  const ready = method === 'email' ? looksLikeEmail(email) : method === 'match' ? !!pick : method === 'account' ? !!person?.uid : false;
   const send = async () => {
     if (!ready || busy) return;
     setBusy(true); setRefusal('');
     try {
       const out = method === 'email'
-        ? await api.createProjectInvitation(project.id, { mode: 'email', email: email.trim(), role })
-        : await api.addProjectMember(project.id, { mode: 'cofounder_match', connection_uid: pick, role });
+        ? await teamsApi.createProjectInvitation(project.id, { mode: 'email', email: email.trim(), role })
+        : method === 'account'
+          ? await teamsApi.createProjectInvitation(project.id, { mode: 'account', user_uid: person.uid, role })
+          : await teamsApi.addProjectMember(project.id, { mode: 'cofounder_match', connection_uid: pick, role });
       onDone({ ...out, method });
     } catch (e) {
       reportError('team:invite-project', e);
-      setRefusal(errorWords(e));
+      setRefusal(method === 'account' ? accountRefusalWords(e) : errorWords(e));
     } finally { setBusy(false); }
   };
   return (
@@ -200,15 +210,12 @@ function ProjectInvite({ project, pending, onClose, onDone }) {
       <div className="flex flex-col gap-5 px-5 py-5">
         <div role="radiogroup" aria-label="How to invite" className="grid grid-cols-3 gap-1 rounded-axal-md bg-axal-ground p-1 dark:bg-gray-900">
           {METHODS.map((m) => (
-            <button key={m.key} type="button" role="radio" aria-checked={method === m.key} disabled={!!m.off} title={m.off}
-              aria-describedby={m.off ? 'invite-account-off' : undefined}
+            <button key={m.key} type="button" role="radio" aria-checked={method === m.key}
               onClick={() => { setMethod(m.key); setRefusal(''); }}
               className={`rounded-[7px] px-2 py-2 text-[12.5px] font-semibold ${method === m.key ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-800 dark:text-gray-100' : 'text-axal-muted disabled:cursor-not-allowed disabled:opacity-55 dark:text-gray-400'}`}
               data-testid={`invite-method-${m.key}`}>{m.label}</button>
           ))}
         </div>
-        {/* The off method's own description, read with it; not drawn under By email or Co-founder match. */}
-        <span id="invite-account-off" className="sr-only" data-testid="invite-account-off">{SEARCH_OFF} Only people who share a company or a connection with you will appear, and their email stays hidden until they accept.</span>
         <fieldset className={`${SECTION} m-0 border-0 p-0`}>
           <legend className={`${LABEL} mb-1.5`}>Role</legend>
           <div role="radiogroup" aria-label="Role" className="flex gap-2">
@@ -224,6 +231,9 @@ function ProjectInvite({ project, pending, onClose, onDone }) {
             <span className={LABEL}>Email</span>
             <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setRefusal(''); }} className={FIELD} data-testid="invite-email" />
           </label>
+        ) : null}
+        {method === 'account' ? (
+          <AccountSearch project={project} picked={person} onPick={(p) => { setPerson(p); setRefusal(''); }} />
         ) : null}
         {method === 'match' ? (
           <div className={SECTION}>
@@ -248,5 +258,69 @@ function ProjectInvite({ project, pending, onClose, onDone }) {
         <PendingList kind="project" list={pending} />
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * "Link an existing Axal account" (TM2b, #3841): a name, searched once typing
+ * rests, among the people who share a company or a co-founder match with you
+ * and are not on this team yet. Each result is its name and what you share,
+ * never an email and never a numeric id; the pick is the account's uid.
+ * Fewer than `SEARCH_MIN` letters is not sent; the Worker's 400
+ * query_too_short says the same words. A failed search is "could not be
+ * read", never "nobody".
+ */
+function AccountSearch({ project, picked, onPick }) {
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState({ status: 'idle' });
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < SEARCH_MIN) { setFound({ status: term ? 'short' : 'idle' }); return undefined; }
+    let alive = true;
+    setFound((f) => (f.status === 'ready' ? f : { status: 'reading' }));
+    const timer = setTimeout(() => {
+      teamsApi.searchPeople(term, { project: project.id })
+        .then((r) => { if (alive) setFound({ status: 'ready', people: Array.isArray(r?.people) ? r.people : [] }); })
+        .catch((e) => {
+          if (!alive) return;
+          const code = e?.code || e?.data?.code || null;
+          if (e?.status === 400 && code === 'query_too_short') setFound({ status: 'short' });
+          else { reportError('team:people-search', e); setFound({ status: 'error' }); }
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [q, project.id]);
+  const people = found.status === 'ready' ? found.people.filter((p) => p?.uid) : [];
+  return (
+    <div className={SECTION}>
+      <label className={SECTION}>
+        <span className={LABEL}>Name</span>
+        <input type="search" value={q} autoComplete="off" onChange={(e) => { setQ(e.target.value); onPick(null); }}
+          aria-describedby="invite-account-hint" className={FIELD} data-testid="invite-account-q" />
+      </label>
+      <span id="invite-account-hint" className={MUTED} data-testid="invite-account-hint">{found.status === 'short' ? SEARCH_SHORT : SEARCH_HINT}</span>
+      <div aria-live="polite" data-testid="invite-account-results">
+        {found.status === 'reading' ? <span className={MUTED}>Searching…</span>
+          : found.status === 'error' ? <span className={MUTED} data-testid="invite-account-unread">The search could not be read. That is not the same as nobody matching.</span>
+            : found.status === 'ready' && !people.length ? <span className={MUTED} data-testid="invite-account-none">Nobody you share a company or a match with has that name, or they are already on this team.</span>
+              : found.status === 'ready' ? (
+                <div role="radiogroup" aria-label="Axal account" className="flex flex-col gap-1.5">
+                  {people.map((p) => {
+                    const on = picked?.uid === p.uid;
+                    const shared = sharedLine(p);
+                    return (
+                      <label key={p.uid} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-axal-md border px-3 py-1.5 text-[13px] ${on ? 'border-axal-violet bg-axal-lavender dark:border-violet-500 dark:bg-violet-900/30' : 'border-axal-hairline dark:border-gray-700'}`}>
+                        <input type="radio" name="account" checked={on} onChange={() => onPick({ uid: p.uid, name: p.name })} className="accent-violet-600" data-testid={`invite-account-${p.uid}`} />
+                        <span className="min-w-0">
+                          <span className="block text-axal-ink dark:text-gray-100">{p.name || 'An Axal VC account'}</span>
+                          {shared ? <span className={`block ${MUTED}`}>{shared}</span> : null}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : null}
+      </div>
+    </div>
   );
 }

@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-route
 import { ChevronDown } from 'lucide-react';
 import { api } from '../../lib/api';
 import { accountCompaniesApi } from '../../lib/api/accountCompanies.js';
+import { teamsApi } from '../../lib/api/teams.js';
 import { reportError } from '../../lib/log';
 import { safeReadJSON } from '../../lib/storage';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
@@ -25,7 +26,7 @@ import TeamSettingsTab from './TeamSettingsTab.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_TEXT, EYEBROW, FIELD, MUTED, useMenu } from './teamUi.jsx';
 import {
-  COMPANY_ROLES, ROSTER_LINE, TABS, TITLE, countBadge, errorWords, freshMemberKey, managedNote, peopleFromCompany, peopleFromProject, purposeLine, tabFrom,
+  COMPANY_ROLES, ROSTER_LINE, TABS, TITLE, countBadge, errorWords, freshMemberKey, managedNote, peopleFromCompany, peopleFromProject, projectResentWords, purposeLine, tabFrom,
 } from './teamModel.js';
 
 /**
@@ -42,9 +43,11 @@ import {
  * project inside a company is always reached from Company settings › Projects.
  *
  * WIRED: People, Invitations and Invite (company and project) on the routes
- * that exist today (see `teamModel.js`). BEHIND THE SEAM: agents, rule books,
- * approvals and agent settings, through `agentsAdapter.js`, unavailable on
- * this base and said so. The page never invents an agent, a count or a zero.
+ * that exist today, through #3841's `teamsApi` (`lib/api/teams.js`; see
+ * `teamModel.js`), including project Resend and linking an account by name.
+ * BEHIND THE SEAM: agents, rule books, approvals and agent settings, through
+ * `agentsAdapter.js` (#3840, #3842–#3844, still unbuilt), unavailable on this
+ * base and said so. The page never invents an agent, a count or a zero.
  *
  * NO AIRAIL: the company form lives under Account, which has none by the
  * owner's rule (`NO_RAIL_ROUTES`); the project form is not in a rail shell
@@ -135,7 +138,7 @@ function ChangeRoleDialog({ company, person, onClose, onDone }) {
   const copy = { title: `Change ${person.name}’s role`, body: [`${person.name}’s role in ${company.name} changes for every page that reads it.`], button: 'Save', cancel: 'Cancel' };
   return (
     <ActionDialog copy={copy} testId="team-change-role" ready={role !== current && COMPANY_ROLES.includes(role)}
-      run={() => api.updateCompanyMember(company.uid, person.userId, { role_in_company: role })} onClose={onClose} onDone={onDone}>
+      run={() => teamsApi.updateCompanyMember(company.uid, person.userId, { role_in_company: role })} onClose={onClose} onDone={onDone}>
       <select value={role} onChange={(e) => setRole(e.target.value)} className={FIELD} aria-label="Role" data-testid="team-change-role-select">
         {!COMPANY_ROLES.includes(current) ? <option value={current} disabled>{current ? `${roleWord(current)} (current)` : `${person.primary ? 'Primary admin, no role' : 'No role'} (current)`}</option> : null}
         {COMPANY_ROLES.map((r) => <option key={r} value={r}>{r}{r === current ? ' (current)' : ''}</option>)}
@@ -146,7 +149,7 @@ function ChangeRoleDialog({ company, person, onClose, onDone }) {
 
 function RemoveCompanyMember({ company, person, onClose, onDone }) {
   const copy = { title: `Remove ${person.name} from ${company.name}?`, body: [`${person.name} loses access to ${company.name}. You can invite them again.`], button: 'Remove', cancel: 'Cancel', danger: true };
-  return <ActionDialog copy={copy} testId="team-remove" run={() => api.removeCompanyMember(company.uid, person.userId)} onClose={onClose} onDone={onDone} />;
+  return <ActionDialog copy={copy} testId="team-remove" run={() => teamsApi.removeCompanyMember(company.uid, person.userId)} onClose={onClose} onDone={onDone} />;
 }
 
 /** Reads one company's team: its detail, the invitations an editor reads, and the vocabulary. */
@@ -155,12 +158,12 @@ function useCompanyTeam(uid) {
   const load = useCallback(async () => {
     const who = me();
     try {
-      const detail = await api.getCompany(uid);
+      const detail = await teamsApi.getCompany(uid);
       const powers = companyPowers(detail, who.id);
       const editor = powers.editor || who.role === 'admin';
       const [inv, vocab, mine] = await Promise.all([
-        editor ? api.listCompanyInvitations(uid).then((r) => ({ ok: true, list: Array.isArray(r) ? r : (r?.invitations || []) })).catch((e) => { reportError('team:invitations', e); return { ok: false }; }) : Promise.resolve(null),
-        api.teamVocabulary().catch(() => null),
+        editor ? teamsApi.listCompanyInvitations(uid).then((r) => ({ ok: true, list: Array.isArray(r) ? r : (r?.invitations || []) })).catch((e) => { reportError('team:invitations', e); return { ok: false }; }) : Promise.resolve(null),
+        teamsApi.teamVocabulary().catch(() => null),
         // The sidebar's Projects entry lists the company's projects from this read (TM1a, TM1e).
         accountCompaniesApi.projects().catch(() => null),
       ]);
@@ -183,7 +186,7 @@ function useProjectTeam(id, companies) {
     try {
       const [project, members, mine] = await Promise.all([
         api.getProject(id),
-        api.listProjectMembers(id),
+        teamsApi.listProjectMembers(id),
         accountCompaniesApi.projects().catch(() => null),
       ]);
       const row = (mine?.projects || []).find((p) => String(p.id) === String(id));
@@ -218,8 +221,8 @@ function CompanyTeam() {
       invitations={state.invitations}
       highlightKey={detail && state.invitations?.ok ? freshMemberKey(detail, state.invitations.list) : null}
       target={company}
-      onResend={async (i) => api.resendCompanyInvitation(uid, i.uid)}
-      onRevoke={async (i) => api.revokeCompanyInvitation(uid, i.uid)}
+      onResend={async (i) => teamsApi.resendCompanyInvitation(uid, i.uid)}
+      onRevoke={async (i) => teamsApi.revokeCompanyInvitation(uid, i.uid)}
       dialogs={{
         changeRole: (p, close, done) => <ChangeRoleDialog company={company} person={p} onClose={close} onDone={done} />,
         remove: (p, close, done) => <RemoveCompanyMember company={company} person={p} onClose={close} onDone={done} />,
@@ -253,7 +256,8 @@ function ProjectTeam({ form }) {
       invitations={read?.can_manage ? { ok: true, list: read.invitations || [] } : null}
       lock={read?.locked ? (read.gate_reason || `Co-founder and advisor invites unlock in Week ${read.unlock_week} of the Spin-Out Lab.`) : null}
       target={team}
-      onRevoke={async (row) => api.revokeProjectInvitation(id, row.id)}
+      onResend={async (row) => teamsApi.resendProjectInvitation(id, row.id)}
+      onRevoke={async (row) => teamsApi.revokeProjectInvitation(id, row.id)}
       dialogs={{
         remove: (m, close, done) => <RemoveMemberDialog venture={team} member={{ userId: m.userId, name: m.name }} onClose={close} onDone={done} />,
       }} />
@@ -302,6 +306,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
     setSheet(null);
     const link = out?.email_sent === false && out?.accept_path ? `${globalThis.location?.origin || ''}${out.accept_path}` : null;
     setNotice(out?.method === 'match' ? { text: 'The co-founder is on the team.' }
+      : out?.method === 'account' ? { text: 'The invitation is waiting in their Account › Invitations.' }
       : link ? { text: 'The invitation is saved. The email did not send: copy this link and send it yourself.', link }
         : { text: 'The invitation is saved and sent.' });
     reload();
@@ -348,7 +353,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
             {!reading && canEdit && invitations ? (
               <InvitationsBlock kind={kind} invitations={invitations.list} error={invitations.ok === false} onRetry={reload}
                 busyKey={busyKey} freshKey={fresh}
-                onResend={(i) => act(i.uid, () => onResend(i), resentNotice)}
+                onResend={(i) => act(kind === 'company' ? i.uid : i.key, () => onResend(i), kind === 'company' ? resentNotice : (out) => setNotice({ text: projectResentWords(out) }))}
                 onRevoke={(i) => act(kind === 'company' ? i.uid : i.key, () => onRevoke(i))} />
             ) : null}
           </PeopleCard>

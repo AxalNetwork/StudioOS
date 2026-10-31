@@ -9,13 +9,16 @@
  *     authority level means: the tooltips and the invite's suggestion are its
  *     words, never written here;
  *   - `GET /api/projects/:id` and `/members` → People and Invitations,
- *     project form; `GET /api/account/projects` → its company's uid and name.
+ *     project form; `GET /api/account/projects` → its company's uid and name;
+ *   - `GET /api/account/people/search` (#3841) → the accounts an Invite can
+ *     link by name: `{ uid, name, avatar_url, shared }`, never an email.
+ * The people and invitation clients are `teamsApi` (`lib/api/teams.js`, #3841).
  * Agents, rule books, approvals and agent settings come through
  * `agentsAdapter.js`, unavailable on this base.
  *
  * THREE RULES the tests hold:
- *   - another member's email is never drawn; your own may be (the Worker still
- *     sends them, #3841 stops it);
+ *   - another member's email is never drawn; your own may be (since #3841 the
+ *     Worker sends only yours, and the model still keeps it on your row only);
  *   - "Not recorded" is never a zero: an unread count, spend or time is the
  *     muted words, and a count that cannot be read draws no badge;
  *   - a refusal reaches the page in words, never as its code.
@@ -282,10 +285,48 @@ export function projectInvitationRow(i) {
   return { key: `pi-${i.id}`, id: i.id, source: sourceWord(i.source), sourceKey: i.source, line: line.filter(Boolean).join(' · ') };
 }
 
-/** Why project Resend is off: the route is #3841's. */
-export const PROJECT_RESEND_OFF = 'Resending a project invitation is not open yet. Revoke it and invite again.';
 export const LINK_ONCE = 'A link invitation is shown once, when it is created.';
-export const SEARCH_OFF = 'Linking an existing account by name is not open yet.';
+
+/**
+ * What a project Resend (#3841, `POST /api/projects/:id/invitations/:invId/resend`)
+ * did, in words. A new token and 14 new days either way; the old link is dead.
+ * `email_sent` is true or false for an email invitation and null for an
+ * account's, which is answered from their Account › Invitations.
+ */
+export function projectResentWords(out) {
+  const sent = out?.invitation ? out.invitation.email_sent : out?.email_sent;
+  if (sent === true) return 'The invitation was resent. The old link no longer works.';
+  if (sent === false) return 'A new link was made and the old one no longer works, but the email did not send. Resend again, or revoke it and invite again.';
+  return 'The invitation was renewed for 14 days. It waits in their Account › Invitations.';
+}
+
+// ---------------------------------------------------------------- linking an account (TM2b, #3841)
+
+/** The Worker's `SEARCH_MIN` (services/peopleReach.ts): fewer letters answer 400 query_too_short. */
+export const SEARCH_MIN = 2;
+/** How long typing rests before a search is sent. */
+export const SEARCH_DEBOUNCE_MS = 250;
+export const SEARCH_HINT = 'Only people who share a company or a co-founder match with you appear. Their email stays hidden.';
+export const SEARCH_SHORT = `Type at least ${SEARCH_MIN} letters of a name.`;
+
+/** What one search result shares with you: "Shares [Northwind Labs] · Co-founder match". Never an email or an id. */
+export function sharedLine(person) {
+  const words = (Array.isArray(person?.shared) ? person.shared : [])
+    .map((s) => (s?.kind === 'company' ? (s.name ? `Shares ${s.name}` : 'Shares a company') : s?.name || 'A connection'))
+    .filter(Boolean);
+  return words.length ? words.join(' · ') : null;
+}
+
+/** An account invitation's refusal (`mode: 'account'`), in words about the person, not an address. */
+export function accountRefusalWords(e) {
+  switch (e?.code || e?.data?.code || null) {
+    case 'account_not_found': return 'That account no longer exists. Search again.';
+    case 'not_reachable': return 'You can invite only people you share a company or a co-founder match with.';
+    case 'already_member': return 'They are already on this team.';
+    case 'already_pending': return 'An invitation to them is already waiting. Nothing was sent.';
+    default: return errorWords(e);
+  }
+}
 export const INVITE_NOTE = 'The invitation lasts 14 days. One pending invitation per address.';
 
 // ---------------------------------------------------------------- refusals
@@ -307,6 +348,7 @@ export function refusalWords(code, detail) {
     case 'already_pending': return 'An invitation to that address is already waiting. Nothing was sent.';
     case 'already_member': return 'That address is already on this team.';
     case 'team_locked': return detail || 'Co-founder and advisor invites are locked for now.';
+    case 'not_pending': return 'This invitation was already answered or revoked.';
     default: return 'It could not be saved. Try again.';
   }
 }

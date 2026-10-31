@@ -27,6 +27,9 @@
  *
  * NO CLIENT METHOD IS ADDED HERE OR IN `lib/api` FOR A ROUTE THAT DOES NOT
  * EXIST: the drift test (`scripts/check-api-drift.mjs`) resolves every one.
+ * People and invitations are not behind this seam: they landed with #3841 in
+ * `lib/api/teams.js` (`teamsApi`) and the screens call it directly. Agents get
+ * their own module, `teamAgents.js`, not a method on `teamsApi`.
  */
 import { FLOOR, refusalWords } from './teamModel.js';
 

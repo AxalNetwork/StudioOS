@@ -244,11 +244,11 @@ test('the Eadwyn button is "Ask", its accessible name "Ask Eadwyn", and no Team 
 test('no client method exists for a route that does not exist', () => {
   const sources = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
   assert.doesNotMatch(sources, /['"`]\/teams\//, 'the agent routes are #3840–#3844');
-  assert.doesNotMatch(sources, /\/account\/people\/search/, '#3841');
-  assert.doesNotMatch(sources, /\/projects\/[^'"`]*\/invitations\/[^'"`]*\/resend/, '#3841');
-  assert.ok(!existsSync('frontend/src/lib/api/teamAgents.js') && !existsSync('frontend/src/lib/api/teams.js'));
+  assert.ok(!existsSync('frontend/src/lib/api/teamAgents.js'), 'the agents client lands with #3840');
   for (const f of readdirSync(TEAM).filter((x) => /\.jsx?$/.test(x))) {
     assert.doesNotMatch(read(`${TEAM}/${f}`), /request\(|fetch\(/, `${f} reaches the network itself`);
+    // #3841 moved the people clients to teamsApi; the old `api.` names are gone from api.js.
+    assert.doesNotMatch(read(`${TEAM}/${f}`), /\bapi\.(getCompany|updateCompanyMember|removeCompanyMember|teamVocabulary|inviteCompanyMember|listCompanyInvitations|resendCompanyInvitation|revokeCompanyInvitation|listProjectMembers|addProjectMember|createProjectInvitation|resendProjectInvitation|revokeProjectInvitation|removeProjectMember|searchPeople)\(/, `${f} calls a people client off teamsApi`);
   }
 });
 
@@ -391,7 +391,7 @@ test('an unread invitation list is "could not be read", never "No invitation is 
   } finally { await w.close(); }
 });
 
-test('a standalone project: "Project" eyebrow, no Legal, Revoke wired, Resend off with its reason', async () => {
+test('a standalone project: "Project" eyebrow, no Legal, Revoke and Resend wired', async () => {
   const v = await mount('/projects/5/settings/team', '/projects/:id/settings/team', h(TeamAgentsPage, { form: 'project' }));
   try {
     assert.equal(v.attr('team-page', 'data-scope'), 'project');
@@ -401,8 +401,8 @@ test('a standalone project: "Project" eyebrow, no Legal, Revoke wired, Resend of
     assert.match(text, /Co-founder/);
     assert.ok(!text.includes('kai@example.com'));
     assert.match(text, /m•••@example\.com · Co-founder · sent 29 Oct · expires 12 Nov/);
-    assert.equal(v.prop('invitation-resend-pi-41', 'disabled'), true);
-    assert.match(v.prop('invitation-resend-pi-41', 'title'), /not open yet/);
+    assert.equal(v.prop('invitation-resend-pi-41', 'disabled'), false, '#3841: Resend is on');
+    assert.equal(v.has('invitation-resend-pi-42'), false, 'a link invitation offers Copy link, not Resend');
     assert.equal(v.prop('invitation-copy-pi-42', 'disabled'), true);
     await v.click('invitation-revoke-pi-41');
     assert.ok(v.keys().includes('POST /api/projects/5/invitations/41/revoke'));
@@ -554,4 +554,110 @@ test('TM4b2 and TM4c: the counsel banner, the Edit sheet\'s own floor line, and 
   const nocap = renderedText(render(h(AgentProfile, { data: { agent: { ...AGENTS[0], monthly_cap_microusd: null }, matrix: [], month_spend: { available: true, value_microusd: 3_840_000 }, events: [] } })));
   assert.match(nocap, /\$3\.84 this month · cap Not recorded/);
   assert.doesNotMatch(nocap, /null|undefined/);
+});
+
+// ---------------------------------------------------------------- #3841: project Resend, linking an account
+
+test('project Resend (#3841): the new link\'s fate in words, and 403 not_manager and 409 not_pending in words', async () => {
+  const sent = (body) => () => response(body);
+  const cases = [
+    [sent({ invitation: { id: 41, status: 'pending', source: 'email', expires_at: '2026-11-14 10:00:00', email_sent: true } }), /The invitation was resent\. The old link no longer works\./],
+    [sent({ invitation: { id: 41, status: 'pending', source: 'email', expires_at: '2026-11-14 10:00:00', email_sent: false } }), /the email did not send\. Resend again, or revoke it and invite again\./],
+    [() => response({ code: 'not_manager', message: 'Only the project owner can manage the team.' }, 403), /Only this team’s editors can do this\./],
+    [() => response({ code: 'not_pending', message: 'x' }, 409), /This invitation was already answered or revoked\./],
+  ];
+  for (const [answer, words] of cases) {
+    const v = await mount('/projects/5/settings/team', '/projects/:id/settings/team', h(TeamAgentsPage, { form: 'project' }), { handle: worker({ 'POST /api/projects/5/invitations/41/resend': answer }) });
+    try {
+      await v.click('invitation-resend-pi-41');
+      assert.deepEqual(v.keys().filter((k) => !k.startsWith('GET ') && k !== 'POST /api/client-error'), ['POST /api/projects/5/invitations/41/resend']);
+      assert.match(v.text(), words);
+      assert.doesNotMatch(v.text(), /not_manager|not_pending/, 'never the code');
+    } finally { await v.close(); }
+  }
+});
+
+const PEOPLE = { people: [
+  { uid: 'u-jr', name: '[Jordan Reyes]', avatar_url: null, shared: [{ kind: 'company', name: '[Northwind Labs]' }] },
+  { uid: 'u-mo', name: '[Mara Ortiz]', avatar_url: null, shared: [{ kind: 'connection', name: 'Co-founder match' }] },
+] };
+const rest = () => act(async () => { await new Promise((r) => setTimeout(r, 300)); });
+
+async function openAccount(handle) {
+  const v = await mount('/projects/5/settings/team', '/projects/:id/settings/team', h(TeamAgentsPage, { form: 'project' }), { handle });
+  await v.click('team-add');
+  await v.click('team-add-person');
+  await v.click('invite-method-account');
+  return v;
+}
+
+test('Link an existing Axal account (#3841): a debounced name search, two letters at least, never an email or a numeric id', async () => {
+  let searches = 0;
+  const handle = worker({ 'GET /api/account/people/search': () => { searches += 1; return response({ people: PEOPLE.people.map((p) => ({ ...p, email: 'leak@example.com', id: 77 })) }); } });
+  const v = await openAccount(handle);
+  try {
+    assert.equal(v.prop('invite-method-account', 'disabled'), undefined, 'no longer off');
+    assert.equal(v.prop('invite-send', 'disabled'), true, 'nothing to send before a pick');
+    await v.change('invite-account-q', 'J');
+    await rest();
+    assert.equal(searches, 0, 'one letter is not sent');
+    assert.match(v.text(), /Type at least 2 letters of a name\./);
+    await v.change('invite-account-q', 'Jo');
+    await v.change('invite-account-q', 'Jor');
+    assert.equal(searches, 0, 'nothing is sent while typing');
+    await rest(); await rest();
+    assert.equal(searches, 1, 'one search once typing rests');
+    const q = v.seen.find((s) => s.key === 'GET /api/account/people/search');
+    assert.ok(q);
+    const text = v.text();
+    assert.match(text, /\[Jordan Reyes\]Shares \[Northwind Labs\]/);
+    assert.match(text, /\[Mara Ortiz\]Co-founder match/);
+    assert.ok(!text.includes('leak@example.com') && !v.values().includes('leak@example.com'), 'no email, even when the answer carries one');
+    assert.doesNotMatch(text, /\b77\b/, 'no numeric id');
+  } finally { await v.close(); }
+  const w = await openAccount(worker({ 'GET /api/account/people/search': () => response({ code: 'query_too_short', message: 'x' }, 400) }));
+  try {
+    await w.change('invite-account-q', 'ab');
+    await rest(); await rest();
+    assert.match(w.text(), /Type at least 2 letters of a name\./, '400 query_too_short is the same hint');
+    assert.doesNotMatch(w.text(), /could not be read/);
+  } finally { await w.close(); }
+  const x = await openAccount(worker({ 'GET /api/account/people/search': () => response({ detail: 'boom' }, 500) }));
+  try {
+    await x.change('invite-account-q', 'ab');
+    await rest(); await rest();
+    assert.match(x.text(), /The search could not be read\. That is not the same as nobody matching\./);
+  } finally { await x.close(); }
+});
+
+test('Choosing an account sends { mode: \'account\', user_uid, role }; its refusals are words about the person', async () => {
+  const v = await openAccount(worker({ 'GET /api/account/people/search': () => response(PEOPLE), 'POST /api/projects/5/invitations': () => response({ invitation: { id: 50, status: 'pending', source: 'account' }, email_sent: null }) }));
+  try {
+    await v.change('invite-account-q', 'Jor');
+    await rest(); await rest();
+    await v.change('invite-account-u-jr', 'on');
+    await v.change('invite-seat-advisor', 'on');
+    assert.equal(v.prop('invite-send', 'disabled'), false);
+    await v.click('invite-send');
+    const post = v.seen.find((s) => s.key === 'POST /api/projects/5/invitations');
+    assert.deepEqual(post.body, { mode: 'account', user_uid: 'u-jr', role: 'advisor' });
+    assert.match(v.text(), /The invitation is waiting in their Account › Invitations\./);
+  } finally { await v.close(); }
+  const refusals = [
+    [404, 'account_not_found', /That account no longer exists\. Search again\./],
+    [403, 'not_reachable', /You can invite only people you share a company or a co-founder match with\./],
+    [409, 'already_member', /They are already on this team\./],
+    [409, 'already_pending', /An invitation to them is already waiting\. Nothing was sent\./],
+  ];
+  for (const [status, code, words] of refusals) {
+    const w = await openAccount(worker({ 'GET /api/account/people/search': () => response(PEOPLE), 'POST /api/projects/5/invitations': () => response({ code, message: 'x' }, status) }));
+    try {
+      await w.change('invite-account-q', 'Jor');
+      await rest(); await rest();
+      await w.change('invite-account-u-jr', 'on');
+      await w.click('invite-send');
+      assert.match(w.text(), words, code);
+      assert.ok(!w.text().includes(code), `${code} reaches the page as words`);
+    } finally { await w.close(); }
+  }
 });
