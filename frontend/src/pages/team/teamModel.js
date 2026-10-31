@@ -53,6 +53,13 @@ export const ROSTER_LINE = 'The company’s roster, including people without an 
 export const COMPANY_AUTHORITY_LIVE = false;
 
 /** The note under a project-in-a-company's title (TM1b, TM1f). */
+/** The agents card's footer: the company's reach is named only once it is live. */
+export function agentsFootLine(companyName, live = COMPANY_AUTHORITY_LIVE) {
+  return live
+    ? `Company editors manage the agents of every project under ${companyName}. Agents propose; a named person accepts.`
+    : AGENTS_FOOT;
+}
+
 export function managedNote(company, live = COMPANY_AUTHORITY_LIVE) {
   return live
     ? `Managed under ${company}'s authority. Company editors can manage this team and its agents.`

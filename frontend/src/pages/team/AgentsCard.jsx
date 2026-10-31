@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Pill, Skeleton, Unrecorded } from '../../ui';
 import { AgentIdentity, AgentTile } from './AgentMark.jsx';
 import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
-import { AGENTS_FOOT, COMPANY_AUTHORITY_LIVE, agentGroups } from './teamModel.js';
+import { AGENTS_FOOT, agentGroups, agentsFootLine } from './teamModel.js';
 
 /**
  * D1497 (#3727, TM1a/TM1b agents card, TM1c, TM1e, TM9b1, TM9c1, TM9c4) —
@@ -149,7 +149,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
               <AgentTable rows={g.rows} onOpen={onOpen} label={g.title} />
             </div>
           ))}
-          <p className={`m-0 ${MUTED}`}>{COMPANY_AUTHORITY_LIVE ? `Company editors manage the agents of every project under ${companyName}. Agents propose; a named person accepts.` : AGENTS_FOOT}</p>
+          <p className={`m-0 ${MUTED}`}>{agentsFootLine(companyName)}</p>
         </>
       ) : (
         <>

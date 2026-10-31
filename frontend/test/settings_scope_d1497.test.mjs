@@ -72,7 +72,7 @@ test('#3697 part 2\'s answer maps onto the same shape, and the seam is closed un
   assert.equal(solo.label, PROJECT_SETTINGS);
   assert.ok(!entryLabels(solo).includes('Legal'));
   assert.deepEqual(solo.companyEditors, { available: false });
-  assert.equal((await readSettingsScope({})).available, false);
+  assert.equal((await readSettingsScope()).available, false);
 });
 
 function sidebar(company) {
