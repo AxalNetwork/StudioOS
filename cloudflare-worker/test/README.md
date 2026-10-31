@@ -177,3 +177,7 @@ D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen memb
 
 | `session_processing_recovery_3711.test.ts` | No-audio legacy recovery, transcript-hash summary reuse and private stage failure diagnostics for #3711. |
 | `stripe_mode_d1433.test.ts` | D1433 (#3703): mode-stamped catalogue, checkout readiness before provider calls, webhook receipts/retries/concurrency and signature timestamp boundaries; mocked Stripe only. |
+
+`project_deck_hard_delete_3747.test.ts` checks deck/share/note/image cleanup over
+the migrated schema, venture isolation, 500-object R2 pages, SQL rollback and
+durable storage retries after the venture row is gone. All records are synthetic.

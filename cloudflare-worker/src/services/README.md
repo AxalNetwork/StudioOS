@@ -633,3 +633,8 @@ projections; All studios requires HQ Super Admin and explicitly reports unread
 remote coverage. Neither reader is used by sync or exports (D1206).
 
 D1421 (#3699): `studioModules.ts` is the one registry of Studio blocks (`STUDIO_MODULES`), each profile's default layout (`STUDIO_DEFAULTS`), whose Studio a caller arranges (`studioProfile`) and each module's plan lock (`lockOf`). The lock reads the paywall prefixes in `../middleware/paywallPrefixes.ts` and the existing gate functions; no tier is written in the registry.
+
+#3747: `projectTrash.ts` batches existing venture cleanup with deck dependencies
+and a content-free image purge marker in `platform_settings`. It removes the
+venture’s R2 image prefix in pages of 500 after SQL commits; the existing trash
+cron retries markers without requiring a project row. Soft deletion is unchanged.
