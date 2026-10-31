@@ -18,6 +18,7 @@ import {
   saveSentence, startOptions,
 } from './newDeckModel';
 import { markRecommended } from './studioActionsModel';
+import { deckRail } from './deckRailGroups';
 
 /**
  * D897 (#2677, part 3 of #2434) — New deck at /raise/pitch/new, built to the
@@ -90,7 +91,8 @@ export default function NewDeck() {
     setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(projectId)); return next; }, { replace: true });
   }, [projectId, requested, setParams]);
 
-  const rail = <WorkerRail workspace="Raise" role="founder" note="New deck fills every figure from your records. Eadwyn writes the outline and the wording; each run shows its cost first." data-testid="pitch-new-rail" />;
+  const railGroups = useMemo(() => deckRail(null), []);
+  const rail = <WorkerRail workspace="Raise" role="founder" groups={railGroups} note="New deck fills every figure from your records. Eadwyn writes the outline and the wording; each run shows its cost first." data-testid="pitch-new-rail" />;
 
   let body;
   if (readOnly) body = <Notice text={READ_ONLY} q={q} testId="pitch-new-readonly" />;

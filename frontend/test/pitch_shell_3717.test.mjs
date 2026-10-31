@@ -139,10 +139,13 @@ test('studio, New deck and editor render one crumb, no nested founder frame, and
         assert.doesNotMatch(m.pr(proposal.parentNode).className,/grid-cols-\[minmax\(0,1fr\)_minmax/);
       }
       if(id==='pitch-studio') {
-        const grid=nodes.find(n=>String(m.pr(n).className).includes('2xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]'));
-        assert.ok(grid);
-        const aside=nodes.find(n=>m.pr(n)['aria-label']==='Readers');
-        assert.match(m.pr(aside).className,/md:grid-cols-2 2xl:grid-cols-1/);
+        // D1604 (pd1): the home's two rows, proportional, so the rail keeps its own column beside them.
+        const home=m.by('pitch-studio-home');
+        assert.ok(home);
+        const rows=home.childNodes.filter(n=>n.nodeType===1&&/grid/.test(String(m.pr(n).className)));
+        assert.deepEqual(rows.map(n=>m.pr(n).className),['grid gap-3.5 lg:grid-cols-3','grid gap-3.5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]']);
+        assert.ok(m.walk(rows[0]).includes(m.by('pitch-studio-current'))&&m.walk(rows[0]).includes(m.by('pitch-studio-start')));
+        assert.ok(m.walk(rows[1]).includes(m.by('pitch-studio-data-ready'))&&m.walk(rows[1]).includes(m.by('pitch-studio-investor-links')));
       }
     } finally {await m.close();}
   }

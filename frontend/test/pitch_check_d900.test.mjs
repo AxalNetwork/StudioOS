@@ -219,10 +219,11 @@ test('the source: the editor opens Check from ⋯ › Check claims, PD2 draws th
   assert.match(editor, /\{sheet === 'check' && base\.deck\?\.id \? \(\s*<CheckSheet deck=\{base\.deck\}/);
   assert.match(read('../src/pages/raise/pitch/DeckSheets.jsx'), /<CheckPanel key=\{deck\.id\} deck=\{deck\} projectId=\{projectId\} readOnly=\{readOnly\} dirty=\{dirty\} onReplaced=\{onReplaced\} \/>/);
   assert.match(read('../src/pages/raise/pitch/deckV2Model.js'), /\{ id: 'check', label: 'Check claims', note: 'Free checks' \}/);
-  const studio = read('../src/pages/raise/pitch/PitchStudio.jsx');
-  assert.match(studio, /<CheckPills /);
-  assert.match(studio, />Checks<\/th>/);
-  assert.match(studio, /pitch-studio-version-checks-/);
+  // D1604 (#3716, pd1): the pills are on the home's deck card, the Checks column in ⋯ › Versions…'s table.
+  assert.match(read('../src/pages/raise/pitch/StudioHome.jsx'), /<CheckPills /);
+  const table = read('../src/pages/raise/pitch/DeckVersions.jsx');
+  assert.match(table, />Checks<\/th>/);
+  assert.match(table, /pitch-studio-version-checks-/);
   const panel = read('../src/pages/raise/pitch/CheckPanel.jsx');
   assert.doesNotMatch(panel, /window\.(confirm|prompt|alert)/);
   assert.equal((panel.match(/<Lightbox /g) || []).length, 2);

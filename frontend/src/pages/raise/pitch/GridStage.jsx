@@ -3,9 +3,12 @@ import { Grid3x3 } from 'lucide-react';
 import { BlockView } from './BlockGrid';
 import { ChartBlock } from './ChartTools';
 import { overlayStyle } from './imageModel';
-import { cardOf } from './presentExportModel';
+import { SOURCE_NOT_RECORDED, cardOf } from './presentExportModel';
 import { KIT_FAILED, NO_KIT } from './editorModel';
 import { areaLabel, askAreaName } from './deckV2Model';
+import { SourceChip } from './SourcesBoards';
+import { ChangedNotice, FigureCard } from './FigureCard';
+import { faceOf, isFigure, itemsByKey, staleFigures } from './figuresModel';
 import {
   KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, keyStep, liveFocus, marquee, moveTo, nudge, pick, selectable, spanOf,
 } from './gridSelection';
@@ -36,8 +39,14 @@ import {
  * `cellAt` reads a pointer against the blocks layer's own measured box, its
  * width-based padding and its gutter, so a drop lands where its ghost showed.
  *
- * Nothing here writes: a move is the editor's `onMove`, held until a version
- * is saved like every other edit.
+ * Figures (pd6, pd24): a bound tile's face says source · grade through
+ * `SourceChip`; the area the pointer or the keyboard is on (else the one
+ * selected) shows its hover card under the card (`FigureCard.jsx`); and when
+ * a figure's store has moved on, the card says so with Refresh from records
+ * (`onRefresh`). None of it is drawn on Present, share or print.
+ *
+ * Nothing here writes: a move is the editor's `onMove`, a refresh its
+ * `onRefresh`, each held until a version is saved like every other edit.
  */
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
@@ -94,15 +103,23 @@ function gutterOf(node) {
 
 export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
-  selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null,
+  selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
 }) {
   const areas = useMemo(() => areasOf(card, model), [card, model]);
+  const byKey = useMemo(() => itemsByKey(items), [items]);
+  const changed = useMemo(() => staleFigures(card, items, charts), [card, items, charts]);
+  const [hover, setHover] = useState(null);
+  useEffect(() => { setHover(null); }, [index]);
+  const face = (b) => {
+    const f = faceOf(b.binding, byKey.get(b.binding?.source_key));
+    return f ? <SourceChip item={f} face /> : <span className="font-mono text-[10px]" style={{ color: colours.muted }}>{SOURCE_NOT_RECORDED}</span>;
+  };
   const [grid, setGrid] = useState(false);
   const [drag, setDrag] = useState(null);
   const [ghost, setGhost] = useState(null);
   const [refused, setRefused] = useState(null);
   const [box, setBox] = useState(null);
-  const face = useRef(null);
+  const faceRef = useRef(null);
   const layer = useRef(null);
   const buttons = useRef(new Map());
   const press = useRef(null);
@@ -123,7 +140,7 @@ export default function GridStage({
     if (!live) return;
     const node = buttons.current.get(live);
     const active = globalThis.document?.activeElement;
-    const box = face.current;
+    const box = faceRef.current;
     if (active && active !== node && box && typeof box.contains === 'function' && !box.contains(active)) return;
     node?.focus?.();
   }, [live]);
@@ -134,7 +151,7 @@ export default function GridStage({
   const chosen = (areas || []).filter((a) => selection.includes(a.id));
   // The blocks layer's own box (the face's padding box), its padding and its gutter.
   const rect = () => {
-    const n = layer.current || face.current;
+    const n = layer.current || faceRef.current;
     return typeof n?.getBoundingClientRect === 'function' ? n.getBoundingClientRect() : null;
   };
   const cellOf = (e, fallback = null) => cellAt(e?.clientX, e?.clientY, rect(), model, { gap: layer.current ? gutterOf(layer.current) : 0 }) || fallback;
@@ -254,12 +271,12 @@ export default function GridStage({
       </div>
       {askLine ? <span className={MUTED} role="status" data-testid="pitch-editor-ask-line">{askLine}</span> : null}
 
-      <div ref={face}
+      <div ref={faceRef}
         className="relative w-full select-none overflow-hidden rounded-[12px] border border-axal-hairline shadow-sm dark:border-gray-700"
         style={{ aspectRatio: '16 / 9', background: bg, color: colours.ink, backgroundImage: bgImage ? `url("${bgImage}")` : undefined, backgroundSize: 'cover' }}
         role={areas ? 'group' : undefined} aria-label={areas ? `Card ${index + 1} on the Grid` : undefined}
         onKeyDown={keys} onKeyUp={keyUp}
-        onPointerDown={(e) => { if (e.target === face.current) down(e); }}
+        onPointerDown={(e) => { if (e.target === faceRef.current) down(e); }}
         onPointerMove={over} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
         onDragOver={(e) => dragOver(e, null)} onDrop={(e) => drop(e, null)}
         data-testid="pitch-editor-card">
@@ -288,12 +305,15 @@ export default function GridStage({
                   onDragOver={(e) => { e.stopPropagation?.(); dragOver(e, a); }}
                   onDrop={(e) => { e.stopPropagation?.(); drop(e, a); }}
                   onPointerDown={(e) => down(e, a)}
+                  onPointerEnter={() => setHover(a.id)}
+                  onPointerLeave={() => setHover((h) => (h === a.id ? null : h))}
+                  onFocus={() => setHover(a.id)}
                   onClick={(e) => click(e, a)}
                   className={`relative min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${on ? 'outline outline-2 outline-violet-500 dark:outline-violet-400' : block ? 'outline outline-1 outline-dashed outline-black/10 dark:outline-white/20' : 'outline outline-1 outline-dashed outline-transparent hover:outline-black/15 dark:hover:outline-white/20'} ${a.id === live ? 'ring-[6px] ring-violet-400/30' : ''} ${ok.ok ? '' : 'cursor-not-allowed opacity-70'}`}
                   style={at}
                   data-testid={block ? `pitch-editor-block-${a.id}` : `pitch-editor-area-${a.id}`}>
                   {block
-                    ? <BlockView block={a.block} colours={colours} renderChart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} />
+                    ? <BlockView block={a.block} colours={colours} renderFace={face} renderChart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} />
                     : on ? <span className="font-mono text-[10px]" style={{ color: colours.muted }}>Empty · {areaLabel(a.grid)}</span> : null}
                 </button>
               );
@@ -314,6 +334,11 @@ export default function GridStage({
       </div>
 
       {refused ? <span className={MUTED} role="status" data-testid="pitch-editor-drop-refused">{refused}</span> : null}
+      {(() => {
+        const at = (areas || []).find((x) => x.id === hover) || one;
+        return at?.kind === 'block' && isFigure(at.block) ? <FigureCard block={at.block} items={items} charts={charts} /> : null;
+      })()}
+      <ChangedNotice changed={changed} readOnly={readOnly} onRefresh={onRefresh} />
       {many ? (
         <div className="flex flex-wrap items-center gap-3 self-center rounded-full bg-gray-900 px-4 py-1.5 text-[12.5px] text-white shadow-lg dark:bg-gray-100 dark:text-gray-900" role="toolbar" aria-label="Selection" data-testid="pitch-editor-selbar">
           <span className="font-bold">{chosen.length} areas selected</span>

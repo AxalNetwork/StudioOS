@@ -197,3 +197,32 @@ export function scorecardDialog(item) {
     canInclude: Boolean(band),
   };
 }
+
+/**
+ * D1604 (#3716, pd1) — Data ready on the studio's home: one row per area, its
+ * share of slots something records, and its items, from the same sources
+ * read. A slot only the founder reads is left out; an item nothing records
+ * reads "Not recorded" with "Add in … ›", never 0. The share counts recorded
+ * slots over every slot the area holds (optional ones included, as the
+ * coverage meter counts them).
+ */
+export function readiness(items, { show = 3 } = {}) {
+  const rows = [];
+  for (const area of AREA_ORDER) {
+    const list = (items || []).filter((it) => it && it.area === area && it.state !== 'withheld');
+    if (!list.length) continue;
+    const recorded = list.filter((it) => it.state === 'recorded').length;
+    const pc = Math.round((recorded / list.length) * 100);
+    // What is recorded first, then the first gap with its link: the row says what is missing.
+    const have = list.filter((it) => it.state === 'recorded').slice(0, show);
+    const gaps = list.filter((it) => it.state === 'not_recorded' && !it.optional);
+    const firstGap = gaps[0] || null;
+    const lines = [
+      ...have.map((it) => ({ key: it.source_key, label: it.label, value: valueText(it), grade: it.grade, missing: false })),
+      ...(firstGap ? [{ key: firstGap.source_key, label: firstGap.label, value: null, grade: null, missing: true, add: firstGap.href ? { text: `Add in ${AREA_LABEL[area]} ›`, href: firstGap.href } : null }] : []),
+    ];
+    const unread = list.filter((it) => it.state === 'unreadable').length;
+    rows.push({ id: area, label: AREA_LABEL[area], pc, recorded, slots: list.length, lines, more: Math.max(0, list.length - lines.length), unread, aria: `${AREA_LABEL[area]} ${pc}% ready` });
+  }
+  return rows;
+}

@@ -3,7 +3,7 @@ import Sheet from '../../../ui/Sheet.jsx';
 import { BrandingCard } from './StudioActions';
 import CheckPanel from './CheckPanel';
 import VersionCompare from './VersionCompare';
-import { Versions, useDeckChecks } from './PitchStudio';
+import { Versions, useDeckChecks } from './DeckVersions';
 import { comparePair } from './compareModel';
 import { APPLY } from './deckV2Model';
 import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from './editorModel';

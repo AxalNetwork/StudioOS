@@ -30,6 +30,8 @@ import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
 import AreaLightbox from './AreaLightbox';
 import InstructionBox from './InstructionBox';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
+import { refreshCard } from './figuresModel';
+import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
@@ -217,7 +219,7 @@ export default function PitchEditor() {
   // A decision in the header re-reads the versions without blanking them, so the
   // open Editor (keyed to the version) keeps its unsaved cards.
   const shell = {
-    query: ventureQuery(projectId || requested), title, tools, overlay, heading: deck.status === 'ok' ? title : null,
+    query: ventureQuery(projectId || requested), title, tools, overlay, heading: deck.status === 'ok' ? title : null, deckId: current?.id ?? null,
     ask: { projectId, readOnly, onPlace, versions, onChanged: versions.refresh, editsKey: proposalsTick },
   };
 
@@ -265,8 +267,10 @@ export default function PitchEditor() {
   );
 }
 
-function Shell({ children, query, title, ask, tools, heading, overlay = null }) {
-  const rail = <WorkerRail workspace="Raise" role="founder" note="The editor reads your deck and its recorded sources. Each Eadwyn run shows its cost first." data-testid="pitch-editor-rail" />;
+function Shell({ children, query, title, ask, tools, heading, overlay = null, deckId = null }) {
+  // D1604 (§5): the rail is the element groups' models and the deck's usage.
+  const groups = useMemo(() => deckRail(deckId), [deckId]);
+  const rail = <WorkerRail workspace="Raise" role="founder" groups={groups} note="The editor reads your deck and its recorded sources. Each Eadwyn run shows its cost first." data-testid="pitch-editor-rail" />;
   return <PitchPage rail={rail} crumb={{ query, trail: title, tools, heading }} ask={ask} testId="pitch-editor"><PitchMovedNotice />{children}{overlay}</PitchPage>;
 }
 
@@ -478,7 +482,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 readOnly={readOnly} selection={selection} focus={focus}
                 onSelection={setPickState}
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
-                onAsk={ask} askOff={askOff} askLine={askLine} />
+                onAsk={ask} askOff={askOff} askLine={askLine}
+                items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }} />
             )}
             {card && !readOnly && chosen.length ? (
               <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn}

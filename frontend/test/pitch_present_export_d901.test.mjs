@@ -134,9 +134,12 @@ test('the routes and the buttons: Present for everyone, Export only for a founde
   // Mutation checked: Export shown to a read-only viewer → the guard check fails.
   const app = read('frontend/src/App.jsx');
   assert.match(app, /path="\/raise\/pitch\/present" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchPresent \/>\)\)\}/);
-  const studio = read('frontend/src/pages/raise/pitch/PitchStudio.jsx');
+  // D1604 (#3716, pd1): the home's deck card. Present stays on its face; Export is its ⋯'s, a writer's only.
+  const studio = read('frontend/src/pages/raise/pitch/StudioHome.jsx');
   assert.match(studio, /<Link to=\{presentHref\(project\?\.id, current\.id\)\}[^>]*data-testid="pitch-studio-present">Present<\/Link>/);
-  assert.match(studio, /\{!readOnly \? <button .*?data-testid="pitch-studio-export">Export<\/button> : null\}/);
+  assert.match(studio, /\{ id: 'export', label: 'Export…', write: true \}/);
+  assert.match(studio, /DECK_CARD_MENU\.filter\(\(it\) => !\(readOnly && it\.write\)\)/);
+  assert.match(studio, /\{sheet === 'export' && current && !readOnly \? <ExportDialog /);
   const present = read('frontend/src/pages/raise/pitch/PitchPresent.jsx');
   const calls = [...present.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]).sort();
   assert.deepEqual([...new Set(calls)], ['deckGet', 'deckListVersions'], 'present only reads');

@@ -312,8 +312,10 @@ test('the route is static, the studio opens it, and the fast path builds a propo
   assert.ok(app.indexOf('path="/raise/pitch/new"') > 0 && app.indexOf('path="/raise/pitch/new"') < app.indexOf('path="/raise/:slug/new"'));
   const studio = read('frontend/src/pages/raise/pitch/PitchStudio.jsx');
   assert.match(studio, /to=\{`\$\{NEW_PATH\}\$\{q\}`\} className=\{PRIMARY\} data-testid="pitch-studio-new"/);
-  assert.match(studio, /to=\{`\$\{NEW_PATH\}\$\{q\}`\} className=\{PRIMARY\} data-testid="pitch-studio-empty-new"/);
-  assert.match(studio, /newDeckApi\.build\(\{ project_id: projectId, audience: 'seed_fund', length: 'standard' \}, railPressHeaders\('deck:build'\)\)/);
+  // D1604 (#3716, pd1): the empty state and the one-click are the home's (`StudioHome.jsx`).
+  const home = read('frontend/src/pages/raise/pitch/StudioHome.jsx');
+  assert.match(home, /to=\{`\$\{NEW_PATH\}\$\{q\}`\} className=\{PRIMARY\} data-testid="pitch-studio-empty-new"/);
+  assert.match(home, /newDeckApi\.build\(\{ project_id: projectId, audience: 'seed_fund', length: 'standard' \}, railPressHeaders\('deck:build'\)\)/);
   for (const f of ['frontend/src/pages/raise/pitch/NewDeck.jsx', 'frontend/src/pages/raise/pitch/newDeckModel.js']) {
     const src = read(f);
     assert.doesNotMatch(src, /\[\$[\d.,]+\]|\[Northwind|\[Seed\]|\[\d+\] runs/, `${f}: no canvas sample reaches the page`);

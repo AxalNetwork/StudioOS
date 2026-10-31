@@ -777,6 +777,10 @@ test('PD15 mounted: Compare draws both versions with the changed cards outlined;
     deckRestore: async (id) => { restored = id; return { id: 41, version: 5 }; },
   }, { id: 2, role: 'founder', founder_id: 20 });
   try {
+    // D1604 (#3716, pd1): the versions are the home deck card's ⋯ › Versions….
+    assert.ok(!m.by('pitch-studio-versions'), 'the home draws no versions table');
+    await m.press(m.by('pitch-studio-more-open'));
+    await m.press(m.by('pitch-studio-more-versions'));
     assert.ok(!m.by('pitch-studio-compare-40'), 'the current version has no Compare');
     await m.press(m.by('pitch-studio-compare-39'));
     assert.ok(m.by('pitch-compare'));
@@ -801,6 +805,9 @@ test('PD15: an admin compares but has no Restore; a refused restore says so in t
     deckGet: async (id) => (Number(id) === 39 ? DECK3 : DECK4), deckEngagement: async () => engagement, 'cycles.module': async () => ({ card: cardOk, records }),
   }, { id: 9, role: 'admin' });
   try {
+    await admin.press(admin.by('pitch-studio-more-open'));
+    assert.ok(!admin.by('pitch-studio-export'), 'a reader has no Export in ⋯');
+    await admin.press(admin.by('pitch-studio-more-versions'));
     await admin.press(admin.by('pitch-studio-compare-39'));
     assert.ok(admin.by('pitch-compare'));
     assert.ok(!admin.by('pitch-compare-restore'), 'an admin reads');
@@ -811,10 +818,83 @@ test('PD15: an admin compares but has no Restore; a refused restore says so in t
     deckRestore: async () => { const e = new Error('forbidden'); e.status = 403; throw e; },
   }, { id: 2, role: 'founder', founder_id: 20 });
   try {
+    await m.press(m.by('pitch-studio-more-open'));
+    await m.press(m.by('pitch-studio-more-versions'));
     await m.press(m.by('pitch-studio-compare-39'));
     await m.press(m.by('pitch-compare-restore'));
     await m.press(m.by('pitch-compare-restore-run'));
     assert.equal(m.text().includes('forbidden'), true);
     assert.ok(m.by('pitch-compare-restore-dialog'), 'the dialog stays open with the refusal');
   } finally { await m.unmount(); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D1604 (#3716, pd1, pd9a, pd9b, pd9c): the studio's home
+ * ------------------------------------------------------------------ */
+
+test('D1604 home: the deck card, Start from, Data ready and Investor links; Versions only behind the card\'s ⋯', async () => {
+  const { START_ITEMS, DECK_CARD_MENU, OPEN_ANALYTICS } = await import('../src/pages/raise/pitch/StudioHome.jsx');
+  const html = decks(reads());
+  for (const id of ['pitch-studio-home', 'pitch-studio-current', 'pitch-studio-start', 'pitch-studio-data-ready', 'pitch-studio-investor-links', 'pitch-studio-more-open']) {
+    assert.match(html, new RegExp(`data-testid="${id}"`), id);
+  }
+  assert.doesNotMatch(html, /data-testid="pitch-studio-versions"/, 'no versions table on the home');
+  assert.deepEqual(START_ITEMS.map((i) => i.label), ['Standard outline', 'Build a standard deck now', 'Browse templates ›', 'Import a .pptx template ›']);
+  assert.deepEqual(DECK_CARD_MENU.map((i) => i.label), ['Versions…', 'Export…', 'Brand kit']);
+  // The deck card's facts, each from a read; nothing recorded is "Not recorded".
+  assert.match(renderedText(between(html, 'pitch-studio-deck-facts', 'pitch-studio-coverage')), /Audience\s*Not recorded\s*Round\s*Not recorded\s*Saved\s*20 Oct · 2 cards\s*Views\s*5/);
+  // Start from: the one-click inside it; .pptx greyed "Coming later" until #3809.
+  const start = between(html, 'pitch-studio-start', 'pitch-studio-data-ready');
+  assert.match(start, /data-testid="pitch-studio-fast"/);
+  assert.match(renderedText(between(start, 'pitch-studio-start-pptx')), /Import a \.pptx template ›\s*Coming later/);
+  assert.match(start, /title="Not switched on yet\."[^>]*data-testid="pitch-studio-start-pptx"/);
+  // Investor links: the links' total, viewers and median from the reads, and the way to the tab.
+  const links = renderedText(between(html, 'pitch-studio-links-summary', 'pitch-studio-weekly'));
+  assert.match(links, /Shared links\s*6\s*Unique viewers\s*4\s*Median time per view\s*1:00/);
+  assert.ok(links.includes(OPEN_ANALYTICS));
+  assert.match(html, /data-testid="pitch-studio-open-analytics" href="\/raise\/pitch\/analytics\?project_id=7"/);
+  // A reader: Present stays; no one-click, no outline or template links.
+  const reader = decks(reads(), true);
+  assert.match(reader, /data-testid="pitch-studio-present"/);
+  assert.doesNotMatch(reader, /data-testid="pitch-studio-(fast|start-outline|start-templates)"/);
+});
+
+test('D1604 home states: loading reads as such; an empty studio offers New deck and the one-click; failed reads say so', async () => {
+  const loadingHtml = decks(reads({ versions: { status: 'loading', data: null } }));
+  assert.match(loadingHtml, /aria-busy="true" data-testid="pitch-studio-loading"/);
+  assert.match(renderedText(loadingHtml), /Reading…/);
+  assert.match(loadingHtml, /data-testid="pitch-studio-data-ready-loading"/);
+  const empty = decks(reads({ versions: ok({ versions: [] }), deck: idle }));
+  assert.match(renderedText(between(empty, 'pitch-studio-empty', 'pitch-studio-start')), /No deck yet\. Start from your records\.\s*New deck/);
+  assert.match(empty, /data-testid="pitch-studio-fast"/, 'the one-click beside the empty state');
+  // Investor links unread (pd9c inset): the summary says so, never 0.
+  const unread = renderedText(decks(reads({ engagement: { status: 'error', data: null }, module: { status: 'error', data: null } })));
+  assert.match(unread, /Shared links\s*Could not be read\s*Unique viewers\s*Could not be read/);
+  assert.match(unread, /Views on your links could not be read\./);
+});
+
+test('D1604 Data ready: each area\'s share of recorded slots, its items with grades, and the first gap with Add in … ›', async () => {
+  const { readiness } = await import('../src/pages/raise/pitch/sourcesModel.js');
+  const { default: DataReady, SOURCES_FAILED } = await import('../src/pages/raise/pitch/DataReady.jsx');
+  const items = [
+    { source_key: 'validate.interviews', area: 'validate', label: 'Interviews', state: 'recorded', value: 9, unit: 'count', grade: 'Measured' },
+    { source_key: 'validate.loi', area: 'validate', label: 'Letters of intent', state: 'not_recorded', module: 'Validate › Customer research', href: '/validate/customer-research?project_id=7' },
+    { source_key: 'validate.private', area: 'validate', label: 'Private', state: 'withheld' },
+    { source_key: 'grow.mrr', area: 'grow', label: 'MRR', state: 'recorded', value: 18400, unit: 'usd', grade: 'Measured' },
+    { source_key: 'grow.runway', area: 'grow', label: 'Runway', state: 'not_recorded', href: '/grow/runway?project_id=7' },
+    { source_key: 'grow.burn', area: 'grow', label: 'Burn', state: 'not_recorded', optional: true },
+  ];
+  const rows = readiness(items);
+  assert.deepEqual(rows.map((r) => [r.id, r.pc, r.aria]), [['validate', 50, 'Validate 50% ready'], ['grow', 33, 'Grow 33% ready']]);
+  assert.deepEqual(rows[0].lines.map((l) => [l.label, l.value, l.grade, l.missing]), [['Interviews', '9', 'Measured', false], ['Letters of intent', null, null, true]]);
+  assert.deepEqual(rows[0].lines[1].add, { text: 'Add in Validate ›', href: '/validate/customer-research?project_id=7' });
+  assert.equal(rows[1].lines[0].value, '$18,400');
+  const html = draw(h(DataReady, { sources: { status: 'ok', data: { items } } }));
+  assert.match(html, /role="img" aria-label="Validate 50% ready"/);
+  assert.match(renderedText(html), /Letters of intent· Not recordedAdd in Validate ›/);
+  assert.doesNotMatch(renderedText(html), /Private/, 'a slot only the founder reads is left out');
+  const failed = draw(h(DataReady, { sources: { status: 'error', data: null, retry() {} } }));
+  assert.ok(renderedText(failed).includes(SOURCES_FAILED));
+  assert.match(renderedText(failed), /Try again/);
+  assert.doesNotMatch(failed, /% ready/, 'a failed read draws no bar');
 });
