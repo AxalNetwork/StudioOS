@@ -51,14 +51,14 @@ const PRODUCTS: Array<{ id: string; name: string; metadata: Record<string, strin
 function world() {
   const f = aiBudgetFixture();
   const env = { DB: f.DB, JWT_SECRET, ENVIRONMENT: 'development', APP_URL: 'https://app.example.test',
-    STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000' } as any;
+    STRIPE_PUBLISHABLE_KEY: 'pk_test_fixture', STRIPE_WEBHOOK_SECRET: 'fixture-signing', STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000' } as any;
   return { ...f, env };
 }
 
 async function seed(f: any) {
   await ensureCatalogSchema(f.env);
   for (const p of PRODUCTS) {
-    f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES(?,?,?,?,?,?)').run(
+    f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES(?,?,?,?,?,?,0)').run(
       p.id, p.name, 'subscription', 1, JSON.stringify(p.metadata),
       JSON.stringify(p.prices.map((x) => ({ id: x.id, currency: x.currency ?? 'usd', unit_amount: x.unit_amount, interval: x.interval, interval_count: 1, nickname: null, type: 'recurring', active: x.active }))));
   }
@@ -137,18 +137,17 @@ test('D816: the founder checkout sells the yearly price at year, the monthly by 
   } finally { s.restore(); f.db.close(); }
 });
 
-test('D816: with no yearly price, catalog_price_missing names the interval and nothing is started', async () => {
-  // Mutation checked: drop `interval` from the refusal → the page cannot say "Yearly not offered yet".
+test('D1433: no yearly price or an unsold institutional plan refuses before checkout', async () => {
+  // The selected yearly interval is never replaced with a monthly price.
   const f = world(); await seed(f); const s = stripeStub();
   try {
     const r = await call(f, 'POST', '/api/billing/tier/checkout', FOUNDER, { tier: 'studio', interval: 'year' });
-    assert.equal(r.status, 502, r.text);
-    assert.equal(r.body.error, 'catalog_price_missing');
-    assert.equal(r.body.interval, 'year');
-    assert.match(r.body.detail, /interval=year/);
+    assert.equal(r.status, 409, r.text);
+    assert.equal(r.body.error, 'checkout_not_ready');
+    assert.equal(r.body.reason, 'price_missing');
     assert.equal(s.sessions.length, 0);
     const inv = await call(f, 'POST', '/api/billing/investor/checkout', INVESTOR, { plan: 'investor_inst_monthly', interval: 'year' });
-    assert.deepEqual([inv.status, inv.body.error, inv.body.interval], [502, 'catalog_price_missing', 'year']);
+    assert.deepEqual([inv.status, inv.body.error, inv.body.reason], [409, 'checkout_not_ready', 'price_missing']);
   } finally { s.restore(); f.db.close(); }
 });
 

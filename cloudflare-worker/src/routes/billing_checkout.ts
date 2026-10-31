@@ -40,6 +40,7 @@ import { ensurePaymentsCustomer } from './payments';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
 import { paidInvestorTier } from '../services/investorTiers';
 import { getCatalog } from '../services/catalog';
+import { keyReadiness, planReadiness, CHECKOUT_NOT_READY_MESSAGE } from '../services/stripeReadiness';
 import { isTokenPackPrice } from '../services/aiCredits';
 import { validatePromoForProduct, computeDiscount, normalizeCode, type PromoRow } from '../services/promos';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
@@ -140,12 +141,15 @@ async function resolvePlan(c: Ctx, user: CheckoutUser, body: Record<string, unkn
   if ('refusal' in planned) return { refusal: planned.refusal };
   const interval = checkoutIntervalOf(body.interval);
   if (!interval) return { refusal: { status: 400, code: 'invalid_interval', message: 'Choose monthly or yearly.' } as CheckoutRefusal };
+  const keys = await keyReadiness(c.env);
+  if (keys.state === 'not_ready') return { refusal: { status: 409, code: 'checkout_not_ready', message: CHECKOUT_NOT_READY_MESSAGE } as CheckoutRefusal, extra: { reason: keys.reason } };
   let products;
-  try { products = await getCatalog(c.env, 'subscription'); } catch {
+  try { products = await getCatalog(c.env, 'subscription', undefined, { sync: false }); } catch {
     return { refusal: { status: 503, code: 'catalogue_unreadable', message: "This plan's price couldn't be read just now. That doesn't mean it's free." } as CheckoutRefusal };
   }
-  const found = priceForEntry(products, planned.entry, interval);
-  if (!found) return { refusal: { status: 409, code: 'price_missing', message: "This plan's price couldn't be read just now. That doesn't mean it's free." } as CheckoutRefusal };
+  const readiness = await planReadiness(c.env, products, planned.entry, interval);
+  if (readiness.state === 'not_ready') return { refusal: { status: 409, code: 'checkout_not_ready', message: CHECKOUT_NOT_READY_MESSAGE } as CheckoutRefusal, extra: { reason: readiness.reason } };
+  const found = priceForEntry(products, planned.entry, interval)!;
   // D755 §9: a token pack is bought only through the order intent, never as a plan.
   if (await isTokenPackPrice(c.env, found.price.id)) return { refusal: { status: 400, code: 'token_pack_checkout_only', message: 'AI tokens are bought from Usage, not as a plan.' } as CheckoutRefusal };
   return { entry: planned.entry, interval, products, ...found };
@@ -174,10 +178,9 @@ function periodEnd(sub: StripeSubLite): string | null {
 checkout.post('/checkout/quote', async (c) => {
   const user = (await requireAuth(c)) as CheckoutUser;
   await ensureTierSchema(c.env);
-  if (!c.env.STRIPE_SECRET_KEY) return refuse(c, 503, { code: 'stripe_not_configured', message: 'Payments are not set up on this deployment.', audience: 'member' });
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const plan = await resolvePlan(c, user, body);
-  if ('refusal' in plan) return no(c, plan.refusal!);
+  if ('refusal' in plan) return no(c, plan.refusal!, plan.extra);
   const { entry, interval, products, product, price, meta } = plan;
   const unit = Number(price.unit_amount);
   const base = {
@@ -283,13 +286,12 @@ checkout.post('/checkout/quote', async (c) => {
 checkout.post('/checkout/start', async (c) => {
   const user = (await requireAuth(c)) as CheckoutUser;
   await ensureTierSchema(c.env);
-  if (!c.env.STRIPE_SECRET_KEY) return refuse(c, 503, { code: 'stripe_not_configured', message: 'Payments are not set up on this deployment.', audience: 'member' });
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const nonce = typeof body.nonce === 'string' ? body.nonce : '';
   // The page sends one nonce per press of Pay, so a double press is one charge.
   if (!NONCE_RE.test(nonce)) return refuse(c, 400, { code: 'nonce_required', message: 'The payment could not be started. Reload the page and try again.', audience: 'member' });
   const plan = await resolvePlan(c, user, body);
-  if ('refusal' in plan) return no(c, plan.refusal!);
+  if ('refusal' in plan) return no(c, plan.refusal!, plan.extra);
   const { entry, interval, product, price, meta } = plan;
   const moneyKind = moneyKindForCatalogPrice(product, price);
   const before = await heldPlanKey(c.env, user.id, entry.family);

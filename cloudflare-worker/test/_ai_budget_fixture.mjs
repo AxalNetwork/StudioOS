@@ -18,7 +18,9 @@ export const AI_SPEND_LIMIT_MIGRATION=readFileSync(new URL('../sql/migrations/50
 export const AI_FIXTURE_PLANS=`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1000)
  INSERT INTO member_subscription_amounts(subscription_id,user_id,plan_family,amount_cents,currency,interval,interval_count,status)
  SELECT 'sub_fixture_'||i,i,'founder',20000,'usd','month',1,'active' FROM n;`;
-export const AI_BUDGET_MIGRATION=readFileSync(new URL('../sql/migrations/419_ai_caps_topups.sql',import.meta.url),'utf8')+AI_BUDGET_REVIEW_MIGRATION+AI_CREDITS_MIGRATION+AI_PLAN_MIGRATION+AI_SPEND_LIMIT_MIGRATION+AI_PACK_OFFERS_MIGRATION+AI_FIXTURE_PLANS;
+export const AI_BUDGET_MIGRATION=readFileSync(new URL('../sql/migrations/419_ai_caps_topups.sql',import.meta.url),'utf8')+AI_BUDGET_REVIEW_MIGRATION+AI_CREDITS_MIGRATION+AI_PLAN_MIGRATION+AI_SPEND_LIMIT_MIGRATION+AI_PACK_OFFERS_MIGRATION+AI_FIXTURE_PLANS
+ +readFileSync(new URL('../sql/migrations/097_stripe_products.sql',import.meta.url),'utf8')
+ +readFileSync(new URL('../sql/migrations/691_stripe_mode_stamps.sql',import.meta.url),'utf8');
 export const AI_USERS_SCHEMA=`CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,name TEXT,role TEXT,is_active INTEGER DEFAULT 1,
  subscription_tier TEXT DEFAULT 'free',subscription_status TEXT DEFAULT 'active',subscription_renews_at TEXT,
  investor_tier TEXT DEFAULT 'free',investor_subscription_status TEXT DEFAULT 'free',investor_subscription_renews_at TEXT,is_super_admin INTEGER DEFAULT 0);

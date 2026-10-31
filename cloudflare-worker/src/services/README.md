@@ -252,6 +252,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `raiseEvidenceSources.ts` | D1263: local Raise evidence source registry, safe projections, source dates and snapshot hashes; founder decisions remain in raiseEvidence.ts. |
 | `capRelAccess.ts` | D1191 (#3125): capital editor access, local staff counts and mandatory founder-visible support audits; contract in the decision file. |
 | `raiseProspectWriters.ts` | D1191: narrow canonical legacy prospect create/edit/promotion writers, re-exported by the Raise writer and safe for Contacts imports. |
+| `stripeReadiness.ts` | D1433 (#3703): shared key-mode, signing-secret and per-interval plan readiness for checkout, public plans and HQ checks. |
 
 ## Rules
 

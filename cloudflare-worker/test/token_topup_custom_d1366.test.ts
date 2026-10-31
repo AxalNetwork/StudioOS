@@ -24,7 +24,7 @@ async function shop(unitCents = 100, extra: Record<string, unknown> = {}) {
   const f = aiBudgetFixture();
   const env = { DB: f.DB, ENVIRONMENT: 'development', STRIPE_WEBHOOK_SECRET: 'd1366-fixture-only-webhook-secret', STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000', STRIPE_PRICE_AI_TOPUP_UNIT: UNIT, ...extra } as any;
   await ensureCatalogSchema(env); await ensureOrdersSchema(env);
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES(?,?,'token_pack',1,'{}',?)").run(...product('prod_unit', 'AI tokens, any amount', UNIT, unitCents));
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES(?,?,'token_pack',1,'{}',?,0)").run(...product('prod_unit', 'AI tokens, any amount', UNIT, unitCents));
   return { ...f, env };
 }
 const cart = (quantity: number, priceId = UNIT, unit = 100) => ({ lines: [{ price_id: priceId, product_id: 'prod_unit', name: 'AI tokens', kind: 'token_pack', quantity, unit_amount: unit, line_total: unit * quantity }], subtotal: unit * quantity, currency: 'usd' }) as any;
@@ -95,7 +95,7 @@ test('migration 654 puts four packs on sale, and a pack price the mirror lacks i
     if (!row) throw new Error(`no Stripe stub answers ${url}`);
     asked.push(id);
     return new Response(JSON.stringify({ id, object: 'price', active: true, currency: 'usd', unit_amount: row.face_cents, type: 'one_time', recurring: null, nickname: null, livemode: false,
-      product: { id: row.product_id, name: `$${row.face_cents / 100} of tokens`, active: true, metadata: { kind: 'token_pack' } } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      product: { id: row.product_id, name: `$${row.face_cents / 100} of tokens`, active: true, livemode: false, metadata: { kind: 'token_pack' } } }), { status: 200, headers: { 'content-type': 'application/json' } });
   }) as any;
   try {
     await mirrorPackPrices(f.env);

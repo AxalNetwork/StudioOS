@@ -28,11 +28,11 @@ function app() {
 
 async function world() {
   const f = aiBudgetFixture();
-  const env = { DB: f.DB, JWT_SECRET: 'test', STRIPE_SECRET_KEY: 'sk_test_fixture', ENVIRONMENT: 'development' } as any;
+  const env = { DB: f.DB, JWT_SECRET: 'test', STRIPE_PUBLISHABLE_KEY: 'pk_test_fixture', STRIPE_WEBHOOK_SECRET: 'fixture-signing', STRIPE_SECRET_KEY: 'sk_test_fixture', ENVIRONMENT: 'development' } as any;
   await ensureCatalogSchema(env);
   f.db.prepare("INSERT INTO ai_token_packs(uid,price_id,product_id,face_cents,bonus_microusd,on_sale,sort,origin) VALUES('pack25','price_Pack25','prod_Pack25',2500,0,1,1,'created')").run();
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_Pack25','$25 of tokens','token_pack',1,'{}',?)").run(JSON.stringify([price('price_Pack25')]));
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_Review','Deck review','alacarte',1,'{}',?)").run(JSON.stringify([price('price_Review')]));
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_Pack25','$25 of tokens','token_pack',1,'{}',?,0)").run(JSON.stringify([price('price_Pack25')]));
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_Review','Deck review','alacarte',1,'{}',?,0)").run(JSON.stringify([price('price_Review')]));
   return { f, env };
 }
 

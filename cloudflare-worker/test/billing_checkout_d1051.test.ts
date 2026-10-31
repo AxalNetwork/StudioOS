@@ -93,7 +93,8 @@ function database() {
       offer_starts_at TEXT, offer_ends_at TEXT, first_purchase_only INTEGER, archived_at TEXT);`);
   db.exec(read('cloudflare-worker/sql/migrations/505_member_subscription_amounts.sql'));
   db.exec('ALTER TABLE member_subscription_amounts ADD COLUMN price_id TEXT');
-  const product = db.prepare('INSERT INTO stripe_products (id, name, metadata_json, prices_json) VALUES (?, ?, ?, ?)');
+  db.exec(read('cloudflare-worker/sql/migrations/691_stripe_mode_stamps.sql'));
+  const product = db.prepare('INSERT INTO stripe_products (id, name, metadata_json, prices_json, livemode) VALUES (?, ?, ?, ?, 0)');
   product.run('prod_growth', 'Founder — Growth', JSON.stringify({ tier: 'growth' }), JSON.stringify([price('price_growth_m', 7900, 'month'), price('price_growth_y', 79000, 'year')]));
   product.run('prod_studio', 'Founder — Studio', JSON.stringify({ tier: 'studio' }), JSON.stringify([price('price_studio_m', 24900, 'month')]));
   product.run('prod_partner', 'Operating Partner Pro', JSON.stringify({ plan_group: 'partner' }), JSON.stringify([price('price_partner_m', 9900, 'month'), price('price_partner_y', 99000, 'year')]));
@@ -111,7 +112,7 @@ function database() {
 }
 const holdGrowth = (db: DatabaseSync, tier = 'growth') =>
   db.prepare(`UPDATE users SET subscription_tier = ?, subscription_status = 'active', stripe_subscription_id = 'sub_held' WHERE id = ?`).run(tier, FOUNDER);
-const env = (db: DatabaseSync) => ({ JWT_SECRET, ENVIRONMENT: 'test', STRIPE_SECRET_KEY: KEY, DB: d1Over(db) } as any);
+const env = (db: DatabaseSync) => ({ JWT_SECRET, ENVIRONMENT: 'test', STRIPE_SECRET_KEY: KEY, STRIPE_PUBLISHABLE_KEY: 'pk_test_fixture', STRIPE_WEBHOOK_SECRET: 'fixture-signing', DB: d1Over(db) } as any);
 const app = (() => {
   const a = new Hono<any>();
   a.route('/api/billing', checkout);
@@ -184,7 +185,7 @@ test('quote, a new subscriber: the plan, its price and allowance, the saving, th
   assert.equal((await quote(db, FOUNDER, 'investor:professional')).body.error, 'other_profile');
   assert.equal((await quote(db, ADMIN, 'founder:growth')).body.error, 'staff_no_plan');
   assert.equal((await quote(db, EXPLORER, 'founder:growth')).body.error, 'choose_profile');
-  assert.equal((await quote(db, FOUNDER, 'founder:studio', 'year')).body.error, 'price_missing', 'no yearly Studio price: never a typed one');
+  assert.equal((await quote(db, FOUNDER, 'founder:studio', 'year')).body.reason, 'price_missing', 'no yearly Studio price: never a typed one');
   assert.equal((await quote(db, FOUNDER, 'founder:growth', 'week')).body.error, 'invalid_interval');
   // A token pack's price is never a plan.
   db.exec(`INSERT INTO ai_token_packs (uid, origin, price_id, product_id, archived_at) VALUES ('pk', 'catalog', 'price_growth_m', 'prod_growth', NULL)`);

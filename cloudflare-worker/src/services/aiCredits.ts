@@ -17,6 +17,8 @@ import { paidInvestorTier } from './investorTiers';
 import { AI_USD_SCALE, planView } from './aiBudget';
 import type { PricedCart } from './orders';
 import { AI_TOPUP_UNIT, aiTopupUnitPriceId } from './aiTopups';
+import { stripeMode, type CatalogProduct } from './catalog';
+import { keyReadiness, planPriceReady } from './stripeReadiness';
 
 const usd = (dollars: number) => dollars * AI_USD_SCALE;
 
@@ -348,7 +350,8 @@ type MirroredPrice = { product: { id: string; name: string; active: boolean }; p
 async function mirrorIndex(env: Env): Promise<Map<string, MirroredPrice>> {
   let rows: any[] = [];
   try {
-    const res = await env.DB.prepare('SELECT id, name, active, prices_json FROM stripe_products').all<any>();
+    const res = await env.DB.prepare('SELECT id, name, active, prices_json FROM stripe_products WHERE livemode = ?')
+      .bind(stripeMode(env) === 'unconfigured' ? null : stripeMode(env) === 'live' ? 1 : 0).all<any>();
     if (res.success !== true) throw new Error('catalog mirror unreadable');
     rows = res.results ?? [];
   } catch (e) {
@@ -702,6 +705,8 @@ export async function plansAndPacks(env: Env) {
   const { PLAN_AI_SHARE, allowanceFromCharge } = await import('./planAllowance');
   const { catalogueFields, planByKey, planByLicenceKey, publicCatalogue } = await import('./planCatalogue');
   const { storageFields } = await import('./storagePlans');
+  const mode = stripeMode(env);
+  const keys = await keyReadiness(env);
   // D783: no plan, no allowance. A paid plan includes 25% of its price each month: each price says what it gives,
   // and the plan's figure is its headline price's (monthly first, else yearly), as the card shows the price.
   const none = { share: PLAN_AI_SHARE, monthly_microusd: 0, source: 'none' };
@@ -709,13 +714,15 @@ export async function plansAndPacks(env: Env) {
     prices.find((p) => p.interval === 'month' && (p.interval_count ?? 1) === 1) ?? prices.find((p) => p.interval === 'year' && (p.interval_count ?? 1) === 1) ?? prices[0];
   let rows: any[] = [];
   try {
-    const res = await env.DB.prepare("SELECT id, name, active, metadata_json, prices_json FROM stripe_products WHERE kind = 'subscription' AND active = 1 ORDER BY name COLLATE NOCASE ASC, id").all<any>();
+    const res = await env.DB.prepare("SELECT id, name, active, metadata_json, prices_json, livemode FROM stripe_products WHERE kind = 'subscription' AND active = 1 AND livemode = ? ORDER BY name COLLATE NOCASE ASC, id")
+      .bind(mode === 'unconfigured' ? null : mode === 'live' ? 1 : 0).all<any>();
     if (res.success !== true) throw new Error('catalog mirror unreadable');
     rows = res.results ?? [];
   } catch (e) {
     if (!/no such table: stripe_products\b/.test(String((e as Error)?.message ?? e))) throw e;
   }
   const plans: Record<string, unknown>[] = [];
+  const products: CatalogProduct[] = [];
   for (const [family, key] of [['founder', 'founder:free'], ['investor', 'investor:free'], ['advisor', 'advisor:free'],
     ['partner', 'partner:free'], ['other', 'other'], ['lp', 'lp_access']] as const)
     plans.push({ family, licence_key: key, product_id: null, plan_name: null, free: true, prices: [], allowance: none,
@@ -725,6 +732,8 @@ export async function plansAndPacks(env: Env) {
     try { metadata = JSON.parse(row.metadata_json); prices = JSON.parse(row.prices_json); } catch { continue; }
     const plan = metadata && typeof metadata === 'object' ? planOf(metadata) : null;
     if (!plan || !Array.isArray(prices)) continue;
+    products.push({ id: row.id, name: row.name, active: true, kind: 'subscription', metadata,
+      prices, categories: [], synced_at: '', livemode: row.livemode === 1 ? true : row.livemode === 0 ? false : null });
     const priced = prices.filter((p) => p && p.active === true && Number.isSafeInteger(p.unit_amount)).map((p) => ({
       price_id: p.id, unit_amount: p.unit_amount, currency: p.currency, interval: p.interval ?? null, interval_count: p.interval_count ?? null,
       allowance_microusd: p.currency == null || String(p.currency).toLowerCase() === 'usd' ? allowanceFromCharge(p.unit_amount, p.interval, p.interval_count) : 0 }));
@@ -735,11 +744,20 @@ export async function plansAndPacks(env: Env) {
       ...intervalPrices(priced),
       ...storageFields(planByLicenceKey(plan.licence_key)?.key), catalogue: catalogueFields(planByLicenceKey(plan.licence_key)) });
   }
-  // D1334: Investor Plus is sold once its Stripe product is mirrored. Until then
-  // its card still reads, with no price, so /pricing shows it as not on sale.
-  if (!plans.some((p) => p.licence_key === 'investor:plus'))
-    plans.push({ family: 'investor', licence_key: 'investor:plus', product_id: null, plan_name: null, free: false,
+  // Every sellable card remains present when its current-mode price is missing.
+  for (const entry of publicCatalogue()) {
+    if (!entry.sellable || plans.some(p => p.licence_key === entry.licence_key)) continue;
+    plans.push({ family: entry.family, licence_key: entry.licence_key, product_id: null, plan_name: null, free: false,
       prices: [], allowance: null, monthly: null, yearly: null, yearly_saving_percent: null,
-      ...storageFields('investor:plus'), catalogue: catalogueFields(planByKey('investor:plus')) });
+      ...storageFields(entry.key), catalogue: catalogueFields(planByKey(entry.key)) });
+  }
+  for (const plan of plans) {
+    const entry = planByLicenceKey(String(plan.licence_key));
+    if (!entry?.sellable) continue;
+    plan.checkout = {
+      monthly: keys.state === 'ready' && planPriceReady(products, entry, 'month', mode) ? 'ready' : 'not_ready',
+      yearly: keys.state === 'ready' && planPriceReady(products, entry, 'year', mode) ? 'ready' : 'not_ready',
+    };
+  }
   return { plans, packs: (await packsOnSale(env)).packs, covers: PLAN_COVERS, resets: PLAN_RESETS, catalogue: publicCatalogue() };
 }
