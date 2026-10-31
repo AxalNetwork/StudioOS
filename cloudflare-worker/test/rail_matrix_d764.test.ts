@@ -24,7 +24,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  OUT, VOICE_BANNED, buildMatrix, loadRegisteredOptions, optionPageKey, readPricing, render,
+  OUT, VOICE_BANNED, buildMatrix, loadRegisteredOptions, optionPageKey, readPricing, render, rowProblems,
 } from '../../scripts/build-rail-matrix.mjs';
 import { PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, RAIL_KINDS, ROUTE } from '../src/services/aiRouter.ts';
 import { MODEL_NAMES, TASK_LABELS } from '../src/services/aiCatalog.ts';
@@ -34,7 +34,7 @@ import { makeD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import ai, { RAIL_PREFERENCE_CAP } from '../src/routes/ai.ts';
-import { compatibleModels, railOptionRows, railOptionsOn, resolveRail, resolveRailChain, resolveRailOption } from '../src/services/ai/railMatrix.ts';
+import { compatibleModels, railRows, railOptionRows, railOptionsOn, resolveRail, resolveRailChain, resolveRailOption } from '../src/services/ai/railMatrix.ts';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { run as aiRun, __resetForTest } from '../src/services/aiRouter.ts';
@@ -323,7 +323,8 @@ test('a model the page does not offer is refused, and a stale stored pick is cle
   const bad = await call(env, A, 'PUT', '/rail/pick', { page: 'Founder · Validate', model: '@cf/qwen/qwen2.5-coder-32b-instruct' });
   assert.equal(bad.status, 400);
   assert.equal(bad.body.error, 'model_not_offered');
-  assert.deepEqual(bad.body.models, resolveRail('Founder · Validate')!.models.map((m) => m.id));
+  const on = resolveRail('Founder · Validate')!;
+  assert.deepEqual(bad.body.models, [...on.models, ...(on.more ?? [])].map((m) => m.id));
   assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: 'Founder · Validate', mode: 'auto' })).status, 400);
   assert.deepEqual(prefs(A), [], 'a refused write stores nothing');
   db.prepare("INSERT INTO ai_rail_preferences (uid, user_id, section, task, model) VALUES ('u1', ?, 'founder · validate', 'page', '@cf/retired/model')").run(A);
@@ -500,4 +501,111 @@ test('GET /api/ai/rail lists the page\'s options with their own rows and picks, 
   assert.equal(o.body.pick, own);
   assert.equal((await call(env, A, 'GET', q(opt.pageKey))).body.options.find((x: any) => x.key === opt.optionKey).pick, own);
   assert.equal(prefs(A).length, 1);
+});
+
+
+test('#3741: generated rows and options cap suggestions and keep demoted choices', () => {
+  for (const r of [...MATRIX.rows, ...MATRIX.options]) {
+    assert.ok(r.models.length > 0 && r.models.length <= 3, r.pageKey);
+    assert.deepEqual(r.models.map((m: any) => m.role), ['Default', 'Alternative', 'Deeper'].slice(0, r.models.length));
+    assert.equal(r.models.some((m: any) => 'optional' in m), false);
+    assert.equal(new Set([...r.models, ...r.more].map((m: any) => m.id)).size, r.models.length + r.more.length);
+  }
+  // Speech and research are the two kinds previously carrying four models.
+  for (const [kind, demoted] of [['speech', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'], ['research', '@cf/baai/bge-reranker-base']]) {
+    const r = MATRIX.rows.find((row: any) => row.kind === kind);
+    assert.deepEqual(r.more.map((m: any) => m.id), [demoted]);
+    const broken = { ...r, models: [...r.models, { ...r.more[0], role: 'Alternative' }], more: [] };
+    assert.match(rowProblems(broken, OVERRIDES, PRICING, capsOf).join('\n'), /more than 3 suggested models/);
+    assert.match(rowProblems({ ...r, models: r.models.map((m: any) => ({ ...m, role: 'Default' })) }, OVERRIDES, PRICING, capsOf).join('\n'), /suggested roles must be/);
+    assert.match(rowProblems({ ...r, models: r.models.map((m: any) => ({ ...m, optional: true })) }, OVERRIDES, PRICING, capsOf).join('\n'), /a suggestion cannot be optional/);
+  }
+});
+
+test('#3741: every Worker page and option returns only curated roles, with priced overflow choices', async () => {
+  const { env, db } = world();
+  const seen = new Set();
+  const assertRow = (r: any) => {
+    assert.ok(r.models.length <= 3);
+    assert.deepEqual(r.models.map((m: any) => m.role), ['Default', 'Alternative', 'Deeper'].slice(0, r.models.length));
+    assert.equal(r.models.some((m: any) => 'optional' in m), false);
+    for (const m of r.models) {
+      assert.equal(m.name, MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null);
+      assert.deepEqual(m.price, unitPrices(m.id, multiplierFor('founder')));
+    }
+    for (const m of r.more) {
+      assert.deepEqual(Object.keys(m).sort(), ['id', 'name', 'line', 'price'].sort());
+      assert.ok(m.name && m.line);
+      assert.deepEqual(m.price, unitPrices(m.id, multiplierFor('founder')));
+      assert.equal(r.models.some((c: any) => c.id === m.id), false);
+    }
+  };
+  try {
+    for (const page of railRows()) {
+      const r = await call(env, A, 'GET', q(page.pageKey));
+      assert.equal(r.status, 200); assertRow(r.body);
+      for (const o of r.body.options) {
+        assertRow(o);
+        assert.deepEqual(o.more.map((m: any) => m.id), resolveRailOption(page.pageKey, o.key)!.more!.map(m => m.id));
+        seen.add(page.pageKey + ':' + o.key);
+      }
+    }
+    assert.equal(seen.size, MATRIX.options.length);
+    const r = await call(env, A, 'GET', q('Founder · Build · Solution design'));
+    assert.deepEqual(r.body.models.map((m: any) => m.id), ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b']);
+    assert.ok(r.body.more.some((m: any) => m.id === '@cf/deepseek-ai/deepseek-v4-flash-0731'));
+    const option = railOptionRows().find(o => o.kind === 'plan')!;
+    const active = await call(env, A, 'GET', q(option.pageKey, option.optionKey));
+    assertRow(active.body);
+    assert.deepEqual(active.body.models.map((m: any) => m.id), option.models.map(m => m.id));
+    assert.deepEqual(active.body.more.map((m: any) => m.id), option.more!.map(m => m.id));
+  } finally { db.close(); }
+});
+
+test('#3741: page and option overflow picks round-trip and stale picks are refused and cleared', async () => {
+  const page = 'Founder · Build · Solution design';
+  const { env, db, prefs } = world();
+  const model = '@cf/deepseek-ai/deepseek-v4-flash-0731';
+  const option = railOptionRows().find(o => o.kind === 'plan' && o.more?.some(m => m.id === model))!;
+  assert.ok(option);
+  try {
+    for (const key of [undefined, option.optionKey]) {
+      const onPage = key ? option.pageKey : page;
+      assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: onPage, option: key, model })).status, 200);
+      const r = await call(env, A, 'GET', q(onPage, key));
+      assert.equal(r.body.pick, model);
+      assert.equal(r.body.models.some((m: any) => m.id === model), false);
+      assert.equal((await call(env, B, 'GET', q(onPage, key))).body.pick, null);
+      assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: onPage, option: key, model: '@cf/no-longer/offered' })).status, 400);
+    }
+    db.prepare('UPDATE ai_rail_preferences SET model = ? WHERE user_id = ?').run('@cf/no-longer/offered', A);
+    const read = await call(env, A, 'GET', q(page));
+    assert.equal(read.body.pick, null);
+    assert.ok(read.body.options.every((o: any) => o.pick === null));
+    const optionRead = await call(env, A, 'GET', q(option.pageKey, option.optionKey));
+    assert.equal(optionRead.body.pick, null);
+    assert.deepEqual(prefs(A), []);
+  } finally { db.close(); }
+});
+
+test('#3741: run honours an overflow pick, and never adds connected extras to automatic fallbacks', async () => {
+  const page = 'Founder · Build · Solution design';
+  const model = '@cf/deepseek-ai/deepseek-v4-flash-0731';
+  const opt = railOptionRows().find(o => o.kind === 'plan' && o.more?.some(m => m.id === model))!;
+  for (const option of [undefined, opt.optionKey]) {
+    const onPage = option ? opt.pageKey : page;
+    const w = runWorld();
+    try {
+      w.env.AI_PARTNER_MODELS = 'on'; w.env.AI_PAID_MODELS = 'on';
+      w.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,model) VALUES('more',2,?,?,?)").run(onPage.toLowerCase(), option ?? 'page', model);
+      const r = await aiRun(w.env, { task: 'advisor_turn', userId: 2, text: 'A synthetic question.', rail: { page: onPage, option } });
+      assert.equal(r.ok, true, JSON.stringify(r));
+      assert.deepEqual(w.calls, [model]);
+      assert.equal(w.db.prepare("SELECT model FROM ai_usage_logs WHERE task='advisor_turn'").get().model, model);
+      const row = option ? resolveRailOption(onPage, option)! : resolveRail(onPage)!;
+      const automatic = resolveRailChain(row, { vision: false }, w.env, {});
+      assert.ok(automatic?.ok);
+      assert.ok(![automatic.primary, ...automatic.chain].some(id => row.more?.some(m => m.id === id)));
+    } finally { w.db.close(); }
+  }
 });

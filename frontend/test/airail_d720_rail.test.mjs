@@ -91,6 +91,7 @@ function railAnswer(page, option, card = rates()) {
   return {
     ok: true, page, crumbs: page.split(' · '), kind: r.kind,
     models: r.models.map((m) => ({ ...m, name: modelName(m.id), price: { cost: priced(m.id).cost, billed: priced(m.id).billed } })),
+    more: r.more.map(m => ({ ...m, name: modelName(m.id), price: { cost: priced(m.id).cost, billed: priced(m.id).billed } })),
     options: [], pick: null, mode: null, billing: card.billing, guard: { model: GUARD, every_run: true },
   };
 }
@@ -221,12 +222,12 @@ test('the price is the Worker\'s: cost while billing is cost, billed once it is 
 test('every suggested card and All models row prints its price in its unit', async () => {
   const m = await mount(onPage('/validate/customer-research', h(WorkerRail, { workspace: 'Validate' })));
   try {
-    // Customer research's row: Whisper Turbo, Nova-3, Flux and the 70B.
+    // Customer research suggests Whisper Turbo, Nova-3 and Flux; the 70B stays in All models.
     assert.equal(m.text(m.by(`text-worker-rail-price-${tail(WHISPER)}`)), '$0.0005 / min');
     assert.equal(m.text(m.by(`text-worker-rail-price-${tail(NOVA)}`)), '$0.0052 / min · $0.0092 / min live');
-    assert.equal(m.text(m.by(`text-worker-rail-price-${tail(L70)}`)), '$0.293 in · $2.253 out per 1M tokens');
+    assert.equal(m.by(`text-worker-rail-price-${tail(L70)}`), undefined);
     const cards = m.all('card-worker-rail-model-');
-    assert.equal(cards.length, 4);
+    assert.equal(cards.length, 3);
     for (const c of cards) assert.ok(m.all(`text-worker-rail-price-${String(m.pr(c)['data-testid']).replace('card-worker-rail-model-', '')}`).length === 1);
     // All models: every row has its short price, under the canvas's note.
     await m.click('button-worker-rail-all-models');

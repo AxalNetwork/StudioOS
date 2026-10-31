@@ -688,6 +688,9 @@ export default function WorkerRail({
             />
           </div>
         )}
+        {rail.state === 'ready' && rail.morePick && (
+          <p className="fwr-models-note" data-testid="text-worker-rail-more-pick">Using {rail.morePick} from All models</p>
+        )}
         {rail.state === 'ready' && (
           <div
             className="fwr-cards"
