@@ -354,7 +354,10 @@ test('every option a profile registers that runs a model has a row, with its own
   const live = registered.filter((o: any) => o.handler !== 'none');
   assert.ok(live.length >= 100, `the profiles' lists did not load (${live.length})`);
   const rows = railOptionRows();
-  assert.equal(rows.length, live.length, 'one row per registered option that runs a model');
+  // D1596 (#3869): a no-model Ask chip (`handler: 'none'`, `noModel`) also has a row, with nothing to pick.
+  const chips = registered.filter((o: any) => o.handler === 'none' && o.noModel);
+  assert.ok(chips.length >= 1, 'the Sessions chip is registered');
+  assert.equal(rows.length, live.length + chips.length, 'one row per registered option that runs a model, and one per no-model chip');
   for (const o of live as any[]) {
     const page = optionPageKey(CANVAS, o.profile, o.page);
     assert.ok(page.key, `${o.file} ${o.key}: ${page.error}`);
@@ -370,6 +373,12 @@ test('every option a profile registers that runs a model has a row, with its own
   }
   for (const o of registered.filter((x: any) => x.handler === 'none') as any[]) {
     const page = optionPageKey(CANVAS, o.profile, o.page);
+    if (o.noModel) {
+      const row = resolveRailOption(page.key, o.key);
+      assert.ok(row, `${o.key}: a no-model chip is listed`);
+      assert.deepEqual([row!.handler, row!.routeTask, row!.models, row!.more ?? []], ['none', 'none', [], []], `${o.key}: no model, no router task, nothing to pick`);
+      continue;
+    }
     assert.equal(resolveRailOption(page.key, o.key), null, `${o.key} runs no model, so it has no row`);
   }
   // A bare board name resolves inside its profile, and an unknown or shared one is refused.
@@ -508,6 +517,8 @@ test('GET /api/ai/rail lists the page\'s options with their own rows and picks, 
 
 test('#3741: generated rows and options cap suggestions and keep demoted choices', () => {
   for (const r of [...MATRIX.rows, ...MATRIX.options]) {
+    // D1596 (#3869): a no-model chip suggests nothing and demotes nothing.
+    if (r.noModel) { assert.deepEqual([r.models, r.more, r.routeTask], [[], [], 'none'], r.optionKey); continue; }
     assert.ok(r.models.length > 0 && r.models.length <= 3, r.pageKey);
     assert.deepEqual(r.models.map((m: any) => m.role), ['Default', 'Alternative', 'Deeper'].slice(0, r.models.length));
     assert.equal(r.models.some((m: any) => 'optional' in m), false);
