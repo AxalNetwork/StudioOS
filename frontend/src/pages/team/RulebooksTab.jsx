@@ -12,9 +12,11 @@ import { AUTO_NOTE, FLOOR, FLOOR_EDIT_NOTE, FLOOR_NOTE, FLOOR_TIP, RULEBOOK_SECT
  * D1497 (#3727, TM4a, TM4b, TM4b2, TM4c) — Roles and rule books.
  *
  * The role catalogue and every rule book come from #3840's routes through
- * `agentsAdapter` (`roles`, `rulebook`, `saveRulebook`). None exists on this
- * base, so the tab draws the honest block; the catalogue is never invented
- * here. What IS drawn without a read is the floor, because it is Axal VC's
+ * `agentsAdapter` (`roles`, `rulebook`, `saveRulebook`), wired. While the
+ * routes are switched off the tab draws the honest block; the catalogue is
+ * never invented here. Version 0 is the catalogue's default (no scope edit
+ * yet) and reads "Default". A save is re-read for its history and diff; a
+ * `rule_floor` refusal outlines the floor item the edit dropped. What IS drawn without a read is the floor, because it is Axal VC's
  * rule and not data: the seven things an agent never does without a named
  * person, and that nothing is automatic in v1.
  *
@@ -121,7 +123,7 @@ export function RulebookView({ book, role, onBack, onEdit, onRestore, canManage,
       <header className="flex flex-wrap items-start gap-3">
         <AgentTile size={40} />
         <div className="min-w-0 flex-1">
-          <h2 className="m-0 text-[18px] font-extrabold text-axal-ink dark:text-gray-100">{role?.name || book.role_key} · Rule book · v{book.version ?? 1}</h2>
+          <h2 className="m-0 text-[18px] font-extrabold text-axal-ink dark:text-gray-100">{role?.name || book.role_key} · Rule book · {book.version === 0 ? 'Default' : `v${book.version ?? 1}`}</h2>
           {versions.length ? (
             <p className={`m-0 ${MONO}`} data-testid="rulebook-history">
               {versions.map((v, i) => (
@@ -180,7 +182,7 @@ export function EditRulebookSheet({ book, role, onClose, onSave }) {
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
-          <button type="button" className={BTN_PRIMARY} onClick={save} disabled={busy || !!refusal?.highlight} title={refusal?.highlight ? 'Fix the highlighted item to save' : undefined}>Save</button>
+          <button type="button" className={BTN_PRIMARY} onClick={save} disabled={busy || !!refusal?.highlight} title={refusal?.highlight ? 'Fix the highlighted item to save' : undefined} data-testid="rulebook-save">Save</button>
         </div>
       )}>
       <div className="flex flex-col gap-4 px-5 py-5">
@@ -241,7 +243,12 @@ export default function RulebooksTab({ scope, canManage, agentsBlock }) {
   if (book.available !== true) return <HonestBlock>{book.reason || 'This rule book could not be read.'}</HonestBlock>;
   const save = async (rules) => {
     const out = await agents.saveRulebook(kind, id, open.key, rules);
-    if (out.available) { setEditing(false); setBook({ available: true, value: { ...book.value, ...out.value } }); return out; }
+    if (out.available) {
+      setEditing(false); setRefusal('');
+      setBook({ available: true, value: { ...book.value, ...out.value } });
+      // The save answers `{ effective, version }`; the history and the diff from the default are read again.
+      agents.rulebook(kind, id, open.key).then((b) => { if (b.available) setBook(b); });
+    }
     return out;
   };
   return (

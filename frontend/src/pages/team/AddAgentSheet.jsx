@@ -9,15 +9,18 @@ import { HOLD_LINE, RULEBOOK_SECTIONS, WHO_PAYS, heldLabel, initials, money } fr
  * D1497 (#3727, TM3a–TM3c, TM9d2) — "Add an AI agent", a Sheet at 640 with
  * three steps: Role, Agent, Review.
  *
- * It is built against #3840's contract and reached only when the agents read
- * is available: while `agentsAdapter` answers unavailable, "AI agent" in Add
- * to team is off with that reason, so this sheet never opens on this base.
+ * It writes through #3840's `addAgent` (wired) and is reached only when the
+ * agents read is available and its `plan_ok` holds: otherwise "AI agent" in
+ * Add to team is off with the reason. A refusal (403 plan_required, 409
+ * role_taken, 422 model_not_offered or tool_not_approved, 400 invalid_cap or
+ * invalid_name) is drawn above the footer in words.
  *
  *   Role    one agent per role per scope: a role held here is disabled.
  *   Agent   only models offered on the plan; holds per run, never "~$". The
- *           model list is read from the roles answer's `models` when #3840
- *           sends it; no filed route lists them yet (D1497 §4), and without
- *           one the step says the list could not be read. Tools are read-only
+ *           model list is read from the roles answer's `models`. #3840 sends
+ *           no model list (neither `roles` nor the agents list carries one;
+ *           D1497 §3b), so the step says the list could not be read and Add
+ *           cannot finish until a read of the offered models lands. Tools are read-only
  *           and come from #3844's `toolChoices` (`{ servers: [{ integration_uid,
  *           name, status, tools: [{ name, description }] }] }`): a switch,
  *           then each server's approved read tools as checkboxes; the ticked

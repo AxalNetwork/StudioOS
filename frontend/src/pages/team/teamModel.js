@@ -14,7 +14,8 @@
  *     link by name: `{ uid, name, avatar_url, shared }`, never an email.
  * The people and invitation clients are `teamsApi` (`lib/api/teams.js`, #3841).
  * Agents, rule books, approvals and agent settings come through
- * `agentsAdapter.js`, unavailable on this base.
+ * `agentsAdapter.js`: the registry and rule books on #3840's routes
+ * (`teamAgentsApi`), approvals, runs and tools unavailable until #3842–#3844.
  *
  * THREE RULES the tests hold:
  *   - another member's email is never drawn; your own may be (since #3841 the
@@ -342,6 +343,13 @@ export function refusalWords(code, detail) {
     case 'model_not_offered': return 'That model is not offered on your plan.';
     case 'tool_not_approved': return 'That tool is not one you approved for read-only use.';
     case 'rule_floor': return `This change can’t be saved. ${detail ? `${detail} always needs a person.` : 'These seven always need a person.'}`;
+    case 'auto_floor': return 'This change can’t be saved. Nothing is automatic in v1.';
+    case 'invalid_rules': return `This change can’t be saved. ${detail ? `Check ${detail}.` : 'Check each section.'}`;
+    case 'rulebook_changed': return 'Someone saved this rule book a moment ago. Reload it and try again.';
+    case 'invalid_cap': return 'The monthly cap must be more than $0.';
+    case 'invalid_name': return 'A name is at most 40 characters.';
+    case 'invalid_role': return 'Choose one of the roles.';
+    case 'removed': return 'This agent was removed.';
     case 'agent_cap_reached': return 'Reached its monthly cap';
     case 'agent_paused': return 'This agent is paused.';
     case 'not_open': return `Already decided${detail ? ` by ${detail}` : ''}.`;
@@ -430,6 +438,33 @@ export function ago(iso, now = new Date()) {
   if (m < 24 * 60) return `${Math.round(m / 60)} h ago`;
   if (m < 48 * 60) return 'Yesterday';
   return `${Math.round(m / (24 * 60))} d ago`;
+}
+
+const EVENTS = {
+  added: () => 'Added',
+  paused: () => 'Paused',
+  resumed: () => 'Resumed',
+  removed: (d) => (Number(d?.proposals_withdrawn) > 0 ? `Removed; ${countWord(Number(d.proposals_withdrawn), 'open proposal')} withdrawn` : 'Removed'),
+  cap_changed: (d) => {
+    const from = money(d?.from_microusd, { whole: true });
+    const to = money(d?.to_microusd, { whole: true });
+    return to ? `Cap changed${from ? ` from ${from}` : ''} to ${to}` : 'Cap changed';
+  },
+  rulebook_changed: (d) => (Number.isFinite(Number(d?.version)) && d?.version != null ? `Rule book saved as v${d.version}` : 'Rule book saved'),
+  run: () => 'Ran',
+  refused: () => 'A run was refused',
+};
+/**
+ * One profile event (#3840's `{ kind, actor: { uid, name } | null, at, detail }`)
+ * in words: "Cap changed from $10 to $25 by Avery Stone". The kind is a code
+ * and never reaches the page; an actor with no recorded name is "Not recorded".
+ */
+export function eventWords(e) {
+  if (e?.text) return e.text;
+  const what = (EVENTS[e?.kind] || (() => 'Changed'))(e?.detail);
+  if (!e?.actor) return what;
+  const who = String(e.actor.name || '').trim() || NOT_RECORDED;
+  return `${what} by ${who}`;
 }
 
 export const agentName = (a) => [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || a?.role_name || 'Unnamed agent';

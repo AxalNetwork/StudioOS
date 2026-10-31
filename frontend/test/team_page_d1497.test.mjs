@@ -144,14 +144,26 @@ test('"Not recorded" is muted and never a zero: spend, last activity, title, cou
 
 // ---------------------------------------------------------------- unavailable is not none
 
-test('the seam: every agent read is unavailable on this base, and the card says it is not "none"', async () => {
-  for (const [name, fn] of Object.entries(adapter)) {
-    if (typeof fn !== 'function' || ['through', 'unavailable'].includes(name)) continue;
-    const out = await fn('company', 'nw1', {});
-    assert.equal(out.available, false, `${name} claims something on a base with no route`);
-    assert.equal(out.reason, 'AI agents aren’t switched on yet.');
-  }
-  const off = renderedText(render(h(AgentsCard, { block: await adapter.listAgents('company', 'nw1'), kind: 'company', companyName: 'x' })));
+/** #3842 (runQuote, runAgent), #3843 (queue, queueItem, decide) and #3844 (toolChoices): no route yet. */
+const UNBUILT = ['runQuote', 'runAgent', 'queue', 'queueItem', 'decide', 'toolChoices'];
+/** #3840's eight, wired to `teamAgentsApi`. */
+const WIRED = ['roles', 'listAgents', 'addAgent', 'agent', 'updateAgent', 'removeAgent', 'rulebook', 'saveRulebook'];
+
+test('the seam: #3842–#3844 still answer unavailable without a request, and the card says it is not "none"', async () => {
+  const restore = installDocument();
+  const previous = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (u) => { seen.push(String(u)); return response({ ok: true }); };
+  try {
+    for (const name of UNBUILT) {
+      const out = await adapter[name]('company', 'nw1', {});
+      assert.deepEqual(out, { available: false, reason: 'AI agents aren’t switched on yet.' }, `${name} claims something with no route`);
+    }
+    assert.deepEqual(seen, [], 'an unbuilt function reaches no route');
+  } finally { globalThis.fetch = previous; restore(); }
+  const exported = Object.entries(adapter).filter(([, fn]) => typeof fn === 'function').map(([n]) => n);
+  for (const name of [...UNBUILT, ...WIRED]) assert.ok(exported.includes(name), name);
+  const off = renderedText(render(h(AgentsCard, { block: adapter.unavailable(), kind: 'company', companyName: 'x' })));
   assert.match(off, /AI agents aren’t switched on yet\. That is not the same as having none\./);
   assert.doesNotMatch(off, /No agent works here yet/);
   const empty = renderedText(render(h(AgentsCard, { block: { available: true, value: { can_manage: true, agents: [] } }, kind: 'company', companyName: 'x', canAdd: true })));
@@ -165,7 +177,9 @@ test('through() maps the Worker\'s answers to what the page draws, in words', as
   assert.deepEqual(await adapter.through(async () => ({ agents: [] })), { available: true, value: { agents: [] } });
   assert.deepEqual(await fail(404, 'team_agents_off'), { available: false, reason: 'AI agents aren’t switched on yet.' });
   assert.deepEqual(await fail(403, 'plan_required'), { available: false, locked: 'plan', reason: 'AI agents come with a paid Founder plan.' });
-  const floor = await fail(422, 'rule_floor', { item: 'send_email' });
+  // #3840's 422 names the section; the item outlined is the one the rules sent dropped.
+  const sent = { rules: { always_asks_human: ['payment', 'sign', 'file', 'cap_table_write', 'send_post', 'invite_person'] } };
+  const floor = await adapter.through(() => Promise.reject(Object.assign(new Error('x'), { status: 422, code: 'rule_floor', data: { error: 'rule_floor', section: 'always_asks_human' } })), sent);
   assert.equal(floor.highlight, 'send_email');
   assert.equal(floor.reason, 'This change can’t be saved. Sending an email always needs a person.');
   const taken = await fail(409, 'not_open', { decided_by: { name: '[Jordan Reyes]' } });
@@ -243,8 +257,22 @@ test('the Eadwyn button is "Ask", its accessible name "Ask Eadwyn", and no Team 
 
 test('no client method exists for a route that does not exist', () => {
   const sources = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
-  assert.doesNotMatch(sources, /['"`]\/teams\//, 'the agent routes are #3840–#3844');
-  assert.ok(!existsSync('frontend/src/lib/api/teamAgents.js'), 'the agents client lands with #3840');
+  // #3842's run paths, #3843's queue and #3844's tools read have no route yet, so no client string names them.
+  assert.doesNotMatch(sources, /\/teams\/agents\/[^'"`\n]*\/run\b/, '#3842: GET /api/teams/agents/:uid/run/quote and POST …/run');
+  assert.doesNotMatch(sources, /\/teams\/[^'"`\n]*queue/, '#3843: /api/teams/:scope/:id/queue and /api/teams/queue/:proposalUid[/decide]');
+  assert.doesNotMatch(sources, /\/teams\/tools/, '#3844: GET /api/teams/tools');
+  // teamAgents.js builds its paths from parts, so its own strings are read whole.
+  assert.doesNotMatch(codeOnly(read('frontend/src/lib/api/teamAgents.js')), /\/run\b|\/queue\b|\/tools\b/, 'no #3842–#3844 path in the agents client');
+  const client = read('frontend/src/lib/api/teamAgents.js');
+  for (const m of ['runQuote', 'runAgent', 'queue', 'queueItem', 'decide', 'toolChoices']) assert.doesNotMatch(client, new RegExp(`\\b${m}\\s*:`), `teamAgentsApi.${m} lands with its route`);
+  // The adapter's #3840 bodies call #3840's client and nothing else; the unbuilt ones call nothing.
+  const seam = codeOnly(read(`${TEAM}/agentsAdapter.js`));
+  for (const m of ['roles', 'listAgents', 'addAgent', 'agent', 'updateAgent', 'removeAgent', 'rulebook', 'saveRulebook']) {
+    assert.match(seam, new RegExp(`export const ${m} = [^\\n]*through\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} is wired to teamAgentsApi.${m}`);
+  }
+  for (const m of ['runQuote', 'runAgent', 'queue', 'queueItem', 'decide', 'toolChoices']) {
+    assert.doesNotMatch(seam, new RegExp(`export const ${m} = [^\\n]*teamAgentsApi`), `${m} waits for its route`);
+  }
   for (const f of readdirSync(TEAM).filter((x) => /\.jsx?$/.test(x))) {
     assert.doesNotMatch(read(`${TEAM}/${f}`), /request\(|fetch\(/, `${f} reaches the network itself`);
     // #3841 moved the people clients to teamsApi; the old `api.` names are gone from api.js.
@@ -299,6 +327,8 @@ function worker(over = {}) {
     if (path === '/api/projects/5') return response(PROJECT);
     if (path === '/api/projects/5/members') return response(MEMBERS);
     if (path === '/api/account/projects') return response({ projects: [] });
+    // #3840's routes, as the Worker answers them while TEAM_AGENTS_ENABLED is off (both wrangler blocks).
+    if (path.startsWith('/api/teams/')) return response({ error: 'team_agents_off' }, 404);
     return response({ ok: true });
   };
 }
@@ -340,7 +370,7 @@ const COMPANY_ROUTE = '/account/companies/:uid/settings/team';
 test('company Team: people and invitations on the routes that exist; agents unavailable; Resend and Revoke wired', async () => {
   const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }));
   try {
-    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary']);
+    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/roles']);
     const text = v.text();
     assert.match(text, /Company settings/);
     assert.match(text, /The people and AI agents working on \[Northwind Labs\]\. Agents propose; people decide\./);
@@ -661,3 +691,219 @@ test('Choosing an account sends { mode: \'account\', user_uid, role }; its refus
     } finally { await w.close(); }
   }
 });
+
+// ---------------------------------------------------------------- #3840 (part 1): wired
+
+/** #3840's answers, as `routes/team_agents.ts` builds them: no model label, a person is { uid, name }. */
+const DTO = (a) => { const { model_label, ...rest } = a; return { ...rest, scope_kind: a.project ? 'project' : 'company' }; };
+const FLOOR_KEYS = ['payment', 'sign', 'file', 'cap_table_write', 'send_email', 'send_post', 'invite_person'];
+const DEFAULT_RULES = { mission: 'Drafts the runway note.', works_in: ['studio'], reads: [], may_propose: [], may_do_automatically: [], always_asks_human: FLOOR_KEYS, escalates_when: ['Runway under six months'], kpis: [], tone: 'Plain.' };
+const ROLES = { roles: [{ key: 'cfo', name: 'CFO', mission: 'Keeps the money honest.', works_in: [{ key: 'studio', label: 'Studio' }], default_rules: DEFAULT_RULES }] };
+const LIST = { can_manage: true, plan_ok: true, agents: [DTO(AGENTS[0]), DTO(AGENTS[2])] };
+const PROFILE = {
+  agent: DTO(AGENTS[0]), can_manage: true, rulebook: { effective: DEFAULT_RULES, version: 0 },
+  matrix: [{ module: 'studio', label: 'Studio', read: true, propose: false, auto: false }],
+  cap_microusd: 25_000_000, month_spend: { available: true, value_microusd: 3_840_000 },
+  proposals: { proposed: 2, accepted: 0, edited: 0, discarded: 0, withdrawn: 0 },
+  events: [
+    { kind: 'cap_changed', actor: { uid: 'u9', name: '' }, at: '2026-10-30 09:00:00', detail: { from_microusd: 10_000_000, to_microusd: 25_000_000 } },
+    { kind: 'added', actor: { uid: 'u1', name: '[Avery Stone]' }, at: '2026-10-29 09:00:00', detail: null },
+  ],
+};
+const BOOK = { role_key: 'cfo', default: DEFAULT_RULES, effective: DEFAULT_RULES, version: 0, versions: [], diff: [], floor: FLOOR_KEYS };
+/** A Worker refusal body (`util/refusal.ts`): `error` is the code, `message` and `detail` our sentence. */
+const refusal = (status, code, extra = {}) => response({ ...extra, error: code, message: 'A sentence.', detail: 'A sentence.' }, status);
+
+/** The adapter alone, on a stubbed fetch: what each call sent, and what it answered. */
+async function onWorker(handle, run) {
+  const restore = installDocument();
+  localStorage.setItem('user', JSON.stringify({ id: 1, role: 'founder' }));
+  const previous = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (u, init = {}) => {
+    const url = new URL(String(u), 'http://x');
+    seen.push({ key: `${(init.method || 'GET').toUpperCase()} ${url.pathname}${url.search}`, body: init.body ? JSON.parse(init.body) : null });
+    return handle(String(u), init);
+  };
+  try { return await run(seen); } finally { globalThis.fetch = previous; restore(); }
+}
+
+test('#3840 wired: list, add, profile, update, remove and rule books call teamAgentsApi and answer available', async () => {
+  const answers = {
+    'GET /api/teams/roles': () => response(ROLES),
+    'GET /api/teams/company/nw1/agents': () => response(LIST),
+    'POST /api/teams/company/nw1/agents': () => response({ agent: DTO(AGENTS[0]) }, 201),
+    'GET /api/teams/agents/a1': () => response(PROFILE),
+    'PATCH /api/teams/agents/a1': () => response({ agent: { ...DTO(AGENTS[0]), status: 'paused', paused_reason: 'manual' } }),
+    'DELETE /api/teams/agents/a1': () => response({ ok: true }),
+    'GET /api/teams/project/5/rulebooks/cfo': () => response(BOOK),
+    'PUT /api/teams/project/5/rulebooks/cfo': () => response({ effective: DEFAULT_RULES, version: 1 }),
+  };
+  await onWorker((u, init) => answers[`${(init.method || 'GET').toUpperCase()} ${new URL(u, 'http://x').pathname}`](), async (seen) => {
+    assert.deepEqual(await adapter.roles(), { available: true, value: ROLES });
+    assert.deepEqual(await adapter.listAgents('company', 'nw1', { include: 'projects' }), { available: true, value: LIST });
+    const body = { role_key: 'cfo', first_name: '[Nora]', last_name: null, model_id: 'm-a', tool_grants: [], monthly_cap_microusd: 25_000_000 };
+    assert.equal((await adapter.addAgent('company', 'nw1', body)).value.agent.uid, 'a1');
+    assert.deepEqual((await adapter.agent('a1')).value.proposals, PROFILE.proposals);
+    assert.equal((await adapter.updateAgent('a1', { status: 'paused' })).value.agent.status, 'paused');
+    assert.deepEqual(await adapter.removeAgent('a1'), { available: true, value: { ok: true } });
+    assert.equal((await adapter.rulebook('project', 5, 'cfo')).value.version, 0);
+    assert.deepEqual((await adapter.saveRulebook('project', 5, 'cfo', DEFAULT_RULES)).value, { effective: DEFAULT_RULES, version: 1 });
+    assert.deepEqual(seen.map((s) => s.key), [
+      'GET /api/teams/roles', 'GET /api/teams/company/nw1/agents?include=projects', 'POST /api/teams/company/nw1/agents', 'GET /api/teams/agents/a1',
+      'PATCH /api/teams/agents/a1', 'DELETE /api/teams/agents/a1', 'GET /api/teams/project/5/rulebooks/cfo', 'PUT /api/teams/project/5/rulebooks/cfo',
+    ]);
+    assert.deepEqual(seen[2].body, body);
+    assert.deepEqual(seen[4].body, { status: 'paused' });
+    assert.deepEqual(seen[7].body, { rules: DEFAULT_RULES });
+  });
+});
+
+test('#3840\'s refusals reach the page as what it draws, in words, never as their codes', async () => {
+  const cases = [
+    ['listAgents', [], 404, 'team_agents_off', {}, { available: false, reason: 'AI agents aren’t switched on yet.' }],
+    ['addAgent', [{}], 403, 'plan_required', {}, { available: false, locked: 'plan', reason: 'AI agents come with a paid Founder plan.' }],
+    ['addAgent', [{}], 403, 'not_manager', {}, { refused: true, reason: 'Only this team’s editors can do this.' }],
+    ['addAgent', [{}], 409, 'role_taken', {}, { refused: true, reason: 'An agent already holds this role here. One agent per role.' }],
+    ['addAgent', [{}], 422, 'model_not_offered', {}, { refused: true, reason: 'That model is not offered on your plan.' }],
+    ['addAgent', [{}], 422, 'tool_not_approved', {}, { refused: true, reason: 'That tool is not one you approved for read-only use.' }],
+    ['addAgent', [{}], 400, 'invalid_cap', {}, { refused: true, reason: 'The monthly cap must be more than $0.' }],
+    ['updateAgent', [{ first_name: 'x' }], 400, 'invalid_name', {}, { refused: true, reason: 'A name is at most 40 characters.' }],
+    ['updateAgent', [{ status: 'paused' }], 409, 'removed', {}, { refused: true, reason: 'This agent was removed.' }],
+    ['saveRulebook', [{ ...DEFAULT_RULES, always_asks_human: FLOOR_KEYS.filter((k) => k !== 'sign') }], 422, 'rule_floor', { section: 'always_asks_human' }, { refused: true, highlight: 'sign', reason: 'This change can’t be saved. Signing always needs a person.' }],
+    ['saveRulebook', [{ ...DEFAULT_RULES, may_do_automatically: ['x'] }], 422, 'rule_floor', { section: 'may_do_automatically' }, { refused: true, highlight: null, reason: 'This change can’t be saved. Nothing is automatic in v1.' }],
+    ['saveRulebook', [DEFAULT_RULES], 422, 'invalid_rules', { section: 'tone' }, { refused: true, reason: 'This change can’t be saved. Check Tone.' }],
+    ['saveRulebook', [DEFAULT_RULES], 409, 'rulebook_changed', {}, { refused: true, reason: 'Someone saved this rule book a moment ago. Reload it and try again.' }],
+    ['agent', [], 500, 'boom', {}, { available: false, unreadable: true, reason: 'could not be read' }],
+  ];
+  for (const [fn, rest, status, code, extra, want] of cases) {
+    await onWorker(() => refusal(status, code, extra), async () => {
+      const args = fn === 'agent' ? ['a1'] : ['updateAgent'].includes(fn) ? ['a1', ...rest] : fn === 'saveRulebook' ? ['company', 'nw1', 'cfo', ...rest] : ['company', 'nw1', ...rest];
+      const out = await adapter[fn](...args);
+      assert.equal(out.available, false, `${fn} ${code}`);
+      for (const [k, v] of Object.entries(want)) assert.deepEqual(out[k], v, `${fn} ${code}: ${k}`);
+      assert.ok(out.reason !== code && !(code.includes('_') && String(out.reason).includes(code)), `${code} reaches the page as words`);
+    });
+  }
+});
+
+/** The company page with #3840 switched on. */
+const agentsOn = (over = {}) => worker({
+  'GET /api/teams/roles': () => response(ROLES),
+  'GET /api/teams/company/nw1/agents': () => response(LIST),
+  'GET /api/teams/agents/a1': () => response(PROFILE),
+  'GET /api/teams/company/nw1/rulebooks/cfo': () => response(BOOK),
+  ...over,
+});
+
+test('#3840 switched on: the agents card draws the list with the AI agent pill, Not recorded for unread spend, and no Add without the plan', async () => {
+  const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), { handle: agentsOn() });
+  try {
+    assert.ok(v.keys().includes('GET /api/teams/company/nw1/agents'));
+    const text = v.text();
+    assert.match(text, /\[Nora\] \[Vale\]AI agent/);
+    assert.match(text, /\[Milo\] \[Hart\]AI agent/);
+    assert.match(text, /Platform model · m-a/, 'the model the Worker names, with no invented label');
+    assert.match(text, /Research analyst · this month Not recorded/, 'unread spend is Not recorded');
+    assert.doesNotMatch(text, /\$0\.00|aren’t switched on/);
+    await v.click('team-add');
+    assert.equal(v.prop('team-add-agent', 'disabled'), false, 'an editor on a paid plan may add');
+  } finally { await v.close(); }
+  const w = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), { handle: agentsOn({ 'GET /api/teams/company/nw1/agents': () => response({ ...LIST, plan_ok: false }) }) });
+  try {
+    assert.ok(w.has('team-agents-plan'), 'the plan line under the list (TM9c4)');
+    await w.click('team-add');
+    assert.equal(w.prop('team-add-agent', 'disabled'), true, 'plan_ok false turns AI agent off');
+    assert.match(w.text(), /AI agents come with a paid Founder plan\./);
+    assert.ok(!w.text().includes('plan_required'));
+  } finally { await w.close(); }
+  const e = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), { handle: agentsOn({ 'GET /api/teams/company/nw1/agents': () => response({ ...LIST, plan_ok: false, agents: [] }) }) });
+  try {
+    assert.match(e.text(), /No agent works here yet\./, 'an empty list the Worker answered');
+    assert.equal(e.has('team-agents-add'), false, 'no Add button without the plan');
+    assert.ok(e.has('team-agents-plan'));
+  } finally { await e.close(); }
+});
+
+test('#3840 profile: events in words with a Not recorded actor, Pause and Remove write only after their confirm', async () => {
+  const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), { handle: agentsOn() });
+  try {
+    await v.click('agent-a1');
+    assert.ok(v.keys().includes('GET /api/teams/agents/a1'));
+    const text = v.text();
+    assert.match(text, /Cap changed from \$10 to \$25 by Not recorded/);
+    assert.match(text, /Added by \[Avery Stone\]/);
+    assert.doesNotMatch(text, /cap_changed/);
+    assert.match(text, /Proposed2/);
+    await v.click('agent-pause');
+    assert.ok(!v.keys().includes('PATCH /api/teams/agents/a1'), 'nothing is written before the confirm');
+    await v.click('agent-pause-confirm-yes');
+    assert.deepEqual(v.seen.find((s) => s.key === 'PATCH /api/teams/agents/a1').body, { status: 'paused' });
+  } finally { await v.close(); }
+  const w = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), { handle: agentsOn({ 'DELETE /api/teams/agents/a1': () => refusal(403, 'not_manager') }) });
+  try {
+    await w.click('agent-a1');
+    await w.click('agent-remove');
+    assert.ok(!w.keys().includes('DELETE /api/teams/agents/a1'));
+    await w.click('agent-remove-confirm-yes');
+    assert.ok(w.keys().includes('DELETE /api/teams/agents/a1'));
+    assert.match(w.text(), /Only this team’s editors can do this\./, 'a refusal in words, the dialog kept open');
+    assert.ok(w.has('agent-remove-confirm'));
+  } finally { await w.close(); }
+});
+
+test('#3840 rule books: the default reads "Default", a floor refusal outlines the dropped item, a save is re-read', async () => {
+  const broken = { ...BOOK, effective: { ...DEFAULT_RULES, always_asks_human: FLOOR_KEYS.filter((k) => k !== 'send_email') } };
+  const v = await mount('/account/companies/nw1/settings/team?tab=roles&role=cfo', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), {
+    handle: agentsOn({ 'GET /api/teams/company/nw1/rulebooks/cfo': () => response(broken), 'PUT /api/teams/company/nw1/rulebooks/cfo': () => refusal(422, 'rule_floor', { section: 'always_asks_human' }) }),
+  });
+  try {
+    assert.match(v.text(), /CFO · Rule book · Default/);
+    await v.click('rulebook-edit');
+    await v.click('rulebook-save');
+    assert.match(v.text(), /This change can’t be saved\. Sending an email always needs a person\./);
+    assert.ok(!v.text().includes('rule_floor'));
+    assert.equal(v.prop('rulebook-save', 'disabled'), true, 'Save waits for the outlined item');
+  } finally { await v.close(); }
+  let reads = 0;
+  const w = await mount('/account/companies/nw1/settings/team?tab=roles&role=cfo', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), {
+    handle: agentsOn({
+      'GET /api/teams/company/nw1/rulebooks/cfo': () => { reads += 1; return response(reads > 1 ? { ...BOOK, version: 1, versions: [{ version: 1, by: { uid: 'u1', name: '[Avery Stone]' }, at: '2026-10-31 10:00:00' }] } : BOOK); },
+      'PUT /api/teams/company/nw1/rulebooks/cfo': () => response({ effective: DEFAULT_RULES, version: 1 }),
+    }),
+  });
+  try {
+    await w.click('rulebook-edit');
+    await w.click('rulebook-save');
+    assert.deepEqual(Object.keys(w.seen.find((s) => s.key === 'PUT /api/teams/company/nw1/rulebooks/cfo').body), ['rules']);
+    assert.equal(reads, 2, 'the history is read again after a save');
+    assert.match(w.text(), /CFO · Rule book · v1v1 by \[Avery Stone\] · 31 Oct/);
+  } finally { await w.close(); }
+});
+
+test('#3840 Add agent: the sheet posts the role, names, model and cap, and a refusal comes back in words', async () => {
+  const models = [{ id: 'm-a', label: '[Model A]' }];
+  const sheet = h(AddAgentSheet, { scope: { kind: 'company', company: { uid: 'nw1' } }, roles: ROLES.roles, models, held: [], me: { name: '[Avery Stone]' }, onClose() {} });
+  const v = await mount('/x', '/x', sheet, { handle: worker({ 'POST /api/teams/company/nw1/agents': () => refusal(409, 'role_taken') }) });
+  try {
+    await v.click('add-agent-role-cfo');
+    await v.click('add-agent-next');
+    const radio = walkRadio();
+    assert.ok(radio, 'the model radio');
+    await act(async () => { radio.onChange(); });
+    await v.click('add-agent-next');
+    await v.change('add-agent-first', '[Nora]');
+    await v.change('add-agent-cap', '25');
+    await v.click('add-agent-next');
+    assert.deepEqual(v.seen.find((s) => s.key === 'POST /api/teams/company/nw1/agents').body, { role_key: 'cfo', first_name: '[Nora]', last_name: null, model_id: 'm-a', tool_grants: [], monthly_cap_microusd: 25_000_000 });
+    assert.match(v.text(), /An agent already holds this role here\. One agent per role\./);
+    assert.ok(!v.text().includes('role_taken'));
+  } finally { await v.close(); }
+});
+
+/** The first model radio's React props in the mounted Add sheet. */
+function walkRadio() {
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1];
+  return walk(document.body).map(props).find((p) => p?.type === 'radio' && p?.name === 'model');
+}

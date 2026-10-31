@@ -4,11 +4,12 @@ import { AgentPill, AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
-import { agentName, budgetLine, dayTime, pauseWords } from './teamModel.js';
+import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamModel.js';
 
 /**
  * D1497 (#3727, TM5a, TM5b) — an agent's profile, a Sheet at 640, from
- * `agentsAdapter.agent(uid)` (#3840's `GET /api/teams/agents/:uid`).
+ * `agentsAdapter.agent(uid)` (#3840's `GET /api/teams/agents/:uid`, wired).
+ * Its events are drawn in words (`eventWords`), never as their kind codes.
  *
  * Name (first name and surname; it keeps the AI agent mark), the permission
  * matrix by module, this month's budget against its cap, its proposals by
@@ -30,7 +31,7 @@ export function Confirm({ title, body, button, danger, onCancel, onConfirm, refu
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onCancel}>Cancel</button>
-          <button type="button" className={danger ? 'inline-flex h-10 items-center rounded-[9px] bg-axal-destructive px-4 text-[13.5px] font-semibold text-white hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-500' : BTN_PRIMARY} onClick={onConfirm}>{button}</button>
+          <button type="button" className={danger ? 'inline-flex h-10 items-center rounded-[9px] bg-axal-destructive px-4 text-[13.5px] font-semibold text-white hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-500' : BTN_PRIMARY} onClick={onConfirm} data-testid={testId ? `${testId}-yes` : undefined}>{button}</button>
         </div>
       )}>
       <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{body}</p>
@@ -121,7 +122,7 @@ export function AgentProfile({ data, canManage, onAsk, onSaveName }) {
           <ul className="m-0 flex list-none flex-col p-0">
             {data.events.map((e, i) => (
               <li key={`${e.at}-${i}`} className="flex justify-between gap-3 border-b border-axal-hairline py-1.5 text-[13px] text-axal-ink last:border-b-0 dark:border-gray-800 dark:text-gray-200">
-                <span>{e.text || e.kind}</span><span className={MONO}>{dayTime(e.at) || <Unrecorded />}</span>
+                <span>{eventWords(e)}</span><span className={MONO}>{dayTime(e.at) || <Unrecorded />}</span>
               </li>
             ))}
           </ul>
@@ -184,13 +185,13 @@ export default function AgentProfileSheet({ uid, canManage, editCap = false, onC
         headerActions={a ? <span className="flex items-center gap-1.5"><AgentTile size={28} /><AgentPill />{pause ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span> : <Pill tone="ok">Active</Pill>}</span> : null}
         footer={manage ? (
           <div className="flex justify-end gap-2">
-            <button type="button" className={BTN_SECONDARY} onClick={() => setConfirm('pause')}>{a.status === 'paused' ? 'Resume' : 'Pause'}</button>
-            <button type="button" className={BTN_DANGER} onClick={() => setConfirm('remove')}>Remove</button>
+            <button type="button" className={BTN_SECONDARY} onClick={() => setConfirm('pause')} data-testid="agent-pause">{a.status === 'paused' ? 'Resume' : 'Pause'}</button>
+            <button type="button" className={BTN_DANGER} onClick={() => setConfirm('remove')} data-testid="agent-remove">Remove</button>
             <button type="button" className={BTN_PRIMARY} onClick={() => { setRefusal(''); setConfirm('cap'); }} data-testid="agent-edit-cap">Edit cap</button>
           </div>
         ) : null}>
         {!block ? <p className={`m-0 px-5 py-5 ${MUTED}`}>Reading…</p>
-          : !block.available ? <div className="px-5 py-5"><HonestBlock>{block.reason} That is not the same as having none.</HonestBlock></div>
+          : !block.available ? <div className="px-5 py-5"><HonestBlock>{block.unreadable ? 'This agent could not be read.' : block.reason}{block.refused ? '' : ' That is not the same as having none.'}</HonestBlock></div>
             : <AgentProfile data={block.value} canManage={manage} onSaveName={saveName} />}
       </Sheet>
       {confirm === 'pause' ? (

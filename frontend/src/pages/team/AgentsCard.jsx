@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Pill, Skeleton, Unrecorded } from '../../ui';
 import { AgentIdentity, AgentTile } from './AgentMark.jsx';
 import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
-import { AGENTS_FOOT, agentGroups, agentsFootLine } from './teamModel.js';
+import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamModel.js';
 
 /**
  * D1497 (#3727, TM1a/TM1b agents card, TM1c, TM1e, TM9b1, TM9c1, TM9c4) —
@@ -13,6 +13,9 @@ import { AGENTS_FOOT, agentGroups, agentsFootLine } from './teamModel.js';
  *   { available: false, reason }  the honest block: why, and that it is not
  *                                 the same as having none (this base)
  *   { locked: 'plan' }            "AI agents come with a paid Founder plan." (TM9c4)
+ *   `planLocked`                  the same line under the table or the empty
+ *                                 state, for an editor whose list says
+ *                                 `plan_ok: false` (#3840), with no Add button
  *   { unreadable: true }          "could not be read" with Try again (TM9c1)
  *   { available: true, [] }       TM1c's empty state, the only "No agent works here yet."
  *   { available: true, agents }   the table; a company editor's read with
@@ -27,6 +30,18 @@ import { AGENTS_FOOT, agentGroups, agentsFootLine } from './teamModel.js';
  * and pill, then one line with the role and this month's spend (or that it is
  * not recorded) and the status pill.
  */
+
+/** TM9c4: the plan lock, from a 403 `plan_required` or the list's `plan_ok: false` (#3840). */
+function PlanLine({ reason = refusalWords('plan_required') }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-axal-md border border-axal-hairline px-4 py-3 text-left dark:border-gray-700" data-testid="team-agents-plan">
+      <AgentTile size={28} />
+      <span className="text-[13px] text-axal-ink dark:text-gray-100">{reason}</span>
+      <PendingOwner />
+      <Link to="/pricing" className={`ml-auto ${BTN_TEXT}`}>See plans</Link>
+    </div>
+  );
+}
 
 function StatusPill({ row }) {
   return row.pause
@@ -82,7 +97,7 @@ function AgentTable({ rows, onOpen, label }) {
   );
 }
 
-export default function AgentsCard({ block, loading, kind, companyName, canAdd, onAdd, onOpen, onRetry, now = new Date() }) {
+export default function AgentsCard({ block, loading, kind, companyName, canAdd, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
   // The grouped footer's company reach is said only once it is live (#3697 part 2), as the page's managed note is.
   const [hidden, setHidden] = useState(() => new Set());
   if (loading) {
@@ -98,14 +113,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
   if (!block || block.available !== true) {
     return (
       <TeamCard title="AI agents" testId="team-agents">
-        {block?.locked === 'plan' ? (
-          <div className="flex flex-wrap items-center gap-3 rounded-axal-md border border-axal-hairline px-4 py-3 dark:border-gray-700" data-testid="team-agents-plan">
-            <AgentTile size={28} />
-            <span className="text-[13px] text-axal-ink dark:text-gray-100">{block.reason}</span>
-            <PendingOwner />
-            <Link to="/pricing" className={`ml-auto ${BTN_TEXT}`}>See plans</Link>
-          </div>
-        ) : block?.unreadable ? (
+        {block?.locked === 'plan' ? <PlanLine reason={block.reason} /> : block?.unreadable ? (
           <HonestBlock role="alert" testId="team-agents-unreadable" action={onRetry ? <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={onRetry}>Try again</button> : null}>
             AI agents could not be read. That is not the same as having none.
           </HonestBlock>
@@ -125,6 +133,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
           <AgentTile size={40} />
           <p className={`m-0 max-w-md ${MUTED}`}>No agent works here yet. Add one in a role, like a CFO who drafts your runway note. It will only propose; you decide.</p>
           {canAdd ? <button type="button" className={BTN_PRIMARY} onClick={onAdd} data-testid="team-agents-add">Add an AI agent</button> : null}
+          {planLocked ? <PlanLine /> : null}
         </div>
       </TeamCard>
     );
@@ -158,6 +167,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
           <p className={`m-0 mt-3 ${MUTED}`}>{AGENTS_FOOT}</p>
         </>
       )}
+      {planLocked ? <div className="mt-3"><PlanLine /></div> : null}
     </TeamCard>
   );
 }

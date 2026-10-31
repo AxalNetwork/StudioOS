@@ -26,7 +26,7 @@ import TeamSettingsTab from './TeamSettingsTab.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_TEXT, EYEBROW, FIELD, MUTED, useMenu } from './teamUi.jsx';
 import {
-  COMPANY_ROLES, ROSTER_LINE, TABS, TITLE, countBadge, errorWords, freshMemberKey, managedNote, peopleFromCompany, peopleFromProject, projectResentWords, purposeLine, tabFrom,
+  COMPANY_ROLES, ROSTER_LINE, TABS, TITLE, countBadge, errorWords, freshMemberKey, managedNote, peopleFromCompany, peopleFromProject, projectResentWords, purposeLine, refusalWords, tabFrom,
 } from './teamModel.js';
 
 /**
@@ -46,8 +46,11 @@ import {
  * that exist today, through #3841's `teamsApi` (`lib/api/teams.js`; see
  * `teamModel.js`), including project Resend and linking an account by name.
  * BEHIND THE SEAM: agents, rule books, approvals and agent settings, through
- * `agentsAdapter.js` (#3840, #3842–#3844, still unbuilt), unavailable on this
- * base and said so. The page never invents an agent, a count or a zero.
+ * `agentsAdapter.js`. The registry, profile and rule books are on #3840's
+ * routes (switched off until `TEAM_AGENTS_ENABLED`, and said so); approvals,
+ * runs and tools wait for #3842–#3844 and say so. The list's `plan_ok` turns
+ * "AI agent" off with the plan's words. The page never invents an agent, a
+ * count or a zero.
  *
  * NO AIRAIL: the company form lives under Account, which has none by the
  * owner's rule (`NO_RAIL_ROUTES`); the project form is not in a rail shell
@@ -297,7 +300,10 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
   const agentList = agentsBlock?.available ? (agentsBlock.value?.agents || []) : [];
   const agentOff = !agentsBlock ? 'Reading the agents…'
     : !agentsBlock.available ? agentsBlock.reason
-      : !(agentsBlock.value?.can_manage) ? 'Only this team’s editors add agents.' : null;
+      : !(agentsBlock.value?.can_manage) ? 'Only this team’s editors add agents.'
+        // #3840's list says whether the caller's plan may add (`plan_ok`); `POST …/agents` refuses 403 plan_required otherwise.
+        : agentsBlock.value?.plan_ok === false ? refusalWords('plan_required') : null;
+  const planLocked = !!(agentsBlock?.available && agentsBlock.value?.can_manage && agentsBlock.value?.plan_ok === false);
   const act = async (key, run, after) => {
     setBusyKey(key); setActionError('');
     try { const out = await run(); after?.(out); await reload(); } catch (e) { reportError('team:invitation', e); setActionError(errorWords(e)); } finally { setBusyKey(null); }
@@ -358,7 +364,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
             ) : null}
           </PeopleCard>
           <AgentsCard block={agentsBlock} loading={!agentsBlock} kind={kind} companyName={name}
-            canAdd={!!agentsBlock?.value?.can_manage} onAdd={() => setSheet({ kind: 'agent' })}
+            canAdd={!!agentsBlock?.value?.can_manage && !planLocked} planLocked={planLocked} onAdd={() => setSheet({ kind: 'agent' })}
             onOpen={(row) => setSheet({ kind: 'profile', uid: row.uid })} onRetry={loadAgents} />
           {kind === 'company' && ['founder', 'admin'].includes(me().role) ? <p className={`m-0 ${MUTED}`}>{ROSTER_LINE} <Link to="/build/team" className={BTN_TEXT}>Open Build › Team</Link></p> : null}
         </>

@@ -12,12 +12,15 @@ board → file map and what waits for which issue are in
   `../../lib/api/teams.js` (#3841), imported from that module. Add no client
   method from here: a new people route lands its client in teams.js with it.
 - **Everything about agents goes through `agentsAdapter.js`.** It is the one
-  seam: today every function answers `{ available: false, reason }`, and the
-  screens draw that as the canvas's honest unavailable state. A builder who
-  lands a route (#3840 part 1, #3842 part 2, #3843 part 3, #3844 part 5) adds
-  the client method to a new teamAgents.js module in `../../lib/api/` and replaces only the matching
-  one-line body there with `through(() => teamAgentsApi.<method>(…))`. No
-  screen changes. Never add a client method for a route that does not exist.
+  seam. The registry, profile and rule books are wired to #3840's
+  `teamAgentsApi` (`../../lib/api/teamAgents.js`): each body is
+  `through(() => teamAgentsApi.<method>(…))`, and `through` turns the
+  Worker's refusals into what the screens draw (switched off, plan lock,
+  refusal in words, unreadable). Runs (#3842), the approvals queue (#3843) and
+  tools (#3844) still answer `{ available: false, reason }`; the builder who
+  lands one adds its method to teamAgents.js with the route and replaces only
+  the matching one-line body. No screen changes. Never add a client method
+  for a route that does not exist.
 - **An agent is never drawn as a person.** People are circles
   (`PersonAvatar`); agents are rounded squares with the spark (`AgentTile`)
   and, wherever an agent is named, the "AI agent" pill (`AgentIdentity`). All
@@ -42,7 +45,7 @@ board → file map and what waits for which issue are in
 | `TeamAgentsPage.jsx` | The page, in three forms (company, project in a company, standalone project): header, tabs, Add to team, the People and agents tab, and the sheets. Publishes its scope to the sidebar. TM1a–TM1g, TM1d, TM9a3, TM9c1, TM9c4, TM9c6. |
 | `ProjectSettingsPage.jsx` | Project settings › General at `/projects/:id/settings`, with Move under a company (TM1g2) and Move out (TM1h), both on `POST /api/projects/:id/move`. |
 | `teamModel.js` | The words and every pure derivation: tabs, people from each read, invitation states, masking, refusals in words, money and time, agent rows and groups, the move copy. |
-| `agentsAdapter.js` | THE SEAM for agents, rule books, approvals, runs and tools. Unavailable on this base; `through()` maps the Worker's refusals once the client exists. |
+| `agentsAdapter.js` | THE SEAM for agents, rule books, approvals, runs and tools. #3840's registry and rule books are wired to `teamAgentsApi`; runs, approvals and tools stay unavailable until #3842–#3844. `through()` maps the Worker's refusals. |
 | `AgentMark.jsx` | `AgentTile`, `AgentPill`, `AgentIdentity`, `PersonAvatar`: who someone is, drawn one way everywhere. |
 | `AskButton.jsx` | The "Ask" button (TMA): `AskButtonView`, which renders nowhere until #3706's Ask panel. |
 | `teamUi.jsx` | The card frame, header row, honest block, "pending owner" pill, button classes and `useMenu` (the two pop-up menus' keyboard model) the Team screens share. |
