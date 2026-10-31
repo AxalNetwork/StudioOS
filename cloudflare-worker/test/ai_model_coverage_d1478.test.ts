@@ -108,15 +108,9 @@ test('every page belongs to one column, and the fixed jobs land where their modu
   assert.equal(coverageCell('@cf/baai/bge-base-en-v1.5', 'research').state, 'wired');
 });
 
-test('the faults Part B fixes are listed, and nothing else is connected outside its fit', () => {
-  const m = optionMismatches();
-  assert.deepEqual(m.filter((x) => x.optionKey === 'deck:image').map((x) => x.listed.sort()), [[
-    '@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/moondream/moondream3.1-9B-A2B',
-  ]]);
-  for (const x of m.filter((y) => y.optionKey.startsWith('transcribe:'))) {
-    assert.ok(x.listed.includes('@cf/meta/llama-3.3-70b-instruct-fp8-fast'), `${x.pageKey} ${x.optionKey}`);
-  }
-  assert.deepEqual(outsideFit().map((x) => `${x.id} ${x.module}`), ['@cf/moondream/moondream3.1-9B-A2B grow']);
+test('Part B: every option lists only models its run uses, and nothing is connected outside its fit', () => {
+  assert.deepEqual(optionMismatches(), [], 'an option lists a model its run never reads');
+  assert.deepEqual(outsideFit().map((x) => `${x.id} ${x.module}`), []);
 });
 
 test('the Pitch deck v2 table prints billedMicro for each role, and each role\'s model is offered', () => {

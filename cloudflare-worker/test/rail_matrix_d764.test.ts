@@ -41,7 +41,7 @@ import { run as aiRun, __resetForTest } from '../src/services/aiRouter.ts';
 import { modelById } from '../src/services/ai/catalogue.ts';
 import { billingMode, multiplierFor } from '../src/services/ai/pricing.ts';
 import { unitPrices } from '../src/routes/ai.ts';
-import { withModuleModels } from '../src/services/ai/moduleConnections.ts';
+import { MODEL_CONNECTIONS, withModuleModels } from '../src/services/ai/moduleConnections.ts';
 
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
@@ -362,7 +362,9 @@ test('every option a profile registers that runs a model has a row, with its own
     assert.ok(row, `${o.file} ${o.key} on ${page.key} has no row`);
     assert.equal(row!.optionLabel, o.label);
     assert.equal(row!.kind, o.kind);
-    assert.equal(row!.routeTask, `rail_${o.kind}`);
+    // D1478 (#3721): an image option names the fixed job it runs; every other option runs its kind's rail task.
+    assert.equal(row!.routeTask, o.kind === 'image' ? o.task : `rail_${o.kind}`);
+    if (o.kind === 'image' || o.handler === 'transcribe') continue; // their own lists, held by the D1478 cases below
     const kindRow = ROWS.find((r) => r.kind === o.kind)!;
     assert.deepEqual(row!.models, withModuleModels({ ...kindRow, pageKey: page.key }).models, `${o.key}: an option takes its kind's models and connected alternatives`);
   }
@@ -607,5 +609,35 @@ test('#3741: run honours an overflow pick, and never adds connected extras to au
       assert.ok(automatic?.ok);
       assert.ok(![automatic.primary, ...automatic.chain].some(id => row.more?.some(m => m.id === id)));
     } finally { w.db.close(); }
+  }
+});
+
+// ─────────────────────────────────────── D1478 (#3721): image and transcription options
+
+const DRAW = Object.keys(MODEL_CONNECTIONS).filter((id) => MODEL_CONNECTIONS[id].operation === 'draw');
+
+test('an image option lists the draw models only, FLUX.1 Schnell first, and no page row takes the kind', () => {
+  const image = railOptionRows().filter((o) => o.kind === 'image');
+  assert.deepEqual(image.map((o) => o.optionKey).sort(), ['deck:image', 'draft:logo']);
+  for (const o of image) {
+    const ids = [...o.models, ...(o.more ?? [])].map((m) => m.id);
+    assert.equal(ids[0], '@cf/black-forest-labs/flux-1-schnell', `${o.optionKey}: Schnell is the Default`);
+    assert.equal(o.models[0].role, 'Default');
+    assert.deepEqual([...ids].sort(), [...DRAW].sort(), `${o.optionKey}: exactly the draw models`);
+    assert.deepEqual([...ids].sort(), [...(ROUTE[o.routeTask as keyof typeof ROUTE].alternates ?? [])].sort(), `${o.optionKey}: the list is its job's alternates`);
+  }
+  assert.ok(!ROWS.some((r) => r.kind === 'image'), 'image is an option kind only');
+  assert.ok(!(RAIL_KINDS as readonly string[]).includes('image'), 'RAIL_KINDS stays the canvas kinds');
+  // Vision rows still read images.
+  for (const r of ROWS.filter((x) => x.kind === 'vision')) assert.ok(r.models.every((m) => MODEL_CONNECTIONS[m.id]?.operation !== 'draw'), r.pageKey);
+});
+
+test('a transcription option lists only what the transcribe task runs, and no chat model joins it', () => {
+  const opts = railOptionRows().filter((o) => o.handler === 'transcribe');
+  assert.ok(opts.length >= 6);
+  for (const o of opts) {
+    const ids = [...o.models, ...(o.more ?? [])].map((m) => m.id);
+    assert.deepEqual(ids, ROUTE.transcribe.alternates, `${o.pageKey} ${o.optionKey}`);
+    assert.ok(ids.every((id) => MODEL_CONNECTIONS[id]?.operation === 'transcribe'), `${o.optionKey}: a chat model on a transcription option`);
   }
 });
