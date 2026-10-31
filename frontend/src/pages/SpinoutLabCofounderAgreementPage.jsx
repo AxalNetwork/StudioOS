@@ -55,7 +55,7 @@ import {
   FileSignature, Loader2, Lock, AlertTriangle, FileText, Users,
   CheckCircle2, ExternalLink, Sparkles, Share2, Download, Copy, Eye, Check,
 } from 'lucide-react';
-import { api, spinoutLab } from '../lib/api';
+import { api, spinoutLab, teamsApi } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import {
@@ -150,7 +150,7 @@ export default function SpinoutLabCofounderAgreementPage() {
           const [docRes, capRes, memRes, ordRes, trkRes, connRes] = await Promise.allSettled([
             api.listDocuments(proj.id),
             api.getCapTableByProject(proj.id),
-            api.listProjectMembers(proj.id),
+            teamsApi.listProjectMembers(proj.id),
             api.legalIncorporationOrders(),
             api.legal83bList(proj.id),
             api.cofounderListConnections(),

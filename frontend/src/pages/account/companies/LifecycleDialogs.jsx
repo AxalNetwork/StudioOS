@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
-import { api } from '../../../lib/api';
+import { api, teamsApi } from '../../../lib/api';
 import { companyActionsApi } from '../../../lib/api/companyActions.js';
 import { reportError } from '../../../lib/log';
 import { LIFECYCLE, isLastPrimaryAdmin, lifecycleRefusal, roleWord, trashUntil } from './companiesModel';
@@ -122,7 +122,7 @@ export function InviteDialog({ company, onClose, onDone }) {
   const [copied, setCopied] = useState('');
   useEffect(() => {
     let alive = true;
-    Promise.resolve().then(() => api.teamVocabulary())
+    Promise.resolve().then(() => teamsApi.teamVocabulary())
       .then((v) => { if (alive) setTitles([...(v?.ladder || []).map((r) => r.title), ...(v?.functions || []).map((f) => f.name)].filter(Boolean)); })
       .catch(() => { if (alive) setTitles(false); });
     return () => { alive = false; };
@@ -150,7 +150,7 @@ export function InviteDialog({ company, onClose, onDone }) {
 
   return (
     <ActionDialog copy={LIFECYCLE.invite(company.name)} testId="invite-dialog" ready={ready}
-      run={() => api.inviteCompanyMember(company.uid, { email: email.trim(), role_in_company: role, title: title || null, authority: authority || null })}
+      run={() => teamsApi.inviteCompanyMember(company.uid, { email: email.trim(), role_in_company: role, title: title || null, authority: authority || null })}
       onClose={onClose}
       onDone={(out) => { if (out && out.email_sent === false && out.accept_path) setSent({ ...out, email: email.trim() }); else onDone(out); }}>
       <label className="flex flex-col gap-1">
@@ -277,7 +277,7 @@ export function TransferVentureDialog({ venture, cofounders, onClose, onDone }) 
 export function LeaveVentureDialog({ venture, me, onClose, onDone }) {
   return (
     <ActionDialog copy={LIFECYCLE.leaveVenture(venture.name, me?.seat)} testId="leave-venture-dialog"
-      run={() => api.removeProjectMember(venture.id, me.userId)} onClose={onClose} onDone={onDone} />
+      run={() => teamsApi.removeProjectMember(venture.id, me.userId)} onClose={onClose} onDone={onDone} />
   );
 }
 
@@ -291,6 +291,6 @@ export function TrashDialog({ venture, now = new Date(), onClose, onDone }) {
 export function RemoveMemberDialog({ venture, member, onClose, onDone }) {
   return (
     <ActionDialog copy={LIFECYCLE.removeMember(member.name, venture.name)} testId="remove-member-dialog"
-      run={() => api.removeProjectMember(venture.id, member.userId)} onClose={onClose} onDone={onDone} />
+      run={() => teamsApi.removeProjectMember(venture.id, member.userId)} onClose={onClose} onDone={onDone} />
   );
 }

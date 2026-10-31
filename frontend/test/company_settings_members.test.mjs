@@ -46,7 +46,8 @@ test('every member mutation the backend offers has a control', () => {
   const s = read(PAGE);
   for (const m of ['updateCompanyMember', 'removeCompanyMember', 'inviteCompanyMember',
                    'listCompanyInvitations', 'resendCompanyInvitation', 'revokeCompanyInvitation']) {
-    assert.ok(s.includes(`api.${m}(`), `${m} has no UI — that was the RESKIN`);
+    // #3841: the people methods live in lib/api/teams.js (teamsApi, D527).
+    assert.ok(s.includes(`teamsApi.${m}(`), `${m} has no UI — that was the RESKIN`);
   }
   // `addCompanyMember` was the whole defect: it joins an existing account to
   // the company WITHOUT asking, and 404s anyone who has no account. Task #121
@@ -160,9 +161,9 @@ test('the worker guards the new role endpoint exactly like the others', () => {
 
 test('the new api method exists on both sides of the drift boundary', () => {
   assert.match(
-    read('frontend/src/lib/api.js'),
+    read('frontend/src/lib/api/teams.js'),
     /updateCompanyMember:\s*\(uid, userId, data\)/,
-    'api.js must expose updateCompanyMember',
+    'lib/api/teams.js must expose updateCompanyMember',
   );
   assert.match(
     read('cloudflare-worker/src/routes/company.ts'),

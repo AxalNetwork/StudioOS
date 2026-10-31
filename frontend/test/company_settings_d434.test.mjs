@@ -117,8 +117,8 @@ test('removing a member is two steps, and the consequence names the company', ()
   assert.match(m, /: removeConsequence\(\)\}/, 'the confirmation prints the consequence, not a bare "are you sure"');
   // The write happens only inside the confirmation.
   const confirmBlock = slice(m, 'remove-confirm-', 'Keep them');
-  assert.match(confirmBlock, /api\.removeCompanyMember\(uid, m\.user_id\)/);
-  assert.equal((m.match(/api\.removeCompanyMember\(/g) || []).length, 1, 'one removal write, behind the confirmation');
+  assert.match(confirmBlock, /teamsApi\.removeCompanyMember\(uid, m\.user_id\)/);
+  assert.equal((m.match(/teamsApi\.removeCompanyMember\(/g) || []).length, 1, 'one removal write, behind the confirmation');
   // Your own row points at Leave company rather than removing you here.
   assert.match(confirmBlock, /use Leave company below instead/);
   assert.match(confirmBlock, /\{!isYou && \(/);
@@ -131,8 +131,8 @@ test('revoking an invitation is two steps with the invitation\'s own consequence
   assert.match(m, /data-testid=\{`revoke-confirm-\$\{i\.uid\}`\}/);
   assert.match(m, /They never had access, so nothing they own is affected\./);
   const block = slice(m, 'revoke-confirm-', 'Keep it');
-  assert.match(block, /api\.revokeCompanyInvitation\(uid, i\.uid\)/);
-  assert.equal((m.match(/api\.revokeCompanyInvitation\(/g) || []).length, 1);
+  assert.match(block, /teamsApi\.revokeCompanyInvitation\(uid, i\.uid\)/);
+  assert.equal((m.match(/teamsApi\.revokeCompanyInvitation\(/g) || []).length, 1);
 });
 
 test('the members description counts members and pending invitations from the loaded lists', () => {
@@ -155,7 +155,7 @@ test('the Workspace card creates through the switcher\'s own rules and counts ho
   assert.match(w, /api\.createCompany\(\{ company_name \}\)/);
   assert.match(w, /setCompanies\(\[\.\.\.\(companies \|\| \[\]\), created\]\);\s*setActiveCompanyId\(created\.id\);\s*setCompany\(created\);/,
     'append, persist, select — the one-writer rule the switcher keeps');
-  assert.match(PAGE, /import \{ api, setActiveCompanyId \} from '\.\.\/lib\/api';/);
+  assert.match(PAGE, /import \{ api, setActiveCompanyId, teamsApi \} from '\.\.\/lib\/api';/);
   assert.match(w, /data-testid="workspace-count"/);
   assert.match(w, /The number of companies on this account could not be read\./, 'an empty list with an active company is a failed read');
   assert.match(w, /count > 0\s*\?/);

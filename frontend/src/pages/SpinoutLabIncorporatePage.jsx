@@ -47,7 +47,7 @@ import {
   Landmark, Loader2, Lock, AlertTriangle, FileText, Share2,
   Download, Link2, Eye, Check, X, Shield, Info, PieChart, Handshake, Circle,
 } from 'lucide-react';
-import { api, spinoutLab } from '../lib/api';
+import { api, spinoutLab, teamsApi } from '../lib/api';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import AxalCheckout from '../components/AxalCheckout';
 import LabPageHeader, { labBtn, LabChip, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
@@ -216,7 +216,7 @@ export default function SpinoutLabIncorporatePage() {
           metaRef.current = initial;
           setMeta(initial);
           const [members, orders, einRead] = await Promise.all([
-            api.listProjectMembers(proj.id).catch((e) => { reportError('spinout-inc:members', e); return null; }),
+            teamsApi.listProjectMembers(proj.id).catch((e) => { reportError('spinout-inc:members', e); return null; }),
             api.legalIncorporationOrders().catch((e) => { reportError('spinout-inc:orders', e); return null; }),
             companyEinApi.read(proj.id).then(
               (data) => ({ status: 'ready', data }),

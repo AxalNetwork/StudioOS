@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import Sheet from '../../../ui/Sheet.jsx';
-import { api } from '../../../lib/api';
+import { teamsApi } from '../../../lib/api';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import {
   ACTIVE_HERE, companyPowers, companySettingsPathFor, day, memberLine, projectGroups, sentInvitationLine, stageWord,
@@ -60,10 +60,10 @@ export default function CompanyLightbox({
 }) {
   const [tick, setTick] = useState(0);
   const reread = () => setTick((n) => n + 1);
-  const loadDetail = useCallback(() => api.getCompany(uid), [uid]);
+  const loadDetail = useCallback(() => teamsApi.getCompany(uid), [uid]);
   const detail = useLoad(loadDetail, true, tick);
   const powers = companyPowers(detail.data, meId);
-  const loadInvites = useCallback(() => api.listCompanyInvitations(uid), [uid]);
+  const loadInvites = useCallback(() => teamsApi.listCompanyInvitations(uid), [uid]);
   const invites = useLoad(loadInvites, detail.status === 'ready' && powers.editor, tick);
   const [dialog, setDialog] = useState(null);
 

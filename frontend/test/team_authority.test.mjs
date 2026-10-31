@@ -116,7 +116,7 @@ test('null means NOT RECORDED, not a default', () => {
 
 test('the picker reads the vocabulary rather than hardcoding it', () => {
   assert.match(route, /r\.get\('\/company\/team-vocabulary'/);
-  assert.match(page, /api\.teamVocabulary\(\)/);
+  assert.match(page, /teamsApi\.teamVocabulary\(\)/);
   // A hardcoded ladder in the page is the drift this endpoint exists to stop.
   assert.doesNotMatch(page, /'Senior Associate'/);
   assert.doesNotMatch(page, /'SPONSOR'/);
