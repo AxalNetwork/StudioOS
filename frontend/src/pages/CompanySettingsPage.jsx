@@ -3,6 +3,7 @@ import { useActiveCompany, useUpdateCompanyDetails } from '../contexts/ActiveCom
 import { useAuth } from '../hooks/useAuthSync';
 import PartnerFirmProfileCard from './partner/PartnerFirmProfileCard';
 import { api, setActiveCompanyId } from '../lib/api';
+import { teamsApi } from '../lib/api/teams';
 import { useCompanySwitch } from '../ui/CompanySwitcher';
 import { bpsPercent } from '../lib/bps';
 import { safeReadJSON } from '../lib/storage';
@@ -450,7 +451,7 @@ function CompanyProfileCard({ uid, flash }) {
   useEffect(() => {
     if (!uid) return;
     let cancelled = false;
-    api
+    teamsApi
       .getCompany(uid)
       .then(data => { if (!cancelled) setRow(data); })
       .catch(e => { if (!cancelled) setErr(e?.message || 'Failed to load company profile'); });
@@ -930,14 +931,14 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
 
   useEffect(() => {
     let off = false;
-    api.teamVocabulary().then((v) => { if (!off) setVocab(v); }).catch(() => {});
+    teamsApi.teamVocabulary().then((v) => { if (!off) setVocab(v); }).catch(() => {});
     return () => { off = true; };
   }, []);
 
   const loadInvites = useCallback(async () => {
     if (!rights.canEdit) { setInvites({ state: 'ready', items: [] }); return; }
     try {
-      const r = await api.listCompanyInvitations(uid);
+      const r = await teamsApi.listCompanyInvitations(uid);
       setInvites({ state: 'ready', items: Array.isArray(r?.invitations) ? r.invitations : [] });
     } catch {
       setInvites({ state: 'failed', items: [] });
@@ -979,7 +980,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
     if (!addr) { flash('Enter the teammate’s email', 'error'); return; }
     setBusy(true); setHandoff(null);
     try {
-      const r = await api.inviteCompanyMember(uid, { email: addr, role_in_company: role });
+      const r = await teamsApi.inviteCompanyMember(uid, { email: addr, role_in_company: role });
       setEmail('');
       if (r?.company?.members) setRow(r.company);
       setInvites({ state: 'ready', items: Array.isArray(r?.invitations) ? r.invitations : [] });
@@ -1049,7 +1050,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
           <div key={m.user_id} className="flex flex-wrap items-center gap-3 p-3">
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                {m.name || m.email}
+                {m.name || (isYou ? m.email : 'Not recorded')}
                 {isYou && (
                   <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                     You
@@ -1061,7 +1062,8 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                   </span>
                 )}
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{m.email}</div>
+              {/* #3841: only your own row carries an address; another member's email is never shown. */}
+              {isYou && m.email && <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{m.email}</div>}
             </div>
 
             <input
@@ -1069,7 +1071,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
               onBlur={(e) => {
                 const next = e.target.value.trim();
                 if (!next || next === m.role_in_company) return;
-                run(() => api.updateCompanyMember(uid, m.user_id, { role_in_company: next }),
+                run(() => teamsApi.updateCompanyMember(uid, m.user_id, { role_in_company: next }),
                     `${m.name || m.email} is now ${next}`);
               }}
               disabled={busy || !canChange}
@@ -1090,7 +1092,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                       .find((x) => (x.title || x.name) === title);
                     const patch = { title };
                     if (title && rung && !m.authority) patch.authority = rung.defaultAuthority;
-                    run(() => api.updateCompanyMember(uid, m.user_id, patch),
+                    run(() => teamsApi.updateCompanyMember(uid, m.user_id, patch),
                         title ? `${m.name || m.email} is now ${title}` : 'Title cleared');
                   }}
                   disabled={busy || !canChange}
@@ -1109,7 +1111,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                 <select
                   value={m.authority || ''}
                   onChange={(e) => run(
-                    () => api.updateCompanyMember(uid, m.user_id, { authority: e.target.value || null }),
+                    () => teamsApi.updateCompanyMember(uid, m.user_id, { authority: e.target.value || null }),
                     e.target.value ? `${m.name || m.email} can ${e.target.value}` : 'Authority cleared',
                   )}
                   disabled={busy || !canChange}
@@ -1151,7 +1153,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                       const raw = e.target.value.trim();
                       const next = raw === '' ? null : Number(raw);
                       if (next === (m.carry_bps ?? null)) return;
-                      run(() => api.updateCompanyMember(uid, m.user_id, { carry_bps: next }),
+                      run(() => teamsApi.updateCompanyMember(uid, m.user_id, { carry_bps: next }),
                           // D149: one bps formatter. This one did not trim, so
                           // a carry of 150 read "1.50%" where every other rate on
                           // the platform reads "1.5%".
@@ -1177,7 +1179,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
             {!m.is_primary_admin && rights.isPrimaryAdmin && (
               <button
                 onClick={() => run(
-                  () => api.updateCompanyMember(uid, m.user_id, { is_primary_admin: true }),
+                  () => teamsApi.updateCompanyMember(uid, m.user_id, { is_primary_admin: true }),
                   `${m.name || m.email} is now a primary admin`,
                 )}
                 disabled={busy}
@@ -1211,7 +1213,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                   {!isYou && (
                     <button type="button" disabled={busy}
                       onClick={() => run(
-                        async () => { await api.removeCompanyMember(uid, m.user_id); setRemoving(null); return api.getCompany(uid); },
+                        async () => { await teamsApi.removeCompanyMember(uid, m.user_id); setRemoving(null); return teamsApi.getCompany(uid); },
                         `${m.name || m.email} removed`,
                       )}
                       className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50">
@@ -1335,7 +1337,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                         <>
                           <button
                             onClick={() => inviteAction(
-                              () => api.resendCompanyInvitation(uid, i.uid),
+                              () => teamsApi.resendCompanyInvitation(uid, i.uid),
                               `Invitation resent to ${i.email}`, i.email,
                             )}
                             disabled={busy}
@@ -1361,7 +1363,7 @@ function MembersCard({ uid, row, setRow, flash, rights }) {
                           </p>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <button type="button" disabled={busy}
-                              onClick={() => { setRevoking(null); inviteAction(() => api.revokeCompanyInvitation(uid, i.uid), `Invitation to ${i.email} revoked`, i.email); }}
+                              onClick={() => { setRevoking(null); inviteAction(() => teamsApi.revokeCompanyInvitation(uid, i.uid), `Invitation to ${i.email} revoked`, i.email); }}
                               className="text-xs px-3 py-1.5 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 disabled:opacity-50">
                               Yes, revoke
                             </button>

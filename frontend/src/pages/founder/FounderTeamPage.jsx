@@ -46,6 +46,7 @@ import {
 import { useAuth } from '../../hooks/useAuthSync';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { api, jobs as jobsApi } from '../../lib/api';
+import { teamsApi } from '../../lib/api/teams';
 import { hasTier } from '../../sidebarConfig';
 import { openPaywall } from '../../components/PaywallModal';
 import PageExplainer from '../../components/PageExplainer';
@@ -1154,7 +1155,7 @@ function InviteDrawer({ company, onClose, onCreated, flash }) {
   const onSaved = async (row, payload) => {
     if (sendInvite && payload.email) {
       try {
-        await api.inviteCompanyMember(company.uid, { email: payload.email, role_in_company: 'Member' });
+        await teamsApi.inviteCompanyMember(company.uid, { email: payload.email, role_in_company: 'Member' });
         flash({ kind: 'ok', msg: `${row.name} recorded and invited to the workspace.` });
       } catch (e) {
         flash({ kind: 'error', msg: `${row.name} is recorded, but the workspace invitation failed: ${e?.message || 'unknown error'}.` });
