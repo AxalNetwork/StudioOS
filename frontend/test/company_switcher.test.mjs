@@ -76,6 +76,7 @@ test('the new company becomes the active one', () => {
  */
 const WIDE_ON_PURPOSE = {
   'account_companies.ts': 'Account › Companies and projects (D1136) lists every company and venture the member holds, across companies by design; each read is the caller\'s own (owned or seated), never another founder\'s',
+  'account_portfolio.ts': 'D1415: the Portfolio switcher, settings scope and address resolution are the reads that CHOOSE a company, so they list every company and project the member holds, across companies by design; each project is the caller\'s own (owned or seated) or in a company they belong to, never another founder\'s',
   // 'calendar.ts' stood here: D1384 (#3692) narrows its compliance source by the active company.
   'capital.ts': 'the project read sits inside an admin-only handler',
   'deal_insights.ts': 'D1151 reads a named deal through userMayReadDeal, not a founder venture list; founder_id resolves its published team and canonical NDA party. The company switcher neither selects that deal nor grants access to it',
