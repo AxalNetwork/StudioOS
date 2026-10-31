@@ -1189,6 +1189,11 @@ export default function PlatformPage() {
                 <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">Meeting bots</div>
                 <p className="mt-1 text-[11.5px] text-axal-muted">Runs, failures, minutes, costs and Test Eadwyn AI.</p>
               </Link>
+              {/* D1491 (#3725): SY1, a literal link so the reachability walk counts it. */}
+              <Link to="/admin/platform/event-syndication" className="mt-3 block rounded-lg border border-axal-hairline p-3 hover:bg-axal-ground dark:hover:bg-gray-800" data-testid="hq-event-syndication-link">
+                <div className="text-[12.5px] font-bold text-axal-ink dark:text-white">Event syndication</div>
+                <p className="mt-1 text-[11.5px] text-axal-muted">Approved public events on Luma, Eventbrite, Google, LinkedIn and Facebook. Not built yet: nothing posts.</p>
+              </Link>
               <Link
                 to="/admin/platform/topology"
                 className="mt-3 block rounded-xl border border-axal-hairline bg-axal-ground px-3 py-2 hover:border-axal-violet dark:hover:border-violet-700"
