@@ -158,6 +158,7 @@ export * from './api/roundCalls.js';
 export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
+export * from './api/slugs.js';
 export * from './api/studioLayout.js';
 export * from './api/teamAgents.js';
 export * from './api/teams.js';

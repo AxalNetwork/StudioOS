@@ -54,6 +54,9 @@ and `/c/…/p/…` address resolution) live in `account_portfolio.ts`, mounted
 at `/api` with full paths beside it. A project's slug is set in
 `project_lifecycle.ts` (`PUT /api/projects/:id/slug`), beside its move.
 
+D1591's slug availability read, `GET /api/account/slug-check`, lives in
+`slug_check.ts`, mounted at `/api` right after `account_companies.ts`.
+
 D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 `/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
 sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
