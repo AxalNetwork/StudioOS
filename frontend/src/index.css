@@ -631,6 +631,36 @@ main[data-onboarding-canvas] {
 .article-prose .callout p:last-child {
   margin-bottom: 0;
 }
+/* D1410 — the callout's kind, and the link card (never fetched: its stored
+   title and description, else the domain and the URL). Unscoped, so the
+   editor's preview draws them as the reader does. */
+.article-callout {
+  margin: 1.5em 0;
+  padding: 1em 1.25em;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  border-left: 3px solid var(--color-brand);
+  border-radius: 0.5rem;
+}
+.article-callout[data-kind='tip'] { border-left-color: #16a34a; }
+.article-callout[data-kind='warning'] { border-left-color: #d97706; }
+.article-callout > p:last-child { margin-bottom: 0; }
+.article-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  margin: 1.5em 0;
+  padding: 0.9em 1.1em;
+  border: 1px solid var(--app-border);
+  border-radius: 0.5rem;
+  background: var(--app-surface);
+  color: var(--app-text);
+  text-decoration: none !important;
+}
+.article-card:hover { border-color: var(--color-brand); }
+.article-card-title { font-weight: 600; line-height: 1.35; }
+.article-card-description { font-size: 0.9em; color: var(--app-text-muted); overflow-wrap: anywhere; }
+.article-card-domain { font-size: 0.8em; color: var(--app-text-muted); }
 
 /* Rotate chevron when details is open */
 details[open] > summary .details-chevron {
