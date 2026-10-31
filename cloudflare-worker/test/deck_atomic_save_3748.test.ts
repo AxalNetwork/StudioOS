@@ -26,9 +26,10 @@ test('713 preserves every payload, keeps the latest id for a duplicate version, 
     db.exec(migration);
     assert.deepEqual(db.prepare('SELECT id, project_id, slides, title FROM pitch_decks ORDER BY id').all(), payloads);
     assert.deepEqual(db.prepare('SELECT id, version, is_current FROM pitch_decks ORDER BY id').all().map(r => [r.id, r.version, r.is_current]), [
-      [1, 10, 0], [2, 1, 0], [3, 11, 0], [4, 2, 0], [5, 9, 1], [6, 2, 0], [7, 1, 1], [8, 4, 0], [9, 5, 1],
+      [1, 10, 0], [2, 1, 0], [3, 11, 0], [4, 2, 0], [5, 12, 1], [6, 2, 0], [7, 3, 1], [8, 4, 0], [9, 5, 1],
     ]);
     assert.deepEqual(db.prepare('SELECT project_id, SUM(is_current) AS n FROM pitch_decks GROUP BY project_id').all().map(r => [r.project_id, r.n]), [[1, 1], [2, 1], [3, 1]]);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pitch_decks d WHERE is_current = 1 AND version <> (SELECT MAX(p.version) FROM pitch_decks p WHERE p.project_id = d.project_id)').get()!.n, 0, 'readers using the highest version see the latest saved payload');
     const once = db.prepare('SELECT * FROM pitch_decks ORDER BY id').all();
     db.exec(migration);
     assert.deepEqual(db.prepare('SELECT * FROM pitch_decks ORDER BY id').all(), once, 'replaying the correction changes no saved version');
