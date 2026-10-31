@@ -168,7 +168,7 @@ export function placeText(body = '', text = '', { start = 0, end = start, mode =
 /** The sentence a refused press shows (D1409's codes), never the server's raw error. */
 export function refusalMessage(err) {
   const code = err?.data?.error || err?.data?.code || err?.data?.refusal || err?.code || '';
-  if (/^budget_|spend_limit|insufficient/.test(code) || err?.status === 402) return { code: code || 'budget', text: 'Your AI balance cannot cover this. Add tokens, then try again.', topUp: true };
+  if (/^(?:budget_[a-z_]+|spend_limit|insufficient_[a-z_]+)$/.test(code) || err?.status === 402) return { code: code || 'budget', text: 'Your AI balance cannot cover this. Add tokens, then try again.', topUp: true };
   if (code === 'ai_paused') return { code, text: 'AI is paused for your account right now.' };
   if (code === 'assist_off') return { code, text: 'AI assistance is off on this page. Turn it on in the AIRail.' };
   if (code === 'real_person') return { code, text: err?.data?.message || 'Eadwyn does not draw real people. Describe a scene, an object or an idea instead.' };

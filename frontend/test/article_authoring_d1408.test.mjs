@@ -85,6 +85,9 @@ test('AR3: a proposal places its Markdown; Replace swaps the selection, Insert g
 
 test('AR3/AR4: a refusal reads as a sentence, with the top-up for a balance', () => {
   assert.equal(refusalMessage({ status: 402, data: { error: 'budget_user_day' } }).topUp, true);
+  // The balance codes are matched whole (CodeQL: every alternative anchored), with or without a 402.
+  for (const c of ['budget_user_day', 'budget_user_month', 'spend_limit', 'insufficient_tokens']) assert.equal(refusalMessage({ data: { error: c } }).topUp, true, c);
+  for (const c of ['over_spend_limit', 'not_budget_user_day', 'spend_limit_x']) assert.equal(refusalMessage({ data: { error: c } }).topUp, undefined, c);
   assert.match(refusalMessage({ data: { error: 'assist_off' } }).text, /AIRail/);
   assert.match(refusalMessage({ data: { error: 'real_person' } }).text, /real people/);
   assert.equal(refusalMessage({ data: { error: 'real_person', message: 'Canvas sentence.' } }).text, 'Canvas sentence.');
