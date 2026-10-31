@@ -357,6 +357,8 @@ export default function ArticleAuthorPage() {
   const [imageError, setImageError] = useState(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [listLoaded, setListLoaded] = useState(false);
+  const [listError, setListError] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   const [creating, setCreating] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelRun, setPanelRun] = useState(null);
@@ -395,9 +397,11 @@ export default function ArticleAuthorPage() {
     try {
       const r = await api.mine();
       setItems(r.items || []);
+      setListError(false);
     } catch (e) {
       reportError('ArticleAuthor:list', e);
-      toast.error('Failed to load drafts');
+      // D1408 (AR6e): a failed read is said, never drawn as an empty library.
+      setListError(true);
     } finally {
       setRefreshing(false);
       setListLoaded(true);
@@ -932,6 +936,26 @@ export default function ArticleAuthorPage() {
     setPanelOpen(true);
   };
 
+  // D1408 (AR5, admin): an approved article another member wrote can be given a
+  // publish time (D484). The Worker refuses an admin's own article (D1292).
+  const scheduleAt = async (iso) => {
+    if (!article || chain !== 'direct') return false;
+    setScheduling(true);
+    try {
+      await adminApi.schedule(article.id, iso);
+      await loadOne(article.id);
+      await refresh();
+      toast.success('Scheduled. It publishes at that time.');
+      return true;
+    } catch (e) {
+      reportError('ArticleAuthor:schedule', e);
+      toast.error(e?.data?.message || 'Could not schedule. Try again.');
+      return false;
+    } finally {
+      setScheduling(false);
+    }
+  };
+
   const backToLibrary = async () => {
     if (dirty && isEditable) await persist();
     setSelectedId(null);
@@ -953,6 +977,7 @@ export default function ArticleAuthorPage() {
         <ArticleLibrary
           items={items}
           loading={!listLoaded}
+          loadError={listError}
           refreshing={refreshing}
           onRefresh={refresh}
           onOpen={setSelectedId}
@@ -1018,6 +1043,10 @@ export default function ArticleAuthorPage() {
                     ) : article.status === 'submitted' ? (
                       <button onClick={retract} className="text-sm px-3 py-1.5 border border-orange-300 text-orange-700 dark:text-orange-300 rounded hover:bg-orange-50 dark:hover:bg-orange-900/20 flex items-center gap-1">
                         <ArrowLeft className="w-4 h-4" /> Retract
+                      </button>
+                    ) : (article.status === 'approved' && chain === 'direct') ? (
+                      <button onClick={() => setPublishOpen(true)} className="text-sm px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1" data-testid="article-schedule-open">
+                        <Clock className="w-4 h-4" /> Schedule…
                       </button>
                     ) : (article.status === 'in_review' || article.status === 'approved') ? (
                       <button disabled title="This article is with the review team — you can't change it right now." className="text-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 rounded flex items-center gap-1 opacity-70 cursor-not-allowed">
@@ -1290,6 +1319,11 @@ export default function ArticleAuthorPage() {
           onSave={save}
           onSubmit={async () => { await submit(); setPublishOpen(false); }}
           onAsk={canSendForReview ? openAsk : null}
+          chain={chain}
+          onPublishNow={() => { setPublishOpen(false); adminPublish(); }}
+          publishing={publishing}
+          onSchedule={scheduleAt}
+          scheduling={scheduling}
         />
       )}
       {imageSheet && article && (
