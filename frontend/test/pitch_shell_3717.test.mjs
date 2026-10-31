@@ -15,7 +15,7 @@ import { deckEditorApi } from '../src/lib/api/deckEditor.js';
 import { deckSourcesApi } from '../src/lib/api/deckSources.js';
 import { newDeckApi } from '../src/lib/api/newDeck.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
-import { SHARED_FULL_BLEED_PREFIXES } from '../src/sidebarConfig.js';
+import { SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES } from '../src/sidebarConfig.js';
 import { CYCLE_GUTTER } from '../src/pages/cycles/cyclePaths.js';
 import PitchPage from '../src/pages/raise/pitch/PitchPage.jsx';
 import PitchStudio from '../src/pages/raise/pitch/PitchStudio.jsx';
@@ -69,7 +69,8 @@ test('pitch routes own their one page frame and keep the existing access boundar
   assert.match(routeBlock(app,'/raise/pitch/present'),/founderEditor\(<PitchPresent/);
 });
 
-test('all pitch children use the shared full-width shell rule',()=>{
+test('studio home and pitch children use the shared full-width shell rule',()=>{
+  assert.ok(SHARED_FULL_BLEED.includes('/raise/pitch'));
   assert.ok(SHARED_FULL_BLEED_PREFIXES.includes('/raise/pitch/'));
   for(const path of ['/raise/pitch/new','/raise/pitch/edit','/raise/pitch/analytics','/raise/pitch/review','/raise/pitch/notes'])assert.ok(SHARED_FULL_BLEED_PREFIXES.some(prefix=>path.startsWith(prefix)),path);
 });

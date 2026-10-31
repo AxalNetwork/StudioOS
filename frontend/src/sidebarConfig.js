@@ -789,6 +789,8 @@ export const ONBOARDING_CANVAS_PATHS = [
 ];
 
 export const SHARED_FULL_BLEED = [
+  // #3717: the studio home also owns its gutter when read by an admin.
+  '/raise/pitch',
   // Pricing and Learning own their hero and body gutters, like Help.
   '/pricing', '/pricing/', '/learning', '/learning/',
   '/referrals',
