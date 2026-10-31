@@ -402,12 +402,6 @@ function figuresOf(spec: CardSpec, items: SourceItem[], exclude: Excluded): Figu
   });
 }
 
-/** Columns for `n` tiles across the card's twelve: four wide at most. */
-function tileSpans(n: number): Array<[number, number]> {
-  const per = Math.max(3, Math.floor(12 / Math.max(1, Math.min(n, 4))));
-  return Array.from({ length: Math.min(n, 4) }, (_, i) => [i * per + 1, Math.min(12, i * per + per)]);
-}
-
 /**
  * D897 §9 (#3659): what a card may draw besides its slots. `series` are the
  * venture's chart series (`chartSeries.ts`, read by code), `diagrams` a typed

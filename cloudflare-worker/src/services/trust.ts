@@ -749,7 +749,7 @@ const SATISFIABLE_BY_CLICKWRAP: ReadonlySet<ObligationKey> = new Set<ObligationK
  */
 export const LEGAL_DOCUMENT_VERSIONS: Readonly<Record<'tos_v1' | 'privacy_v1', string>> = Object.freeze({
   tos_v1: '2026-07-08',
-  privacy_v1: '2026-03-31',
+  privacy_v1: '2026-10-29',
 });
 
 export interface AcceptanceRecord {

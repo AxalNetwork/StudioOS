@@ -464,3 +464,28 @@ test('D778 part 8: a Summarise keeps its digest a draft, and a Structure only pr
   assert.deepEqual({ ...f.db.prepare('SELECT * FROM discovery_interviews WHERE id = ?').get(INTERVIEW) }, before, 'the interview record is unchanged');
   assert.equal(n(f.db, "SELECT COUNT(*) n FROM validate_proposals WHERE session_id = ? AND status <> 'proposed'", id), 0, 'nothing accepted');
 });
+
+test('#3711 a failed placement reuses the completed summary on retry without a second summary charge', async () => {
+  const { recoverSession, runInterviewProcessJob } = await import('../src/services/interviewProcessing.ts');
+  const f=world({summary:{overview:[{text:'Synthetic summary.',cites:[{from:0,to:1000}]}]}});
+  const id=await call2(f);
+  await digestSession(f.env,{sessionId:id,userId:ME,trigger:'recording_processed',stages:['summarise']});
+  const saved=row(f.db,id).summary;
+  f.db.prepare("UPDATE interview_sessions SET processing_stage='placing',processing_auto=1 WHERE id=?").run(id);
+  const prepare=f.env.DB.prepare.bind(f.env.DB);
+  f.env.DB.prepare=(sql:string)=>{
+    if(sql.includes('SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments')) throw new Error('SYNTHETIC_PLACEMENT_EXCEPTION');
+    return prepare(sql);
+  };
+  try {assert.equal(await runInterviewProcessJob(f.env,{session_id:id,user_id:ME}),'failed');}
+  finally {f.env.DB.prepare=prepare;}
+  assert.equal(row(f.db,id).processing_error,'Placing findings stopped unexpectedly. Try again to resume this step.');
+  const messages:unknown[]=[];
+  Object.assign(f.env,{USE_CF_QUEUE:'true',JOB_QUEUE:{async send(body:unknown){messages.push(body);}}});
+  assert.deepEqual(await recoverSession(f.env,row(f.db,id),ME),{ok:true,stage:'placing'});
+  assert.equal(await runInterviewProcessJob(f.env,{session_id:id,user_id:ME}),'done');
+  assert.equal(row(f.db,id).summary,saved);
+  assert.equal(f.ai.filter(a=>a.task==='summary').length,1);
+  assert.equal(f.ai.some(a=>a.task==='structure'),true);
+  assert.equal(n(f.db,'SELECT COUNT(*) AS n FROM interview_summary_receipts WHERE session_id=?',id),1);
+});
