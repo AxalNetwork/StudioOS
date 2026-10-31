@@ -246,7 +246,7 @@ async function assertReadAgain(box) {
 
 test('4: a failed read of the choices says so with Try again, which reads them again', async () => {
   await mutationCheck(boxSource, boxPath, assertReadAgain, [
-    ['{readFailed && <button', '{false && <button'],
+    ['{readFailed && !readRecovery && <button', '{false && <button'],
     ['setLoaded(null); setReadFailed(true);', 'setLoaded(null);'],
     ['setAttempt((n) => n + 1);', ''],
   ]);

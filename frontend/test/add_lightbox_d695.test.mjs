@@ -209,7 +209,7 @@ test('fieldless forms submit and a done view remains open with the returned link
     ['if (completion) setDone(completion);', 'if (false) setDone(completion);'],
     ['if (!completion) onClose?.();', 'onClose?.();'],
     ['linkOf(done.href) &&', 'false &&'],
-    ["focusKey={done ? 'done' : 'form'} ", ''],
+    ["focusKey={readRecovery ? 'read-reason' : done ? 'done' : 'form'} ", ''],
   ]);
 });
 
