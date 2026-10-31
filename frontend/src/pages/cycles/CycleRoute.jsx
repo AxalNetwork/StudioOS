@@ -71,7 +71,7 @@ import { useAuth } from '../../hooks/useAuthSync';
 import { moduleToolLinks } from './founderToolNavigation.js';
 import { NarrativeHome, NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
 import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
-import { NarrativeAdminGate } from '../raise/narrative/NarrativeAdmin';
+import { NarrativeAdminGate, narrativeFormAccess } from '../raise/narrative/NarrativeAdmin';
 import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool';
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
 import { DataRoomHomeNav, DataRoomTabPage } from '../raise/dataroom/DataRoomTool';
@@ -328,7 +328,7 @@ const CYCLE_DEFS = {
     tools: toFnMap({
       'revenue-and-traction': (q) => ({ label: 'Open the metric log and this month’s targets', href: `/grow/focus${q}` }),
       'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
-      'durable-company-building': () => ({ label: 'Open the compliance calendar', href: '/compliance' }),
+      'durable-company-building': () => ({ label: 'Open compliance in Calendar', href: '/calendar?layer=compliance' }),
     }),
     add: toFnMap({}),
     fills: { 'product-improvement': 'feedback_theme' },
@@ -976,13 +976,16 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     return t ? { ...t, project: projectId, aiOff: !fillsOn, edited: fillRow && fillRow.form === entry.key ? fillRow : null } : null;
   };
   const moduleFill = !narrativeAdmin && projectId && slug ? moduleFillTarget(cycle, slug, forms) : null;
+  // #3712: Add/Edit dialogs sit outside the page gate, including phone sheets.
+  // The authenticated role decides read-only access; shell preview never grants writes.
+  const narrativeAccess = cycle === 'raise' && slug === NARRATIVE ? narrativeFormAccess(projectId, user) : {};
   const openForm = record ? recordState.form
     : !projectId ? null
     // D1106 (#2986): DR4, Data room's Upload is its own sheet, the queue in states.
     : formOpen && cycle === 'raise' && slug === DATA_ROOM ? (
       <DataRoomUpload key="dataroom-upload" projectId={projectId} onSaved={saved} onClose={closeAdd} />
     ) : formOpen ? (
-      <FormLightbox key={`add-${formOpen.key}${fillRow ? `-${fillRow.uid}` : ''}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
+      <FormLightbox key={`add-${formOpen.key}${fillRow ? `-${fillRow.uid}` : ''}`} form={formOpen} {...narrativeAccess} cycle={cycle} slug={slug} search={location.search}
         renderAssistant={uofAssistant}
         fill={fillFor(formOpen)}
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
@@ -994,18 +997,18 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     ) : editing && edit.idOf(editing) != null && edit.readsRecord ? (
       // Drawn once the record answers: its values, or the refusal in the dialog.
       rowEdit?.spec ? (
-        <FormLightbox key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} cycle={cycle} slug={slug}
+        <FormLightbox key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} {...narrativeAccess} cycle={cycle} slug={slug}
           renderAssistant={uofAssistant}
           loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
           onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
           onSaved={saved}
           onClose={closeEdit} />
       ) : rowEdit ? (
-        <FormLightbox key={`edit-${editing.id}-refused`} form={{ ...edit, fields: [] }} cycle={cycle} slug={slug}
+        <FormLightbox key={`edit-${editing.id}-refused`} form={{ ...edit, fields: [] }} {...narrativeAccess} cycle={cycle} slug={slug}
           refused={rowEdit.error || 'This record has no Edit.'} onSubmit={() => {}} onClose={closeEdit} />
       ) : null
     ) : editing && edit.idOf(editing) != null ? (
-      <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} cycle={cycle} slug={slug}
+      <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} {...narrativeAccess} cycle={cycle} slug={slug}
         renderAssistant={uofAssistant}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
         onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}

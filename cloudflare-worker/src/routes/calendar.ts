@@ -41,6 +41,7 @@ import { adoptMeetCopy, makeMeetLink, readItem } from '../services/calendar/item
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
 import { requireAuth, isSuperAdmin } from '../auth';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { branchOf } from '../util/branch';
 import {
   googleOAuthAvailable, microsoftOAuthAvailable,
@@ -48,7 +49,7 @@ import {
   revokeGoogleOAuthGrant, loadRefreshTokenExport,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
-  fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, KNOWN_KINDS, SCOPED_EXCLUDED_KINDS, validScopeWindow,
+  fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, FEED_KINDS, SCOPED_EXCLUDED_KINDS, validScopeWindow,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -223,8 +224,10 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   // D1207: this read alone asks for cancelled rows, so the page can strike
   // them through with their reason; and each item carries what the drawer
   // draws (`describeItems`). The feed, the sync and the push never see either.
+  // D1384: the active company, for the one source that scopes by it (`compliance_due`).
+  const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
   const { events, sources } = await fetchUserEventsWithSources(
-    c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds, { withCancelled: true },
+    c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds, { withCancelled: true, companyId },
   );
   const items = await describeItems(c.env, user, await attachPushRecords(c.env, user.id, events));
   await ensureCalendarOAuthSchema(c.env);
@@ -244,7 +247,8 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
 // not part of answers as one that does not exist (CAL18).
 calendar.get('/item/:kind/:id', safe('item', 'Could not read this calendar item', async (c) => {
   const user = await requireAuth(c);
-  const out = await readItem(c.env, user, c.req.param('kind'), c.req.param('id'));
+  const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  const out = await readItem(c.env, user, c.req.param('kind'), c.req.param('id'), companyId);
   if (!out.ok) return c.json({ error: out.error, detail: out.detail }, out.status);
   return c.json({ item: out.item });
 }));
@@ -264,7 +268,8 @@ calendar.get('/events.ics', safe('ics', 'Could not export calendar', async (c) =
   // aggregator does not know is refused rather than read as an empty file.
   const kindsQ = url.searchParams.get('kinds');
   const kinds = kindsQ ? kindsQ.split(',').map(s => s.trim()).filter(Boolean) : undefined;
-  if (kinds && kinds.some(k => !(KNOWN_KINDS as readonly string[]).includes(k))) {
+  // D1384: a page-only kind (a deadline) is not in any file, so asking for it is refused too.
+  if (kinds && kinds.some(k => !(FEED_KINDS as readonly string[]).includes(k))) {
     return c.json({ detail: 'Unknown calendar kind' }, 400);
   }
   const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds);
@@ -328,7 +333,7 @@ async function serveFeed(c: any, scope: FeedScope): Promise<Response> {
   // for a role (`gather` ignores it), so an admin's feed holds what the admin
   // is party to, never a studio's or every studio's calendar. Every kind the
   // calendar reads, by name, so a kind added later joins the feed on purpose.
-  const kinds = whole ? [...KNOWN_KINDS] : [...MY_EVENT_KINDS];
+  const kinds = whole ? [...FEED_KINDS] : [...MY_EVENT_KINDS];
   const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds);
   const body = eventsToIcs(events, whole ? `Axal StudioOS — ${user.name}` : `Axal StudioOS — my events — ${user.name}`);
   return new Response(body, {
