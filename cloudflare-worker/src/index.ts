@@ -42,6 +42,7 @@ import scoring from './routes/scoring';
 import labReportShares from './routes/lab_report_shares';
 import projects from './routes/projects';
 import accountCompanies from './routes/account_companies';
+import slugCheck from './routes/slug_check';
 import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
@@ -937,6 +938,8 @@ app.route('/api/lab-report-shares', labReportShares);
 // D1136 (#3016): the caller's own companies, ventures and invitations, and answering an invitation signed in.
 // Before `projects` and `companyRoutes`; the answer paths are literal `invitations/<id>/accept|decline`.
 app.route('/api', accountCompanies);
+// D1591 (#3858): is a company or project address free, while the member types it.
+app.route('/api', slugCheck);
 // D1137 — a venture's move to a company and its owner transfer.
 app.route('/api/projects', projectLifecycle);
 app.route('/api/projects', projects);

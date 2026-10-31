@@ -60,3 +60,17 @@ export function retireSlug(env: Env, kind: SlugKind, slug: string, targetId: num
 }
 
 export const companyPath = (c: { uid: string; slug: string | null }) => `/c/${c.slug ?? c.uid}`;
+
+/**
+ * D1591 (#3858) — the first of `<base>-2` … `<base>-20` that has a valid shape
+ * and is free in this scope, or null. Shared by the live check and by
+ * create, so the field and the save suggest the same next address.
+ */
+export async function nextFreeSlug(env: Env, kind: SlugKind, base: string, scopeCompanyId: number | null = null): Promise<string | null> {
+  for (let n = 2; n <= 20; n += 1) {
+    const candidate = checkSlug(`${base}-${n}`);
+    if (!candidate.ok) continue;
+    if ((await slugHolder(env, kind, candidate.slug, scopeCompanyId)) == null) return candidate.slug;
+  }
+  return null;
+}
