@@ -3163,6 +3163,8 @@ function AppInner() {
       <Route path="/articles" element={<ArticlesPage />} />
       <Route path="/articles/draft" element={authOnly(<ArticleAuthorPage />)} />
       <Route path="/articles/edit/:id" element={authOnly(<ArticleAuthorPage />)} />
+      {/* D1408 (#3694): the editor without an article opens the library. */}
+      <Route path="/articles/edit" element={<Navigate to="/articles/draft" replace />} />
       {/* Articles hub is public-only; the writing workspace lives at /articles/draft. Legacy /articles/mine redirects there. */}
       <Route path="/articles/mine" element={<Navigate to="/articles/draft" replace />} />
       <Route path="/authors/:userId" element={<AuthorProfilePage />} />
