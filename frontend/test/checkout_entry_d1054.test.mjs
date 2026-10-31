@@ -143,7 +143,7 @@ test('PAYX13–16: who pays here — a licence administrator is staff, and a pla
   assert.equal(sheetMode({ role: 'investor', plan: { ...plus, prices: [price(5000, 'month')] }, held: 'free' }), 'pay');
   assert.equal(sheetMode({ role: 'investor', plan: inst }), 'notsold', 'a Stripe price does not make Institutional sold here');
   assert.equal(sheetMode({ role: 'founder', plan: plus }), 'other', 'another profile’s plan says so first');
-  assert.equal(notSoldView(inst).title, 'Contact sales');
+  assert.equal(notSoldView(inst).title, 'Contact Axal VC');
   assert.equal(notSoldView(inst).contact, true);
   assert.equal(sheetMode({ role: 'founder', plan: STUDIO, held: 'free' }), 'pay', 'a sold plan pays as before');
 });
@@ -213,7 +213,7 @@ async function sheet(props, routes = {}) {
   return { ...v, calls, async close() { await v.close(); Object.assign(checkoutApi, saved); } };
 }
 
-test('PAYX13: Investor Plus with no price mirrored yet is not on sale (D1334), and Institutional is Contact sales, each with no price, no quote and no Pay', async () => {
+test('PAYX13: Investor Plus with no price mirrored yet is not on sale (D1334), and Institutional is Contact Axal VC, each with no price, no quote and no Pay', async () => {
   const user = { role: 'investor', investor_tier: 'free' };
   const plus = await sheet({ user, role: 'investor', plan: planForKey(READ, 'investor:plus') });
   try {
@@ -224,7 +224,7 @@ test('PAYX13: Investor Plus with no price mirrored yet is not on sale (D1334), a
   } finally { await plus.close(); }
   const inst = await sheet({ user, role: 'investor', plan: planForKey(READ, 'investor:institutional') });
   try {
-    assert.match(inst.text('checkout-mode-notsold'), /Contact sales/);
+    assert.match(inst.text('checkout-mode-notsold'), /Contact Axal VC/);
     assert.equal(inst.props('checkout-contact-sales').href, '/contact', 'the contact page, inside the app');
     assert.deepEqual(inst.calls, []);
   } finally { await inst.close(); }

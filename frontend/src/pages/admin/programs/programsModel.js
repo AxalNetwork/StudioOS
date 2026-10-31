@@ -108,7 +108,6 @@ const trimPath = (p) => String(p || '').replace(/\/+$/, '') || '/';
 
 /** The other pages these pages link to. */
 export const SPINOUT_LAB_PATH = '/admin/programs/spinout-lab';
-export const PROFILING_TRENDS_PATH = '/admin/profiling-trends';
 export const PRODUCT_TESTING_PATH = '/admin?tab=product-testing';
 export const COMMISSIONS_PATH = '/admin/commissions';
 export const CONTRACT_TEMPLATES_PATH = '/admin/contracts?tab=templates';
@@ -135,7 +134,6 @@ export const TITLE = 'Programs';
 export const LINE_ADMIN = 'Every program on the accounts HQ holds, and what it needs from you now.';
 // D964 (#2797): the line regains "…and what studios propose." with HQ's Proposals tab.
 export const LINE_SUPER = 'Every program on StudioOS, what needs HQ now, and what studios propose.';
-export const FOOT_PROFILING = 'Profiling trends is not a program. It stays here until its home is decided.';
 export const PAGE_UNREADABLE = 'Could not be read';
 
 const nf = (n) => Number(n).toLocaleString('en-US');

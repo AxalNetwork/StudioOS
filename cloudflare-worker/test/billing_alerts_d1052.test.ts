@@ -70,6 +70,8 @@ function database({ alerts = true } = {}) {
   u.run(IRA, 'founder', 'Ira Vale', 'ira@example.test', 'uid-62', 'cus_ira', 'sub_ira', 'growth', 'active');
   u.run(PAT, 'partner', 'Pat Rowe', 'pat@example.test', 'uid-63', 'cus_pat', null, 'free', 'active');
   db.prepare(`INSERT INTO account_subscriptions (user_id, plan_group, plan, status, subscription_id) VALUES (?, 'partner', 'partner_pro', 'active', 'sub_pat')`).run(PAT);
+  db.exec(read('cloudflare-worker/sql/migrations/097_stripe_products.sql'));
+  db.exec(read('cloudflare-worker/sql/migrations/691_stripe_mode_stamps.sql'));
   return db;
 }
 const env = (db: DatabaseSync, over: Record<string, unknown> = {}) => ({ JWT_SECRET, ENVIRONMENT: 'test', STRIPE_SECRET_KEY: 'sk_test_sentinel', DB: d1Over(db), ...over } as any);
@@ -97,7 +99,7 @@ async function hit(db: DatabaseSync, method: string, path: string, who: [number,
 }
 let seq = 0;
 const hook = (db: DatabaseSync, type: string, object: Record<string, unknown>, e = env(db)) =>
-  hit(db, 'POST', '/api/billing/stripe/webhook', null, { id: `evt_${++seq}`, type, data: { object } }, e);
+  hit(db, 'POST', '/api/billing/stripe/webhook', null, { id: `evt_${++seq}`, livemode: false, type, data: { object } }, e);
 const alerts = (db: DatabaseSync) => db.prepare('SELECT * FROM billing_alerts ORDER BY id').all() as any[];
 const notices = (db: DatabaseSync, type: string) => {
   try { return db.prepare('SELECT user_id, title, body, payload FROM notifications_inbox WHERE type = ? ORDER BY id').all(type) as any[]; }
@@ -414,12 +416,12 @@ test('D1133 an activity failure rolls back alert changes; a redelivery recovers 
   const db = database();
   try {
     db.exec("CREATE TRIGGER refuse_activity BEFORE INSERT ON activity_logs BEGIN SELECT RAISE(ABORT,'fixture refusal'); END;");
-    assert.equal((await hook(db, 'invoice.payment_failed', renewal())).status, 500);
+    assert.equal((await hook(db, 'invoice.payment_failed', renewal())).status, 503);
     assert.equal(alerts(db).length, 0);
     db.exec('DROP TRIGGER refuse_activity');
     assert.equal((await hook(db, 'invoice.payment_failed', renewal())).status, 200);
     db.exec("CREATE TRIGGER refuse_activity BEFORE INSERT ON activity_logs BEGIN SELECT RAISE(ABORT,'fixture refusal'); END;");
-    assert.equal((await hook(db, 'invoice.paid', { id: 'in_ada1', paid: true })).status, 500);
+    assert.equal((await hook(db, 'invoice.paid', { id: 'in_ada1', paid: true })).status, 503);
     assert.equal(alerts(db)[0].state, 'open');
     db.exec('DROP TRIGGER refuse_activity');
     await hook(db, 'invoice.paid', { id: 'in_ada1', paid: true });
@@ -432,7 +434,7 @@ test('D1133 a verified refusal records only its reason family and deduplicates e
   const db = database();
   try {
     stripe['/invoices/in_ada1'] = { body: { subscription: 'sub_ada', billing_reason: 'subscription_create' } };
-    const event = { id: 'evt_refused', type: 'payment_intent.payment_failed', data: { object: { id: 'pi_declined', invoice: 'in_ada1', last_payment_error: { type: 'card_error', message: 'private detail 4242', decline_code: 'private_code' } } } };
+    const event = { id: 'evt_refused', livemode: false, type: 'payment_intent.payment_failed', data: { object: { id: 'pi_declined', invoice: 'in_ada1', last_payment_error: { type: 'card_error', message: 'private detail 4242', decline_code: 'private_code' } } } };
     for (let n = 0; n < 2; n++) assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, event)).status, 200);
     assert.deepEqual(activity(db), [{ user_id: ADA, action: 'payment_refused', details: '{"reason_family":"declined"}' }]);
     event.id = 'evt_auth'; event.data.object.last_payment_error = { code: 'authentication_required' } as any;
@@ -448,7 +450,7 @@ test('D1133 a first decline arriving before subscription.created still records i
   try {
     stripe['/invoices/in_first'] = { body: { billing_reason: 'subscription_create', subscription: 'sub_first', customer: 'cus_ada' } };
     stripe['/subscriptions/sub_first'] = { body: { customer: 'cus_ada', metadata: { kind: 'tier', user_id: String(ADA) } } };
-    const event = { id: 'evt_first', type: 'payment_intent.payment_failed', data: { object: { id: 'pi_first', invoice: 'in_first' } } };
+    const event = { id: 'evt_first', livemode: false, type: 'payment_intent.payment_failed', data: { object: { id: 'pi_first', invoice: 'in_first' } } };
     assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, event)).status, 200);
     assert.equal(activity(db).length, 1); assert.equal(activity(db)[0].user_id, ADA);
     event.id = 'evt_wrong'; stripe['/subscriptions/sub_first'] = { body: { customer: 'cus_ira', metadata: { kind: 'tier', user_id: String(ADA) } } };
@@ -458,7 +460,7 @@ test('D1133 a first decline arriving before subscription.created still records i
     await hit(db, 'POST', '/api/billing/stripe/webhook', null, event); assert.equal(activity(db).length, 1);
     event.id = 'evt_retry'; stripe['/invoices/in_first'] = { status: 503, body: { error: { message: 'private provider text' } } };
     const out = await hit(db, 'POST', '/api/billing/stripe/webhook', null, event);
-    assert.equal(out.status, 500); assert.doesNotMatch(out.text, /private provider text/);
+    assert.equal(out.status, 503); assert.doesNotMatch(out.text, /private provider text/);
   } finally { db.close(); }
 });
 
@@ -543,7 +545,7 @@ test('D1133 permanent provider object refusals are acknowledged without invented
   try {
     for (const status of [400, 404]) {
       stripe['/invoices/in_missing'] = { status, body: { error: { type: 'invalid_request_error', code: 'resource_missing', message: 'private provider context' } } };
-      const event = { id: `evt_missing${status}`, type: 'payment_intent.payment_failed', data: { object: { invoice: 'in_missing' } } };
+      const event = { id: `evt_missing${status}`, livemode: false, type: 'payment_intent.payment_failed', data: { object: { invoice: 'in_missing' } } };
       const out = await hit(db, 'POST', '/api/billing/stripe/webhook', null, event);
       assert.equal(out.status, 200); assert.doesNotMatch(out.text, /private provider context/);
       stripe['/invoices/in_missing'] = { body: { subscription: 'sub_missing', customer: 'cus_ada', billing_reason: 'subscription_create' } };
@@ -553,7 +555,7 @@ test('D1133 permanent provider object refusals are acknowledged without invented
     }
     assert.deepEqual(activity(db), []);
     stripe['/invoices/in_missing'] = { status: 400, body: { error: { type: 'invalid_request_error', code: 'parameter_unknown' } } };
-    assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, { id: 'evt_badParameter', type: 'payment_intent.payment_failed', data: { object: { invoice: 'in_missing' } } })).status, 500, 'configuration errors are not silently discarded');
+    assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, { id: 'evt_badParameter', livemode: false, type: 'payment_intent.payment_failed', data: { object: { invoice: 'in_missing' } } })).status, 503, 'configuration errors are not silently discarded');
   } finally { db.close(); }
 });
 

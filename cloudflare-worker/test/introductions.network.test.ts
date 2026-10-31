@@ -24,6 +24,7 @@
  * Run via the strip-types loader (see package.json test:drift).
  */
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -212,6 +213,8 @@ test('monthlyAllowanceFor gives free and paid tiers a monthly allowance', () => 
 // ---------------------------------------------------------------------------
 test('getIntroCreditState grants the monthly allowance exactly once', async () => {
   const { env, raw } = makeEnv();
+  raw.exec(readFileSync(new URL('../sql/migrations/097_stripe_products.sql', import.meta.url), 'utf8'));
+  raw.exec(readFileSync(new URL('../sql/migrations/691_stripe_mode_stamps.sql', import.meta.url), 'utf8'));
   raw.prepare(`INSERT INTO users (id, uid, name, role) VALUES (1, 'u1', 'A', 'founder')`).run();
   const user = { id: 1, role: 'founder', subscription_tier: 'free' };
   const first = await getIntroCreditState(env, user as any);
@@ -224,6 +227,8 @@ test('getIntroCreditState grants the monthly allowance exactly once', async () =
 
 test('referral credits accrue once per valid referred user', async () => {
   const { env, raw } = makeEnv();
+  raw.exec(readFileSync(new URL('../sql/migrations/097_stripe_products.sql', import.meta.url), 'utf8'));
+  raw.exec(readFileSync(new URL('../sql/migrations/691_stripe_mode_stamps.sql', import.meta.url), 'utf8'));
   raw.prepare(`INSERT INTO users (id, uid, name, role) VALUES (1, 'u1', 'Referrer', 'partner')`).run();
   raw.prepare(`INSERT INTO users (id, uid, name, role, email_verified) VALUES (2, 'u2', 'Joined', 'founder', 1)`).run();
   raw.prepare(`INSERT INTO users (id, uid, name, role, email_verified) VALUES (3, 'u3', 'Unverified', 'founder', 0)`).run();
@@ -239,6 +244,8 @@ test('referral credits accrue once per valid referred user', async () => {
 
 test('purchase fulfilment is idempotent on the PaymentIntent id and packs match spec', async () => {
   const { env, raw } = makeEnv();
+  raw.exec(readFileSync(new URL('../sql/migrations/097_stripe_products.sql', import.meta.url), 'utf8'));
+  raw.exec(readFileSync(new URL('../sql/migrations/691_stripe_mode_stamps.sql', import.meta.url), 'utf8'));
   raw.prepare(`INSERT INTO users (id, uid, name, role) VALUES (1, 'u1', 'Buyer', 'investor')`).run();
   assert.deepEqual(
     Object.values(INTRO_PACKS).map((p) => p.credits).sort((a, b) => a - b),
@@ -324,6 +331,8 @@ test('sharedValueDimensions requires same-direction conviction on both sides', (
 // ---------------------------------------------------------------------------
 test('generateIntroPropositions proposes consent-gated matches with reciprocal mirrors, no dupes', async () => {
   const { env, raw } = makeEnv();
+  raw.exec(readFileSync(new URL('../sql/migrations/097_stripe_products.sql', import.meta.url), 'utf8'));
+  raw.exec(readFileSync(new URL('../sql/migrations/691_stripe_mode_stamps.sql', import.meta.url), 'utf8'));
   seedTaxonomies(raw);
   const addUser = (id: number, role: string, optIn: boolean, country: string) => {
     raw.prepare(`INSERT INTO users (id, uid, name, role, country) VALUES (?, ?, ?, ?, ?)`)
@@ -392,6 +401,8 @@ const D755_WEBHOOK = ['d755', 'webhook', 'fixture'].join('-');
 
 function d755Env() {
   const { env, raw } = makeEnv();
+  raw.exec(readFileSync(new URL('../sql/migrations/097_stripe_products.sql', import.meta.url), 'utf8'));
+  raw.exec(readFileSync(new URL('../sql/migrations/691_stripe_mode_stamps.sql', import.meta.url), 'utf8'));
   raw.exec('ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER');
   raw.prepare(`INSERT INTO users (id, uid, name, email, role) VALUES (1, 'u1', 'Ivy Investor', 'ivy@example.test', 'investor')`).run();
   Object.assign(env as any, { JWT_SECRET: D755_SECRET, ENVIRONMENT: 'development', STRIPE_SECRET_KEY: 'sk_test_fixture', STRIPE_WEBHOOK_SECRET: D755_WEBHOOK });
@@ -469,7 +480,7 @@ test('D755 an introduction PaymentIntent minted before the switch still grants i
     id: 'pi_before_switch', object: 'payment_intent', status: 'succeeded', amount: 39_900, amount_received: 39_900, currency: 'usd',
     metadata: { kind: 'intro_credits', user_id: '1', pack: 'intro_100', credits: '100' },
   };
-  const body = JSON.stringify({ id: 'evt_before_switch', type: 'payment_intent.succeeded', data: { object: pi } });
+  const body = JSON.stringify({ id: 'evt_before_switch', livemode: false, type: 'payment_intent.succeeded', data: { object: pi } });
   const timestamp = Math.floor(Date.now() / 1000);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(D755_WEBHOOK), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`))))

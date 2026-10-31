@@ -15,22 +15,22 @@ import ordersRoute from '../src/routes/orders.ts';
 
 const ID = 'price_TopUp123abc';
 const PRICE = { id: ID, product: 'prod_topup', active: true, currency: 'usd', unit_amount: 2500, nickname: null, type: 'one_time', recurring: null };
-const PRODUCT = { id: 'prod_topup', object: 'product', name: 'AI tokens', active: true, metadata: {} };
+const PRODUCT = { id: 'prod_topup', object: 'product', name: 'AI tokens', active: true, livemode: true, metadata: {} };
 const READY = { configured: true, state: 'ready', product: { price_id: ID, product_id: 'prod_topup', name: 'AI tokens', currency: 'usd', unit_amount: 2500, cycle: 'onetime', credit_microusd: 25000000 } };
 
 function fixture(extra: Record<string, unknown> = {}) {
   resetAiTopupMirrorWindow();
   const f = aiBudgetFixture();
   const env = { DB: f.DB, JWT_SECRET: 'd750-fixture-only-signing-secret', STRIPE_WEBHOOK_SECRET: 'd750-fixture-only-webhook-secret',
-    ENVIRONMENT: 'development', STRIPE_SECRET_KEY: 'sk' + '_live_fixtureOnly000', STRIPE_PRICE_AI_TOPUP: ID, ...extra } as any;
+    STRIPE_PUBLISHABLE_KEY: 'pk_live_fixture', ENVIRONMENT: 'development', STRIPE_SECRET_KEY: 'sk' + '_live_fixtureOnly000', STRIPE_PRICE_AI_TOPUP: ID, ...extra } as any;
   return { ...f, env };
 }
 /** The mirror as the last Sync from Stripe left it: one other product, so the lazy empty-table sync never runs. */
 async function mirror(f: any, prices: unknown[] = [], product: Record<string, unknown> = {}) {
   await ensureCatalogSchema(f.env);
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_other','Other','alacarte',1,'{}','[]')").run();
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_other','Other','alacarte',1,'{}','[]',1)").run();
   if (prices.length) {
-    f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_topup','AI tokens','alacarte',?,'{}',?)")
+    f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_topup','AI tokens','alacarte',?,'{}',?,1)")
       .run(product.active === false ? 0 : 1, JSON.stringify(prices));
   }
 }
@@ -213,7 +213,7 @@ test('end to end: a price created after the last sync is fetched, bought through
     assert.equal(placed.total, 2500); assert.equal(placed.payment_intent_id, 'pi_topupE2E');
     assert.equal((await loadAiBudget(f.env, 2)).balance_microusd, 0, 'placing the order credits nothing');
     const pi = { id: 'pi_topupE2E', status: 'succeeded', currency: 'usd', amount_received: 2500, metadata: { kind: 'cart_order', order_ref: placed.order_ref, user_id: '2' } };
-    const body = JSON.stringify({ id: 'evt_topupE2E', type: 'payment_intent.succeeded', data: { object: pi } });
+    const body = JSON.stringify({ id: 'evt_topupE2E', livemode: true, type: 'payment_intent.succeeded', data: { object: pi } });
     const timestamp = Math.floor(Date.now() / 1000);
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(f.env.STRIPE_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))).map((n) => n.toString(16).padStart(2, '0')).join('');

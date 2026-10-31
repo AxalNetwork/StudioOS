@@ -31,6 +31,8 @@ const TYPED_READS: Record<string, string> = {
   whatsapp_business: 'cloudflare-worker/src/services/channels/whatsappSetup.ts',
   // D1385 (#3731): PostHog's typed reads.
   posthog: 'cloudflare-worker/src/services/posthog/reads.ts',
+  // D855 §4 (#3733): Linear's read-only reads.
+  linear: 'cloudflare-worker/src/services/linear/reads.ts',
 };
 
 const records = Object.entries(MCP_PROVIDERS) as Array<[string, McpProvider]>;

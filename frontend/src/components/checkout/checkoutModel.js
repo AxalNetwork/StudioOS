@@ -348,11 +348,11 @@ export const savedCardsApply = (plan) => plan?.family !== 'investor';
 
 /**
  * D1054 (PAYX13): a plan the catalogue does not sell, in the canvas's words,
- * with the catalogue's own reason. A plan priced by sales offers Contact sales.
+ * with the catalogue's own reason. A negotiated plan offers Contact Axal VC.
  */
 export function notSoldView(plan) {
   const reason = typeof plan?.catalogue?.sellable_reason === 'string' ? plan.catalogue.sellable_reason : null;
-  if (reason && /sales team/i.test(reason)) return { title: 'Contact sales', line: 'This plan is priced by our sales team for each firm. Nothing is bought here.', contact: true };
+  if (plan?.catalogue?.key === 'investor:institutional') return { title: 'Contact Axal VC', line: reason || 'Pricing agreed with Axal VC. Nothing is bought here.', contact: true };
   return { title: 'Not sold here', line: reason || 'This plan is not sold here.', contact: false };
 }
 

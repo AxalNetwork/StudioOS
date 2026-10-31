@@ -41,11 +41,11 @@ async function shop() {
   resetAiTopupMirrorWindow();
   const f = aiBudgetFixture();
   const env = { DB: f.DB, JWT_SECRET: 'd790-fixture-only-signing-secret', STRIPE_WEBHOOK_SECRET: 'd790-fixture-only-webhook-secret',
-    ENVIRONMENT: 'development', STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000' } as any;
+    ENVIRONMENT: 'development', STRIPE_PUBLISHABLE_KEY: 'pk_test_fixture', STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000' } as any;
   await ensureCatalogSchema(env); await ensureOrdersSchema(env);
   for (const t of ['promo_codes', 'user_sessions']) f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   f.db.exec("ALTER TABLE users ADD COLUMN uid TEXT; ALTER TABLE users ADD COLUMN stripe_customer_id TEXT; ALTER TABLE users ADD COLUMN investor_stripe_customer_id TEXT; UPDATE users SET uid='uid-'||id, stripe_customer_id='cus_member'||id");
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_pack25','$25 of tokens','token_pack',1,'{}',?)")
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_pack25','$25 of tokens','token_pack',1,'{}',?,0)")
     .run(JSON.stringify([{ id: PACK, product: 'prod_pack25', active: true, currency: 'usd', unit_amount: 2500, nickname: null, type: 'one_time', recurring: null }]));
   f.db.prepare("INSERT INTO ai_token_packs(uid,price_id,product_id,face_cents,bonus_microusd,on_sale,origin) VALUES('pack25',?,'prod_pack25',2500,2500000,1,'created')").run(PACK);
   return { ...f, env };
@@ -82,7 +82,7 @@ async function intent(f: any, user = 2) {
   return { status: r.status, body: await r.json() as any };
 }
 async function webhook(f: any, pi: Record<string, unknown>) {
-  const body = JSON.stringify({ id: `evt_${Math.random().toString(36).slice(2)}`, type: 'payment_intent.succeeded', data: { object: pi } });
+  const body = JSON.stringify({ id: `evt_${Math.random().toString(36).slice(2)}`, livemode: false, type: 'payment_intent.succeeded', data: { object: pi } });
   const timestamp = Math.floor(Date.now() / 1000);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(f.env.STRIPE_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))).map((n) => n.toString(16).padStart(2, '0')).join('');
@@ -93,7 +93,7 @@ const paid = (r: any, total = 2500) => ({ id: r.body.payment_intent_id, status: 
 const refund = (f: any, pi: string, refunded: number) => webhookOf(f, 'charge.refunded',
   { id: `ch_${pi.replace(/_/g, '')}`, object: 'charge', payment_intent: pi, currency: 'usd', amount: 2500, amount_captured: 2500, amount_refunded: refunded });
 async function webhookOf(f: any, type: string, object: Record<string, unknown>) {
-  const body = JSON.stringify({ id: `evt_${Math.random().toString(36).slice(2)}`, type, data: { object } });
+  const body = JSON.stringify({ id: `evt_${Math.random().toString(36).slice(2)}`, livemode: false, type, data: { object } });
   const timestamp = Math.floor(Date.now() / 1000);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(f.env.STRIPE_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))).map((n) => n.toString(16).padStart(2, '0')).join('');

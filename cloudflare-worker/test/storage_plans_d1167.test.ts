@@ -222,13 +222,14 @@ test('unreadable entitlement tables refuse with fixed words, never Free or raw d
 
 async function publicWorld() {
   const f = world(); await ensureCatalogSchema(f.env);
+  f.env.STRIPE_SECRET_KEY = 'sk_test_fixture';
   const products = [
     ['growth', { tier: 'growth' }], ['studio', { tier: 'studio' }],
     ['professional', { investor_tier: 'professional' }], ['institutional', { investor_tier: 'institutional' }],
     ['advisor', { plan_group: 'advisor' }], ['partner', { plan_group: 'partner' }], ['mi', { plan: 'mi_pro' }],
     ['plus', { investor_tier: 'plus' }],
   ] as const;
-  for (const [id, meta] of products) f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES(?,?,?,?,?,?)')
+  for (const [id, meta] of products) f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES(?,?,?,?,?,?,0)')
     .run(id, id, 'subscription', 1, JSON.stringify(meta), JSON.stringify([{ id: `price_${id}`, active: true, unit_amount: 2000, currency: 'usd', interval: 'month', interval_count: 1 }]));
   const app = new Hono(); app.route('/api/public', publicRoutes);
   return { ...f, app, read: () => app.request('/api/public/plans-and-packs', {}, f.env) };
@@ -280,7 +281,7 @@ test('an empty mirror still publishes free/LP/unsold-Plus allowances; a failed m
   try {
     f.db.exec('DELETE FROM stripe_products');
     const r = await f.read(); const body: any = await r.json();
-    assert.equal(r.status, 200); assert.equal(body.plans.length, 7);
+    assert.equal(r.status, 200); assert.equal(body.plans.length, 12);
     assert.equal(body.plans.find((p: any) => p.licence_key === 'lp_access').storage_bytes, storagePlan('lp_access')!.allowance_bytes);
     // Malformed store, not an absent mirror: it must not appear empty/free.
     f.db.exec('ALTER TABLE stripe_products RENAME COLUMN metadata_json TO unavailable_metadata');

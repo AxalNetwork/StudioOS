@@ -6,7 +6,7 @@ import { deckEditorApi } from '../../../lib/api/deckEditor';
 import { deckSourcesApi } from '../../../lib/api/deckSources';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { Lightbox, usePhoneWidth } from '../../../ui';
+import { Lightbox, WorkerRail, usePhoneWidth } from '../../../ui';
 import { SourcesPanel, useDeckSources } from './SourcesBoards';
 import CheckPanel from './CheckPanel';
 import { SlideEvidence } from '../../cycles/evidence/EvidencePart';
@@ -21,6 +21,7 @@ import { BlockGrid } from './BlockGrid';
 import { ChartBlock, ChartLibrary, ChartToolbar } from './ChartTools';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
 import { NEW_PATH } from './newDeckModel';
+import PitchPage from './PitchPage';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { cardOf, presentHref } from './presentExportModel';
 import {
@@ -121,6 +122,7 @@ export default function PitchEditor() {
   const phone = usePhoneWidth();
   const [params, setParams] = useSearchParams();
   const requested = params.get('project_id');
+  const [reportedTitle, setReportedTitle] = useState(null);
 
   const projects = useRead('ventures', () => api.listProjects(), []);
   const list = asList(projects.data, 'items', 'projects');
@@ -141,12 +143,17 @@ export default function PitchEditor() {
   // D898 group C: the dated series a chart plots (PD9–PD9c).
   const charts = useRead(projectId, () => deckEditorApi.chartSeries(projectId), []);
 
-  if (projects.status === 'error') return <Shell><ReadFailed text="Your ventures could not be read." onRetry={projects.retry} testId="pitch-editor-ventures-error" /></Shell>;
-  if (projects.status === 'ok' && !project) return <Shell><div className={`${CARD} p-5 ${MUTED}`}>Start a venture first, then build its deck.</div></Shell>;
-  if (versions.status === 'error') return <Shell><ReadFailed text="Your deck's versions could not be read." onRetry={versions.retry} testId="pitch-editor-versions-error" /></Shell>;
+  const title = reportedTitle?.deckId === deck.data?.id && reportedTitle?.projectId === projectId
+    ? reportedTitle.title
+    : deck.data ? `${String(project?.name || '').trim() || 'Your venture'} · v${deck.data.version ?? '?'}` : 'Your venture';
+  const shell = { query: ventureQuery(projectId || requested), title };
+
+  if (projects.status === 'error') return <Shell {...shell}><ReadFailed text="Your ventures could not be read." onRetry={projects.retry} testId="pitch-editor-ventures-error" /></Shell>;
+  if (projects.status === 'ok' && !project) return <Shell {...shell}><div className={`${CARD} p-5 ${MUTED}`}>Start a venture first, then build its deck.</div></Shell>;
+  if (versions.status === 'error') return <Shell {...shell}><ReadFailed text="Your deck's versions could not be read." onRetry={versions.retry} testId="pitch-editor-versions-error" /></Shell>;
   if (versions.status === 'ok' && !current) {
     return (
-      <Shell>
+      <Shell {...shell}>
         <div className={`${CARD} flex flex-col items-start gap-3 p-5`} data-testid="pitch-editor-no-deck">
           <span className={`text-[14px] font-extrabold ${INK}`}>No deck yet.</span>
           <span className={MUTED}>Start one from your records or a template, then edit it here.</span>
@@ -155,12 +162,12 @@ export default function PitchEditor() {
       </Shell>
     );
   }
-  if (deck.status === 'error') return <Shell><ReadFailed text={READ_FAILED} onRetry={deck.retry} testId="pitch-editor-deck-error" /></Shell>;
-  if (model.status === 'error') return <Shell><ReadFailed text={MODEL_FAILED} onRetry={model.retry} testId="pitch-editor-model-error" /></Shell>;
-  if (deck.status !== 'ok' || model.status !== 'ok') return <Shell><EditorSkeleton /></Shell>;
+  if (deck.status === 'error') return <Shell {...shell}><ReadFailed text={READ_FAILED} onRetry={deck.retry} testId="pitch-editor-deck-error" /></Shell>;
+  if (model.status === 'error') return <Shell {...shell}><ReadFailed text={MODEL_FAILED} onRetry={model.retry} testId="pitch-editor-model-error" /></Shell>;
+  if (deck.status !== 'ok' || model.status !== 'ok') return <Shell {...shell}><EditorSkeleton /></Shell>;
 
   return (
-    <Shell>
+    <Shell {...shell}>
       <Editor
         key={deck.data.id}
         project={project}
@@ -172,15 +179,16 @@ export default function PitchEditor() {
         charts={charts}
         readOnly={readOnly}
         phone={phone}
+        onTitle={setReportedTitle}
         onSaved={() => versions.retry()}
       />
     </Shell>
   );
 }
 
-function Shell({ children }) {
-  // The old `?mode=workspace` address lands here with its moved notice (D894).
-  return <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-4 py-4" data-testid="pitch-editor"><PitchMovedNotice />{children}</div>;
+function Shell({ children, query, title }) {
+  const rail = <WorkerRail workspace="Raise" role="founder" note="The editor reads your deck and its recorded sources. Each Eadwyn run shows its cost first." data-testid="pitch-editor-rail" />;
+  return <PitchPage rail={rail} crumb={{ query, trail: title }} testId="pitch-editor"><PitchMovedNotice />{children}</PitchPage>;
 }
 
 /** PD24: the header at once; the rail, the card and the panel as grey skeletons. */
@@ -188,10 +196,10 @@ function EditorSkeleton() {
   return (
     <div className="flex flex-col gap-3" data-testid="pitch-editor-loading" aria-busy="true">
       <Skeleton h="h-12" />
-      <div className="grid gap-3 lg:grid-cols-[200px_minmax(0,1fr)_320px]">
+      <div className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)] 2xl:grid-cols-[200px_minmax(0,1fr)_320px]">
         <div className="flex flex-col gap-2">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} h="h-10" />)}</div>
         <div className="flex flex-col gap-3"><Skeleton h="h-[360px]" /><span className={MUTED}>Reading…</span><Skeleton h="h-20" /></div>
-        <div className="flex flex-col gap-2"><Skeleton h="h-8" />{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} h="h-12" />)}</div>
+        <div className="flex flex-col gap-2 lg:col-start-2 2xl:col-start-auto"><Skeleton h="h-8" />{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} h="h-12" />)}</div>
       </div>
     </div>
   );
@@ -213,7 +221,7 @@ export function sourcesCard(model, lines) {
   return text ? updateBlock(card, text.id, { style: 'list', text: lines.join('\n') }) : { ...card, notes: lines.join('\n') };
 }
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly, phone, onSaved }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly, phone, onTitle, onSaved }) {
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
   const [cards, setCards] = useState(base.cards);
   const [theme, setTheme] = useState(base.theme);
@@ -251,6 +259,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
   };
 
   const title = `${String(project?.name || '').trim() || 'Your venture'} · v${base.deck.version ?? '?'}`;
+  useEffect(() => { onTitle({ deckId: deck.id, projectId: project?.id, title }); }, [deck.id, project?.id, title, onTitle]);
   const state = saveState({ dirty, savedAt: base.deck.created_at, readOnly, version: base.deck.version });
 
   return (
@@ -285,7 +294,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
         <PhoneEditor cards={cards} sel={sel} setSel={setSel} move={move} card={card} readOnly={readOnly}
           onNotes={(v) => setCard(sel, { ...card, notes: v })} notesMax={model.notes_max} />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-[210px_minmax(0,1fr)_330px]">
+        <div className="grid gap-3 lg:grid-cols-[180px_minmax(0,1fr)] 2xl:grid-cols-[200px_minmax(0,1fr)_320px]">
           <Rail cards={cards} sel={sel} stale={stale} readOnly={readOnly}
             onSelect={(i) => { setSel(i); setSelBlock(null); }} move={move}
             onAdd={() => {
@@ -338,7 +347,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
               </label>
             ) : null}
           </div>
-          <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-3 lg:col-start-2 2xl:col-start-auto">
             <RightPanel panel={panel} setPanel={setPanel} project={project} sources={sources} refresh={refresh} kit={kit}
               model={model} card={card} theme={theme} audience={audience} readOnly={readOnly}
               deck={base.deck} dirty={dirty} onReplaced={saved}
@@ -422,7 +431,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
 function Rail({ cards, sel, stale, readOnly, onSelect, move, onAdd }) {
   const [drag, setDrag] = useState(null);
   return (
-    <nav className={`${CARD} flex flex-col gap-1 p-2`} aria-label="Cards" data-testid="pitch-editor-rail">
+    <nav className={`${CARD} flex flex-col gap-1 p-2`} aria-label="Cards" data-testid="pitch-editor-cards">
       <ol className="m-0 flex list-none flex-col gap-1 p-0">
         {cards.map((c, i) => (
           <li key={i}

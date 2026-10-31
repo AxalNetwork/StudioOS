@@ -215,7 +215,7 @@ function Summary({ plan, spec, interval, setInterval, intervals, view, read, loc
 function NotHere({ mode, plan, interval, onClose, onRetryPlan }) {
   const ns = mode === 'notsold' ? notSoldView(plan) : null;
   const body = {
-    notsold: ns && [ns.title, ns.line, ns.contact ? <Link key="c" to="/contact" className={LINK} onClick={onClose} data-testid="checkout-contact-sales">Contact sales</Link> : null],
+    notsold: ns && [ns.title, ns.line, ns.contact ? <Link key="c" to="/contact" className={LINK} onClick={onClose} data-testid="checkout-contact-sales">Contact Axal VC</Link> : null],
     signin: ['Sign in to continue.', `After you sign in, Checkout opens on ${plan?.plan_name || 'this plan'}.`, <Link key="s" to={signinHref(plan, interval)} className={LINK} data-testid="checkout-signin">Sign in</Link>],
     reading: ['Reading your current plan…', 'Payment waits until your current plan is read.', null],
     unreadable: ['Your current plan could not be read.', 'Your current plan is Unreadable. Try again before starting a payment.', null],

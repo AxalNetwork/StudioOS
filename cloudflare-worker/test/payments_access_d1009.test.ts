@@ -24,6 +24,7 @@ const allDDL = tables.map(t => tableFromBaseline(baseline, t)).join(';\n') + ';\
 
 function world() {
   const f = makeD1(allDDL);
+  f.db.exec(readFileSync(new URL('../sql/migrations/691_stripe_mode_stamps.sql', import.meta.url), 'utf8'));
   // As in D223, unrelated baseline foreign-key targets are outside this narrow fixture.
   f.db.exec('PRAGMA foreign_keys=OFF');
   f.db.exec("INSERT INTO users(id,email,name,role) VALUES(1,'holder@example.test','Holder','admin'),(2,'plain@example.test','Admin','admin'),(3,'founder@example.test','Founder','founder'); INSERT INTO super_admins(user_id) VALUES(1)");
@@ -73,7 +74,7 @@ let failStripe = false;
 const oldFetch = globalThis.fetch;
 beforeEach(() => {
   calls=[]; failStripe=false;
-  const products: any[] = [{id:'prod_fixed',name:'Advisor Pro',active:true,metadata:{kind:'subscription',plan_group:'advisor'}}];
+  const products: any[] = [{id:'prod_fixed',name:'Advisor Pro',active:true,livemode:false,metadata:{kind:'subscription',plan_group:'advisor'}}];
   const prices: any[] = [{id:'price_fixed',product:'prod_fixed',active:true,type:'recurring',currency:'usd',unit_amount:2900,recurring:{interval:'month',interval_count:1}}];
   globalThis.fetch = (async (input: any,init: any={}) => {
     const u = new URL(String(input)); const method = init.method??'GET'; const form = new URLSearchParams(String(init.body??''));
@@ -83,7 +84,7 @@ beforeEach(() => {
     if(method==='GET'&&u.pathname==='/v1/products') return Response.json({data:products,has_more:false});
     if(method==='GET'&&u.pathname==='/v1/prices') return Response.json({data:prices,has_more:false});
     if(method==='GET'&&u.pathname==='/v1/webhook_endpoints') return Response.json({data:[{id:'we_fixed',url:'https://axal.vc/api/billing/stripe/webhook',status:'enabled',enabled_events:['*'],secret:'whsec_synthetic_hidden'}]});
-    if(method==='POST'&&u.pathname==='/v1/products') {const p={id:'prod_new',name:form.get('name'),active:true,metadata:{kind:form.get('metadata[kind]'),plan_group:form.get('metadata[plan_group]')}};products.push(p);return Response.json(p);}
+    if(method==='POST'&&u.pathname==='/v1/products') {const p={id:'prod_new',name:form.get('name'),active:true,livemode:false,metadata:{kind:form.get('metadata[kind]'),plan_group:form.get('metadata[plan_group]')}};products.push(p);return Response.json(p);}
     if(method==='POST'&&u.pathname==='/v1/prices') {const p={...prices[0],id:'price_new',unit_amount:Number(form.get('unit_amount'))};prices.push(p);return Response.json(p);}
     if(method==='POST'&&u.pathname.startsWith('/v1/products/')) return Response.json(products[0]);
     if(method==='POST'&&u.pathname.startsWith('/v1/prices/')) return Response.json(prices[0]);

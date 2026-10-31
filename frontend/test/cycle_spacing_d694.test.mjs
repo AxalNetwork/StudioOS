@@ -10,7 +10,7 @@ import * as espree from 'espree';
 import { transformWithOxc } from 'vite';
 import { Chart } from '../src/pages/cycles/CycleCharts.jsx';
 import { MODULES } from '../src/pages/cycles/modules.js';
-import { ACTION_PATHS, RECORD_ID, STATIC_CHILDREN, isCyclePath } from '../src/pages/cycles/cyclePaths.js';
+import { ACTION_PATHS, CYCLE_GUTTER, RECORD_ID, STATIC_CHILDREN, isCyclePath } from '../src/pages/cycles/cyclePaths.js';
 
 const read = (path) => readFileSync(path, 'utf8');
 
@@ -136,7 +136,7 @@ function assertBody(source) {
 }
 
 test('the cycle body takes the canvas gutter in a cycle size container, and no overlay sits inside it', () => {
-  const source = read(routePath);
+  const source = read(routePath).replace('className={CYCLE_GUTTER}', `className="${CYCLE_GUTTER}"`);
   assertBody(source);
   // D703 (#1665's PR 2c): the container and body sit in the one `!actionPage` condition, which closes with them.
   const close = '      </div>\n      </div>\n      )}\n';
@@ -160,13 +160,13 @@ test('the cycle body takes the canvas gutter in a cycle size container, and no o
 
 const chartsPath = 'pages/cycles/CycleCharts.jsx';
 let serial = 0;
-/** CycleCharts.jsx built from a given source, its one relative import pinned to the real file. */
+/** CycleCharts.jsx built from a given source, its model and package imports pinned to real files. */
 async function chartsFrom(source) {
   const url = new URL('../src/' + chartsPath, import.meta.url);
   const require = createRequire(url);
   const js = (await transformWithOxc(source, url.pathname, { jsx: { runtime: 'automatic' } })).code
     .replace(/from\s*['"]\.\/cycleModel['"]/, `from ${JSON.stringify(new URL('./cycleModel.js', url).href)}`)
-    .replace(/from\s*['"](react\/jsx-runtime)['"]/, (_m, spec) => `from ${JSON.stringify(pathToFileURL(require.resolve(spec)).href)}`);
+    .replace(/from\s*['"](react\/jsx-runtime|react-router-dom)['"]/g, (_m, spec) => `from ${JSON.stringify(pathToFileURL(require.resolve(spec)).href)}`);
   return import('data:text/javascript;base64,' + Buffer.from(js).toString('base64') + '#d694-' + serial++);
 }
 const HBAR = { kind: 'hbar', items: [{ label: 'Onboarding takes weeks', value: 11, tone: 'v1' }, { label: 'Reports by hand', value: 6, tone: 'v2' }], legend: [{ label: 'Severe', tone: 'v1' }, { label: 'Real', tone: 'v2' }] };

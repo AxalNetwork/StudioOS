@@ -55,8 +55,14 @@ test('additional models do not change canvas defaults or automatic fallback chai
     return r.models[0].id !== before.models[0].id || JSON.stringify(after) !== JSON.stringify(baseline);
   });
   assert.deepEqual(changed.map(r => r.pageKey), []);
+  const lost = rows.flatMap(r => {
+    const demoted = original.rows.find((b: any) => b.pageKey === r.pageKey).more ?? [];
+    const connected = moduleConnections(r, switches);
+    return demoted.filter((m: any) => !connected.some(c => c.id === m.id)).map((m: any) => [r.pageKey, m.id]);
+  });
+  assert.deepEqual(lost, [], 'demoting an existing model does not disconnect its module operation');
   const choice = rows.find(r => r.kind === 'chat')!;
-  const optional = choice.models.find(m => m.optional)!;
+  const optional = choice.more![0];
   assert.equal(resolveRailChain(choice, { vision: false }, switches, { caller: optional.id })?.ok, true);
 });
 
@@ -72,10 +78,10 @@ test('structured decisions, the guard and standalone image queries cannot become
 test('optional choices never replace automatic defaults under paid-plan demotion', () => {
   const paid = '@cf/deepseek-ai/deepseek-v4-pro-0813', optional = '@cf/meta/llama-3.2-1b-instruct';
   const row = { pageKey: 'Founder · Studio', kind: 'chat', routeTask: 'rail_chat', models: [
-    { id: paid, role: 'Default', line: '' }, { id: optional, role: 'Alternative', line: '', optional: true },
-  ] };
+    { id: paid, role: 'Default', line: '' },
+  ], more: [{ id: optional, line: '' }] };
   assert.deepEqual(resolveRailChain(row, { vision: false }, {}, {}), { ok: true, primary: paid, chain: [], source: 'default' });
-  assert.equal(resolveRailChain({ ...row, models: [row.models[1]] }, { vision: false }, {}, {}), null);
+  assert.equal(resolveRailChain({ ...row, models: [] }, { vision: false }, {}, {}), null);
   assert.deepEqual(resolveRailChain(row, { vision: false }, {}, { page: optional }), { ok: true, primary: optional, chain: [], source: 'pick' });
 });
 

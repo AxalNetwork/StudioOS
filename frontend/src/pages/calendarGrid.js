@@ -7,7 +7,7 @@
  * Everything here reads the page's one list (`inRange`); nothing counts a second
  * list, and a count the read did not give is never a 0.
  */
-import { FAMILIES } from './calendarViews';
+import { FAMILIES, LAYERS } from './calendarViews';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -173,17 +173,23 @@ export function familiesFor(role) {
 }
 export const kindsOfFamilies = (families) => families.flatMap((f) => f.kinds);
 
-/** `?kinds=` as the set of kinds shown, or null for everything. Unknown words are dropped; nothing known left is everything. */
+/**
+ * `?kinds=` as the set of kinds shown, or null for everything. Unknown words are dropped; nothing known left is everything.
+ * D1384: with no `?kinds=`, `?layer=` (a `LAYERS` word) stands for its kinds.
+ */
 export function kindsFrom(search = '', allowed = []) {
-  const raw = new URLSearchParams(String(search).replace(/^\?/, '')).get('kinds');
-  if (raw == null) return null;
-  const set = new Set(raw.split(',').map((s) => s.trim()).filter((k) => allowed.includes(k)));
+  const p = new URLSearchParams(String(search).replace(/^\?/, ''));
+  const raw = p.get('kinds');
+  const words = raw != null ? raw.split(',') : (LAYERS[p.get('layer')] || null);
+  if (words == null) return null;
+  const set = new Set(words.map((s) => s.trim()).filter((k) => allowed.includes(k)));
   return set.size ? set : null;
 }
 
 /** The search with `?kinds=` set from a choice (every allowed kind is everything, so the parameter goes), keeping the rest. */
 export function withKinds(search = '', chosen, allowed = []) {
   const p = new URLSearchParams(String(search).replace(/^\?/, ''));
+  p.delete('layer');
   const all = !chosen || allowed.every((k) => chosen.has(k));
   if (all) p.delete('kinds'); else p.set('kinds', allowed.filter((k) => chosen.has(k)).join(','));
   const s = p.toString();
@@ -213,7 +219,7 @@ export function familyCounts(families, counts) {
   });
 }
 
-/** The three quick sets (CAL6). Deadlines carry no kind yet, so Hide deadlines shows every kind there is. */
+/** The three quick sets (CAL6). Hide deadlines drops the Deadlines family's kinds (D1384: compliance). */
 export const QUICK_SETS = Object.freeze([
   { key: 'everything', label: 'Everything' },
   { key: 'needs', label: 'Only what needs me' },

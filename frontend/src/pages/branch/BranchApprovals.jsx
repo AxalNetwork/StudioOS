@@ -619,7 +619,7 @@ const LANE_CONSOLE = {
   exploring: { to: '/admin/exploring', label: 'Exploring queue' },
   jobs: { to: '/admin/jobs', label: 'Jobs console' },
   events: { to: '/admin/events', label: 'Events console' },
-  best_fit: { to: '/admin/best-fit', label: 'Best-Fit console' },
+  best_fit: { to: '/admin/approvals', label: 'Approvals' },
   due_diligence: { to: '/admin/due-diligence', label: 'Due diligence' },
   // D1041 (#2889). KYB has no console: no admin route decides a business
   // verification yet, so the row says so rather than linking to KYC's.

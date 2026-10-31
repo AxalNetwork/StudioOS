@@ -665,7 +665,8 @@ test('the sidebars: the Admin row and its match, Approvals without /admin/refer-
   const admin = SIDEBAR_GROUPS.admin.flatMap((g) => g.items || []);
   const programs = admin.find((r) => r.label === 'Programs');
   assert.equal(programs.to, '/admin/programs');
-  assert.deepEqual(programs.match, ['/admin/programs', '/admin/held/programs', '/admin/advisor-cohorts', '/admin/refer-earn', '/admin/spinout-lab', '/admin/profiling-trends']);
+  assert.ok(!programs.match.includes('/admin/profiling-trends'), 'retired Profiling trends is not claimed by Programs');
+  assert.deepEqual(programs.match, ['/admin/programs', '/admin/held/programs', '/admin/advisor-cohorts', '/admin/refer-earn', '/admin/spinout-lab']);
   assert.ok(!admin.find((r) => r.label === 'Approvals').match.includes('/admin/refer-earn'), 'exactly one row lights each page');
   const lit = (path) => admin.filter((r) => r.to === path || (r.match || []).some((m) => path === m || path.startsWith(`${m}/`))).map((r) => r.label);
   for (const p of ['/admin/programs', '/admin/programs/perks/queue', '/admin/programs/mentor-cohorts/people', '/admin/refer-earn']) assert.deepEqual(lit(p), ['Programs'], p);

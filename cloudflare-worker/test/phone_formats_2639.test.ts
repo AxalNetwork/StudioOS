@@ -78,7 +78,7 @@ function moduleUrl(source: string, base: URL) {
 test('#2639: strict validation and recovery binding assertions reject guard mutations, then pass restored sources',async t=>{
   const smsUrl=new URL('../src/routes/auth_sms.ts',import.meta.url);
   const smsSource=readFileSync(smsUrl,'utf8');
-  const mutant=(await import(moduleUrl(smsSource.replace('if (!isE164(phone))','if (false)'),smsUrl))).default;
+  const mutant=(await import(moduleUrl(smsSource.replace('if (!isE164(phone))','if (false)').replace('parsePhoneNumberFromString(phone, { extract: false })', "({ country: 'CH', isPossible: () => true })"),smsUrl))).default;
   await assert.rejects(()=>enrollment(t,mutant),{name:'AssertionError'});
   await enrollment(t);
   const profileUrl=new URL('../src/services/profileExpansion.ts',import.meta.url);

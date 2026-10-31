@@ -145,8 +145,8 @@ export const DOORS = {
       {
         k: 'Your profile',
         t: 'Your founder profile goes with you.',
-        d: 'Profiling maps your skills and values to a founder archetype card. The venture-readiness score reads your record and shows the evidence behind it. Your public profile has its own address, co-founder match looks for a partner who fits, and wellbeing sessions and Academy lessons are in the same account.',
-        list: ['Archetype card', 'Venture-readiness score', 'Public profile', 'Co-founder match', 'Wellbeing', 'Academy'],
+        d: 'Profiling maps your skills and values to a founder archetype card. The venture-readiness score reads your record and shows the evidence behind it. Your public profile has its own address, co-founder match looks for a partner who fits, and wellbeing sessions are in the same account.',
+        list: ['Archetype card', 'Venture-readiness score', 'Public profile', 'Co-founder match', 'Wellbeing'],
       },
     ],
     eadwynT: 'Eadwyn, the assistant inside the product',
@@ -180,7 +180,6 @@ export const DOORS = {
       { t: 'Public profile', route: '/u/:handle' },
       { t: 'Co-founder match', route: '/spinout-lab/cofounder-match' },
       { t: 'Wellbeing sessions', route: '/wellbeing' },
-      { t: 'Academy', route: '/academy' },
     ],
     // The AI-assistant connector (#1555) is built and switched off until its
     // OAuth store exists in production.

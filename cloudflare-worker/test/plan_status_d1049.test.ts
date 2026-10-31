@@ -49,7 +49,7 @@ function world() {
 async function seed(f: any) {
   await ensureCatalogSchema(f.env);
   for (const p of PRODUCTS) {
-    f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES(?,?,?,?,?,?)').run(
+    f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES(?,?,?,?,?,?,0)').run(
       p.id, p.name, 'subscription', 1, JSON.stringify(p.metadata),
       JSON.stringify(p.prices.map((x) => ({ id: x.id, currency: x.currency ?? 'usd', unit_amount: x.unit_amount, interval: x.interval, interval_count: 1, nickname: null, type: 'recurring', active: x.active }))));
   }

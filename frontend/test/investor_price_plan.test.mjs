@@ -13,12 +13,12 @@ const pro = { id: 'prod_pro', active: true, kind: 'subscription', metadata: { in
 test('approved Investor amounts and annual equivalents', () => {
   assert.deepEqual(INVESTOR_PRICES.map(p => [p.tier, p.month, p.year]), [['plus', 5000, 51000], ['professional', 15000, 153000]]);
   const result = planInvestorPrices({ products: [pro] });
-  assert.deepEqual(result.create.map(a => [a.method, a.path, a.body.unit_amount, a.body.interval]), [
-    ['POST', '/api/admin/catalog/products/prod_pro/prices', 15000, 'month'],
-    ['POST', '/api/admin/catalog/products/prod_pro/prices', 153000, 'year'],
+  assert.deepEqual(result.change.map(a => [a.method, a.path, a.body.unit_amount]), [
+    ['POST', '/api/admin/catalog/prices/price_oldmonth/change', 15000], ['POST', '/api/admin/catalog/prices/price_oldyear/change', 153000],
   ]);
-  assert.deepEqual(result.archive_after_verification.map(a => a.path), ['/api/admin/catalog/prices/price_oldmonth/archive', '/api/admin/catalog/prices/price_oldyear/archive']);
-  const plans = [{ licence_key: 'investor:professional', product_id: pro.id, free: false, prices: result.create.map(a => a.body) }];
+  assert.deepEqual(result.create, []);
+  assert.deepEqual(result.archive_after_verification, []);
+  const plans = [{ licence_key: 'investor:professional', product_id: pro.id, free: false, prices: result.change.map((a, i) => ({ ...pro.prices[i], ...a.body })) }];
   const monthly = planCards({ plans }, PLAN_CARDS.investor);
   assert.equal(monthly.cards.find(c => c.id === 'professional').price, '$150');
   const yearly = planCards({ plans }, PLAN_CARDS.investor, { billing: 'yearly' });

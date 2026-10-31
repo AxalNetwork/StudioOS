@@ -197,7 +197,7 @@ const FEATURE_CATALOG: FeatureEntry[] = [
   { keywords: ['incorporation', 'incorporate', 'wizard'],
     url: '/incorporate', label: 'Incorporation Wizard', roles: ['founder', 'admin'] },
   { keywords: ['compliance calendar', 'compliance', '83(b)', '83b'],
-    url: '/compliance', label: 'Compliance Calendar', roles: ['founder', 'admin'] },
+    url: '/calendar?layer=compliance', label: 'Compliance in Calendar', roles: ['founder', 'admin'] },
   { keywords: ['fund management', 'fund'],
     url: '/funds', label: 'Fund Management', roles: ['admin', 'investor'] },
   { keywords: ['advisor', 'office hours', 'advisor matching'],

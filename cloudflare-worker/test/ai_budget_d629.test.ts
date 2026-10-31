@@ -15,7 +15,7 @@ import { ensureCatalogSchema } from '../src/services/catalog.ts';
 
 import { guardSafe } from './_guard_stub.mjs';
 const now=new Date('2026-10-07T12:00:00Z');
-const fixture=()=>{const f=aiBudgetFixture();return {...f,env:{DB:f.DB,JWT_SECRET:'d629-fixture-only-signing-secret',STRIPE_WEBHOOK_SECRET:'d629-fixture-only-webhook-secret',ENVIRONMENT:'development'} as any};};
+const fixture=()=>{const f=aiBudgetFixture();return {...f,env:{DB:f.DB,JWT_SECRET:'d629-fixture-only-signing-secret',STRIPE_WEBHOOK_SECRET:'d629-fixture-only-webhook-secret',STRIPE_SECRET_KEY:'sk_test_fixture',ENVIRONMENT:'development'} as any};};
 // D783: only the admin licence's caps are typed. A member's allowance is 25% of their plans (`setFixtureAllowance`), with no daily cap.
 const caps=(db:any,day=1000000,month=3000000,licence='admin')=>db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES(?,?,?,1)").run(licence,day,month);
 const pick=(c:any)=>({licence:c.licence,source:c.source,daily_capped:c.daily_capped,daily_microusd:c.daily_microusd,monthly_microusd:c.monthly_microusd});
@@ -181,7 +181,7 @@ test('a confirmed signed webhook credits a persisted checkout quote once; unsign
   const pi=await buy(f);
   await ensureOrdersSchema(f.env);
   f.db.prepare("INSERT INTO orders(id,order_ref,user_id,status,payment_intent_id,items_json) VALUES('order-id','order1',2,'paid','pi_topup','[]')").run();
-  const body=JSON.stringify({id:'evt_topup',type:'payment_intent.succeeded',data:{object:pi}});
+  const body=JSON.stringify({id:'evt_topup',livemode:false,type:'payment_intent.succeeded',data:{object:pi}});
   assert.equal((await billingRoute.request('/stripe/webhook',{method:'POST',body},f.env)).status,400);
   assert.equal(purchases(f.db),0);
   const timestamp=Math.floor(Date.now()/1000);
@@ -244,7 +244,7 @@ test('configured price must be an active one-time USD product; absent makes no p
   f.env.STRIPE_PRICE_AI_TOPUP='price_owner';
   await ensureCatalogSchema(f.env);
   const price={id:'price_owner',currency:'usd',unit_amount:2000,type:'one_time',active:true,interval:null};
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_owner','Owner AI top-up','alacarte',1,'{}',?)").run(JSON.stringify([price]));
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_owner','Owner AI top-up','alacarte',1,'{}',?,0)").run(JSON.stringify([price]));
   assert.deepEqual(await readAiTopupProduct(f.env),{configured:true,state:'ready',product:{price_id:'price_owner',product_id:'prod_owner',name:'Owner AI top-up',currency:'usd',unit_amount:2000,cycle:'onetime',credit_microusd:20000000}});
   for(const [changed,reason] of [[{currency:'eur'},'not_usd'],[{type:'recurring'},'not_one_time'],[{active:false},'inactive'],[{unit_amount:0},'bad_amount'],[{unit_amount:1.5},'bad_amount']] as const) {
     f.db.prepare("UPDATE stripe_products SET prices_json=? WHERE id='prod_owner'").run(JSON.stringify([{...price,...changed}]));

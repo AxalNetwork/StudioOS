@@ -6,7 +6,7 @@ import { Lightbox, Unreadable } from '../../../ui';
 import {
   BOUNDARY, HOME_PATH, NOTES_META, NOTES_TITLE, NOTE_ANSWER_PLACEHOLDER, NOTE_MAX, NOTE_PLACEHOLDER, NO_NOTES, NO_READS,
   OTHER_VENTURE, READS_TITLE, READ_ONLY, REASON_HELP, REASON_MAX, REASON_PLACEHOLDER, REASON_TITLE, TITLE,
-  noteRow, notePosts, openedLine, readRow, reasonProblem,
+  noteRow, notePosts, isNarrativeAdmin, openedLine, readRow, reasonProblem,
 } from './narrativeModel';
 
 /**
@@ -67,7 +67,7 @@ export function ReadOnlyBanner({ read, viewer }) {
 }
 
 /** Before an admin reads the narrative, the reason the founder will see. */
-function ReasonForm({ projectId, onOpened }) {
+export function NarrativeReasonForm({ projectId, onOpened, submitLabel = 'Open read only' }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(null);
@@ -95,9 +95,20 @@ function ReasonForm({ projectId, onOpened }) {
           onChange={(e) => setText(e.target.value)} data-testid="narrative-reason-input" />
       </label>
       {failed ? <p role="alert" className={ALERT} data-testid="narrative-reason-failed">{failed}</p> : null}
-      <button type="submit" className={BTN} disabled={busy} data-testid="narrative-reason-open">{busy ? 'Opening…' : 'Open read only'}</button>
+      <button type="submit" className={BTN} disabled={busy} data-testid="narrative-reason-open">{busy ? 'Opening…' : submitLabel}</button>
     </form>
   );
+}
+
+/** #3712: shared by the cycle's Add/Edit dialogs, outside the page's gate. */
+export function narrativeFormAccess(projectId, user) {
+  // Use the authenticated role. A shell preview is not a different principal.
+  if (!isNarrativeAdmin(user)) return {};
+  return {
+    readOnly: `${READ_ONLY} Only the venture’s founders create or change versions.`,
+    renderReadRecovery: (error, retry) => error?.data?.code === 'read_reason_required'
+      ? <NarrativeReasonForm projectId={projectId} onOpened={retry} submitLabel="Continue" /> : null,
+  };
 }
 
 /**
@@ -111,7 +122,7 @@ export function NarrativeAdminGate({ projectId, onOpened, children }) {
   if (!projectId) return children;
   if (reads.status === 'loading' && !reads.mine) return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="narrative-reason-loading" />;
   if (reads.status === 'error') return <Unreadable what="The read log" claim="The narrative stays closed until it can be checked." onRetry={() => setTick((n) => n + 1)} />;
-  if (!reads.mine) return <ReasonForm projectId={projectId} onOpened={opened} />;
+  if (!reads.mine) return <NarrativeReasonForm projectId={projectId} onOpened={opened} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="narrative-admin">
       <ReadOnlyBanner read={reads.mine} viewer={reads.viewer} />

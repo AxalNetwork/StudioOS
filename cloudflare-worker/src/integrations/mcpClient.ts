@@ -412,6 +412,8 @@ export async function openMcpSession(provider: McpProvider, opts: McpSessionOpti
   if (!provider.resources.includes(url) || !onProviderHosts(url, provider.hosts)) throw new McpClientError('path_not_allowed');
   const budget = Math.min(opts.budget ?? provider.budget, provider.budget);
   const fixed = fixedHeaders(provider.headers, connectionHeaders(provider, opts.headers));
+  const limitHeaders = provider.rate_limit_headers ?? [];
+  const limitSpent = (res: Response): boolean => limitHeaders.some((h) => res.headers.get(h)?.trim() === '0');
   const wallEnd = Date.now() + MCP_SESSION_WALL_MS;
   let requests = 0;
   let nextId = 1;
@@ -450,6 +452,8 @@ export async function openMcpSession(provider: McpProvider, opts: McpSessionOpti
       throw new McpClientError(e instanceof DeadlineExceeded ? 'timeout' : 'network_error');
     }
     if (res.status === 0 || (res.status >= 300 && res.status < 400)) throw new McpClientError('redirect_refused', res.status || null);
+    // D855 §4: a provider's own "spent" counter outranks the status it chose.
+    if (!res.ok && limitSpent(res)) throw new McpClientError('rate_limited', res.status);
     if (res.status === 401) throw new McpClientError('unauthorized', 401);
     if (res.status === 403) {
       const challenge = res.headers.get('WWW-Authenticate') || '';

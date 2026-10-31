@@ -1,4 +1,5 @@
-import { lineSegments, maxOf, share } from './cycleModel';
+import { Link } from 'react-router-dom';
+import { lineSegments, maxOf, safeHref, share } from './cycleModel';
 
 /**
  * D661 (#1474) — the cycle cards' charts, one component per helper in
@@ -289,12 +290,19 @@ const ROW_TONE = { ok: 'text-emerald-700 dark:text-emerald-300', warn: 'text-amb
 function Rows({ spec }) {
   return (
     <div className="flex flex-col">
-      {(spec.items || []).map((it, i) => (
-        <div key={`${it.label}-${i}`} className="flex justify-between gap-2.5 border-b border-axal-ground py-[7px] text-[12px] last:border-b-0 dark:border-gray-800">
-          <span className="font-semibold text-axal-ink dark:text-gray-100">{it.label}</span>
-          <span className={`text-right ${ROW_TONE[it.tone] || 'text-axal-muted dark:text-gray-400'}`}>{it.value == null ? 'Not recorded' : fmt(it.value, spec.unit)}</span>
-        </div>
-      ))}
+      {(spec.items || []).map((it, i) => {
+        const actionHref = safeHref(it.next?.href);
+        return (
+          <div key={`${it.label}-${i}`} className="flex justify-between gap-2.5 border-b border-axal-ground py-[7px] text-[12px] last:border-b-0 dark:border-gray-800">
+            <span className="font-semibold text-axal-ink dark:text-gray-100">{it.label}</span>
+            <span className="flex min-w-0 flex-1 flex-col items-end text-right">
+              <span className={it.value == null ? 'text-axal-muted dark:text-gray-400' : ROW_TONE[it.tone] || 'text-axal-muted dark:text-gray-400'}>{it.value == null ? 'Not recorded' : fmt(it.value, spec.unit)}</span>
+              {it.note && <span className="text-[11px] text-axal-muted dark:text-gray-400">{it.note}</span>}
+              {it.next?.text && actionHref && <Link to={actionHref} className="inline-flex min-h-[44px] items-center font-semibold text-axal-violet-deep hover:underline sm:min-h-0 dark:text-violet-300">{it.next.text}</Link>}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

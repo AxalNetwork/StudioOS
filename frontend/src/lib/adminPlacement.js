@@ -64,7 +64,6 @@ export const ADMIN_PLACEMENT = [
   // reachable. Its 14 tabs are placed individually". Since D938 it is a
   // redirect, and each tab is a page of its own, placed below.
   row('Due Diligence', '/admin/due-diligence', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
-  row('Best-Fit Console', '/admin/best-fit', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
   row('Event Admin', '/admin/events', admin('Community', 'card link'), false,
     { how: 'Card link. Its approvals are also an Approvals lane.', also: [admin('Approvals', 'lane')] }),
   row('Job Board Admin', '/admin/jobs', admin('Community', 'card link'), false,
@@ -152,7 +151,6 @@ export const ADMIN_PLACEMENT = [
   page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),
   page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall', 'Proceeds by class at a given exit.'),
   page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
-  page('Capital & Legal', 'Compliance Calendar', '/compliance', 'Filings and their deadlines.'),
   page('Network & Growth', 'Network', '/network', 'Relationships and introductions.'),
   page('Network & Growth', 'Jobs', '/my/jobs', 'Open roles.'),
   page('Network & Growth', 'Demand Insights', '/partner/insights', 'Partner demand analytics.'),
@@ -202,7 +200,6 @@ export const PAGE_HOMES = {
   '/portfolio/health': [['investor', 'Portfolio', 'row']],
   '/portfolio/waterfall': [['investor', 'Portfolio', 'also']],
   '/incorporate': [['founder', 'Raise', 'also']],
-  '/compliance': [['founder', 'Raise', 'also']],
   '/network': [['founder', 'Network', 'row'], ['investor', 'Network', 'row'], ['partner', 'Network', 'row'], ['advisor', 'Network', 'row']],
   '/my/jobs': [['partner', 'Network', 'also'], ['advisor', 'Network', 'also']],
   '/partner/insights': [['partner', 'Pipeline', 'also']],

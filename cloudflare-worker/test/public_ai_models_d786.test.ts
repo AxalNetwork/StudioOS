@@ -77,7 +77,7 @@ test('the owner\'s switches decide what is offered: partner models only while AI
 test('pages are the matrix\'s canvas page names that name each model; New and Paid-only are flagged', async () => {
   const { body } = await get({ AI_PARTNER_MODELS: 'on' });
   const want = new Map<string, Set<string>>();
-  for (const row of [...railRows(), ...railOptionRows()]) for (const m of row.models) {
+  for (const row of [...railRows(), ...railOptionRows()]) for (const m of [...row.models, ...(row.more ?? [])]) {
     if (!want.has(m.id)) want.set(m.id, new Set());
     want.get(m.id)!.add(row.pageKey);
   }

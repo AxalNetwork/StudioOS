@@ -185,8 +185,17 @@ b86a6d6d4eac96a90f29bc3f4714d364d2f6b4a0:cloudflare-worker/test/kyb_d1231.test.t
 5e8d812707ccd72f3b83c00586252df8d43edc4c:cloudflare-worker/test/publish_core_d1319.test.ts:jwt:293
 # D1361: a fixture signing string in a test, removed in the next commit; the published commit is pinned.
 987c80ec092a8a971073fac8bc57017348041ca2:cloudflare-worker/test/connector_api_d1361.test.ts:generic-api-key:198
+# D1384 (#3692): the synthetic JWT signing string in the Compliance layer
+# route test's first commit. It signs test tokens for an in-memory database
+# only and was never a credential. The next commit uses the D1206 test's
+# literal shape instead, so no later commit carries it. Scoped to the one finding.
+f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_compliance_d1384.test.ts:generic-api-key:34
 # #3708: the synthetic JWT signing string in the meeting-bot diagnostic test's
 # first commit. It signs test tokens for an in-memory database only, and was
 # never a credential. The next commit (daba115f) generates it at run time, so no
 # later commit carries it. Scoped to the one finding, as D334's entry is.
 9cb2388051552c6512b718c43b516fb7acbf767b:cloudflare-worker/test/meeting_bot_diagnose_3708.test.ts:generic-api-key:21
+# D1445 (#3707): deterministic signing seed for an in-memory test database,
+# never a deployed credential. The follow-up expands a short fixture seed at
+# runtime. Pin only the already-published finding, as in D334.
+122a14aa2bb671ea2df0794f79fa0db42e30677f:cloudflare-worker/test/sms_enrolment_3707.test.ts:generic-api-key:12

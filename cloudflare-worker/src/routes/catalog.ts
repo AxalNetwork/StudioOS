@@ -66,7 +66,7 @@ import {
   type CreatePriceBody,
 } from '../services/catalog';
 import { ensureAdminAuditLogTable } from './admin';
-import { isTokenPackPrice, isTokenPackProduct, packLabel, TOKEN_PACK_LIMITS } from '../services/aiCredits';
+import { isTokenPackPrice, isTokenPackProduct, packLabel, packLines, TOKEN_PACK_LIMITS } from '../services/aiCredits';
 import { refuse } from '../util/refusal';
 import { annotateCatalog, catalogChecks, changePrice, membersPerPlan, packProductIds } from '../services/paymentsCatalog';
 import { StripeApiError } from '../util/stripeError';
@@ -167,9 +167,11 @@ adminCatalog.get('/products', async (c) => {
   await requireSuperAdmin(c);
   let products;
   let packs;
+  let packReadiness;
   try {
     products = await getCatalog(c.env);
     packs = await packProductIds(c.env);
+    packReadiness = await packLines(c.env);
   } catch (e) {
     return refuse(c, 502, { code: 'catalog_read_failed', message: 'The catalogue could not be read. Try again in a moment.', raw: e, audience: 'admin' });
   }
@@ -178,7 +180,8 @@ adminCatalog.get('/products', async (c) => {
   const publishableMode = publishableKeyMode(await getPublishableKey(c.env));
   return c.json({
     products: annotateCatalog(products, packs), mode: accountMode, audience_categories: AUDIENCE_CATEGORIES,
-    keys: { account_mode: accountMode, publishable_mode: publishableMode }, checks: catalogChecks(products, { accountMode, publishableMode }),
+    keys: { account_mode: accountMode, publishable_mode: publishableMode },
+    checks: catalogChecks(products, { accountMode, publishableMode, webhookConfigured: !!c.env.STRIPE_WEBHOOK_SECRET }, packReadiness),
   });
 });
 

@@ -34,6 +34,7 @@
   --k-partner_office_hour: #1d4ed8; --k-calendly_event: #86198f; --k-expert_booking: #be123c;
   --k-event_ticket: #4d7c0f; --k-event_hosted: #0369a1;
   --k-investor_meeting: #047857;
+  --k-compliance_due: #57534e;
   background: var(--cal-shell);
   color: var(--cal-ink);
   min-height: 100%;
@@ -62,6 +63,7 @@
   --k-partner_office_hour: #93c5fd; --k-calendly_event: #f0abfc; --k-expert_booking: #fda4af;
   --k-event_ticket: #bef264; --k-event_hosted: #7dd3fc;
   --k-investor_meeting: #6ee7b7;
+  --k-compliance_due: #d6d3d1;
 }
 
 .cal-mono { font-family:var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -112,6 +114,8 @@
 .cal-dot[data-kind='event_ticket'] { background: var(--k-event_ticket); border-radius: 50% 50% 0 0; }
 .cal-dot[data-kind='event_hosted'] { background: var(--k-event_hosted); border-radius: 0 0 50% 50%; }
 .cal-dot[data-kind='investor_meeting'] { background: var(--k-investor_meeting); border-radius: 50% 0 50% 50%; }
+/* D1384: the Compliance layer, a deadline flag. */
+.cal-dot[data-kind='compliance_due'] { background: var(--k-compliance_due); border-radius: 0 50% 50% 0; }
 
 /* ── body: agenda beside the 328px rail ───────────────────────────────── */
 .cal-body { display: flex; align-items: stretch; }
@@ -151,6 +155,9 @@
 
 .cal-ev { display: flex; flex-direction: column; gap: 3px; padding: 8px 9px; border-radius: 8px; background: var(--cal-ev); border: 1px solid var(--cal-ev-line); text-align: left; }
 .cal-ev[data-kind='ic_meeting'] { box-shadow: inset 3px 0 0 var(--k-ic_meeting); }
+.cal-ev[data-kind='compliance_due'] { box-shadow: inset 3px 0 0 var(--k-compliance_due); }
+.cal-nr[data-state='overdue'] { color: var(--cal-err-ink); font-weight: 700; }
+.cal-nr[data-state='done'] { color: var(--cal-ok-ink); }
 .cal-ev[data-cancelled='true'] { opacity: .6; }
 .cal-ev-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cal-ev-kind { font-family:var(--font-mono); font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .13em; }

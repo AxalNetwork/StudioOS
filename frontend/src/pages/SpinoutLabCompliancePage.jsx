@@ -5,9 +5,11 @@
 // WEEK_DEFS week-4 deliverable and its real milestone key, so an item ticks
 // here only when the founder actually completed it in the source tool.
 //
-// IMPORTANT — this does NOT replace /compliance.
+// IMPORTANT — this does NOT replace the compliance calendar. D1384 (#3692)
+// moved it from /compliance into Calendar's Compliance layer
+// (/calendar?layer=compliance); what follows is the history of why.
 //
-// /compliance is the platform-wide Compliance Calendar (Task #32): recurring
+// /compliance was the platform-wide Compliance Calendar (Task #32): recurring
 // post-incorporation obligations (annual report, franchise tax, registered
 // agent, board meetings) with T-30/14/7/1 reminder pings fired by
 // services/compliance_reminders.py, its own complianceList/Create/Update API,

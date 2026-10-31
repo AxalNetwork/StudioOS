@@ -14,6 +14,10 @@
  * `POST /api/fills/record` keeps only the placed values that still equal
  * Eadwyn's proposal. `edited` is a waiting row opened by its Edit (AF16): its
  * values open the form, and Save decides the proposal as edited.
+ *
+ * #3712: `readOnly` explains a read-only sheet; `renderReadRecovery(error,
+ * retry)` replaces a failed choices read with its domain's access form.
+ * Recovery sits outside the data form so its own submit cannot save a record.
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Lightbox from '../../ui/Lightbox.jsx';
@@ -189,7 +193,7 @@ function FieldHead({ fill, name, label, value, busy, children }) {
   </div>;
 }
 
-export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null }) {
+export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null, readOnly = '', renderReadRecovery = null }) {
   const id = useId();
   const initialFields = useMemo(() => formFields(base, {}, current), [base, current]);
   const queryValues = useMemo(() => typeof base?.fromQuery === 'function' ? base.fromQuery(new URLSearchParams(search)) : {}, [base, search]);
@@ -204,6 +208,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const [loaded, setLoaded] = useState(refused ? null : loadOptions ? undefined : {});
   // D969: a failed read of the choices says so with Try again, and reads them again.
   const [readFailed, setReadFailed] = useState(false);
+  const [readError, setReadError] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const [done, setDone] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -244,9 +249,9 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     Promise.resolve().then(loadOptions).then((read) => {
       if (!live) return;
       const result = read ?? {};
-      setLoaded(result); setReadFailed(false);
+      setLoaded(result); setReadFailed(false); setReadError(null);
       setValues(formValues(formFields(base, result, current), seed, queryValues));
-    }, (error) => { if (live) { setLoaded(null); setReadFailed(true); setRefusal(error?.message || 'The choices could not be read.'); } });
+    }, (error) => { if (live) { setLoaded(null); setReadFailed(true); setReadError(error); setRefusal(error?.message || 'The choices could not be read.'); } });
     return () => { live = false; };
     // The caller keys a mounted form per row; a new callback does not re-read. Try again does (`attempt`).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -257,7 +262,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const [fillOpen, setFillOpen] = useState(false);
   const [placed, setPlaced] = useState(() => (fill?.edited?.row ? placeValues(Object.entries(fill.edited.row).map(([field, value]) => ({ field, value, source_kind: 'eadwyn' })), Object.keys(fill.edited.row)).placed : {}));
   useEffect(() => {
-    if (!fill || refused) return undefined;
+    if (!fill || refused || readOnly) return undefined;
     let live = true;
     setFillRead({ status: 'loading', data: null });
     Promise.resolve().then(() => fillsApi.sheet({ page: fill.page, form: fill.form, project: fill.project }))
@@ -265,10 +270,10 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
         (error) => { if (live) { reportError('fill-form:read', error); setFillRead({ status: 'unreadable', data: null }); } });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fill?.page, fill?.form, fill?.project, fillTick]);
+  }, [fill?.page, fill?.form, fill?.project, fillTick, readOnly]);
   const fillFields = fillRead?.status === 'ready' && Array.isArray(fillRead.data?.fields) ? fillRead.data.fields : [];
   const fillNames = fillFields.map((f) => f.field);
-  const fillCtl = fill && fillRead?.status === 'ready' ? {
+  const fillCtl = !readOnly && fill && fillRead?.status === 'ready' ? {
     field: (name) => fillFields.find((f) => f.field === name) || null,
     placed, aiOff: !!fill.aiOff, open: () => setFillOpen(true),
   } : null;
@@ -294,14 +299,15 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
       catch (error) { reportError('fill-form:edited-row', error); }
     }
   };
-  const readAgain = () => { setLoaded(undefined); setReadFailed(false); setRefusal(''); setAttempt((n) => n + 1); };
+  const readAgain = () => { setLoaded(undefined); setReadFailed(false); setReadError(null); setRefusal(''); setAttempt((n) => n + 1); };
+  const readRecovery = readFailed && renderReadRecovery?.(readError, readAgain);
   if (!base) return null;
   const cycleKey = String(cycle ?? '').toLowerCase();
   const name = moduleName || MODULES[cycleKey]?.find((module) => module.slug === slug)?.name;
   const eyebrow = [CYCLES[cycleKey]?.name || cycle, name].filter(Boolean).join(' · ');
   const save = async (event) => {
     event.preventDefault();
-    if (saving.current || !loaded || done || blocked) return;
+    if (saving.current || !loaded || done || blocked || readOnly) return;
     const found = formErrors(base, fields, values);
     setErrors(found); setRefusal('');
     if (Object.keys(found).length) return;
@@ -322,16 +328,18 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   };
   const setValue = (name, value) => setValues((old) => ({ ...old, [name]: value }));
   const footer = <div className="flex flex-wrap items-center justify-between gap-2.5 max-lg:flex-col max-lg:items-stretch">
-    {base.foot && <p className="m-0 text-xs text-axal-muted dark:text-gray-400">{cleanFormCopy(base.foot)}</p>}
+    {!readOnly && base.foot && <p className="m-0 text-xs text-axal-muted dark:text-gray-400">{cleanFormCopy(base.foot)}</p>}
     <div className="flex justify-end gap-2 max-lg:flex-col">
-      <button type="button" onClick={onClose} className="rounded-[9px] border border-axal-hairline bg-white px-3.5 py-[9px] text-[12.5px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{done ? 'Close' : 'Cancel'}</button>
-      {!done && <button type="submit" form={id} disabled={busy || !loaded || blocked} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-[9px] text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600 dark:text-white max-lg:h-[52px] max-lg:w-full">{busy ? 'Saving…' : base.cta || base.button || 'Save'}</button>}
+      <button type="button" onClick={onClose} className="rounded-[9px] border border-axal-hairline bg-white px-3.5 py-[9px] text-[12.5px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{done || (readOnly && loaded) ? 'Close' : 'Cancel'}</button>
+      {!done && !readOnly && <button type="submit" form={id} disabled={busy || !loaded || blocked} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-[9px] text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600 dark:text-white max-lg:h-[52px] max-lg:w-full">{busy ? 'Saving…' : base.cta || base.button || 'Save'}</button>}
     </div>
   </div>;
-  return <Lightbox pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={onClose} footer={footer} focusKey={done ? 'done' : 'form'} testId="cycle-form" bar={bar}>
-    <form id={id} onSubmit={save} noValidate className="flex flex-col gap-3.5 px-5 py-4">
-      {refusal && <p role="alert" data-testid="cycle-form-refusal" className="m-0 rounded-lg border border-red-200 bg-red-50 p-3 text-[12.5px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{refusal}</p>}
-      {readFailed && <button type="button" onClick={readAgain} data-testid="cycle-form-read-again" className="self-start rounded-[9px] border border-axal-hairline bg-white px-3.5 py-[9px] text-[12.5px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">Try again</button>}
+  return <Lightbox pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={onClose} footer={footer} focusKey={readRecovery ? 'read-reason' : done ? 'done' : 'form'} testId="cycle-form" bar={bar}>
+    {readOnly ? <p role="status" data-testid="cycle-form-read-only" className="m-0 px-5 pt-4 text-[13px] text-axal-muted dark:text-gray-400">{readOnly}</p> : null}
+    {readRecovery ? <div className="px-5 py-4">{readRecovery}</div> : null}
+    {!readRecovery && <form id={id} onSubmit={save} noValidate className="flex flex-col gap-3.5 px-5 py-4">
+      {!readRecovery && refusal && <p role="alert" data-testid="cycle-form-refusal" className="m-0 rounded-lg border border-red-200 bg-red-50 p-3 text-[12.5px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{refusal}</p>}
+      {readFailed && !readRecovery && <button type="button" onClick={readAgain} data-testid="cycle-form-read-again" className="self-start rounded-[9px] border border-axal-hairline bg-white px-3.5 py-[9px] text-[12.5px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">Try again</button>}
       {done ? <div data-testid="cycle-form-done" className="space-y-3 text-[13px] text-axal-ink dark:text-gray-200">
         <p>{done.text}</p>
         {linkOf(done.href) && <a href={done.href} className="font-bold text-axal-violet underline dark:text-violet-300">Continue</a>}
@@ -342,7 +350,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
       </div> : <>
         {loaded === undefined && <p data-testid="cycle-form-loading" className="m-0 text-xs text-axal-muted dark:text-gray-400">Reading the choices…</p>}
         {loaded && fill && fillRead?.status === 'unreadable' ? <p role="status" data-testid="fill-form-unreadable" className="m-0 flex flex-wrap items-center gap-2 text-xs text-axal-muted dark:text-gray-400">
-          Unreadable: Fill with Eadwyn could not be read for this form. Type the values, or
+          Unreadable: Eadwyn's suggestions for this form could not be read. Type the values, or
           <button type="button" onClick={() => setFillTick((n) => n + 1)} className="font-semibold text-axal-violet underline dark:text-violet-300" data-testid="fill-form-retry">Try again</button>
         </p> : null}
         {/* D1329 (#3490, AF15): a support session reads the form, its marks and no trigger, and says why. */}
@@ -351,14 +359,14 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
         {loaded && fillCtl && (fillable || placedCount > 0) ? <div className="flex flex-wrap items-center justify-between gap-2" data-testid="fill-form-bar">
           <span className="text-xs text-axal-muted dark:text-gray-400" data-testid="fill-form-placed">{placedCount
             ? `${placedCount} ${placedCount === 1 ? 'value' : 'values'} placed. Nothing is saved until you press ${cleanFormCopy(base.cta || base.button || 'Save')}.`
-            : fill.aiOff ? 'Fill from your sources.' : 'Fill the blank fields from your sources or with Eadwyn.'}</span>
+            : fill.aiOff ? 'Ask fills the blank fields from your sources only.' : 'Ask Eadwyn to fill the blank fields, or fill them from your sources.'}</span>
           {fillable ? <FillFormTrigger aiOff={!!fill.aiOff} disabled={busy} onOpen={() => setFillOpen(true)} /> : null}
         </div> : null}
-        {loaded && fields.map((field) => <Field key={field.name} field={field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy} search={finder} fill={fillCtl} />)}
-        {loaded && renderAssistant?.({ fields, values, setValue, busy })}
+        {loaded && fields.map((field) => <Field key={field.name} field={readOnly ? { ...field, note: null, hint: null } : field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy || !!readOnly} search={finder} fill={fillCtl} />)}
+        {loaded && !readOnly && renderAssistant?.({ fields, values, setValue, busy })}
       </>}
-    </form>
-    {fillOpen && fill ? <FillSheet page={fill.page} form={fill.form} project={fill.project} title={cleanFormCopy(base.title || 'this form').toLowerCase()}
+    </form>}
+    {fillOpen && fill && !readOnly ? <FillSheet page={fill.page} form={fill.form} project={fill.project} title={cleanFormCopy(base.title || 'this form').toLowerCase()}
       values={Object.fromEntries(fillNames.map((n) => [n, values[n]]))} aiOff={!!fill.aiOff} onPlace={place} onClose={() => setFillOpen(false)} /> : null}
   </Lightbox>;
 }

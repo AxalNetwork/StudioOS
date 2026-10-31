@@ -6,9 +6,8 @@
  * dashboard "Your Profile & Fit" section. Read-only.
  *
  * Deliberately leaner than the admin report (services/bestFit.ts): it does NOT
- * include cross-counterparty matches or the spin-out risk assessment. Matches
- * stay tier-gated via GET /api/matches/summary; the full report stays admin-only
- * via GET /api/admin/best-fit/:userId.
+ * include cross-counterparty matches or the spin-out risk assessment. The full report builder is retained for consultations precompute; its legacy
+ * admin fetch route was retired by #3734.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';

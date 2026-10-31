@@ -68,6 +68,14 @@ call runs at boot.
   revoked, best effort, then the tokens deleted), `revokeGranted` and `ready`.
   The sign-in is the generic MCP route's (D1080); every read is
   `cloudflare-worker/src/services/notion/reads.ts`.
+- D855 §4 (#3733 part 1) — `linear.ts` is a member's own Linear, read-only,
+  through Linear's read-only MCP server (`https://mcp.linear.app/mcp/readonly`,
+  grant `read`). It registers the same four functions as `notion.ts` and a
+  D848 `ConnectorAdapter` (pattern `mcp`) whose six read tools are the
+  record's allowlist and whose `classifyLinearError` keeps a spent request or
+  complexity counter as `rate_limited`. Every read is
+  `cloudflare-worker/src/services/linear/reads.ts`. No member can connect it
+  yet: the generic sign-in needs a `REGISTRY` entry, which a later part adds.
 - D713 (#1778) — `mercury.ts` is a member's own Mercury, for founders and
   partners (`personal_roles`). It registers `connect` and nothing else: no
   sync, push, webhook, preview or action. Connect takes a Read Only token,

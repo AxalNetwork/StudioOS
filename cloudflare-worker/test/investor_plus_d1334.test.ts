@@ -53,11 +53,12 @@ function database() {
   for (const t of ['users', 'user_sessions', 'activity_logs', 'account_subscriptions', 'super_admins', 'admin_audit_log']) db.exec(tableFromBaseline(baseline, t));
   db.exec(`CREATE TABLE IF NOT EXISTS mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'free', subscription_id TEXT UNIQUE, plan TEXT, period_end TEXT, stripe_customer_id TEXT, updated_at TEXT);
     CREATE TABLE stripe_products (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'subscription',
-      active INTEGER NOT NULL DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]', synced_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+      active INTEGER NOT NULL DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]', synced_at TEXT NOT NULL DEFAULT (datetime('now')), livemode INTEGER);`);
   db.prepare('INSERT INTO users (id, role, name, email, uid, is_active) VALUES (?, ?, ?, ?, ?, 1)').run(INVESTOR, 'investor', 'Ira Vale', 'ira@example.test', 'uid-61');
+  db.exec(read('cloudflare-worker/sql/migrations/691_stripe_mode_stamps.sql').split('CREATE TABLE IF NOT EXISTS stripe_webhook_events')[1].replace(/^/, 'CREATE TABLE IF NOT EXISTS stripe_webhook_events'));
   return db;
 }
-const env = (db: DatabaseSync, over: Record<string, unknown> = {}) => ({ JWT_SECRET, ENVIRONMENT: 'test', STRIPE_SECRET_KEY: 'sk_test_sentinel', DB: d1Over(db), ...over } as any);
+const env = (db: DatabaseSync, over: Record<string, unknown> = {}) => ({ JWT_SECRET, ENVIRONMENT: 'test', STRIPE_SECRET_KEY: 'sk_test_sentinel', STRIPE_PUBLISHABLE_KEY: 'pk_test_fixture', STRIPE_WEBHOOK_SECRET: 'fixture-signing', DB: d1Over(db), ...over } as any);
 const app = (() => {
   const a = new Hono<any>();
   a.route('/api/billing', billing);
@@ -79,8 +80,8 @@ async function request(db: DatabaseSync, path: string, init: RequestInit, e = en
   } finally { [console.warn, console.error] = saved; }
 }
 const hook = (db: DatabaseSync, type: string, object: Record<string, unknown>) => request(db, '/api/billing/stripe/webhook', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: `evt_${Math.random()}`, type, data: { object } }),
-});
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: `evt_${Math.random()}`, livemode: false, type, data: { object } }),
+}, env(db, { STRIPE_WEBHOOK_SECRET: undefined }));
 const row = (db: DatabaseSync) => db.prepare('SELECT investor_tier, investor_subscription_status, investor_dealroom_max, investor_stripe_subscription_id FROM users WHERE id = ?').get(INVESTOR) as any;
 const completed = (tier: string) => ({
   id: 'cs_plus_1', object: 'checkout.session', mode: 'subscription', customer: 'cus_inv_61', subscription: 'sub_plus_1',

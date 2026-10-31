@@ -16,8 +16,10 @@ import matrix from './railMatrix.json';
 import * as catalogue from './catalogue';
 import { chatCompatible, withModuleModels } from './moduleConnections';
 
-export type RailModel = { id: string; role: string; line: string; optional?: boolean };
-export type RailRow = { pageKey: string; kind: string; routeTask: string; models: RailModel[] };
+/** Curated cards carry roles; overflow choices deliberately do not. */
+export type RailChoice = { id: string; line: string };
+export type RailModel = RailChoice & { role: string };
+export type RailRow = { pageKey: string; kind: string; routeTask: string; models: RailModel[]; more?: RailChoice[] };
 export type RailOptionRow = RailRow & { optionKey: string; optionLabel: string; handler: string };
 
 const ROWS: readonly RailRow[] = matrix.rows.map(withModuleModels);
@@ -70,9 +72,9 @@ export function railCrumbs(row: RailRow): string[] {
   return row.pageKey.split(' · ');
 }
 
-/** True when the row offers this model, the only picks a page accepts. */
+/** Either curated suggestions or All models may supply a page's pick. */
 export function rowOffers(row: RailRow, model: string): boolean {
-  return row.models.some((m) => m.id === model);
+  return [...row.models, ...(row.more ?? [])].some((m) => m.id === model);
 }
 
 // ---------------------------------------------------------------------------
@@ -93,9 +95,9 @@ export function canRun(id: string, need: RailNeed, env: catalogue.CatalogueSwitc
   return !!m && catalogue.isOffered(m, env) && chatCompatible(id, need.vision);
 }
 
-/** The row's models a run may use, in the row's order. */
+/** Compatible suggestions and overflow choices, used to validate explicit picks. */
 export function compatibleModels(row: RailRow, need: RailNeed, env: catalogue.CatalogueSwitches): string[] {
-  return row.models.map((m) => m.id).filter((id) => canRun(id, need, env));
+  return [...row.models, ...(row.more ?? [])].map((m) => m.id).filter((id) => canRun(id, need, env));
 }
 
 export type RailChain =
@@ -123,11 +125,12 @@ export function resolveRailChain(
   const demoted = catalogue.defaultDemoted(env);
   const paid = (id: string) => catalogue.modelById(id)?.paid_only === true;
   const stored = [picks.option, picks.page].find((id) => id && fits.includes(id)) ?? null;
-  const automatic = fits.filter(id => !row.models.find(m => m.id === id)?.optional);
+  // All models extends explicit choices, never the automatic fallback chain.
+  const automatic = row.models.map(m => m.id).filter(id => fits.includes(id));
   const fallback = (demoted ? automatic.find((id) => !paid(id)) : null) ?? automatic[0];
   if (!picks.caller && !stored && !fallback) return null;
   const primary = picks.caller ?? stored ?? fallback;
   const source = picks.caller ? 'caller' : stored ? 'pick' : 'default';
-  const chain = fits.filter((id) => id !== primary && !row.models.find(m => m.id === id)?.optional && !(demoted && paid(id)));
+  const chain = automatic.filter((id) => id !== primary && !(demoted && paid(id)));
   return { ok: true, primary, chain, source };
 }

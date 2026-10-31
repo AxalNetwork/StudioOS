@@ -106,8 +106,8 @@ function database() {
   for (const t of ['users', 'user_sessions', 'activity_logs', 'account_subscriptions', 'super_admins', 'admin_audit_log']) db.exec(tableFromBaseline(baseline, t));
   db.exec(`CREATE TABLE IF NOT EXISTS mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'free', subscription_id TEXT UNIQUE, plan TEXT, period_end TEXT, stripe_customer_id TEXT, updated_at TEXT);
     CREATE TABLE stripe_products (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'subscription',
-      active INTEGER NOT NULL DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]', synced_at TEXT NOT NULL DEFAULT (datetime('now')));`);
-  const product = db.prepare('INSERT INTO stripe_products (id, name, metadata_json, prices_json) VALUES (?, ?, ?, ?)');
+      active INTEGER NOT NULL DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]', synced_at TEXT NOT NULL DEFAULT (datetime('now')), livemode INTEGER);`);
+  const product = db.prepare('INSERT INTO stripe_products (id, name, metadata_json, prices_json,livemode) VALUES (?, ?, ?, ?,0)');
   product.run('prod_growth', 'Founder — Growth', JSON.stringify({ tier: 'growth' }), JSON.stringify([price('price_growth_m', 7900, 'month')]));
   product.run('prod_studio', 'Founder — Studio', JSON.stringify({ tier: 'studio' }), JSON.stringify([price('price_studio_m', 24900, 'month')]));
   product.run('prod_pro', 'Investor — Professional', JSON.stringify({ investor_tier: 'professional' }), JSON.stringify([price('price_pro_m', 14900, 'month')]));
@@ -118,6 +118,7 @@ function database() {
   u.run(FOUNDER, 'founder', 'Ada Quill', 'ada@example.test', 'uid-51', 'cus_founder');
   u.run(INVESTOR, 'investor', 'Ira Vale', 'ira@example.test', 'uid-52', 'cus_general_52');
   u.run(PARTNER, 'partner', 'Pat Rowe', 'pat@example.test', 'uid-53', 'cus_partner');
+  db.exec(read('cloudflare-worker/sql/migrations/691_stripe_mode_stamps.sql').split('CREATE TABLE IF NOT EXISTS stripe_webhook_events')[1].replace(/^/, 'CREATE TABLE IF NOT EXISTS stripe_webhook_events'));
   return db;
 }
 const env = (db: DatabaseSync) => ({ JWT_SECRET, ENVIRONMENT: 'test', STRIPE_SECRET_KEY: KEY, DB: d1Over(db) } as any);
@@ -163,7 +164,7 @@ async function hit(db: DatabaseSync, path: string, who: number | null, role: str
   } finally { [console.warn, console.error] = saved; }
 }
 const intent = (db: DatabaseSync, who: number, role: string, priceId: string) => hit(db, '/api/payments/intent', who, role, { price_id: priceId, nonce: 'n1' });
-const hook = (db: DatabaseSync, type: string, object: Record<string, unknown>) => hit(db, '/api/billing/stripe/webhook', null, 'founder', { id: `evt_${Math.random()}`, type, data: { object } });
+const hook = (db: DatabaseSync, type: string, object: Record<string, unknown>) => hit(db, '/api/billing/stripe/webhook', null, 'founder', { id: `evt_${Math.random()}`, livemode: false, type, data: { object } });
 /** A subscription event built from what the intent actually sent to Stripe. */
 function subscriptionFromIntent(i = 0, status = 'active', over: Record<string, unknown> = {}) {
   const sent = new URLSearchParams(subCalls()[i].body);
@@ -628,7 +629,7 @@ const legacyInvestorSub = () => ({
   metadata: { user_id: String(INVESTOR), uid: 'uid-52', price_id: 'price_pro_m' },
   items: { data: [{ id: 'si_invold', quantity: 1, price: { id: 'price_pro_m', unit_amount: 14900, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } } }] },
 });
-const addInstitutional = (db: DatabaseSync) => db.prepare("INSERT INTO stripe_products (id, name, metadata_json, prices_json) VALUES ('prod_inst', 'Investor — Institutional', ?, ?)")
+const addInstitutional = (db: DatabaseSync) => db.prepare("INSERT INTO stripe_products (id, name, metadata_json, prices_json,livemode) VALUES ('prod_inst', 'Investor — Institutional', ?, ?,0)")
   .run(JSON.stringify({ investor_tier: 'institutional' }), JSON.stringify([price('price_inst_m', 49900, 'month')]));
 const listedCustomers = () => calls.filter((c) => c.method === 'GET' && new URL(c.url).pathname === '/v1/subscriptions')
   .map((c) => new URL(c.url).searchParams.get('customer'));

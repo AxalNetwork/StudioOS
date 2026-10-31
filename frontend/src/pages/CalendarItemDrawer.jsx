@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { calendarItemsApi } from '../lib/api/calendarItems';
 import { Lightbox, Sheet, Unreadable, actionDanger, actionGhost, actionPrimary } from '../ui';
+import CalendarComplianceSheet from './CalendarComplianceSheet';
 import {
   ANSWERS, ANSWER_WORD, KIND_WORDS, LENGTHS, NOT_PARTY, NOT_PARTY_SUB, SAYS,
   copyLines, goingLine, joinOpen, minutesOf, noChangeLine, refusalOf, startError, startOf, whenLine, whenShort, zoneLabel,
@@ -242,6 +243,11 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
         </div>
       </Sheet>
     );
+  }
+
+  // D1384: a compliance deadline has its own body and its own changes.
+  if (item.kind === 'compliance_due') {
+    return <CalendarComplianceSheet item={item} onClose={onClose} onChanged={onChanged} reload={load} />;
   }
 
   const cancelled = item.status === 'cancelled';

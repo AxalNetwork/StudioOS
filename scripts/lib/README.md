@@ -29,6 +29,7 @@ can be read to find out what a rule actually is.
 | `assetRetentionTime.test.mjs` | D1364: the 72-hour window, protected floor, whole-generation cap, legacy grace and post-deploy timestamp CLI. |
 | `assetRetentionBuild.test.mjs` | D1364: real build-wrapper restore, protected output cap and total static-file limit with synthetic bundler output. |
 | `spaChunks.mjs` | Parses Vite's dependency list as JSON, validates JS/CSS paths and types, and selects the cached previous entry (#3590). `spaChunks.test.mjs` uses the actual built `../fixtures/vite-lazy-entry.js` plus stubbed capture/live CLI runs. |
+| `ownerPlanPrices.mjs` | D1430 (#3702): the owner’s six paid plan targets and unpriced profiles, shared only by offline planners and the live drift check. Runtime prices remain Stripe’s D1 mirror. |
 
 ## Tests
 

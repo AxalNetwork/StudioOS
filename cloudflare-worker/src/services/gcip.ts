@@ -11,12 +11,9 @@
  *   - GCIP_API_KEY        Web API key for the Identity Platform project.
  *
  * Optional env:
- *   - GCIP_RECAPTCHA_TOKEN_FALLBACK  In production, sendVerificationCode
- *     normally requires a reCAPTCHA token minted by the Firebase JS SDK
- *     in the user's browser. Server-only flows can call the API key path
- *     directly, but Google may eventually require attestation. The
- *     frontend passes the recaptcha token through to the worker; if
- *     omitted (e.g. dev), this fallback is used.
+ *   - GCIP_RECAPTCHA_TOKEN_FALLBACK  Development and synthetic smoke-test
+ *     escape hatch only. Production web sends use a fresh browser token;
+ *     never provision a constant fallback token in production.
  *
  * `isGcipConfigured(env)` is async: env `GCIP_API_KEY` wins, then the
  * admin-managed `provider_oauth_keys` row (`gcip`). Routes that touch
@@ -25,6 +22,7 @@
  */
 import type { Env } from '../types';
 import { loadOauthCreds } from './providerOauthKeys';
+import { withDeadline } from '../util/deadline';
 
 interface GcipEnv extends Env {
   GCIP_API_KEY?: string;
@@ -104,13 +102,39 @@ export async function isGcipConfigured(env: Env): Promise<boolean> {
   return !!(await loadGcipApiKey(env));
 }
 
+/** D1445: Google's public v2 widget key, never the API credential. */
+export async function getRecaptchaSiteKey(env: Env): Promise<string | null> {
+  try {
+    return await withDeadline((async () => {
+      const key = await loadGcipApiKey(env);
+      if (!key) return null;
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+      const source = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+      const cached = await env.RATE_LIMITS.get('gcip-recaptcha-site-key');
+      if (cached) {
+        try {
+          const value = JSON.parse(cached);
+          if (value.source === source && typeof value.siteKey === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value.siteKey)) return value.siteKey;
+        } catch { /* old or corrupt cache entries are refreshed */ }
+      }
+      const response = await fetch(`${ENDPOINT}/recaptchaParams?key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(2_000) });
+      if (!response.ok) return null;
+      const body = await response.json() as { recaptchaSiteKey?: unknown };
+      const siteKey = body.recaptchaSiteKey;
+      if (typeof siteKey !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(siteKey)) return null;
+      await env.RATE_LIMITS.put('gcip-recaptcha-site-key', JSON.stringify({ source, siteKey }), { expirationTtl: 3600 });
+      return siteKey;
+    })(), 2_000, 'gcip-site-key');
+  } catch { return null; }
+}
+
 export interface SendCodeResult {
   ok: true;
   sessionInfo: string;
 }
 export interface SendCodeError {
   ok: false;
-  code: 'invalid_phone' | 'quota_exceeded' | 'recaptcha_required' | 'upstream_error';
+  code: 'invalid_phone' | 'quota_exceeded' | 'recaptcha_required' | 'region_blocked' | 'phone_auth_disabled' | 'upstream_error';
   message: string;
 }
 
@@ -141,7 +165,9 @@ export async function sendVerificationCode(
       const err = await res.json() as { error?: { message?: string } };
       const m = err?.error?.message || '';
       message = m || message;
-      if (/INVALID_PHONE/i.test(m)) code = 'invalid_phone';
+      if (/REGION/i.test(m)) code = 'region_blocked';
+      else if (/OPERATION_NOT_ALLOWED/i.test(m)) code = 'phone_auth_disabled';
+      else if (/INVALID_PHONE/i.test(m)) code = 'invalid_phone';
       else if (/QUOTA|TOO_MANY/i.test(m)) code = 'quota_exceeded';
       else if (/CAPTCHA/i.test(m)) code = 'recaptcha_required';
     } catch {}
@@ -184,7 +210,7 @@ export async function signInWithPhoneNumber(
       const m = err?.error?.message || '';
       message = m || message;
       if (/INVALID_CODE|MISSING_CODE/i.test(m)) errCode = 'invalid_code';
-      else if (/SESSION_EXPIRED/i.test(m)) errCode = 'session_expired';
+      else if (/CODE_EXPIRED|SESSION_EXPIRED/i.test(m)) errCode = 'session_expired';
     } catch {}
     return { ok: false, code: errCode, message };
   }
@@ -210,6 +236,9 @@ export const GCIP_SENTENCES: Record<string, string> = {
   invalid_code: 'That code is not right. Check it and try again, or ask for a new one.',
   session_expired: 'That code has expired. Ask for a new one.',
   upstream_error: 'The code could not be sent or checked just now. Try again in a moment.',
+  region_blocked: 'Texts to this country are not enabled yet.',
+  phone_auth_disabled: "SMS backup isn't available yet. An administrator needs to finish setting it up.",
+  rate_limited: 'Too many codes asked for. Wait a minute and try again.',
 };
 
 export function gcipSentence(code: string): string {

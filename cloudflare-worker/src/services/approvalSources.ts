@@ -319,7 +319,7 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
     key: 'best_fit',
     label: 'Best-Fit consultations',
     // The canvas says "Best-Fit"; the queue is the booking table the
-    // consultations route decides (`admin_bestfit.ts` only fetches reports).
+    // consultations route decides (the legacy admin report page was retired by #3734).
     countSql:
       'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM admin_consultation_bookings '
       + "WHERE status = 'requested'",

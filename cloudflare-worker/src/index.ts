@@ -71,6 +71,7 @@ import adminSlack from './routes/admin_slack';
 // Task #2 — News with author proposals + admin queue.
 import newsRoutes from './routes/news';
 import articlesRoutes from './routes/articles';
+import articleAssist from './routes/article_assist';
 import adminArticles from './routes/admin_articles';
 import teamPublic from './routes/team_public';
 import contactRoutes from './routes/contact';
@@ -199,6 +200,8 @@ import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
 import './integrations/providers/notion';
 import './integrations/providers/posthog';
+// D855 §4 (#3733 part 1) — a member's own Linear, read-only, through Linear's read-only MCP server: sign-in only, not listed yet.
+import './integrations/providers/linear';
 // D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
 import './services/notion/build';
 import crunchbaseRoutes from './routes/crunchbase';
@@ -350,6 +353,7 @@ import referencesRoutes from './routes/references';
 import comarketingRoutes from './routes/comarketing';
 import companyRoutes from './routes/company';
 import companyLifecycle from './routes/company_lifecycle';
+import companyLegal from './routes/company_legal';
 import projectLifecycle from './routes/project_lifecycle';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 // #45 — the partner workspace's own stores (migrations 208/209). Mounted under
@@ -408,7 +412,6 @@ import adminCirclesRoutes from './routes/admin_circles';
 import assessmentRoutes from './routes/assessment';
 import adminAssessmentRoutes from './routes/admin_assessment';
 import consultations, { adminConsultations } from './routes/consultations';
-import adminBestFit from './routes/admin_bestfit';
 // Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
 import adminExploring from './routes/admin_exploring';
 import adminLpApplications from './routes/admin_lp_applications';
@@ -1169,7 +1172,6 @@ app.route('/api/admin/assessment', adminAssessmentRoutes);
 // Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
 // the specific prefixes resolve here, not in the generic admin router.
 app.route('/api/admin/consultations', adminConsultations);
-app.route('/api/admin/best-fit', adminBestFit);
 // Task #9 — Exploring-users review queue. Mount BEFORE the catch-all
 // /api/admin so /api/admin/exploring/* resolves here. requireAdmin per-route.
 app.route('/api/admin/exploring', adminExploring);
@@ -1650,6 +1652,8 @@ app.route('/api/news', newsRoutes);
 // Task #1 (Articles) — Public + author-facing /api/articles. Shares the
 // articles tables with /api/news; adds role filter, by-author endpoint,
 // and sector taxonomy. Public GETs are CORS-open + edge-cached 60d.
+// D1409 (#3695): Eadwyn's writing options on an article (`/:id/assist…`), before `articles` with it at /api/articles.
+app.route('/api/articles', articleAssist);
 app.route('/api/articles', articlesRoutes);
 app.route('/api/references', referencesRoutes);
 // Task #1 (AG) — service offerings (founder marketplace) alphabetically
@@ -1660,6 +1664,8 @@ app.route('/api/services', servicesRoutes);
 app.route('/api/comarketing', comarketingRoutes);
 // D1137 — archive, restore and the primary-admin transfer.
 app.route('/api', companyLifecycle);
+// D1415: the company's legal record, officers, locations, sealed tax ID and slug.
+app.route('/api', companyLegal);
 app.route('/api', companyRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);

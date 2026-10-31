@@ -51,8 +51,8 @@ function fixture({ wyPrice = true } = {}) {
   for (const t of ['users', 'projects', 'entities', 'documents']) db.exec(ddl(t));
   db.exec(`CREATE TABLE stripe_products (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'alacarte',
     active INTEGER NOT NULL DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]',
-    synced_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  const p = db.prepare('INSERT INTO stripe_products (id, name, kind, active, metadata_json, prices_json) VALUES (?, ?, ?, ?, ?, ?)');
+    synced_at TEXT NOT NULL DEFAULT (datetime('now')), livemode INTEGER)`);
+  const p = db.prepare('INSERT INTO stripe_products (id, name, kind, active, metadata_json, prices_json,livemode) VALUES (?, ?, ?, ?, ?, ?,0)');
   const de = product('prod_de', 'us_de_ccorp', 50000);
   p.run(de.id, de.name, de.kind, de.active, de.metadata_json, de.prices_json);
   if (wyPrice) {
@@ -78,7 +78,7 @@ async function call(db: any, who: number, method: string, path: string, body?: u
   const res = await app.request(path, {
     method, headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
-  }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), RATE_LIMITS: kv(), ...extraEnv } as any);
+  }, { JWT_SECRET, ENVIRONMENT: 'development', STRIPE_SECRET_KEY: 'sk_test_fixture', DB: d1Over(db), RATE_LIMITS: kv(), ...extraEnv } as any);
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
 
