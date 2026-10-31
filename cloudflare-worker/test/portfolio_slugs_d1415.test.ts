@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fixture, envOf, call, M685, ADA, BEN, DEE, EVE, NORTH, SOUTH, WEST, VENTURE, SOLO, DOCK, RELIC, PRIVATE } from './_portfolio_d1415_fixture.ts';
+import { fixture, envOf, call, M685, ADA, BEN, CY, DEE, EVE, NORTH, SOUTH, WEST, VENTURE, SOLO, DOCK, RELIC, PRIVATE } from './_portfolio_d1415_fixture.ts';
 
 const history = (db: any) => (db.prepare('SELECT kind, scope_company_id, slug, target_id FROM slug_history ORDER BY id').all() as any[]).map((r) => ({ ...r }));
 const slugOf = (db: any, id: number) => (db.prepare('SELECT slug FROM projects WHERE id = ?').get(id) as any).slug;
@@ -128,6 +128,10 @@ test('resolve: slugs, uids and ids; a non-member gets the same 404 as an unknown
   assert.equal(notMine.status, 404);
   assert.deepEqual(notMine.body, unknown.body, 'a non-member reads exactly what an unknown path reads');
   assert.equal((await status(BEN, '/p/private')).status, 404);
+  assert.equal((await status(BEN, `/p/${PRIVATE}`)).status, 404, 'a project id reached directly is still checked for visibility');
+  const seat = await status(CY, `/p/${DOCK}`);
+  assert.equal(seat.status, 200, 'a seat alone makes a project visible');
+  assert.equal(seat.body.canonical_path, `/c/co-south/p/${DOCK}`);
   assert.equal((await status(BEN, `/c/westwind/p/${PRIVATE}`)).status, 404);
   assert.equal((await status(ADA, '/c/oldwind')).status, 404, 'an archived company does not resolve');
   assert.equal((await status(ADA, `/c/oldwind/p/${RELIC}`)).status, 404);
