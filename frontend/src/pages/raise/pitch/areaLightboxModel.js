@@ -34,7 +34,7 @@
 
 import { ELEMENTS, HOLD, LATER, areaLabel } from './deckV2Model.js';
 import { availability } from './deckV2Adapter.js';
-import { FIGURE_LINE, LANGUAGES, TONES, textBody } from './deckAssistModel.js';
+import { FIGURE_LINE, textBody } from './deckAssistModel.js';
 import { aiTokens } from './newDeckModel.js';
 import { askBody, defaultDescription } from './imageModel.js';
 import { addBlock, removeBlock, updateBlock } from './editorModel.js';
@@ -58,24 +58,42 @@ const DIALOGS = Object.freeze({
 
 /**
  * How a filled text area's words change, each its own rail option (D899).
- * Tone and Translate take a choice; anything else goes in the editor's
- * instruction box ("warmer", "in French"), scoped to the selection.
+ * Change tone and Translate are not here (plan §0, §4.2): they are typed
+ * instructions in the editor's instruction box ("warmer", "in French"),
+ * scoped to the selection (`instructionModel.typedChange`).
  */
 export const TEXT_CHANGES = Object.freeze([
   { action: 'rewrite', label: 'Rewrite', option: 'deck:rewrite' },
   { action: 'shorten', label: 'Shorten', option: 'deck:shorten' },
   { action: 'expand', label: 'Expand', option: 'deck:expand' },
-  { action: 'tone', label: 'Change tone', option: 'deck:tone' },
-  { action: 'translate', label: 'Translate', option: 'deck:translate' },
 ]);
-export { TONES, LANGUAGES };
+/**
+ * A Title's own change (plan §4.2): the Worker's `headline` action, charged to
+ * deck:rewrite, writes a headline from the card's recorded figures (their
+ * labels; the values stay the records'). It needs one recorded figure bound
+ * on the card, so a card with none offers it greyed, with why.
+ */
+export const HEADLINE = Object.freeze({ action: 'headline', label: 'Headline', option: 'deck:rewrite' });
+export const HEADLINE_WHY = 'A headline is written from the card’s recorded figures. Bind one on this card first.';
+/** The changes a text element offers: a Title leads with its Headline. */
+export const changesFor = (element) => (element === 'title' ? [HEADLINE, ...TEXT_CHANGES] : TEXT_CHANGES);
+
+/** The recorded figures bound on a card (at most six, as the Worker reads them): what a headline is written from. */
+export function cardFigures(card, items = []) {
+  const keys = (Array.isArray(card?.blocks) ? card.blocks : []).map((b) => b?.binding?.source_key).filter(Boolean);
+  return [...new Set(keys)].filter((k) => items.some((i) => i.source_key === k && i.state === 'recorded')).slice(0, 6);
+}
 
 /** Variants per area: 1 on main; 2 and 3 arrive with #3764 (`areasGenerate`). */
 export const VARIANTS = Object.freeze([1, 2, 3]);
 export const NO_MODEL = 'No model · free';
 export const MODEL_WHERE = 'set in the AIRail';
 export const EMPTY_TEXT_WHAT = 'Words for an empty area';
-export const CHART_MIN = Object.freeze({ cols: 3, rows: 2 });
+/** The canvas's limit (pd12 inset 1): "A chart needs at least 4 × 3 cells." */
+export const CHART_MIN = Object.freeze({ cols: 4, rows: 3 });
+export const CHART_MIN_LINE = 'A chart needs at least 4 × 3 cells. Select a larger area.';
+/** A table or a timeline from the records: the editor's own fit for a records block (3 × 2 or more, `ChartLibrary`). */
+export const RECORDS_MIN = Object.freeze({ cols: 3, rows: 2 });
 export const SEQUENCE_LINE = 'Each area runs on its own, one after another, and is charged on its own. If one is refused, the rest do not run.';
 export const NOT_RUN = 'Not run: an area before it was refused. Nothing was charged for it.';
 export const RESULTS_LINE = 'Nothing is on the card until you accept it. Accepting places it; Save writes the version.';
@@ -110,9 +128,10 @@ export function aspectFor(grid) {
 
 /**
  * One area and its element, as it runs on main. `choice` carries the row's
- * own picks: `change` (a text change), `tone`, `language`, `figure` (a
- * recorded item's source_key), `file` (an upload). `items` are the deck's
- * sources (`GET /api/decks/sources`).
+ * own picks: `change` (a text change), `figure` (a recorded item's
+ * source_key), `file` (an upload). `items` are the deck's sources
+ * (`GET /api/decks/sources`). A Title starts as its Headline when the card
+ * has a recorded figure bound, and as Rewrite when it has none.
  */
 export function rowPlan({ area, element, card, cardIndex, items = [], choice = {} }) {
   const el = byId(element);
@@ -128,13 +147,16 @@ export function rowPlan({ area, element, card, cardIndex, items = [], choice = {
     const words = block?.kind === 'text' ? String(block.text ?? '').trim() : '';
     // Words for an empty area are the several-area route's (#3764): nothing on main writes them.
     if (!words) return { run: 'later', adapter: 'areasGenerate', issue: 3764, why: LATER, what: EMPTY_TEXT_WHAT };
-    const change = TEXT_CHANGES.find((c) => c.action === choice.change) || TEXT_CHANGES[0];
-    const extra = { tone: choice.tone || TONES[0][0], language: choice.language || LANGUAGES[0] };
-    return { run: 'assist', action: change.action, option: change.option, cardIndex, body: textBody(change.action, block, extra) };
+    const figures = element === 'title' ? cardFigures(card, items) : [];
+    const offered = figures.length ? changesFor(element) : TEXT_CHANGES;
+    const change = offered.find((c) => c.action === choice.change) || offered[0];
+    const body = change.action === 'headline' ? { ...textBody('headline', block), source_keys: figures } : textBody(change.action, block);
+    return { run: 'assist', action: change.action, option: change.option, cardIndex, body };
   }
   if (CHARTS[element]) {
-    if (cols(area.grid) < CHART_MIN.cols || rows(area.grid) < CHART_MIN.rows) {
-      return { run: 'refused', why: `A ${element} needs at least ${CHART_MIN.cols} × ${CHART_MIN.rows} cells. Select a larger area.` };
+    const min = element === 'chart' ? CHART_MIN : RECORDS_MIN;
+    if (cols(area.grid) < min.cols || rows(area.grid) < min.rows) {
+      return { run: 'refused', why: element === 'chart' ? CHART_MIN_LINE : `A ${element} needs at least ${min.cols} × ${min.rows} cells. Select a larger area.` };
     }
     const heading = String(card?.title || '').trim();
     return { run: 'assist', action: CHARTS[element], option: `deck:${CHARTS[element]}`, cardIndex, body: { action: CHARTS[element], ...(heading ? { heading } : {}) } };

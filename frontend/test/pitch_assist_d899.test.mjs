@@ -7,7 +7,9 @@
  *   · PD7, mounted, since D1604 through "Generate into N areas"
  *     (`AreaLightbox.jsx`; D899's bar is retired): a text area's Ask shows
  *     its hold and the AIRail's model first, Generate sends the change's rail
- *     option (Rewrite, Change tone, Translate), the proposal is the before
+ *     option (Rewrite; a Title leads with Headline), and Change tone and
+ *     Translate are typed in the instruction box under their own options
+ *     (D1604, plan §0); the proposal is the before
  *     struck and the after, Accept places it and Save writes it; a metric
  *     tile takes no tool; AI off greys the Ask; a 402 offers Add tokens;
  *   · the Add menu: Text opens Add a block, Image and Background open D903's
@@ -219,6 +221,9 @@ test('Ask on a text area: "Generate into 1 area" shows its hold and the AIRail\'
     await m.press(m.by('pitch-editor-ask-area'));
     assert.match(m.text(m.by('pitch-areas')), /Generate into 1 area/);
     assert.match(m.text(m.by('pitch-areas-row-b1-element')), /Title/, 'a heading starts as Title');
+    assert.equal(m.pr(m.by('pitch-areas-row-b1-change-headline'))['aria-checked'], true, 'a Title leads with its headline: the card has a recorded figure');
+    assert.equal(m.text(m.by('pitch-areas-hold')), 'Holds up to $0.0005 · you pay what it uses');
+    await m.press(m.by('pitch-areas-row-b1-change-rewrite'));
     assert.equal(m.pr(m.by('pitch-areas-row-b1-change-rewrite'))['aria-checked'], true);
     assert.equal(m.text(m.by('pitch-areas-hold')), 'Holds up to $0.0012 · you pay what it uses', 'the cost before it runs');
     assert.equal(m.text(m.by('pitch-areas-row-b1-model')), 'Synthetic Text · $0.0004 per variant · set in the AIRail', 'the model is the AIRail\'s, read-only');
@@ -248,27 +253,26 @@ test('Ask on a text area: "Generate into 1 area" shows its hold and the AIRail\'
   } finally { await m.unmount(); }
 });
 
-test('the lightbox\'s Change tone and Translate send their choice under their own options; Discard places nothing', async () => {
+test('Change tone and Translate are typed in the instruction box, under their own options; Discard places nothing', async () => {
   const m = await mount({
     'assist.run': async (id, card, body) => ({ proposal: { uid: `p-${body.action}` }, before: body.text, after: 'Synthetic other words', cost: { charged_microusd: 100 } }),
   });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
     await m.press(m.by('pitch-editor-ask-area'));
-    await m.press(m.by('pitch-areas-row-b1-change-tone'));
-    await m.type(m.by('pitch-areas-row-b1-tone'), 'formal');
-    await m.press(m.by('pitch-areas-generate'));
+    assert.ok(!m.by('pitch-areas-row-b1-change-tone') && !m.by('pitch-areas-row-b1-change-translate'), 'the lightbox offers neither');
+    await m.press(m.by('pitch-areas-close'));
+    await m.type(m.by('pitch-instruction-field'), 'more formal');
+    await m.press(m.by('pitch-instruction-send'));
+    await m.press(m.by('pitch-instruction-run'));
     assert.equal(m.named('assist.run').at(-1)[3].tone, 'formal');
     assert.equal(decodeURIComponent(m.named('assist.run').at(-1)[4]['X-Rail-Option']), 'deck:tone');
-    await m.press(m.by('pitch-area-result-b1-discard'));
+    await m.press(m.by('pitch-instruction-proposal-discard'));
     assert.deepEqual(m.named('proposals.decide').at(-1).slice(1), ['p-tone', 'discard']);
-    assert.match(m.text(m.by('pitch-area-result-b1-decided')), /Discarded\. Nothing was placed\./);
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers love it/, 'Discard places nothing');
-    await m.press(m.by('pitch-areas-close'));
-    await m.press(m.by('pitch-editor-ask-area'));
-    await m.press(m.by('pitch-areas-row-b1-change-translate'));
-    await m.type(m.by('pitch-areas-row-b1-language'), 'German');
-    await m.press(m.by('pitch-areas-generate'));
+    await m.type(m.by('pitch-instruction-field'), 'translate into German');
+    await m.press(m.by('pitch-instruction-send'));
+    await m.press(m.by('pitch-instruction-run'));
     assert.equal(m.named('assist.run').at(-1)[3].language, 'German');
     assert.equal(decodeURIComponent(m.named('assist.run').at(-1)[4]['X-Rail-Option']), 'deck:translate');
   } finally { await m.unmount(); }

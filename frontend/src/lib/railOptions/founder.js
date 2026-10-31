@@ -230,13 +230,15 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'deck:expand', route: '/raise/pitch/edit', label: 'Expand', kind: 'write', handler: 'draft',
     at: [[AREA_LIGHTBOX, 'deckAssistApi.run(']],
   },
+  // D1604 (#3716, plan §0): Change tone and Translate are typed in the instruction box ("warmer", "in French"),
+  // which runs words that are only a tone or a language under these two options (`instructionModel.typedChange`).
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:tone', route: '/raise/pitch/edit', label: 'Change tone', kind: 'write', handler: 'draft',
-    at: [[AREA_LIGHTBOX, 'deckAssistApi.run(']],
+    at: [[INSTRUCTION_BOX, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:translate', route: '/raise/pitch/edit', label: 'Translate', kind: 'write', handler: 'draft',
-    at: [[AREA_LIGHTBOX, 'deckAssistApi.run(']],
+    at: [[INSTRUCTION_BOX, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:chart', route: '/raise/pitch/edit', label: 'Chart from your records', kind: 'write', handler: 'draft',

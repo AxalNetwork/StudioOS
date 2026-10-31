@@ -4,11 +4,15 @@
  * to Eadwyn, scoped to the selection on The Grid.
  *
  *   · one filled text area: the quote first (assist, action `ask`), then Run
- *     under deck:rewrite, then a proposal placed only on Accept;
+ *     under deck:rewrite, then a proposal placed only on Accept, which says
+ *     the run was already charged; Enter never sends twice;
+ *   · v1's Change tone and Translate are typed: words that are only a tone
+ *     or a language run `tone` / `translate` under their own options;
  *   · a figure in the instruction is refused before any quote;
  *   · several areas answer through the adapter (#3773), with no quote;
  *   · chips are removable; a bound figure or an area without words says why;
- *   · the phone docks the box at the bottom (pd9k);
+ *   · the phone: tap an area, then Ask opens the full-height sheet with the
+ *     box at its foot (pd9k);
  *   · no typed field to Eadwyn outside the editor's selection: the header's
  *     Ask sheet and the lightbox take none.
  *
@@ -24,8 +28,10 @@ import { CARD, MODEL, mountEditor } from './_pitch_editor_mount.mjs';
 import { SURFACES } from '../src/pages/raise/pitch/deckV2Adapter.js';
 import { areasOf } from '../src/pages/raise/pitch/gridSelection.js';
 import {
-  FIGURE_REFUSAL, INSTRUCTION_OFF, NOT_WORDS, instructionField, instructionPlan, placeholderFor,
+  FIGURE_REFUSAL, INSTRUCTION_OFF, NOT_WORDS, instructionField, instructionPlan, placeholderFor, typedChange,
 } from '../src/pages/raise/pitch/instructionModel.js';
+import { CHARGED_LINE } from '../src/pages/raise/pitch/deckV2Model.js';
+import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (f) => readFileSync(resolve(root, 'frontend/src/pages/raise/pitch', f), 'utf8');
@@ -63,21 +69,76 @@ test('one text area: Send quotes first, Run proposes under deck:rewrite, Accept 
     assert.ok(m.by('pitch-instruction-chip-b2'));
     assert.equal(m.pr(node(m, 'pitch-instruction-field')).placeholder, 'Tell Eadwyn what to change in this area');
     assert.equal(m.pr(node(m, 'pitch-instruction-field')).maxLength, 300);
-    await m.type(node(m, 'pitch-instruction-field'), 'make it warmer');
+    await m.type(node(m, 'pitch-instruction-field'), 'make it warmer and shorter');
     await m.press(node(m, 'pitch-instruction-send'));
     const q = m.calls.filter((c) => c[0] === 'assist.quote').at(-1);
-    assert.deepEqual(q[3], { action: 'ask', block: { id: 'b2', kind: 'text' }, text: 'Synthetic body words', instruction: 'make it warmer' });
+    assert.deepEqual(q[3], { action: 'ask', block: { id: 'b2', kind: 'text' }, text: 'Synthetic body words', instruction: 'make it warmer and shorter' });
     assert.equal(m.text(node(m, 'pitch-instruction-hold')), 'Holds up to $0.0011 · you pay what it uses');
     assert.equal(m.calls.filter((c) => c[0] === 'assist.run').length, 0, 'Send quotes; it runs nothing');
     await m.press(node(m, 'pitch-instruction-run'));
     const run = m.calls.find((c) => c[0] === 'assist.run');
     assert.equal(decodeURIComponent(run[4]['X-Rail-Option']), 'deck:rewrite');
     assert.match(m.text(node(m, 'pitch-instruction-proposal-after')), /Synthetic warmer words/);
+    assert.equal(m.text(node(m, 'pitch-instruction-charged')), `Charged $0.0006. ${CHARGED_LINE}`, 'until undo: the run was already charged');
     assert.match(m.text(node(m, 'pitch-editor-save-state')), /Saved/, 'a proposal is not a change');
     await m.press(node(m, 'pitch-instruction-proposal-accept'));
     assert.deepEqual(m.calls.filter((c) => c[0] === 'proposals.decide').map((c) => c.slice(1)), [['i1', 'accept']]);
     assert.match(m.text(node(m, 'pitch-editor-block-b2')), /Synthetic warmer words/);
     assert.match(m.text(node(m, 'pitch-editor-save-state')), /Unsaved changes/);
+  } finally { await m.close(); }
+});
+
+test('Change tone and Translate are typed: a tone or a language alone runs under its own option', async () => {
+  assert.deepEqual(typedChange('warmer'), { action: 'tone', tone: 'warm' });
+  assert.deepEqual(typedChange('Make it more formal.'), { action: 'tone', tone: 'formal' });
+  assert.deepEqual(typedChange('in French'), { action: 'translate', language: 'French' });
+  assert.deepEqual(typedChange('translate it into chinese'), { action: 'translate', language: 'Chinese (Simplified)' });
+  assert.deepEqual(typedChange('warmer, and drop the jargon'), { action: 'ask' }, 'anything more is an instruction');
+  assert.deepEqual(typedChange('in Klingon'), { action: 'ask' }, 'a language the Worker does not take stays an instruction');
+  for (const key of ['deck:tone', 'deck:translate']) {
+    assert.deepEqual(FOUNDER_OPTIONS.find((o) => o.key === key).at, [['frontend/src/pages/raise/pitch/InstructionBox.jsx', 'deckAssistApi.run(']], `${key} lives in the instruction box`);
+  }
+  const m = await mountEditor({ answers: {
+    'assist.quote': QUOTE,
+    'assist.run': async (_id, _card, body) => ({ proposal: { uid: `t-${body.action}` }, before: body.text, after: 'Synthetic other words', cost: { charged_microusd: null } }),
+  } });
+  try {
+    await m.press(m.by('pitch-editor-block-b2'));
+    await m.type(node(m, 'pitch-instruction-field'), 'warmer');
+    await m.press(node(m, 'pitch-instruction-send'));
+    assert.deepEqual(m.calls.filter((c) => c[0] === 'assist.quote').at(-1)[3], { action: 'tone', block: { id: 'b2', kind: 'text' }, text: 'Synthetic body words', tone: 'warm' });
+    await m.press(node(m, 'pitch-instruction-run'));
+    assert.equal(decodeURIComponent(m.calls.filter((c) => c[0] === 'assist.run').at(-1)[4]['X-Rail-Option']), 'deck:tone');
+    assert.equal(m.text(node(m, 'pitch-instruction-charged')), `Charged; the amount is not recorded yet. ${CHARGED_LINE}`, 'no $0 for an amount not recorded');
+    await m.type(node(m, 'pitch-instruction-field'), 'in German');
+    await m.press(node(m, 'pitch-instruction-send'));
+    await m.press(node(m, 'pitch-instruction-run'));
+    const run = m.calls.filter((c) => c[0] === 'assist.run').at(-1);
+    assert.equal(run[3].language, 'German');
+    assert.equal(run[3].action, 'translate');
+    assert.equal(decodeURIComponent(run[4]['X-Rail-Option']), 'deck:translate');
+  } finally { await m.close(); }
+});
+
+test('Enter never sends while a quote is read or a run is in flight: one run, one charge', async () => {
+  let finish;
+  const m = await mountEditor({ answers: {
+    'assist.quote': QUOTE,
+    'assist.run': () => new Promise((r) => { finish = r; }),
+  } });
+  try {
+    await m.press(m.by('pitch-editor-block-b2'));
+    await m.type(node(m, 'pitch-instruction-field'), 'make it sharper');
+    await m.fire(node(m, 'pitch-instruction-field'), 'onKeyDown', { key: 'Enter' });
+    assert.equal(m.calls.filter((c) => c[0] === 'assist.quote').length, 1, 'Enter is Send');
+    await m.press(node(m, 'pitch-instruction-run'));
+    await m.fire(node(m, 'pitch-instruction-field'), 'onKeyDown', { key: 'Enter' });
+    assert.equal(m.calls.filter((c) => c[0] === 'assist.quote').length, 1, 'no second quote while the run is in flight');
+    assert.ok(!m.by('pitch-instruction-run'), 'and no second Run to press');
+    assert.equal(m.calls.filter((c) => c[0] === 'assist.run').length, 1);
+    finish({ proposal: { uid: 'e1' }, before: 'Synthetic body words', after: 'Synthetic sharper words', cost: { charged_microusd: 500 } });
+    await m.settle();
+    assert.match(m.text(node(m, 'pitch-instruction-proposal-after')), /Synthetic sharper words/);
   } finally { await m.close(); }
 });
 
@@ -112,22 +173,44 @@ test('several areas answer through the adapter; a chip comes out; a bound figure
   } finally { await m.close(); }
 });
 
-test('the phone docks the instruction box at the bottom for the tapped area', async () => {
+test('the phone: tap any area, then Ask opens the full-height sheet with the instruction field at its foot', async () => {
   const before = globalThis.matchMedia;
   globalThis.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
-  const m = await mountEditor({ answers: { 'assist.quote': QUOTE } });
+  const m = await mountEditor({ answers: {
+    'assist.quote': QUOTE,
+    'prefs.page': async () => ({ models: [{ id: 'synthetic/m', name: 'Synthetic phone model' }], pick: 'synthetic/m' }),
+  } });
   try {
     assert.ok(m.by('pitch-editor-phone'));
-    assert.ok(!m.by('pitch-instruction-dock'), 'nothing docked until an area is tapped');
+    assert.doesNotMatch(m.text(node(m, 'pitch-editor-phone-areas')), /Ask Eadwyn/, 'the list is not named as if it were the control');
+    for (const id of ['b1', 'b2', 'b3', 'free:11-2', 'free:8-4']) assert.ok(m.by(`pitch-editor-phone-area-${id}`), `${id} can be tapped`);
+    assert.ok(!m.by('pitch-editor-phone-ask'), 'no Ask until an area is tapped');
     await m.press(node(m, 'pitch-editor-phone-area-b2'));
-    const dock = node(m, 'pitch-instruction-dock');
-    assert.match(m.pr(dock).className, /\bfixed\b.*\bbottom-0\b/);
+    const ask = node(m, 'pitch-editor-phone-ask');
+    assert.equal(m.pr(ask)['aria-label'], 'Ask Eadwyn about this area');
+    assert.match(m.pr(ask).className, /min-h-\[44px\]/, '44 px');
+    assert.ok(!m.by('pitch-areas'), 'tapping only selects');
+    await m.press(ask);
+    assert.match(m.text(node(m, 'pitch-areas')), /Generate into 1 area/);
+    const sheet = node(m, 'pitch-instruction-sheet');
+    assert.ok(m.walk(node(m, 'pitch-areas')).includes(sheet), 'the instruction field is inside the sheet');
+    assert.match(m.pr(sheet).className, /\bsticky\b.*\bbottom-0\b/);
     assert.match(m.pr(node(m, 'pitch-instruction-send')).className, /min-h-\[44px\]/, '44 px targets');
     await m.type(node(m, 'pitch-instruction-field'), 'shorter please');
     await m.press(node(m, 'pitch-instruction-send'));
     assert.equal(m.calls.filter((c) => c[0] === 'assist.quote').at(-1)[3].block.id, 'b2');
-    await m.press(node(m, 'pitch-instruction-dock-close'));
-    assert.ok(!m.by('pitch-instruction-dock'));
+    await m.press(node(m, 'pitch-areas-close'));
+    assert.ok(!m.by('pitch-areas'));
+    // An empty area is reachable too: its Ask opens Generate, with no instruction field (it has no words).
+    await m.press(node(m, 'pitch-editor-phone-area-free:8-4'));
+    await m.press(node(m, 'pitch-editor-phone-ask'));
+    assert.ok(m.by('pitch-areas-row-free:8-4'));
+    assert.ok(!m.by('pitch-instruction-sheet'));
+    await m.press(node(m, 'pitch-areas-close'));
+    // A bound figure says why, as the desktop's Ask does.
+    await m.press(node(m, 'pitch-editor-phone-area-b3'));
+    assert.equal(m.pr(node(m, 'pitch-editor-phone-ask')).disabled, true);
+    assert.match(m.text(node(m, 'pitch-editor-phone-ask-why')), /^Figures come from your records/);
   } finally { await m.close(); globalThis.matchMedia = before; }
 });
 

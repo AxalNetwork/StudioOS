@@ -7,6 +7,8 @@ import { RESULTS_LINE, chargedLine, placeResult } from './areaLightboxModel';
 import { aiTokens, refusalOf } from './newDeckModel';
 import { NOT_RECORDED } from './editorModel';
 import { EYE, GHOST, INK, LAV, MUTED, PRIMARY, RefusalLine } from './AssistParts';
+import { SourceChip } from './SourcesBoards';
+import { chipOf } from './sourcesModel';
 
 const PILL = 'inline-flex items-center rounded-full border border-axal-lavender-edge bg-white px-2 py-0.5 font-mono text-[10px] font-bold text-axal-violet dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300';
 
@@ -34,8 +36,12 @@ const CHECKS = {
  * A refused area shows the Worker's sentence; one that did not run because an
  * area before it was refused says so, uncharged. The line under the cards is
  * what the runs charged and that what they did not use was released.
+ *
+ * A proposed figure carries its source and grade (`SourceChip`, from the
+ * deck's sources `items`); a value, a grade or a source that is not recorded
+ * says so, never a zero.
  */
-export default function AreaResults({ results, card, model, onPlace, onProposals, testId = 'pitch-area-results' }) {
+export default function AreaResults({ results, card, model, items = [], onPlace, onProposals, testId = 'pitch-area-results' }) {
   const [state, setState] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -115,7 +121,7 @@ export default function AreaResults({ results, card, model, onPlace, onProposals
             </span>
             {r.status === 'refused' ? <RefusalLine refusal={refusalOf(r.error)} testId={`${id}-refused`} /> : null}
             {r.status === 'not_run' ? <span className={MUTED} data-testid={`${id}-not-run`}>{r.line}</span> : null}
-            {r.status === 'proposed' ? <Body result={r} id={id} /> : null}
+            {r.status === 'proposed' ? <Body result={r} id={id} items={items} /> : null}
             {r.status === 'proposed' && !decided ? (
               <>
                 <span className={MUTED}>{r.kind === 'block' && r.local ? CHECKS.metric : CHECKS[r.kind]}</span>
@@ -138,7 +144,7 @@ export default function AreaResults({ results, card, model, onPlace, onProposals
   );
 }
 
-function Body({ result: r, id }) {
+function Body({ result: r, id, items }) {
   if (r.kind === 'text') {
     return (
       <span className="flex flex-col gap-1">
@@ -152,7 +158,13 @@ function Body({ result: r, id }) {
   }
   const b = r.block || {};
   if (b.kind === 'metric') {
-    return <span className={`text-[13px] ${INK}`} data-testid={`${id}-body`}>{b.label} · {b.value ?? NOT_RECORDED} · {b.binding?.grade || NOT_RECORDED}</span>;
+    const item = (items || []).find((i) => i.source_key && i.source_key === b.binding?.source_key) || null;
+    return (
+      <span className="flex flex-col gap-1">
+        <span className={`text-[13px] ${INK}`} data-testid={`${id}-body`}>{b.label} · {b.value ?? NOT_RECORDED} · {b.binding?.grade || NOT_RECORDED}</span>
+        {chipOf(item) ? <SourceChip item={item} /> : <span className={`${MUTED} font-mono text-[10.5px]`} data-testid={`${id}-source`}>Source: {NOT_RECORDED}</span>}
+      </span>
+    );
   }
   const series = (b.series || []).map((s) => s.label).filter(Boolean).join(', ');
   return (

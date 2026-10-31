@@ -586,7 +586,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           onPlace={(c) => setCard(sel, c)} onProposals={onProposals} onClose={() => setDialog(null)}
           onDialog={(plan, area) => {
             if (plan.open === 'structure') { setDialog(null); setSheet('structure'); return; }
-            setDialog({ kind: 'add-block', range: area.kind === 'free' ? area.grid : null, initial: plan.kind });
+            // "Add it here": the area's own range; a block that holds it gives way when Add places the new one.
+            setDialog({ kind: 'add-block', range: area.grid, replace: area.kind === 'block' ? area.block.id : null, initial: plan.kind });
           }}
           onImageOptions={(area) => setDialog({ kind: 'image', use: 'content', replace: area.kind === 'block' ? area.block.id : null })} />
       ) : null}
@@ -599,7 +600,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           }} />
       ) : null}
       {dialog?.kind === 'add-block' && card ? (
-        <AddBlockDialog card={card} model={model} sources={sources} initialKind={dialog.initial} range={dialog.range} onClose={() => setDialog(null)}
+        <AddBlockDialog card={dialog.replace ? removeBlock(card, dialog.replace) : card} model={model} sources={sources} initialKind={dialog.initial} range={dialog.range} onClose={() => setDialog(null)}
           onAdd={(c) => { setCard(sel, c); const last = c.blocks?.[c.blocks.length - 1]; selectBlock(last?.id ?? null); setDialog(null); }} />
       ) : null}
     </>
@@ -813,12 +814,21 @@ function SaveDialog({ changes, save, onSaved, onClose, named = false, initialNam
 // ---------------------------------------------------------------------------
 
 function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesMax, deckId, items, aiOn, model, onPlace, onProposals }) {
-  // pd9k: tap one text area on the card, and the instruction box docks at the bottom.
+  // pd9k / plan §8: tap one area on the card, then Ask opens "Generate into 1
+  // area" as a full-height sheet, with the instruction field at its foot.
   const [tapped, setTapped] = useState(null);
-  useEffect(() => { setTapped(null); }, [sel]);
+  const [asking, setAsking] = useState(false);
+  useEffect(() => { setTapped(null); setAsking(false); }, [sel]);
   const all = areasOf(card, model) || [];
-  const texts = all.filter((a) => a.kind === 'block' && a.block.kind === 'text');
-  const docked = texts.find((a) => a.id === tapped) || null;
+  const area = all.find((a) => a.id === tapped) || null;
+  const target = area ? askTarget(all, [area.id], { aiOn, items }) : null;
+  const words = area?.kind === 'block' && area.block.kind === 'text';
+  const describe = (a) => {
+    if (a.kind !== 'block') return 'Empty';
+    if (a.block.kind === 'text') return String(a.block.text || '').slice(0, 40) || 'No words yet';
+    if (a.block.kind === 'metric') return a.block.label || 'Figure';
+    return a.block.kind[0].toUpperCase() + a.block.kind.slice(1);
+  };
   return (
     <div className="flex flex-col gap-2.5" data-testid="pitch-editor-phone">
       <span className={MUTED}>{PHONE_NOTE}</span>
@@ -844,21 +854,35 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
           <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} onChange={(e) => onNotes(e.target.value)} />
         </label>
       ) : null}
-      {card && !readOnly && texts.length ? (
-        <div className={`${CARD} flex flex-col gap-1.5 p-3 ${docked ? 'mb-[180px]' : ''}`} data-testid="pitch-editor-phone-areas">
-          <span className={EYE}>Ask Eadwyn about an area · card {sel + 1}</span>
-          {texts.map((a) => (
+      {card && !readOnly && all.length ? (
+        <div className={`${CARD} flex flex-col gap-1.5 p-3`} data-testid="pitch-editor-phone-areas">
+          <span className={EYE}>Areas on card {sel + 1}</span>
+          {all.map((a) => (
             <button key={a.id} type="button" aria-pressed={tapped === a.id}
               className={`flex min-h-[44px] items-center rounded-[9px] border px-3 text-left text-[13px] ${tapped === a.id ? 'border-axal-violet bg-axal-lavender dark:border-violet-500 dark:bg-violet-950/40' : 'border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900'} ${INK}`}
               onClick={() => setTapped(tapped === a.id ? null : a.id)} data-testid={`pitch-editor-phone-area-${a.id}`}>
-              <span className="truncate">{areaTitle(a, all.indexOf(a), all.length)} · {String(a.block.text || '').slice(0, 40)}</span>
+              <span className="truncate">{areaTitle(a, all.indexOf(a), all.length)} · {describe(a)}</span>
             </button>
           ))}
+          {area ? (
+            <div className="flex flex-wrap items-center gap-2" data-testid="pitch-editor-phone-actions">
+              <button type="button" className={`${GHOST} min-h-[44px] min-w-[44px]`} aria-label="Ask Eadwyn about this area"
+                disabled={!target || target.kind !== 'areas'} onClick={() => setAsking(true)} data-testid="pitch-editor-phone-ask">
+                <img src="/eadwyn-ai.png" alt="" aria-hidden="true" className="h-4 w-4 rounded-full" /> Ask
+              </button>
+              {target?.kind === 'off' ? <span className={MUTED} data-testid="pitch-editor-phone-ask-why">AI is paused for your studio.</span> : null}
+              {target?.kind === 'refused' ? <span className={MUTED} data-testid="pitch-editor-phone-ask-why">{target.why}</span> : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
-      {docked ? (
-        <InstructionBox dock deckId={deckId} cardIndex={sel} card={card} areas={[docked]} items={items} aiOn={aiOn}
-          onPlace={onPlace} onProposals={onProposals} onClose={() => setTapped(null)} />
+      {asking && area && target?.kind === 'areas' ? (
+        <AreaLightbox deckId={deckId} cardIndex={sel} card={card} areas={[area]} model={model} items={items} aiOn={aiOn}
+          onPlace={onPlace} onProposals={onProposals} onClose={() => setAsking(false)}
+          instruction={words ? (
+            <InstructionBox sheet deckId={deckId} cardIndex={sel} card={card} areas={[area]} items={items} aiOn={aiOn}
+              onPlace={onPlace} onProposals={onProposals} />
+          ) : null} />
       ) : null}
     </div>
   );
