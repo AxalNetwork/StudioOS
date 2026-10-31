@@ -21,6 +21,8 @@ import { PLAN_KEY as INVESTOR_PLAN_KEY } from '../src/middleware/requireInvestor
 const JWT_SECRET = randomBytes(32).toString('hex');
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const MIGRATION = readFileSync(new URL('../sql/migrations/687_studio_layouts.sql', import.meta.url), 'utf8');
+// D1594 (#3863): the layout's revision.
+const REVISION = readFileSync(new URL('../sql/migrations/750_studio_layout_revision.sql', import.meta.url), 'utf8');
 
 const USERS: Array<[number, string, number]> = [
   [1, 'founder', 0], [2, 'investor', 0], [3, 'advisor', 0], [4, 'partner', 0],
@@ -30,6 +32,7 @@ function world() {
   const fx = makeD1(stripForeignKeys(tableFromBaseline(baseline, 'users')));
   fx.db.exec('PRAGMA foreign_keys=ON');
   fx.db.exec(MIGRATION);
+  fx.db.exec(REVISION);
   for (const [id, role, lab] of USERS)
     fx.db.prepare('INSERT INTO users(id,name,email,role,is_active,spinout_lab_active) VALUES(?,?,?,?,1,?)').run(id, 'Synthetic', `s${id}@example.test`, role, lab);
   const env: any = { DB: fx.DB, JWT_SECRET, ENVIRONMENT: 'development' };
@@ -37,7 +40,13 @@ function world() {
 }
 const token = (id: number) => new SignJWT({ user_id: id }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
   .sign(new TextEncoder().encode(JWT_SECRET));
-async function call(env: any, id: number | null, path: string, method = 'GET', body?: unknown) {
+async function call(env: any, id: number | null, path: string, method = 'GET', body?: unknown): Promise<{ status: number; body: any }> {
+  // D1594: a save names the revision it was read at. These tests are about
+  // validation, so a body that does not name one saves from a fresh read.
+  if (method === 'PUT' && id !== null && body && typeof body === 'object' && !Array.isArray(body) && !('expected_revision' in body)) {
+    const read = await call(env, id, path, 'GET');
+    body = { ...body, expected_revision: read.body?.revision ?? null };
+  }
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (id !== null) headers.authorization = `Bearer ${await token(id)}`;
   const res = await studio.fetch(new Request(`https://example.test${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }), env);
@@ -68,7 +77,7 @@ test('a member arranges only their own Studio; an admin names the one they previ
       assert.deepEqual([r.status, r.body.error], [400, 'invalid_profile'], q);
     }
     const adv = await call(w.env, 5, '/modules?profile=advisor');
-    assert.deepEqual(adv.body.modules.map((m: any) => m.key), catalogueOf('advisor').map((m) => m.key));
+    assert.deepEqual(adv.body.modules.map((m: any) => m.key), catalogueOf('advisor', { role: 'admin' }).map((m) => m.key));
     await call(w.env, 5, '/layout?profile=advisor', 'PUT', { layout: [{ key: 'earnings', size: 'full' }] });
     await call(w.env, 5, '/layout?profile=partner', 'PUT', { layout: [{ key: 'firm_feed', size: '1/2' }] });
     assert.deepEqual(w.db.prepare('SELECT profile FROM studio_layouts WHERE user_id = 5 ORDER BY profile').all().map((r: any) => r.profile), ['advisor', 'partner']);
@@ -86,14 +95,14 @@ test('each catalogue is its registry rows, in order, and never offers a fixed or
       assert.equal(r.body.profile, profile);
       assert.deepEqual(r.body.modules.map((m: any) => m.key), STUDIO_MODULES.filter((m) => m.profile === profile).map((m) => m.key));
       for (const m of r.body.modules) {
-        assert.deepEqual(Object.keys(m).sort(), ['cohort_only', 'default_size', 'group', 'key', 'locked_by_plan', 'plan', 'title']);
+        assert.deepEqual(Object.keys(m).sort(), ['cohort_only', 'default_size', 'group', 'href', 'in_default', 'key', 'locked_by_plan', 'plan', 'purpose', 'title']);
         assert.equal(m.locked_by_plan, false, `${m.key}: no block on /studio is plan-locked on main`);
         assert.equal(m.plan, null);
         assert.ok(![...STUDIO_FIXED, ...STUDIO_REMOVED].includes(m.key));
       }
     }
     const founder = (await call(w.env, 1, '/modules')).body.modules;
-    assert.equal(founder.find((m: any) => m.key === 'module_map').cohort_only, true);
+    assert.equal(founder.find((m: any) => m.key === 'lab_tools').cohort_only, true);
     assert.ok(!founder.some((m: any) => ['holding_progress', 'implications'].includes(m.key)), 'no-store zones are not offered (owner question B)');
   } finally { w.db.close(); }
 });
@@ -120,7 +129,7 @@ test('a saved layout round-trips in order with its sizes, and an empty one stays
     assert.equal(put.status, 200);
     assert.equal(put.body.source, 'saved');
     const read = await call(w.env, 2, '/layout');
-    assert.deepEqual(read.body.layout, layout.map((e) => ({ ...e, locked_by_plan: false })));
+    assert.deepEqual(read.body.layout, layout, 'a placed module carries no lock flag: it is never locked');
     assert.ok(read.body.updated_at);
     assert.equal(rows(w.db), 1);
     assert.equal((await call(w.env, 2, '/layout', 'PUT', { layout: [] })).status, 200);
@@ -157,7 +166,7 @@ test('validation: the cap, duplicates, unknown, removed, fixed and other-profile
     }
     assert.equal(rows(w.db), 0);
     // Twelve distinct entries fit; this catalogue has five, so the cap is checked on its own above.
-    assert.equal((await call(w.env, 3, '/layout', 'PUT', { layout: catalogueOf('advisor').map((m) => ({ key: m.key, size: '1/3' })) })).status, 200);
+    assert.equal((await call(w.env, 3, '/layout', 'PUT', { layout: catalogueOf('advisor', { role: 'admin' }).map((m) => ({ key: m.key, size: '1/3' })) })).status, 200);
   } finally { w.db.close(); }
 });
 
@@ -190,9 +199,11 @@ test('a locked module: the lock comes from the shared paywalls, its plan is name
     w.db.prepare("UPDATE users SET investor_tier = 'professional', investor_subscription_status = 'active' WHERE id = 2").run();
     assert.equal((await call(w.env, 2, '/modules')).body.modules.find((m: any) => m.key === pipeline.key).locked_by_plan, false);
     assert.equal((await call(w.env, 2, '/layout', 'PUT', { layout: [{ key: pipeline.key, size: '1/2' }] })).status, 200);
-    // A plan that lapses later keeps the saved key, now marked locked.
+    // D1594: a plan that lapses later moves the saved key to `dropped`, named, with its plan.
     w.db.prepare("UPDATE users SET investor_tier = 'free' WHERE id = 2").run();
-    assert.deepEqual((await call(w.env, 2, '/layout')).body.layout, [{ key: pipeline.key, size: '1/2', locked_by_plan: true }]);
+    const lapsed = (await call(w.env, 2, '/layout')).body;
+    assert.deepEqual(lapsed.layout, []);
+    assert.deepEqual(lapsed.dropped.map((d: any) => [d.key, d.title, d.reason, d.plan.plan_key]), [[pipeline.key, 'Pipeline', 'plan', INVESTOR_PLAN_KEY.professional]]);
     // The founder paywall, from STUDIO_PREFIXES.
     const founder = (await call(w.env, 1, '/modules')).body.modules.find((m: any) => m.key === capital.key);
     assert.deepEqual([founder.locked_by_plan, founder.plan.name, founder.plan.plan_key], [true, PLAN_NAME.studio, PLAN_KEY.studio]);
@@ -209,7 +220,7 @@ test('a saved key later removed from the registry is left out and named; a corru
   try {
     w.db.prepare("INSERT INTO studio_layouts(user_id,profile,layout) VALUES(4,'partner',?)").run(JSON.stringify([{ key: 'retired_tile', size: '1/3' }, { key: 'firm_feed', size: 'full' }]));
     const r = await call(w.env, 4, '/layout');
-    assert.deepEqual([r.body.layout.map((e: any) => e.key), r.body.dropped], [['firm_feed'], ['retired_tile']]);
+    assert.deepEqual([r.body.layout.map((e: any) => e.key), r.body.dropped], [['firm_feed'], [{ key: 'retired_tile', title: null, reason: 'not_offered', plan: null }]]);
     w.db.prepare('PRAGMA ignore_check_constraints = ON').run();
     w.db.prepare("INSERT INTO studio_layouts(user_id,profile,layout) VALUES(3,'advisor','not json')").run();
     const bad = await call(w.env, 3, '/layout');
@@ -220,7 +231,7 @@ test('a saved key later removed from the registry is left out and named; a corru
 test('reset deletes the row and answers the default; reset with no row is still 200', async () => {
   const w = world();
   try {
-    await call(w.env, 1, '/layout', 'PUT', { layout: [{ key: 'module_map', size: '1/3' }] });
+    await call(w.env, 1, '/layout', 'PUT', { layout: [{ key: 'lab_tools', size: '1/3' }] });
     await call(w.env, 8, '/layout', 'PUT', { layout: [] });
     const r = await call(w.env, 1, '/layout/reset', 'POST');
     assert.deepEqual([r.status, r.body.source], [200, 'default']);
@@ -261,7 +272,7 @@ test('the registry: unique snake_case keys, valid defaults within the cap, /api 
     for (const p of m.reads) assert.match(p, /^\/api\//);
   }
   for (const p of STUDIO_PROFILES) {
-    const allowed = new Set(catalogueOf(p).map((m) => m.key));
+    const allowed = new Set(catalogueOf(p, { role: 'admin' }).map((m) => m.key));
     assert.ok(STUDIO_DEFAULTS[p].length <= STUDIO_LAYOUT_MAX);
     for (const e of STUDIO_DEFAULTS[p]) { assert.ok(allowed.has(e.key), `${p}:${e.key}`); assert.ok(['1/3', '1/2', 'full'].includes(e.size)); }
   }

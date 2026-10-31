@@ -175,5 +175,9 @@ D1231 concurrency tests cover displayed If-Match tokens, source edits during a r
 | `messages_retirement_d1345.test.ts` | Phase 1: real mounted 410s and own-LP / own-advisor Email recipient scopes on migrated SQLite. |
 D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.
 
+| File | Purpose |
+| --- | --- |
 | `session_processing_recovery_3711.test.ts` | No-audio legacy recovery, transcript-hash summary reuse and private stage failure diagnostics for #3711. |
 | `stripe_mode_d1433.test.ts` | D1433 (#3703): mode-stamped catalogue, checkout readiness before provider calls, webhook receipts/retries/concurrency and signature timestamp boundaries; mocked Stripe only. |
+| `project_deck_hard_delete_3747.test.ts` | #3747: migrated SQLite deck/share/note/image cleanup, venture isolation, 500-object R2 pages, rollback, durable retries and per-sweep schema discovery; synthetic records only. |
+| `deck_atomic_save_3748.test.ts` | #3748: migration 713 preserves duplicate deck payloads and enforces unique version/current rows. |

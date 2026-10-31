@@ -1,5 +1,5 @@
 // D1139 (#3019, part 5 of #2422) — Account › Companies and projects: the
-// company lightbox at `/account/companies/<uid>` (CMP2), the venture lightbox
+// company lightbox at `/account/portfolio/<uid>` (CMP2), the venture lightbox
 // (CMP4, CMP4b) and the lifecycle dialogs (CMP6–CMP8). Each dialog says what
 // it changes before it changes it; Leave is refused for the only primary
 // admin with the reason; a Lab-locked venture shows the Worker's reason.
@@ -89,7 +89,7 @@ function worker(over = {}) {
 
 function Where() { const l = useLocation(); return h('i', { 'data-testid': 'where', 'data-path': l.pathname }); }
 
-async function mount(role, { url = '/account/companies', handle = worker(), known = KNOWN, active = { id: 7, uid: 'c7' } } = {}) {
+async function mount(role, { url = '/account/portfolio', handle = worker(), known = KNOWN, active = { id: 7, uid: 'c7' } } = {}) {
   const restore = installDocument();
   localStorage.setItem('user', JSON.stringify({ id: ME, role, name: 'Sam Example' }));
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
@@ -106,7 +106,7 @@ async function mount(role, { url = '/account/companies', handle = worker(), know
   const settle = async () => { for (let i = 0; i < 8; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
   await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] },
     h(AuthProvider, null, h(ActiveCompanyContext.Provider, { value: ctx },
-      h(Routes, null, h(Route, { path: '/account/companies/:tab?', element: h(React.Fragment, null, h(Where), h(CompaniesProjects, { role })) })))))));
+      h(Routes, null, h(Route, { path: '/account/portfolio/:tab?', element: h(React.Fragment, null, h(Where), h(CompaniesProjects, { role })) })))))));
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const textOf = (n) => (n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join('') : n.textContent || '');
@@ -129,16 +129,16 @@ async function mount(role, { url = '/account/companies', handle = worker(), know
 // ---------------------------------------------------------------- the model
 
 test('a company uid is its own address, kept by the canonicalising path; a tab is never read as a uid', () => {
-  assert.equal(companyUidFor('/account/companies/c7'), 'c7');
-  assert.equal(companyUidFor('/account/companies/c7/'), 'c7');
-  for (const tab of ['projects', 'funds', 'engagements', 'invitations', 'Projects']) assert.equal(companyUidFor(`/account/companies/${tab}`), null, tab);
-  assert.equal(companyUidFor('/account/companies'), null);
-  assert.equal(companyUidFor('/account/companies/a/b'), null);
-  assert.equal(companyPathFor('c7'), '/account/companies/c7');
-  assert.equal(accountViewFor({ pathname: '/account/companies/c7' }), 'companies');
-  assert.equal(companiesTabFor('/account/companies/c7'), 'companies', 'the lightbox opens over Companies');
-  assert.equal(accountPathFor({ section: 'companies', companiesTab: 'companies', companyUid: 'c7' }), '/account/companies/c7');
-  assert.equal(accountPathFor({ section: 'companies', companiesTab: 'projects' }), '/account/companies/projects');
+  assert.equal(companyUidFor('/account/portfolio/c7'), 'c7');
+  assert.equal(companyUidFor('/account/portfolio/c7/'), 'c7');
+  for (const tab of ['projects', 'funds', 'engagements', 'invitations', 'Projects']) assert.equal(companyUidFor(`/account/portfolio/${tab}`), null, tab);
+  assert.equal(companyUidFor('/account/portfolio'), null);
+  assert.equal(companyUidFor('/account/portfolio/a/b'), null);
+  assert.equal(companyPathFor('c7'), '/account/portfolio/c7');
+  assert.equal(accountViewFor({ pathname: '/account/portfolio/c7' }), 'companies');
+  assert.equal(companiesTabFor('/account/portfolio/c7'), 'companies', 'the lightbox opens over Companies');
+  assert.equal(accountPathFor({ section: 'companies', companiesTab: 'companies', companyUid: 'c7' }), '/account/portfolio/c7');
+  assert.equal(accountPathFor({ section: 'companies', companiesTab: 'projects' }), '/account/portfolio/projects');
 });
 
 test('each lifecycle dialog says what it changes, and the destructive ones are marked', () => {
@@ -181,10 +181,10 @@ test('who may do what in a company is the Worker\'s rule; the Lab lock is the Wo
 
 // ---------------------------------------------------------------- CMP2
 
-test('mounted CMP2: a card opens /account/companies/<uid>; the lightbox reads the company and draws its facts, ventures, members and invitations', async () => {
-  const v = await mount('founder', { url: '/account/companies/c7' });
+test('mounted CMP2: a card opens /account/portfolio/<uid>; the lightbox reads the company and draws its facts, ventures, members and invitations', async () => {
+  const v = await mount('founder', { url: '/account/portfolio/c7' });
   try {
-    assert.equal(v.prop('company-open-c8', 'href'), '/account/companies/c8');
+    assert.equal(v.prop('company-open-c8', 'href'), '/account/portfolio/c8');
     assert.ok(v.has('company-lightbox'));
     assert.equal(v.prop('company-lightbox', 'role'), 'dialog', 'D1317: the company is the shared Sheet over its list');
     assert.ok(v.prop('company-lightbox', 'aria-labelledby'));
@@ -199,14 +199,14 @@ test('mounted CMP2: a card opens /account/companies/<uid>; the lightbox reads th
     for (const id of ['company-rename', 'company-invite', 'company-transfer', 'company-archive', 'company-leave', 'company-open-studio']) assert.ok(v.has(id), id);
     assert.ok(!v.has('company-make-active'), 'it is already active');
     await v.click('company-lightbox-close');
-    assert.equal(v.path(), '/account/companies', 'D1317: closing the sheet returns to the list’s address');
+    assert.equal(v.path(), '/account/portfolio', 'D1317: closing the sheet returns to the list’s address');
     assert.ok(!v.has('company-lightbox'));
     assert.ok(v.has('company-open-c8'), 'the list was under it all along');
   } finally { await v.close(); }
 });
 
 test('mounted CMP2 as a plain member: Make active and Leave only; no invitations read', async () => {
-  const v = await mount('founder', { url: '/account/companies/c8' });
+  const v = await mount('founder', { url: '/account/portfolio/c8' });
   try {
     assert.ok(v.has('company-make-active') && v.has('company-leave'));
     for (const id of ['company-rename', 'company-invite', 'company-transfer', 'company-archive', 'company-invitations-block']) assert.ok(!v.has(id), id);
@@ -222,7 +222,7 @@ test('mounted CMP2 as a plain member: Make active and Leave only; no invitations
 // ---------------------------------------------------------------- CMP7
 
 test('Leave is refused for the only primary admin, with the reason, before anything is sent; Transfer primary admin opens from it', async () => {
-  const v = await mount('founder', { url: '/account/companies/c7' });
+  const v = await mount('founder', { url: '/account/portfolio/c7' });
   try {
     await v.click('company-leave');
     assert.ok(!v.has('leave-dialog'));
@@ -245,7 +245,7 @@ test('Leave is refused for the only primary admin, with the reason, before anyth
 test('when the page cannot tell, the Worker\'s last_primary_admin refusal turns Leave into the refusal with its reason', async () => {
   // The read shows a second primary admin; the Worker knows better.
   const two = { ...C7, members: [C7.members[0], { ...C7.members[1], is_primary_admin: true }] };
-  const v = await mount('founder', { url: '/account/companies/c7', handle: worker({ 'GET /api/company/c7': () => response(two) }) });
+  const v = await mount('founder', { url: '/account/portfolio/c7', handle: worker({ 'GET /api/company/c7': () => response(two) }) });
   try {
     await v.click('company-leave');
     assert.match(v.of('leave-dialog-says'), /lose access to its workspaces/);
@@ -257,7 +257,7 @@ test('when the page cannot tell, the Worker\'s last_primary_admin refusal turns 
 });
 
 test('Archive says what happens and what is kept, then posts; a member\'s Leave posts and closes', async () => {
-  let v = await mount('founder', { url: '/account/companies/c7' });
+  let v = await mount('founder', { url: '/account/portfolio/c7' });
   try {
     await v.click('company-archive');
     assert.match(v.of('archive-dialog'), /leaves the switcher for every member.*kept.*Deleting a company is not self-serve/s);
@@ -268,13 +268,13 @@ test('Archive says what happens and what is kept, then posts; a member\'s Leave 
     assert.deepEqual(v.writes().map((w) => w.call), ['POST /api/company/c7/archive']);
     assert.match(v.of('companies-done'), /Harbor Ledger is archived/);
   } finally { await v.close(); }
-  v = await mount('founder', { url: '/account/companies/c8' });
+  v = await mount('founder', { url: '/account/portfolio/c8' });
   try {
     await v.click('company-leave');
     await v.click('leave-dialog-confirm');
     assert.deepEqual(v.writes().map((w) => w.call), ['POST /api/company/c8/leave']);
     assert.ok(!v.has('company-lightbox'));
-    assert.equal(v.path(), '/account/companies');
+    assert.equal(v.path(), '/account/portfolio');
   } finally { await v.close(); }
 });
 
@@ -282,7 +282,7 @@ test('Archive says what happens and what is kept, then posts; a member\'s Leave 
 
 test('Rename sends the new name; Invite sends its fields and, when the email does not send, hands over the link', async () => {
   const v = await mount('founder', {
-    url: '/account/companies/c7',
+    url: '/account/portfolio/c7',
     handle: worker({ 'POST /api/company/c7/invitations': () => response({ ok: true, email_sent: false, accept_path: '/company/invitations/accept?token=t0k' }) }),
   });
   try {
@@ -323,7 +323,7 @@ test('New company says the clash under the field and sends nothing', async () =>
 // ---------------------------------------------------------------- CMP4, CMP8
 
 test('mounted CMP4 as owner: a Lab-locked venture shows the Worker\'s reason in place of its invitations; Move, Transfer and Trash each say first', async () => {
-  const v = await mount('founder', { url: '/account/companies/projects' });
+  const v = await mount('founder', { url: '/account/portfolio/projects' });
   try {
     await v.click('project-open-1');
     assert.ok(v.has('venture-lightbox'));
@@ -360,7 +360,7 @@ test('mounted CMP4 as owner: a Lab-locked venture shows the Worker\'s reason in 
 
 test('CMP4b: past the lock, the invitations list with Revoke; a venture in no company moves into one', async () => {
   const open = { ...P1_TEAM, locked: false, gate_reason: null };
-  const v = await mount('founder', { url: '/account/companies/projects', handle: worker({ 'GET /api/projects/2/members': () => response(open) }) });
+  const v = await mount('founder', { url: '/account/portfolio/projects', handle: worker({ 'GET /api/projects/2/members': () => response(open) }) });
   try {
     await v.click('project-open-2');
     assert.ok(!v.has('venture-lab-lock'));
@@ -378,7 +378,7 @@ test('CMP4b: past the lock, the invitations list with Revoke; a venture in no co
 });
 
 test('CMP4 as a co-founder: Leave venture only, saying the seat lost; no Move, Transfer, Trash or Remove', async () => {
-  const v = await mount('founder', { url: '/account/companies/projects' });
+  const v = await mount('founder', { url: '/account/portfolio/projects' });
   try {
     await v.click('project-open-3');
     for (const id of ['venture-move', 'venture-transfer', 'venture-trash', 'venture-remove-11', 'venture-invitations']) assert.ok(!v.has(id), id);
@@ -391,7 +391,7 @@ test('CMP4 as a co-founder: Leave venture only, saying the seat lost; no Move, T
 
 test('a refused move is said inside its dialog, and the dialog stays', async () => {
   const v = await mount('founder', {
-    url: '/account/companies/projects',
+    url: '/account/portfolio/projects',
     handle: worker({ 'POST /api/projects/1/move': () => response({ detail: 'That company is archived. Restore it before you move a venture to it.', code: 'archived' }, 409) }),
   });
   try {

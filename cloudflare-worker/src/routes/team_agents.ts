@@ -35,7 +35,7 @@ import { refuse } from '../util/refusal';
 import { userMeetsTier } from '../middleware/requireTier';
 import { modelRefusal } from '../services/aiRouter';
 import { canAccessProject, isProjectManager } from '../services/projectAccess';
-import { canEdit } from './company';
+import { canEdit } from '../services/companyAccess';
 import { isAdmin, mapError, newUid } from './_t13t14t15_helpers';
 import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf, type Rules } from '../services/agents/catalogue';
 import { checkRules, diffRules } from '../services/agents/rulebook';
@@ -101,7 +101,7 @@ async function canRead(env: Env, s: Scope, user: User): Promise<boolean> {
 }
 
 async function canManage(env: Env, s: Scope, user: User): Promise<boolean> {
-  if (s.kind === 'company') return canEdit(env, { id: s.id } as any, user);
+  if (s.kind === 'company') return canEdit(env, { id: s.id }, user);
   return isProjectManager(user, s);
 }
 

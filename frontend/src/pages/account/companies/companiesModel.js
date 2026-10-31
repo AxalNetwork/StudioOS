@@ -34,13 +34,22 @@ export const ADMIN_LINE = 'Switching company does not narrow what you see as an 
 export const EXPLORER_LINE = 'Creating a company opens once your profile is set.';
 export const ADVISOR_LINE = 'Practice and Expertise are not yet separated by company.';
 
+/**
+ * D1415 part 4 (#3856): the section's address is `/account/portfolio`. Every
+ * old `/account/companies…` address forwards here (`CompaniesMovedRedirect`,
+ * `movedCompaniesTarget`); the labels stay "Companies and projects" until the
+ * owner answers #3696's naming question.
+ */
+export const BASE_PATH = '/account/portfolio';
+export const OLD_BASE_PATH = '/account/companies';
+
 /** Every tab, each at its own address. Which a profile sees is `tabsFor`. */
 export const TAB_PATHS = {
-  companies: '/account/companies',
-  projects: '/account/companies/projects',
-  funds: '/account/companies/funds',
-  engagements: '/account/companies/engagements',
-  invitations: '/account/companies/invitations',
+  companies: BASE_PATH,
+  projects: `${BASE_PATH}/projects`,
+  funds: `${BASE_PATH}/funds`,
+  engagements: `${BASE_PATH}/engagements`,
+  invitations: `${BASE_PATH}/invitations`,
 };
 export const TAB_LABELS = { companies: 'Companies', projects: 'Projects', funds: 'Funds', engagements: 'Engagements', invitations: 'Invitations' };
 
@@ -68,7 +77,7 @@ export const tabsFor = (profile) => PROFILE_TABS[profile] || PROFILE_TABS.founde
 
 /** Which tab an address opens: its segment when it is a tab, else Companies. */
 export function companiesTabFor(pathname = '') {
-  const m = String(pathname).match(/^\/(?:account|settings)\/companies\/([^/?#]+)\/?$/);
+  const m = String(pathname).match(/^\/(?:account\/portfolio|(?:account|settings)\/companies)\/([^/?#]+)\/?$/);
   const tab = m && m[1].toLowerCase();
   return tab && TAB_PATHS[tab] ? tab : 'companies';
 }
@@ -79,10 +88,10 @@ export const companiesPathFor = (tab) => TAB_PATHS[tab] || TAB_PATHS.companies;
  * segment that is not a tab is a company uid. Anything else is null.
  */
 export function companyUidFor(pathname = '') {
-  const m = String(pathname).match(/^\/(?:account|settings)\/companies\/([A-Za-z0-9_-]{1,64})\/?$/);
+  const m = String(pathname).match(/^\/(?:account\/portfolio|(?:account|settings)\/companies)\/([A-Za-z0-9_-]{1,64})\/?$/);
   return m && !TAB_PATHS[m[1].toLowerCase()] && m[1].toLowerCase() !== SETTINGS_SEGMENT ? m[1] : null;
 }
-export const companyPathFor = (uid) => `/account/companies/${encodeURIComponent(uid)}`;
+export const companyPathFor = (uid) => `${BASE_PATH}/${encodeURIComponent(uid)}`;
 
 /* ------------------------------------------------------------------ *
  * D1140 (#3020, CMP19) — one place for companies
@@ -97,22 +106,27 @@ export const companyPathFor = (uid) => `/account/companies/${encodeURIComponent(
  * `settings` is reserved: it is never read as a company's uid.
  */
 export const SETTINGS_SEGMENT = 'settings';
-export const SETTINGS_PATH = '/account/companies/settings';
-export const companySettingsPathFor = (uid) => `/account/companies/${encodeURIComponent(uid)}/settings`;
+export const SETTINGS_PATH = `${BASE_PATH}/settings`;
+export const companySettingsPathFor = (uid) => `${BASE_PATH}/${encodeURIComponent(uid)}/settings`;
 
 /** The company a settings address names: its uid, '' for the active one, or null when the address is not a settings address. */
 export function settingsUidFor(pathname = '') {
   const p = String(pathname).replace(/\/+$/, '');
   if (p === SETTINGS_PATH) return '';
-  const m = p.match(/^\/account\/companies\/([A-Za-z0-9_-]{1,64})\/settings$/);
+  const m = p.match(/^\/account\/portfolio\/([A-Za-z0-9_-]{1,64})\/settings$/);
   return m && m[1].toLowerCase() !== SETTINGS_SEGMENT && !TAB_PATHS[m[1].toLowerCase()] ? m[1] : null;
 }
 
 export const MANAGE_LABEL = 'Manage companies and projects';
 export const SIDEBAR_LABEL = 'Companies and projects';
 export const MOVED_KEY = 'company-settings';
+/** D1415 part 4: the `?moved=` an old `/account/companies…` address lands with. */
+export const COMPANIES_MOVED_KEY = 'companies';
 /** The notices an old address lands with (CMP19b), by `?moved=`. */
-export const MOVED_NOTICES = Object.freeze({ [MOVED_KEY]: 'Company Settings has a new address. Update your bookmark.' });
+export const MOVED_NOTICES = Object.freeze({
+  [MOVED_KEY]: 'Company Settings has a new address. Update your bookmark.',
+  [COMPANIES_MOVED_KEY]: 'Companies and projects has a new address. Update your bookmark.',
+});
 /** Profile and identity's one-line notice (CMP19b), shown until dismissed on this device. */
 export const PROFILE_MOVED_TEXT = 'Your companies is now Companies and projects, under Account.';
 export const PROFILE_MOVED_STORE = 'moved:your-companies';
@@ -126,6 +140,22 @@ export function forwardTarget(uid, search = '', hash = '') {
   const q = new URLSearchParams(String(search).replace(/^\?/, ''));
   q.set('moved', MOVED_KEY);
   return `${uid ? companyPathFor(uid) : TAB_PATHS.companies}?${q.toString()}${hash || ''}`;
+}
+
+/**
+ * D1415 part 4 (#3856): where an old `/account/companies…` address forwards.
+ * The same rest of the path under `/account/portfolio` (a tab, a company's
+ * lightbox, `settings`, `<uid>/settings`), the query and the hash kept, and
+ * `moved=companies` naming the notice. An address outside the old section is
+ * null.
+ */
+export function movedCompaniesTarget(pathname = '', search = '', hash = '') {
+  const p = String(pathname);
+  if (p !== OLD_BASE_PATH && !p.startsWith(`${OLD_BASE_PATH}/`)) return null;
+  const rest = p.slice(OLD_BASE_PATH.length).replace(/\/+$/, '');
+  const q = new URLSearchParams(String(search).replace(/^\?/, ''));
+  q.set('moved', COMPANIES_MOVED_KEY);
+  return `${BASE_PATH}${rest}?${q.toString()}${hash || ''}`;
 }
 
 /**

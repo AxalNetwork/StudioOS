@@ -11,6 +11,7 @@ import { railBody } from './railPages.js';
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
 export * from './api/accountCompanies.js';
+export * from './api/accountPortfolio.js';
 export * from './api/adminAccountWrites.js';
 export * from './api/adminAccounts.js';
 export * from './api/adminAiUsage.js';
@@ -51,6 +52,7 @@ export * from './api/closings.js';
 export * from './api/community.js';
 export * from './api/communityTasks.js';
 export * from './api/companyActions.js';
+export * from './api/companyDocuments.js';
 export * from './api/companyEin.js';
 export * from './api/companyLegal.js';
 export * from './api/companyReceivingAccounts.js';
@@ -158,6 +160,7 @@ export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
 export * from './api/studioLayout.js';
 export * from './api/teamAgents.js';
+export * from './api/teams.js';
 export * from './api/ticketReviews.js';
 export * from './api/tokenPacks.js';
 export * from './api/trustContent.js';
@@ -1090,15 +1093,7 @@ export const api = {
   // Task #1 — Spin-Out teams collaboration: project membership (co-founders +
   // advisors). Management (add/invite/remove/revoke) is owner + admin/partner
   // only and stage-gated server-side; the UI mirrors `can_manage` + `locked`.
-  listProjectMembers: (id) => request(`/projects/${id}/members`),
-  addProjectMember: (id, data) =>
-    request(`/projects/${id}/members`, { method: 'POST', body: JSON.stringify(data || {}) }),
-  createProjectInvitation: (id, data) =>
-    request(`/projects/${id}/invitations`, { method: 'POST', body: JSON.stringify(data || {}) }),
-  revokeProjectInvitation: (id, invId) =>
-    request(`/projects/${id}/invitations/${invId}/revoke`, { method: 'POST' }),
-  removeProjectMember: (id, userId) =>
-    request(`/projects/${id}/members/${userId}`, { method: 'DELETE' }),
+  // #3841: the roster and invitation methods moved to `lib/api/teams.js` (`teamsApi`, D527).
   acceptProjectInvitation: (token) =>
     request('/projects/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
 
@@ -3466,24 +3461,13 @@ export const api = {
   // Company Profiles (Growth & Expansion Track — Task 1)
   companyMe: () => request('/company/me'),
   listMyCompanies: () => request('/company/memberships'),
-  getCompany: (uid) => request(`/company/${uid}`),
   listCompanies: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
     return request(`/companies${qs ? `?${qs}` : ''}`);
   },
   createCompany: (data) => request('/company/create', { method: 'POST', body: JSON.stringify(data) }),
   updateCompany: (uid, data) => request(`/company/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  // The direct add (`addCompanyMember`, POST /company/:uid/members) is retired
-  // (D434): it joined an existing account without asking it. Membership is
-  // granted by the invitation below, accepted by the invitee.
-  // Wave 2 — role change / primary-admin transfer. Send only the keys you are
-  // changing; remove already existed, this closes the middle.
-  updateCompanyMember: (uid, userId, data) =>
-    request(`/company/${uid}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
-  // The ladder, the named functions, and what each authority level MEANS.
-  // A picker must never hardcode these — see services/teamAuthority.ts.
-  teamVocabulary: () => request('/company/team-vocabulary'),
+  // #3841: `getCompany`, the member edits and `teamVocabulary` moved to `lib/api/teams.js` (`teamsApi`, D527).
   // D435 — the founder's Team page (migration 326): the roster, coverage and
   // headcount plan of one company, plus the cap-table, option-pool and
   // co-founder-decision reads it composes, each reported per source.
@@ -3497,19 +3481,7 @@ export const api = {
   saveCompanyHeadcountPlan: (uid, rows) =>
     request(`/company/${uid}/team/plan`, { method: 'PUT', body: JSON.stringify({ rows }) }),
 
-  // Task #121 — a real invitation, as opposed to the retired direct add, which
-  // linked an EXISTING account without asking it and 404'd on anyone who had
-  // not signed up. These five drive `company_invitations`: the first mails a
-  // hashed, expiring token, and the last is the invitee's own accept.
-  inviteCompanyMember: (uid, data) =>
-    request(`/company/${uid}/invitations`, { method: 'POST', body: JSON.stringify(data) }),
-  listCompanyInvitations: (uid) => request(`/company/${uid}/invitations`),
-  // A NEW token — nothing stored can reproduce the old one, which is the
-  // point of storing only its hash.
-  resendCompanyInvitation: (uid, inviteUid) =>
-    request(`/company/${uid}/invitations/${inviteUid}/resend`, { method: 'POST' }),
-  revokeCompanyInvitation: (uid, inviteUid) =>
-    request(`/company/${uid}/invitations/${inviteUid}`, { method: 'DELETE' }),
+  // #3841: the company invitation methods moved to `lib/api/teams.js` (`teamsApi`, D527); the invitee's accept stays here.
   acceptCompanyInvitation: (token) =>
     request('/company/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
 

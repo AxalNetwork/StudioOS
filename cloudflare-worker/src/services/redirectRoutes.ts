@@ -89,6 +89,11 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/settings', keep: true },
   // D1140 (#3020): Company Settings moved under Companies and projects. No sent mail carries it, so its count decides.
   { path: '/company-settings' },
+  // D1415 part 4 (#3856): Companies and projects moved to /account/portfolio. Exact patterns before the :tab one.
+  { path: '/account/companies' },
+  { path: '/account/companies/settings' },
+  { path: '/account/companies/:uid/settings' },
+  { path: '/account/companies/:tab' },
   { path: '/settings/:section', keep: true },
   { path: '/dashboard' },
   { path: '/product-testing', keep: true }, // #2314: historical member notifications

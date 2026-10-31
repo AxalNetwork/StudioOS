@@ -88,7 +88,9 @@ test('every invitation method has a worker route behind it', () => {
     ['revokeCompanyInvitation', /r\.delete\('\/company\/:uid\/invitations\/:inviteUid',/],
     ['acceptCompanyInvitation', /r\.post\('\/company\/invitations\/accept',/],
   ]) {
-    assert.match(API, new RegExp(`\\n\\s*${method}:`), `api.js does not expose ${method}`);
+    // #3841: the inviter's methods moved to lib/api/teams.js (D527); the invitee's accept stays in api.js.
+    const client = method === 'acceptCompanyInvitation' ? API : read('frontend/src/lib/api/teams.js');
+    assert.match(client, new RegExp(`\\n\\s*${method}:`), `the client does not expose ${method}`);
     assert.match(ROUTE, matcher, `${method} has no worker route — it would 404`);
   }
 });

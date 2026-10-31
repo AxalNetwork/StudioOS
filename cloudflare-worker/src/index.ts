@@ -42,6 +42,7 @@ import scoring from './routes/scoring';
 import labReportShares from './routes/lab_report_shares';
 import projects from './routes/projects';
 import accountCompanies from './routes/account_companies';
+import accountPortfolio from './routes/account_portfolio';
 import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
@@ -354,6 +355,7 @@ import comarketingRoutes from './routes/comarketing';
 import companyRoutes from './routes/company';
 import companyLifecycle from './routes/company_lifecycle';
 import companyLegal from './routes/company_legal';
+import companyDocuments from './routes/company_documents';
 import projectLifecycle from './routes/project_lifecycle';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 // #45 — the partner workspace's own stores (migrations 208/209). Mounted under
@@ -938,6 +940,8 @@ app.route('/api/lab-report-shares', labReportShares);
 // D1136 (#3016): the caller's own companies, ventures and invitations, and answering an invitation signed in.
 // Before `projects` and `companyRoutes`; the answer paths are literal `invitations/<id>/accept|decline`.
 app.route('/api', accountCompanies);
+// D1415: the Portfolio reads — switcher, settings scope, path resolution.
+app.route('/api', accountPortfolio);
 // D1137 — a venture's move to a company and its owner transfer.
 app.route('/api/projects', projectLifecycle);
 app.route('/api/projects', projects);
@@ -1648,6 +1652,8 @@ app.route('/api/comarketing', comarketingRoutes);
 app.route('/api', companyLifecycle);
 // D1415: the company's legal record, officers, locations, sealed tax ID and slug.
 app.route('/api', companyLegal);
+// D1592 (#3860): the company's documents (the four named slots, other, its ventures'), upload and download.
+app.route('/api', companyDocuments);
 app.route('/api', companyRoutes);
 // D1496 (#3840): team agents, their rule books and their audit; 404 `team_agents_off` until TEAM_AGENTS_ENABLED is "true".
 app.route('/api/teams', teamAgentsRoutes);
