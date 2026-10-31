@@ -94,17 +94,31 @@ export async function hardDeleteProject(env: Env, projectId: number): Promise<vo
   }
   // #3747: delete dependants before decks, including stores without FKs.
   // View/feedback rows can omit project_id; resolve ownership through decks.
-  const decks = 'SELECT id FROM pitch_decks WHERE project_id = ?';
   if (present.has('pitch_decks')) {
     if (present.has('deck_view_slides') && present.has('deck_share_views')) {
-      add(`DELETE FROM deck_view_slides WHERE view_id IN (SELECT id FROM deck_share_views WHERE deck_id IN (${decks}))`);
+      add(`DELETE FROM deck_view_slides WHERE view_id IN
+        (SELECT id FROM deck_share_views WHERE deck_id IN (SELECT id FROM pitch_decks WHERE project_id = ?))`);
     }
-    for (const table of ['deck_share_conversions', 'deck_share_feedback', 'deck_share_views', 'pitch_deck_share_tokens', 'deck_exports', 'deck_checks', 'deck_notes']) {
-      if (present.has(table)) add(`DELETE FROM ${table} WHERE deck_id IN (${decks})`);
+    // Literal SQL keeps every deck statement visible to the schema/privacy guards.
+    for (const [table, query] of [
+      ['deck_share_conversions', 'DELETE FROM deck_share_conversions WHERE deck_id IN (SELECT id FROM pitch_decks WHERE project_id = ?)'],
+      ['deck_share_feedback', 'DELETE FROM deck_share_feedback WHERE deck_id IN (SELECT id FROM pitch_decks WHERE project_id = ?)'],
+      ['deck_share_views', 'DELETE FROM deck_share_views WHERE deck_id IN (SELECT id FROM pitch_decks WHERE project_id = ?)'],
+      ['pitch_deck_share_tokens', 'DELETE FROM pitch_deck_share_tokens WHERE deck_id IN (SELECT id FROM pitch_decks WHERE project_id = ?)'],
+      ['deck_exports', 'DELETE FROM deck_exports WHERE deck_id IN (SELECT id FROM pitch_decks WHERE project_id = ?)'],
+      ['deck_checks', 'DELETE FROM deck_checks WHERE deck_id IN (SELECT id FROM pitch_decks WHERE project_id = ?)'],
+      ['deck_notes', 'DELETE FROM deck_notes WHERE deck_id IN (SELECT id FROM pitch_decks WHERE project_id = ?)'],
+    ]) {
+      if (present.has(table)) add(query);
     }
   }
-  for (const table of ['deck_notes', 'deck_images', 'pitch_deck_proposals', 'pitch_decks']) {
-    if (present.has(table)) add(`DELETE FROM ${table} WHERE project_id = ?`);
+  for (const [table, query] of [
+    ['deck_notes', 'DELETE FROM deck_notes WHERE project_id = ?'],
+    ['deck_images', 'DELETE FROM deck_images WHERE project_id = ?'],
+    ['pitch_deck_proposals', 'DELETE FROM pitch_deck_proposals WHERE project_id = ?'],
+    ['pitch_decks', 'DELETE FROM pitch_decks WHERE project_id = ?'],
+  ]) {
+    if (present.has(table)) add(query);
   }
   // Even orphan objects (no deck_images row) must go. Missing storage still
   // records a retry when the image schema exists. Minimal older installs with
