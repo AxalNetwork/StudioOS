@@ -100,7 +100,7 @@ export default function NewDeck() {
   else body = <Flow key={projectId} projectId={projectId} q={q} navigate={navigate} params={params} setParams={setParams} />;
 
   return (
-    <PitchPage rail={rail} crumb={{ query: q, trail: 'New deck' }} testId="pitch-new">
+    <PitchPage rail={rail} crumb={{ query: q, trail: 'New deck' }} ask={{ projectId, readOnly }} testId="pitch-new">
       <div className="flex flex-col gap-5 pb-24 lg:pb-10">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">

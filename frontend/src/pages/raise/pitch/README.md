@@ -2,7 +2,10 @@
 
 The founder's Pitch deck studio at `/raise/pitch` (D894, #2434), built to the
 owner's "Pitch Deck Studio" canvas: `design/incoming/Pitch Deck Studio Page.dc.html`
-and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
+and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28). Version 2
+(D1604, #3716) is being built onto it from `design/incoming/Pitch Deck Studio v2 Page.dc.html`
+and `Pitch Deck Studio v2 · Boards.dc.html`; its surfaces whose routes are not
+on main read `deckV2Adapter.js`.
 
 | File | What it is |
 |---|---|
@@ -43,7 +46,10 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 | `PitchWorkspaceMoved.jsx` | The old addresses. `/raise/pitch?mode=workspace` opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`; the retired builder's `/raise/pitch/builder` opens the studio with `?moved=pitch-builder` (D898 group E). The venture and the hash are kept, and `PitchMovedNotice` draws the notice once on the page it lands on. |
 | `StudioActions.jsx` | D898 group E (#2676): the retired builder's actions, now the studio's. `FillFromProject` on the Decks tab's current deck (`POST /api/decks/:id/autofill`; the proposal is reviewed at New deck's step 4), `SpinoutReadiness` for a Spin-Out deck (a read), and `BrandingCard` (the plan, the footer and the watermark, saved behind a dialog). New deck's Start from marks the recommended template. |
 | `studioActionsModel.js` | D898 group E: pure words and derivations of those actions — which deck is a Spin-Out deck, a refused fill, why a template is recommended, the readiness lines, the branding lines and the watermark's dialog. |
-| `PitchPage.jsx` | #3717: shared cycle gutter, one project-aware breadcrumb and the edge-docked rail for the studio, New deck and editor. |
+| `PitchPage.jsx` | #3717: shared cycle gutter, one project-aware breadcrumb and the edge-docked rail for the studio, New deck and editor. D1604: the header's right side is the deck's Ask (`DeckAsk.jsx`, from the page's `ask` prop) on every width, in place of the phone-only `EadwynButton`. |
+| `DeckAsk.jsx` | D1604 (#3716, pd40): the header Ask (`frontend/src/ui/AskButton.jsx`, "Ask Eadwyn", ", N waiting") and its sheet "Waiting for you": the whole-deck proposal (Review, Accept all, Discard) and the card edits a card run left (`GET /api/ai/rail/proposals`, `record=deck:<id>`). In the editor Accept places an edit on its card, held until Save; elsewhere it opens the editor. No input of any kind. A failed read draws no count. |
+| `deckV2Model.js` | D1604: what every v2 surface shares, pure: "Coming later", "(pending owner)", the hold line, area labels ("c5–8 × r4–6"), the element picker's 8 groups routed to main or to the adapter, the proposal verbs, Ask's names, and a waiting card edit read from its rail row. |
+| `deckV2Adapter.js` | D1604: THE SEAM. Each v2 surface whose route is not on main reads it; every method answers `{ available: false, reason, issue }`, keyed to the issue that brings the route (#3749–#3882), with no network code. `shown()` never prints a zero for an unavailable answer; `through()` is the swap when a route lands. |
 | `PitchPage.css` | #3717: scopes the app-main flex height to PitchPage so its rail reaches the footer on short pages. |
 
 The old template builder retired with D898 group E: its four actions are

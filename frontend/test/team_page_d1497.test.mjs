@@ -19,7 +19,8 @@ import { codeOnly } from './_codeOnly.mjs';
 import { readDecision } from './_decisions.mjs';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { AgentIdentity, PersonAvatar } from '../src/pages/team/AgentMark.jsx';
-import { AskButtonView } from '../src/pages/team/AskButton.jsx';
+import { AskButtonView } from '../src/ui/AskButton.jsx';
+import { AskButtonView as TeamAskButtonView } from '../src/pages/team/AskButton.jsx';
 import AgentsCard from '../src/pages/team/AgentsCard.jsx';
 import PeopleCard from '../src/pages/team/PeopleCard.jsx';
 import TeamAgentsPage from '../src/pages/team/TeamAgentsPage.jsx';
@@ -226,6 +227,8 @@ test('another member\'s email is never drawn; your own row may show yours', () =
 // ---------------------------------------------------------------- Ask, never Fill
 
 test('the Eadwyn button is "Ask", its accessible name "Ask Eadwyn", and no Team file says Fill', () => {
+  // D1604 lifted the button to ui/AskButton.jsx; Team re-exports the same component.
+  assert.equal(TeamAskButtonView, AskButtonView);
   const ask = render(h(AskButtonView, {}));
   assert.match(ask, /aria-label="Ask Eadwyn"/);
   assert.equal(renderedText(ask).trim(), 'Ask');

@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 185 canonical canvases at `design/canvases/`, listed
-290 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 187 canonical canvases at `design/canvases/`, listed
+295 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 84 canvases
+## Founder — 86 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -85,6 +85,8 @@ it, where in their nav, and how do they get there.*
 | Perks & Products | `/perks` | Headerless | Full page | Sidebar → Headerless → Grow | NEW | High |
 | Pitch Deck Builder | `/spinout-lab/pitch-deck` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Pitch Deck Studio | `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/builder` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Pitch Deck Studio v2 · Boards | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| Pitch Deck Studio v2 Page | `/raise/pitch` · `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/templates` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Profiling | `/spinout-lab/profiling` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Raise evidence | `/raise/evidence` · `/raise/evidence/item/:id` · `/raise/evidence/claim/:id` · `/deals/:id/evidence` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
 | Reporting to investors | `/portfolio/updates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -116,7 +118,7 @@ it, where in their nav, and how do they get there.*
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
 
-## Advisor — 25 canvases
+## Advisor — 26 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -133,6 +135,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Advisor Network | `/network/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Network | UPGRADE | Low |
 | Pages · Advisor Research | `/research/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Research | UPGRADE | Low |
 | Pitch Deck Studio | `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/builder` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Pitch Deck Studio v2 Page | `/raise/pitch` · `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/templates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Reporting to investors | `/portfolio/updates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Research · Companies | `/research/companies` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Company | `/research/companies/company/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -189,7 +192,7 @@ it, where in their nav, and how do they get there.*
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | NEW | Low |
 
-## Partner / Operator — 22 canvases
+## Partner / Operator — 23 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -205,6 +208,7 @@ it, where in their nav, and how do they get there.*
 | Partner Operator Canvas | `/studio` · `/spinout-lab` · `/needs` · `/partner/insights` · `/partner/operations/*` · `/services` · `/perks` · `/comarketing` · `/partner/office-hours` · `/network` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | Perks & Products | `/perks` | Headerless | Full page | Sidebar → Headerless → Offers | NEW | High |
 | Pitch Deck Studio | `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/builder` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Pitch Deck Studio v2 Page | `/raise/pitch` · `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/templates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Reporting to investors | `/portfolio/updates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Main | `/research` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
@@ -216,7 +220,7 @@ it, where in their nav, and how do they get there.*
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Subsidiary Admin — 43 canvases
+## Subsidiary Admin — 44 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -247,6 +251,7 @@ it, where in their nav, and how do they get there.*
 | Partner profiles | `/admin?tab=profiles` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Persona segments | `/admin/persona-segments/new` · `/api/personas/segments/:key/completion` · `/onboarding/persona?follow_up=1` · `/admin?tab=personas` | Admin | Full page | Sidebar → Admin → Accounts | UPGRADE | High |
 | Pitch Deck Studio | `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/builder` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Pitch Deck Studio v2 Page | `/raise/pitch` · `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/templates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Program grants | `/admin/licences/programs` · `/admin/licences/programs/requests` · `/admin/licences/programs/history` · `/admin/licences/programs/defaults` · `/admin/licences/programs/studio/:uid` · `/admin/my-licence/programs` | Admin | Full page (proposed) | Sidebar → Admin → Licences | UPGRADE | Low |
 | Raise evidence | `/raise/evidence` · `/raise/evidence/item/:id` · `/raise/evidence/claim/:id` · `/deals/:id/evidence` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Reporting to investors | `/portfolio/updates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -371,9 +376,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 117 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 86 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 87 | Not routed. Proposed route only. |
+| High | 118 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 89 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Low | 88 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

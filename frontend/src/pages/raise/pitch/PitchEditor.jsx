@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -22,6 +22,7 @@ import { ChartBlock, ChartLibrary, ChartToolbar } from './ChartTools';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
 import { NEW_PATH } from './newDeckModel';
 import PitchPage from './PitchPage';
+import { placeTextEdit } from './deckV2Model';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { cardOf, presentHref } from './presentExportModel';
 import {
@@ -146,7 +147,10 @@ export default function PitchEditor() {
   const title = reportedTitle?.deckId === deck.data?.id && reportedTitle?.projectId === projectId
     ? reportedTitle.title
     : deck.data ? `${String(project?.name || '').trim() || 'Your venture'} · v${deck.data.version ?? '?'}` : 'Your venture';
-  const shell = { query: ventureQuery(projectId || requested), title };
+  // D1604: the header Ask places a waiting card edit through the open editor.
+  const placeRef = useRef(null);
+  const onPlace = useCallback((edit) => (placeRef.current ? placeRef.current(edit) : { error: 'The deck is still loading. Try again in a moment.' }), []);
+  const shell = { query: ventureQuery(projectId || requested), title, ask: { projectId, readOnly, onPlace, versions, onChanged: versions.retry } };
 
   if (projects.status === 'error') return <Shell {...shell}><ReadFailed text="Your ventures could not be read." onRetry={projects.retry} testId="pitch-editor-ventures-error" /></Shell>;
   if (projects.status === 'ok' && !project) return <Shell {...shell}><div className={`${CARD} p-5 ${MUTED}`}>Start a venture first, then build its deck.</div></Shell>;
@@ -181,14 +185,15 @@ export default function PitchEditor() {
         phone={phone}
         onTitle={setReportedTitle}
         onSaved={() => versions.retry()}
+        placeRef={placeRef}
       />
     </Shell>
   );
 }
 
-function Shell({ children, query, title }) {
+function Shell({ children, query, title, ask }) {
   const rail = <WorkerRail workspace="Raise" role="founder" note="The editor reads your deck and its recorded sources. Each Eadwyn run shows its cost first." data-testid="pitch-editor-rail" />;
-  return <PitchPage rail={rail} crumb={{ query, trail: title }} testId="pitch-editor"><PitchMovedNotice />{children}</PitchPage>;
+  return <PitchPage rail={rail} crumb={{ query, trail: title }} ask={ask} testId="pitch-editor"><PitchMovedNotice />{children}</PitchPage>;
 }
 
 /** PD24: the header at once; the rail, the card and the panel as grey skeletons. */
@@ -221,7 +226,7 @@ export function sourcesCard(model, lines) {
   return text ? updateBlock(card, text.id, { style: 'list', text: lines.join('\n') }) : { ...card, notes: lines.join('\n') };
 }
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly, phone, onTitle, onSaved }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly, phone, onTitle, onSaved, placeRef }) {
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
   const [cards, setCards] = useState(base.cards);
   const [theme, setTheme] = useState(base.theme);
@@ -249,6 +254,34 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, readOnly,
   useEffect(() => { loadImages(); }, [loadImages]);
 
   const setCard = (i, c) => setCards((cs) => cs.map((x, j) => (j === i ? c : x)));
+
+  // D1604: a card edit accepted from the header Ask. Checked against the cards
+  // on screen first; placed after the decision is recorded, against the cards
+  // as they are then, and held until Save like every other edit.
+  const cardsNow = useRef(cards);
+  cardsNow.current = cards;
+  useEffect(() => {
+    if (!placeRef) return undefined;
+    placeRef.current = readOnly ? null : (edit) => {
+      const place = (cs) => {
+        if (edit.kind === 'text') return placeTextEdit(cs, edit);
+        const at = cs[edit.card];
+        if (!at) return { error: `Card ${edit.card + 1} is no longer in this deck. Discard this proposal.` };
+        const grid = firstFree(at, edit.size.cols, edit.size.rows, model);
+        if (!grid) return { error: `No free ${edit.size.cols} × ${edit.size.rows} range on card ${edit.card + 1}. Remove a block, then accept.` };
+        return addBlock(at, { ...edit.block, grid }, model);
+      };
+      const check = place(cardsNow.current);
+      if (check.error) return { error: check.error };
+      return {
+        commit: () => {
+          setCards((cs) => { const r = place(cs); return r.error ? cs : cs.map((x, j) => (j === edit.card ? r.card : x)); });
+          setSel(edit.card); setSelBlock(null);
+        },
+      };
+    };
+    return () => { placeRef.current = null; };
+  }, [placeRef, readOnly, model]);
   const move = (from, to) => { setCards((cs) => moveCard(cs, from, to)); setSel(to); setSelBlock(null); };
 
   const saved = (fresh) => {

@@ -111,6 +111,32 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-31 — Pitch deck studio v2 (#3716)
+
+The owner's two exports for #3716's v2 prompt arrived unpacked (the page's and
+the grid's bundles, read as data only) and were rebuilt into their bundled form
+and decoded by `scripts/read-canvas.mjs`:
+- `Pitch Deck Studio v2 Page.dc.html` is the page, one component drawn per
+  frame through its `v` prop (73 values, a `-d` suffix is dark);
+- `Pitch Deck Studio v2 · Boards.dc.html` is the board grid "Pitch deck studio
+  v2": Page, PD-1 to PD-9 and Ask (11 sections, 58 frames). It imports the page
+  by name.
+
+**Two edits, named.** In the page, the Eadwyn mark points at `/eadwyn-ai.png`
+and the Axal VC mark (the export's `uploads/axal-logo-200x200.png`) at
+`/axal-mark.png`; the bundles carried neither image. The grid's `dc-import`
+name was already `Pitch Deck Studio v2 Page`, so it needed no edit. No other
+value was edited.
+
+**Grade: UPGRADE (D1604).** The studio, New deck and the editor are live, and
+the v2 surfaces are built onto them in the order of S1's plan on #3716; the
+templates gallery (`/raise/pitch/templates`, pd29) is NEW. Surfaces whose
+routes are not on main draw their unavailable state through
+`frontend/src/pages/raise/pitch/deckV2Adapter.js`, keyed to the issue that
+brings each route. The v1 pair from D894 (below) stays: the v1 surfaces with
+no v2 board are kept. Two files arrived and none left, so the folder counts
+above do not move (they count `design/canvases/`).
+
 ## Landed 2026-10-31 — Team: people and AI agents (#3727)
 
 The owner's two artifacts (`U6FNNm7jdTGHb2kmaFswGr`, `7Qm97kr6oKKX5ws6TMP86g`)

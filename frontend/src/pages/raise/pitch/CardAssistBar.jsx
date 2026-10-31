@@ -122,8 +122,8 @@ export default function CardAssistBar({ deckId, cardIndex, block, items, onPlace
               </select>
             ) : null}
             {tool.action === 'ask' ? (
-              <input className={`${FIELD} w-[180px]`} value={instruction} maxLength={INSTRUCTION_MAX} placeholder="Ask Eadwyn to change it…"
-                onChange={(e) => setInstruction(e.target.value)} disabled={aiOff || Boolean(why)} aria-label="Ask Eadwyn" data-testid="pitch-assist-instruction" />
+              <input className={`${FIELD} w-[180px]`} value={instruction} maxLength={INSTRUCTION_MAX} placeholder="Tell Eadwyn what to change…"
+                onChange={(e) => setInstruction(e.target.value)} disabled={aiOff || Boolean(why)} aria-label="Tell Eadwyn what to change in this block" data-testid="pitch-assist-instruction" />
             ) : null}
             <button type="button" className={GHOST} disabled={aiOff || Boolean(why) || (tool.action === 'ask' && !instruction.trim())}
               onClick={() => open(tool)} data-testid={`pitch-assist-${tool.action}`}>

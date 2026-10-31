@@ -183,7 +183,7 @@ export default function PitchStudio({ tab = 'decks' }) {
   );
 
   return (
-    <PitchPage rail={rail} crumb={{ query: q }} testId="pitch-studio">
+    <PitchPage rail={rail} crumb={{ query: q }} ask={{ projectId, readOnly, versions: reads.versions, onChanged: reads.reload }} testId="pitch-studio">
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid={`pitch-studio-${tab}`}>
         <StudioHeader tab={tab} q={q} readOnly={readOnly} showNew={tab === 'decks' && !readOnly && Boolean(projectId)} />
         {tab === 'review' ? (

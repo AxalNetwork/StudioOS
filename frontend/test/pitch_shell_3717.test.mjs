@@ -89,7 +89,10 @@ test('the common frame is outermost, with the cycle gutter and responsive back p
   assert.ok(out.includes(CYCLE_GUTTER));
   assert.match(read('pages/cycles/CycleRoute.jsx'),/className=\{CYCLE_GUTTER\}/);
   assert.match(read('pages/raise/pitch/PitchPage.jsx'),/\$\{CYCLE_GUTTER\}/);
-  assert.match(read('pages/raise/pitch/PitchPage.jsx'),/className="shrink-0 lg:hidden">\s*<EadwynButton/);
+  // D1604: the header's right side is the deck's Ask on every width; the phone-only EadwynButton is gone.
+  assert.match(read('pages/raise/pitch/PitchPage.jsx'),/<div className="shrink-0" data-testid="pitch-header-ask"><DeckAsk \{\.\.\.ask\} \/><\/div>/);
+  assert.doesNotMatch(codeOnly(read('pages/raise/pitch/PitchPage.jsx')),/EadwynButton/);
+  assert.doesNotMatch(out,/pitch-header-ask/,'no ask prop, no Ask');
 });
 
 test('studio, New deck and editor render one crumb, no nested founder frame, and one rail',async()=>{
@@ -108,6 +111,11 @@ test('studio, New deck and editor render one crumb, no nested founder frame, and
       assert.match(m.pr(m.by(id)).className,/^fwr-frame/);
       assert.equal(m.pr(m.by(id))['data-rail'],'true');
       assert.equal(nodes.filter(n=>m.pr(n)['data-testid']==='worker-rail-frame').length,1);
+      // D1604: one header Ask, named "Ask Eadwyn" with the waiting proposal counted.
+      const asks=nodes.filter(n=>/^Ask Eadwyn/.test(String(m.pr(n)['aria-label']||'')));
+      assert.equal(asks.length,1,id);
+      assert.equal(m.pr(asks[0])['aria-label'],'Ask Eadwyn, 1 waiting',id);
+      assert.ok(m.walk(m.by('pitch-header-ask')).includes(asks[0]),id);
       assert.doesNotMatch(m.text(m.container),/‹ Pitch deck studio|Get capital, stay legal/);
       assert.equal(nodes.some(n=>['founder-module-back','founder-workspace-raise','heading-founder-raise'].includes(m.pr(n)['data-testid'])),false);
       if(id==='pitch-editor') {
