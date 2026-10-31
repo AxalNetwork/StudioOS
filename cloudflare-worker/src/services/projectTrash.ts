@@ -169,6 +169,7 @@ export async function sweepTrashedProjects(env: Env, daysOld = 30): Promise<Swee
       console.error('[projectTrash.sweep] hard-delete failed for', id, (e as Error).message);
     }
   }
-  await retryDeckImagePurges(env);
+  try { await retryDeckImagePurges(env); }
+  catch { console.error('[projectTrash.deckImages] pending retry scan failed'); }
   return { scanned: ids.length, deleted, failed };
 }

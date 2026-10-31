@@ -11,12 +11,25 @@ const sqlRoot = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', sqlRoot), 'utf8');
 const migrations = readdirSync(new URL('migrations/', sqlRoot)).filter(name => /^\d+_.*\.sql$/.test(name) && migrationNumber(name) > BASELINE_CUTOFF).sort()
   .map(name => readFileSync(new URL('migrations/' + name, sqlRoot), 'utf8'));
+// Apply the canonical migrations once, then copy their resulting schema for
+// each isolated case. Replaying hundreds of ALTERs per case is unnecessary;
+// no hand-copied DDL or shared rows stand in for the production schema.
+const schema = (() => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  try {
+    db.exec(baseline); for (const sql of migrations) db.exec(sql);
+    return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL
+      AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 WHEN 'view' THEN 2 ELSE 3 END`).all() as { sql: string }[])
+      .map(row => row.sql + ';').join('\n');
+  } finally { db.close(); }
+})();
+
 const marker = 'project-deck-images-purge:1';
 const stores = ['pitch_decks', 'pitch_deck_proposals', 'pitch_deck_share_tokens', 'deck_share_views', 'deck_share_feedback', 'deck_share_conversions', 'deck_view_slides', 'deck_exports', 'deck_notes', 'deck_images', 'deck_checks'];
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  db.exec(schema);
   db.exec(`INSERT INTO users(id, role, name, email, founder_id) VALUES(2,'founder','Synthetic founder','delete@example.invalid',100);
     INSERT INTO projects(id,name,founder_id,deleted_at) VALUES(1,'Synthetic venture',100,'2000-01-01'),(10,'Other venture',100,NULL);`);
   for (const [deck, project] of [[7, 1], [8, 1], [9, 10]]) {
@@ -253,4 +266,29 @@ test('SQL sweep precedes capped retries and older failures rotate behind unattem
   assert.equal(attempts[before], 'deck-images/125/');
   assert.equal(attempts.length - before, 25);
   assert.equal((f.db.prepare("SELECT COUNT(*) n FROM platform_settings WHERE key LIKE 'project-deck-images-purge:%'").get() as any).n, 26);
+});
+
+test('retry SQL failures are logged, retain the marker and preserve the completed sweep result', async t => {
+  const errors: any[][] = [];
+  const error = console.error;
+  console.error = (...args: any[]) => { errors.push(args); };
+  t.after(() => { console.error = error; });
+  for (const failure of ['read', 'update']) {
+    const f = fixture(); t.after(() => f.db.close());
+    const key = 'project-deck-images-purge:100';
+    f.db.prepare('INSERT INTO platform_settings(key,value) VALUES(?,?)').run(key, '100');
+    if (failure === 'update') {
+      f.db.exec("CREATE TRIGGER synthetic_retry_update_refusal BEFORE UPDATE ON platform_settings WHEN OLD.key='project-deck-images-purge:100' BEGIN SELECT RAISE(ABORT,'Synthetic retry update refusal'); END");
+    } else {
+      const prepare = f.env.DB.prepare.bind(f.env.DB);
+      f.env.DB.prepare = (sql: string) => prepare(sql.startsWith('SELECT key FROM platform_settings') ? 'SELECT missing_retry_column FROM platform_settings' : sql);
+    }
+    const before = errors.length;
+    assert.deepEqual(await sweepTrashedProjects(f.env), { scanned: 1, deleted: 1, failed: 0 });
+    assert.equal(f.n('projects'), 1);
+    assert.equal(f.n('pitch_decks'), 1);
+    assert.ok(f.db.prepare('SELECT value FROM platform_settings WHERE key=?').get(key));
+    assert.equal(f.objects.size, 2);
+    assert.ok(errors.slice(before).some(args => args[0] === '[projectTrash.deckImages] pending retry scan failed'));
+  }
 });
