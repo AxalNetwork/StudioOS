@@ -86,8 +86,8 @@ function database() {
   d.exec(MIGRATION);
   d.exec(PACKS);
   d.exec(`CREATE TABLE stripe_products (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'subscription',
-      active INTEGER NOT NULL DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]', synced_at TEXT NOT NULL DEFAULT (datetime('now')));`);
-  const product = d.prepare('INSERT INTO stripe_products (id, name, kind, active, metadata_json, prices_json) VALUES (?, ?, ?, ?, ?, ?)');
+      active INTEGER NOT NULL DEFAULT 1, metadata_json TEXT NOT NULL DEFAULT '{}', prices_json TEXT NOT NULL DEFAULT '[]', synced_at TEXT NOT NULL DEFAULT (datetime('now')), livemode INTEGER);`);
+  const product = d.prepare('INSERT INTO stripe_products (id, name, kind, active, metadata_json, prices_json,livemode) VALUES (?, ?, ?, ?, ?, ?,0)');
   product.run('prod_growth', 'Founder — Growth', 'subscription', 1, JSON.stringify({ tier: 'growth' }),
     JSON.stringify([price('price_growth_m', 7900, 'month'), price('price_growth_y', 79000, 'year')]));
   product.run('prod_growth_old', 'Founder — Growth (old)', 'subscription', 0, JSON.stringify({ tier: 'growth' }), JSON.stringify([price('price_growth_old', 6900, 'month')]));

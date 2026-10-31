@@ -35,6 +35,8 @@ function fixture(opts: { failOn?: RegExp } = {}) {
   }
   db.exec(read('../sql/migrations/277_user_recovery_state.sql'));
   db.exec(MIGRATION_631);
+  db.exec(read('../sql/migrations/097_stripe_products.sql'));
+  db.exec(read('../sql/migrations/691_stripe_mode_stamps.sql'));
   const user = db.prepare('INSERT INTO users (id,role,name,email) VALUES (?, ?, ?, ?)');
   user.run(HQ, 'admin', 'Hana HQ', 'hq@example.test');
   user.run(PLAIN, 'admin', 'Pat Admin', 'admin@example.test');
@@ -148,7 +150,7 @@ test('a failed Stripe read never fails the webhook, and records nothing', async 
 });
 
 async function webhook(f: any, type: string, object: Record<string, unknown>) {
-  const body = JSON.stringify({ id: `evt_${object.id}`, type, data: { object } });
+  const body = JSON.stringify({ id: `evt_${object.id}`, livemode: false, type, data: { object } });
   const t = Math.floor(Date.now() / 1000);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(WEBHOOK), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${body}`)))).map((n) => n.toString(16).padStart(2, '0')).join('');

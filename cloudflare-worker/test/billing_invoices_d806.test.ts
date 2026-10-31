@@ -34,9 +34,9 @@ async function world() {
   f.db.exec(`ALTER TABLE users ADD COLUMN uid TEXT; ALTER TABLE users ADD COLUMN stripe_customer_id TEXT;
     ALTER TABLE users ADD COLUMN investor_stripe_customer_id TEXT;
     UPDATE users SET uid='uid-'||id, stripe_customer_id='cus_member'||id`);
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_pack25','$25 of tokens','alacarte',1,'{}',?)")
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_pack25','$25 of tokens','alacarte',1,'{}',?,0)")
     .run(JSON.stringify([{ id: PACK, product: 'prod_pack25', active: true, currency: 'usd', unit_amount: 2500, nickname: null, type: 'one_time', recurring: null }]));
-  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_build','Validate + Build','subscription',1,'{}',?)")
+  f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES('prod_build','Validate + Build','subscription',1,'{}',?,0)")
     .run(JSON.stringify([{ id: PLAN, product: 'prod_build', active: true, currency: 'usd', unit_amount: 4900, nickname: null, type: 'recurring', recurring: { interval: 'month', interval_count: 1 } }]));
   f.db.prepare("INSERT INTO ai_token_packs(uid,price_id,product_id,face_cents,bonus_microusd,on_sale,origin) VALUES('pack25',?,'prod_pack25',2500,0,1,'created')").run(PACK);
   return { ...f, env };

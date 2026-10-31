@@ -176,3 +176,4 @@ D1231 concurrency tests cover displayed If-Match tokens, source edits during a r
 D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.
 
 | `session_processing_recovery_3711.test.ts` | No-audio legacy recovery, transcript-hash summary reuse and private stage failure diagnostics for #3711. |
+| `stripe_mode_d1433.test.ts` | D1433 (#3703): mode-stamped catalogue, checkout readiness before provider calls, webhook receipts/retries/concurrency and signature timestamp boundaries; mocked Stripe only. |

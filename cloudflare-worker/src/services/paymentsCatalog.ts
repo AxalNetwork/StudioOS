@@ -26,10 +26,13 @@
  *                   change is left behind silently.
  */
 import type { Env } from '../types';
-import type { CatalogPrice, CatalogProduct, StripeMode } from './catalog';
+import type { CatalogPrice, CatalogProduct } from './catalog';
 import { archivePrice, createPrice } from './catalog';
 import { intervalPrices, planOf } from './aiCredits';
 import { allowanceFromCharge } from './planAllowance';
+import { readinessForKeyModes, planPriceReady, type StripeKeyModes } from './stripeReadiness';
+import { PLAN_CATALOGUE } from './planCatalogue';
+import type { PackLine } from './aiCredits';
 
 export type CheckSeverity = 'blocker' | 'warning';
 export interface CatalogCheck {
@@ -66,7 +69,8 @@ const priceName = (p: CatalogPrice) => (p.nickname ? `“${p.nickname}” (${p.i
  */
 export function catalogChecks(
   products: CatalogProduct[],
-  keys: { accountMode: StripeMode; publishableMode: 'live' | 'test' | 'unknown' | null },
+  keys: StripeKeyModes,
+  packs: readonly PackLine[] = [],
 ): CatalogCheck[] {
   const out: CatalogCheck[] = [];
   const active = products.filter((p) => p.active);
@@ -127,18 +131,34 @@ export function catalogChecks(
   }
 
   // The publishable key's mode against the account's (the secret key's).
-  if (keys.accountMode === 'unconfigured') {
+  const readiness = readinessForKeyModes(keys);
+  if (readiness.state === 'not_ready' && readiness.reason === 'secret_key_missing') {
     out.push({ code: 'secret_key_missing', severity: 'blocker', product_id: null, price_id: null,
       message: 'No Stripe secret key is set, so no checkout can open and the catalogue cannot be synced.' });
-  } else if (keys.publishableMode === null) {
+  } else if (readiness.state === 'not_ready' && readiness.reason === 'publishable_key_missing') {
     out.push({ code: 'publishable_key_missing', severity: 'blocker', product_id: null, price_id: null,
       message: 'No publishable key is set, so the card form cannot load. Set it under Stripe keys.' });
-  } else if (keys.publishableMode === 'unknown') {
+  } else if (readiness.state === 'not_ready' && readiness.reason === 'publishable_key_unknown') {
     out.push({ code: 'publishable_key_unknown', severity: 'blocker', product_id: null, price_id: null,
       message: 'The publishable key starts with neither pk_live_ nor pk_test_, so its mode cannot be checked against the account’s.' });
-  } else if (keys.publishableMode !== keys.accountMode) {
+  } else if (readiness.state === 'not_ready' && readiness.reason === 'key_mode_mismatch') {
     out.push({ code: 'key_mode_mismatch', severity: 'blocker', product_id: null, price_id: null,
       message: `The publishable key is a ${keys.publishableMode} key but the account key is ${keys.accountMode}. Card forms and checkouts would talk to different Stripe accounts.` });
+  } else if (readiness.state === 'not_ready' && readiness.reason === 'webhook_secret_missing') {
+    out.push({ code: 'webhook_secret_missing', severity: 'blocker', product_id: null, price_id: null,
+      message: 'The Stripe webhook signing secret is not set, so a payment cannot safely update the member’s plan or AI tokens.' });
+  }
+  for (const entry of PLAN_CATALOGUE) {
+    if (entry.sellable && !planPriceReady(products, entry, 'month', keys.accountMode)) {
+      out.push({ code: 'sellable_plan_unpriced', severity: 'blocker', product_id: null, price_id: null,
+        message: `${entry.name} has no active monthly price in this Stripe mode.` });
+    }
+  }
+  for (const pack of packs) {
+    if (pack.origin !== 'environment' && pack.state === 'not_ready' && pack.reason !== 'off_sale') {
+      out.push({ code: 'pack_not_ready', severity: 'blocker', product_id: null, price_id: pack.price_id,
+        message: 'This token pack has no sellable price in this Stripe mode.' });
+    }
   }
   return out;
 }

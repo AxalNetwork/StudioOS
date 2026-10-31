@@ -36,16 +36,19 @@ type P = { id: string; currency?: string; unit_amount: number; interval: string 
 const price = (x: P) => ({ id: x.id, currency: x.currency ?? 'usd', unit_amount: x.unit_amount, interval: x.interval, interval_count: x.interval === null ? null : (x.interval_count ?? 1),
   nickname: x.nickname ?? null, type: x.interval === null ? 'one_time' : 'recurring', active: x.active ?? true });
 const product = (id: string, name: string, kind: string, metadata: Record<string, string>, prices: P[], o: Partial<CatalogProduct> = {}): CatalogProduct => ({
-  id, name, kind: kind as any, active: true, metadata, categories: [], prices: prices.map(price) as any, synced_at: '2026-10-24 12:00:00', ...o,
+  id, name, kind: kind as any, active: true, livemode: true, metadata, categories: [], prices: prices.map(price) as any, synced_at: '2026-10-24 12:00:00', ...o,
 });
 
 const GOOD = () => [
   product('prod_growth', 'Validate + Build', 'subscription', { tier: 'growth' }, [{ id: 'price_gmonth', unit_amount: 2000, interval: 'month' }, { id: 'price_g_y', unit_amount: 20400, interval: 'year' }]),
   product('prod_pro', 'Investor Plus', 'subscription', { investor_tier: 'professional' }, [{ id: 'price_p_m', unit_amount: 14900, interval: 'month' }, { id: 'price_pyear', unit_amount: 151980, interval: 'year' }]),
+  product('prod_plus', 'Investor Plus', 'subscription', { investor_tier: 'plus' }, [{ id: 'price_plus_m', unit_amount: 1000, interval: 'month' }, { id: 'price_plus_y', unit_amount: 10000, interval: 'year' }]),
+  product('prod_advisor', 'Advisor', 'subscription', { plan_group: 'advisor' }, [{ id: 'price_advisor_m', unit_amount: 1000, interval: 'month' }, { id: 'price_advisor_y', unit_amount: 10000, interval: 'year' }]),
+  product('prod_partner', 'Partner', 'subscription', { plan_group: 'partner' }, [{ id: 'price_partner_m', unit_amount: 1000, interval: 'month' }, { id: 'price_partner_y', unit_amount: 10000, interval: 'year' }]),
   // A second founder plan: same family, another tier, so no clash.
   product('prod_studio', 'Raise + Grow', 'subscription', { tier: 'studio' }, [{ id: 'price_s_m', unit_amount: 19900, interval: 'month' }, { id: 'price_s_y', unit_amount: 199000, interval: 'year' }]),
 ];
-const LIVE = { accountMode: 'live' as const, publishableMode: 'live' as const };
+const LIVE = { accountMode: 'live' as const, publishableMode: 'live' as const, webhookConfigured: true };
 
 /* ------------------------------------------------------------------ *
  * The model
@@ -56,12 +59,12 @@ test('a clean catalogue with matching keys has no checks', () => {
 });
 
 test('each check names its product or price and says what goes wrong', () => {
-  const codes = (ps: CatalogProduct[], keys = LIVE) => catalogChecks(ps, keys).map((c) => [c.code, c.severity, c.product_id, c.price_id]);
+  const codes = (ps: CatalogProduct[], keys = LIVE) => catalogChecks(ps, { ...LIVE, ...keys }).filter(c => c.code !== 'sellable_plan_unpriced').map((c) => [c.code, c.severity, c.product_id, c.price_id]);
   // Two active products making one plan; an archived twin is not a clash.
   const clash = [...GOOD(), product('prod_growth2', 'Growth (old)', 'subscription', { tier: 'growth' }, [{ id: 'price_g2_m', unit_amount: 1900, interval: 'month' }, { id: 'price_g2_y', unit_amount: 19000, interval: 'year' }])];
   assert.deepEqual(codes(clash), [['plan_clash', 'blocker', 'prod_growth', null]]);
   assert.match(catalogChecks(clash, LIVE)[0].message, /“Validate \+ Build” and “Growth \(old\)” all make the founder growth plan\./);
-  assert.deepEqual(codes([...GOOD(), { ...clash[2], active: false }]), []);
+  assert.deepEqual(codes([...GOOD(), { ...clash[clash.length - 1], active: false }]), []);
   // A plan with no yearly price (an archived yearly one does not count).
   assert.deepEqual(codes([product('prod_studio', 'Raise + Grow', 'subscription', { tier: 'studio' }, [{ id: 'price_s_m', unit_amount: 19900, interval: 'month' }, { id: 'price_s_y', unit_amount: 1, interval: 'year', active: false }])]),
     [['plan_no_yearly', 'warning', 'prod_studio', null]]);
@@ -79,7 +82,7 @@ test('each check names its product or price and says what goes wrong', () => {
   assert.match(catalogChecks([odd], LIVE)[0].message, /charged every 3 months \(price_g_q\)\. Checkout picks a plan's price by its interval alone/);
   // The keys.
   assert.deepEqual(codes(GOOD(), { accountMode: 'live', publishableMode: 'test' }), [['key_mode_mismatch', 'blocker', null, null]]);
-  assert.match(catalogChecks(GOOD(), { accountMode: 'live', publishableMode: 'test' })[0].message, /publishable key is a test key but the account key is live/);
+  assert.match(catalogChecks(GOOD(), { accountMode: 'live', publishableMode: 'test', webhookConfigured: true })[0].message, /publishable key is a test key but the account key is live/);
   assert.deepEqual(codes(GOOD(), { accountMode: 'test', publishableMode: null }), [['publishable_key_missing', 'blocker', null, null]]);
   assert.deepEqual(codes(GOOD(), { accountMode: 'test', publishableMode: 'unknown' }), [['publishable_key_unknown', 'blocker', null, null]]);
   assert.deepEqual(codes(GOOD(), { accountMode: 'unconfigured', publishableMode: 'live' }), [['secret_key_missing', 'blocker', null, null]]);
@@ -123,7 +126,7 @@ function world(o: { pk?: string | null; secret?: string | null } = {}) {
   const f = aiBudgetFixture();
   const kv = new Map<string, string>();
   if (o.pk !== null) kv.set('config:stripe:pk', o.pk ?? 'pk_test_fixtureOnly000');
-  const env = { DB: f.DB, JWT_SECRET, ENVIRONMENT: 'development', APP_URL: 'https://app.example.test',
+  const env = { DB: f.DB, JWT_SECRET, ENVIRONMENT: 'development', APP_URL: 'https://app.example.test', STRIPE_WEBHOOK_SECRET: 'fixture-signing',
     RATE_LIMITS: { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => { kv.set(k, v); }, delete: async (k: string) => { kv.delete(k); } },
     ...(o.secret === null ? {} : { STRIPE_SECRET_KEY: o.secret ?? `sk${'_test_'}fixtureOnly000` }) } as any;
   f.db.prepare("INSERT INTO users(id,email,name,role,is_super_admin) VALUES(?, 'admin@example.test', 'Plain Admin', 'admin', 0) ON CONFLICT(id) DO UPDATE SET role = 'admin', is_super_admin = 0").run(ADMIN);
@@ -136,8 +139,8 @@ function world(o: { pk?: string | null; secret?: string | null } = {}) {
 /** The catalogue as Stripe holds it, mirrored into D1 the way a sync writes it. */
 const STRIPE = () => ({
   products: [
-    { id: 'prod_growth', name: 'Validate + Build', active: true, metadata: { tier: 'growth' } },
-    { id: 'prod_ra', name: 'Registered Agent', active: true, metadata: {} },
+    { id: 'prod_growth', name: 'Validate + Build', active: true, livemode: false, metadata: { tier: 'growth' } },
+    { id: 'prod_ra', name: 'Registered Agent', active: true, livemode: false, metadata: {} },
   ],
   prices: [
     { id: 'price_gmonth', product: 'prod_growth', active: true, currency: 'usd', unit_amount: 2000, nickname: 'Monthly', type: 'recurring', recurring: { interval: 'month', interval_count: 1 } },
@@ -152,7 +155,7 @@ async function seed(f: any, store = STRIPE()) {
     const kind = 'subscription';
     const prices = store.prices.filter((x) => x.product === p.id).map((x) => ({ id: x.id, currency: x.currency, unit_amount: x.unit_amount, interval: x.recurring?.interval ?? null,
       interval_count: x.recurring?.interval_count ?? null, nickname: x.nickname, type: x.type, active: x.active }));
-    f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES(?,?,?,?,?,?)').run(p.id, p.name, kind, 1, JSON.stringify(p.metadata), JSON.stringify(prices));
+    f.db.prepare('INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json,livemode) VALUES(?,?,?,?,?,?,0)').run(p.id, p.name, kind, 1, JSON.stringify(p.metadata), JSON.stringify(prices));
   }
 }
 
@@ -222,7 +225,7 @@ test('the admin catalogue read carries the checks, the two keys\' modes and no k
   const r = await call(f, 'GET', '/api/admin/catalog/products', OWNER);
   assert.equal(r.status, 200, r.text);
   assert.deepEqual(r.body.keys, { account_mode: 'test', publishable_mode: 'live' });
-  assert.deepEqual(r.body.checks.map((c: any) => c.code).sort(), ['key_mode_mismatch', 'plan_no_yearly', 'subscription_no_card']);
+  assert.deepEqual(r.body.checks.map((c: any) => c.code).sort(), ['key_mode_mismatch', 'plan_no_yearly', ...Array(5).fill('sellable_plan_unpriced'), 'subscription_no_card']);
   const growth = r.body.products.find((p: any) => p.id === 'prod_growth');
   assert.deepEqual(growth.shows_on.map((s: any) => s.key), ['pricing', 'bundles']);
   assert.deepEqual([growth.prices[0].allowance_microusd, growth.prices[0].allowance_reason], [5_000_000, null]);
