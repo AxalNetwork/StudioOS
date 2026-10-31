@@ -106,19 +106,28 @@ export default function ArticleWritingPanel({
     return () => clearInterval(t);
   }, [getContext]);
 
-  // The proposals still waiting on this article, from an earlier visit.
+  // The proposals still waiting on this article, from an earlier visit. A read
+  // that fails is said (AR6e), never shown as "nothing waiting".
+  const [waitingUnread, setWaitingUnread] = useState(false);
+  const [readTick, setReadTick] = useState(0);
   useEffect(() => {
     if (!articleId) return undefined;
     let live = true;
-    Promise.all(OPTIONS.map((option) => railProposalsApi.list({ option, record: record(articleId), status: 'proposed' })
-      .then((r) => r?.proposals || []).catch(() => [])))
-      .then((lists) => {
+    Promise.allSettled(OPTIONS.map((option) => railProposalsApi.list({ option, record: record(articleId), status: 'proposed' })
+      .then((r) => r?.proposals || [])))
+      .then((results) => {
         if (!live) return;
+        setWaitingUnread(results.some((r) => r.status === 'rejected'));
         const seen = new Set();
-        setItems(lists.flat().filter((p) => p?.uid && !seen.has(p.uid) && seen.add(p.uid)).map((proposal) => ({ proposal })));
+        const read = results.filter((r) => r.status === 'fulfilled').flatMap((r) => r.value)
+          .filter((p) => p?.uid && !seen.has(p.uid) && seen.add(p.uid)).map((proposal) => ({ proposal }));
+        setItems((prev) => {
+          const fresh = prev.filter((x) => x.cost !== undefined && !seen.has(x.proposal.uid));
+          return [...fresh, ...read];
+        });
       });
     return () => { live = false; };
-  }, [articleId]);
+  }, [articleId, readTick]);
 
   // Each action's hold, quoted once with a stand-in for what it needs.
   useEffect(() => {
@@ -182,7 +191,7 @@ export default function ArticleWritingPanel({
   const where = focus.selection ? 'Selected text' : focus.section ? `Section · ${focus.section}` : 'Whole article';
 
   return (
-    <aside className="w-full lg:w-[360px] shrink-0 border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-col" aria-label="Eadwyn writing panel" data-testid="article-writing-panel">
+    <aside className="fixed inset-x-0 bottom-0 z-40 max-h-[75vh] rounded-t-2xl shadow-2xl lg:static lg:z-auto lg:max-h-none lg:rounded-none lg:shadow-none w-full lg:w-[360px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-col" aria-label="Eadwyn writing panel" data-testid="article-writing-panel">
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
         <div>
           <div className="text-[11px] uppercase tracking-wide text-slate-500">Eadwyn · Articles · Writing</div>
@@ -195,6 +204,12 @@ export default function ArticleWritingPanel({
           <div className="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Working on</div>
           <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200" data-testid="article-working-on">{where}</span>
         </section>
+
+        {waitingUnread && (
+          <div role="status" className="text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-slate-600 dark:text-slate-300" data-testid="article-proposals-unread">
+            Some waiting proposals could not be read. <button type="button" className="underline" onClick={() => setReadTick((n) => n + 1)}>Try again</button>
+          </div>
+        )}
 
         {items.length > 0 && (
           <section>

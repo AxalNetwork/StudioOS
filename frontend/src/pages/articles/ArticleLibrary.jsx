@@ -17,7 +17,7 @@ import {
  * that card is left out until the count is read.
  */
 export default function ArticleLibrary({
-  items = [], loading, refreshing, onRefresh, onOpen, onNew, creating, statusPill, relativeTime, coverSrc, onCopyUrl, publicUrl, followers = null,
+  items = [], loading, refreshing, onRefresh, onOpen, onNew, creating, statusPill, relativeTime, coverSrc, onCopyUrl, publicUrl, followers = null, loadError = false,
 }) {
   const [tab, setTab] = useState('drafts');
   const [query, setQuery] = useState('');
@@ -87,7 +87,12 @@ export default function ArticleLibrary({
       </div>
 
       <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-x-auto">
-        {loading ? (
+        {loadError && items.length === 0 ? (
+          <div role="alert" className="p-10 text-center text-slate-600 dark:text-slate-300" data-testid="article-library-error">
+            <p className="m-0">Your articles could not be read.</p>
+            <button type="button" onClick={onRefresh} className="mt-3 text-sm px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">Try again</button>
+          </div>
+        ) : loading ? (
           <div className="p-10 text-center text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline" /> Loading your articles…</div>
         ) : rows.length === 0 ? (
           <div className="p-10 text-center text-slate-500" data-testid="article-library-empty">
