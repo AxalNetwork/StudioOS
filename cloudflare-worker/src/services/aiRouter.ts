@@ -96,6 +96,9 @@ export type TaskClass =
   // text-to-image path (#2434 owner question 1, A): a member's press, quoted
   // and charged per image.
   | 'deck_image'
+  // D1409 (#3695): an article's images, on the same model as the deck's, so
+  // usage logs name articles and not decks.
+  | 'article_image'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
@@ -884,6 +887,8 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // failed image is never redrawn on a dearer model.
   brand_logo:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
   deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
+  // D1409 (#3695): an article's images, on the same model as the deck's.
+  article_image: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
   system_job:   { provider: 'workers-ai', model: SMALL_LLAMA },

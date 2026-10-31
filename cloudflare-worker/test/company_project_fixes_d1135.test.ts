@@ -17,6 +17,9 @@ function fixture() {
   db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/515_newsletter_lists.sql', import.meta.url), 'utf8'), 'email_suppressions'));
   // D1137 (#3017): a rename writes its membership event in the same batch (migration 597).
   db.exec(readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8'));
+  // D1415: project create writes a slug, and company create a slug and the legal fields (migration 685).
+  db.exec(stripForeignKeys(tableFromBaseline(baseline, 'incorporations')));
+  db.exec(readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8'));
   for (const [id, role, fid] of [[1, 'founder', 10], [2, 'founder', 20], [3, 'exploring', null], [4, 'admin', null]] as const) {
     db.prepare('INSERT INTO users(id,email,name,role,founder_id) VALUES(?,?,?,?,?)').run(id, `synthetic${id}@example.test`, `Synthetic ${id}`, role, fid);
   }
