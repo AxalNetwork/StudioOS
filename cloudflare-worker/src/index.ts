@@ -402,6 +402,8 @@ import publicRoutes from './routes/public';
 import eventsRoutes from './routes/events';
 import eventsPublicRoutes from './routes/events_public';
 import adminEventsRoutes from './routes/admin_events';
+import adminEventSyndicationRoutes from './routes/admin_event_syndication';
+import eventSyndicationRoutes from './routes/event_syndication';
 // Task #68 — Public Job Board (Worker on D1): founder /api/jobs, public feed +
 // apply on /api/public/jobs*, admin review queue on /api/admin/jobs.
 import jobsRoutes from './routes/jobs';
@@ -1146,6 +1148,8 @@ app.route('/api/venture-scores', ventureScoreModels);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
 // so /api/admin/events/* resolves here, not in the generic admin router.
 app.route('/api/admin/events', adminEventsRoutes);
+// D1490 — HQ › Platform › Event syndication; before the /api/admin catch-all.
+app.route('/api/admin/event-syndication', adminEventSyndicationRoutes);
 // Task #68 — Job Board admin review queue. Mount BEFORE the catch-all
 // /api/admin so /api/admin/jobs/* resolves here, not in the generic admin router.
 app.route('/api/admin/jobs', adminJobsRoutes);
@@ -1456,6 +1460,8 @@ app.route('/api/dashboard', dashboard);
 // D1421 (#3699): the Studio's module catalogue and the member's saved layout.
 app.route('/api/studio', studioLayout);
 // Task #39 — Event engine authed routes (§8.1).
+// D1490 — one event's syndication (`/:id/syndication…`), before events.ts.
+app.route('/api/events', eventSyndicationRoutes);
 app.route('/api/events', eventsRoutes);
 // Task #68 — Job Board founder routes (post/manage roles, read applicants).
 app.route('/api/jobs', jobsRoutes);
