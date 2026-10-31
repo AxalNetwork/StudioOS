@@ -1002,7 +1002,7 @@ The founder's `/studio` carries Eadwyn's panel tab in `?tab=` (`tasks`, `tickets
 
 The server part of Studio modularity (#3698). No screen yet: the four Studio homes still draw their blocks in JSX. The client is `lib/api/studioLayout.js` (`studioLayoutApi`).
 
-- GET `/api/studio/modules`: `routes/studio_layout.ts`; this profile's modules from `services/studioModules.ts`, each with `locked_by_plan` derived from `middleware/paywallPrefixes.ts` and the existing plan gates.
+- GET `/api/studio/modules`: `routes/studio_layout.ts`; this profile's modules from `services/studioModules.ts`, each with `locked_by_plan` derived from `middleware/paywallPrefixes.ts` and the existing plan gates. D1418 (#3862): the response also carries `groups` (`[{ key, label }]`, `STUDIO_GROUPS` in order, a group with no module offered left out), and each module its `purpose`, `href` (the tile's Open link, or null) and `in_default`. The founder catalogue is 3 Studio modules plus the 27 cycle modules derived from the four cycles' Worker lists; Grow's seven are left out for a Spin-Out Lab member.
 - GET/PUT `/api/studio/layout`, POST `/api/studio/layout/reset`: the member's saved layout in `studio_layouts` (migration 687), or the profile's default when there is no row. At most 12 modules; unknown, removed, fixed, other-profile and locked keys are refused, and nothing is written.
 - An admin names the profile they preview with `?profile=`; a member's role names theirs. See `decisions/D1421.md`.
 
