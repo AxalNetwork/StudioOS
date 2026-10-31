@@ -60,14 +60,14 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/huggingface/distilbert-sst-2-int8` | Text Classification | ga | tokens_in 0.026 | Not recorded | all | O | G | · | · | O | · | · | · | · | G | · | O | · | O |
 | `@cf/lykon/dreamshaper-8-lcm` | Text-to-Image | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/embeddinggemma-300m` | Text Embeddings | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | O | O | · | · | · | · | · | · | · | · | O | · | · | O |
+| `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | O | O | · | · | · | · | · | · | · | · | G | · | · | O |
 | `@cf/black-forest-labs/flux-1-schnell` | Text-to-Image | ga | tiles 0.0000528, steps 0.0001056 | Not recorded | all | · | · | G | W | W | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-dev` | Text-to-Image | partner | input_tile_steps 0.00021, output_tile_steps 0.00041 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-klein-4b` | Text-to-Image | partner | input_tiles 0.000059, output_tiles 0.000287 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-klein-9b` | Text-to-Image | partner | first_megapixels 0.015, subsequent_megapixels 0.002, input_image_megapixels 0.002 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/google/gemma-2b-it-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/gemma-3-12b-it` | Text Generation | deprecated | tokens_in 0.345, tokens_out 0.556 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/google/gemma-4-26b-a4b-it` | Text Generation | ga | tokens_in 0.100, tokens_out 0.300 | 256000 | all | G | G | G | W | O | G | W | · | G | G | G | W | · | G |
+| `@cf/google/gemma-4-26b-a4b-it` | Text Generation | ga | tokens_in 0.100, tokens_out 0.300 | 256000 | all | G | G | G | W | G | G | W | · | G | G | G | W | · | G |
 | `@hf/google/gemma-7b-it` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/gemma-7b-it-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/aisingapore/gemma-sea-lion-v4-27b-it` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | G | G | G | O | O | G | O | · | G | G | O | O | · | O |
@@ -99,7 +99,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/meta/llama-3.2-1b-instruct` | Text Generation | ga | tokens_in 0.027, tokens_out 0.201 | 60000 | all | O | G | G | G | O | G | G | · | G | G | O | O | · | O |
 | `@cf/meta/llama-3.2-3b-instruct` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 80000 | all | O | G | G | G | O | G | O | · | G | O | O | O | · | O |
 | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Text Generation | ga | tokens_in 0.293, tokens_out 2.253 | 24000 | all | W | W | O | W | W | O | W | · | G | W | W | W | · | W |
-| `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | Not recorded | all | G | G | G | O | O | G | O | · | G | G | G | W | · | G |
+| `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | Not recorded | all | G | G | G | O | G | G | O | · | G | G | G | W | · | G |
 | `@cf/meta/llama-guard-3-8b` | Text Generation | ga | tokens_in 0.484, tokens_out 0.030 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | W | · |
 | `@cf/llava-hf/llava-1.5-7b-hf` | Image-to-Text | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/leonardo/lucid-origin` | Text-to-Image | partner | tiles 0.006996, steps 0.000132 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
@@ -110,7 +110,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@hf/mistral/mistral-7b-instruct-v0.2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/mistral/mistral-7b-instruct-v0.2-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | Not recorded | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
-| `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | O | · | O | · | · | · | G | O | · | G |
+| `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | · | · | O | · | · | · | G | O | · | G |
 | `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | G | · | · | · | · | · | · | O | · | · | O |
 | `@cf/microsoft/phi-2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -384,9 +384,9 @@ sentiment: English positive and negative sentiment cues in customer and session 
 
 stream: Live conversational transcription in recorded sessions.
 
-- Validate: **offered**, `railMatrix.json "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; `railMatrix.json option transcribe:session`
+- Validate: **offered**, `railMatrix.json "Founder · Validate · Customer research"`
 - Record a Session: **offered**, `services/sttModels.ts (STT_MODELS), live`
-- Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`
+- Studio / Eadwyn: **gap**, `#3721`
 - Investor, Advisor and Partner workspaces: **offered**, `railMatrix.json "Advisor · Practice · Sessions"`
 
 ### `@cf/black-forest-labs/flux-1-schnell`
@@ -405,8 +405,8 @@ draw: Generate pitch-deck visuals and brand-image drafts.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -416,8 +416,8 @@ draw: Generate pitch-deck visuals and brand-image drafts.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -427,8 +427,8 @@ draw: Generate pitch-deck visuals and brand-image drafts.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -441,7 +441,7 @@ chat: Read pitch-deck images, explain screenshots and extract visual evidence.
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
 - Raise: **wired**, `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `railMatrix.json option draft:logo`
+- Grow: **gap**, `#3721`
 - Network: **gap**, `#3721`
 - Research: **wired**, `railMatrix.json "Investor · Research · Diligence"`
 - Articles: **gap**, `#3721`
@@ -759,8 +759,8 @@ chat: Read pitch-deck images, explain screenshots and extract visual evidence.
 - Validate: **gap**, `#3721`
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 2 more
-- Grow: **offered**, `railMatrix.json option draft:logo`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 1 more
+- Grow: **gap**, `#3721`
 - Network: **gap**, `#3721`
 - Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`; `railMatrix.json "Investor · Research · Diligence"`
 - Articles: **gap**, `#3721`
@@ -780,8 +780,8 @@ guard: Check member inputs and generated drafts for unsafe content.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -833,8 +833,7 @@ chat: Investor narratives, distribution copy and multilingual summaries.
 vision: Answer questions about document images and describe visual evidence.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 2 more
-- Grow: **offered**, `railMatrix.json option draft:logo`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 1 more
 - Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`; `railMatrix.json "Investor · Research · Diligence"`
 - Studio / Eadwyn: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Due diligence"`; `/api/ai/modules on "Admin · Approvals · Entity profiles"`; `/api/ai/modules on "Admin · Approvals · Identity checks"`; `railMatrix.json "Admin · Approvals · Due diligence"`; and 2 more
@@ -872,8 +871,8 @@ transcribe: Transcribe member-supplied recordings and interview audio.
 draw: Generate pitch-deck visuals and brand-image drafts.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
@@ -994,10 +993,10 @@ turn: Detect whether a speaker has finished a turn in an audio excerpt.
 
 transcribe: Transcribe member-supplied recordings and interview audio.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `services/interviewProcessing.ts (transcribe)`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; `railMatrix.json option transcribe:session`; and 1 more
 - Record a Session: **offered**, `routes/founder_validate.ts (transcribe)`; `services/sttModels.ts (STT_MODELS), final`
 - Raise: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `routes/advisor.ts (transcribe)`
+- Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`; `routes/advisor.ts (transcribe)`
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`
 
 ### `@cf/openai/whisper-large-v3-turbo`
@@ -1012,24 +1011,11 @@ transcribe: Transcribe member-supplied recordings and interview audio.
 
 ## Picks the run never reads
 
-These options list models their run does not use, so a pick of one changes nothing. Part B of #3721 fixes them.
-
-| Page | Option | The run | Needs | Listed, not usable |
-| --- | --- | --- | --- | --- |
-| Founder · Studio | `transcribe:voice-answer` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Founder · Validate · Customer research | `transcribe:interview` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Founder · Validate · Customer research | `transcribe:session` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Founder · Validate · Customer research | `transcribe:recording` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Founder · Raise · Pitch deck | `deck:image` | `deck_image` (routes/deck_images.ts) | draw | `@cf/google/gemma-4-26b-a4b-it`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/moondream/moondream3.1-9B-A2B` |
-| Founder · Grow · Distribution | `draft:logo` | `brand_logo` (routes/brand.ts) | draw | `@cf/google/gemma-4-26b-a4b-it`, `@cf/meta/llama-4-scout-17b-16e-instruct`, `@cf/moondream/moondream3.1-9B-A2B` |
-| Advisor · Home | `transcribe:voice-answer` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
-| Operating Partner · Home | `transcribe:voice-answer` | `transcribe` | transcribe | `@cf/deepgram/flux`, `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+None: every option lists only models its run uses.
 
 ## Connected outside its fit
 
-| Model | Operation | Module | State | Where |
-| --- | --- | --- | --- | --- |
-| `@cf/moondream/moondream3.1-9B-A2B` | vision | Grow | offered | `railMatrix.json option draft:logo` |
+None.
 
 ## Why n/a
 

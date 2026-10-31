@@ -23,6 +23,8 @@ export function connectionOnPage(id: string, page: Pick<Page, 'pageKey' | 'kind'
 export function withModuleModels<T extends Page>(row: T): T & { more: Array<{ id: string; line: string }> } {
   const models = row.models.filter(m => MODEL_CONNECTIONS[m.id]?.operation !== 'vision').map(m => ({ ...m }));
   const more = (row.more ?? []).map(({ id, line }) => ({ id, line }));
+  // D1478 (#3721): a transcription option lists what transcribes; no chat model joins it.
+  if ((row as { handler?: string }).handler === 'transcribe') return { ...row, models, more };
   for (const [id, c] of Object.entries(MODEL_CONNECTIONS)) {
     if (c.operation !== 'chat' || !connectionOnPage(id, row) || [...models, ...more].some(m => m.id === id)) continue;
     more.push({ id, line: c.purpose });
