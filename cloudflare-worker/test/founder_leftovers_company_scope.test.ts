@@ -28,6 +28,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 
 import decks from '../src/routes/decks.ts';
 import privateData from '../src/routes/private-data.ts';
@@ -145,12 +146,10 @@ function freshDb() {
       locked_until TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    CREATE TABLE pitch_decks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, version INTEGER,
-      title TEXT, is_current INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
   `);
+  // Exercise the production deck metadata columns, including migration 539.
+  db.exec(stripForeignKeys(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'), 'pitch_decks')));
+  db.exec(readFileSync(new URL('../sql/migrations/539_pitch_deck_editor.sql', import.meta.url), 'utf8'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, email) VALUES (?,?,?,?)');
   u.run(FOUNDER.user, 'founder', FOUNDER.founder_id, 'f@example.com');
   u.run(OTHER.user, 'founder', OTHER.founder_id, 'g@example.com');

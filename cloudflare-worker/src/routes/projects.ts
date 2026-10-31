@@ -1030,10 +1030,7 @@ projects.delete('/:id', async (c) => {
   }
 
   if (hard) {
-    // Migration 039 added ON DELETE CASCADE to every project FK we ship,
-    // so a single DELETE is enough on a migrated DB. The legacy manual
-    // cascade (kept for stale installs that haven't applied 039 yet) lives
-    // in services/projectTrash.ts:hardDeleteProject.
+    // The service performs the explicit, atomic cascade and durable image purge.
     const { hardDeleteProject } = await import('../services/projectTrash');
     try {
       await hardDeleteProject(c.env, id);
@@ -1469,11 +1466,13 @@ projects.get('/:id/members', async (c) => {
 
   const sql2 = getSQL(c.env);
   try {
-    const members = await sql2`SELECT pm.id, pm.user_id, pm.role, pm.source, pm.accepted_at, pm.created_at,
+    const rosterRows = await sql2`SELECT pm.id, pm.user_id, pm.role, pm.source, pm.accepted_at, pm.created_at,
         u.uid, u.name, u.email, u.role AS account_role
       FROM project_members pm JOIN users u ON u.id = pm.user_id
       WHERE pm.project_id = ${id} AND pm.status = 'accepted'
       ORDER BY CASE pm.role WHEN 'owner' THEN 0 WHEN 'cofounder' THEN 1 ELSE 2 END, pm.created_at ASC`;
+    // #3841: never another member's email (the canvas: "Never show another member's email"). Your own row keeps it.
+    const members = rosterRows.map(({ email, ...m }: any) => (Number(m.user_id) === Number(user.id) ? { ...m, email } : m));
     let invitations: any[] = [];
     if (manager) {
       invitations = await sql2`SELECT id, role, status, source, invitee_email, invitee_user_id, expires_at, created_at
@@ -1618,6 +1617,7 @@ projects.post('/:id/invitations', async (c) => {
     inviteeEmail = normalizeEmail(body.email);
     if (!inviteeEmail || !isValidEmail(inviteeEmail)) return c.json({ detail: 'A valid email is required' }, 400);
   }
+  if (mode === 'account') return inviteAccount(c, user, guard.project, role, body.user_uid);
 
   const token = generateToken();
   const tokenHash = await hashInviteToken(token);
@@ -1665,6 +1665,78 @@ projects.post('/:id/invitations', async (c) => {
   } finally {
     await sql.end();
   }
+});
+
+/**
+ * #3841: invite an existing account by name, without its email. The invitee
+ * must be reachable from the caller (a shared company or an accepted
+ * connection, `services/peopleReach.ts`). The invitation names the account
+ * (`invitee_user_id`, source `account`), carries no token and is answered from
+ * the invitee's Account › Invitations. The inviter's answer never holds the
+ * invitee's email.
+ */
+async function inviteAccount(c: any, user: User, project: { id: number; founder_id: number | null }, role: string, userUid: unknown) {
+  const uid = typeof userUid === 'string' ? userUid.trim() : '';
+  if (!/^[a-f0-9-]{1,64}$/i.test(uid)) return refuse(c, 404, { code: 'account_not_found', message: 'There is no such account.' });
+  const exists = await c.env.DB.prepare('SELECT id, role, founder_id FROM users WHERE uid = ? AND is_active = 1')
+    .bind(uid).first() as { id: number; role: string; founder_id: number | null } | null;
+  if (!exists) return refuse(c, 404, { code: 'account_not_found', message: 'There is no such account.' });
+  const { reachableAccount } = await import('../services/peopleReach');
+  const reach = await reachableAccount(c.env, user.id, uid);
+  if (!reach) return refuse(c, 403, { code: 'not_reachable', message: 'You can invite people you share a company or a connection with.' });
+  if (exists.role === 'investor') return refuse(c, 400, { code: 'investor', message: 'Investors cannot be added as project members.' });
+  const member = await c.env.DB.prepare(`SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? AND status = 'accepted'`)
+    .bind(project.id, reach.id).first();
+  const owner = project.founder_id != null && exists.founder_id != null && Number(exists.founder_id) === Number(project.founder_id);
+  if (member || owner) return refuse(c, 409, { code: 'already_member', message: 'They are already on this team.' });
+  const inv = await c.env.DB.prepare(
+    `INSERT INTO project_member_invitations (project_id, role, status, source, invitee_user_id, invited_by_user_id, expires_at)
+     SELECT ?, ?, 'pending', 'account', ?, ?, datetime('now','+14 days')
+      WHERE NOT EXISTS (SELECT 1 FROM project_member_invitations WHERE project_id = ? AND invitee_user_id = ?
+        AND status = 'pending' AND (expires_at IS NULL OR julianday(expires_at) > julianday('now')))
+     RETURNING id, role, status, source, expires_at, created_at`,
+  ).bind(project.id, role, reach.id, user.id, project.id, reach.id).first();
+  if (!inv) return refuse(c, 409, { code: 'already_pending', message: 'An invitation to them is already pending.' });
+  return c.json({ invitation: { ...inv, invitee: reach.person }, email_sent: null });
+}
+
+// POST /api/projects/:id/invitations/:invId/resend — #3841: a new token and a
+// new 14-day expiry; the old token fails at accept. The email goes again for an
+// email invitation. The project's manager only.
+projects.post('/:id/invitations/:invId/resend', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  const invId = parseInt(c.req.param('invId'));
+  if (!Number.isFinite(id) || !Number.isFinite(invId)) return c.json({ error: 'Invalid id' }, 400);
+  await ensureProjectMembershipSchema(c.env);
+  const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .bind(id).first() as { id: number; founder_id: number | null } | null;
+  if (!project) return refuse(c, 404, { code: 'not_found', message: 'There is no such invitation.' });
+  if (!isProjectManager(user, project)) return refuse(c, 403, { code: 'not_manager', message: 'Only the project owner can manage the team.' });
+  const inv = await c.env.DB.prepare('SELECT id, status, source, invitee_email FROM project_member_invitations WHERE id = ? AND project_id = ?')
+    .bind(invId, id).first() as { id: number; status: string; source: string | null; invitee_email: string | null } | null;
+  if (!inv) return refuse(c, 404, { code: 'not_found', message: 'There is no such invitation.' });
+  if (inv.status !== 'pending') return refuse(c, 409, { code: 'not_pending', message: 'This invitation was already answered or revoked.' });
+  const token = generateToken();
+  const tokenHash = await hashInviteToken(token);
+  const row = await c.env.DB.prepare(
+    `UPDATE project_member_invitations SET token_hash = ?, expires_at = datetime('now','+14 days'), updated_at = datetime('now')
+      WHERE id = ? AND status = 'pending' RETURNING id, status, source, expires_at`,
+  ).bind(tokenHash, inv.id).first() as { id: number; status: string; source: string | null; expires_at: string } | null;
+  if (!row) return refuse(c, 409, { code: 'not_pending', message: 'This invitation was already answered or revoked.' });
+  let emailSent: boolean | null = null;
+  if (row.source === 'email' && inv.invitee_email) {
+    const { sendNotificationEmail } = await import('../services/email');
+    const base = String((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+    const link = `${base}/projects/invitations/accept?token=${encodeURIComponent(token)}`;
+    emailSent = await sendNotificationEmail(c.env, inv.invitee_email, 'Your StudioOS project invitation',
+      `You have been invited to a StudioOS project. Accept here: ${link}\nThis invitation expires in 14 days and works only for this email address.`);
+  }
+  return c.json({
+    invitation: { ...row, email_sent: emailSent },
+    // A link invitation's new link, returned ONCE (only the hash is stored), as the create route does.
+    ...(row.source === 'link' ? { token, accept_path: `/projects/invitations/accept?token=${token}` } : {}),
+  });
 });
 
 // POST /api/projects/:id/invitations/:invId/revoke

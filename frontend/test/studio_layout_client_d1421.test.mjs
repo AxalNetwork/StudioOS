@@ -28,8 +28,9 @@ test('paths, verbs and bodies; profile only when given', async () => {
     await studioLayoutApi.modules('advisor');
     await studioLayoutApi.layout();
     await studioLayoutApi.layout('partner');
-    await studioLayoutApi.saveLayout(layout);
-    await studioLayoutApi.saveLayout([], 'investor');
+    await studioLayoutApi.saveLayout(layout, 3);
+    await studioLayoutApi.saveLayout([], null, 'investor');
+    await studioLayoutApi.saveLayout([]);
     await studioLayoutApi.resetLayout();
     await studioLayoutApi.resetLayout('a b');
   } finally { globalThis.fetch = orig; }
@@ -38,8 +39,9 @@ test('paths, verbs and bodies; profile only when given', async () => {
     ['GET', '/api/studio/modules?profile=advisor', null],
     ['GET', '/api/studio/layout', null],
     ['GET', '/api/studio/layout?profile=partner', null],
-    ['PUT', '/api/studio/layout', JSON.stringify({ layout })],
-    ['PUT', '/api/studio/layout?profile=investor', JSON.stringify({ layout: [] })],
+    ['PUT', '/api/studio/layout', JSON.stringify({ layout, expected_revision: 3 })],
+    ['PUT', '/api/studio/layout?profile=investor', JSON.stringify({ layout: [], expected_revision: null })],
+    ['PUT', '/api/studio/layout', JSON.stringify({ layout: [], expected_revision: null })],
     ['POST', '/api/studio/layout/reset', null],
     ['POST', '/api/studio/layout/reset?profile=a%20b', null],
   ]);

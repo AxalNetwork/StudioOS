@@ -187,7 +187,9 @@ test('the read and the write narrow on the same accessible set, and neither reac
   // The CSV predicate reads NULL as EVERY ROW, so `[]` must be answered before
   // the query. `cloudflare-worker/test/portfolio_support_scope.test.ts` drives
   // this against real SQL; this asserts the shape cannot silently drop.
-  assert.match(ROUTE, /return \{ ids, empty: ids != null && ids\.length === 0 \}/,
+  // D1595 (#3868): the book moved to services/profileWriteGates.ts, shared with Fill's scope; the route still reads it.
+  assert.match(ROUTE, /return supportBookIds\(c\.env, user, await investorActiveCompany\(c, user\)\)/, 'the route no longer reads the shared book');
+  assert.match(read('cloudflare-worker/src/services/profileWriteGates.ts'), /return \{ ids, empty: ids != null && ids\.length === 0 \}/,
     'the empty-set flag changed shape');
   const get = handler("r.get('/'");
   assert.match(get, /if \(empty\) \{/, 'the read no longer short-circuits an empty accessible set');

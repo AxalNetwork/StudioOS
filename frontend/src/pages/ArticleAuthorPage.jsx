@@ -1,26 +1,41 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  FileText, Plus, RefreshCw, Loader2, Save, Send, ArrowLeft, ImageIcon,
-  CheckCircle2, Eye, MessageSquare, ChevronDown, ChevronRight,
-  Copy, ExternalLink, ShieldAlert, Clock, Upload, X, Globe,
+  Loader2, Save, Send, ArrowLeft, ImageIcon,
+  CheckCircle2, Eye, MessageSquare, Sparkles, Wand2,
+  Copy, ExternalLink, ShieldAlert, Clock, Globe,
 } from 'lucide-react';
-import { articles as api, adminArticles as adminApi } from '../lib/api';
+import { api as appApi, articles as api, adminArticles as adminApi } from '../lib/api';
 import { useToast } from '../components/useToast';
 import ToastMessage from '../components/ToastMessage';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import ReactMarkdown from 'react-markdown';
-import { wordsAndMinutes, slugify } from '../lib/articleMarkdown';
+import { wordsAndMinutes } from '../lib/articleMarkdown';
 import { appOrigin } from '../lib/branchHost';
-import { isSuperAdminUser } from '../lib/shellRole';
+import { isSuperAdminUser, readHqView, shellRoleFor } from '../lib/shellRole';
 import Lightbox from '../ui/Lightbox';
+import { RailFrame, WorkerRail } from '../ui';
+import ArticleLibrary from './articles/ArticleLibrary';
+import ArticleWritingPanel from './articles/ArticleWritingPanel';
+import ArticleImageSheet from './articles/ArticleImageSheet';
+import ArticlePublishSheet from './articles/ArticlePublishSheet';
+import {
+  FORMAT_BUTTONS, LIBRARY_TABS, SLASH_BLOCKS, draftAudience, formatMarkdown, imageMarkdown, placeText, proposalMarkdown, tabOf,
+} from './articles/articleCanvas';
 import { ghost as actionGhost, primary as actionPrimary } from '../ui/ActionSheet';
 
 // Task #1 — Article author dashboard, scoped to the /articles surface
 // (role-aware list, dynamic sector taxonomy from `/api/articles/sectors`,
 // deep-linkable via /articles/edit/:id). The legacy /news author page
 // redirects here (Task #3 — News & Articles merged).
+//
+// D1408 (#3694) — the Article Authoring canvas (boards AR1–AR6): the
+// library at /articles/draft (AR1), the editor at /articles/edit/:id (AR2),
+// Eadwyn's writing panel (AR3), the image sheet (AR4) and Publish… (AR5),
+// inside the page's own rail (`<Profile> · Articles`, D1409). The parts live
+// in `pages/articles/`; this file keeps the store, the save, the submit and
+// the D1292 publish chain.
 
 const MAX_COVER_MB = 5;
 
@@ -98,15 +113,6 @@ const STATUS_LABEL = {
   published: 'Published',
   rejected: 'Rejected',
 };
-
-// Which collapsible rail section an article belongs to. Drafts also holds
-// `rejected` (still editable + resubmittable); In review holds the whole
-// review pipeline incl. `approved` (reviewed, awaiting publish).
-function lifecycleGroup(status) {
-  if (status === 'published') return 'published';
-  if (['submitted', 'in_review', 'changes_requested', 'approved'].includes(status)) return 'in_review';
-  return 'drafts';
-}
 
 // Compact relative time for row metadata + the editor save-state.
 function relativeTime(value) {
@@ -249,6 +255,36 @@ function HighlightedTextarea({ value, onChange, disabled, ranges, textareaRef })
   );
 }
 
+/** D1408 — a heading field in the article's own type that grows with its text (AR2). */
+function GrowingField({ value, onChange, className, ...rest }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return <textarea ref={ref} rows={1} value={value} onChange={(e) => onChange(e.target.value.replace(/\n/g, ' '))} className={`w-full resize-none overflow-hidden bg-transparent focus:outline-none disabled:opacity-80 ${className}`} {...rest} />;
+}
+
+/**
+ * D1408 — the page's rail, `<Profile> · Articles`, in the viewer's accent.
+ * Each mount names its role literally (`branch_rail_mount`); a branch admin
+ * takes the admin's.
+ */
+const ARTICLE_RAIL_NOTE = 'Eadwyn outlines, rewrites, suggests headlines and draws images when you ask. Nothing goes into your article until you place it.';
+function ArticleRail({ role }) {
+  switch (role) {
+    case 'investor': return <WorkerRail workspace="Articles" role="investor" note={ARTICLE_RAIL_NOTE} data-testid="article-rail" />;
+    case 'advisor': return <WorkerRail workspace="Articles" role="advisor" note={ARTICLE_RAIL_NOTE} data-testid="article-rail" />;
+    case 'partner': return <WorkerRail workspace="Articles" role="partner" note={ARTICLE_RAIL_NOTE} data-testid="article-rail" />;
+    case 'super_admin': return <WorkerRail workspace="Articles" role="super_admin" note={ARTICLE_RAIL_NOTE} data-testid="article-rail" />;
+    case 'admin':
+    case 'branch_admin': return <WorkerRail workspace="Articles" role="admin" note={ARTICLE_RAIL_NOTE} data-testid="article-rail" />;
+    default: return <WorkerRail workspace="Articles" role="founder" note={ARTICLE_RAIL_NOTE} data-testid="article-rail" />;
+  }
+}
+
 function readFileAsDataUri(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -288,101 +324,6 @@ function coverErrorMessage(e) {
   return e?.message || 'Cover upload failed. Please try again.';
 }
 
-function ArticleRow({ a, selected, onSelect, onCopyUrl }) {
-  return (
-    <li>
-      <button
-        onClick={() => onSelect(a.id)}
-        className={`w-full text-left px-3 py-2 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 ${selected ? 'bg-violet-50 dark:bg-violet-900/20' : ''}`}
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="font-medium text-sm truncate">{a.title || 'Untitled'}</div>
-          {statusBadge(a.status)}
-        </div>
-        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          {a.word_count} words · {relativeTime(a.updated_at)}
-        </div>
-      </button>
-      {a.status === 'published' && a.slug && (
-        <div className="px-3 pb-2 flex items-center gap-3 text-xs border-b border-slate-100 dark:border-slate-800">
-          <button
-            onClick={() => onCopyUrl(a.slug)}
-            className="inline-flex items-center gap-1 text-slate-500 hover:text-violet-700 dark:hover:text-violet-300"
-          >
-            <Copy className="w-3 h-3" /> Copy link
-          </button>
-          <a
-            href={publicArticleUrl(a.slug)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-slate-500 hover:text-violet-700 dark:hover:text-violet-300"
-          >
-            <ExternalLink className="w-3 h-3" /> View live
-          </a>
-        </div>
-      )}
-    </li>
-  );
-}
-
-const RAIL_SECTIONS = [
-  { key: 'drafts', label: 'Drafts' },
-  { key: 'in_review', label: 'In review' },
-  { key: 'published', label: 'Published' },
-];
-
-function ArticleList({ items, selectedId, onSelect, onNew, refreshing, refresh, onCopyUrl }) {
-  const [open, setOpen] = useState({ drafts: true, in_review: true, published: true });
-  const groups = { drafts: [], in_review: [], published: [] };
-  for (const a of items || []) groups[lifecycleGroup(a.status)].push(a);
-
-  return (
-    <div className="border-r border-slate-200 dark:border-slate-800 w-72 flex-shrink-0 overflow-y-auto bg-white dark:bg-slate-900">
-      <div className="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
-        <button onClick={onNew} className="flex-1 flex items-center gap-2 px-3 py-2 bg-violet-600 text-white rounded hover:bg-violet-700 text-sm">
-          <Plus className="w-4 h-4" /> New draft
-        </button>
-        <button onClick={refresh} disabled={refreshing} className="p-2 border border-slate-300 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-800">
-          {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-        </button>
-      </div>
-      {(items || []).length === 0 ? (
-        <div className="p-4 text-sm text-slate-500 dark:text-slate-400">No articles yet. Click <strong>New draft</strong> to start.</div>
-      ) : (
-        <div>
-          {RAIL_SECTIONS.map(({ key, label }) => {
-            const list = groups[key];
-            const isOpen = open[key];
-            return (
-              <section key={key}>
-                <button
-                  onClick={() => setOpen((p) => ({ ...p, [key]: !p[key] }))}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
-                  <span className="flex items-center gap-1.5">
-                    {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                    {label}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-normal">{list.length}</span>
-                </button>
-                {isOpen && (list.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800">None yet</div>
-                ) : (
-                  <ul>
-                    {list.map((a) => (
-                      <ArticleRow key={a.id} a={a} selected={selectedId === a.id} onSelect={onSelect} onCopyUrl={onCopyUrl} />
-                    ))}
-                  </ul>
-                ))}
-              </section>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function ArticleAuthorPage() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
@@ -405,7 +346,6 @@ export default function ArticleAuthorPage() {
   const [submitting, setSubmitting] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [preview, setPreview] = useState(false);
-  const [tagInput, setTagInput] = useState('');
   const [coverUploading, setCoverUploading] = useState(false);
   const [coverPreview, setCoverPreview] = useState(null);
   const [coverError, setCoverError] = useState(null);
@@ -416,16 +356,39 @@ export default function ArticleAuthorPage() {
   const [overrideAsk, setOverrideAsk] = useState(false);
   const [imageError, setImageError] = useState(null);
   const [imageUploading, setImageUploading] = useState(false);
+  const [listLoaded, setListLoaded] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelRun, setPanelRun] = useState(null);
+  const [waiting, setWaiting] = useState(0);
+  const [imageSheet, setImageSheet] = useState(null);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [followers, setFollowers] = useState(null);
   const bodyRef = useRef(null);
   const articleRef = useRef(null);
   const autosaveTimerRef = useRef(null);
   const [, setNowTick] = useState(0);
 
+  // D1408 — the library and the editor are two addresses, so Back returns
+  // from an article to the library.
   const setSelectedId = useCallback((id) => {
     setSelectedIdState(id);
-    if (id) navigate(`/articles/edit/${id}`, { replace: true });
-    else navigate('/articles/draft', { replace: true });
+    if (id) navigate(`/articles/edit/${id}`);
+    else navigate('/articles/draft');
   }, [navigate]);
+
+  useEffect(() => {
+    const id = routeId ? Number(routeId) : null;
+    setSelectedIdState(id);
+    if (!id) {
+      setArticle(null);
+      articleRef.current = null;
+      setPanelOpen(false);
+      setPublishOpen(false);
+      setImageSheet(null);
+    }
+  }, [routeId]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -437,6 +400,7 @@ export default function ArticleAuthorPage() {
       toast.error('Failed to load drafts');
     } finally {
       setRefreshing(false);
+      setListLoaded(true);
     }
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -451,6 +415,16 @@ export default function ArticleAuthorPage() {
     })();
     refresh();
   }, [refresh]);
+
+  // D1408 — AR1's followers card: the member's public follower count.
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    let live = true;
+    appApi.followStatus('user', user.id)
+      .then((r) => { if (live && Number.isFinite(Number(r?.followers))) setFollowers(Number(r.followers)); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [user?.id]);
 
   // Keep relative times ("Saved 12s ago", row updated times) ticking without
   // a network round-trip.
@@ -494,6 +468,7 @@ export default function ArticleAuthorPage() {
   useEffect(() => { if (selectedId) loadOne(selectedId); }, [selectedId, loadOne]);
 
   const onNew = async () => {
+    setCreating(true);
     try {
       const r = await api.createDraft({ title: 'Untitled draft', body_markdown: '' });
       setItems((prev) => [r.article, ...prev]);
@@ -501,6 +476,8 @@ export default function ArticleAuthorPage() {
     } catch (e) {
       reportError('ArticleAuthor:create', e);
       toast.error('Failed to create draft');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -851,16 +828,6 @@ export default function ArticleAuthorPage() {
     }
   };
 
-  const addTag = () => {
-    const t = tagInput.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40);
-    if (!t) return;
-    if ((editing.tags || []).includes(t)) { setTagInput(''); return; }
-    setEditing((prev) => ({ ...prev, tags: [...(prev.tags || []), t].slice(0, 8) }));
-    setTagInput('');
-  };
-
-  const removeTag = (t) => setEditing((p) => ({ ...p, tags: (p.tags || []).filter((x) => x !== t) }));
-
   const copyUrl = async (slug) => {
     const url = publicArticleUrl(slug);
     try {
@@ -877,11 +844,6 @@ export default function ArticleAuthorPage() {
     const { words, minutes } = wordsAndMinutes(editing.body_markdown || '');
     return { words, minutes };
   }, [editing.body_markdown]);
-  const slugPreview = useMemo(() => {
-    if (slugTouched) return editing.slug || '';
-    if (editing.title) return slugify(editing.title);
-    return '';
-  }, [slugTouched, editing.slug, editing.title]);
   let reviewerNote = '';
   if (article && article.status === 'changes_requested') {
     const adminCmts = [...comments].reverse().filter((c) => c.author_role === 'admin');
@@ -890,55 +852,144 @@ export default function ArticleAuthorPage() {
       || (comments.length ? comments[comments.length - 1].body : '')
       || article.rejection_reason || '';
   }
+  // D1408 — what the writing panel is working on: the selection, the text
+  // before the caret, and the heading of the section the caret is in.
+  const getContext = useCallback(() => {
+    const ta = bodyRef.current;
+    const body = ta?.value ?? '';
+    const start = ta?.selectionStart ?? body.length;
+    const end = ta?.selectionEnd ?? start;
+    const heads = [...body.slice(0, start).matchAll(/^#{1,3}\s+(.+)$/gm)];
+    return {
+      start, end,
+      selection: body.slice(start, end),
+      cursorContext: body.slice(0, end),
+      section: heads.length ? heads[heads.length - 1][1].trim() : '',
+    };
+  }, []);
+
+  const focusBody = (start, end = start) => setTimeout(() => {
+    const ta = bodyRef.current;
+    if (!ta) return;
+    ta.focus();
+    try { ta.setSelectionRange(start, end); } catch { /* noop */ }
+  }, 0);
+
+  // D1408 — Insert or Replace: the proposal's text goes into the draft, which
+  // the page's autosave writes. A rewrite whose selection has changed since
+  // the run is inserted below instead of replacing other text.
+  const onPlace = (item, mode) => {
+    const md = proposalMarkdown(item.proposal);
+    if (!md) return;
+    const body = editing.body_markdown || '';
+    const range = item.range || { start: item.at ?? body.length, end: item.at ?? body.length };
+    let how = mode;
+    if (how === 'replace' && body.slice(range.start, range.end) !== (item.proposal.payload?.before ?? '')) {
+      how = 'below';
+      toast.error('The selected text changed since Eadwyn read it, so the rewrite went below it instead.');
+    }
+    const r = placeText(body, md, { start: range.start, end: range.end, mode: how });
+    setEditing((p) => ({ ...p, body_markdown: r.body }));
+    if (piiFindings) setPiiFindings(null);
+    focusBody(r.caret);
+  };
+
+  const onApplySeo = (payload) => setEditing((p) => ({
+    ...p,
+    ...(payload.seo_title ? { seo_title: String(payload.seo_title).slice(0, 120) } : {}),
+    ...(payload.excerpt ? { excerpt: String(payload.excerpt).slice(0, 200) } : {}),
+  }));
+  const onApplyHeadline = (h) => setEditing((p) => ({ ...p, title: h }));
+
+  const applyFormat = (kind) => {
+    const ta = bodyRef.current;
+    const body = editing.body_markdown || '';
+    const r = formatMarkdown(body, ta?.selectionStart ?? body.length, ta?.selectionEnd ?? body.length, kind);
+    setEditing((p) => ({ ...p, body_markdown: r.body }));
+    focusBody(r.start, r.end);
+  };
+
+  const onImagePlaced = (img, target, coverUrl) => {
+    setImageSheet(null);
+    if (target === 'cover') {
+      // The cover is served from its own copy; a new `updated_at` busts the cached one (`coverSrc`).
+      setCoverPreview(null);
+      setArticle((prev) => (prev ? { ...prev, cover_url: coverUrl || prev.cover_url || `/api/articles/cover/${prev.id}`, updated_at: new Date().toISOString() } : prev));
+      toast.success('Cover updated');
+    } else {
+      const ta = bodyRef.current;
+      const body = editing.body_markdown || '';
+      const at = ta?.selectionEnd ?? body.length;
+      const r = placeText(body, imageMarkdown(img), { start: at, end: at, mode: 'below' });
+      setEditing((p) => ({ ...p, body_markdown: r.body }));
+      toast.success('Image placed');
+    }
+  };
+
+  const openAsk = (option = null) => {
+    setPublishOpen(false);
+    setPanelRun(option);
+    setPanelOpen(true);
+  };
+
+  const backToLibrary = async () => {
+    if (dirty && isEditable) await persist();
+    setSelectedId(null);
+    refresh();
+  };
+
+  const rail = <ArticleRail role={shellRoleFor(user?.role, user, readHqView())} />;
+  const tabLabel = article ? (LIBRARY_TABS.find((t) => t.key === tabOf(article)) || LIBRARY_TABS[0]).label : '';
+  const canSendForReview = article && ['draft', 'changes_requested', 'rejected'].includes(article.status);
+  const coverImg = coverPreview || (article?.cover_url ? coverSrc(article) : null);
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <RailFrame rail={rail} data-testid="article-author-page">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <ToastMessage toast={current} onDismiss={dismissToast} />
       {overrideAsk && <OverrideDialog onCancel={() => setOverrideAsk(false)} onConfirm={(r) => { setOverrideAsk(false); adminPublish(r); }} />}
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <FileText className="w-5 h-5 text-violet-600" />
-            <h1 className="font-semibold">Article authoring</h1>
-            <Link to="/articles" className="text-xs text-slate-500 hover:text-violet-700 underline">View public feed</Link>
-          </div>
-        </div>
-      </header>
 
-      <div className="flex" style={{ height: 'calc(100vh - 56px)' }}>
-        <ArticleList
+      {!selectedId ? (
+        <ArticleLibrary
           items={items}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onNew={onNew}
+          loading={!listLoaded}
           refreshing={refreshing}
-          refresh={refresh}
+          onRefresh={refresh}
+          onOpen={setSelectedId}
+          onNew={onNew}
+          creating={creating}
+          statusPill={statusBadge}
+          relativeTime={relativeTime}
+          coverSrc={coverSrc}
           onCopyUrl={copyUrl}
+          publicUrl={publicArticleUrl}
+          followers={followers}
         />
-
-        <main className="flex-1 overflow-y-auto p-6">
-          {!article ? (
-            <div className="text-center text-slate-500 dark:text-slate-400 mt-20">
-              Select a draft or click <strong>New draft</strong> to start.
-            </div>
-          ) : (
-            <div className="max-w-4xl mx-auto">
-              <div className="mb-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
+      ) : !article ? (
+        <div className="text-center text-slate-500 dark:text-slate-400 mt-20"><Loader2 className="w-5 h-5 animate-spin inline" /> Opening the article…</div>
+      ) : (
+        <div className="flex flex-col lg:flex-row min-h-screen">
+          <main className="flex-1 min-w-0">
+            <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2.5">
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">
+                    <button type="button" onClick={backToLibrary} className="hover:text-violet-700 dark:hover:text-violet-300" data-testid="article-crumb">Articles</button>
+                    <span aria-hidden="true"> › </span>{tabLabel}
+                  </div>
                   <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="font-semibold truncate max-w-[320px]">{editing.title || 'Untitled draft'}</span>
                     {statusBadge(article.status)}
-                    <span className="text-sm font-medium">{STATUS_LABEL[article.status] || article.status}</span>
-                    <span className="text-slate-300 dark:text-slate-600">·</span>
                     {saving ? (
                       <span className="text-xs inline-flex items-center gap-1 text-amber-600 dark:text-amber-400"><Loader2 className="w-3 h-3 animate-spin" /> Saving…</span>
                     ) : dirty ? (
                       <span className="text-xs text-amber-600 dark:text-amber-400">Unsaved changes</span>
                     ) : (
-                      <span className="text-xs inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"><CheckCircle2 className="w-3 h-3 text-emerald-500" /> Saved {relativeTime(savedAt)}</span>
+                      <span className="text-xs inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"><CheckCircle2 className="w-3 h-3 text-emerald-500" /> Saved · {relativeTime(savedAt)}</span>
                     )}
-                    <span className="text-slate-300 dark:text-slate-600 hidden sm:inline">·</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">{article.word_count} words · ~{article.read_minutes} min read</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <button onClick={() => setPreview((p) => !p)} className="text-sm px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1">
                       <Eye className="w-4 h-4" /> {preview ? 'Edit' : 'Preview'}
                     </button>
@@ -973,8 +1024,8 @@ export default function ArticleAuthorPage() {
                         {STATUS_LABEL[article.status]}
                       </button>
                     ) : (
-                      <button onClick={submit} disabled={submitting} className="text-sm px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1 disabled:opacity-50">
-                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} {article.status === 'draft' ? 'Submit' : 'Resubmit'}
+                      <button onClick={() => setPublishOpen(true)} className="text-sm px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1" data-testid="article-publish-open">
+                        <Send className="w-4 h-4" /> Publish…
                       </button>
                     )}
                     {article.status === 'changes_requested' && (
@@ -982,24 +1033,29 @@ export default function ArticleAuthorPage() {
                         <ArrowLeft className="w-4 h-4" /> Retract
                       </button>
                     )}
+                    <button type="button" onClick={() => (panelOpen ? setPanelOpen(false) : openAsk())} aria-pressed={panelOpen}
+                      className="text-sm px-3 py-1.5 rounded border border-violet-300 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 flex items-center gap-1" data-testid="article-ask">
+                      <Sparkles className="w-4 h-4" /> Ask
+                      {waiting > 0 && <span className="ml-1 text-[11px] px-1.5 rounded-full bg-violet-600 text-white" data-testid="article-ask-waiting">{waiting} waiting</span>}
+                    </button>
                   </div>
-                </div>
+              </div>
+            </div>
 
+            <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
                 {article.status === 'changes_requested' && reviewerNote && (
-                  <div className="px-4 py-3 border-t border-orange-200 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-900/20 text-sm rounded-b-lg">
+                  <div className="mb-4 px-4 py-3 border border-orange-200 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-900/20 text-sm rounded-lg">
                     <div className="font-semibold text-orange-800 dark:text-orange-200 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Reviewer asked for changes</div>
                     <div className="text-orange-700 dark:text-orange-300 mt-1 whitespace-pre-wrap">{reviewerNote}</div>
                   </div>
                 )}
                 {article.status === 'published' && article.slug && (
-                  <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2 text-sm rounded-b-lg">
+                  <div className="mb-4 px-4 py-2.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-wrap items-center gap-2 text-sm rounded-lg">
                     <span className="text-xs text-slate-500 dark:text-slate-400">Public link</span>
                     <code className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded break-all">{publicArticleUrl(article.slug)}</code>
                     <button onClick={() => copyUrl(article.slug)} className="inline-flex items-center gap-1 text-xs text-violet-600 hover:underline"><Copy className="w-3.5 h-3.5" /> Copy</button>
                   </div>
                 )}
-              </div>
-
               {piiFindings && piiFindings.length > 0 && (
                 <div className="p-3 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded text-sm">
                   <div className="font-semibold text-red-800 dark:text-red-200 flex items-center gap-1.5">
@@ -1070,234 +1126,114 @@ export default function ArticleAuthorPage() {
                 </div>
               )}
 
-              {/* Task #4 — split-pane editor */}
               {preview ? (
-                <div className="bg-white dark:bg-slate-900 p-8 rounded border border-slate-200 dark:border-slate-800">
+                <article className="bg-white dark:bg-slate-900 p-8 rounded-lg border border-slate-200 dark:border-slate-800" data-testid="article-preview">
+                  {coverImg && <img src={coverImg} alt="" className="w-full rounded-lg mb-6 max-h-[360px] object-cover" />}
                   <h1 className="text-3xl font-bold">{editing.title}</h1>
                   {editing.subtitle && <p className="text-lg text-slate-600 dark:text-slate-400 mt-2">{editing.subtitle}</p>}
                   <div className="mt-6 prose dark:prose-invert max-w-none"><ReactMarkdown>{editing.body_markdown || ''}</ReactMarkdown></div>
-                </div>
+                </article>
               ) : (
-                <div className="space-y-4">
-                  {/* Meta header row */}
-                  <div className="flex flex-wrap gap-3 items-center">
-                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                      <span>{liveStats.words} words</span>
-                      <span>·</span>
-                      <span>~{liveStats.minutes} min</span>
-                    </div>
-                    <span className="text-xs text-slate-300 dark:text-slate-600">·</span>
-                    <select
-                      value={editing.sector}
-                      onChange={(e) => setEditing((p) => ({ ...p, sector: e.target.value }))}
-                      disabled={!isEditable}
-                      className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 disabled:opacity-60"
-                    >
-                      <option value="">Sector…</option>
-                      {sectors.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                    </select>
-                    <div className="flex flex-wrap gap-1 items-center">
-                      {(editing.tags || []).map((t) => (
-                        <span key={t} className="text-xs px-2 py-0.5 bg-slate-200 dark:bg-slate-700 rounded flex items-center gap-1">
-                          {t}
-                          {isEditable && <button onClick={() => removeTag(t)} className="hover:text-red-600"><X className="w-3 h-3" /></button>}
-                        </span>
-                      ))}
-                      {isEditable && (editing.tags || []).length < 8 && (
-                        <input
-                          value={tagInput}
-                          onChange={(e) => setTagInput(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
-                          placeholder="Add tag…"
-                          className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 w-24"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Title + subtitle */}
-                  <input
-                    type="text"
-                    value={editing.title}
-                    onChange={(e) => setEditing((p) => ({ ...p, title: e.target.value }))}
-                    placeholder="Article title"
-                    disabled={!isEditable}
-                    className="w-full text-2xl font-bold px-3 py-2 bg-transparent border-b border-slate-200 dark:border-slate-700 focus:outline-none focus:border-violet-500 disabled:opacity-60"
-                  />
-                  <input
-                    type="text"
-                    value={editing.subtitle}
-                    onChange={(e) => setEditing((p) => ({ ...p, subtitle: e.target.value }))}
-                    placeholder="Subtitle (optional)"
-                    disabled={!isEditable}
-                    className="w-full text-base px-3 py-2 bg-transparent border-b border-slate-200 dark:border-slate-700 focus:outline-none focus:border-violet-500 disabled:opacity-60"
-                  />
-
-                  {/* Slug preview + lock on publish */}
-                  <div className="flex flex-wrap gap-2 items-center text-sm">
-                    <span className="text-slate-500 dark:text-slate-400">Slug preview</span>
-                    <code className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded break-all">
-                      {slugPreview || (editing.title ? slugify(editing.title) : 'untitled')}
-                    </code>
+                <div className="space-y-4" data-testid="article-editor">
+                  {/* AR2 — the cover slot, with Replace and Generate (AR4). */}
+                  <div className="relative group">
+                    {coverImg ? (
+                      <img src={coverImg} alt="" className={`w-full max-h-[320px] object-cover rounded-lg border border-slate-200 dark:border-slate-700 transition-opacity ${coverUploading ? 'opacity-50' : ''}`} />
+                    ) : (
+                      <div className="w-full h-40 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-center text-sm text-slate-500">No cover yet</div>
+                    )}
+                    {coverUploading && <span className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-violet-600" /></span>}
                     {isEditable && (
-                      <>
-                        <input
-                          type="text"
-                          value={editing.slug}
-                          onChange={(e) => { setEditing((p) => ({ ...p, slug: e.target.value })); setSlugTouched(true); }}
-                          placeholder="Override slug"
-                          className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 w-40"
-                        />
-                        <button
-                          onClick={() => { setEditing((p) => ({ ...p, slug: '' })); setSlugTouched(false); }}
-                          className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                          title="Reset to auto"
-                        >
-                          Auto
+                      <div className="absolute bottom-2 right-2 flex gap-1.5" data-testid="article-cover-toolbar">
+                        <label className={`text-xs px-2.5 py-1 rounded bg-white/95 dark:bg-slate-900/95 border border-slate-300 dark:border-slate-700 inline-flex items-center gap-1 ${coverUploading ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+                          <ImageIcon className="w-3.5 h-3.5" /> {coverImg ? 'Replace' : 'Upload'}
+                          <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" disabled={coverUploading}
+                            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; uploadCover(f); }} />
+                        </label>
+                        <button type="button" onClick={() => setImageSheet('cover')} className="text-xs px-2.5 py-1 rounded bg-white/95 dark:bg-slate-900/95 border border-slate-300 dark:border-slate-700 inline-flex items-center gap-1 hover:bg-slate-50 dark:hover:bg-slate-800">
+                          <Wand2 className="w-3.5 h-3.5" /> Generate
                         </button>
-                      </>
-                    )}
-                    {article.status === 'published' && (
-                      <span className="text-xs text-emerald-600 dark:text-emerald-400">Locked — published</span>
+                      </div>
                     )}
                   </div>
+                  {coverError && (
+                    <div className="text-sm rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-3 py-2">{coverError}</div>
+                  )}
 
-                  {/* Cover image */}
-                  <div className="flex flex-wrap gap-2 items-center">
-                    {isEditable && (
-                      <label className={`text-sm px-3 py-2 border border-slate-300 dark:border-slate-700 rounded flex items-center gap-1 ${coverUploading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer'}`}>
-                        {coverUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                        {coverUploading ? 'Uploading…' : 'Cover'}
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/webp"
-                          className="hidden"
-                          disabled={coverUploading}
-                          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; uploadCover(f); }}
-                        />
-                      </label>
-                    )}
-                    {(coverPreview || article.cover_url) && (
-                      <div className="relative inline-block">
-                        <img
-                          src={coverPreview || coverSrc(article)}
-                          alt="cover"
-                          className={`max-h-48 rounded border border-slate-200 dark:border-slate-700 transition-opacity ${coverUploading ? 'opacity-50' : ''}`}
-                        />
-                        {coverUploading && (
-                          <span className="absolute inset-0 flex items-center justify-center">
-                            <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
-                          </span>
+                  {/* AR2 — the article in public type: title, subtitle, author line, tags. */}
+                  <GrowingField value={editing.title} onChange={(v) => setEditing((p) => ({ ...p, title: v }))} placeholder="Title" aria-label="Title"
+                    disabled={!isEditable} className="text-3xl sm:text-4xl font-bold leading-tight" />
+                  <GrowingField value={editing.subtitle} onChange={(v) => setEditing((p) => ({ ...p, subtitle: v }))} placeholder="Subtitle (optional)" aria-label="Subtitle"
+                    disabled={!isEditable} className="text-lg text-slate-600 dark:text-slate-300" />
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <span>By {user?.name || user?.full_name || 'you'}</span>
+                    <span>·</span>
+                    <span>{liveStats.words.toLocaleString()} words · {liveStats.minutes} min read</span>
+                    {(editing.tags || []).map((t) => <span key={t} className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200">{t}</span>)}
+                  </div>
+
+                  {/* AR2 — the format bar and the insert menu; the body stays Markdown. */}
+                  {isEditable && (
+                    <div className="sticky top-[64px] z-[5] flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-2 py-1.5 shadow-sm" role="toolbar" aria-label="Format" data-testid="article-format-bar">
+                      {FORMAT_BUTTONS.map((b) => (
+                        <button key={b.kind} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyFormat(b.kind)} aria-label={b.label} title={b.label}
+                          className={`text-xs min-w-[28px] px-1.5 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 ${b.kind === 'bold' ? 'font-bold' : b.kind === 'italic' ? 'italic' : ''}`}>{b.short}</button>
+                      ))}
+                      <span className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" aria-hidden="true" />
+                      <div className="relative">
+                        <button type="button" onClick={() => setSlashOpen((o) => !o)} aria-expanded={slashOpen} className="text-xs px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800">Insert…</button>
+                        {slashOpen && (
+                          <ul className="absolute left-0 top-full mt-1 w-48 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg py-1 z-20" role="menu" data-testid="article-insert-menu">
+                            {SLASH_BLOCKS.map((b) => (
+                              <li key={b.kind}><button type="button" role="menuitem" onMouseDown={(e) => e.preventDefault()} onClick={() => { setSlashOpen(false); applyFormat(b.kind); }} className="w-full text-left text-xs px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800">{b.label}</button></li>
+                            ))}
+                            <li>
+                              <label className="block text-xs px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
+                                Upload an image
+                                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" disabled={imageUploading}
+                                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; setSlashOpen(false); handleImageUpload(f); }} />
+                              </label>
+                            </li>
+                            <li><button type="button" role="menuitem" onClick={() => { setSlashOpen(false); setImageSheet('body'); }} className="w-full text-left text-xs px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800">Generate an image</button></li>
+                          </ul>
                         )}
                       </div>
-                    )}
-                    {coverError && (
-                      <div className="text-sm rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-3 py-2">
-                        {coverError}
-                      </div>
-                    )}
-                  </div>
+                      <div className="flex-1" />
+                      {imageUploading && <span className="text-xs inline-flex items-center gap-1 text-amber-600"><Loader2 className="w-3 h-3 animate-spin" /> Uploading…</span>}
+                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => openAsk()} className="text-xs px-2 py-1 rounded text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 inline-flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" /> Ask
+                      </button>
+                    </div>
+                  )}
 
-                  {/* SEO / meta fields */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-slate-500 dark:text-slate-400">Excerpt ({(editing.excerpt || '').length}/200)</label>
-                      <textarea
-                        value={editing.excerpt || ''}
-                        onChange={(e) => setEditing((p) => ({ ...p, excerpt: e.target.value.slice(0, 200) }))}
+                  <div className="relative rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-[480px] flex flex-col"
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const files = e.dataTransfer.files;
+                      if (files?.length) handleImageUpload(files[0]);
+                    }}
+                    onPaste={(e) => {
+                      if (!e.clipboardData.files?.length) return;
+                      e.preventDefault();
+                      handleImageUpload(e.clipboardData.files[0]);
+                    }}
+                  >
+                    <div className="flex-1 relative">
+                      <HighlightedTextarea
+                        value={editing.body_markdown}
+                        onChange={onBodyChange}
                         disabled={!isEditable}
-                        rows={3}
-                        placeholder="Short summary for cards and SEO (max 200 chars)"
-                        className="w-full text-sm px-3 py-2 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 focus:outline-none focus:border-violet-500 disabled:opacity-60"
+                        ranges={piiFindings}
+                        textareaRef={bodyRef}
                       />
                     </div>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-xs text-slate-500 dark:text-slate-400">SEO title (optional)</label>
-                        <input
-                          type="text"
-                          value={editing.seo_title || ''}
-                          onChange={(e) => setEditing((p) => ({ ...p, seo_title: e.target.value }))}
-                          disabled={!isEditable}
-                          placeholder="Override the browser title for this article"
-                          className="w-full text-sm px-3 py-2 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 focus:outline-none focus:border-violet-500 disabled:opacity-60"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-500 dark:text-slate-400">Canonical URL (optional)</label>
-                        <input
-                          type="text"
-                          value={editing.canonical_url || ''}
-                          onChange={(e) => setEditing((p) => ({ ...p, canonical_url: e.target.value }))}
-                          disabled={!isEditable}
-                          placeholder="https://…"
-                          className="w-full text-sm px-3 py-2 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 focus:outline-none focus:border-violet-500 disabled:opacity-60"
-                        />
-                      </div>
-                    </div>
+                    {imageError && (
+                      <div className="text-xs px-3 py-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-t border-red-200 dark:border-red-800">{imageError}</div>
+                    )}
                   </div>
-
-                  {/* Body editor + live preview split pane */}
-                  <div className="flex flex-col lg:flex-row gap-0 rounded border border-slate-300 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
-                    {/* Editor pane */}
-                    <div className="flex-1 min-h-[360px] flex flex-col"
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const files = e.dataTransfer.files;
-                        if (files?.length) handleImageUpload(files[0]);
-                      }}
-                      onPaste={(e) => {
-                        if (!e.clipboardData.files?.length) return;
-                        e.preventDefault();
-                        handleImageUpload(e.clipboardData.files[0]);
-                      }}
-                    >
-                      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
-                        <span className="text-xs text-slate-500">Markdown</span>
-                        <div className="flex-1" />
-                        {isEditable && (
-                          <label className="text-xs inline-flex items-center gap-1 px-2 py-1 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
-                            <Upload className="w-3 h-3" />
-                            <span>Image</span>
-                            <input
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp,image/gif"
-                              className="hidden"
-                              disabled={imageUploading}
-                              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; handleImageUpload(f); }}
-                            />
-                          </label>
-                        )}
-                        {imageUploading && (
-                          <span className="text-xs inline-flex items-center gap-1 text-amber-600">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Uploading…
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex-1 relative">
-                        <HighlightedTextarea
-                          value={editing.body_markdown}
-                          onChange={onBodyChange}
-                          disabled={!isEditable}
-                          ranges={piiFindings}
-                          textareaRef={bodyRef}
-                        />
-                      </div>
-                      {imageError && (
-                        <div className="text-xs px-3 py-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-t border-red-200 dark:border-red-800">
-                          {imageError}
-                        </div>
-                      )}
-                      <div className="text-xs text-slate-400 px-3 py-1.5 border-t border-slate-200 dark:border-slate-800">
-                        # headings, **bold**, *italic*, [links](https://…), - lists, ```code blocks```, ![images](url). Drag or paste images here to upload.
-                        Minimum 200 characters.
-                      </div>
-                    </div>
-                    {/* Preview pane */}
-                    <div className="flex-1 min-h-[360px] border-t lg:border-t-0 lg:border-l border-slate-300 dark:border-slate-700 overflow-y-auto">
-                      <div className="px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs text-slate-500">Preview</div>
-                      <div className="p-4 prose dark:prose-invert max-w-none text-sm"><ReactMarkdown>{editing.body_markdown || ''}</ReactMarkdown></div>
-                    </div>
+                  <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500 dark:text-slate-400" data-testid="article-editor-footer">
+                    <span>{liveStats.words.toLocaleString()} words · {liveStats.minutes} min read · Markdown; drag or paste images in. At least 200 characters to send.</span>
+                    <span>{draftAudience(article.status)}</span>
                   </div>
                 </div>
               )}
@@ -1320,9 +1256,46 @@ export default function ArticleAuthorPage() {
                 </div>
               )}
             </div>
+          </main>
+          {panelOpen && (
+            <ArticleWritingPanel
+              key={`${article.id}:${panelRun || ''}`}
+              articleId={article.id}
+              editable={isEditable}
+              autoRun={panelRun}
+              getContext={getContext}
+              onPlace={onPlace}
+              onApplySeo={onApplySeo}
+              onApplyHeadline={onApplyHeadline}
+              onWaiting={setWaiting}
+              onClose={() => { setPanelOpen(false); setPanelRun(null); }}
+            />
           )}
-        </main>
+        </div>
+      )}
+
+      {publishOpen && article && (
+        <ArticlePublishSheet
+          article={article}
+          editing={editing}
+          setEditing={setEditing}
+          sectors={sectors}
+          editable={isEditable}
+          slugTouched={slugTouched}
+          setSlugTouched={setSlugTouched}
+          saving={saving}
+          submitting={submitting}
+          coverSrc={coverImg}
+          onClose={() => setPublishOpen(false)}
+          onSave={save}
+          onSubmit={async () => { await submit(); setPublishOpen(false); }}
+          onAsk={canSendForReview ? openAsk : null}
+        />
+      )}
+      {imageSheet && article && (
+        <ArticleImageSheet articleId={article.id} target={imageSheet} onClose={() => setImageSheet(null)} onPlaced={onImagePlaced} />
+      )}
       </div>
-    </div>
+    </RailFrame>
   );
 }

@@ -72,7 +72,7 @@ function worker(over = {}) {
   };
 }
 
-async function mount(role, { url = '/account/companies', handle = worker(), phone = false, user = null, known = KNOWN, active = { uid: 'c7' } } = {}) {
+async function mount(role, { url = '/account/portfolio', handle = worker(), phone = false, user = null, known = KNOWN, active = { uid: 'c7' } } = {}) {
   const restore = installDocument();
   if (user) localStorage.setItem('user', JSON.stringify(user));
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
@@ -119,8 +119,8 @@ test('each profile\'s tabs, at their own addresses; an Explorer cannot create a 
     assert.equal(accountViewFor({ pathname: path }), 'companies');
     assert.equal(accountPathFor({ section: 'companies', companiesTab: tab }), path);
   }
-  assert.equal(companiesPathFor('companies'), '/account/companies');
-  assert.equal(companiesTabFor('/account/companies/nope'), 'companies');
+  assert.equal(companiesPathFor('companies'), '/account/portfolio');
+  assert.equal(companiesTabFor('/account/portfolio/nope'), 'companies');
 });
 
 test('a card says what each block holds: an unread count or cycle list is never 0 or "none"', () => {
@@ -172,8 +172,8 @@ test('funds by the firm that runs them, then a fund with no firm; engagements wi
 test('mounted founder (CMP1): the tabs at their addresses, two cards from the summary read, the active one this device\'s', async () => {
   const v = await mount('founder');
   try {
-    assert.equal(v.prop('companies-tab-projects', 'href'), '/account/companies/projects');
-    assert.equal(v.prop('companies-tab-invitations', 'href'), '/account/companies/invitations');
+    assert.equal(v.prop('companies-tab-projects', 'href'), '/account/portfolio/projects');
+    assert.equal(v.prop('companies-tab-invitations', 'href'), '/account/portfolio/invitations');
     assert.ok(!v.has('companies-tab-funds') && !v.has('companies-tab-engagements'));
     assert.match(v.of('companies-tabs'), /Companies2.*Projects3.*Invitations/s);
     assert.equal(v.count('company-card'), 2);
@@ -188,13 +188,13 @@ test('mounted founder (CMP1): the tabs at their addresses, two cards from the su
 });
 
 test('mounted founder: Projects grouped (CMP3) and Invitations answered in a dialog (CMP5)', async () => {
-  let v = await mount('founder', { url: '/account/companies/projects' });
+  let v = await mount('founder', { url: '/account/portfolio/projects' });
   try {
     assert.equal(v.count('project-group'), 3);
     await v.change('projects-search', 'orbit');
     assert.equal(v.count('project-row'), 1);
   } finally { await v.close(); }
-  v = await mount('founder', { url: '/account/companies/invitations' });
+  v = await mount('founder', { url: '/account/portfolio/invitations' });
   try {
     assert.match(v.of('invitations-to-you'), /Saltmarsh Energy · as Co-founder.*From Ben Sample.*Juniper Grid · as Member.*expires 4 Nov/s);
     assert.ok(!v.has('invitation-decline-c-ci1'), 'a company invitation offered a decline no route records');
@@ -212,7 +212,7 @@ test('mounted founder: Projects grouped (CMP3) and Invitations answered in a dia
 });
 
 test('mounted: a refused answer is said in the dialog in words, and nothing is claimed', async () => {
-  const v = await mount('founder', { url: '/account/companies/invitations', handle: worker({
+  const v = await mount('founder', { url: '/account/portfolio/invitations', handle: worker({
     'POST /api/projects/invitations/41/accept': () => response({ error: 'already_answered', message: 'This invitation was already answered.' }, 409),
   }) });
   try {
@@ -232,7 +232,7 @@ test('mounted investor (CMP9): Funds, not Projects; each firm\'s funds on its ca
     assert.match(funds, /Fund I · 2024 · Fundraising · Manage/);
     assert.ok(!v.reads().includes('GET /api/account/projects') && !v.reads().includes('GET /api/projects'));
   } finally { await v.close(); }
-  v = await mount('investor', { url: '/account/companies/funds' });
+  v = await mount('investor', { url: '/account/portfolio/funds' });
   try {
     assert.equal(v.count('fund-group'), 2);
   } finally { await v.close(); }
@@ -243,7 +243,7 @@ test('mounted Operating Partner (CMP10) and advisor (CMP11): the firm\'s counts,
   try {
     assert.match(v.of('company-firm-counts'), /3 engagements.*0 quotes.*offers: could not be read/s);
   } finally { await v.close(); }
-  v = await mount('advisor', { url: '/account/companies/engagements' });
+  v = await mount('advisor', { url: '/account/portfolio/engagements' });
   try {
     assert.match(v.of('engagements-note'), /not yet separated by company/);
     assert.match(v.of('engagements'), /Clinic App.*since 2 Sep 2026 · until 30 Jan 2027.*Project.*Data room.*Open brief/s);
@@ -287,7 +287,7 @@ test('states (CMP14–CMP16): empty offers New company; a failed summary is Unre
     assert.match(v.of('companies-tab-companies'), /Companies—/);
     assert.match(v.of('companies-tabs'), /Invitations2/, 'one failed read blanked another tab');
   } finally { await v.close(); }
-  v = await mount('founder', { url: '/account/companies/invitations', handle: worker({ 'GET /api/account/invitations': () => response({ error: 'x' }, 503) }) });
+  v = await mount('founder', { url: '/account/portfolio/invitations', handle: worker({ 'GET /api/account/invitations': () => response({ error: 'x' }, 503) }) });
   try { assert.match(v.of('invitations-unreadable'), /Invitations to you could not be read/); } finally { await v.close(); }
   v = await mount('founder', { handle: () => new Promise(() => {}) });
   try {
@@ -311,7 +311,7 @@ test('mounted New company: the dialog says what happens, then one create', async
 
 test('the routes, the guard, and no browser pop-up', () => {
   const app = read('frontend/src/App.jsx');
-  assert.ok(app.includes(`<Route path="/account/companies/:tab" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />`));
+  assert.ok(app.includes(`<Route path="/account/portfolio/:tab" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />`));
   const dir = 'frontend/src/pages/account/companies/';
   const src = ['CompaniesProjects.jsx', 'CompaniesDialogs.jsx', 'companiesModel.js'].map((f) => read(dir + f)).join('\n');
   assert.doesNotMatch(src, /window\.(alert|confirm|prompt)\(|\balert\(/);

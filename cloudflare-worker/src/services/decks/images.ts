@@ -23,7 +23,8 @@
 import type { Env } from '../../types';
 // The parts every image press shares (the deck's and D1409's article images) live in `../aiImages`.
 export {
-  EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_MODEL, IMAGE_MODEL_LABEL, MIMES, REAL_PERSON_MESSAGE, balanceRefusal, personIn, sniffMime,
+  EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_MODEL, IMAGE_MODEL_LABEL, IMAGE_MODEL_LABELS, MIMES, REAL_PERSON_MESSAGE, balanceRefusal,
+  imageModelLabel, personIn, sniffMime,
 } from '../aiImages';
 
 export const IMAGE_PAGE = 'Founder · Raise · Pitch deck';
