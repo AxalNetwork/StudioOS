@@ -30,6 +30,7 @@ export * from './api/adminStorage.js';
 export * from './api/adminSubAccounts.js';
 export * from './api/aiBudget.js';
 export * from './api/approvalBoards.js';
+export * from './api/articleAuthoring.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
 export * from './api/billingAlerts.js';
