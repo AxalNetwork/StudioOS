@@ -23,7 +23,7 @@ addresses are `../dealPageModel.js` (D1148).
   round, your next step and the deck's slot.
 - `DealNotes.jsx` — DL14: your firm's notes (part 2's store; only a note's
   author edits or deletes it, each in an in-page dialog), the slot for
-  Eadwyn's draft (AUTOFILL #2431), and the deal's activity (`DealActivity`,
+  Eadwyn's draft through Ask, and the deal's activity (`DealActivity`,
   also the founder's and staff's Activity tab).
 - `dealVisit.js` — reads `whats-new` once per deal per visit, because each
   read advances the reader's "last looked" marker (D1150).

@@ -334,6 +334,7 @@ test('mounted Checklist: each area and item from the read, links to Files and Up
     assert.ok(v.hrefs().includes('/raise/data-room/new?project_id=3'));
     assert.ok(v.hrefs().includes('/raise/fundraising-readiness?project_id=3'));
     assert.equal(v.textOf('dataroom-proposals-wait'), PROPOSALS_WAIT);
+    assert.match(v.textOf('dataroom-proposals-wait'), /Each waits until Ask can record where a proposal came from\./);
     assert.ok(!v.buttons().some((b) => /Accept|Dismiss/.test(b)), 'a proposal is never offered for acceptance here');
     assert.deepEqual(writes(v.requests), [], 'the checklist changes nothing');
   } finally { await v.close(); }

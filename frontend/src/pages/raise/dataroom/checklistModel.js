@@ -18,7 +18,7 @@
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
 
-export const PROPOSALS_WAIT = 'Not read here yet. Eadwyn proposes three kinds of change only: a checklist match, a folder for a top-level file, and a reading of gaps. Each waits for AUTOFILL (#2431) to record where a proposal came from. Nothing here changes a file, a match or who can open it.';
+export const PROPOSALS_WAIT = 'Not read here yet. Eadwyn proposes three kinds of change only: a checklist match, a folder for a top-level file, and a reading of gaps. Each waits until Ask can record where a proposal came from. Nothing here changes a file, a match or who can open it.';
 export const READINESS_WAIT = 'Not read here yet. Fundraising readiness scores the data room; its figure is not carried to this page.';
 export const READINESS_PATH = '/raise/fundraising-readiness';
 export const MATCH_NOTE = 'Matching changes nothing about who can open a file.';
