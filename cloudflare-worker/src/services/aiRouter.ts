@@ -37,7 +37,7 @@ import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
 import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
-import { resolveRail, resolveRailChain, resolveRailOption } from './ai/railMatrix';
+import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './ai/railMatrix';
 import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleConnections';
 import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 
@@ -657,6 +657,9 @@ const SMALL_LLAMA = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const MID_LLAMA   = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 // D766 — the vision model for the system's image calls (D761 PR 2's content parts).
 const VISION_SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
+// D1478 (#3721): every draw model, FLUX.1 Schnell first (the routes' default).
+const DRAW_MODELS = ['@cf/black-forest-labs/flux-1-schnell',
+  ...Object.keys(MODEL_CONNECTIONS).filter((id) => MODEL_CONNECTIONS[id].operation === 'draw' && id !== '@cf/black-forest-labs/flux-1-schnell')];
 
 export const ROUTE: Record<TaskClass, RouteEntry> = {
   ...MODULE_ROUTES,
@@ -876,8 +879,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   ops_summary:  { provider: 'workers-ai', model: SMALL_LLAMA },
   image_screen: { provider: 'workers-ai', model: VISION_SCOUT },
   image_alt_text: { provider: 'workers-ai', model: VISION_SCOUT },
-  brand_logo:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
-  deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
+  // D1478 (#3721): the draw models are both tasks' alternates, so the option's
+  // pick (`draft:logo`, `deck:image`) is the run's model. No fallback chain: a
+  // failed image is never redrawn on a dearer model.
+  brand_logo:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
+  deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
   system_job:   { provider: 'workers-ai', model: SMALL_LLAMA },
@@ -1723,6 +1729,36 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
     });
     if (resolved && !resolved.ok) return { ok: false, refusal: 'model_not_offered', error: `${resolved.model} cannot do this page's work`, record: true };
     if (resolved) railed = { primary: resolved.primary, chain: resolved.chain };
+  }
+
+  // ---- D1478 (#3721): an image or a transcription option's pick ------------
+  // A draw run (`deck:image`, `draft:logo`) or an audio run whose option lists
+  // the task's own models takes, in order: the caller's model when the option
+  // offers it, else the member's stored pick for the option, else the route's
+  // default. Each must be one of the route's alternates and offered (status
+  // and the partner gate); a stale pick reads as none. An image never falls
+  // back to another model.
+  if (!railed && opts.rail?.option && (opts.draw || route.isAudio) && route.alternates?.length) {
+    const row = resolveRailOption(opts.rail.page, opts.rail.option);
+    if (row && (opts.draw ? row.kind === 'image' : row.handler === 'transcribe')) {
+      const takes = (id: string | null | undefined): id is string => {
+        if (!id || !rowOffers(row, id) || !route.alternates!.includes(id)) return false;
+        const m = catalogue.modelById(id);
+        return !!m && catalogue.isOffered(m, env as catalogue.CatalogueSwitches);
+      };
+      // The route's own chain when its default runs, so a run with no pick behaves as before.
+      const chainAfter = (primary: string) => (opts.draw ? []
+        : primary === route.model ? (route.fallbackChain ?? []) : (route.fallbackChain ?? []).filter((id) => id !== primary));
+      if (opts.model) {
+        if (!takes(opts.model)) return { ok: false, refusal: 'model_not_offered', error: `${opts.model} is not offered for ${opts.task}`, record: true };
+        return { ok: true, primary: opts.model, chain: chainAfter(opts.model) };
+      }
+      let picks: { page: string | null; option: string | null };
+      try { picks = await railPicks(env, opts.userId, row.pageKey, row.optionKey); }
+      catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your model picks for this page could not be read. Nothing was run.', record: false }; }
+      const primary = takes(picks.option) ? picks.option : route.model;
+      return { ok: true, primary, chain: chainAfter(primary) };
+    }
   }
 
   const offered = route.alternates ?? [];

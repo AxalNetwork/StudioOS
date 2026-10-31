@@ -19,7 +19,7 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { CYCLES, CYCLE_ROUTE, cycleBands, cycleFills, cycleRouteSource } from './_cycleBands.mjs';
 import {
-  FOUNDER_HANDLERS, FOUNDER_KINDS, FOUNDER_OPTIONS, FOUNDER_QUIET_PAGES,
+  FOUNDER_HANDLERS, FOUNDER_KINDS, FOUNDER_OPTIONS, FOUNDER_QUIET_PAGES, OPTION_KINDS,
 } from '../src/lib/railOptions/founder.js';
 import { pageKeyFor } from '../src/lib/railPages.js';
 import { railOptionFor } from '../src/lib/railOptions/index.js';
@@ -87,7 +87,9 @@ test('every option names a founder page, a kind, a handler and a key unique on i
     assert.ok(!seen.has(id), `${id}: the key is used twice on its page`);
     seen.add(id);
     assert.ok(typeof o.label === 'string' && o.label.trim(), `${id}: no label`);
-    assert.ok(FOUNDER_KINDS.includes(o.kind), `${id}: ${o.kind} is not one of the canvas's kinds`);
+    assert.ok(FOUNDER_KINDS.includes(o.kind) || OPTION_KINDS.includes(o.kind), `${id}: ${o.kind} is not one of the canvas's kinds`);
+    // D1478: an option-only kind names the job it runs, and no other option names one.
+    assert.equal(OPTION_KINDS.includes(o.kind), typeof o.task === 'string', `${id}: only an option-only kind names its task`);
     assert.ok(FOUNDER_HANDLERS.includes(o.handler), `${id}: ${o.handler} is not a handler`);
     assert.ok(Array.isArray(o.at) && o.at.length, `${id}: says nowhere where it lives`);
   }

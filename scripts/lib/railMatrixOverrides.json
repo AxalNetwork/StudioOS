@@ -1,5 +1,5 @@
 {
-  "_about": "D764 (#2089): what scripts/build-rail-matrix.mjs adds to the owner's canvas tables (design/incoming/airail-every-page-data/canvas.json). The canvas names models by display name; `models` maps each to its Workers AI id and what it can do. `kinds` says which capabilities a kind's models may have and which its default must have. `searchIndexKinds` are the kinds whose embedding writes or reads axal-search, a 768-dimension bge-base index (wrangler.toml), so their embedding is `searchIndexModel`. `pages` adds the page rows the canvas has no board for, and, with `keepKind`, keeps a renamed board on the kind it had (D796). Every id is checked against the pricing file (cloudflare-pricing-2026-10-15.md) until D760's catalogue lands.",
+  "_about": "D764 (#2089): what scripts/build-rail-matrix.mjs adds to the owner's canvas tables (design/incoming/airail-every-page-data/canvas.json). The canvas names models by display name; `models` maps each to its Workers AI id and what it can do. `kinds` says which capabilities a kind's models may have and which its default must have. `searchIndexKinds` are the kinds whose embedding writes or reads axal-search, a 768-dimension bge-base index (wrangler.toml), so their embedding is `searchIndexModel`. `pages` adds the page rows the canvas has no board for, and, with `keepKind`, keeps a renamed board on the kind it had (D796). Every id is checked against the pricing file (cloudflare-pricing-2026-10-15.md) until D760's catalogue lands. D1478 (#3721): `optionKinds` are kinds an option may take and no page row does (`image`: the draw models, FLUX.1 Schnell first); `transcribeModels` are what an option with handler `transcribe` lists, the `transcribe` task's alternates.",
   "models": {
     "Aura-2 EN": { "id": "@cf/deepgram/aura-2-en", "caps": ["voice"] },
     "Aura-2 ES": { "id": "@cf/deepgram/aura-2-es", "caps": ["voice"] },
@@ -65,6 +65,21 @@
     "multi": { "defaultNeeds": "embedding", "allow": ["embedding", "translation", "text"] },
     "search": { "defaultNeeds": "embedding", "allow": ["embedding", "text"] }
   },
+  "optionKinds": {
+    "image": { "defaultNeeds": "image", "allow": ["image"], "models": [
+      { "t": "FLUX.1 Schnell", "line": "Quick drafts at the lowest price" },
+      { "t": "FLUX.2 Klein 4B", "line": "Sharper detail, still quick" },
+      { "t": "FLUX.2 Klein 9B", "line": "Finer detail and cleaner lettering" },
+      { "t": "FLUX.2 Dev", "line": "The most detailed images, and the slowest" },
+      { "t": "Lucid Origin", "line": "Graphic design and crisp text" },
+      { "t": "Phoenix 1.0", "line": "Close to the prompt, with clear text" }
+    ] }
+  },
+  "transcribeModels": [
+    { "t": "Whisper Large v3 Turbo", "line": "Turns each recording into a transcript" },
+    { "t": "Deepgram Nova-3", "line": "Labels who said what" },
+    { "t": "Whisper", "line": "A plain transcript at the lowest price" }
+  ],
   "searchIndexKinds": ["research", "search"],
   "searchIndexModel": "@cf/baai/bge-base-en-v1.5",
   "pages": {
