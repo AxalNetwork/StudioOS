@@ -108,14 +108,21 @@ export async function getRecaptchaSiteKey(env: Env): Promise<string | null> {
     return await withDeadline((async () => {
       const key = await loadGcipApiKey(env);
       if (!key) return null;
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+      const source = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
       const cached = await env.RATE_LIMITS.get('gcip-recaptcha-site-key');
-      if (cached && /^[A-Za-z0-9_-]{1,256}$/.test(cached)) return cached;
+      if (cached) {
+        try {
+          const value = JSON.parse(cached);
+          if (value.source === source && typeof value.siteKey === 'string' && /^[A-Za-z0-9_-]{1,256}$/.test(value.siteKey)) return value.siteKey;
+        } catch { /* old or corrupt cache entries are refreshed */ }
+      }
       const response = await fetch(`${ENDPOINT}/recaptchaParams?key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(2_000) });
       if (!response.ok) return null;
       const body = await response.json() as { recaptchaSiteKey?: unknown };
       const siteKey = body.recaptchaSiteKey;
       if (typeof siteKey !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(siteKey)) return null;
-      await env.RATE_LIMITS.put('gcip-recaptcha-site-key', siteKey, { expirationTtl: 3600 });
+      await env.RATE_LIMITS.put('gcip-recaptcha-site-key', JSON.stringify({ source, siteKey }), { expirationTtl: 3600 });
       return siteKey;
     })(), 2_000, 'gcip-site-key');
   } catch { return null; }

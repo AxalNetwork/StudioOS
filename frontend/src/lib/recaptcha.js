@@ -32,8 +32,9 @@ export function loadRecaptcha() {
   return loading;
 }
 
-export async function invisibleToken(container, siteKey) {
+export async function invisibleToken(container, siteKey, signal) {
   const api = await loadRecaptcha();
+  if (signal?.aborted) throw new Error('Security check cancelled.');
   if (!container || !siteKey) throw new Error(LOAD_ERROR);
   let widget = widgets.get(container);
   if (!widget) {
@@ -43,6 +44,7 @@ export async function invisibleToken(container, siteKey) {
       if (!pending) return;
       widget.pending = null;
       clearTimeout(pending.timer);
+      pending.cleanup();
       try { api.reset(widget.id); } catch { /* retain the original result */ }
       if (error) pending.reject(new Error(error));
       else if (typeof token === 'string' && token) pending.resolve(token);
@@ -61,7 +63,10 @@ export async function invisibleToken(container, siteKey) {
   }
   if (widget.pending) throw new Error('A security check is already in progress.');
   return new Promise((resolve, reject) => {
-    widget.pending = { resolve, reject, timer: setTimeout(() => widget.finish('The security check expired. Try again.'), 120_000) };
+    const abort = () => widget.finish('Security check cancelled.');
+    widget.pending = { resolve, reject, timer: setTimeout(() => widget.finish('The security check expired. Try again.'), 120_000), cleanup: () => signal?.removeEventListener('abort', abort) };
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) { abort(); return; }
     try { api.execute(widget.id); } catch { widget.finish(LOAD_ERROR); }
   });
 }

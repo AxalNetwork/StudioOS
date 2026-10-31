@@ -28,19 +28,20 @@ export const api = {
 const source = prelude + settings.slice(start, settings.indexOf('\nfunction ', start + 10)) + '\nexport { SmsPanel };';
 const button = (f, label) => f.nodes().find(n => n.tagName === 'BUTTON' && textOf(n).trim() === label);
 const change = (f, id, value) => act(async () => f.props(f.by(id)).onChange({ target: { value } }));
-async function panel(module) {
+async function panel(module, holdCheck = false) {
   const before = globalThis.grecaptcha;
   let options, tokens = 0;
   const calls = { renders: 0, resets: 0 };
   globalThis.grecaptcha = {
     render(_container, opts) { calls.renders++; options = opts; return 0; },
-    execute() { options.callback('synthetic-token-' + ++tokens); },
+    execute() { if (!holdCheck) options.callback('synthetic-token-' + ++tokens); },
     reset() { calls.resets++; },
   };
   const f = await mountForm(h(module.SmsPanel, { data: { totp_configured: true }, flash() {}, onChanged() {} }));
   const unmount = f.unmount;
   f.unmount = async () => { await unmount(); if (before === undefined) delete globalThis.grecaptcha; else globalThis.grecaptcha = before; };
   f.widget = calls;
+  f.finishCheck = () => options.callback('synthetic-token-' + ++tokens);
   return f;
 }
 async function numberStep(f) { await f.click('Add a phone number'); await change(f, 'sms-phone-input', '079 000 00 00'); }
@@ -75,6 +76,25 @@ test('send requires a valid allowed number and the loaded browser check', async 
     ['&& countryOk && checkReady;', '&& countryOk;'],
     ['normalizedPhone.e164, normalizedPhone.country, token', 'normalizedPhone.e164, normalizedPhone.country, null'],
   ]);
+});
+
+async function cancelCheck(module) {
+  const f = await panel(module, true);
+  try {
+    await numberStep(f);
+    let sending;
+    await act(async () => { sending = f.props(button(f, 'Send verification code')).onClick(); await Promise.resolve(); });
+    assert.equal(f.props(button(f, 'Cancel')).disabled, false);
+    await f.click('Cancel');
+    // Even a late widget completion must not send after the member cancels.
+    await act(async () => { f.finishCheck(); await sending; });
+    assert.deepEqual([module.api.sends.length, !!button(f, 'Add a phone number'), !!f.by('sms-error'), f.widget.resets], [0, true, false, 1]);
+    await f.click('Add a phone number');
+    assert.equal(f.props(f.by('sms-phone-input')).disabled, false);
+  } finally { await f.unmount(); }
+}
+test('a pending or dismissed bot check can be cancelled without sending or leaving the form busy', async () => {
+  await mutationCheck(source, 'pages/SettingsPage.jsx', cancelCheck, [["pendingCheck.current?.abort(); setStep('idle');", "setStep('idle');"]]);
 });
 
 async function sendFlow(module, t) {

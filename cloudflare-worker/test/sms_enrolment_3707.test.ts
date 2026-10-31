@@ -59,6 +59,16 @@ async function statusRead(t: any, route = sms) {
 }
 test('status exposes shared country policy and only the cached public site key', t => statusRead(t));
 
+test('rotating the project credential refreshes the cached public key', async t => {
+  const f = await fixture(t), first = await read(f);
+  const cached = JSON.parse(f.kv.get('gcip-recaptcha-site-key'));
+  f.env.GCIP_API_KEY = 'next'.repeat(12);
+  f.siteKey = 'public'.repeat(3);
+  const second = await read(f);
+  const next = f.kv.get('gcip-recaptcha-site-key');
+  assert.deepEqual([first.recaptcha_site_key, second.recaptcha_site_key, f.calls.length, JSON.parse(next).source !== cached.source, next.includes(f.env.GCIP_API_KEY)], ['synthetic-site-key', 'publicpublicpublic', 2, true, false]);
+});
+
 test('incomplete bot-check setup is unavailable; the site-key read never throws', async t => {
   const f = await fixture(t);
   f.siteKey = null;

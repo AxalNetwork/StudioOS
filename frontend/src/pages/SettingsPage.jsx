@@ -1977,7 +1977,10 @@ function SmsPanel({ data, flash, onChanged }) {
   const [last4, setLast4] = useState('');
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now);
+  const [checking, setChecking] = useState(false);
   const recaptchaRef = useRef(null);
+  const pendingCheck = useRef(null);
+  useEffect(() => () => pendingCheck.current?.abort(), []);
 
   const refresh = async () => {
     try { setStatus(await api.smsStatus()); }
@@ -2025,10 +2028,15 @@ function SmsPanel({ data, flash, onChanged }) {
     if (!countryReady) return;
     if (!normalizedPhone) { flash(PHONE_ERROR, 'error'); return; }
     if (!canSend || (step === 'verify' && resendSeconds > 0)) return;
+    const controller = new AbortController();
+    pendingCheck.current = controller;
     setBusy(true);
+    setChecking(true);
     setError('');
     try {
-      const token = status.recaptcha_site_key ? await invisibleToken(recaptchaRef.current, status.recaptcha_site_key) : null;
+      const token = status.recaptcha_site_key ? await invisibleToken(recaptchaRef.current, status.recaptcha_site_key, controller.signal) : null;
+      setChecking(false);
+      if (controller.signal.aborted) return;
       const res = await api.smsStartEnrollment(normalizedPhone.e164, normalizedPhone.country, token);
       setSession(res.session_info);
       setLast4(res.last4);
@@ -2038,8 +2046,8 @@ function SmsPanel({ data, flash, onChanged }) {
       setStep('verify');
       flash('Verification code sent.');
     } catch (e) {
-      await refusal(e, 'Could not send verification code.');
-    } finally { setBusy(false); }
+      if (!controller.signal.aborted) await refusal(e, 'Could not send verification code.');
+    } finally { pendingCheck.current = null; setChecking(false); setBusy(false); }
   };
 
   const confirm = async () => {
@@ -2163,9 +2171,9 @@ function SmsPanel({ data, flash, onChanged }) {
           <div className="flex gap-2">
             <button onClick={start} disabled={!canSend}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium">
-              {busy ? 'Sending…' : 'Send verification code'}
+              {busy ? (checking ? 'Checking…' : 'Sending…') : 'Send verification code'}
             </button>
-            <button onClick={() => { setStep('idle'); setPhone(''); setError(''); }}
+            <button disabled={busy && !checking} onClick={() => { pendingCheck.current?.abort(); setStep('idle'); setPhone(''); setError(''); }}
               className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm">
               Cancel
             </button>
@@ -2188,7 +2196,7 @@ function SmsPanel({ data, flash, onChanged }) {
           <button onClick={start} disabled={busy || resendSeconds > 0 || !checkReady} className="text-sm text-violet-700 disabled:text-gray-500 mr-3" data-testid="sms-resend">
             {resendSeconds > 0 ? `Resend in ${Math.floor(resendSeconds / 60)}:${String(resendSeconds % 60).padStart(2, '0')}` : 'Resend'}
           </button>
-          <button onClick={() => { setStep('enroll'); setCode(''); setSession(null); setError(''); setResendAt(0); }}
+          <button disabled={busy && !checking} onClick={() => { pendingCheck.current?.abort(); setStep('enroll'); setCode(''); setSession(null); setError(''); setResendAt(0); }}
             className="text-xs text-gray-500 hover:text-gray-700">Use a different number</button>
         </div>
       )}
