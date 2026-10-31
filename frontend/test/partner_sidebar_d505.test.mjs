@@ -32,11 +32,11 @@ const APP = codeOnly(read('frontend/src/App.jsx'));
 const partnerRows = () => SIDEBAR_GROUPS.partner.flatMap((g) => g.items);
 
 // D395's own mapping, retired address → successor, and the row that owns each.
-// The settings (`/account/companies/settings` since D1140) are owned by the sidebar's pinned footer, not a row, so
+// The settings (`/account/portfolio/settings` since D1140) are owned by the sidebar's pinned footer, not a row, so
 // its owner here is null: listing it in a row's `match` lights two rows.
 const SUCCESSOR = {
-  '/partner/operations': ['/account/companies/settings', null], // D1140 (#3020)
-  '/partner/operations/overview': ['/account/companies/settings', null],
+  '/partner/operations': ['/account/portfolio/settings', null], // D1140 (#3020)
+  '/partner/operations/overview': ['/account/portfolio/settings', null],
   '/partner/operations/capabilities': ['/offers/catalog', 'Offers'],
   '/partner/operations/portfolio': ['/delivery/health', 'Delivery'],
   '/partner/operations/engagements': ['/pipeline/proposals', 'Pipeline'],
@@ -89,7 +89,7 @@ test('the full-bleed list still covers every partner workspace route, has no dup
   for (const p of ['/pipeline/proposals', '/pipeline/analytics', '/delivery/health', '/offers/catalog']) {
     assert.ok(PARTNER_FULL_BLEED.includes(p), `${p} is a successor that owns a full-bleed body and is not listed`);
   }
-  assert.ok(!PARTNER_FULL_BLEED.includes('/account/companies/settings'), 'Firm Settings is a centred page by design');
+  assert.ok(!PARTNER_FULL_BLEED.includes('/account/portfolio/settings'), 'Firm Settings is a centred page by design');
   assert.deepEqual(PARTNER_FULL_BLEED.filter((p, i, a) => a.indexOf(p) !== i), []);
 });
 

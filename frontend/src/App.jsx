@@ -539,7 +539,7 @@ import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect'
 import CapRelMovedRedirect from './pages/raise/caprel/CapRelMovedRedirect';
 import UseOfFundsMovedRedirect from './pages/raise/useoffunds/UseOfFundsMovedRedirect';
 import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
-import { CompanySettingsRedirect } from './pages/account/companies/CompaniesMoved';
+import { CompaniesMovedRedirect, CompanySettingsRedirect } from './pages/account/companies/CompaniesMoved';
 import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
@@ -2633,9 +2633,15 @@ function AppInner() {
           Usage sub-page answered 404; SettingsPage reads the page from the path. */}
       <Route path="/account/usage/:page" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       {/* D1140: the full company settings (what /company-settings drew), the active company's, before :tab. */}
-      <Route path="/account/companies/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
-      <Route path="/account/companies/:uid/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
-      <Route path="/account/companies/:tab" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      {/* D1415 part 4 (#3856): the section is at /account/portfolio; settings still before :tab. */}
+      <Route path="/account/portfolio/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
+      <Route path="/account/portfolio/:uid/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
+      <Route path="/account/portfolio/:tab" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      {/* D1415 part 4: every old address forwards in one hop, its query and hash kept, ?moved=companies added. */}
+      <Route path="/account/companies" element={<CompaniesMovedRedirect />} />
+      <Route path="/account/companies/settings" element={<CompaniesMovedRedirect />} />
+      <Route path="/account/companies/:uid/settings" element={<CompaniesMovedRedirect />} />
+      <Route path="/account/companies/:tab" element={<CompaniesMovedRedirect />} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
       {/* Phase 0.1 — investor role added to every guard a partner currently
@@ -3823,14 +3829,14 @@ function AppInner() {
           destination guards itself, so an unentitled visitor is refused there
           rather than at a URL that no longer has a page (the D118 shape).
           None of the retired pages read a query string, so none is carried.
-            root, overview → /account/companies/settings (the firm profile card, D390; D1140 moved it from /company-settings)
+            root, overview → /account/portfolio/settings (the firm profile card, D390; D1140 moved it from /company-settings)
             capabilities   → /offers/catalog (the service catalogue writes)
             portfolio      → /delivery/health (founder reviews, D390)
             engagements    → /pipeline/proposals (withdraw; the lifecycle and
                               invoice ledger are on /delivery/board)
             performance    → /pipeline/analytics (the same quotesAnalytics read) */}
-      <Route path="/partner/operations" element={<Navigate to="/account/companies/settings" replace />} />
-      <Route path="/partner/operations/overview" element={<Navigate to="/account/companies/settings" replace />} />
+      <Route path="/partner/operations" element={<Navigate to="/account/portfolio/settings" replace />} />
+      <Route path="/partner/operations/overview" element={<Navigate to="/account/portfolio/settings" replace />} />
       <Route path="/partner/operations/capabilities" element={<Navigate to="/offers/catalog" replace />} />
       <Route path="/partner/operations/portfolio" element={<Navigate to="/delivery/health" replace />} />
       <Route path="/partner/operations/engagements" element={<Navigate to="/pipeline/proposals" replace />} />
@@ -3939,7 +3945,7 @@ function AppInner() {
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ReferRedirect />)} />
       {/* D1140 (#3020, CMP19b, owner question 2, A): one place for companies. /company-settings forwards to the
           active company's page under Companies and projects with the moved notice, the query and hash kept; it is
-          counted for #2319. The full settings are at /account/companies/<uid>/settings. */}
+          counted for #2319. The full settings are at /account/portfolio/<uid>/settings. */}
       <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CompanySettingsRedirect />)} />
       {/* D651 — Integrations are Connectors now; both old addresses redirect
           to /account/connectors, keeping ?query= so OAuth returns still land.

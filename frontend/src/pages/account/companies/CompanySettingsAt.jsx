@@ -2,10 +2,10 @@
  * D1140 (#3020, CMP19) — the full company settings at their address under
  * Companies and projects (the owner's choice, 2026-10-27):
  *
- *   /account/companies/<uid>/settings   the company active on this device;
+ *   /account/portfolio/<uid>/settings   the company active on this device;
  *                                       another company says so and links
  *                                       to its page, where it can be made active
- *   /account/companies/settings         whichever is active, or, with none, a
+ *   /account/portfolio/settings         whichever is active, or, with none, a
  *                                       partner's Firm Settings, an advisor's
  *                                       Practice Settings and the way to
  *                                       create or join a company

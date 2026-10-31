@@ -329,7 +329,7 @@ export default function FounderTeamPage() {
         <Card>
           <p className="text-sm text-gray-700 dark:text-gray-300">
             Team is scoped to a company, and this account has no company membership yet.
-            Create one or accept an invitation in <Link to="/account/companies" className="text-violet-700 underline dark:text-violet-300">Companies and projects</Link>.
+            Create one or accept an invitation in <Link to="/account/portfolio" className="text-violet-700 underline dark:text-violet-300">Companies and projects</Link>.
           </p>
         </Card>
       </div>

@@ -195,7 +195,7 @@ test('Company Settings is the pinned footer only, never a nav row', () => {
   // no role gate — so removing the row cannot strand a role without a door.
   const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
   // D1140 (#3020): the footer is Companies and projects now.
-  assert.ok(/to="\/account\/companies"/.test(nav), 'the pinned footer lost its link');
+  assert.ok(/to="\/account\/portfolio"/.test(nav), 'the pinned footer lost its link');
   assert.ok(!/to="\/company-settings"/.test(nav), 'the footer points at the retired address');
   assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
 });
