@@ -351,6 +351,7 @@ import referencesRoutes from './routes/references';
 import comarketingRoutes from './routes/comarketing';
 import companyRoutes from './routes/company';
 import companyLifecycle from './routes/company_lifecycle';
+import companyLegal from './routes/company_legal';
 import projectLifecycle from './routes/project_lifecycle';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 // #45 — the partner workspace's own stores (migrations 208/209). Mounted under
@@ -1656,6 +1657,8 @@ app.route('/api/services', servicesRoutes);
 app.route('/api/comarketing', comarketingRoutes);
 // D1137 — archive, restore and the primary-admin transfer.
 app.route('/api', companyLifecycle);
+// D1415: the company's legal record, officers, locations, sealed tax ID and slug.
+app.route('/api', companyLegal);
 app.route('/api', companyRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);

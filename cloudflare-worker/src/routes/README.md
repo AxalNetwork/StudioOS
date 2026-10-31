@@ -95,6 +95,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
 /api/company/…     → company_lifecycle.ts (D1137: archive, restore and the primary-admin transfer in one batch, primary admin only, each with its membership event; mounted at /api before company.ts)
+/api/company/…     → company_legal.ts (D1415: the legal record, sealed tax ID, officers (ceased, never deleted), locations (one open registered address; closed, never deleted) and the company slug with its history; member reads, editor writes; mounted at /api after company_lifecycle.ts, before company.ts)
 /api/projects      → project_lifecycle.ts (D1137: POST /:id/move to a company the owner belongs to, or out of one; POST /:id/transfer the owner seat to a co-founder with a founder account; each with its membership event; mounted before projects.ts)
 /api/projects      → projects.ts
 /api/cycles/build  → cycle_build.ts      (Build overview, six module reads, D662 field writes, and D686 system mappings)
