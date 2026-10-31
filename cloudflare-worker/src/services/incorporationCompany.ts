@@ -52,7 +52,7 @@ type OrderFacts = {
   id: number; project_id: number; company_name: string | null; jurisdiction_id: string | null;
   registered_agent_name: string | null; registered_agent_address: string | null;
 };
-type ProjectFacts = { id: number; founder_id: number | null; company_id: number | null };
+type ProjectFacts = { id: number; founder_id: number | null; company_id: number | null; slug: string | null };
 type CompanyFacts = {
   id: number; uid: string; archived_at: string | null; legal_name: string | null; legal_form: string | null;
   jurisdiction: string | null; incorporation_date: string | null; registered_agent_name: string | null;
@@ -86,7 +86,7 @@ const clean = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : nu
 export async function filingCompanyStatements(
   env: Env, order: OrderFacts, filedOn: string, adminId: number,
 ): Promise<{ statements: D1PreparedStatement[]; outcome: CompanyOutcome }> {
-  const project = await env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ?').bind(order.project_id).first<ProjectFacts>();
+  const project = await env.DB.prepare('SELECT id, founder_id, company_id, slug FROM projects WHERE id = ?').bind(order.project_id).first<ProjectFacts>();
   const legal = mappedLegal(order.jurisdiction_id);
   const name = clean(order.company_name);
   const agent = clean(order.registered_agent_name);
@@ -153,7 +153,7 @@ export async function filingCompanyStatements(
        SELECT cp.id, NULL, ?, ?, 'join', NULL, '{"role_in_company":"Admin","is_primary_admin":true}' FROM company_profiles cp
         WHERE cp.uid = ? AND EXISTS (SELECT 1 FROM incorporations WHERE id = ? AND status = 'filed' AND company_id IS NULL)`,
     ).bind(adminId, owner, uid, ...guard),
-    ...projectMoveStatements(env, { projectId: project.id, from: null, toNewCompanyUid: uid, orderId: order.id, actorUserId: adminId }),
+    ...projectMoveStatements(env, { projectId: project.id, from: null, toNewCompanyUid: uid, orderId: order.id, actorUserId: adminId, slug: project.slug }),
   ];
   const filled = ['legal_name', ...(legal.legal_form ? ['legal_form', 'jurisdiction'] : []), 'incorporation_date', ...(agent ? ['registered_agent_name'] : [])];
   if (address && country) {

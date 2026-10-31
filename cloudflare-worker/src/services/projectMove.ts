@@ -11,6 +11,7 @@
  */
 import type { Env } from '../types';
 import { membershipEvent } from './companyMembershipEvents';
+import { retireSlug } from './slugs';
 
 /** The owner's account: the oldest user on the venture's founders row, as `projects.ts` resolves it. */
 export async function ownerUserId(env: Pick<Env, 'DB'>, founderId: number | null): Promise<number | null> {
@@ -23,6 +24,8 @@ export type ProjectMove = {
   projectId: number;
   from: number | null;
   actorUserId: number;
+  /** The venture's slug: retired in its old scope in the same batch, so the old address still resolves (D1415). */
+  slug?: string | null;
 } & (
   /** A company that exists now, or null to take the venture out of its company. */
   | { to: number | null }
@@ -34,8 +37,9 @@ export type ProjectMove = {
   | { toNewCompanyUid: string; orderId: number }
 );
 
-/** The move's UPDATE and its `project_move` event. */
+/** The move's UPDATE, its `project_move` event and, for a venture with a slug, the old address retired. */
 export function projectMoveStatements(env: Pick<Env, 'DB'>, m: ProjectMove): D1PreparedStatement[] {
+  const retired = m.slug ? [retireSlug(env as Env, 'project', m.slug, m.projectId, m.from, m.actorUserId)] : [];
   if ('toNewCompanyUid' in m) {
     const before = JSON.stringify({ company_id: m.from });
     return [
@@ -49,6 +53,7 @@ export function projectMoveStatements(env: Pick<Env, 'DB'>, m: ProjectMove): D1P
            FROM company_profiles cp
           WHERE cp.uid = ? AND EXISTS (SELECT 1 FROM incorporations WHERE id = ? AND status = 'filed' AND company_id IS NULL)`,
       ).bind(m.projectId, m.actorUserId, before, m.toNewCompanyUid, m.orderId),
+      ...retired,
     ];
   }
   return [
@@ -57,5 +62,6 @@ export function projectMoveStatements(env: Pick<Env, 'DB'>, m: ProjectMove): D1P
       kind: 'project_move', projectId: m.projectId, companyId: m.to ?? m.from, actorUserId: m.actorUserId,
       before: { company_id: m.from }, after: { company_id: m.to },
     }),
+    ...retired,
   ];
 }

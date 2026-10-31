@@ -119,7 +119,7 @@ function text(v: unknown): { value: string | null } | { error: 'field_invalid' |
   return { value: t || null };
 }
 
-const MESSAGES: Record<string, string> = {
+export const MESSAGES: Record<string, string> = {
   field_invalid: 'One of the fields is not text.',
   text_too_long: `Each field must be at most ${TEXT_MAX} characters.`,
   legal_form_invalid: 'Choose an entity type from the list.',
@@ -148,7 +148,7 @@ const bad = (c: any, code: string) => refuse(c, 400, { code, message: MESSAGES[c
 const LEGAL_FIELDS = ['legal_name', 'legal_form', 'jurisdiction', 'registration_number', 'incorporation_date', 'registered_agent_name'] as const;
 
 /** Validate a partial legal body: the columns to set, or the first error code. */
-function legalPatch(body: any): { sets: Record<string, string | null> } | { error: string } {
+export function legalPatch(body: any): { sets: Record<string, string | null> } | { error: string } {
   const sets: Record<string, string | null> = {};
   for (const f of LEGAL_FIELDS) {
     if (body?.[f] === undefined) continue;

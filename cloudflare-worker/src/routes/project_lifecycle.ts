@@ -27,15 +27,17 @@ import { requireAuth } from '../auth';
 import { isProjectManager, ensureProjectMembershipSchema } from '../services/projectAccess';
 import { membershipEvent } from '../services/companyMembershipEvents';
 import { ownerUserId, projectMoveStatements } from '../services/projectMove';
+import { checkSlug, slugHolder, retireSlug, projectPath } from '../services/slugs';
+import { refuse } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
-type ProjectRow = { id: number; founder_id: number | null; company_id: number | null };
+type ProjectRow = { id: number; founder_id: number | null; company_id: number | null; slug: string | null };
 
 async function managedProject(env: Env, raw: string, user: User): Promise<{ project: ProjectRow } | { status: 400 | 403 | 404; detail: string }> {
   const id = Number(raw);
   if (!Number.isSafeInteger(id) || id <= 0) return { status: 400, detail: 'Invalid project id' };
-  const project = await env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+  const project = await env.DB.prepare('SELECT id, founder_id, company_id, slug FROM projects WHERE id = ? AND deleted_at IS NULL')
     .bind(id).first<ProjectRow>();
   if (!project) return { status: 404, detail: 'Project not found' };
   if (!isProjectManager(user, project)) return { status: 403, detail: 'Only the venture\'s owner can do this' };
@@ -66,9 +68,57 @@ r.post('/:id/move', async (c) => {
     if (!company || !(await belongs(c.env, owner, to))) return c.json({ detail: 'The venture\'s owner does not belong to that company', code: 'not_owner_company' }, 404);
     if (company.archived_at) return c.json({ detail: 'That company is archived. Restore it before you move a venture to it.', code: 'archived' }, 409);
   }
+  // D1415: a project slug is unique within its scope. A move into a scope that
+  // already holds it (current or retired) is refused, changing nothing; else
+  // the old address is retired in the same batch, so it still resolves.
+  const slug = g.project.slug;
+  if (slug) {
+    const holder = await slugHolder(c.env, 'project', slug, to);
+    if (holder != null && holder !== g.project.id) {
+      return refuse(c, 409, { code: 'slug_taken', message: 'A project there already has this project\'s address. Change this project\'s slug first, then move it.' });
+    }
+  }
   // D1415 Part 3: the one writer of `projects.company_id`, shared with the filing (`services/projectMove.ts`).
-  await c.env.DB.batch(projectMoveStatements(c.env, { projectId: g.project.id, from, to, actorUserId: user.id }));
+  await c.env.DB.batch(projectMoveStatements(c.env, { projectId: g.project.id, from, to, actorUserId: user.id, slug }));
   return c.json({ project_id: g.project.id, company_id: to, previous_company_id: from });
+});
+
+/** The company a project sits in, for its path: uid and slug, or null for standalone. */
+const companyOfProject = (env: Env, companyId: number | null) => companyId == null
+  ? Promise.resolve(null)
+  : env.DB.prepare('SELECT uid, slug FROM company_profiles WHERE id = ?').bind(companyId).first<{ uid: string; slug: string | null }>();
+
+const SLUG_MESSAGES: Record<string, string> = {
+  slug_invalid: 'A slug is 1 to 50 lower-case letters, digits and hyphens, and starts and ends with a letter or digit.',
+  slug_reserved: 'That word is used by the address itself. Choose another.',
+};
+
+// D1415 — the project's slug, unique within its current scope. The old slug is
+// retired in the same batch and keeps resolving to this project.
+r.put('/:id/slug', async (c) => {
+  const user = await requireAuth(c);
+  const g = await managedProject(c.env, c.req.param('id'), user);
+  if ('status' in g) return c.json({ detail: g.detail }, g.status);
+  const body = (await c.req.json().catch(() => ({}))) as { slug?: unknown };
+  const s = checkSlug(body.slug);
+  if (!s.ok) return refuse(c, 400, { code: s.code, message: SLUG_MESSAGES[s.code] });
+  const scope = g.project.company_id ?? null;
+  const company = await companyOfProject(c.env, scope);
+  const previous = g.project.slug;
+  if (previous === s.slug) return c.json({ slug: s.slug, path: projectPath(g.project, company), previous_slug: previous });
+  const holder = await slugHolder(c.env, 'project', s.slug, scope);
+  const taken = () => refuse(c, 409, { code: 'slug_taken', message: 'Another project here holds that address. Choose another.' });
+  if (holder != null && holder !== g.project.id) return taken();
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare('UPDATE projects SET slug = ? WHERE id = ?').bind(s.slug, g.project.id),
+      ...(previous ? [retireSlug(c.env, 'project', previous, g.project.id, scope, user.id)] : []),
+    ]);
+  } catch (e) {
+    if (/UNIQUE constraint failed/i.test(String((e as Error)?.message))) return taken();
+    throw e;
+  }
+  return c.json({ slug: s.slug, path: projectPath({ id: g.project.id, slug: s.slug }, company), previous_slug: previous });
 });
 
 r.post('/:id/transfer', async (c) => {
