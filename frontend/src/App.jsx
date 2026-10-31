@@ -365,9 +365,7 @@ const FounderTeamPage = lazy(() => import('./pages/founder/FounderTeamPage'));
 // Task #20 — /skills and /values are consolidated into the advisor flow, and
 // their routes redirect to /studio, where the profile band draws both. The two
 // pages were imported by nothing and were deleted in D323.
-const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 // D358 — aggregates of how profiles move over time (counts only).
-const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTrends'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const TrustCenter = lazy(() => import('./pages/site/TrustCenter'));
@@ -429,7 +427,6 @@ const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'));
 // since before any route answered it.
 const InboxPage = lazy(() => import('./pages/InboxPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
-const AcademyLessonPage = lazy(() => import('./pages/AcademyLessonPage'));
 const OnboardingFounderPage = lazy(() => import('./pages/OnboardingFounderPage'));
 const ChooseLicencePage = lazy(() => import('./pages/ChooseLicencePage'));
 // Task #178 — rendered in place by RequireAuth rather than routed to, so it
@@ -3160,8 +3157,6 @@ function AppInner() {
       <Route path="/admin/telegram" element={guard(['admin'], hqOnly(<AdminTelegram />))} />
       <Route path="/admin/x" element={guard(['admin'], hqOnly(<AdminX />))} />
       {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}
-      <Route path="/admin/best-fit" element={guard(['admin'], <AdminBestFitPage />)} />
-      <Route path="/admin/profiling-trends" element={guard(['admin'], <AdminProfilingTrends />)} />
       {/* Task #3 — News & Articles admin queues merged into one Content Queue. Legacy routes redirect. */}
       <Route path="/admin/news" element={<Navigate to="/admin/articles" replace />} />
       <Route path="/news" element={<Navigate to="/articles/draft" replace />} />
@@ -4096,8 +4091,6 @@ function AppInner() {
       <Route path="/changelog" element={<ChangelogPage />} />
       {/* Public credential verification — unauthenticated by design. */}
       <Route path="/verify/:token" element={<PublicCertificateVerifyPage />} />
-      <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
-      <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       {/* #2321 — the retired audience pages forward to their door pages.
           Keep external links working and count the redirects in #2301. */}
       <Route path="/lp/founder" element={<Navigate to="/for-founders" replace />} />

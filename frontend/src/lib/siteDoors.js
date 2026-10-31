@@ -180,7 +180,6 @@ export const DOORS = {
       { t: 'Public profile', route: '/u/:handle' },
       { t: 'Co-founder match', route: '/spinout-lab/cofounder-match' },
       { t: 'Wellbeing sessions', route: '/wellbeing' },
-      { t: 'Academy', route: '/academy' },
     ],
     // The AI-assistant connector (#1555) is built and switched off until its
     // OAuth store exists in production.

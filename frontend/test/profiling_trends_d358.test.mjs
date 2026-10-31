@@ -1,103 +1,51 @@
-/**
- * D358 — Admin · Profiling trends (/admin/profiling-trends) and the two new
- * api.js calls. The Worker half is cloudflare-worker/test/profile_evolution_d358.test.ts.
- *
- * A hidden cell is drawn "<5", never 0; a real 0 stays 0; a month with no
- * profile is "—"; nothing on the page names a person; a failed read is
- * Unreadable with a retry, never an empty table.
- *
- * Run with:
- *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/profiling_trends_d358.test.mjs
+/** #3734: the placeholder Academy and the two retired admin pages stay absent.
+ * D358's aggregate privacy/API behavior remains covered by the Worker tests.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { TrendsView, cellText, shareText } from '../src/pages/admin/AdminProfilingTrends.jsx';
+import { existsSync, readFileSync } from 'node:fs';
+import { api } from '../src/lib/api.js';
+import { installDocument } from './_contracts_dom.mjs';
 
-const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
-const PAGE = read('../src/pages/admin/AdminProfilingTrends.jsx');
+const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const APP = read('../src/App.jsx');
-const API = read('../src/lib/api.js');
-const SIDEBAR = read('../src/sidebarConfig.js');
-// D953 (#2371): the Programs landing is the catalogue now.
-const PROGRAMS = read('../src/pages/admin/programs/ProgramsCatalogue.jsx');
-const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').trim();
+const RETIRED = ['/academy', '/admin/best-fit', '/admin/profiling-trends'];
+const pageFiles = ['../src/pages/AcademyLessonPage.jsx', '../src/pages/admin/AdminBestFitPage.jsx', '../src/pages/admin/AdminProfilingTrends.jsx'];
+const navFiles = ['../src/lib/siteDoors.js', '../src/lib/adminPlacement.js', '../src/lib/railOptions/admin.js', '../src/lib/railPages.js',
+  '../src/sidebarConfig.js', '../src/pages/admin/programs/ProgramsCatalogue.jsx', '../src/pages/admin/programs/programsModel.js',
+  '../src/pages/admin/adminStudioOverview.js', '../src/pages/admin/approvals/AdminApprovals.jsx', '../src/pages/branch/BranchApprovals.jsx'];
 
-const arche = (over) => [
-  { slug: 'fo_missionary', label: 'The Missionary', count: 8, suppressed: false },
-  { slug: 'fo_rocketeer', label: 'The Rocketeer', count: 0, suppressed: false },
-  { slug: 'fo_architect', label: 'The Architect', count: null, suppressed: true },
-  { slug: 'fo_maverick', label: 'The Maverick', count: null, suppressed: true },
-].map((a) => ({ ...a, ...(over?.[a.slug] || {}) }));
-const DATA = {
-  min_cell: 5,
-  months: ['2026-06', '2026-07'],
-  distribution: [
-    { month: '2026-07', persona: 'founder', profiles: { count: 17, suppressed: false }, archetypes: arche() },
-  ],
-  changes: [
-    { month: '2026-07', persona: 'founder', count: 6, suppressed: false, share: 0.353 },
-    { month: '2026-07', persona: 'investor', count: null, suppressed: true, share: null },
-  ],
-  skills: [
-    { axis: 'finance_ops', label: 'Finance / Ops', states: [
-      { state: 'not_recorded', count: 0, suppressed: false },
-      { state: 'self_rated_only', count: 17, suppressed: false },
-      { state: 'some_evidence', count: null, suppressed: true },
-      { state: 'corroborated', count: null, suppressed: true },
-      { state: 'evidence_only', count: 0, suppressed: false },
-    ] },
-  ],
-  revisions: [{ month: '2026-07', count: 12, suppressed: false }],
-};
-
-test('D358: a hidden cell reads "<5", a real zero stays 0, and no cell reads "—"', () => {
-  assert.equal(cellText({ count: null, suppressed: true }, 5), '<5');
-  assert.equal(cellText({ count: 0, suppressed: false }, 5), '0');
-  assert.equal(cellText({ count: 12, suppressed: false }, 5), '12');
-  assert.equal(cellText(undefined, 5), '—');
-  assert.equal(shareText(0.353), '35.3%');
-  assert.equal(shareText(null), '—');
+test('#3734 retired pages have no route, import, page file or navigation entry', () => {
+  assert.deepEqual(RETIRED.filter(path => APP.includes(path)), []);
+  assert.doesNotMatch(APP, /AcademyLessonPage|AdminBestFitPage|AdminProfilingTrends/);
+  assert.deepEqual(pageFiles.filter(path => existsSync(new URL(path, import.meta.url))), []);
+  assert.deepEqual(navFiles.flatMap(file => RETIRED.filter(path => read(file).includes(path)).map(path => `${file}: ${path}`)), []);
 });
 
-test('D358: the distribution draws counts, hidden cells, zeros and months with no profile honestly', () => {
-  const html = renderToStaticMarkup(createElement(TrendsView, { data: DATA }));
-  const t = text(html);
-  assert.match(t, /Founders Archetype 2026-06 2026-07 The Missionary — 8 The Rocketeer — 0 The Architect — <5 The Maverick — <5 Profiles — 17/);
-  assert.equal((html.match(/data-suppressed="true"/g) || []).length, 2 + 1 + 2, 'two archetypes, one change, two skill states');
-  assert.match(t, /Founders — 6 · 35.3% Investors — <5/);
-  assert.match(t, /Finance \/ Ops 0 17 <5 <5 0/);
-  assert.match(t, /change of mind\. 2026-06 2026-07 — 12$/);
-  assert.match(html, /title="Fewer than 5, hidden so a small group cannot identify a person"/);
+test('#3734 admin report fetch is retired; consultations keep their report builder', () => {
+  const worker = read('../../cloudflare-worker/src/index.ts');
+  assert.equal(typeof api.adminGetBestFitReport, 'undefined');
+  assert.doesNotMatch(worker, /adminBestFit|admin_bestfit|\/api\/admin\/best-fit/);
+  assert.equal(existsSync(new URL('../../cloudflare-worker/src/routes/admin_bestfit.ts', import.meta.url)), false);
+  assert.match(read('../../cloudflare-worker/src/routes/consultations.ts'), /await buildBestFitReport\(c.env, user.id\)/);
+  assert.match(read('../../cloudflare-worker/src/services/bestFit.ts'), /export async function buildBestFitReport\(/);
 });
 
-test('D358: an empty population says so', () => {
-  const t = text(renderToStaticMarkup(createElement(TrendsView, { data: { ...DATA, distribution: [], changes: [], skills: [], revisions: [] } })));
-  assert.match(t, /No profile has been classified yet\./);
-  assert.match(t, /No displayed archetype has changed in this period\./);
-  assert.match(t, /No skill axis has been recorded yet\./);
+test('#3734 member best-fit, its archetype consumer and project deep links remain', async () => {
+  const restore = installDocument();
+  const previous = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url) => { requests.push(String(url)); return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ fit: [] }) }; };
+  try { await api.bestFit.me(); } finally { globalThis.fetch = previous; restore(); }
+  assert.deepEqual(requests, ['/api/best-fit/me']);
+  assert.match(read('../../cloudflare-worker/src/index.ts'), /app.route\('\/api\/best-fit', bestFitSelf\)/);
+  assert.match(read('../src/pages/ArchetypeCardPage.jsx'), /wire\(api.bestFit.me\(\), setFit/);
+  assert.match(APP, /path="\/projects\/:id"/);
+  assert.match(APP, /<ProjectDetail/);
 });
 
-test('D358: a failed read is Unreadable with a retry, not an empty page', () => {
-  assert.match(PAGE, /api\.adminProfilingTrends\(months\)/);
-  assert.match(PAGE, /setState\(\{ status: 'unreadable', data: null \}\)/);
-  assert.match(PAGE, /<Unreadable what="Profiling trends" claim="[^"]+" onRetry=\{load\} \/>/);
-  assert.doesNotMatch(PAGE, /\?\? 0|\|\| 0/, 'no figure defaults to 0');
-});
-
-test('D358: the page is an admin route, lit under Programs, with a door on the Programs landing', () => {
-  assert.match(APP, /const AdminProfilingTrends = lazy\(\(\) => import\('\.\/pages\/admin\/AdminProfilingTrends'\)\);/);
-  assert.match(APP, /<Route path="\/admin\/profiling-trends" element=\{guard\(\['admin'\], <AdminProfilingTrends \/>\)\} \/>/);
-  assert.match(SIDEBAR, /label: 'Programs',\s*match: \['\/admin\/programs', '\/admin\/held\/programs', '\/admin\/advisor-cohorts', '\/admin\/refer-earn', '\/admin\/spinout-lab', '\/admin\/profiling-trends'\] \}/);
-  // D953 / O-PRF: Profiling trends is not a program; one literal door stays in the catalogue's foot.
-  assert.match(PROGRAMS, /<Link to="\/admin\/profiling-trends" className=\{LINK\}>Open profiling trends<\/Link>/);
-  assert.match(read('../src/pages/admin/programs/programsModel.js'), /FOOT_PROFILING = 'Profiling trends is not a program\. It stays here until its home is decided\.'/);
-});
-
-test('D358: api.js carries both calls on their Worker paths', () => {
-  assert.match(API, /profileReask: \(\) => request\('\/profile\/reask'\),/);
-  assert.match(API, /adminProfilingTrends: \(months\) =>\s*\n\s*request\(`\/admin\/profiling\/trends\$\{months \? `\?months=\$\{encodeURIComponent\(months\)\}` : ''\}`\),/);
+test('D358 profile re-ask and aggregate trends API are retained independently of the retired page', () => {
+  const source = read('../src/lib/api.js');
+  assert.match(source, /profileReask: \(\) => request\('\/profile\/reask'\),/);
+  assert.match(source, /adminProfilingTrends: \(months\) =>/);
 });

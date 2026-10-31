@@ -205,11 +205,11 @@ function laneDoors() {
   return out;
 }
 
-test('Approvals draws the canvas\'s twenty lanes, each with a literal door; moderation keeps its console (D506)', async () => {
+test('Approvals draws the canvas\'s twenty lanes, with Best-Fit reviewed here and literal doors for other consoles; moderation keeps its console (D506)', async () => {
   const { LANES } = await import('../src/pages/admin/approvals/approvalsModel.js');
   const doors = laneDoors();
   assert.equal(LANES.length, 20);
-  assert.deepEqual(Object.keys(doors).sort(), LANES.map((l) => l.key).sort(), 'every lane has exactly one door');
+  assert.deepEqual(Object.keys(doors).sort(), LANES.filter((l) => l.key !== 'best_fit').map((l) => l.key).sort(), 'every remaining console has exactly one door');
   for (const [k, to] of Object.entries(doors)) assert.ok(routeLine(pathOf(to)), `${k} opens ${to}, which is not a registered route`);
   assert.equal(doors.moderation, '/admin/spinout-moderation', 'Spinout moderation lost its console — D442 built it and D506 made this lane its HQ door');
   // The laned queues the glance counts are the lanes with a glance key: D215's
@@ -224,6 +224,7 @@ test('Approvals draws the canvas\'s twenty lanes, each with a literal door; mode
   // D215's eleven only: the nine new lanes' doors are D1038's canvas, drawn after the H35 map,
   // and every door is a registered route by the check above.
   for (const l of LANES.filter((x) => x.glance && !x.isNew)) {
+    if (l.key === 'best_fit') { assert.equal(doors[l.key], undefined, 'retired Best-Fit has no console door'); continue; }
     const route = doors[l.key];
     // The Lab's queue is placed on Programs (D937); moderation (D442) postdates the map (D506);
     // Events opens the desk's Review tab, a sub-path of the placed /admin/events (D1038).
@@ -259,11 +260,12 @@ test('Community (D930) links its six consoles at their own routes — Advisors &
   assert.doesNotMatch(code, /\.map\([^)]*<Link/, 'Community maps data into links — invisible to the reachability walk');
 });
 
-test('Programs (D953) opens the Lab console and Profiling trends, never the Admin Console\'s Lab tab; Accounts links the Users table, Exploring, Personas and Trash', () => {
+test('Programs (D953) opens the Lab console after Profiling trends retirement, never the Admin Console\'s Lab tab; Accounts links the Users table, Exploring, Personas and Trash', () => {
   // Defect 1 of #2371: two cards opened one console. One Spin-Out Lab card
   // now, and Programs no longer links the Admin Console's Lab tab.
   const programs = doorsIn(codeOnly(read(PROGRAMS)));
-  for (const d of ['/admin/programs/spinout-lab', '/admin/profiling-trends']) assert.ok(programs.includes(d), `Programs has no literal door onto ${d}`);
+  for (const d of ['/admin/programs/spinout-lab']) assert.ok(programs.includes(d), `Programs has no literal door onto ${d}`);
+  assert.ok(!programs.includes('/admin/profiling-trends'), 'retired Profiling trends has no door');
   assert.ok(!programs.includes('/admin?tab=lab-applications'), 'Programs links the Lab tab and the Lab console, one console twice');
   assert.ok(!programs.includes('/admin/advisor-cohorts'), 'Programs links the old address, which only redirects');
   assert.deepEqual(doorsIn(CODE[LANDINGS.Accounts]),
@@ -318,7 +320,7 @@ test('the three false labels are not rendered, and no gate was narrowed or raise
 test('the ten routes that lost their sidebar row have a literal door on this shell', () => {
   // D953: the referral review and the assignments console are under Programs
   // now; their old addresses only redirect, and lanes 2 and 16 are their doors.
-  const orphans = ['/admin/programs/refer-and-earn/queue', '/admin/partner-invitations', '/admin/lp-applications', '/admin/my-licence', '/admin/best-fit',
+  const orphans = ['/admin/programs/refer-and-earn/queue', '/admin/partner-invitations', '/admin/lp-applications', '/admin/my-licence',
     '/admin/events', '/admin/jobs', '/admin/circles', '/admin/due-diligence', '/admin/programs/mentor-cohorts/people'];
   const doors = new Set([
     ...rows.map((r) => pathOf(r.to)),
@@ -327,6 +329,7 @@ test('the ten routes that lost their sidebar row have a literal door on this she
     ...doorsIn(APPROVALS_CODE).map(pathOf),
     ...doorsIn(codeOnly(read(COMMUNITY))).map(pathOf),
   ]);
+  assert.ok(!doors.has('/admin/best-fit'), 'retired Best-Fit has no shell door');
   const missing = orphans.filter((p) => !doors.has(p));
   assert.deepEqual(missing, [], 'these routes have no door on the Admin shell');
 });
