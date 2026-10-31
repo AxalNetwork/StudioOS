@@ -89,6 +89,9 @@ const SELF_FRAMED_TREES = ['frontend/src/pages/founder/', 'frontend/src/pages/in
 
 function howFramed(m) {
   if (/<RailFrame\b[\s\S]*?\brail=/.test(m.code)) return 'frame';
+  // #3717's pitch wrapper forwards its rail to the shared frame.
+  if (/<PitchPage\b[^>]*\brail=/.test(m.code) && /import PitchPage from '\.\/PitchPage';/.test(m.code)
+      && /<RailFrame rail=\{rail\}/.test(codeOnly(read('frontend/src/pages/raise/pitch/PitchPage.jsx')))) return 'frame';
   if (/<WorkspaceShell\b[\s\S]*?\brail=/.test(m.code)) return 'shell';
   if (RAIL_COMPONENTS[m.rel]) {
     const [host, use] = RAIL_COMPONENTS[m.rel];
@@ -102,6 +105,7 @@ function howFramed(m) {
 }
 
 test('every file that mounts <WorkerRail> puts it in a frame', () => {
+  assert.match(codeOnly(read('frontend/src/pages/raise/pitch/PitchPage.jsx')), /<RailFrame rail=\{rail\}/);
   assert.ok(MOUNTS.length >= 70, `expected the known mounts, found ${MOUNTS.length}`);
   const unframed = MOUNTS.filter((m) => !howFramed(m)).map((m) => m.rel);
   assert.deepEqual(unframed, [],

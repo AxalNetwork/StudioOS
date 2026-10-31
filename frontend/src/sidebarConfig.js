@@ -839,9 +839,9 @@ export const SHARED_FULL_BLEED = [
  * this list.
  */
 export const SHARED_FULL_BLEED_PREFIXES = [
+  '/spinout-lab/',
   // Pitch pages own the cycle gutter and dock their rail for founders and admins.
   '/raise/pitch/',
-  '/spinout-lab/',
   // A researched fund's own page. The list `/research/funds` is already full
   // bleed because it is a shell zone; the child is not in that derived list,
   // and without this prefix the dossier would sit inside App's padding on top
