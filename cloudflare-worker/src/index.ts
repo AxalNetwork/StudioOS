@@ -71,6 +71,7 @@ import adminSlack from './routes/admin_slack';
 // Task #2 — News with author proposals + admin queue.
 import newsRoutes from './routes/news';
 import articlesRoutes from './routes/articles';
+import articleAssist from './routes/article_assist';
 import adminArticles from './routes/admin_articles';
 import teamPublic from './routes/team_public';
 import contactRoutes from './routes/contact';
@@ -1646,6 +1647,8 @@ app.route('/api/news', newsRoutes);
 // Task #1 (Articles) — Public + author-facing /api/articles. Shares the
 // articles tables with /api/news; adds role filter, by-author endpoint,
 // and sector taxonomy. Public GETs are CORS-open + edge-cached 60d.
+// D1409 (#3695): Eadwyn's writing options on an article (`/:id/assist…`), before `articles` with it at /api/articles.
+app.route('/api/articles', articleAssist);
 app.route('/api/articles', articlesRoutes);
 app.route('/api/references', referencesRoutes);
 // Task #1 (AG) — service offerings (founder marketplace) alphabetically

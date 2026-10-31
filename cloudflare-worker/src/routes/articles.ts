@@ -494,7 +494,8 @@ articles.post('/draft', async (c) => {
   return c.json({ article: authorArticleShape(row) }, 201);
 });
 
-async function loadOwned(env: Env, id: number, userId: number, role: string): Promise<any | null> {
+/** The article when the member wrote it or is an admin, else null. D1409: `routes/article_assist.ts` gates on it too. */
+export async function loadOwned(env: Env, id: number, userId: number, role: string): Promise<any | null> {
   const row: any = await env.DB.prepare(`SELECT * FROM articles WHERE id = ? LIMIT 1`).bind(id).first();
   if (!row) return null;
   if (row.author_user_id !== userId && role !== 'admin') return null;
