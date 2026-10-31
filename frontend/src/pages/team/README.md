@@ -1,0 +1,57 @@
+# `frontend/src/pages/team/` — Team: people and AI agents (D1497, #3727)
+
+The Team page drawn to the owner's canvas (`design/incoming/Team Page.dc.html`
+and `design/incoming/Team · Boards.dc.html`, boards TM1a–TM9f), and Project
+settings › General. The routes are in `frontend/src/routes/team.jsx`; the
+board → file map and what waits for which issue are in
+`documentation/architecture/decisions/D1497.md`.
+
+## The rule for adding here
+
+- **People and invitations call routes that exist** (`../../lib/api.js`'s company
+  and project clients; #3841 moves them to a teams.js module in `../../lib/api/`).
+- **Everything about agents goes through `agentsAdapter.js`.** It is the one
+  seam: today every function answers `{ available: false, reason }`, and the
+  screens draw that as the canvas's honest unavailable state. A builder who
+  lands a route (#3840 part 1, #3842 part 2, #3843 part 3, #3844 part 5) adds
+  the client method to a new teamAgents.js module in `../../lib/api/` and replaces only the matching
+  one-line body there with `through(() => teamAgentsApi.<method>(…))`. No
+  screen changes. Never add a client method for a route that does not exist.
+- **An agent is never drawn as a person.** People are circles
+  (`PersonAvatar`); agents are rounded squares with the spark (`AgentTile`)
+  and, wherever an agent is named, the "AI agent" pill (`AgentIdentity`). All
+  three are in `AgentMark.jsx`.
+- **"Not recorded" is never a zero.** An unread count, spend or time is the
+  muted words (`Unrecorded`); an unread count draws no badge (`countBadge`).
+  "Unavailable" is never "none": no screen says "No agent works here yet"
+  unless the read answered `{ available: true }` with an empty list.
+- **Another member's email is never drawn.** The model keeps it on your own
+  row only. Invitation addresses are masked (owner question T3).
+- **Ask, never Fill.** `AskButton.jsx` is "Ask", accessible name "Ask Eadwyn",
+  and draws nothing until #3706's Ask panel exists. The AIRail is not changed.
+- **A page names no scope it has not read.** The Team page, Project settings and
+  `../ProjectDetail.jsx` tell the sidebar their scope through
+  `usePublishScope` (`../../lib/settingsScope.js`) only once their read is ready.
+- Sample names and figures from the canvas live only in test fixtures.
+
+## Files
+
+| File | What it is |
+| --- | --- |
+| `TeamAgentsPage.jsx` | The page, in three forms (company, project in a company, standalone project): header, tabs, Add to team, the People and agents tab, and the sheets. Publishes its scope to the sidebar. TM1a–TM1g, TM1d, TM9a3, TM9c1, TM9c4, TM9c6. |
+| `ProjectSettingsPage.jsx` | Project settings › General at `/projects/:id/settings`, with Move under a company (TM1g2) and Move out (TM1h), both on `POST /api/projects/:id/move`. |
+| `teamModel.js` | The words and every pure derivation: tabs, people from each read, invitation states, masking, refusals in words, money and time, agent rows and groups, the move copy. |
+| `agentsAdapter.js` | THE SEAM for agents, rule books, approvals, runs and tools. Unavailable on this base; `through()` maps the Worker's refusals once the client exists. |
+| `AgentMark.jsx` | `AgentTile`, `AgentPill`, `AgentIdentity`, `PersonAvatar`: who someone is, drawn one way everywhere. |
+| `AskButton.jsx` | The "Ask" button (TMA): `AskButtonView`, which renders nowhere until #3706's Ask panel. |
+| `teamUi.jsx` | The card frame, header row, honest block, "pending owner" pill, button classes and `useMenu` (the two pop-up menus' keyboard model) the Team screens share. |
+| `PeopleCard.jsx` | People (TM1a, TM1b), the read-only line (TM9a3), the Lab gate, and Company editors with access (TM1f) when a read supplies it. |
+| `InvitationsBlock.jsx` | Invitations with their states and actions (TM2c); project Resend off until #3841. |
+| `InviteSheet.jsx` | Invite people, company (TM2a, TM9a2) and project (TM2b). |
+| `AgentsCard.jsx` | The AI agents card in every state (TM1c, TM1e, TM9b1, TM9c1, TM9c4). |
+| `AddAgentSheet.jsx` | Add an AI agent, three steps (TM3a–TM3c). Reached only when the agents read is available. |
+| `AgentProfileSheet.jsx` | An agent's profile, Pause, Remove, Edit cap and Save name (TM5a, TM5b). |
+| `RulebooksTab.jsx` | Roles and rule books: the library, one rule book, and Edit with the floor (TM4a–TM4c). |
+| `ApprovalsTab.jsx` | Approvals with its four filters, and one proposal (TM7a, TM7b, TM7b2). |
+| `TeamSettingsTab.jsx` | Settings: who pays, who may add agents, caps (Edit cap opens the profile's editor), models and tools, data sharing (Open rule book opens the role's book) (TM8a; TM9a5's lock line). |
+| `WorkingHere.jsx` | Working here (TM6c) and Assign this task to… (TM6b). Built, not mounted: module headers mount them with the Ask panel (#3706) and the task store (#3845). |

@@ -33,6 +33,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 // that tag is not written in prose here). See frontend/src/routes/README.md;
 // routes_modules_d528.test.mjs fails the build for a module that is not wired in.
 import learningRoutes from './routes/learning';
+import teamRoutes from './routes/team';
 import BranchDigestRedirect from './pages/branch/BranchDigestRedirect';
 import HqCreditsRedirect from './pages/hq/HqCreditsRedirect';
 import { useRedirectBeacon } from './lib/redirectBeacon';
@@ -4102,6 +4103,7 @@ function AppInner() {
           the block of the same name at the top of this file. Above the
           catch-all, so a module's routes are matched before it. */}
       {learningRoutes(routeTools)}
+      {teamRoutes(routeTools)}
       {/* ── end route modules ── */}
       {/* Task #11 — Catch-all 404. Must stay LAST so it only matches when no
           other route (public, alias, or guarded) does. */}

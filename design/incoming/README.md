@@ -111,6 +111,30 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-31 — Team: people and AI agents (#3727)
+
+The owner's two artifacts (`U6FNNm7jdTGHb2kmaFswGr`, `7Qm97kr6oKKX5ws6TMP86g`)
+came from the prompt on #3727:
+- `Team Page.dc.html` is the page, one component drawn per board through its
+  `v` prop, in the copy the grid's bundle carries (decoded by
+  `scripts/read-canvas.mjs`, its body is the same);
+- `Team · Boards.dc.html` is the board grid, TMA and TM1a to TM9f (33 boards,
+  55 frames, with TM1e–TM1i on authority by scope and TM6c on Working here);
+  it imports the page by name.
+
+**Three edits, named.** In the page, the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. In the grid, the
+`dc-import` name is `Team Page` (Claude Design called the page
+`Team Agents Page`), so the grid resolves its sibling. No other value was
+edited.
+
+**Grade: UPGRADE for people, NEW for agents (D1497).** The Team page is built
+at four routes (`frontend/src/routes/team.jsx`) with people, invitations and
+Move under or out of a company wired; agents, rule books, approvals and agent
+settings draw their unavailable state through `frontend/src/pages/team/agentsAdapter.js`
+until #3840–#3844 land. Both files stay here: the bar is the bodies, and the
+agent bodies are outstanding. No file moved, so no count changed.
+
 ## Landed 2026-10-27 — Validate › Record a session › the ring visualiser (D1330)
 
 The owner's artifact `3xHppg2QRN4HD78fR2VmW1` ("Recording View Canvas"):
