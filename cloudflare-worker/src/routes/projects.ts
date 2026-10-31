@@ -36,6 +36,7 @@ import {
 } from '../services/marketAssumptions';
 import { fillsForRow, filledColumns } from '../services/fills/provenance';
 import { refuse } from '../util/refusal';
+import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { bindingKey } from '../util/schemaBootstrap';
 import { findableBy, keepFindable } from '../services/investorFindable';
 import { ndaChoiceInput } from '../services/dataRoomNda';
@@ -573,10 +574,40 @@ async function createProjectHandler(c: any) {
   // while nothing new ever belonged to a company. A creator with no company
   // selected still records NULL, which is the honest answer rather than a guess
   // at their primary.
-  const createCompanyId = await resolveActiveCompany(
+  let createCompanyId = await resolveActiveCompany(
     c.env, user as any, c.req.header(ACTIVE_COMPANY_HEADER));
+  // D1415: an explicit `company_id` in the body wins over the header. `null`
+  // makes the project standalone even while a company is selected; a number
+  // must be a live company the caller belongs to.
+  if (data && 'company_id' in data) {
+    if (data.company_id === null) createCompanyId = null;
+    else {
+      const wanted = Number(data.company_id);
+      const own = Number.isSafeInteger(wanted) && wanted > 0
+        ? await c.env.DB.prepare(
+          `SELECT cp.id FROM company_profiles cp JOIN user_company_links l ON l.company_id = cp.id
+            WHERE cp.id = ? AND l.user_id = ? AND cp.archived_at IS NULL`,
+        ).bind(wanted, user.id).first() as { id: number } | null
+        : null;
+      if (!own) { await sql.end(); return refuse(c, 404, { code: 'company_not_found', message: 'You do not belong to that company.' }); }
+      createCompanyId = Number(own.id);
+    }
+  }
+  // D1415: an optional slug, unique in the project's scope; else one made from the name.
+  let projectSlug: string | null;
+  if (data && data.slug !== undefined && data.slug !== null) {
+    const s = checkSlug(data.slug);
+    if (!s.ok) { await sql.end(); return refuse(c, 400, { code: s.code, message: s.code === 'slug_reserved' ? 'That word is used by the address itself. Choose another.' : 'A slug is 1 to 50 lower-case letters, digits and hyphens, and starts and ends with a letter or digit.' }); }
+    if ((await slugHolder(c.env, 'project', s.slug, createCompanyId ?? null)) != null) {
+      await sql.end();
+      return refuse(c, 409, { code: 'slug_taken', message: 'Another project here holds that address. Choose another.' });
+    }
+    projectSlug = s.slug;
+  } else {
+    projectSlug = await generateSlug(c.env, 'project', name, createCompanyId ?? null);
+  }
 
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${createCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, slug, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${createCompanyId}, ${projectSlug}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
 
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, 'applied')`;
   await sql`INSERT INTO activity_logs (project_id, action, details) VALUES (${project.id}, 'project_created', ${`Project '${project.name}' submitted`})`;

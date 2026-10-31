@@ -2814,8 +2814,7 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
     const windows = await c.env.DB.prepare(
       `SELECT week_number, unlock_at, deadline_at FROM week_windows
         WHERE cohort_cycle_id = ? ORDER BY week_number ASC`
-    ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>()
-      .catch(() => ({ results: [] as Array<{ week_number: number; unlock_at: string; deadline_at: string }> }));
+    ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>();
     const weekRows = windows.results || [];
     for (const w of weekRows) {
       items.push({
@@ -2926,7 +2925,7 @@ advisors.get('/me/thinking', async (c) => {
       id: number; slug: string; title: string; subtitle: string | null;
       status: string; published_at: string | null; word_count: number;
       read_minutes: number; views: number; sector: string | null;
-    }>().catch(() => ({ results: [] as any[] }));
+    }>();
     const items = rows.results || [];
     const published = items.filter((a) => a.status === 'published');
     const reach = published.map((a) => Number(a.views || 0));

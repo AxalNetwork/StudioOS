@@ -181,3 +181,4 @@ D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen memb
 `project_deck_hard_delete_3747.test.ts` checks deck/share/note/image cleanup over
 the migrated schema, venture isolation, 500-object R2 pages, SQL rollback and
 durable storage retries after the venture row is gone. All records are synthetic.
+| `deck_atomic_save_3748.test.ts` | #3748: migration 713 preserves duplicate deck payloads and enforces unique version/current rows. |
