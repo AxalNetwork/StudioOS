@@ -848,12 +848,12 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
   assert.match(start, /data-testid="pitch-studio-fast"/);
   assert.match(renderedText(between(start, 'pitch-studio-start-pptx')), /Import a \.pptx template ›\s*Coming later/);
   assert.match(start, /title="Not switched on yet\."[^>]*data-testid="pitch-studio-start-pptx"/);
-  // Each item's way in: only Standard outline links to New deck; Browse templates is greyed until the
-  // gallery (step 15) and its filters (#3782), never a second link to the same page.
+  // Each item's way in: Standard outline opens New deck; Browse templates opens the gallery (D1604 step 15),
+  // never a second link to the same New deck page.
   assert.match(start, /data-testid="pitch-studio-start-outline-link" href="\/raise\/pitch\/new\?project_id=7"/);
   assert.equal((start.match(/href="\/raise\/pitch\/new\?project_id=7"/g) || []).length, 1, 'one Start from link opens New deck');
-  assert.doesNotMatch(start, /data-testid="pitch-studio-start-templates-link"/);
-  assert.match(renderedText(between(start, 'pitch-studio-start-templates', 'pitch-studio-start-pptx')), /Browse templates ›\s*Coming later/);
+  assert.match(start, /data-testid="pitch-studio-start-templates-link" href="\/raise\/pitch\/templates\?project_id=7"/);
+  assert.doesNotMatch(renderedText(between(start, 'pitch-studio-start-templates', 'pitch-studio-start-pptx')), /Coming later/);
   // Investor links: the links' total, viewers and median from the reads, and the way to the tab.
   const links = renderedText(between(html, 'pitch-studio-links-summary', 'pitch-studio-weekly'));
   assert.match(links, /Shared links\s*6\s*Unique viewers\s*4\s*Median time per view\s*1:00/);

@@ -11,18 +11,14 @@ import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import { NOT_ON_STUDIOOS } from './sourcesModel';
 
 export const NEW_PATH = '/raise/pitch/new';
-export const STEPS = ['Audience', 'Sources', 'Outline', 'Build'];
-export const PROMPT_HINT = 'Tone, emphasis, what to lead with. Figures always come from your records.';
 export const NO_ROUND = 'No active round yet.';
 export const ROUND_LINK = { text: 'Plan it in Raise › Round planner ›', path: '/raise/calls' };
 export const PROPOSED_BY_EADWYN = 'Proposed by Eadwyn';
 export const PROPOSAL_LINE = 'Figures come from your records. Eadwyn wrote the wording.';
 export const TITLES_ONLY_LINE = 'Figures come from your records. The cards carry their titles.';
-export const PAID_LINE = 'Paid in AI tokens. Figures from your records cost nothing; the cost is Eadwyn writing the wording.';
 export const FAST_TITLE = 'Build a standard deck now';
 export { NOT_ON_STUDIOOS };
 
-const pad2 = (n) => String(n).padStart(2, '0');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** AI tokens as dollars: `$0.0060` under a dollar, `$1.25` above; null when there is no figure. */
@@ -134,13 +130,9 @@ export function outlineSentence(quote, regenerate) {
 export function buildSentence(quote, cards) {
   const price = quote?.ai ? `Eadwyn writes the wording, holding up to ${aiTokens(quote.hold_microusd)} in AI tokens and charging for what it uses.` : 'AI is off on this page, so the cards carry their titles, at no cost.';
   const what = cards == null ? 'the deck' : `${cards} card${cards === 1 ? '' : 's'}`;
-  return `StudioOS builds ${what} from your records. ${price} The deck is a proposal: nothing is a version until you keep cards and save.`;
+  return `StudioOS builds ${what} from your records. ${price} The deck is a proposal: you review it, and nothing is saved until you accept it.`;
 }
 
-export const keepSentence = (card) => `Card ${card.n} · ${card.title} joins the cards you keep. Nothing is a version until you save.`;
-export const keepAllSentence = (count) => `All ${count} cards join the cards you keep. Nothing is a version until you save.`;
-export const saveSentence = (kept, total, audience) =>
-  `The ${kept} card${kept === 1 ? '' : 's'} you kept, of ${total}, become the new current version${audience ? ` for ${audience}` : ''}. The proposal is then removed; your earlier versions stay as they are.`;
 export const DISCARD_SENTENCE = 'The whole proposal is deleted, with any cards you kept from it. No deck version changes.';
 
 /**
@@ -166,47 +158,4 @@ export function fastPathLine(quote, brief = null) {
   const what = brief?.cards ? `${brief.cards} cards` : 'A deck';
   const who = brief?.label ? `, for the ${brief.label} audience` : '';
   return `${what} from everything on record${who}. Review sources afterwards.${price}`;
-}
-
-// ─────────────────────────────────────────────────────────── the proposal
-
-/** A card of the proposal as PD6 B draws it: its words, and each figure from its own binding. */
-export function proposalCards(proposal, items = []) {
-  const slides = Array.isArray(proposal?.slides) ? proposal.slides : [];
-  const kept = new Set(Array.isArray(proposal?.kept) ? proposal.kept : []);
-  return slides.map((s, i) => {
-    const blocks = Array.isArray(s?.blocks) ? s.blocks : [];
-    const heading = blocks.find((b) => b?.kind === 'text' && b.style === 'heading');
-    const body = blocks.find((b) => b?.kind === 'text' && b.style === 'paragraph');
-    const figures = blocks.filter((b) => b?.kind === 'metric').map((b) => {
-      const key = b.binding?.source_key || null;
-      const it = items.find((x) => x.source_key === key);
-      const recorded = b.value != null && b.binding?.grade && b.binding.grade !== 'Not recorded';
-      return { key, label: b.label || it?.label || key, value: recorded ? String(b.value) : null, grade: recorded ? b.binding.grade : 'Not recorded', module: it?.module || null, href: it?.href || null };
-    });
-    return {
-      index: i, n: pad2(i + 1), title: String(s?.title || `Card ${i + 1}`),
-      headline: heading?.text || null, body: body?.text || null,
-      figures, missing: figures.filter((f) => f.value == null), kept: kept.has(i),
-    };
-  });
-}
-
-/** PD6 A: per card, what it was filled from, and whether Eadwyn worded it. */
-export function progressRows(progress = []) {
-  return progress.map((p) => ({
-    n: pad2(p.n), title: p.title,
-    status: p.slots ? `Filled from records · ${p.filled} of ${p.slots}` : 'No figures on this card',
-    words: p.worded ? 'Eadwyn wrote the words' : 'Title only',
-    missing: p.missing || [],
-  }));
-}
-
-/** PD6 A's totals: charged by the run, nothing held once it answered, and the estimate it was quoted. */
-export function costRows(cost, quote) {
-  return [
-    { label: 'Used so far', value: cost?.charged_microusd == null ? 'Not known yet' : aiTokens(cost.charged_microusd) },
-    { label: 'Held', value: aiTokens(0) },
-    { label: 'Estimated for the whole deck', value: quote?.ai ? aiTokens(quote.hold_microusd) : quote ? aiTokens(0) : 'Not quoted' },
-  ];
 }

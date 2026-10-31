@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { MoreHorizontal, RefreshCw } from 'lucide-react';
 import { reportError } from '../../../lib/log';
 import { deckEditorApi } from '../../../lib/api/deckEditor';
 import { deckSourcesApi } from '../../../lib/api/deckSources';
-import { newDeckApi } from '../../../lib/api/newDeck';
-import { railPressHeaders } from '../../../lib/railPage';
-import { Lightbox, Pill, usePhoneWidth } from '../../../ui';
-import { useRailOption } from '../../../ui/railCrumbs';
+import { Pill, usePhoneWidth } from '../../../ui';
 import ExportDialog from './ExportDialog';
 import DataReady from './DataReady';
+import OneClickBuild from './OneClickBuild';
 import { BrandKitSheet, VersionsSheet } from './DeckSheets';
 import { useDeckChecks } from './DeckVersions';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
@@ -19,7 +17,9 @@ import { LATER } from './deckV2Model';
 import useMenuFocus from './useMenuFocus';
 import { NOT_CHECKED, checkPills } from './checkModel';
 import { presentHref } from './presentExportModel';
-import { FAST_TITLE, NEW_PATH, buildSentence, fastBrief, fastPathLine, refusalOf } from './newDeckModel';
+import { FAST_TITLE, NEW_PATH } from './newDeckModel';
+import { FAST_LINE } from './oneClickModel';
+import { TEMPLATES_PATH } from './templatesModel';
 import {
   ANALYTICS_PATH, EDIT_PATH, EMPTY_DECK, NOT_RECORDED, NO_VIEWS, NEW_DATA_FAILED, NOTHING_BOUND, NOTHING_NEW, REFRESH_THE_DECK,
   asList, coverOf, currentVersion, dayLabel, linkPage, mmss, newInData, readerStats, slideSeconds, versionLabel, versionRows, viewsState, weeklyViews,
@@ -40,8 +40,8 @@ import {
  *                   Done" (#3826) are not drawn until their routes merge; one
  *                   deck per venture is what main holds.
  *   Start from      Standard outline (New deck), Build a standard deck now
- *                   (the one-click, from your records), Browse templates
- *                   (greyed "Coming later" until the gallery and #3782) and
+ *                   (the one-click, from your records: `OneClickBuild.jsx`),
+ *                   Browse templates (the gallery, `TemplatesGallery.jsx`) and
  *                   Import a .pptx template, greyed "Coming later" (#3809).
  *                   A reader gets no Start from: the deck card takes the row
  *   Data ready      `DataReady.jsx`: each area's share and "Add in … ›"
@@ -71,17 +71,18 @@ const LINK = 'text-[12.5px] font-bold text-axal-violet hover:underline dark:text
 const ITEM = 'flex min-h-[36px] w-full items-center justify-between gap-3 rounded-[8px] px-2.5 text-left text-[12.5px]';
 
 export const START_FROM = 'Start from';
-export const FAST_LINE = 'One click, from your records';
-export const FAST_UNREAD = 'Your venture\'s brief could not be read, so the one-click cannot build yet. Use New deck, or reload.';
+export { FAST_LINE, FAST_UNREAD } from './oneClickModel';
 export const INVESTOR_LINKS = 'Investor links';
 export const OPEN_ANALYTICS = 'Open Share & analytics ›';
-/** pd1's Start from, in its order. `fast` is the one-click; `adapter` greys an entry until its route merges. */
+/**
+ * pd1's Start from, in its order. `fast` is the one-click (`OneClickBuild.jsx`);
+ * `to` is where an entry goes; `adapter` greys an entry until its route merges.
+ */
 export const START_ITEMS = Object.freeze([
-  { id: 'outline', label: 'Standard outline', line: 'The outline investors expect at your stage' },
+  { id: 'outline', label: 'Standard outline', line: 'The outline investors expect at your stage', to: NEW_PATH },
   { id: 'fast', label: FAST_TITLE, line: FAST_LINE },
-  // The gallery (`/raise/pitch/templates`, step 15) and its stage and audience filters (#3782) are not built:
-  // greyed until then, never a second link to the same New deck page. A template start stays in New deck.
-  { id: 'templates', label: 'Browse templates ›', line: 'Start from a template, by stage and audience', adapter: 'templates' },
+  // D1604 step 15: the gallery (`TemplatesGallery.jsx`). Its stage, audience and style filters wait on #3782 there.
+  { id: 'templates', label: 'Browse templates ›', line: 'Start from a template, by stage and audience', to: TEMPLATES_PATH },
   { id: 'pptx', label: 'Import a .pptx template ›', line: 'Map your own layouts to The Grid', adapter: 'pptxImport' },
 ]);
 /** The deck card's ⋯, in its order; `write` items are a writer's. */
@@ -268,7 +269,7 @@ function StartFrom({ projectId, q }) {
       <h2 id="pitch-studio-start-title" className={`${EYE} m-0`}>{START_FROM}</h2>
       <ul className="m-0 flex list-none flex-col p-0">
         {START_ITEMS.map((it) => {
-          if (it.id === 'fast') return projectId != null ? <FastPath key={it.id} projectId={projectId} q={q} /> : null;
+          if (it.id === 'fast') return projectId != null ? <OneClickBuild key={it.id} projectId={projectId} q={q} /> : null;
           const off = it.adapter ? availability(it.adapter) : null;
           if (off && off.available !== true) {
             return (
@@ -283,7 +284,7 @@ function StartFrom({ projectId, q }) {
           }
           return (
             <li key={it.id} className="flex flex-col gap-0.5 border-t border-axal-hairline py-3 first:border-t-0 dark:border-gray-700" data-testid={`pitch-studio-start-${it.id}`}>
-              <Link to={`${NEW_PATH}${q}`} className={`text-[13.5px] font-bold ${INK} hover:text-axal-violet dark:hover:text-violet-300`} data-testid={`pitch-studio-start-${it.id}-link`}>{it.label}</Link>
+              <Link to={`${it.to}${q}`} className={`text-[13.5px] font-bold ${INK} hover:text-axal-violet dark:hover:text-violet-300`} data-testid={`pitch-studio-start-${it.id}-link`}>{it.label}</Link>
               <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{it.line}</span>
             </li>
           );
@@ -330,78 +331,6 @@ function CheckPills({ checks, current, q }) {
       {pills.map((p) => <Pill key={p.key} tone={p.tone}>{p.label}</Pill>)}
       <Link to={`${EDIT_PATH}${q}`} className="text-[11.5px] font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid="pitch-studio-checks-open">Open the check ›</Link>
     </div>
-  );
-}
-
-/**
- * D897 (#2677), PD2 → pd1's Start from: "Build a standard deck now" — a deck
- * from everything on record, skipping source curation. D1604 (#3716, §3.2):
- * its brief is the context read's (`newDeckApi.context`: #3877's `inferred`
- * when present, else `fast_path`), never a literal of the client's; until
- * that read answers, Build is drawn disabled and no quote is asked. Its
- * estimate is the quote (`POST /api/decks/new/quote`); the build is a
- * proposal, reviewed card by card at /raise/pitch/new.
- */
-function FastPath({ projectId, q }) {
-  const navigate = useNavigate();
-  const [quote, setQuote] = useState(null);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [refusal, setRefusal] = useState(null);
-  // The brief: { status, data } from the context read; null data until it answers.
-  const [ctx, setCtx] = useState({ status: 'loading', data: null });
-  const brief = ctx.status === 'ok' ? fastBrief(ctx.data) : null;
-  useRailOption(busy ? 'deck:build' : null, 'Build deck');
-  useEffect(() => {
-    let live = true;
-    setCtx({ status: 'loading', data: null });
-    newDeckApi.context(projectId)
-      .then((c) => { if (live) setCtx({ status: 'ok', data: c }); }, (e) => { if (live) setCtx({ status: 'error', data: null }); reportError('pitch-studio:fast-context', e); });
-    return () => { live = false; };
-  }, [projectId]);
-  useEffect(() => {
-    if (!brief) return undefined;
-    let live = true;
-    newDeckApi.quote({ project_id: projectId, step: 'build', audience: brief.audience, length: brief.length })
-      .then((qt) => { if (live) setQuote(qt); }, (e) => { if (live) setQuote(null); reportError('pitch-studio:fast-quote', e); });
-    return () => { live = false; };
-  }, [projectId, brief?.audience, brief?.length]);
-  const build = async () => {
-    if (!brief) return;
-    setBusy(true); setRefusal(null);
-    try {
-      const r = await newDeckApi.build({ project_id: projectId, audience: brief.audience, length: brief.length }, railPressHeaders('deck:build'));
-      navigate(`${NEW_PATH}${q}${q ? '&' : '?'}proposal=${encodeURIComponent(r.proposal.id)}`);
-    } catch (e) { setRefusal(refusalOf(e)); setOpen(false); reportError('pitch-studio:fast-build', e); } finally { setBusy(false); }
-  };
-  return (
-    <li className="flex flex-wrap items-center justify-between gap-3 border-t border-axal-hairline py-3 first:border-t-0 dark:border-gray-700" data-testid="pitch-studio-fast">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className={`text-[13.5px] font-bold ${INK}`}>{FAST_TITLE}</span>
-        <span className={MUTED}>{FAST_LINE}</span>
-        <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-fast-line">{fastPathLine(quote, brief)}</span>
-        {brief?.why ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-fast-why">{brief.why}</span> : null}
-        {ctx.status === 'error' ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-fast-unread">{FAST_UNREAD}</span> : null}
-        {refusal ? (
-          <span role="alert" className="text-[12px] font-semibold text-axal-violet dark:text-violet-300">
-            {refusal.message} {refusal.topUp ? <a href={refusal.topUp.href} className="underline">{refusal.topUp.text}</a> : null}
-          </span>
-        ) : null}
-      </div>
-      <button type="button" className={`${PRIMARY} disabled:cursor-not-allowed disabled:opacity-50 dark:disabled:opacity-50`} onClick={() => setOpen(true)} disabled={!brief}
-        aria-busy={ctx.status === 'loading' ? 'true' : undefined} data-testid="pitch-studio-fast-build">Build</button>
-      {open ? (
-        <Lightbox label={FAST_TITLE} title={FAST_TITLE} width={520} onClose={() => !busy && setOpen(false)} testId="pitch-studio-fast-dialog"
-          footer={(
-            <div className="flex justify-end gap-2">
-              <button type="button" className={GHOST} onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
-              <button type="button" className={PRIMARY} onClick={build} disabled={busy}>{busy ? 'Building…' : 'Build deck'}</button>
-            </div>
-          )}>
-          <p className={`m-0 ${MUTED}`}>{buildSentence(quote, brief?.cards ?? null)}</p>
-        </Lightbox>
-      ) : null}
-    </li>
   );
 }
 
