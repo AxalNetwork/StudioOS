@@ -19,5 +19,10 @@ export const posthogApi = {
   untrack: (section, projectId, uid) => request(`/cycles/${enc(section)}/posthog/tracked/${enc(uid)}?project=${enc(projectId)}`, { method: 'DELETE' }),
   deleteFact: (section, projectId, id) => request(`/cycles/${enc(section)}/posthog/facts/${enc(id)}?project=${enc(projectId)}`, { method: 'DELETE' }),
   accept: (section, projectId, id, extra = {}) => request(`/cycles/${enc(section)}/posthog/proposals/${enc(id)}/accept`, json('POST', { ...extra, project: projectId })),
+  /** D1605–: the section's founder-pressed sync. */
+  sync: (section, projectId) => request(`/cycles/${enc(section)}/posthog/sync`, json('POST', { project: projectId })),
+  /** D1605: the surveys and their questions, with what each is marked as. */
+  surveys: (projectId) => request(`/cycles/validate/posthog/surveys?project=${enc(projectId)}`),
+  markQuestion: (projectId, surveyId, questionId, mark) => request(`/cycles/validate/posthog/surveys/${enc(surveyId)}/marks`, json('PUT', { project: projectId, question_id: questionId, mark })),
   dismiss: (section, projectId, id) => request(`/cycles/${enc(section)}/posthog/proposals/${enc(id)}/dismiss`, json('POST', { project: projectId })),
 };

@@ -29,6 +29,9 @@
  *   DELETE /:section/posthog/facts/:id?project=         delete a fact; it stays deleted
  *   POST   /:section/posthog/proposals/:id/accept       { project, … }
  *   POST   /:section/posthog/proposals/:id/dismiss      { project }
+ *   POST   /:section/posthog/sync                       { project }  D1605–: the section's founder-pressed sync
+ *   GET    /validate/posthog/surveys?project=           D1605: the project's surveys, their questions and marks
+ *   PUT    /validate/posthog/surveys/:id/marks          D1605: { project, question_id, question_index, mark | null }
  *
  * WHO, IN A MODULE. Reading From PostHog is the venture's team only (#2409
  * decision C, `isTeamViewer`). Tracking an insight, Accept and Dismiss are the
@@ -49,8 +52,11 @@ import type { IntegrationRow } from '../integrations/registry';
 import { PosthogReadError, posthogProjectId, posthogReadsFor, type PosthogFetch, type PosthogProject } from '../services/posthog/reads';
 import { hashEmail } from '../util/hashEmail';
 import { isTeamViewer } from '../services/mercury/growFeeds';
+// D1605–: each section's sync and acceptors register themselves on import.
+import '../services/posthog/validate';
+import { MARKS, marksOf, setMark } from '../services/posthog/validate';
 import {
-  AcceptRefused, MetricsRefused, POSTHOG_MODULES, SECTIONS, acceptProposal, deleteFact, dismissProposal, fromPosthog, linkOf, track, untrack,
+  AcceptRefused, MetricsRefused, syncFor, POSTHOG_MODULES, SECTIONS, acceptProposal, deleteFact, dismissProposal, fromPosthog, linkOf, track, untrack,
   type Section,
 } from '../services/posthog/metrics';
 
@@ -80,6 +86,9 @@ export const SENTENCES: Record<string, string> = {
   not_your_posthog: 'Only the member whose PostHog serves this venture can do this.',
   team_only: 'From the founder’s PostHog: only the venture’s team sees these figures.',
   invalid_section: 'Choose Validate, Build, Raise or Grow.',
+  no_sync: 'PostHog does not feed this section yet.',
+  invalid_survey: 'That is not a PostHog survey.',
+  invalid_question: 'That question is not in this survey.',
   invalid_module: 'Choose a module PostHog feeds.',
   invalid_role: 'Choose what this insight measures.',
   invalid_insight: 'Choose one of your saved insights.',
@@ -291,6 +300,11 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
     if (!link.active) throw new Refused(409, 'posthog_not_connected');
     return link;
   }
+  /** The owner's reads, pinned to the venture's linked project. */
+  async function readsFor(c: C, link: { integration_id: number; posthog_project_id: string }) {
+    const row = await c.env.DB.prepare('SELECT * FROM integrations WHERE id = ?').bind(link.integration_id).first<IntegrationRow>();
+    return posthogReadsFor(c.env, row!, { fetcher: deps.fetcher, projectId: link.posthog_project_id });
+  }
   const log = async (c: C, user: User, action: string, details: Record<string, number | string>) => {
     await c.env.DB.prepare('INSERT INTO activity_logs (user_id, actor, action, details) VALUES (?, ?, ?, ?)')
       .bind(user.id, await hashEmail(user.email), action, JSON.stringify(details)).run();
@@ -339,6 +353,57 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
     if (!(await isTeamViewer(c.env, user, p.id))) throw new Refused(403, 'team_only');
     if (!(await deleteFact(c.env, p.id, Number(c.req.param('id'))))) throw new Refused(404, 'fact_not_found');
     await log(c, user, 'posthog_fact_deleted', { project_id: p.id });
+    return c.json({ ok: true });
+  }));
+
+  // D1605–: the section's sync, the owner's own PostHog only, pinned to the venture's project.
+  router.post(`${SECTION}/posthog/sync`, route(async (c, user) => {
+    await noSupport(c);
+    const section = sectionOf(c);
+    const b = await bodyOf(c);
+    const p = await writable(c, user, b.project);
+    const link = await ownLink(c, user, p.id);
+    const sync = syncFor(section);
+    if (!sync) throw new Refused(409, 'no_sync');
+    const reads = await readsFor(c, link);
+    const out = await sync(c.env, reads, { integrationId: link.integration_id, projectId: p.id, userId: user.id, today: new Date().toISOString().slice(0, 10) });
+    await c.env.DB.prepare("UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP WHERE id = ?").bind(link.integration_id).run();
+    await log(c, user, `posthog_${section}_synced`, { project_id: p.id, facts: out.facts + out.updated, proposals: out.proposals, partial: out.partial ? 1 : 0 });
+    return c.json({ ok: true, ...out });
+  }));
+
+  // D1605: the surveys and their questions, for marking which answer means what.
+  router.get('/validate/posthog/surveys', route(async (c, user) => {
+    await noSupport(c);
+    const p = await writable(c, user, c.req.query('project'));
+    const link = await ownLink(c, user, p.id);
+    const reads = await readsFor(c, link);
+    const marks = await marksOf(c.env, p.id);
+    const out = [];
+    for (const s of (await reads.surveys()).slice(0, 10)) {
+      const d = await reads.survey(s.id);
+      out.push({
+        id: s.id, name: s.name,
+        questions: d.questions.filter((q) => q.id).map((q, i) => ({ id: q.id, index: i, text: q.text, type: q.type, mark: marks.find((m) => m.survey_id === s.id && m.question_id === q.id)?.mark ?? null })),
+      });
+    }
+    return c.json({ ok: true, project_id: p.id, marks: MARKS, surveys: out });
+  }));
+
+  router.put('/validate/posthog/surveys/:id/marks', route(async (c, user) => {
+    await noSupport(c);
+    const b = await bodyOf(c);
+    const p = await writable(c, user, b.project);
+    const link = await ownLink(c, user, p.id);
+    const surveyId = c.req.param('id') || '';
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(surveyId)) throw new Refused(400, 'invalid_survey');
+    const reads = await readsFor(c, link);
+    const d = await reads.survey(surveyId);
+    const qid = typeof b.question_id === 'string' ? b.question_id : '';
+    const index = d.questions.findIndex((q) => q.id === qid);
+    if (index < 0) throw new Refused(400, 'invalid_question');
+    await setMark(c.env, { integrationId: link.integration_id, projectId: p.id, userId: user.id }, surveyId, qid, index, b.mark ?? null);
+    await log(c, user, 'posthog_survey_marked', { project_id: p.id });
     return c.json({ ok: true });
   }));
 

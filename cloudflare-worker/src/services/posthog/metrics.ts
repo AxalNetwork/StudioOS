@@ -304,6 +304,63 @@ export async function fromPosthog(env: Env, projectId: number, module: string, v
   };
 }
 
+// ── Section syncs (parts 3–6) ────────────────────────────────────────────
+
+export interface SyncContext { integrationId: number; projectId: number; userId: number; today: string }
+export interface SyncResult { facts: number; updated: number; kept_deleted: number; proposals: number; partial: boolean; unread: string[] }
+export type SectionSync = (env: Env, reads: import('./reads').PosthogReads, ctx: SyncContext) => Promise<SyncResult>;
+
+const SYNCS = new Map<Section, SectionSync>();
+/** A section's sync, registered by its part on import. */
+export const registerSync = (section: Section, fn: SectionSync) => { SYNCS.set(section, fn); };
+export const syncFor = (section: Section) => SYNCS.get(section) ?? null;
+
+export const emptyResult = (): SyncResult => ({ facts: 0, updated: 0, kept_deleted: 0, proposals: 0, partial: false, unread: [] });
+
+/** Count one `landFact` outcome into a result. */
+export function counted(r: SyncResult, outcome: 'written' | 'updated' | 'kept_deleted') {
+  if (outcome === 'written') r.facts += 1; else if (outcome === 'updated') r.updated += 1; else r.kept_deleted += 1;
+}
+
+/**
+ * The latest number an insight's results give: the last point of the first
+ * series, or a single count or aggregate. A funnel gives its conversion, last
+ * step over first, as a percentage. Null when nothing numeric is there.
+ */
+export function latestOf(result: unknown): number | null {
+  const o = result && typeof result === 'object' ? result as Record<string, unknown> : null;
+  const rows = Array.isArray(o?.results) ? o!.results as unknown[] : Array.isArray(result) ? result as unknown[] : [];
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const first = rows[0] && typeof rows[0] === 'object' ? rows[0] as Record<string, unknown> : null;
+  if (!first) return num(o?.aggregated_value) ?? num(o?.count);
+  if (Array.isArray(first.data) && first.data.length) return num(first.data[first.data.length - 1]);
+  if (rows.length > 1 && rows.every((r) => r && typeof r === 'object' && num((r as Record<string, unknown>).count) != null)) {
+    const a = num((rows[0] as Record<string, unknown>).count)!; const b = num((rows[rows.length - 1] as Record<string, unknown>).count)!;
+    return a > 0 ? Math.round((b / a) * 1000) / 10 : null;
+  }
+  return num(first.aggregated_value) ?? num(first.count) ?? num(first.value);
+}
+
+/** Every tracked metric of these modules, run and landed as today's fact. A failed read is named, never a 0. */
+export async function landTracked(env: Env, reads: import('./reads').PosthogReads, ctx: SyncContext, modules: string[], r: SyncResult) {
+  for (const m of (await trackedOf(env, ctx.projectId)).filter((t) => modules.includes(t.module))) {
+    try {
+      const value = latestOf(await reads.runInsight(m.insight_short_id));
+      if (value == null) { r.unread.push(`metric:${m.uid}`); continue; }
+      counted(r, await landFact(env, ctx, { module: m.module, kind: 'metric', fact_key: `metric:${m.uid}`, period: ctx.today, value, label: m.insight_name, source_ref: m.insight_short_id, as_of: ctx.today }));
+    } catch (e) {
+      if (stopsSync(e)) { r.partial = true; return; }
+      r.unread.push(`metric:${m.uid}`);
+    }
+  }
+}
+
+/** A rate limit or a spent budget ends the sync as partly synced; any other failure skips one item. */
+export const stopsSync = (e: unknown) => {
+  const code = (e as { code?: string })?.code;
+  return code === 'rate_limited' || code === 'budget_exhausted' || code === 'unauthorized';
+};
+
 function safeJson(s: string | null): Record<string, unknown> | null {
   if (!s) return null;
   try { const v = JSON.parse(s); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; }
