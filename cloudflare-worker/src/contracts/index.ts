@@ -23,6 +23,10 @@ export const CONTRACTS = Object.freeze({
   // The two swaps that merged beside this file's own PR (D1538, D1555).
   typedTables: { issue: 3787, route: 'GET /api/decks/:id/typed-values', schema: 'deckTypedTables.schema.json' },
   consistency: { issue: 3802, route: 'GET /api/decks/:id/check (its consistency key)', schema: 'deckConsistency.schema.json' },
+  // D1501 (#3751): a version's working copy, card by card.
+  saveCard: { issue: 3751, route: 'PATCH /api/decks/:id/cards/:uid', schema: 'deckSaveCard.schema.json' },
+  discardDraft: { issue: 3751, route: 'DELETE /api/decks/:id/draft', schema: 'deckDiscardDraft.schema.json' },
+  draft: { issue: 3751, route: 'GET /api/decks/:id/draft', schema: 'deckDraft.schema.json' },
 });
 
 export type ContractMethod = keyof typeof CONTRACTS;
