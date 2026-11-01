@@ -24,7 +24,7 @@ import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
 import ShareDialog from './ShareDialog';
 import ExportDialog from './ExportDialog';
-import { BackgroundSheet, BrandKitSheet, CheckSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
+import { BackgroundSheet, BrandKitSheet, CheckSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 import { EDITOR_WAITING, aiOffState, placeTextEdit, saveChip } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
@@ -436,7 +436,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'duplicate') { if (!readOnly) duplicate(sel); return; }
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
-    if (['theme', 'brand', 'sources', 'versions', 'check', 'structure', 'background'].includes(id)) setSheet(id);
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i) => {
@@ -520,6 +520,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <ThemeSheet model={model} theme={theme} audience={audience} kit={kit} readOnly={readOnly}
           onTheme={setTheme} onAudience={setAudience} onApplyAll={() => setDialog({ kind: 'apply-all' })} onClose={() => setSheet(null)} />
       ) : null}
+      {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onTheme={setTheme} onClose={() => setSheet(null)} /> : null}
       {sheet === 'structure' && card ? (
         <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })} onClose={() => setSheet(null)} />
       ) : null}

@@ -1,4 +1,10 @@
-/** #3626: reviewed model purposes and module capability assignments. */
+/**
+ * #3626: reviewed model purposes and module capability assignments.
+ * #3934 (§4 of #3721's use-case plan): glm-5.2 (superseded by GLM-5.3) and the
+ * 3.1 70B (an older twin of the 3.3 70B at the same price) are hidden, so no
+ * page, option or module route offers them; r1-distill is a Reason model
+ * only, and phonellm a Voice turn model only.
+ */
 export default {
   "@cf/cloudflare/clef": {
     "operation": "decision",
@@ -30,8 +36,7 @@ export default {
   "@cf/daily-co/phonellm-mini-alpha-2": {
     "operation": "chat",
     "kinds": [
-      "chat",
-      "speech"
+      "voice_turn"
     ],
     "purpose": "Short conversational replies for recorded-session and voice workflows"
   },
@@ -43,15 +48,6 @@ export default {
       "chat"
     ],
     "purpose": "Southeast Asian language conversations and regional market copy"
-  },
-  "@cf/meta/llama-3.1-70b-instruct-fp8-fast": {
-    "operation": "chat",
-    "kinds": [
-      "chat",
-      "synth",
-      "write"
-    ],
-    "purpose": "Summarise research, explain records and draft member communications"
   },
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast": {
     "operation": "chat",
@@ -114,9 +110,7 @@ export default {
   "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b": {
     "operation": "chat",
     "kinds": [
-      "reason",
-      "plan",
-      "numbers"
+      "reason"
     ],
     "purpose": "Compare evidence, work through scenarios and explain planning assumptions"
   },
@@ -191,15 +185,6 @@ export default {
       "plan"
     ],
     "purpose": "Interactive explanations, evidence summaries and planning drafts"
-  },
-  "@cf/zai-org/glm-5.2": {
-    "operation": "chat",
-    "kinds": [
-      "code",
-      "reason",
-      "plan"
-    ],
-    "purpose": "Prototype code, technical plans and multi-step problem solving"
   },
   "@cf/zai-org/glm-5.3": {
     "operation": "chat",

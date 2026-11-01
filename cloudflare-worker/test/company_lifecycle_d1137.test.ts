@@ -255,7 +255,7 @@ test('a venture\'s seat changes write their events, and the event writer refuses
   assert.equal((await call(db, env, ADA, 'DELETE', `/api/projects/${VENTURE}/members/${DEE}`)).status, 200, 'removing again changes nothing');
   assert.deepEqual(events(db).map((e) => [e.kind, e.project_id, e.target_user_id]), [['seat_add', VENTURE, DEE], ['seat_remove', VENTURE, DEE]]);
 
-  assert.deepEqual([...MEMBERSHIP_EVENT_KINDS].sort(), ['archive', 'join', 'leave', 'project_move', 'project_transfer', 'remove', 'rename', 'restore', 'role_change', 'seat_add', 'seat_remove', 'transfer']);
+  assert.deepEqual([...MEMBERSHIP_EVENT_KINDS].sort(), ['archive', 'join', 'leave', 'project_move', 'project_transfer', 'remove', 'rename', 'restore', 'role_change', 'seat_add', 'seat_remove', 'transfer', 'currency_change'].sort());
   assert.throws(() => membershipEvent(env, { kind: 'join' }), /names a company or a venture/);
   assert.throws(() => membershipEvent(env, { kind: 'nope' as any, companyId: 1 }), /unknown/);
   // The migration's CHECK holds the same rule for any writer.

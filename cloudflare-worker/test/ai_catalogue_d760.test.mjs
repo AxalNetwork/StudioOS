@@ -265,7 +265,9 @@ test('automatic routes work without switches; explicit module choices are priced
   for (const [task, e] of Object.entries(ROUTE)) {
     // Partner module choices are explicit and gated; automatic defaults must
     // still work with no owner switch, as before the module registry existed.
-    const env = Object.hasOwn(MODULE_ROUTES, task) ? GATE_ON : GATE_OFF;
+    // #3934: Edit image has no model every plan runs (DK5's fallback is "none (the press is hidden)"),
+    // so its route answers only with the partner gate on, as a module choice does.
+    const env = Object.hasOwn(MODULE_ROUTES, task) || task === 'rail_edit_image' ? GATE_ON : GATE_OFF;
     const automatic = new Set([e.model, ...(e.fallbackChain ?? [])]);
     for (const id of automatic) assert.equal(modelRefusal(env, id), null, `${task}: ${id} would be refused`);
     // An alternate is a member's explicit pick, so a partner model there waits on
@@ -358,7 +360,9 @@ test('/catalogue serves the offered models, cost and billed, ordered by kind wit
   assert.equal(status, 200);
   assert.equal(body.billing, 'cost');
   assert.deepEqual(body.guard, { every_run: false });
-  assert.equal(body.models.length, 53, 'the gate is off, so the eight new partner models are not offered');
+  // #3934 (§4): glm-5.2 and the 3.1 70B are hidden everywhere, so 2 fewer than the 53 and 61 offered before.
+  assert.equal(body.models.length, 51, 'the gate is off, so the eight new partner models are not offered');
+  assert.ok(!body.models.some((m) => ['@cf/zai-org/glm-5.2', '@cf/meta/llama-3.1-70b-instruct-fp8-fast'].includes(m.id)), 'hidden models are not in the catalogue');
   assert.equal(body.models.at(-1).id, ROUTE.safety.model, 'Safety is last');
   assert.ok(!body.models.some((m) => m.id === '@cf/deepgram/aura-1'));
   const kinds = body.models.slice(0, -1).map((m) => m.kind);
@@ -376,7 +380,7 @@ test('/catalogue serves the offered models, cost and billed, ordered by kind wit
   assert.equal(v4.cost.tokens_cached, 0.014003);
 
   const on = await get('/catalogue', 41, 'founder', GATE_ON);
-  assert.equal(on.body.models.length, 61);
+  assert.equal(on.body.models.length, 59);
   assert.ok(on.body.models.some((x) => x.id === '@cf/deepgram/aura-1'));
 });
 

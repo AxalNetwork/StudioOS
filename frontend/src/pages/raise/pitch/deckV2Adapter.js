@@ -22,12 +22,17 @@
  * D1603, so `ExportDialog.jsx` calls `api.deckExportOdp` directly and this
  * file no longer lists it.
  *
+ * Swapped here (`SWAPPED`): `grid`, whose route `GET /api/decks/:id/grid`
+ * merged as D1499 part 1 (#3749). It keeps its row, so the plan's table still
+ * reads whole, and answers through `deckGridApi.grid`.
+ *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
  * no method here: the surfaces read them when the existing read carries them.
  */
 
 import { LATER, NOT_ON } from './deckV2Model.js';
+import { deckGridApi } from '../../../lib/api/deckGrid.js';
 
 export { NOT_ON };
 
@@ -87,6 +92,9 @@ export const SURFACES = Object.freeze({
 
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
+/** The rows whose route is on main: each answers through its real client, never unavailable by default. */
+export const SWAPPED = Object.freeze(['grid']);
+
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
  * `{ available: true, value }`, or unavailable with the Worker's reason. A
@@ -116,7 +124,8 @@ export function shown(answer, format = String, later = LATER) {
 
 // ---------------------------------------------------------------- the methods
 
-export const grid = off('grid');
+/** D1499 (#3749): the deck version's Grid — its aspect, the 17 structures and each card's areas, each with its box. */
+export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES.grid.issue);
 export const saveCard = off('saveCard');
 export const discardDraft = off('discardDraft');
 export const batch = off('batch');
@@ -162,4 +171,4 @@ export const markSeen = off('markSeen');
 export const setDeckSource = off('setDeckSource');
 
 /** Synchronous: whether a surface is on, for a menu that greys its item before any read. */
-export const availability = (name) => (SURFACES[name] ? unavailable(SURFACES[name].issue) : null);
+export const availability = (name) => (SURFACES[name] && !SWAPPED.includes(name) ? unavailable(SURFACES[name].issue) : null);

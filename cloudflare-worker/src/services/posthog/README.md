@@ -60,5 +60,11 @@ PostHog parts 4–6 (#3731) add their syncs and acceptors beside these files
   founder said measures a role, read by Traction proof's lines and the
   consistency check's `active_users`. It never moves a score.
 
+- `grow.ts` — D1608 (#3731 part 6): Grow's sync (tracked metrics, product
+  retention cohorts by first-seen week, survey figures by month) and the
+  `survey_feedback` acceptor (`addFeedback`, `source 'customer'`, no name or
+  email).
+
+Every section's sync and acceptor now lives beside these files
 PostHog part 6 (#3731) adds its sync and acceptor beside these files
 and read PostHog through `reads.ts` alone.
