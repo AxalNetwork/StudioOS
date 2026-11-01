@@ -257,6 +257,7 @@ import deckElementModels from './routes/deck_element_models';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
+import deckFigures from './routes/deck_figures';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
@@ -1392,6 +1393,8 @@ app.route('/api/decks', deckStage);
 app.route('/api/decks', deckRemix);
 // D1538 (#3787): the figures a founder types for a deck, Stated (`/:id/typed-values`).
 app.route('/api/decks', deckTypedValues);
+// D1523 (#3775): each figure's provenance, Linked, Stated, Uncited or Not recorded (`/:id/figures`), editor-only.
+app.route('/api/decks', deckFigures);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.

@@ -9,7 +9,8 @@ import { comparePair } from './compareModel';
 import { APPLY } from './deckV2Model';
 import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from './editorModel';
 import { SLIDE_SIZES, aspectOf, withAspect } from './gridModel';
-import { remix as remixAdapter, shown } from './deckV2Adapter';
+import { figures as figuresAdapter, remix as remixAdapter, shown } from './deckV2Adapter';
+import { GO_TO_CARD, checkCounts, toReview } from './figuresModel';
 import { movedNotice } from './deckReflow';
 
 /**
@@ -32,7 +33,10 @@ import { movedNotice } from './deckReflow';
  *   VersionsSheet    PD15: every version, Compare, and Restore behind its
  *                    dialog (`POST /api/decks/:id/restore`)
  *   SourcesSheet     D896's Sources panel, with the slide's own evidence
- *   CheckSheet       D900's Check panel ("Check claims · Free checks")
+ *   CheckSheet       D900's Check panel ("Check claims · Free checks"),
+ *                    headed by D1523's figure counts (pd25: "▤ Linked n ·
+ *                    ✎ Stated n · ! Uncited n") and the Stated and Uncited
+ *                    figures, each with "Go to card ›" (`deckV2Adapter.figures`)
  *   RemixSheet       This card › Remix this slide (pd5, D1553): four layouts
  *                    from The Grid's structures, each keeping every block, and
  *                    "Remove a block · the rest reflows inside the grid". Free:
@@ -198,9 +202,47 @@ export function SourcesSheet({ onClose, children }) {
   return <Frame title="Sources and coverage" testId="pitch-sheet-sources" onClose={onClose} width={560}>{children}</Frame>;
 }
 
+/**
+ * D1523 (#3775, pd25): where the figures on the saved version come from. It
+ * reads the saved version, so an unsaved edit shows after Save; a read that
+ * fails says so and never counts 0.
+ */
+export function FigureCounts({ deckId, onGoToCard }) {
+  const [answer, setAnswer] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setAnswer(null);
+    figuresAdapter(deckId).then((a) => { if (live) setAnswer(a); });
+    return () => { live = false; };
+  }, [deckId]);
+  if (!answer) return <span className={MUTED} role="status" data-testid="pitch-figures-loading">Reading where each figure comes from…</span>;
+  if (!answer.available) return <span className={MUTED} role="status" data-testid="pitch-figures-off">{shown(answer)}</span>;
+  const review = toReview(answer.value?.figures);
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="pitch-figures">
+      <span className={EYE}>Figures on the saved version</span>
+      <span className={`text-[12.5px] font-bold ${INK}`} data-testid="pitch-figures-counts">{checkCounts(answer.value?.counts)}</span>
+      {review.length ? (
+        <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-figures-review">
+          {review.map((f) => (
+            <li key={f.key} className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-axal-hairline px-2.5 py-1.5 dark:border-gray-700" data-testid={`pitch-figures-row-${f.key}`}>
+              <span className="flex flex-col">
+                <span className={`text-[12.5px] ${INK}`}><b>{f.chip}</b> · card {f.card + 1} · {f.title}</span>
+                <span className={MUTED}>{f.line}</span>
+              </span>
+              {onGoToCard ? <button type="button" className={GHOST} onClick={() => onGoToCard(f.card)} data-testid={`pitch-figures-go-${f.key}`}>{GO_TO_CARD}</button> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function CheckSheet({ deck, projectId, readOnly, dirty, onReplaced, onGoToCard, onClose }) {
   return (
     <Frame title="Check claims" testId="pitch-sheet-check" onClose={onClose} width={560}>
+      <FigureCounts key={`figures-${deck.id}-${deck.updated_at ?? ''}`} deckId={deck.id} onGoToCard={onGoToCard} />
       <CheckPanel key={deck.id} deck={deck} projectId={projectId} readOnly={readOnly} dirty={dirty} onReplaced={onReplaced} onGoToCard={onGoToCard} />
     </Frame>
   );

@@ -1,7 +1,7 @@
 import React from 'react';
 import { NOT_RECORDED, blockLabel, runsOf, tileValue } from './editorModel';
 import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './presentExportModel';
-import { STATED_CHIP, TYPED_LINE, faceOf, projectionOf } from './figuresModel';
+import { STATED_CHIP, TYPED_LINE, UNCITED_CHIP, UNCITED_LINE, faceOf, numbersIn, projectionOf } from './figuresModel';
 import { isTypedChart, marketCircles, projectionLines, tableView } from './typedChartsModel';
 import { aspectOf, placeOf } from './gridModel';
 
@@ -26,6 +26,10 @@ export { gridBlocks } from './presentExportModel';
  * words in plain text). Present, share and print draw no such badge: only
  * "Show sources"' line, as before. A chart that reaches past today carries
  * "Projection" and its footnote in every format (`projectionOf`).
+ *
+ * D1523 (#3775, pd24): in the editor a typed tile reads "✎ Stated" and a
+ * number in free text "! Uncited" (`badgeOf`'s rule). `live` (Present, the
+ * print page and so every export) draws neither.
  */
 
 /** The Projection label and footnote under a chart (pd6), wherever the card is drawn. */
@@ -119,10 +123,18 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
     if (!String(b.text || '').trim()) return live ? null : <span className="text-[11px] italic" style={{ color: colours.muted }}>Text · empty</span>;
     // D1500: rich text is drawn as its runs, read-only (editing them is A4c's).
     const paras = runsOf(b);
-    if (paras) return <RichText paras={paras} className={b.style === 'heading' ? `${heading} font-extrabold leading-tight` : `${para} leading-snug`} />;
-    if (b.style === 'heading') return <span className={`${heading} font-extrabold leading-tight`}>{b.text}</span>;
-    if (b.style === 'list') return <ul className={`m-0 list-disc pl-4 ${para}`}>{String(b.text).split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ul>;
-    return <span className={`${para} leading-snug`}>{b.text}</span>;
+    const body = paras ? <RichText paras={paras} className={b.style === 'heading' ? `${heading} font-extrabold leading-tight` : `${para} leading-snug`} />
+      : b.style === 'heading' ? <span className={`${heading} font-extrabold leading-tight`}>{b.text}</span>
+        : b.style === 'list' ? <ul className={`m-0 list-disc pl-4 ${para}`}>{String(b.text).split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ul>
+          : <span className={`${para} leading-snug`}>{b.text}</span>;
+    // D1523 (#3775): in the editor a number in free text carries "! Uncited"; Present and print (`live`) never do.
+    if (live || !numbersIn(b.text).length) return body;
+    return (
+      <span className="flex flex-col gap-0.5">
+        {body}
+        <span className="self-start text-[10px] font-bold text-amber-700 dark:text-amber-300" title={UNCITED_LINE} data-testid={`deck-block-uncited-${b.id}`}>{UNCITED_CHIP}</span>
+      </span>
+    );
   }
   if (b.kind === 'metric') {
     const v = tileValue(b);
