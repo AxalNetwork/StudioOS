@@ -45,6 +45,7 @@ import { acceptRows, fillForUndo, recordKept, undoFill } from '../services/fills
 import { SCOPED_READS, isExplorer, parentKey, scopeOf, type RecordScope } from '../services/fills/scopes';
 import { logActorAct } from '../services/actorLog';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { competitorNameNorm } from '../services/validateWriters';
 
 const fills = new Hono<{ Bindings: Env }>();
 
@@ -84,10 +85,53 @@ export const ROW_READS: Readonly<Record<string, string>> = Object.freeze({
   roadmap_okrs: 'SELECT * FROM roadmap_okrs WHERE id = ? AND project_id = ?',
   raise_prospects: 'SELECT * FROM raise_prospects WHERE id = ? AND project_id = ?',
   job_postings: 'SELECT * FROM job_postings WHERE id = ? AND project_id = ?',
+  // #4046 (Group A1).
+  competitor_tracking: 'SELECT * FROM competitor_tracking WHERE id = ? AND project_id = ?',
+  product_feedback: 'SELECT * FROM product_feedback WHERE id = ? AND project_id = ?',
+  compliance_events: 'SELECT * FROM compliance_events WHERE id = ? AND project_id = ?',
   // D1329 (#3490): records that are not a venture's. Each is `scopes.ts`' own read, bound on the id alone and
   // reached only through the scoped branch, after the record's own scope is checked.
   ...SCOPED_READS,
 });
+
+/**
+ * #4046: the rows a form names by a text key, not by their id. A competitor's
+ * Edit and Add answer a candidate id (its tracking row is keyed by the name,
+ * `competitorNameNorm`), and feedback answers its uid. Each resolves to the
+ * row's own id on this venture, through literal statements only; `ROW_READS`
+ * then reads the row as for every other table.
+ */
+export const ROW_KEYS: Readonly<Record<string, (env: Env, key: string, projectId: number) => Promise<number | null>>> = Object.freeze({
+  competitor_tracking: async (env: Env, key: string, projectId: number) => {
+    const c = await env.DB.prepare(
+      `SELECT c.name FROM competitor_candidates c JOIN competitor_analyses a ON a.id = c.analysis_id
+        WHERE c.id = ? AND a.project_id = ?`,
+    ).bind(key, projectId).first<{ name: string }>();
+    if (!c) return null;
+    const t = await env.DB.prepare('SELECT id FROM competitor_tracking WHERE project_id = ? AND name_norm = ?')
+      .bind(projectId, competitorNameNorm(String(c.name))).first<{ id: number }>();
+    return t ? Number(t.id) : null;
+  },
+  product_feedback: async (env: Env, key: string, projectId: number) => {
+    const r = await env.DB.prepare('SELECT id FROM product_feedback WHERE uid = ? AND project_id = ?').bind(key, projectId).first<{ id: number }>();
+    return r ? Number(r.id) : null;
+  },
+});
+
+/** A text key as a form sends it: letters, digits, `_` and `-`, at most 80. */
+const TEXT_KEY = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
+
+/**
+ * The id of the row a request names on this venture, or null: a positive
+ * integer, or (#4046) a text key of a table `ROW_KEYS` lists.
+ */
+export async function venturedRowId(env: Env, table: string, raw: unknown, projectId: number): Promise<number | null> {
+  const n = typeof raw === 'number' ? raw : /^[1-9]\d*$/.test(String(raw ?? '')) ? Number(raw) : NaN;
+  if (Number.isSafeInteger(n) && n > 0) return n;
+  const resolve = ROW_KEYS[table];
+  if (!resolve || typeof raw !== 'string' || !TEXT_KEY.test(raw)) return null;
+  return resolve(env, raw, projectId);
+}
 
 const blank = (v: unknown) => v == null || String(v).trim() === '';
 
@@ -114,8 +158,8 @@ fills.get('/sheet', async (c) => {
   let recordId: number | null = null;
   let row: Record<string, unknown> | null = null;
   if (rawRecord != null && rawRecord !== '') {
-    recordId = Number(rawRecord);
-    if (!Number.isSafeInteger(recordId) || recordId <= 0 || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
+    recordId = await venturedRowId(c.env, table, rawRecord, projectId);
+    if (!recordId || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
     row = await c.env.DB.prepare(ROW_READS[table]).bind(recordId, projectId).first<Record<string, unknown>>();
     if (!row) return refuse(c, 404, 'record_not_found');
   }
@@ -218,8 +262,8 @@ fills.post('/record', async (c) => {
   const venture = await writableVenture(c, user, body?.project); if (venture instanceof Response) return venture;
   const uids = uidsOf(body?.proposals); if (!uids) return refuse(c, 400, 'invalid_proposals');
   const table = fields[0].table;
-  const recordId = Number(body?.record);
-  if (!Number.isSafeInteger(recordId) || recordId <= 0 || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
+  const recordId = await venturedRowId(c.env, table, body?.record, venture.id);
+  if (!recordId || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
   // The row as the form's own Save left it: the authority on what was kept.
   const row = await c.env.DB.prepare(ROW_READS[table]).bind(recordId, venture.id).first<Record<string, unknown>>();
   if (!row) return refuse(c, 404, 'record_not_found');

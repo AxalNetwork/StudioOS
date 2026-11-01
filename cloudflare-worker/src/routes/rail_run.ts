@@ -45,7 +45,7 @@ import { runRefusalView } from '../util/railContext';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import { sessionBlockProposals, windowDays } from '../services/sessionsBlock';
-import { ROW_READS } from './fills';
+import { ROW_READS, venturedRowId } from './fills';
 import { layoutView, savedRow } from './studio_layout';
 import { studioProfile } from '../services/studioModules';
 import {
@@ -263,8 +263,9 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
         .bind(projectId).first<{ id: number; founder_id: number | null; company_id: number | null }>();
       if (!project || !(await canAccessProject(c.env, user, project, { write: true }))) return refuse(c, 403, 'project_not_available');
       if (rec != null) {
-        recordId = Number(rec?.id);
-        if (rec?.type !== table || !Number.isSafeInteger(recordId) || recordId <= 0 || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
+        // #4046: a positive id, or a text key of a table `ROW_KEYS` lists.
+        recordId = rec?.type === table ? await venturedRowId(c.env, table, rec?.id, projectId) : null;
+        if (!recordId || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
         row = await c.env.DB.prepare(ROW_READS[table]).bind(recordId, projectId).first<Record<string, unknown>>();
         if (!row) return refuse(c, 404, 'record_not_found');
       }

@@ -44,12 +44,14 @@ test('each founder form FILL_FIELDS lists has a sheet; no other form does', () =
   assert.deepEqual(fillTarget('build', 'prototype-mvp', 'must-have')?.form, 'must-have');
   // #3740 part 2a: a roadmap item has a sheet now (its title).
   assert.deepEqual(fillTarget('build', 'product-roadmap', 'item')?.form, 'item');
-  for (const [c, s, f] of [['validate', 'market-intelligence', 'competitor'], ['validate', 'demand-signals', 'signal'], ['validate', 'problem-discovery', 'segment'], ['raise', 'pitch-deck', 'theme'], ['validate', 'problem-discovery', '']]) {
+  // #4046: a competitor has a sheet now (why it matters).
+  assert.deepEqual(fillTarget('validate', 'market-intelligence', 'competitor')?.form, 'competitor');
+  for (const [c, s, f] of [['validate', 'demand-signals', 'signal'], ['validate', 'problem-discovery', 'segment'], ['raise', 'pitch-deck', 'theme'], ['validate', 'problem-discovery', '']]) {
     assert.equal(fillTarget(c, s, f), null, `${c}/${s}/${f}`);
   }
   for (const [slug, forms] of Object.entries(VALIDATE_FORMS)) {
     const t = moduleFillTarget('validate', slug, forms);
-    assert.equal(!!t, ['problem-discovery', 'ideal-customer-profile', 'experiments'].includes(slug), slug);
+    assert.equal(!!t, ['problem-discovery', 'ideal-customer-profile', 'experiments', 'market-intelligence'].includes(slug), slug);
   }
   assert.equal(moduleFillTarget('build', 'solution-design', BUILD_FORMS['solution-design']).label, 'Add feature');
   assert.equal(moduleFillTarget('validate', 'problem-discovery', []), null);
@@ -483,7 +485,13 @@ const src = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8')
 const FOUNDER = { theme: ['validate', 'problem-discovery'], segment: ['validate', 'ideal-customer-profile'], hypothesis: ['validate', 'experiments'],
   feature: ['build', 'solution-design'], 'must-have': ['build', 'prototype-mvp'], kpi: ['grow', 'revenue-and-traction'],
   // #3740 part 2a.
-  item: ['build', 'product-roadmap'], investor: ['raise', 'capital-relationships'], role: ['grow', 'team-expansion'] };
+  item: ['build', 'product-roadmap'], investor: ['raise', 'capital-relationships'], role: ['grow', 'team-expansion'],
+  // #4046 (Group A1).
+  competitor: ['validate', 'market-intelligence'], feedback: ['grow', 'product-improvement'], obligation: ['grow', 'durable-company-building'] };
+/** A founder form whose Edit cannot take Ask, with its reason (#4046). */
+const FOUNDER_EDIT_EXEMPT = {
+  feedback: 'exempt: Edit feedback picks its theme from the venture\'s chips; only Log feedback names a new theme',
+};
 const MOUNTS = {
   'Investor · Deals · Commit | ic-memo': { add: 'exempt: an IC decision is opened by the decision flow, and its memo is written on the decision page', edit: ['pages/ICDecisionPage.jsx', /scope: SCOPED_FORMS\.icMemo, record:/] },
   'Advisor · Expertise · Services | service': { add: ['pages/advisor/expertise/ServicesZone.jsx', /scope: SCOPED_FORMS\.service/], edit: 'exempt: Services has no Edit form today; the advisor sections are redrawn under #3700' },
@@ -514,6 +522,11 @@ test('#3740 guard: every FILL_FIELDS form has an Add mount and an Edit mount tha
       const adds = (FORMS[cycle]?.[slug] || []).map((f) => f.key);
       assert.ok(adds.some((k) => fillTarget(cycle, slug, k)?.form === form), `${pair}: no Add mount fills it`);
       const editKey = editFor(cycle, slug)?.key;
+      if (FOUNDER_EDIT_EXEMPT[form]) {
+        assert.match(FOUNDER_EDIT_EXEMPT[form], /^exempt: .{10,}/, `${pair}: an exemption names its reason`);
+        assert.equal(fillTarget(cycle, slug, editKey), null, `${pair}: an exempt Edit (${editKey}) must not draw Ask`);
+        continue;
+      }
       assert.equal(fillTarget(cycle, slug, editKey)?.form, form, `${pair}: its Edit (${editKey}) does not fill it`);
       continue;
     }
@@ -551,4 +564,46 @@ test('#3740 part 2a: a roadmap item, an investor and a role draw Ask on their co
     ['raise', 'investor-narrative', 'narrative-version'], ['grow', 'partner-network', 'partner'], ['grow', 'market-expansion', 'market']]) {
     assert.equal(fillTarget(cycle, slug, key), null, `${key} draws no Ask`);
   }
+});
+
+test('#4046 Group A1: a competitor\'s why, feedback\'s new theme and an obligation\'s title draw Ask; keyed rows send their key', async () => {
+  // Mutation checked: a dropped FILL_PAGES key or EDIT_FILL_FORMS entry, a text key sent for a table not
+  // keyed, savedId ignoring a competitor's candidate_id, or the obligation Edit without its title, each turns this red.
+  const { FORMS: forms, editFor: edit } = await import('../src/pages/cycles/forms.js');
+  const { KEYED_FILL_TABLES, fillTable } = await import('../src/lib/fillForms.js');
+  for (const [cycle, slug, form, field, column, editFills] of [
+    ['validate', 'market-intelligence', 'competitor', 'why', 'why_it_matters', true],
+    ['grow', 'product-improvement', 'feedback', 'theme', 'theme', false],
+    ['grow', 'durable-company-building', 'obligation', 'title', 'title', true],
+  ]) {
+    const add = (forms[cycle]?.[slug] ?? []).find((f) => f.key === form);
+    assert.ok(add, `${cycle}/${slug} has its Add form ${form}`);
+    assert.deepEqual(fillTarget(cycle, slug, form), { page: FILL_PAGES[`${cycle}/${slug}`], form });
+    const fields = fieldsOfPage(FILL_PAGES[`${cycle}/${slug}`], form);
+    assert.deepEqual(fields.map((f) => [f.field, f.column, f.class]), [[field, column, 'composition']], 'only the composition field');
+    assert.ok(add.fields.some((f) => f.name === field), 'the Add form draws that field');
+    const e = edit(cycle, slug);
+    if (editFills) {
+      assert.deepEqual(fillTarget(cycle, slug, e?.key), { page: FILL_PAGES[`${cycle}/${slug}`], form }, `${cycle}/${slug}: its Edit fills the same form`);
+      assert.ok(e.fields.some((f) => f.name === field), 'the Edit form draws that field');
+    } else {
+      assert.equal(fillTarget(cycle, slug, e?.key), null, 'Edit feedback picks a theme from chips, so it draws no Ask');
+    }
+  }
+  // The obligation's Edit draws its title, preloads it and sends it.
+  const ob = edit('grow', 'durable-company-building');
+  assert.equal(ob.fields[0].name, 'title');
+  assert.equal(ob.valuesOf({ edit: { id: 61, title: 'Board meeting' } }).title, 'Board meeting');
+  assert.equal(ob.toBody({ title: 'Quarterly board meeting', status: 'upcoming' }).title, 'Quarterly board meeting');
+  // A keyed table sends its text key; any other table sends ids only.
+  assert.deepEqual([...KEYED_FILL_TABLES], ['competitor_tracking', 'product_feedback']);
+  assert.equal(fillTable(FILL_PAGES['validate/market-intelligence'], 'competitor'), 'competitor_tracking');
+  assert.equal(fillRecordId('cand-1', 'competitor_tracking'), 'cand-1');
+  assert.equal(fillRecordId('cand-1', 'compliance_events'), null, 'a table not keyed takes ids only');
+  assert.equal(fillRecordId("x' OR 1=1", 'product_feedback'), null, 'not a key');
+  assert.equal(fillRecordId(61, 'compliance_events'), 61);
+  assert.equal(savedId({ candidate_id: 'cand-9', added: true }, 'competitor_tracking'), 'cand-9', 'Add competitor answers its candidate');
+  assert.equal(savedId({ uid: 'fb-9' }, 'product_feedback'), 'fb-9', 'Log feedback answers its uid');
+  assert.equal(savedId({ uid: 'fb-9' }, 'compliance_events'), null);
+  assert.equal(savedId({ id: 61 }, 'compliance_events'), 61);
 });

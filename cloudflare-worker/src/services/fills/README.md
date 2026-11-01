@@ -46,3 +46,15 @@ wait for a later part: the competitor's row is keyed by name and the
 feedback's by uid, which `ROW_READS` and `fillRecordId` do not take. An
 obligation's title waits for its Edit form to draw one.
 
+**#4046 Group A1.** The three forms part 2a left join, one composition field
+each: Validate › Market intelligence's competitor (`competitor_tracking.why_it_matters`,
+Add and `edit-competitor`), Grow › Product improvement's feedback (its new theme,
+`product_feedback.theme`, Log feedback only: its Edit picks a theme from the
+venture's chips) and Grow › Durable company building's obligation
+(`compliance_events.title`, Add and `edit-obligation`, whose Edit now draws the
+title). A row a form names by a text key is resolved by `ROW_KEYS` in
+`../../routes/fills.ts` (`venturedRowId`): a competitor by its candidate id (the
+tracking row is keyed by the name, `competitorNameNorm`) and feedback by its uid,
+each to its own id on the venture, literal statements only; the frontend sends a
+text key only for `KEYED_FILL_TABLES`. A customer's words are never read for a
+fill: feedback's `EXISTING_READS` reads the venture's themes alone.

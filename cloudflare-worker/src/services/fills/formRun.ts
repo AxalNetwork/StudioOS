@@ -79,6 +79,10 @@ export const EXISTING_READS: Readonly<Record<string, string>> = Object.freeze({
   roadmap_okrs: 'SELECT objective AS value FROM roadmap_okrs WHERE project_id = ? ORDER BY id DESC LIMIT 40',
   raise_prospects: 'SELECT name AS value FROM raise_prospects WHERE project_id = ? ORDER BY id DESC LIMIT 40',
   job_postings: 'SELECT title AS value FROM job_postings WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  // #4046 (Group A1). Feedback's themes, never what a customer said.
+  competitor_tracking: "SELECT why_it_matters AS value FROM competitor_tracking WHERE project_id = ? AND why_it_matters IS NOT NULL AND trim(why_it_matters) <> '' ORDER BY id DESC LIMIT 40",
+  product_feedback: "SELECT DISTINCT theme AS value FROM product_feedback WHERE project_id = ? AND theme IS NOT NULL AND trim(theme) <> '' ORDER BY theme LIMIT 40",
+  compliance_events: 'SELECT title AS value FROM compliance_events WHERE project_id = ? ORDER BY id DESC LIMIT 40',
 });
 
 /** The venture's own records the form's restatement fields pick from. Literal statements only. */

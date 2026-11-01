@@ -28,6 +28,10 @@ export const FILL_PAGES = Object.freeze({
   'build/product-roadmap': 'Founder · Build · Product roadmap',
   'raise/capital-relationships': 'Founder · Raise · Capital relationships',
   'grow/team-expansion': 'Founder · Grow · Team expansion',
+  // #4046 (Group A1).
+  'validate/market-intelligence': 'Founder · Validate · Market intelligence',
+  'grow/product-improvement': 'Founder · Grow · Product improvement',
+  'grow/durable-company-building': 'Founder · Grow · Durable company building',
 });
 
 /**
@@ -46,12 +50,31 @@ export const EDIT_FILL_FORMS = Object.freeze({
   'edit-item': 'item',
   'edit-investor': 'investor',
   'edit-role': 'role',
+  // #4046 (Group A1). Feedback's Edit picks a theme from chips, so only Log feedback offers one.
+  'edit-competitor': 'competitor',
+  'edit-obligation': 'obligation',
 });
 
-/** A row id an Edit sends as `record`: a positive integer, or null (a KPI's key is not a row). */
-export function fillRecordId(id) {
+/**
+ * #4046: the tables whose rows a form names by a text key (`ROW_KEYS` in the
+ * Worker's routes/fills.ts): a competitor by its candidate id, feedback by its uid.
+ */
+export const KEYED_FILL_TABLES = Object.freeze(['competitor_tracking', 'product_feedback']);
+const TEXT_KEY = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
+
+/**
+ * A row id an Edit sends as `record`: a positive integer, or null (a KPI's key
+ * is not a row). #4046: for a table `KEYED_FILL_TABLES` lists, its text key.
+ */
+export function fillRecordId(id, table = null) {
   const n = typeof id === 'number' ? id : /^[1-9]\d*$/.test(String(id ?? '')) ? Number(id) : NaN;
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
+  if (Number.isSafeInteger(n) && n > 0) return n;
+  return KEYED_FILL_TABLES.includes(table) && typeof id === 'string' && TEXT_KEY.test(id) ? id : null;
+}
+
+/** The table a sheet's form writes, from FILL_FIELDS; null for a form it does not list. */
+export function fillTable(page, form) {
+  return fieldsOf(page, form)[0]?.table || null;
 }
 
 /** The sheet a cycle form opens, `{ page, form }`, or null when FILL_FIELDS lists none of its fields. */
@@ -71,10 +94,16 @@ export function moduleFillTarget(cycle, slug, forms) {
   return null;
 }
 
-/** The row a form's Save created or wrote, from the route's `{ id }`; null for anything else. */
-export function savedId(result) {
+/**
+ * The row a form's Save created or wrote, from the route's `{ id }`; null for
+ * anything else. #4046: a keyed table's Save answers its key, a competitor's
+ * `candidate_id` or feedback's `uid`.
+ */
+export function savedId(result, table = null) {
   const id = Number(result?.id);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
+  if (Number.isSafeInteger(id) && id > 0) return id;
+  if (!KEYED_FILL_TABLES.includes(table)) return null;
+  return fillRecordId(String(result?.candidate_id ?? result?.uid ?? ''), table);
 }
 
 /**
