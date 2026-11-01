@@ -90,6 +90,7 @@
  *     appear as a locked row to an investor without an NDA — a filename is
  *     itself information ("Series B term sheet — Acme.pdf").
  */
+import { notifyReasonedRead } from '../services/reasonedReadNotice';
 import { markRequestAnsweredByFile } from '../services/ddRequests';
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -665,6 +666,11 @@ r.post('/:projectUid/support-read', async (c) => {
     if (!audit.success || audit.meta.changes !== 1) throw new Error('Support audit unavailable');
     await logAdminAction(c.env, Number(admin.id), admin.email || '', 'data_room_support_read', {
       project_id: project.id, target_user_id: ownerId, reason, read_only: true,
+    });
+    // D1465 § Notifications (#4022): the founder is told, after the read is recorded. Never throws.
+    await notifyReasonedRead(c.env, {
+      surface: 'data_room', projectId: project.id, founderId: project.founder_id ?? null, admin: { id: Number(admin.id), role: admin.role }, reason,
+      link: `/raise/data-room?project_id=${project.id}`,
     });
     const detail = await roomDetails(c.env, { ...project, name: '' }, 'support');
     // Fetching the name belongs to the audited detail read, not the summary.

@@ -1,3 +1,4 @@
+import { notifyReasonedRead } from '../services/reasonedReadNotice';
 import { readRecord } from '../services/capTableRecord';
 import { recordAccessView, recordHolder } from '../services/capTableAccessRecord';
 /**
@@ -265,6 +266,11 @@ r.post('/:projectId/support', async (c) => {
     }
     const record = await readRecord(c.env, p.id);
     await logOpen(c.env, { project_id: p.id, user_id: user.id, via: 'support', level: 'full', reason });
+    // D1465 § Notifications (#4022): the founder is told, after the open is logged. Never throws.
+    await notifyReasonedRead(c.env, {
+      surface: 'cap_table', projectId: p.id, founderId: p.founder_id ?? null, admin: { id: Number(user.id), role: user.role }, reason,
+      link: `/raise/cap-table/access?project_id=${p.id}`,
+    });
     return c.json({
       project_id: p.id, level: 'full', via: 'support', read_only: true, scope: LEVEL_SCOPE.full, reason,
       source: 'record', source_note: 'These figures come from recorded issuances. Saved models and proposals are excluded.',

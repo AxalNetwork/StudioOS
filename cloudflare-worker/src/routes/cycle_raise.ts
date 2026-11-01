@@ -125,6 +125,7 @@
  * company, outside a support session, from their own connection. Anyone
  * else's module read has no `parts.mercury`, and the routes answer 403.
  */
+import { notifyReasonedRead } from '../services/reasonedReadNotice';
 import { checkNarrativeVersion, narrative as narrativeSurface, pinnedItems, signalKinds } from '../services/raiseClaims';
 import { narrativeCheckRows, narrativeClaims, sectionOfField, sectionWords } from '../services/narrative/claims';
 import { swapFigure } from '../services/deckCheck';
@@ -440,6 +441,12 @@ cycleRaise.post('/capital-relationships/support-read', async (c) => {
     if (prospectId != null && !await c.env.DB.prepare('SELECT 1 FROM raise_prospects WHERE id = ? AND project_id = ?').bind(prospectId, s.projectId).first()) return c.json({ detail: 'Investor not found' }, 404);
     const page = capitalPage(input.page);
     const auditId = await recordCapitalSupport(c.env, s.user, s.project, input.reason, { page, prospect_id: prospectId });
+    // D1465 § Notifications (#4022): the founder is told, after the read is recorded. Never throws.
+    await notifyReasonedRead(c.env, {
+      surface: 'capital_relationships', projectId: s.projectId, founderId: (s.project as any).founder_id ?? null,
+      admin: { id: Number(s.user.id), role: s.user.role }, reason: String(input.reason ?? '').trim(),
+      link: `/raise/capital-relationships?project_id=${s.projectId}`,
+    });
     return c.json({ ...(await capitalSupportDetails(c.env, s.projectId, page, prospectId)), audit_id: auditId });
   } catch (error) { return capitalFailure(c, error); }
 });
