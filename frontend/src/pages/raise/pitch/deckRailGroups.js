@@ -10,14 +10,21 @@
  * page" (owner answer D(a)).
  *
  *   DECK_RAIL_GROUPS  the element groups of the area lightbox's picker (pd4,
- *                     `deckV2Model.ELEMENT_GROUPS`), each mapped to the rail
- *                     options on main (`lib/railOptions/founder.js`) whose
- *                     model it picks. The lead option's suggestions are what
- *                     the group shows (at most three, `railView`); a pick is
- *                     stored for every option of the group that offers that
- *                     model (`PUT /api/ai/rail/pick`). A group with no option
- *                     on main reads "Not set up yet" from the adapter (#3754,
- *                     per-element routing, which replaces the option lists).
+ *                     `deckV2Model.ELEMENT_GROUPS`). D1503 (#3754): on a deck,
+ *                     each element group (`elements: true`) reads its routes
+ *                     from the Worker's per-element reply (`GET
+ *                     /api/decks/:id/element-models`, through
+ *                     `deckV2Adapter.elementModels`): the group's lead
+ *                     element's suggestions (at most three) and its stored
+ *                     pick, which is what the next run of the group uses. A
+ *                     pick is stored as the deck's group pick (`PUT …/element-
+ *                     models`, key `group:<group>`); HQ's lock refuses it and
+ *                     the block says so. A group whose elements run no model
+ *                     reads the Worker's "No model · free". On a page with no
+ *                     deck yet (New deck, Templates) there is no reply, so a
+ *                     group keeps the rail options on main it read before
+ *                     (`lib/railOptions/founder.js`, `PUT /api/ai/rail/pick`),
+ *                     and one with none reads "Not set up yet".
  *   PRESETS           Fast · Balanced · Best · Custom, greyed "Coming later"
  *                     until #3796 (and the HQ lock with #3786)
  *   deckRail(deckId)  the `groups` prop: the groups, the presets and the
@@ -29,7 +36,8 @@
  */
 
 import { aiBudgetApi } from '../../../lib/api/aiBudget.js';
-import { availability, deckUsage, presets as presetsRead } from './deckV2Adapter.js';
+import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckUsage, elementModels, presets as presetsRead } from './deckV2Adapter.js';
 import { ELEMENT_GROUPS, LATER } from './deckV2Model.js';
 
 /** The page key the pitch pages' rail reads (`lib/railOptions/founder.js`). */
@@ -48,26 +56,54 @@ export function usedBy(groupIds, max = 4) {
 const G = (id, label, options, elements, extra = {}) => Object.freeze({
   id, label, options: Object.freeze(options), usedBy: extra.usedBy ?? usedBy(elements), ...extra,
 });
-const off = (name) => {
-  const a = availability(name);
-  return Object.freeze({ reason: a?.reason || null, issue: a?.issue ?? null });
-};
+/** Why a group with no option on main has nothing to pick on a page with no deck: models are picked per deck. */
+const NO_DECK = Object.freeze({ reason: 'Models are picked per deck: open a deck to pick them.', issue: null });
 
 /**
- * The groups, in aird1's order. `options` are rail option keys on main, lead
- * first; `unavailable` marks a group whose models wait on the adapter;
- * `safety` is the guard, always on and never picked.
+ * The groups, in aird1's order. `elements` marks a group the Worker's
+ * per-element reply answers on a deck; `options` are the rail option keys on
+ * main a page with no deck still reads, lead first; `safety` is the guard,
+ * always on and never picked.
  */
 export const DECK_RAIL_GROUPS = Object.freeze([
-  G('text', 'Text', ['deck:rewrite', 'deck:build', 'deck:outline', 'deck:shorten', 'deck:expand'], ['text']),
-  G('images', 'Images', ['deck:image'], ['images']),
-  G('graphics', 'Graphics', [], ['graphics'], { unavailable: off('elementModels') }),
-  G('data', 'Data', ['deck:chart', 'deck:table', 'deck:timeline'], ['data']),
-  G('diagrams', 'Diagrams', [], ['diagrams'], { unavailable: off('elementModels') }),
-  G('venture', 'Venture records', [], ['venture'], { unavailable: off('elementModels') }),
+  G('text', 'Text', ['deck:rewrite', 'deck:build', 'deck:outline', 'deck:shorten', 'deck:expand'], ['text'], { elements: true }),
+  G('images', 'Images', ['deck:image'], ['images'], { elements: true }),
+  G('graphics', 'Graphics', [], ['graphics'], { elements: true }),
+  G('data', 'Data', ['deck:chart', 'deck:table', 'deck:timeline'], ['data'], { elements: true }),
+  G('diagrams', 'Diagrams', [], ['diagrams'], { elements: true }),
+  G('venture', 'Venture records', [], ['venture'], { elements: true }),
   G('vision', 'Vision and checks', ['review:deck-file'], [], { usedBy: 'Deck review' }),
   G('safety', 'Safety', [], [], { safety: true, usedBy: null }),
 ]);
+
+/**
+ * One group's block as `RailGroups` reads it, from the per-element reply: its
+ * lead element's suggestions and `more` (#3741's shape), the pick the next
+ * run uses, and the Worker's "No model · free" for a group that runs none. A
+ * reply that is off or unreadable is thrown, so the block says so.
+ */
+export function groupAnswer(answer, groupId) {
+  if (!answer?.available) throw Object.assign(new Error(answer?.reason || 'could not be read'), { status: answer?.unreadable ? 500 : 404 });
+  const g = (answer.value?.groups || []).find((x) => x?.group === groupId);
+  if (!g) throw Object.assign(new Error('This group is not in the answer.'), { status: 404 });
+  if (g.free) return { ok: true, models: [], more: [], pick: null, free: g.free, billing: answer.value.billing };
+  return {
+    ok: true, models: g.suggested || [], more: g.more || [], pick: g.pick ?? null, billing: answer.value.billing,
+    locked: Boolean(g.resolved?.locked), notice: g.resolved?.notice ?? null,
+  };
+}
+
+/** The groups for a page: on a deck, each element group reads and picks through the per-element routes. */
+export function railItems(deckId) {
+  if (deckId == null) {
+    return DECK_RAIL_GROUPS.map((g) => (g.elements && !g.options.length ? Object.freeze({ ...g, unavailable: NO_DECK }) : g));
+  }
+  return DECK_RAIL_GROUPS.map((g) => (!g.elements ? g : Object.freeze({
+    ...g,
+    read: () => elementModels(deckId).then((a) => groupAnswer(a, g.id)),
+    pick: (model) => deckElementModelsApi.pick(deckId, { scope: 'deck', key: `group:${g.id}`, model }),
+  })));
+}
 
 /** The four presets (aird1), drawn greyed until #3796. */
 export const PRESETS = Object.freeze({
@@ -99,7 +135,7 @@ export function heldNow(reply) {
 export function deckRail(deckId = null) {
   return {
     page: DECK_RAIL_PAGE,
-    items: DECK_RAIL_GROUPS,
+    items: railItems(deckId),
     presets: PRESETS,
     usage: [
       {

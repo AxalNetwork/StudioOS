@@ -134,7 +134,7 @@ async function fixture() {
   db.exec(baseline); for (const sql of migrations) db.exec(sql);
   db.prepare("INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (2, 'founder', 100, 'Ada Quill', 'synthetic-2@example.invalid', 1, 'studio')").run();
   db.exec("INSERT INTO projects(id,name,founder_id) VALUES (1,'Synthetic venture',100)");
-  db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, is_current) VALUES (7, 1, 3, ?, 1)').run(JSON.stringify([{ title: 'Solution' }]));
+  db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, is_current) VALUES (7, 1, 3, ?, 1)').run(JSON.stringify([{ uid: 'card-a', title: 'Solution' }, { uid: 'card-b', title: 'Traction' }]));
   const r2 = new Map<string, Uint8Array>();
   const FILES = { put: async (key: string, bytes: Uint8Array) => { r2.set(key, new Uint8Array(bytes)); }, get: async () => null };
   const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', FILES };
@@ -157,9 +157,13 @@ test('an upload is stored stripped, measured from its header, hashed, and once p
   // Mutation checked: storing the raw bytes keeps the EXIF in R2; skipping the hash lookup stores the picture twice.
   const f = await fixture();
   try {
-    const first = await post(f, '/api/decks/7/images/upload', fileForm(jpeg(30, 20), 'image/jpeg'));
+    const form = fileForm(jpeg(30, 20), 'image/jpeg');
+    form.append('card', '0');
+    form.append('card_uid', 'card-b');
+    const first = await post(f, '/api/decks/7/images/upload', form);
     assert.equal(first.status, 201, JSON.stringify(first.body));
     const [row] = f.rows();
+    assert.deepEqual([row.card, row.card_uid], [1, 'card-b'], 'the uid chooses the card after reordering');
     assert.deepEqual([row.width, row.height], [30, 20]);
     assert.match(row.sha256, /^[0-9a-f]{64}$/);
     const stored = f.r2.get(row.r2_key)!;
@@ -191,8 +195,9 @@ test('an external image is copied in through the safe fetcher; private hosts and
   }) as any;
   const f = await fixture();
   try {
-    const ok = await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/logo.png', use: 'content' });
+    const ok = await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/logo.png', use: 'content', card: 1, card_uid: 'card-a' });
     assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    assert.deepEqual([ok.body.image.card, ok.body.image.card_uid], [0, 'card-a'], 'imported images keep the stable card reference');
     assert.ok(!has(f.r2.get(f.rows()[0].r2_key)!, MARK));
     for (const url of ['http://cdn.example.com/logo.png', 'https://10.0.0.5/x.png', 'https://localhost/x.png', ['https:/', '/u', ':', 'p', '@cdn.example.com/x.png'].join('')]) {
       const r = await post(f, '/api/decks/7/images/import', { url });
