@@ -78,7 +78,8 @@ function makeDb(user: any, mine: any[]) {
       bind: () => api,
       async all() {
         if (s.includes('from users where id')) return { results: user ? [user] : [] };
-        if (s.includes('from articles where author_user_id')) return { results: mine };
+        // D1406: /mine joins the publish time's setter (`FROM articles a LEFT JOIN users ps … WHERE a.author_user_id`).
+        if (/from articles\b[\s\S]*\bauthor_user_id = \?/.test(s)) return { results: mine };
         return { results: [] };
       },
       async first() { return null; },
