@@ -45,6 +45,17 @@ absolute, correctly-sized `og:image`. No JavaScript required.
 `ogTagsFor()`, so client-side navigation keeps the tab title correct and cannot
 disagree with what the server served.
 
+**The card art (#3705).** Since 2026-11-01 the generator draws the
+owner's social-cards canvas (`design/incoming/Share Cards Page.dc.html`): one
+light 1200×630 image per URL, a lavender art band left of x 268 and the text
+block from x 300, so the mark, the eyebrow and the title survive the centred
+square crop WhatsApp and iMessage take. Trust and legal pages use the document
+card; `/pricing` shows the plan names (never a price). `FAMILY_OG_KEYS`
+(`event`, `profile`, `private`) are drawn for the record and private-link cards
+that §6's Worker injector (D1439) serves. The generator measures Chromium's
+viewport with a `100vh` probe: on Chromium 1194 the screenshot is full size but
+its bottom 87px are unpainted, which the old size comparison missed.
+
 ### Fallback hierarchy for `og:image`
 
 Highest priority first:
@@ -94,8 +105,9 @@ node scripts/prerender-og.mjs           # writes docs/new-thing/index.html
 node scripts/validate-og-tags.mjs       # confirms it
 ```
 
-Commit the generated PNG, the manifest, and the prerendered HTML — `docs/` is a
-tracked build artifact in this repo.
+Commit the generated PNG and the manifest. The prerendered HTML is build output:
+`docs/` is not committed (D529), and every job that ships it builds it from
+`frontend/src`.
 
 **Custom artwork instead of a generated card.** Drop a 1200×630 PNG in
 `frontend/public/og/` and reference it:
@@ -151,7 +163,13 @@ bug in the first place.
 
 ---
 
-## 6. Known gap: per-item cards on dynamic routes
+## 6. Per-item cards on dynamic routes: closed by D1439
+
+**Closed** (D1439, #3914): the Worker card injector (`cloudflare-worker/src/services/socialCards.ts`)
+now answers `/events/*`, `/articles/*`, `/jobs/*`, `/u/*`, `/startups/*`,
+`/partners/*`, `/authors/*` and `/insights/public/*` with the record's own
+title, description and image, behind each page's own public gate. A missing or
+private record gets its section card. The record of the gap follows.
 
 Prerendering covers the fixed public routes. It cannot cover one HTML file per
 *item* on content routes — `/articles/<slug>`, `/jobs/<slug>`, `/events/<slug>`,
@@ -168,3 +186,9 @@ the shell from the `ASSETS` binding, look the item up in D1, and rewrite the
 asset on any error). The worker already serves `/p/*` and `/landing/*` this way,
 so the pattern exists. That change alters production request routing for those
 paths and deserves its own PR.
+
+**Being closed by D1439** (#3914, Part B of #3705): the Worker card injector
+does exactly this for `/events/*`, `/articles/*`, `/jobs/*`, `/u/*`,
+`/startups/*`, `/partners/*`, `/authors/*` and `/insights/public/*`. Which card
+each route group shows, and the token-link card that follows it (Part D), is in
+`SOCIAL_CARDS_MAP.md` (D1440).

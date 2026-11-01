@@ -61,10 +61,23 @@ export function GradeDot({ grade, size = 'h-2 w-2' }) {
   return <span aria-hidden="true" className={`inline-block ${size} flex-none rounded-[2px] ${fill || GAP}`} />;
 }
 
-/** The chip under a figure: source, record, date and grade; it explains itself on hover. */
-export function SourceChip({ item }) {
+/**
+ * The chip under a figure: source, record, date and grade; it explains itself
+ * on hover. D1604 (pd24): `face` is the tile face's form, source · grade only,
+ * with the record and the date moved into its title (the hover card says them
+ * in full). It is drawn in the editor only, never on Present, share or print.
+ */
+export function SourceChip({ item, face = false }) {
   const c = chipOf(item);
   if (!c) return null;
+  if (face) {
+    return (
+      <span title={`${c.record}${c.date ? ` · as of ${c.date}` : ''} · ${c.grade}`} className={`inline-flex items-center gap-1 font-mono text-[10px] font-medium ${MUTED}`} data-testid={`source-chip-${item.source_key}`} data-face="true">
+        <span className={`font-bold ${SOURCE_TEXT[c.source] || ''}`}>{c.icon} {c.source}</span>
+        <span className="inline-flex items-center gap-1">· <GradeDot grade={c.grade} />{c.grade}</span>
+      </span>
+    );
+  }
   return (
     <span title={c.title} className={`inline-flex flex-wrap items-center gap-1 font-mono text-[10.5px] font-medium ${MUTED}`} data-testid={`source-chip-${item.source_key}`}>
       <span className={`font-bold ${SOURCE_TEXT[c.source] || ''}`}>{c.icon} {c.source}</span>

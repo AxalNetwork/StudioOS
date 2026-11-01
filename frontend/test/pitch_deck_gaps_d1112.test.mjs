@@ -178,6 +178,11 @@ test('PD2 mounted: the versions table\'s Shared links, its Audience filter and i
   studioStubs(async () => REFRESH);
   const v = await mount(h(StudioDecks, { reads: reads(), readOnly: false, q: '?project_id=7' }));
   try {
+    // D1604 (#3716, pd1): the table is ⋯ › Versions… on the home's deck card, no longer on the home itself.
+    assert.ok(!v.has('pitch-studio-versions'), 'the home draws no versions table');
+    await v.press(v.by('pitch-studio-more-open'));
+    await v.press(v.by('pitch-studio-more-versions'));
+    assert.ok(v.has('pitch-sheet-versions'), 'the sheet opens');
     assert.match(v.of('pitch-studio-versions'), /Shared links/);
     assert.equal(v.of('pitch-studio-version-links-40'), '3');
     assert.equal(v.of('pitch-studio-version-links-39'), '0');

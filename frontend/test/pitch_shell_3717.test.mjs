@@ -89,7 +89,10 @@ test('the common frame is outermost, with the cycle gutter and responsive back p
   assert.ok(out.includes(CYCLE_GUTTER));
   assert.match(read('pages/cycles/CycleRoute.jsx'),/className=\{CYCLE_GUTTER\}/);
   assert.match(read('pages/raise/pitch/PitchPage.jsx'),/\$\{CYCLE_GUTTER\}/);
-  assert.match(read('pages/raise/pitch/PitchPage.jsx'),/className="shrink-0 lg:hidden">\s*<EadwynButton/);
+  // D1604: the header's right side is the deck's Ask on every width; the phone-only EadwynButton is gone.
+  assert.match(read('pages/raise/pitch/PitchPage.jsx'),/<div className="shrink-0" data-testid="pitch-header-ask"><DeckAsk \{\.\.\.ask\} \/><\/div>/);
+  assert.doesNotMatch(codeOnly(read('pages/raise/pitch/PitchPage.jsx')),/EadwynButton/);
+  assert.doesNotMatch(out,/pitch-header-ask/,'no ask prop, no Ask');
 });
 
 test('studio, New deck and editor render one crumb, no nested founder frame, and one rail',async()=>{
@@ -108,16 +111,25 @@ test('studio, New deck and editor render one crumb, no nested founder frame, and
       assert.match(m.pr(m.by(id)).className,/^fwr-frame/);
       assert.equal(m.pr(m.by(id))['data-rail'],'true');
       assert.equal(nodes.filter(n=>m.pr(n)['data-testid']==='worker-rail-frame').length,1);
+      // D1604: one header Ask, named "Ask Eadwyn" with the waiting proposal counted.
+      const asks=nodes.filter(n=>/^Ask Eadwyn/.test(String(m.pr(n)['aria-label']||'')));
+      assert.equal(asks.length,1,id);
+      assert.equal(m.pr(asks[0])['aria-label'],'Ask Eadwyn, 1 waiting',id);
+      assert.ok(m.walk(m.by('pitch-header-ask')).includes(asks[0]),id);
       assert.doesNotMatch(m.text(m.container),/‹ Pitch deck studio|Get capital, stay legal/);
       assert.equal(nodes.some(n=>['founder-module-back','founder-workspace-raise','heading-founder-raise'].includes(m.pr(n)['data-testid'])),false);
       if(id==='pitch-editor') {
         assert.ok(m.by('pitch-editor-rail'));
-        const bar=m.by('pitch-editor-bar');
-        const title=m.walk(bar).find(n=>String(m.pr(n).className).includes('truncate text-[15px]'));
-        assert.equal(m.text(title),current);
-        const grid=nodes.find(n=>String(m.pr(n).className).includes('lg:grid-cols-[180px_minmax(0,1fr)]'));
-        assert.match(m.pr(grid).className,/2xl:grid-cols-\[200px_minmax\(0,1fr\)_320px\]/);
-        assert.ok(nodes.some(n=>String(m.pr(n).className).includes('lg:col-start-2 2xl:col-start-auto')));
+        // D1604: the header holds the h1, DeckToolbar and DeckAsk; the old editor bar and right panel are gone.
+        assert.equal(m.text(m.by('pitch-heading')),current);
+        assert.equal(m.by('pitch-heading').tagName,'H1');
+        const tools=m.by('pitch-header-tools');
+        assert.ok(m.walk(tools).includes(m.by('deck-toolbar')));
+        assert.ok(m.walk(tools).includes(m.by('pitch-header-ask')));
+        assert.ok(!m.by('pitch-editor-bar')&&!m.by('pitch-editor-panel'));
+        const body=m.by('pitch-editor-body');
+        assert.match(m.pr(body).className,/lg:grid-cols-\[150px_minmax\(0,1fr\)\]/);
+        assert.ok(m.walk(body).includes(m.by('pitch-editor-cards'))&&m.walk(body).includes(m.by('pitch-editor-stage')));
       }
       if(id==='pitch-new') {
         const proposal=m.by('pitch-new-proposal');
@@ -127,10 +139,13 @@ test('studio, New deck and editor render one crumb, no nested founder frame, and
         assert.doesNotMatch(m.pr(proposal.parentNode).className,/grid-cols-\[minmax\(0,1fr\)_minmax/);
       }
       if(id==='pitch-studio') {
-        const grid=nodes.find(n=>String(m.pr(n).className).includes('2xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]'));
-        assert.ok(grid);
-        const aside=nodes.find(n=>m.pr(n)['aria-label']==='Readers');
-        assert.match(m.pr(aside).className,/md:grid-cols-2 2xl:grid-cols-1/);
+        // D1604 (pd1): the home's two rows, proportional, so the rail keeps its own column beside them.
+        const home=m.by('pitch-studio-home');
+        assert.ok(home);
+        const rows=home.childNodes.filter(n=>n.nodeType===1&&/grid/.test(String(m.pr(n).className)));
+        assert.deepEqual(rows.map(n=>m.pr(n).className),['grid gap-3.5 lg:grid-cols-3','grid gap-3.5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]']);
+        assert.ok(m.walk(rows[0]).includes(m.by('pitch-studio-current'))&&m.walk(rows[0]).includes(m.by('pitch-studio-start')));
+        assert.ok(m.walk(rows[1]).includes(m.by('pitch-studio-data-ready'))&&m.walk(rows[1]).includes(m.by('pitch-studio-investor-links')));
       }
     } finally {await m.close();}
   }
@@ -148,7 +163,7 @@ test('editor keeps the same frame, dock and moved notice when its deck finishes 
     assert.ok(notice);
     await act(async()=>{resolveDeck(DECK);});
     await m.settle();
-    assert.ok(m.by('pitch-editor-bar'));
+    assert.ok(m.by('deck-toolbar'));
     assert.equal(m.by('pitch-editor')===frame,true);
     assert.equal(m.by('worker-rail-frame')===dock,true);
     assert.equal(m.by('pitch-moved')===notice,true);

@@ -144,7 +144,8 @@ test('without a record, every slot is Not recorded with the module that fills it
     assert.equal(it.value, null, it.source_key);
     assert.equal(it.grade, 'Not recorded', it.source_key);
     assert.equal(it.snapshot_hash, null, it.source_key);
-    assert.match(it.href, new RegExp(`^/(validate|build|raise|grow)/[a-z-]+\\?project=${P}$`), it.source_key);
+    // D1601: a connected tool's slots are filled on its connector page.
+    assert.match(it.href, new RegExp(`^(/(validate|build|raise|grow)/[a-z-]+\\?project=${P}|/account/connectors/(posthog|hubspot|linear))$`), it.source_key);
     assert.ok(it.module.includes(' › '), it.source_key);
   }
   assert.deepEqual(body.coverage, { slots: SLOT_KEYS.length, filled: 0, by_grade: { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0, Projected: 0 }, not_recorded: SLOT_KEYS.length, unreadable: 0 });
@@ -290,7 +291,8 @@ test('Mercury: the founder reads their own facts; anyone else gets the slots wit
     assert.equal(a.get(k)!.state, 'withheld', k);
     assert.equal(a.get(k)!.value, null, k);
   }
-  assert.equal(admin.body.coverage.slots, SLOT_KEYS.length - 4);
+  // D1601: the founder's HubSpot (3) and Linear (2) are withheld with the bank (4).
+  assert.equal(admin.body.coverage.slots, SLOT_KEYS.length - 9);
   assert.ok(!JSON.stringify(admin.body).includes('1695000'));
   // A support session acting as the founder is refused the bank too.
   const support = byKey((await call(db, FOUNDER, 'GET', `/api/decks/sources?project_id=${P}`, { impersonated_by: ADMIN })).body.items);

@@ -25,6 +25,11 @@ import {
  * member's own Drive (`POST /api/decks/:id/export/google-slides`). Until
  * Google is connected the dialog says so, with the one link that connects it,
  * and offers no Export; after it, "Created in Google Slides · Open ›".
+ *
+ * D1604 (#3716, pd8b): the Slides-suite file (.odp) through D1603's
+ * `POST /api/decks/:id/export/odp` (#3882, on main), with the same two
+ * options, the same ledger row and the same failure sentence. Opened from the
+ * header's Share ▾ › Export….
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -97,7 +102,9 @@ export default function ExportDialog({ versions, current, onClose }) {
       }
       const r = format === 'html'
         ? await api.deckExportHtml(version.id, { notes, sources })
-        : await api.deckExport(version.id, format, { notes, sources });
+        : format === 'odp'
+          ? await api.deckExportOdp(version.id, { notes, sources })
+          : await api.deckExport(version.id, format, { notes, sources });
       if (!r.ok) {
         const body = await r.json().catch(() => null);
         setFailed(exportFailure(format, r.status, body));
