@@ -19,7 +19,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import advisors from '../src/routes/advisors.ts';
 import { ENGAGEMENTS_NOTE, NO_LINK_NOTE, OPENS_NOTE, VIEWS_NOTE, visibilityWindow } from '../src/services/advisorVisibility.ts';
 
-const SECRET = 'synthetic-advisor-visibility-d1597-'.repeat(2);
+const SECRET = 'test'.repeat(16);
 test.after(() => removeMigratedDatabases());
 
 const DAY = 86_400_000;
