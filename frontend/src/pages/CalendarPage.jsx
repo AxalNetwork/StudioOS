@@ -113,29 +113,33 @@ import {
 import './calendarPage.css';
 
 /**
- * The six kinds, in the canvas's reading order. `from` is the module the events
- * come from, which is what the rail's legend shows — a reader who wonders why
- * something is or is not here can see where each row originates. D1613 (#3723):
- * it names the module in plain words. It used to print the D1 table each kind
- * is read from (`ic_meetings`, `raise_prospect_events`), and the page never
- * shows a table name.
+ * The kinds, in the canvas's reading order. `from` is the module the events
+ * come from, in plain words, never a table name (D1613, #3723). D1484 (#3977):
+ * the Worker's registry (`services/calendar/registry.ts`) says where each
+ * source comes from, and the legend shows the read's `sources[].module` first;
+ * `from` carries the same words for the moment before the read answers.
  * D1384 (#3692): `compliance_due` is the Compliance layer, which replaced the
  * /compliance page; the canvas draws no deadline kind, so its mark is derived
  * in the same idiom as the others (calendarPage.css).
  */
 const KINDS = [
-  { id: 'ic_meeting', label: 'IC meeting', from: 'Deal room' },
-  { id: 'founder_checkin', label: 'Check-in', from: 'Check-ins' },
-  { id: 'advisor_booking', label: 'Advisor', from: 'Advisors' },
-  { id: 'partner_office_hour', label: 'Office hour', from: 'Office hours' },
+  { id: 'ic_meeting', label: 'IC meeting', from: 'Deals › Investment committee' },
+  { id: 'founder_checkin', label: 'Check-in', from: 'Ventures › Check-ins' },
+  { id: 'advisor_booking', label: 'Advisor', from: 'Advisors › Sessions' },
+  { id: 'partner_office_hour', label: 'Office hour', from: 'Partners › Office hours' },
   { id: 'calendly_event', label: 'Calendly', from: 'Calendly' },
-  { id: 'expert_booking', label: 'Expert session', from: 'Wellbeing' },
-  { id: 'event_ticket', label: 'Event ticket', from: 'Events · your tickets' },
-  { id: 'event_hosted', label: 'Hosting', from: 'Events · you host' },
+  { id: 'expert_booking', label: 'Expert session', from: 'Wellbeing › Expert sessions' },
+  { id: 'event_ticket', label: 'Event ticket', from: 'My events › Tickets' },
+  { id: 'event_hosted', label: 'Hosting', from: 'My events › Hosting' },
   { id: 'investor_meeting', label: 'Investor meeting', from: 'Raise › Capital relationships' },
-  { id: 'compliance_due', label: 'Compliance', from: 'Compliance' },
-  // #3959: the Learning source.
-  { id: 'learning', label: 'Learning', from: 'Learning · your plan' },
+  { id: 'compliance_due', label: 'Compliance', from: 'Build › Compliance' },
+  // D1484 (#3977): D1208's three readers and "New event", page only.
+  { id: 'interview_call', label: 'Interview call', from: 'Validate › Customer research' },
+  { id: 'cohort_date', label: 'Cohort date', from: 'Spin-Out Lab › Cohort' },
+  { id: 'deal_closing', label: 'Deal closing', from: 'Deals › Closings' },
+  { id: 'manual', label: 'Your event', from: 'Calendar' },
+  // #3959: the Learning source, page only.
+  { id: 'learning', label: 'Learning', from: 'Learning › Your plan' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 
@@ -486,6 +490,8 @@ export default function CalendarPage() {
   // not the same as an empty range.
   const inRange = items;
   const failedSources = useMemo(() => sources.filter((s) => s && s.ok === false), [sources]);
+  // D1484: each source's module, in the Worker's plain words.
+  const moduleOf = useMemo(() => Object.fromEntries(sources.filter((s) => s?.kind && s.module).map((s) => [s.kind, s.module])), [sources]);
   const failedKinds = useMemo(() => new Set(failedSources.map((s) => s.kind)), [failedSources]);
   const counts = useMemo(() => {
     const out = {};
@@ -765,7 +771,7 @@ export default function CalendarPage() {
                 <div key={k.id}>
                   <span className="cal-dot" data-kind={k.id} aria-hidden="true" />
                   <span>{k.label}</span>
-                  <span className="cal-mono">{k.from}</span>
+                  <span className="cal-mono">{moduleOf[k.id] || k.from}</span>
                 </div>
               ))}
             </div>
