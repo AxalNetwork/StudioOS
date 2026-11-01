@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Sheet } from '../../ui';
 import { api } from '../../lib/api';
-// Team's Ask: it draws nothing until #3706's panel (D1443), then opens it.
-import AskButton from '../team/AskButton.jsx';
+// D1443 (#3706): Ask opens the Ask panel, and draws nothing where no rail serves the viewer.
+import { PageAsk } from '../../ui/AskButton.jsx';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, MUTED, HonestBlock } from '../team/teamUi.jsx';
 import { workAdapter } from './workAdapter.js';
 import { NOT_RECORDED as NOT_RECORDED_WORD } from '../../lib/absence';
@@ -70,7 +70,7 @@ export default function WorkPage() {
         </div>
         <div className="wk-head-actions">
           <button type="button" className={BTN_PRIMARY} disabled={off} title={off ? board.reason : undefined} data-testid="work-new-item">+ New item</button>
-          <AskButton label={`Work · ${name}`} />
+          <PageAsk label={`Work · ${name}`} />
         </div>
       </header>
 

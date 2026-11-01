@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Sheet } from '../../ui';
-// Team's Ask: it draws nothing until #3706's panel (D1443), then opens it.
-import AskButton from '../team/AskButton.jsx';
+// D1443 (#3706): Ask opens the Ask panel, and draws nothing where no rail serves the viewer.
+import { PageAsk } from '../../ui/AskButton.jsx';
 import { NOT_RECORDED } from '../../lib/absence';
 import { BTN_PRIMARY, BTN_SECONDARY, EYEBROW, MUTED, HonestBlock } from '../team/teamUi.jsx';
 import { workAdapter } from './workAdapter.js';
@@ -57,7 +57,7 @@ export default function CompliancePage() {
           {state.status === 'off' || can.create ? (
             <button type="button" className={BTN_PRIMARY} disabled={state.status !== 'ready'} title={state.status === 'off' ? state.reason : undefined} data-testid="compliance-new">+ New compliance task</button>
           ) : null}
-          <AskButton label={`Compliance · ${company || 'Company'}`} />
+          <PageAsk label={`Compliance · ${company || 'Company'}`} />
         </div>
       </header>
 
