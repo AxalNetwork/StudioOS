@@ -10,6 +10,9 @@
  *   3. Every `deckV2Adapter.js` method swapped to `through(…)` has a contract,
  *      and every contract names a swapped method, so an adapter swap changes
  *      no screen.
+ *   4. `GET /api/decks/:id/typed-values` (D1538) and the deck check's
+ *      `consistency` key (D1555), the two swaps that merged beside this file,
+ *      match their contracts.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_contracts_d1511.test.ts
@@ -23,8 +26,8 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckGrid from '../src/routes/deck_grid.ts';
 import deckCheck from '../src/routes/deck_check.ts';
-import { deckConsistency } from '../src/services/deckConsistency.ts';
 import deckTypedValues from '../src/routes/deck_typed_values.ts';
+import { deckConsistency } from '../src/services/deckConsistency.ts';
 import { CONTRACTS as NAMED } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 import { LAYOUTS } from '../src/services/decks/slideModel.ts';

@@ -54,6 +54,9 @@ export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Objec
   // D1486 §b (#3981): Grow's dated stores. Page only: a send's time and a planned day are not provider copies.
   publish_send: { family: 'grow', module: 'Publish', label: 'Publish send', page_only: true, pushable: false },
   content_planned: { family: 'grow', module: 'Grow › Distribution', label: 'Planned content', page_only: true, pushable: false },
+  // #3982 (D1486 §c): Raise's dated stores.
+  round_close: { family: 'raise', module: 'Raise › Round', label: 'Round close', page_only: true, pushable: false },
+  nda_expiry: { family: 'raise', module: 'Raise › NDAs', label: 'NDA expiry', page_only: true, pushable: false },
 });
 
 export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];
