@@ -5728,6 +5728,32 @@
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "transcribe:rehearsal",
+   "optionLabel": "Rehearse",
+   "kind": "speech",
+   "handler": "transcribe",
+   "routeTask": "rail_speech",
+   "models": [
+    {
+     "id": "@cf/openai/whisper-large-v3-turbo",
+     "role": "Default",
+     "line": "Turns each recording into a transcript"
+    },
+    {
+     "id": "@cf/deepgram/nova-3",
+     "role": "Alternative",
+     "line": "Labels who said what"
+    },
+    {
+     "id": "@cf/openai/whisper",
+     "role": "Deeper",
+     "line": "A plain transcript at the lowest price"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "review:deck-file",
    "optionLabel": "Drop your deck here or click to browse",
    "kind": "vision",

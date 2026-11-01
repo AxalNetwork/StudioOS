@@ -1,0 +1,30 @@
+{
+  "$id": "deckRehearsals",
+  "title": "GET /api/decks/:id/rehearsals (D1580 F1, #3827)",
+  "description": "What the deck v2 adapter's `rehearse` method passes through: the founder's own rehearsals of one deck version, newest first, at most 20 (`routes/deck_rehearsals.ts`). A summary per rehearsal; the report is read by uid. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "rehearsals"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "rehearsals": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["uid", "deck_id", "pitch_seconds", "duration_ms", "status", "time_line", "figures", "audio", "created_at"],
+        "properties": {
+          "uid": { "type": "string" },
+          "deck_id": { "type": "integer", "minimum": 1 },
+          "pitch_seconds": { "enum": [120, 180, 300] },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "status": { "enum": ["reported", "failed"] },
+          "time_line": { "description": "\"1:30 of 2:00\", or null when no report was written; no type, so null holds" },
+          "figures": { "description": "how many figures said disagree with a linked one, or null; no type, so null holds" },
+          "audio": { "enum": ["kept", "held", "deleted"] },
+          "created_at": { "type": "string" }
+        }
+      }
+    }
+  }
+}

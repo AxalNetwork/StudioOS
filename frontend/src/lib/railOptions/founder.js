@@ -54,6 +54,7 @@ const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
 const ONE_CLICK = 'frontend/src/pages/raise/pitch/OneClickBuild.jsx';
 const TEMPLATES = 'frontend/src/pages/raise/pitch/TemplatesGallery.jsx';
 const STUDIO_ACTIONS = 'frontend/src/pages/raise/pitch/StudioActions.jsx';
+const REHEARSE = 'frontend/src/pages/raise/pitch/RehearsePanel.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
 const AREA_LIGHTBOX = 'frontend/src/pages/raise/pitch/AreaLightbox.jsx';
 const INSTRUCTION_BOX = 'frontend/src/pages/raise/pitch/InstructionBox.jsx';
@@ -261,6 +262,11 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:image', route: '/raise/pitch/edit', label: 'Generate', kind: 'image', task: 'deck_image', handler: 'draft',
     at: [[AREA_LIGHTBOX, 'deckImagesApi.generate('], [IMAGE_LIGHTBOX, 'deckImagesApi.generate('], [ONE_CLICK, 'deckImagesApi.generate(']],
+  },
+  // D1580 F1 (#3827): Present › Rehearse transcribes the rehearsal; the member's pick here is the run's model.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'transcribe:rehearsal', route: '/raise/pitch/present', label: 'Rehearse', kind: 'speech', handler: 'transcribe',
+    at: [[REHEARSE, 'deckRehearsalsApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-file', route: '/raise/pitch/review', label: 'Drop your deck here or click to browse', kind: 'vision', handler: 'upload',
