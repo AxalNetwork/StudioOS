@@ -58,8 +58,9 @@ test('the seam reaches no network, and no client method exists for a route that 
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest|lib\/api/);
   assert.doesNotMatch(codeOnly(read(`${PITCH}/deckV2Model.js`)), /request\(|fetch\(|lib\/api|from 'react'/);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
-  // #3925 (D1499 part 1) put GET /api/decks/:id/grid and lib/api/deckGrid.js on main, so /grid left this list;
-  // the adapter's grid surface (#3749) keeps the parts of The Grid that are still to come.
+  // #3749 part 1 merged as #3925: Grid has a real read route and client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_grid.ts')), /deckGrid\.get\(['"]\/:id\{\[0-9\]\+\}\/grid['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckGrid\)/);
   for (const path of ['/areas', '/stage-plan', '/figures', '/element-models', '/remix', '/draft', '/areas/instruct']) {
     assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
   }
