@@ -43,5 +43,10 @@ The rules for adding to this folder:
   hypothesis and direction, through `addExperiment` and `addEvidence`) and
   `survey_signal` (through `writeDemandSignal`). It registers itself on import.
 
-PostHog parts 4–6 (#3731) add their syncs and acceptors beside these files
+- `build.ts` — D1606 (#3731 part 4): Build's sync (tracked metrics, each
+  flag's daily state), the `flag_link` acceptor (the founder's must-have) and
+  the `flag_shipped` acceptor (Done after 14 days active at 100%), the roadmap
+  KPI words, the linked flags' chips and Operating systems' Tools line.
+
+PostHog parts 5–6 (#3731) add their syncs and acceptors beside these files
 and read PostHog through `reads.ts` alone.

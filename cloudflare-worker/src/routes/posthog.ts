@@ -54,6 +54,7 @@ import { hashEmail } from '../util/hashEmail';
 import { isTeamViewer } from '../services/mercury/growFeeds';
 // D1605–: each section's sync and acceptors register themselves on import.
 import '../services/posthog/validate';
+import { flagChips, mustHaves, toolsLine } from '../services/posthog/build';
 import { MARKS, marksOf, setMark } from '../services/posthog/validate';
 import {
   AcceptRefused, MetricsRefused, syncFor, POSTHOG_MODULES, SECTIONS, acceptProposal, deleteFact, dismissProposal, fromPosthog, linkOf, track, untrack,
@@ -315,7 +316,10 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
     const module = moduleOf(section, c.req.query('module'));
     const projectId = idOf(c.req.query('project'), 'invalid_project');
     if (!(await isTeamViewer(c.env, user, projectId))) throw new Refused(403, 'team_only');
-    return c.json({ ok: true, project_id: projectId, ...(await fromPosthog(c.env, projectId, module, user.id)) });
+    // D1606: Build's modules read what their parts draw beside the figures.
+    const extra = module === 'prototype_mvp' ? { must_haves: await mustHaves(c.env, projectId), flags: await flagChips(c.env, projectId) }
+      : module === 'operating_systems' ? { tools: await toolsLine(c.env, projectId) } : {};
+    return c.json({ ok: true, project_id: projectId, ...(await fromPosthog(c.env, projectId, module, user.id)), ...extra });
   }));
 
   router.post(`${SECTION}/posthog/tracked`, route(async (c, user) => {
