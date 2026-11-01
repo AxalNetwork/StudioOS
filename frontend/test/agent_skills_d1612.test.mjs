@@ -181,7 +181,7 @@ test('SK1: the directory groups From Axal and the company\'s skills, with Assign
   assert.match(t, /By \[Northwind Labs\]/);
   assert.match(out, /data-testid="skill-assign-s1"/);
   assert.match(out, /data-testid="skills-new"/);
-  for (const c of ['All', 'Product', 'Engineering', 'Design', 'GTM / Sales', 'Marketing / Brand', 'Finance / Ops', 'Legal / Compliance', 'Capital / Network']) assert.match(t, new RegExp(c.replace(/\//g, '\\/')));
+  for (const c of ['All', 'Product', 'Engineering', 'Design', 'GTM / Sales', 'Marketing / Brand', 'Finance / Ops', 'Legal / Compliance', 'Capital / Network']) assert.ok(t.includes(c), `category ${c}`);
   const ro = html(h(Directory, { role: ROLE, value: { ...LIB, can_edit: false }, companyName: '[Northwind Labs]', canEdit: false, onBack() {}, onOpen() {}, onAssign() {}, onNew() {} }));
   assert.doesNotMatch(ro, /skill-assign-|skills-new/);
   assert.match(renderedText(ro), /Only company editors add skills or assign them/);
@@ -195,7 +195,7 @@ test('SK2: the skill page shows steps, tags, tools, output, versions and the age
   const out = html(h(SkillPage, { block, agentsBlock: usingIt, canEdit: true, roleName: 'Investor relations', roleNames: () => 'Investor relations', onBack() {}, onAssign() {} }));
   const t = renderedText(out);
   for (const w of ['Monthly investor update', 'Read last month’s figures.', 'Draft highlights.', 'Adds the “Not recorded” step.', '[Pilot app] · project', 'A named person accepts it']) assert.ok(t.includes(w), w);
-  for (const id of ['skill-copy', 'skill-download', 'skill-page-assign', 'skill-md']) assert.match(out, new RegExp(`data-testid="${id}"`), id);
+  for (const id of ['skill-copy', 'skill-download', 'skill-page-assign', 'skill-md']) assert.ok(out.includes(`data-testid="${id}"`), id);
   assert.match(text(h(UsingAgents, { block: { available: false, reason: 'x' } })), /Who uses it is not open yet/);
   assert.match(text(h(UsingAgents, { block: { available: false, unreadable: true } })), /could not be read/);
   assert.match(text(h(SkillsUnreadable, { onRetry() {} })), /Skills could not be read\.\s*Try again/);
