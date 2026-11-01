@@ -53,7 +53,8 @@ const item = (id: number, label: any, on: string | null = null): PinnedItem => (
 const cand = (value: number | null, label: any, on: string | null = null, id = 1): Candidate => ({ value, label, provider: null, observed_on: on, items: [item(id, label, on)] });
 
 test('every figure on #2430\'s list is read by its words, never from a bare number', () => {
-  assert.deepEqual([...FIGURES].sort(), ['arr', 'cac', 'churn', 'headcount', 'interviews', 'lois', 'mrr', 'net_burn', 'paying_customers', 'pilots', 'raise', 'revenue', 'revenue_growth', 'runway', 'waitlist'].sort());
+  // D1607 (#3731): active users joins, read from the founder's PostHog.
+  assert.deepEqual([...FIGURES].sort(), ['active_users', 'arr', 'cac', 'churn', 'headcount', 'interviews', 'lois', 'mrr', 'net_burn', 'paying_customers', 'pilots', 'raise', 'revenue', 'revenue_growth', 'runway', 'waitlist'].sort());
   assert.deepEqual([...NARRATIVE_CHECK_FIGURES], ['mrr', 'paying_customers', 'raise', 'revenue'], 'narrative_checks keeps its four figures for readiness');
   const got = (t: string) => Object.fromEntries(parseStatedFigures('f', t).map((s) => [s.figure, s.value]));
   assert.deepEqual(got('We have $18,400 MRR, $220k ARR and 42 paying customers, raising $2m.'), { mrr: 18400, arr: 220000, paying_customers: 42, raise: 2000000 });

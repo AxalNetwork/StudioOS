@@ -581,6 +581,12 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       console.info(`[mi.reducer] cells=${r.cells_written} suppressed=${r.cells_suppressed} fit_pairs=${r.fit_pairs_written} purged=${r.optout_purged}`);
       return;
     }
+    case 'event_syndication': {
+      // D1490 — post, update, cancel or withdraw one listing; eligibility re-checked here.
+      const { runSyndicationJob } = await import('./eventSyndication/jobs');
+      await runSyndicationJob(env, payload);
+      return;
+    }
     case 'event_calendar_cleanup': {
       const { runEventCalendarCleanup } = await import('./calendar/cancelEvents');
       await runEventCalendarCleanup(env, payload);

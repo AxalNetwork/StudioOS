@@ -30,7 +30,7 @@ const STORAGE = {
   total_bytes: 3 * 1024 ** 3, files: 42, unknown_size_files: 0,
   areas: [area('data_room', 20, 2 * 1024 ** 3), area('diligence_files', 2, 1024 ** 2), area('research_library', 10, 512 * 1024 ** 2),
     area('message_attachments', 8, 256 * 1024 ** 2), area('interview_recordings', 2, 255 * 1024 ** 2),
-    ...['data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports'].map((k) => area(k, 0, 0)),],
+    ...['data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports', 'articles'].map((k) => area(k, 0, 0)),],
 };
 
 async function mounted(url, element, path) {

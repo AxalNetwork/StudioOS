@@ -19,6 +19,8 @@ throw fixed words. `planCatalogue.ts` and the public plans rows project the same
 table. Negotiated and staff values stay null with distinct reasons. Later
 storage readers and guards must consume it rather than copy figures.
 
+`eventSyndication/` (D1490, #3904) lists an approved public event on outside channels: the eligibility rule, the channel registry (no adapter yet), the four triggers and the `event_syndication` job. See its README.
+
 `storageRoom.ts` (D1170, #3083) is the storage guard every member upload calls
 before its R2 write, and the 80/95/100% notices sent once the write lands. Its
 refusal is the one exception to "never a Response" here: it throws the 413
@@ -229,7 +231,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `fundPositionsHistory.ts` | D1158 (#3065): `readFundPositions`, each position with its latest dated mark or `marked: false` and a reason; `readFundHistory`, `readFundPerformance` point in time at each quarter end since the first call. Computed on every read, never stored. |
 | `linear/` | D855 §4 (#3733): a member's own Linear, read-only, through Linear's read-only MCP server. `reads.ts` is the only file that opens a Linear session: issues, one issue with its comments, projects and teams, each identifier checked before it is sent. Not connectable until Linear's directory entry lands. Its README has the rules. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
-| `posthog/` | D1385 (#3731): a founder's own PostHog, read only, through PostHog's MCP server. `reads.ts` is the only file that opens a PostHog session: the 19 typed reads, the venture's project pinned by header, every answer scrubbed of person and visit identifiers. Its README has the rules. |
+| `posthog/` | D1385 (#3731): a founder's own PostHog, read only, through PostHog's MCP server. `reads.ts` is the only file that opens a PostHog session: the 19 typed reads, the venture's project pinned by header, every answer scrubbed of person and visit identifiers. D1609: `metrics.ts` holds the tracked metrics, facts (kept deleted through the ledger) and proposals, and the `posthog-<uid>` KPI readings. Its README has the rules. |
 | `notion/` | D1085: a founder's own Notion, read-only, through Notion's MCP server. `reads.ts` is the only file that opens a Notion session: search, a page with its fingerprint, children, a data source's schema and its rows, each id checked before it is sent, never SQL. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |

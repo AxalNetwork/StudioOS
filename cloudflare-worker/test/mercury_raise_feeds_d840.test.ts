@@ -40,10 +40,6 @@ import {
   TODAY, tx, LINES, CASHFLOW, fixture, call, sync, mod, accept, dismiss, proposal, withFake,
 } from './_mercury_raise_fixture.ts';
 
-// Route calculations use the same October clock as this suite's fixed Mercury data.
-beforeEach(() => mock.timers.enable({ apis: ['Date'], now: Date.parse(`${TODAY}T12:00:00Z`) }));
-afterEach(() => mock.timers.reset());
-
 // ───────────────────────────────────────────── 1. the rules
 
 const line = (o: Partial<RaiseLine>): RaiseLine => ({
