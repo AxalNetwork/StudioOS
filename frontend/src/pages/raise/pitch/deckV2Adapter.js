@@ -40,6 +40,7 @@
  * no method here: the surfaces read them when the existing read carries them.
  */
 
+import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { LATER, NOT_ON } from './deckV2Model.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
@@ -108,7 +109,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'setDeckSource', 'consistency']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -193,7 +194,7 @@ export const walkthrough = off('walkthrough');
 export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');
 export const markSeen = off('markSeen');
-export const setDeckSource = off('setDeckSource');
+export const setDeckSource = (projectUid, fileUid, opts) => through(() => dataRoomApi.setDeckSource(projectUid, fileUid, opts), 3881);
 
 /** Synchronous: whether a surface is on, for a menu that greys its item before any read. */
 export const availability = (name) => (SURFACES[name] && !SWAPPED.includes(name) ? unavailable(SURFACES[name].issue) : null);

@@ -34,6 +34,7 @@ addresses here with DR24's notice.
 | `DataRoomMoved.jsx` | D1109, DR24: the old addresses' forward (each counts itself once, #2319) and the one-line moved notice under a tab's header. |
 | `DataRoomRequests.jsx` | DR9 and DR9d: access requests (Share the room, Decline with a note) and the venture's diligence requests (Answer with a file). |
 | `DataRoomDialog.jsx` | The one in-page dialog every change opens, and a refusal as one sentence. |
+| `DataRoomDeckSource.jsx` | D1602: owner-only deck-source opt-in, extraction state, withdrawal and inline quote confirmation in the file sheet. |
 
 ## Where the tool lives
 

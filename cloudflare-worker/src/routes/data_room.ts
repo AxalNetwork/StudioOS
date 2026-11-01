@@ -109,6 +109,7 @@ import { logCycleWrite } from '../services/cycleActivity';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { WriterError } from '../services/validateWriters';
 import { DECLINE_REASON_MAX, readRequests } from '../services/dataRoomRequests';
+import { deckSourceReady, sourceFile, sourceState, sourceQuote, typedFile, fileKind, enableSource, resetSourceStatements } from '../services/decks/dataroomExtract';
 import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -539,12 +540,16 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
 
     const scopes = await grantScopesOf(env, project.id);
 
+    const deckSourcesAvailable = await deckSourceReady(env);
+    const deckFiles = deckSourcesAvailable ? await env.DB.prepare('SELECT * FROM data_room_files WHERE project_id = ?').bind(project.id).all<any>() : null;
+    const states = new Map((deckFiles?.results || []).map(f => [f.uid, sourceState(f)]));
     return {
+      deck_sources_available: deckSourcesAvailable,
       project: { uid: project.uid, name: project.name },
       // D1103 — what the caller may do here: `owner` shares and sets gates.
       role,
       folders: folders.results || [],
-      files: files.results || [],
+      files: (files.results || []).map(f => ({ ...f, ...(states.get(f.uid) || {}) })),
       grants: (grants.results || []).map(({ id, folders_scoped, ...g }) => ({
         ...g, nda_signed: !!g.nda_signed, nda_pending: !g.nda_signed && !!g.nda_pending,
         // D1103 — null opens every folder; else the uids it opens. Unreadable
@@ -942,6 +947,7 @@ export async function replaceDataRoomFile(
     httpMetadata: { contentType },
     customMetadata: { project_uid: project.uid, uploaded_by: String(a.userId) },
   });
+  const deckReady = await deckSourceReady(env);
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO data_room_file_versions (file_id, version, r2_key, content_type, size_bytes, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -949,12 +955,51 @@ export async function replaceDataRoomFile(
     env.DB.prepare(
       `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ? WHERE id = ? AND project_id = ?`,
     ).bind(key, contentType, a.bytes.byteLength, a.userId, nowIso(), file.id, project.id),
+    ...(deckReady ? resetSourceStatements(env, file.id, project.id, key, null, a.userId) : []),
   ]);
   await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
     entityId: file.id, action: 'file_replaced', summary: `File replaced; version ${version} kept` });
   await noteStorageLanded(env, room);
   return { id: file.id, version, size_bytes: a.bytes.byteLength };
 }
+
+/** D1602: an explicit owner opt-in; quotes never open the object. */
+r.put('/:projectUid/files/:uid/deck-source', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (user.role === 'admin') return c.json({ code: 'support_read_required', detail: 'Use an audited support read.' }, 403);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!await deckSourceReady(c.env)) return c.json({ code: 'deck_sources_unavailable', detail: 'Deck sources are not available yet.' }, 503);
+    const file = await sourceFile(c.env, room.project.id, c.req.param('uid'));
+    if (!file) return c.json({ detail: 'File not found' }, 404);
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body.enabled !== 'boolean') return c.json({ code: 'invalid_enabled', detail: 'Choose whether this file is a deck source.' }, 400);
+    if (!body.enabled) {
+      await c.env.DB.batch([
+        c.env.DB.prepare(`UPDATE data_room_files SET deck_source = 0, deck_source_token = NULL, deck_extract_state = NULL,
+          deck_extract_started_at = NULL, deck_extract_queued_at = NULL, deck_source_as_of = NULL, deck_source_user_id = NULL, deck_source_quote = NULL WHERE id = ? AND project_id = ?`).bind(file.id, room.project.id),
+        c.env.DB.prepare('DELETE FROM dataroom_deck_values WHERE project_id = ? AND file_uid = ?').bind(room.project.id, file.uid),
+      ]);
+    } else {
+      if (!fileKind(file)) return c.json({ code: 'unsupported_file', detail: 'Use CSV, XLSX, PDF or DOCX.' }, 400);
+      // A repeated save must not buy a second run. An unreadable extraction can be retried deliberately.
+      if (file.deck_source && sourceState(file).extraction.state !== 'unreadable') return c.json(sourceState(file));
+      let approved = null;
+      if (typedFile(file)) {
+        const quote = await sourceQuote(c.env, file, Number(user.id));
+        if (!quote.ok) return c.json({ code: 'extraction_unavailable', detail: quote.error }, 503);
+        if (body.confirm_quote !== quote.confirm_quote) return c.json({ code: 'quote_required', detail: 'Confirm the extraction cost before continuing.', quote }, 402);
+        approved = { model: quote.model, hold_microusd: quote.hold_microusd };
+      }
+      if (!await enableSource(c.env, file, Number(user.id), approved)) return c.json({ code: 'version_conflict', detail: 'The file changed. Read it again before retrying.' }, 409);
+    }
+    await logCycleWrite(c.env, { projectId: room.project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
+      entityId: file.id, action: body.enabled ? 'deck_source_enabled' : 'deck_source_disabled', summary: body.enabled ? 'Deck source enabled' : 'Deck source withdrawn' });
+    return c.json(sourceState((await sourceFile(c.env, room.project.id, file.uid))!));
+  } catch (e) { return mapError(c, e); }
+});
 
 r.patch('/:projectUid/files/:uid', async (c) => {
   try {
@@ -1131,16 +1176,28 @@ r.post('/:projectUid/files/:uid/versions/:n/current', async (c) => {
     if (!file || !version) return c.json({ detail: 'Version not found' }, 404);
     if (!version.r2_key.startsWith(`data-room/${project.uid}/`)) return c.json({ detail: 'Version not found' }, 404);
     const at = nowIso();
+    const deckReady = await deckSourceReady(c.env);
+    // Tie invalidation to this successful swap, not another writer's identical target key.
+    const swapToken = crypto.randomUUID();
+    const fileSwap = deckReady ? c.env.DB.prepare(
+      `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ?, deck_source_token = ?
+        WHERE id = ? AND project_id = ? AND r2_key = ?
+          AND EXISTS (SELECT 1 FROM data_room_file_versions WHERE id = ? AND file_id = ? AND r2_key = ?)`,
+    ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, swapToken, file.id, project.id, file.r2_key, version.id, file.id, version.r2_key) : c.env.DB.prepare(
+      `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ?
+        WHERE id = ? AND project_id = ? AND r2_key = ?
+          AND EXISTS (SELECT 1 FROM data_room_file_versions WHERE id = ? AND file_id = ? AND r2_key = ?)`,
+    ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, file.id, project.id, file.r2_key, version.id, file.id, version.r2_key);
     const [toFile, toVersion] = await c.env.DB.batch([
-      c.env.DB.prepare(
-        `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ?
-          WHERE id = ? AND project_id = ? AND r2_key = ?`,
-      ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, file.id, project.id, file.r2_key),
+      fileSwap,
+      // No intervening statement: changes() is the first swap's affected-row count.
+      // A stale pair must not move the archive even if another writer chose the same key.
       c.env.DB.prepare(
         `UPDATE data_room_file_versions SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by = ?, updated_at = ?
-          WHERE id = ? AND r2_key = ?
+          WHERE id = ? AND r2_key = ? AND changes() = 1
             AND EXISTS (SELECT 1 FROM data_room_files WHERE id = ? AND r2_key = ?)`,
       ).bind(file.r2_key, file.content_type, file.size_bytes, file.uploaded_by_user_id, at, version.id, version.r2_key, file.id, version.r2_key),
+      ...(deckReady ? resetSourceStatements(c.env, file.id, project.id, version.r2_key, swapToken, Number(user.id)) : []),
     ]);
     if (!(toFile as any).meta?.changes || !(toVersion as any).meta?.changes) {
       return c.json({ detail: 'The file changed while this was saved. Read it again and retry.', code: 'version_conflict' }, 409);
@@ -1198,7 +1255,9 @@ export async function removeDataRoomFile(
   // Row first. A deleted object with a surviving row is a broken download;
   // a surviving object with no row is unreachable, which is merely waste.
   // D1 may run with foreign keys off, so the versions' rows go by hand.
+  const deckReady = await deckSourceReady(env);
   await env.DB.batch([
+    ...(deckReady ? [env.DB.prepare('DELETE FROM dataroom_deck_values WHERE project_id = ? AND file_uid IN (SELECT uid FROM data_room_files WHERE id = ?)').bind(project.id, file.id)] : []),
     env.DB.prepare('DELETE FROM data_room_file_versions WHERE file_id = ?').bind(file.id),
     env.DB.prepare('DELETE FROM data_room_files WHERE id = ?').bind(file.id),
   ]);

@@ -1,3 +1,5 @@
+import { contractErrors } from '../src/contracts/validate.ts';
+const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckConsistency.schema.json', import.meta.url), 'utf8'));
 /**
  * D1555 (#3802, deck v2 C7) — the deck's consistency rules across its cards.
  *
@@ -139,7 +141,9 @@ async function call(db: any, who: number, method: string, path: string) {
   const token = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await app.fetch(new Request(`http://t${path}`, { method, headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` }, ...(method === 'POST' ? { body: '{}' } : {}) }),
     { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any, { waitUntil() {}, passThroughOnException() {} } as any);
-  return { status: res.status, body: await res.json().catch(() => null) as any };
+  const reply = await res.json().catch(() => null) as any;
+  if (res.status === 200 && 'consistency' in reply) assert.deepEqual(contractErrors(replyContract, reply.consistency), [], 'consistency reply contract');
+  return { status: res.status, body: reply };
 }
 
 test('D1555 route: the founder\'s read and run both carry the findings with their cards; a consistent version is ok with none', async () => {

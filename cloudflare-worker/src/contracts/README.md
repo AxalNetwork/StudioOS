@@ -11,6 +11,7 @@ reply against its schema, not only that the route exists.
 | `deckGrid.schema.json` | `GET /api/decks/:id/grid` (D1499, #3749): the geometry, the 17 structures and each card's areas with their boxes. |
 | `deckInvestorLinks.schema.json` | `GET /api/decks/:id/investor-links` (D1565, #3812): the deck, its version and its per-investor links. |
 | `deckRemix.schema.json` | `POST /api/decks/:id/remix` (D1553, #3800): the card's structure, the card and its layout options. |
+| `deckSource.schema.json` | `PUT /api/data-room/:projectUid/files/:uid/deck-source` (#3881): the public opt-in and extraction state, without internal job or billing fields. |
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
 | `deckTypedTables.schema.json` | `GET /api/decks/:id/typed-values` (D1538, #3787): the deck and the venture's typed figures, graded Stated. |
 | `deckWithdrawInvestorLink.schema.json` | `POST /api/decks/:id/investor-links/:shareId/withdraw` (D1565, #3812): ok and the withdrawn link. |

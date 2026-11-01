@@ -128,6 +128,16 @@ test('3. every adapter method swapped to through() has a contract, and every con
   }
 });
 
+
+test('nullable contract types accept only their named alternatives', () => {
+  assert.deepEqual(contractErrors({ type: ['object', 'null'] }, null), []);
+  assert.deepEqual(contractErrors({ type: ['object', 'null'] }, {}), []);
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, 1), []);
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, 'one'), []);
+  assert.deepEqual(contractErrors({ type: ['object', 'null'] }, []), ['$: must be object,null, is array']);
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, false), ['$: must be number,string, is boolean']);
+});
+
 // ── 4. The replies of the two swaps that merged beside this file ─────────
 
 test('4. the typed-values reply matches deckTypedTables, for a number, a text figure and none', async () => {

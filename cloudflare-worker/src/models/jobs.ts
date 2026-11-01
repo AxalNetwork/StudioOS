@@ -9,6 +9,7 @@ import type { Env } from '../types';
 import { dlqDepth } from '../services/deadLetters';
 
 export type JobType =
+  | 'dataroom_extract'
   | 'ai_scoring'
   | 'spinout_processing'
   | 'metrics_aggregation'

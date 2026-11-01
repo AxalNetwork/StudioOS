@@ -75,6 +75,8 @@ Every external fetch is forbidden; no Mercury call reaches a provider.
 | File | Guarantee |
 | --- | --- |
 | `capital_access_d1191.test.ts` | D1191: real-route access, staff summaries, support audit ordering, scoped prospect writes and failure/race outcomes against the canonical schema. |
+| `dataroom_deck_sources_d1602.test.ts` | D1602: migrated data-room source permissions, quotes, billed extraction, code readers, citations, stale versions and withdrawal. |
+| `dataroom_deck_sources_d1602.mutations.mjs` | D1602: reproducible isolated-loader mutation proof, with passing original controls before and after; source files are never edited. |
 
 ## Conventions
 
