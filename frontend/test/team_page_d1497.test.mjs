@@ -257,20 +257,24 @@ test('the Eadwyn button is "Ask", its accessible name "Ask Eadwyn", and no Team 
 
 test('no client method exists for a route that does not exist', () => {
   const sources = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
-  // #3842's run paths, #3843's queue and #3844's tools read have no route yet, so no client string names them.
-  assert.doesNotMatch(sources, /\/teams\/agents\/[^'"`\n]*\/run\b/, '#3842: GET /api/teams/agents/:uid/run/quote and POST …/run');
+  // #3843's queue and #3844's tools read have no route yet, so no client string names them.
+  // #3842's run paths landed with their routes (runQuote and runAgent, below).
   assert.doesNotMatch(sources, /\/teams\/[^'"`\n]*queue/, '#3843: /api/teams/:scope/:id/queue and /api/teams/queue/:proposalUid[/decide]');
   assert.doesNotMatch(sources, /\/teams\/tools/, '#3844: GET /api/teams/tools');
   // teamAgents.js builds its paths from parts, so its own strings are read whole.
-  assert.doesNotMatch(codeOnly(read('frontend/src/lib/api/teamAgents.js')), /\/run\b|\/queue\b|\/tools\b/, 'no #3842–#3844 path in the agents client');
+  assert.doesNotMatch(codeOnly(read('frontend/src/lib/api/teamAgents.js')), /\/queue\b|\/tools\b/, 'no #3843–#3844 path in the agents client');
   const client = read('frontend/src/lib/api/teamAgents.js');
-  for (const m of ['runQuote', 'runAgent', 'queue', 'queueItem', 'decide', 'toolChoices']) assert.doesNotMatch(client, new RegExp(`\\b${m}\\s*:`), `teamAgentsApi.${m} lands with its route`);
+  for (const m of ['queue', 'queueItem', 'decide', 'toolChoices']) assert.doesNotMatch(client, new RegExp(`\\b${m}\\s*:`), `teamAgentsApi.${m} lands with its route`);
+  // #3842: the run's two methods, on the Worker's two paths.
+  assert.match(client, /runQuote: \(uid, \{ module, option \} = \{\}\) =>[\s\S]*?`\/teams\/agents\/\$\{enc\(uid\)\}\/run\/quote\?/);
+  assert.match(client, /runAgent: \(uid, [^)]*\) =>\s*request\(`\/teams\/agents\/\$\{enc\(uid\)\}\/run`, \{ method: 'POST'/);
   // The adapter's #3840 bodies call #3840's client and nothing else; the unbuilt ones call nothing.
   const seam = codeOnly(read(`${TEAM}/agentsAdapter.js`));
   for (const m of ['roles', 'listAgents', 'addAgent', 'agent', 'updateAgent', 'removeAgent', 'rulebook', 'saveRulebook']) {
     assert.match(seam, new RegExp(`export const ${m} = [^\\n]*through\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} is wired to teamAgentsApi.${m}`);
   }
-  for (const m of ['runQuote', 'runAgent', 'queue', 'queueItem', 'decide', 'toolChoices']) {
+  // S1 wires the seam's runQuote and runAgent to #3842's client; the rest wait for their routes.
+  for (const m of ['queue', 'queueItem', 'decide', 'toolChoices']) {
     assert.doesNotMatch(seam, new RegExp(`export const ${m} = [^\\n]*teamAgentsApi`), `${m} waits for its route`);
   }
   for (const f of readdirSync(TEAM).filter((x) => /\.jsx?$/.test(x))) {
