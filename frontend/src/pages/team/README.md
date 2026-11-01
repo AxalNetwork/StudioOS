@@ -21,6 +21,7 @@ board → file map and what waits for which issue are in
   lands one adds its method to teamAgents.js with the route and replaces only
   the matching one-line body. No screen changes. Never add a client method
   for a route that does not exist.
+- **Skills (D1612) are behind the same seam.** Their methods in `agentsAdapter.js` (`skillLibrary` … `coverage`) answer unavailable until A1 (#3951) and A2 (#3956) land; the builder replaces each one-line body with `throughSkill(() => teamAgentsApi.<method>(…))`. A pasted SKILL.md is untrusted text: draw it as text, never as HTML, and let the Worker's import be the parse that saves.
 - **An agent is never drawn as a person.** People are circles
   (`PersonAvatar`); agents are rounded squares with the spark (`AgentTile`)
   and, wherever an agent is named, the "AI agent" pill (`AgentIdentity`). All
@@ -58,4 +59,10 @@ board → file map and what waits for which issue are in
 | `RulebooksTab.jsx` | Roles and rule books: the library, one rule book, and Edit with the floor (TM4a–TM4c). |
 | `ApprovalsTab.jsx` | Approvals with its four filters, and one proposal (TM7a, TM7b, TM7b2). |
 | `TeamSettingsTab.jsx` | Settings: who pays, who may add agents, caps (Edit cap opens the profile's editor), models and tools, data sharing (Open rule book opens the role's book) (TM8a; TM9a5's lock line). |
+| `SkillsTab.jsx` | Skills (D1612, #3945): the roles (SK0), a role's directory with categories, search and sort (SK1), the skill page with its SKILL.md drawn as text, Copy and Download (SK2), and the states (SK9). |
+| `SkillSheets.jsx` | Assign to agents (SK3), Add skills to this agent (SK5), the Add-an-agent Skills step (SK6) and New skill: Write, or Paste a SKILL.md with a preview (SK7). |
+| `AgentSkillsCard.jsx` | The agent profile's Skills and Values (SK4, SK9b): the radar computed by the Worker, pinned versions, Update to vN, Remove, and values "Set by [Company]". |
+| `TeamCoverageCard.jsx` | Team coverage (SK8): people and agents on the 8 /studio axes; a category covered only by agents reads as a people gap. Not drawn while its read is off. |
+| `SkillParts.jsx` | The taxonomy and tool chips, the directory card, a skill row and the agent radar the skill screens share. |
+| `skillsModel.js` | The skill words and pure derivations: levels and categories, filter and sort, the radar and coverage, assignment groups, refusals, and the client-side SKILL.md preview. |
 | `WorkingHere.jsx` | Working here (TM6c) and Assign this task to… (TM6b). Built, not mounted: module headers mount them with the Ask panel (#3706) and the task store (#3845). |
