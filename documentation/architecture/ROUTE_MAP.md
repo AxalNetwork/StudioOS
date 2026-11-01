@@ -2068,6 +2068,14 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 | `GET /api/account/people/search?q=&company=<uid>\|&project=<id>` | signed in | `{ people: [{ uid, name, avatar_url, shared: [{ kind: 'company' \| 'connection', name }] }] }`, at most 10, by name, only people reachable from the caller, never the caller. `company` or `project` names the team being built: the caller must belong to it (403 `not_member`) and its members are left out. `avatar_url` is null (users record none). 400 `query_too_short` (under 2 letters) / `query_too_long`. Rate bucket `people_search`, 30 a minute, fail-closed. |
 | `GET /api/company/:uid` · `GET /api/projects/:id/members` | as before | `members[]` carries `email` on the caller's own row only; another member's row has no `email` key (the canvas: "Never show another member's email"). Invitation addresses to editors are unchanged (owner question T3 is open). Company Settings › Members prints no address on another member's row. |
 
+### Remix (D1553, #3800)
+
+`routes/deck_remix.ts`, mounted at `/api/decks` beside `deck_grid.ts`. Rules in `services/decks/remix.ts` (also called by the one-click run for AUTO-4's drop). Client: `lib/api/deckRemix.js` (`deckRemixApi.remix`), read through `deckV2Adapter.remix` (a `SWAPPED` row); the pd5 sheet is `RemixSheet` in `DeckSheets.jsx`, opened from ⋯ › This card › Remix this slide only.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `POST /api/decks/:id/remix` `{ card, remove? }` | whoever may read the deck (`projectOwned`) | `{ deck_id, current, card, options: [{ structure, label, line, card }] }`: at most four layouts, each holding every block of the card unchanged; with `remove`, `card` is the card after the reflow. 400 for no card, a card with no blocks, or a block not on the card; 403; 404. No model, no hold, no charge (works with AI paused); writes nothing. |
+
 ### The Grid v2 (D1499, #3749)
 
 `routes/deck_grid.ts`, mounted at `/api/decks` beside `deck_check.ts`. Geometry and catalogue in `services/decks/structures.ts`, mirrored (geometry only) in `frontend/src/pages/raise/pitch/gridModel.js`. Client: `lib/api/deckGrid.js` (`deckGridApi.grid`), read through `deckV2Adapter.grid` (part 2, the one `SWAPPED` row of the seam). The editor's stage (`GridStage.jsx`), Present and the print page (`BlockGrid.jsx`) place every area with `gridModel.placeOf`, so they draw this route's boxes; ⋯ › Slide size writes `theme.aspect` with the next version save, so no route is added for it.

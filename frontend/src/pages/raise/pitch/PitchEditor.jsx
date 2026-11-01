@@ -24,7 +24,7 @@ import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
 import ShareDialog from './ShareDialog';
 import ExportDialog from './ExportDialog';
-import { BackgroundSheet, BrandKitSheet, CheckSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
+import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 import { EDITOR_WAITING, aiOffState, placeTextEdit, saveChip } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
@@ -436,7 +436,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'duplicate') { if (!readOnly) duplicate(sel); return; }
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background'].includes(id)) setSheet(id);
+    // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i) => {
@@ -541,6 +542,18 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           <SlideEvidence projectId={project?.id} version={base.deck.version} slide={sel + 1} readOnly={readOnly}
             onAddSources={(lines) => { const c = sourcesCard(model, lines); setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); setSheet(null); }} />
         </SourcesSheet>
+      ) : null}
+      {sheet === 'remix' && card && base.deck?.id ? (
+        <RemixSheet deckId={base.deck.id} card={card} index={sel} readOnly={readOnly}
+          onApply={(next) => {
+            // One edit, one undo step: Undo puts the card back as it was, unless something changed it since.
+            const i = sel;
+            const was = cardsNow.current[i];
+            setCards((cs) => cs.map((x, j) => (j === i && x === was ? next : x)));
+            setPickState(NO_PICK);
+            return () => setCards((cs) => cs.map((x, j) => (j === i && x === next ? was : x)));
+          }}
+          onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'check' && base.deck?.id ? (
         <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved} onClose={() => setSheet(null)} />
