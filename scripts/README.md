@@ -124,6 +124,12 @@ unit tests over its pure helpers that *are* in the suite.
 | `pitch-acceptance-live.mjs` | #3662: the Pitch deck studio's live acceptance run. Signs in with a test account's session the owner confirms is synthetic (`PITCH_TEST_ACCOUNT=synthetic`), screenshots the five studio pages at desktop and phone widths and, with `PITCH_EXPORTS=1`, checks the test deck's PDF, PowerPoint and HTML exports are the files they claim. Writes a pass / fail / not-tested matrix with the revision. Creates no share, sends nothing, accepts no terms. **Exits 2 and verifies nothing when not configured, never 0.** Run by hand, not by a workflow; see `documentation/operations/PITCH_ACCEPTANCE.md`. Guarded by `frontend/test/pitch_acceptance_live_3662.test.mjs`. |
 | `capture-spa-previous.mjs` | Captures the restored previous deploy's lazy entry before a build, or generation 1 of the deployed cache for scheduled smoke. Writes an entry-path manifest outside `docs/`; `check-spa-live.mjs` uses it to check both generations on both hosts (#3590). |
 
+## The deck harness
+
+| File | What it does |
+| --- | --- |
+| `eval-elements.mjs` | D1518 (#3770): the element eval and the deck benchmark, on `lib/deckEval.mjs`. Run through `cloudflare-worker/test/_ts-loader.mjs`, since it reads the Worker's TypeScript. `--plan` (default) lists each golden brief with its element's job and the models the rail suggests, calling nothing. `--benchmark [--write]` runs the zero-edit acceptance arm on the three sample ventures and refreshes `documentation/product/DECK_BENCHMARK.md`; it exits 1 while any venture fails the gate (#3768's). `--live` is refused (exit 2) until the owner sets the evaluation cap (decision N) and a staging URL, and it never targets production. Not in `test:guards`: `cloudflare-worker/test/deck_eval_d1518.test.ts` covers its helpers and holds the benchmark table to the arm. |
+
 ## The pull-request preview
 
 | File | What it does |
