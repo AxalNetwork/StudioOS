@@ -96,7 +96,8 @@ export default function ProjectPage({ id, projects = null, summary = null, paths
       </header>
       {notice ? <p role="status" className={`m-0 rounded-axal-md bg-axal-ground px-3 py-2 text-[12.5px] ${INK} dark:bg-gray-800`}>{notice}</p> : null}
 
-      {!ready ? <PCard title="Company"><Reading lines={2} /></PCard> : inCompany ? (
+      {/* A failed project read is said once, in Project details, with Try again; this card is not left on Reading…. */}
+      {!ready ? (project.status === 'error' ? null : <PCard title="Company"><Reading lines={2} /></PCard>) : inCompany ? (
         <PCard title="Linked company" testId="project-linked-company">
           <div className="flex flex-wrap items-center gap-3 rounded-axal-md border border-violet-200 bg-axal-lavender px-3 py-3 dark:border-violet-800 dark:bg-violet-900/20">
             <CompanyMark name={company.name || '?'} size={36} />

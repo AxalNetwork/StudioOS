@@ -74,10 +74,11 @@ function CompanyCard({ c, onAddProject, onRetry, profile, counts }) {
       {counts ? <p className={`m-0 px-[18px] ${MUTED}`} data-testid="company-extra">{counts}</p> : null}
       <div className="rounded-b-axal-lg border-t border-axal-hairline bg-axal-ground/60 px-[18px] py-3 dark:border-gray-800 dark:bg-gray-950/40" data-testid="company-projects">
         <div className="flex items-center justify-between gap-2">
-          <span className={EYEBROW}>Projects in this company{projects.available ? ` · ${projects.value.length}` : ''}</span>
+          <span className={EYEBROW}>Projects in this company{projects.available && !projects.loading ? ` · ${projects.value.length}` : ''}</span>
           {canCreate(profile) ? <button type="button" className={BTN_TEXT} onClick={() => onAddProject(c)} data-testid={`company-add-project-${c.uid}`}>+ Add project</button> : null}
         </div>
-        {!projects.available ? <div className="mt-2"><Failed what="Its projects" onRetry={onRetry} testId="company-projects-unread" /></div>
+        {projects.loading ? <div className="mt-2"><Reading lines={1} /></div>
+          : !projects.available ? <div className="mt-2"><Failed what="Its projects" onRetry={onRetry} testId="company-projects-unread" /></div>
           : projects.value.length
             ? <ul className="m-0 mt-1 list-none p-0">{projects.value.map((p) => <ProjectRow key={p.id} p={p} />)}</ul>
             : <p className={`m-0 mt-1 ${MUTED}`} data-testid="company-projects-none">No projects yet.</p>}
@@ -142,12 +143,11 @@ export default function PortfolioOverview({ companies, projects, switcher, activ
       </div>
     );
   }
-  const loadingProjects = projectsLoading ? { available: false, loading: true } : null;
   return (
     <div className="flex flex-col gap-3" data-testid="portfolio-overview">
       <span className={EYEBROW} data-testid="portfolio-companies-count">Companies · {sections.companies.length}</span>
       {sections.companies.length ? sections.companies.map((c) => (
-        <CompanyCard key={c.uid} c={loadingProjects ? { ...c, projects: { available: true, value: [] } } : c} profile={profile}
+        <CompanyCard key={c.uid} c={projectsLoading ? { ...c, projects: { available: false, loading: true } } : c} profile={profile}
           onAddProject={(co) => onNew('project', co)} onRetry={retry} counts={extraFor ? extraFor(c.uid) : null} />
       )) : (
         <div className={`${CARD} flex flex-wrap items-center justify-between gap-2`} data-testid="companies-none">

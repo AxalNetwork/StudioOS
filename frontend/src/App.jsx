@@ -78,6 +78,7 @@ import { clearSupportSession } from './lib/supportSession';
 import { disablePush } from './lib/pwa';
 import { readStoredReason, clearStoredReason } from './lib/impersonationBar';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
+import { clearActiveProject } from './lib/activeProject.js';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
 // surface on mount; a lazy chunk could load AFTER the background settings 401
@@ -2247,6 +2248,10 @@ function AppInner() {
     // so nothing leaks — but that first paint would be unscoped rather than
     // the new account's own company.
     setActiveCompanyId(null);
+    // D1413 (#3696, PF5): the project picked in the switcher is the same kind of
+    // per-browser memory, and it carries a project NAME the trigger draws: left
+    // in place, the next account would see the previous account's project.
+    clearActiveProject();
     // Sweep any per-tab sensitive state (drafts, in-flight wizards, etc.) —
     // but NOT the reload guards, which this used to take with it.
     //

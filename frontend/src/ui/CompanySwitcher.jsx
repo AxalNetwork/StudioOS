@@ -4,7 +4,7 @@ import { ChevronDown, Plus } from 'lucide-react';
 import { useActiveCompany as _useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
 import { companyActionsApi } from '../lib/api/companyActions';
-import { clearActiveProject, selectProject, useActiveProject } from '../lib/activeProject.js';
+import { clearActiveProject, getActiveProject, selectProject, useActiveProject } from '../lib/activeProject.js';
 import { switcher as readPortfolioSwitcher } from '../pages/account/companies/portfolioAdapter.js';
 
 /**
@@ -163,6 +163,10 @@ export function useCompanySwitch() {
   const currentCompany = useRef(company);
   currentCompany.current = company;
   function switchTo(next) {
+    // D1413 (PF5): a project picked in another company no longer describes the
+    // selection; one in this company (`selectProject` sets it first) stays.
+    const picked = getActiveProject();
+    if (picked && picked.company?.uid !== next?.uid) clearActiveProject();
     setActiveCompanyId(next.id);
     setCompany(next);
   }
@@ -170,6 +174,7 @@ export function useCompanySwitch() {
   async function create(name, extra = {}) {
     const created = await api.createCompany({ ...extra, company_name: name });
     setCompanies([...companies, created]);
+    clearActiveProject();
     setActiveCompanyId(created.id);
     setCompany(created);
     return created;
@@ -177,6 +182,7 @@ export function useCompanySwitch() {
   async function leave(uid) {
     await companyActionsApi.leave(uid);
     setCompanies((rows) => rows.filter((row) => row.uid !== uid));
+    if (getActiveProject()?.company?.uid === uid) clearActiveProject();
     if (currentCompany.current?.uid === uid) {
       setActiveCompanyId(null);
       setCompany(null);
@@ -270,7 +276,10 @@ function CompanySwitcher({ collapsed, role }) {
     readPortfolioSwitcher().then((out) => {
       if (!alive) return;
       const parts = out.available ? switcherProjects(out.value) : { byCompany: null, standalone: null };
-      setProjectsRead({ status: out.available ? 'ready' : 'error', ...parts });
+      // A block that failed is said, never drawn as no projects: `switcherProjects`
+      // answers null for it even when the read itself answered.
+      const whole = out.available && parts.byCompany != null && parts.standalone != null;
+      setProjectsRead({ status: whole ? 'ready' : 'error', ...parts });
     });
     return () => { alive = false; };
   }, [open, projectsTick]);

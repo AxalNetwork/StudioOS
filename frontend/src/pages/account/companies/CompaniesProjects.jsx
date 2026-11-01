@@ -381,7 +381,8 @@ export default function CompaniesProjects({ role, entityRecords = null }) {
     return (
       <div className="flex min-w-0 flex-col gap-4" data-testid="companies-projects">
         {done ? <p role="status" className={`m-0 rounded-[9px] bg-axal-ground px-3 py-2 text-[12.5px] ${INK} dark:bg-gray-800`} data-testid="companies-done">{done}</p> : null}
-        <CompanyPage uid={openUid} card={card} projects={projects.status === 'ready' ? projects.data : null} meId={meId} profile={profile}
+        <CompanyPage uid={openUid} card={card} projects={projects.status === 'ready' ? projects.data : null}
+          projectsLoading={projects.status === 'loading' || projects.status === 'idle'} meId={meId} profile={profile}
           active={activeUid === openUid} row={(known || []).find((c) => c.uid === openUid) || null}
           switchTo={switchTo} leave={leave} onChanged={changed} onNew={onNew} />
         {sheets}

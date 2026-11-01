@@ -104,7 +104,7 @@ function DocumentsCard({ uid, read, onRetry, onChanged }) {
 }
 
 export default function CompanyPage({
-  uid, card = null, projects = null, meId, active, row, switchTo, leave, onChanged, onNew, profile,
+  uid, card = null, projects = null, projectsLoading = false, meId, active, row, switchTo, leave, onChanged, onNew, profile,
 }) {
   const [tick, setTick] = useState(0);
   const reread = useCallback(() => setTick((n) => n + 1), []);
@@ -229,7 +229,8 @@ export default function CompanyPage({
           </PCard>
           <PCard title="Projects in this company" testId="company-page-projects"
             aside={!powers.archived && profile !== 'explorer' ? <button type="button" className={BTN_TEXT} onClick={() => onNew('project', { uid, name })}>+ Add project</button> : null}>
-            {inside == null ? <Failed what="Its projects" onRetry={() => onChanged('', {})} testId="company-page-projects-unread" />
+            {inside == null && projectsLoading ? <Reading lines={2} />
+              : inside == null ? <Failed what="Its projects" onRetry={() => onChanged('', {})} testId="company-page-projects-unread" />
               : inside.length ? (
                 <ul className="m-0 flex list-none flex-col gap-2 p-0">
                   {inside.map((p) => (

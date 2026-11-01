@@ -299,10 +299,67 @@ test('PF4a: only the name is required (owner Q2); filled legal fields go on the 
     await v.click('new-company-confirm');
     const w = v.writes();
     assert.equal(w[0].call, 'POST /api/company/create');
-    assert.deepEqual(w[0].body, { legal_form: 'gmbh', slug: 'newco', company_name: 'Newco' });
+    // The address made from the name is only shown: the Worker makes it (unique) when none is sent.
+    assert.deepEqual(w[0].body, { legal_form: 'gmbh', company_name: 'Newco' });
     assert.equal(w[1].call, 'PUT /api/company/c9/tax-id');
     assert.match(v.of('companies-done'), /Newco is created and active on this device/);
   } finally { await v.close(); }
+});
+
+test('PF4: a name alone creates even when the address made from it is held; a typed address is sent; an address without its country is said', async () => {
+  let v = await mount('founder', { handle: worker({ 'POST /api/company/create': (init) => (JSON.parse(init.body).slug ? response({ code: 'slug_taken', message: 'Another company holds that address. Choose another.' }, 409) : response({ id: 9, uid: 'c9', company_name: 'Newco' })) }) });
+  try {
+    await v.click('portfolio-new');
+    await v.click('portfolio-new-company');
+    await v.change('new-company-name', 'Newco');
+    await v.click('new-company-confirm');
+    assert.equal(v.writes()[0].body.slug, undefined);
+    assert.match(v.of('companies-done'), /Newco is created/);
+  } finally { await v.close(); }
+  v = await mount('founder');
+  try {
+    await v.click('portfolio-new');
+    await v.click('portfolio-new-company');
+    await v.change('new-company-name', 'Newco');
+    await v.change('new-company-slug', 'newco-labs');
+    await v.click('new-company-confirm');
+    assert.equal(v.writes()[0].body.slug, 'newco-labs');
+  } finally { await v.close(); }
+  v = await mount('founder');
+  try {
+    await v.click('company-add-project-nl');
+    await v.change('new-project-name', 'Second');
+    await v.click('new-project-confirm');
+    const w = v.writes().find((x) => x.call === 'POST /api/projects');
+    assert.equal(w.body.slug, undefined, 'a project\'s address made from its name is the Worker\'s to make');
+  } finally { await v.close(); }
+  assert.match(read('frontend/src/pages/account/companies/CreateSheets.jsx'), /The registered address was not saved: it needs the country as a two-letter code/);
+});
+
+test('PF1: while the projects read, a card says Reading…, never "· 0" or "No projects yet"', async () => {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const v = await mount('founder', { handle: worker({ 'GET /api/account/projects': () => held.then(() => response(PROJECTS)) }) });
+  try {
+    assert.equal(v.count('company-projects-none'), 0);
+    assert.equal(v.count('company-projects-unread'), 0);
+    assert.doesNotMatch(v.of('company-projects'), /· 0/);
+  } finally { release(); await v.close(); }
+});
+
+test('PF6a: the General card says a failed company read with Try again, and a failed address read is not "Not recorded"', () => {
+  const failed = renderedText(renderToStaticMarkup(h(MemoryRouter, null, h(GeneralCard, { uid: 'nl', detail: null, path: null, status: 'error', onRetry: () => {} }))));
+  assert.match(failed, /The company’s details could not be read\..*Try again/);
+  assert.doesNotMatch(failed, /Reading…/);
+  const noPath = renderedText(renderToStaticMarkup(h(MemoryRouter, null, h(GeneralCard, { uid: 'nl', detail: COMPANY, path: null, pathRead: false, status: 'ready' }))));
+  assert.match(noPath, /The address could not be read/);
+});
+
+test('PF5: signing out forgets the picked project; a company made or switched to elsewhere clears a project of another company', () => {
+  assert.match(read('frontend/src/App.jsx'), /setActiveCompanyId\(null\);[\s\S]{0,400}clearActiveProject\(\);/);
+  const src = read('frontend/src/ui/CompanySwitcher.jsx');
+  assert.match(src, /function switchTo\(next\) \{[\s\S]{0,400}clearActiveProject\(\)/);
+  assert.match(src, /const whole = out\.available && parts\.byCompany != null && parts\.standalone != null;/);
 });
 
 // ---------------------------------------------------------------- PF2, PF3

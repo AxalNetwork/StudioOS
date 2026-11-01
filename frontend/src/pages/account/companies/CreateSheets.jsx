@@ -94,7 +94,9 @@ export function NewCompanySheet({ create, companies = [], onClose, onDone }) {
     setBusy(true); setRefusal('');
     const extra = {};
     for (const k of ['legal_name', 'legal_form', 'jurisdiction', 'registration_number', 'incorporation_date']) if (f[k].trim()) extra[k] = f[k].trim();
-    if (slug) extra.slug = slug;
+    // Only an address the member typed is sent: one made from the name is the
+    // Worker's to make (and to make unique), so a name alone always creates.
+    if (slugTouched && slug) extra.slug = slug;
     let created;
     try { created = await create(name, extra); } catch (e) {
       reportError('portfolio:create-company', e);
@@ -108,6 +110,8 @@ export function NewCompanySheet({ create, companies = [], onClose, onDone }) {
     if (uid && (f.line1.trim() || f.city.trim()) && f.country.trim()) {
       const out = await portfolio.addLocation(uid, { kind: 'registered', line1: f.line1.trim() || null, city: f.city.trim() || null, postal_code: f.postal_code.trim() || null, country: f.country.trim().toUpperCase() });
       if (!out.available) failed.push(`The registered address was not saved: ${out.refused ? out.reason : 'it could not be sent'}`);
+    } else if (uid && (f.line1.trim() || f.city.trim())) {
+      failed.push('The registered address was not saved: it needs the country as a two-letter code');
     }
     for (const o of officers) {
       if (!uid || !o.name.trim()) continue;
@@ -211,7 +215,7 @@ export function NewProjectSheet({ companies = [], company = null, onClose, onDon
     setBusy(true); setRefusal(''); setLocked(false);
     try {
       const body = { name: name.trim(), company_id: chosen ? Number(chosen.id) : null };
-      if (slug) body.slug = slug;
+      if (slugTouched && slug) body.slug = slug;
       const created = await api.createProject(body);
       setBusy(false);
       onDone(created, chosen);

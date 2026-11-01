@@ -30,15 +30,28 @@ import { companyPathFor, companySettingsPathFor } from './companiesModel';
 import * as portfolio from './portfolioAdapter.js';
 import { GeneralCard, SettingsHead } from './CompanySettingsTabs.jsx';
 
+// Each read keeps its own outcome: a failed one is said with Try again, never
+// left on "Reading…" and never drawn as "Not recorded".
 function useCompanyHead(uid) {
-  const [state, set] = useState({ detail: null, path: null });
-  const load = useCallback(async () => {
-    if (!uid) return;
-    const [detail, legal] = await Promise.all([portfolio.through(() => teamsApi.getCompany(uid)), portfolio.legal(uid)]);
-    set({ detail: detail.available ? detail.value : null, path: legal.available ? legal.value?.path || null : null });
-  }, [uid]);
-  useEffect(() => { load(); }, [load]);
-  return state;
+  const [state, set] = useState({ status: 'loading', detail: null, path: null, pathRead: false });
+  const [tick, setTick] = useState(0);
+  const retry = useCallback(() => setTick((n) => n + 1), []);
+  useEffect(() => {
+    if (!uid) return undefined;
+    let alive = true;
+    set((x) => ({ ...x, status: 'loading' }));
+    Promise.all([portfolio.through(() => teamsApi.getCompany(uid)), portfolio.legal(uid)]).then(([detail, legal]) => {
+      if (!alive) return;
+      set({
+        status: detail.available ? 'ready' : detail.notFound ? 'notFound' : 'error',
+        detail: detail.available ? detail.value : null,
+        path: legal.available ? legal.value?.path || null : null,
+        pathRead: !!legal.available,
+      });
+    });
+    return () => { alive = false; };
+  }, [uid, tick]);
+  return { ...state, retry };
 }
 
 export default function CompanySettingsAt() {
@@ -59,7 +72,7 @@ export default function CompanySettingsAt() {
     <div className="flex flex-col" data-testid="company-settings-general">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pt-6 md:px-7">
         <SettingsHead uid={uid} name={name} path={head.path} tab="general" />
-        <GeneralCard uid={uid} detail={head.detail} path={head.path} />
+        <GeneralCard uid={uid} detail={head.detail} path={head.path} pathRead={head.pathRead} status={head.status} onRetry={head.retry} />
       </div>
       {company?.uid === uid ? <CompanySettingsPage /> : (
         <div className="mx-auto flex max-w-3xl flex-col gap-2 p-6" data-testid="company-settings-not-active">

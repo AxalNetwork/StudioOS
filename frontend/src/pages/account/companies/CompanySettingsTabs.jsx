@@ -9,7 +9,7 @@ import { moveOutCopy } from '../../team/teamModel.js';
 import { BTN_DANGER, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
 import * as portfolio from './portfolioAdapter.js';
 import {
-  BASE_PATH, companyLegalPath, companyPathFor, companyProjectsPath, companySettingsPathFor, legalFacts, stageWord, valueFact,
+  BASE_PATH, companyLegalPath, companyPathFor, companyProjectsPath, companySettingsPathFor, legalFacts, stageWord, unreadFact, valueFact,
 } from './companiesModel';
 import { CompanyMark, EYEBROW, Fact, FactList, Failed, INK, LINK, MUTED, PCard, ProjectMark, Reading, SlugChip } from './portfolioUi.jsx';
 import LegalSheet from './LegalSheet.jsx';
@@ -42,7 +42,7 @@ function useBlock(load, tick) {
     set((x) => ({ status: 'loading', value: x.value }));
     Promise.resolve().then(load).then((out) => {
       if (!alive) return;
-      set(out && out.available ? { status: 'ready', value: out.value } : { status: out?.notFound ? 'notFound' : 'error', value: null });
+      set(out && out.available ? { status: 'ready', value: out.value } : { status: out?.notFound ? 'notFound' : 'error', value: null, out });
     });
     return () => { alive = false; };
   }, [load, tick]);
@@ -72,7 +72,7 @@ export function SettingsHead({ uid, name, path, tab }) {
 }
 
 /** PF6a's General card: display name, address, website, logo and default currency (#3932). */
-export function GeneralCard({ uid, detail, path }) {
+export function GeneralCard({ uid, detail, path, pathRead = true, status = null, onRetry = null }) {
   const [currency, setCurrency] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -81,10 +81,11 @@ export function GeneralCard({ uid, detail, path }) {
   }, [uid]);
   return (
     <PCard title="General" testId="company-general">
-      {!detail ? <Reading lines={3} /> : (
+      {status === 'error' || status === 'notFound' ? <Failed what="The company’s details" onRetry={onRetry} testId="company-general-unread" />
+        : !detail ? <Reading lines={3} /> : (
         <FactList testId="company-general-facts" rows={[
           ['Display name', <Fact key="n" fact={valueFact(detail.company_name)} />],
-          ['Address', <Fact key="s" fact={valueFact(path)} mono />],
+          ['Address', <Fact key="s" fact={pathRead ? valueFact(path) : unreadFact('The address')} mono />],
           ['Website', <Fact key="w" fact={valueFact(detail.website)} />],
           ['Logo', <Fact key="l" fact={valueFact(detail.logo_url ? 'Recorded' : null)} />],
           ['Default currency', currency == null ? <span key="c" className={MUTED}>Reading…</span>
@@ -160,11 +161,12 @@ function ProjectSettingsCard({ uid, companyName, child, onMoved }) {
             ['Address', <Fact key="s" fact={valueFact(child.path)} mono />],
             ['Stage', <Fact key="st" fact={valueFact(stageWord(project.value.stage))} />],
             ['Team', members.status === 'loading' ? <span key="t" className={MUTED}>Reading…</span>
-              : team == null ? <span key="t" className={MUTED}>The team could not be read</span>
+              : team == null ? <span key="t" className={MUTED} data-testid="company-project-team-unread">The team could not be read · <button type="button" className={LINK} onClick={reread}>Try again</button></span>
                 : <span key="t">{team} {team === 1 ? 'person' : 'people'} · <Link to={teamTo} className={LINK}>Open Team</Link></span>],
             ['Agents', agents.status === 'loading' ? <span key="a" className={MUTED}>Reading…</span>
               : agents.status === 'ready' ? <span key="a" data-testid="company-project-agents">{agents.value} · <Link to={teamTo} className={LINK}>Open Team</Link></span>
-                : <span key="a" className={MUTED} data-testid="company-project-agents-off">AI agents aren’t switched on yet.</span>],
+                : agents.out?.unreadable ? <span key="a" className={MUTED} data-testid="company-project-agents-unread">Agents could not be read · <button type="button" className={LINK} onClick={reread}>Try again</button></span>
+                  : <span key="a" className={MUTED} data-testid="company-project-agents-off">{agents.out?.reason || 'AI agents aren’t switched on yet.'}</span>],
           ]} />
         )}
       </PCard>
@@ -220,8 +222,10 @@ export default function CompanySettingsTabs({ tab }) {
   const { uid, id } = useParams();
   const load = useCallback(() => portfolio.through(() => teamsApi.getCompany(uid)), [uid]);
   const loadLegal = useCallback(() => portfolio.legal(uid), [uid]);
-  const detail = useBlock(load, 0);
-  const legal = useBlock(loadLegal, 0);
+  const [tick, setTick] = useState(0);
+  const reread = useCallback(() => setTick((n) => n + 1), []);
+  const detail = useBlock(load, tick);
+  const legal = useBlock(loadLegal, tick);
   const name = String(detail.value?.company_name || '').trim();
   usePublishScope(detail.status === 'ready' ? scopeFor({ company: { uid, name } }) : null);
   if (detail.status === 'notFound') {
@@ -235,7 +239,7 @@ export default function CompanySettingsTabs({ tab }) {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pb-8 pt-6 md:px-7" data-testid={`company-settings-${tab}`}>
       <SettingsHead uid={uid} name={name} path={legal.value?.path || null} tab={tab} />
-      {detail.status === 'error' ? <Failed what="This company" testId="company-settings-unread" /> : null}
+      {detail.status === 'error' ? <Failed what="This company" onRetry={reread} testId="company-settings-unread" /> : null}
       {tab === 'legal' ? <LegalTab uid={uid} name={name} /> : null}
       {tab === 'projects' ? <ProjectsTab uid={uid} name={name} projectId={id} /> : null}
     </div>
