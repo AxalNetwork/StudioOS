@@ -28,7 +28,7 @@ import { SignJWT } from 'jose';
 import deckSources from '../src/routes/deck_sources.ts';
 import decks from '../src/routes/decks.ts';
 import { CHART_SERIES, chartFits, isSeriesKey } from '../src/services/decks/chartSeries.ts';
-import { CHART_TYPES } from '../src/services/decks/slideModel.ts';
+import { LIBRARY_CHART_TYPES } from '../src/services/decks/slideModel.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -123,7 +123,9 @@ test('2. interviews per week: first week to last, a week between with none is a 
 test('3. the library\'s fits: how many series each type draws, and the reason for a type with none', async () => {
   const db = fixture();
   let r = await call(db, FOUNDER, 'GET', `/api/decks/chart-series?project_id=${P}`);
-  assert.deepEqual(r.body.types.map((t: any) => t.type), [...CHART_TYPES]);
+  // D1538: the library is the 12 bound-series tiles; market circles and projections are drawn from typed figures.
+  assert.deepEqual(r.body.types.map((t: any) => t.type), [...LIBRARY_CHART_TYPES]);
+  assert.equal(r.body.types.length, 12);
   assert.ok(r.body.types.every((t: any) => t.fits === 0 && t.reason), 'nothing recorded: every type greyed, each with its reason');
   db.exec(`INSERT INTO project_metrics (id, project_id, snapshot_date, mrr, arr, paying_accounts, source) VALUES
     (1, ${P}, '2026-08-31', 14100, 169200, 33, 'stripe'), (2, ${P}, '2026-09-30', 16950, 203400, 38, 'stripe')`);

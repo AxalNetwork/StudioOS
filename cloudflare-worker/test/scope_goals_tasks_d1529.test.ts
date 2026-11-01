@@ -48,6 +48,8 @@ function world() {
   addColumnsFrom(db, sql('migrations/597_company_archive_and_events.sql'), 'company_profiles');
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(stripForeignKeys(MIGRATION));
+  // D1614 W1 (#3969): the project board's columns on the same task store; project tasks now go through it.
+  db.exec(stripForeignKeys(sql('migrations/762_scope_task_work_board.sql')));
   db.exec(`CREATE TABLE IF NOT EXISTS project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");

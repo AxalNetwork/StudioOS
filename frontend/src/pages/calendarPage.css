@@ -37,6 +37,7 @@
   --k-compliance_due: #57534e;
   --k-interview_call: #9d174d; --k-cohort_date: #0e7490; --k-deal_closing: #b91c1c; --k-manual: #374151;
   --k-learning: #4338ca;
+  --k-publish_send: #a21caf; --k-content_planned: #65a30d;
   --k-round_close: #a16207; --k-nda_expiry: #6d28d9;
   background: var(--cal-shell);
   color: var(--cal-ink);
@@ -69,6 +70,7 @@
   --k-compliance_due: #d6d3d1;
   --k-interview_call: #f9a8d4; --k-cohort_date: #67e8f9; --k-deal_closing: #fca5a5; --k-manual: #e5e7eb;
   --k-learning: #a5b4fc;
+  --k-publish_send: #f0abfc; --k-content_planned: #bef264;
   --k-round_close: #fde047; --k-nda_expiry: #c4b5fd;
 }
 
@@ -129,9 +131,12 @@
 .cal-dot[data-kind='manual'] { background: var(--k-manual); border-radius: 50% 0 0 0; }
 /* #3959: the Learning source (its own boards are LRN1–LRN3 and CAL12). */
 .cal-dot[data-kind='learning'] { background: var(--k-learning); }
+/* D1486 §b (#3981): Grow's sends and planned pieces. */
+.cal-dot[data-kind='publish_send'] { background: var(--k-publish_send); border-radius: 0 50% 0 50%; }
+.cal-dot[data-kind='content_planned'] { background: var(--k-content_planned); border-radius: 50% 0 50% 0; }
 /* #3982 (D1486 §c): a round's close and an NDA's expiry, each its own hue and shape. */
-.cal-dot[data-kind='round_close'] { background: var(--k-round_close); border-radius: 0 50% 0 50%; }
-.cal-dot[data-kind='nda_expiry'] { background: var(--k-nda_expiry); border-radius: 50% 0 50% 0; }
+.cal-dot[data-kind='round_close'] { background: var(--k-round_close); border-radius: 0 50% 0 0; }
+.cal-dot[data-kind='nda_expiry'] { background: var(--k-nda_expiry); border-radius: 0 0 50% 0; }
 
 /* ── body: agenda beside the 328px rail ───────────────────────────────── */
 .cal-body { display: flex; align-items: stretch; }

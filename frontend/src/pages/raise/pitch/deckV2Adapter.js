@@ -25,12 +25,15 @@
  * Swapped here (`SWAPPED`): `grid`, whose route `GET /api/decks/:id/grid`
  * merged as D1499 part 1 (#3749), `stagePlan`, whose route
  * `GET /api/decks/:id/stage-plan` is D1522 (#3774), `remix`, whose route
- * `POST /api/decks/:id/remix` is D1553 (#3800), and D1565's (#3812)
- * `investorLinks` and `withdrawInvestorLink`. Each keeps its row, so the
- * plan's table still reads whole, and answers through its client
+ * `POST /api/decks/:id/remix` is D1553 (#3800), D1565's (#3812)
+ * `investorLinks` and `withdrawInvestorLink`, and `typedTables`, whose route
+ * `GET /api/decks/:id/typed-values` is D1538 (#3787). Each keeps its row, so
+ * the plan's table still reads whole, and answers through its client
  * (`deckGridApi.grid`, `deckStageApi.stagePlan`, `deckRemixApi.remix`,
- * `deckInvestorLinksApi`).
+ * `deckInvestorLinksApi`, `deckTypedValuesApi.list`).
  * `elementModels` (D1503, #3754) answers through `deckElementModelsApi.read`.
+ * And `consistency` (D1555, #3802): the free rules ride the deck check's own
+ * reply, so it answers through `deckCheckApi.read`.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -42,6 +45,8 @@ import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
+import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
+import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 
 export { NOT_ON };
@@ -103,7 +108,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -159,14 +164,20 @@ export const ventureElements = off('ventureElements');
 export const templates = off('templates');
 export const myTemplates = off('myTemplates');
 export const saveAsTemplate = off('saveAsTemplate');
-export const typedTables = off('typedTables');
+/** D1538 (#3787): the figures typed for the deck, each Stated, with who typed it. */
+export const typedTables = (deckId) => through(() => deckTypedValuesApi.list(deckId), SURFACES.typedTables.issue);
 export const media = off('media');
 export const presets = off('presets');
 export const orgLocks = off('orgLocks');
 export const critique = off('critique');
 /** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
 export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);
-export const consistency = off('consistency');
+/**
+ * D1555 (#3802): the free consistency rules, in the deck check's own reply (no route of their own).
+ * `{ state, findings: [{ key, rule, message, cards }] }`, or null for a reader who is not the founder.
+ * The Wording half stays with #3808 C13.
+ */
+export const consistency = (deckId) => through(() => deckCheckApi.read(deckId).then((r) => r?.consistency ?? null), SURFACES.consistency.issue);
 export const deckActions = off('deckActions');
 export const brandLocks = off('brandLocks');
 export const pptxImport = off('pptxImport');

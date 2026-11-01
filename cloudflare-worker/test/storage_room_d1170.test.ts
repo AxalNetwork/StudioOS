@@ -230,6 +230,8 @@ const SITES: Array<[string, string, string]> = [
   ['routes/deck_images.ts', "deckImages.post('/:id/images', async", 'await c.env.FILES!.put(key, drawn'],
   // D1506: upload and import (an external image copied in) both land through `landImage`.
   ['routes/deck_images.ts', 'async function landImage', 'await c.env.FILES.put(key, bytes'],
+  // D1506: save/export-time copies also check room before storage.
+  ['services/decks/imageCopy.ts', 'export async function copyExternalImages', 'await env.FILES.put(key, img.bytes'],
   ['routes/founder_validate_sessions.ts', 'async function openOn', 'const insert = env.DB.prepare('],
   ['services/interviewIntake.ts', 'export async function openSession', 'const [inserted] = await env.DB.batch(['],
 ];
