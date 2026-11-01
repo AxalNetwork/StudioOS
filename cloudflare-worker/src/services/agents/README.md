@@ -9,12 +9,15 @@ is automatic. The routes are `routes/team_agents.ts`, mounted at `/api/teams`.
 | --- | --- |
 | `catalogue.ts` | The modules an agent can work in (the cycles' own slugs plus Studio, Research and Network), the rail options each module offers (from `ai/railMatrix.json`), the read keys, the hard floor (`ALWAYS_ASKS_FLOOR`) and the eleven roles with their default rule books. |
 | `rulebook.ts` | `checkRules`: a rule book's closed shape and its floor (`rule_floor` before `invalid_rules`); `diffRules`: what a scope changed from the default. |
+| `teams.ts` | The reads the routes and the run share: an agent's scope, the read and manage gates, the rule book in force, the month's spend (`{ available: false }`, never 0, when unknown) and the audit row. |
+| `agentRun.ts` | Part 2 (#3842): the only way an agent runs, as its sponsor, within its rule book and its monthly cap; its output is a proposal with `agent_id`. Also its quote. |
 
-**The rule for adding here.** Pure files only: no binding, no fetch. A new
-module key must be a slug a cycle already has; a new rule book section is one
-entry in `rulebook.ts`'s `SECTIONS`; the floor only grows. Part 2 adds the run
-(`agentRun.ts`), part 3 the queue. `team_agents_d1496.test.ts` covers both
-files.
+**The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
+binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
+written there once. A new module key must be a slug a cycle already has; a new
+rule book section is one entry in `rulebook.ts`'s `SECTIONS`; the floor only
+grows. An agent runs only through `agentRun.ts`. Part 3 adds the queue.
+`team_agents_d1496.test.ts` covers every file here.
 
 ## `skills/` (#3953, D1612)
 

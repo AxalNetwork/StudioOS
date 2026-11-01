@@ -46,6 +46,11 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import { sessionBlockProposals, windowDays } from '../services/sessionsBlock';
 import { ROW_READS } from './fills';
+import { layoutView, savedRow } from './studio_layout';
+import { studioProfile } from '../services/studioModules';
+import {
+  STUDIO_RAIL_PAGES, founderContext, sourceSentence, studioLayoutMessages, validateOps, type FounderContext,
+} from '../services/studioLayoutRun';
 
 /** The form fields an Add form needs before a whole row can be proposed (the writer's own rule). */
 export const ROW_REQUIRED: Readonly<Record<string, readonly string[]>> = Object.freeze({
@@ -117,6 +122,15 @@ async function sessionsBlockRun(c: any, user: User, page: string, option: string
   return new Response(events.join(''), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 
+/** D1420 (#3864): the `studio:layout` refusals, in the panel's words. */
+const STUDIO_SENTENCES: Record<string, string> = {
+  no_profile: 'Ask opens once you hold a venture or a profile.',
+  support_session_refused: 'A support session cannot ask Eadwyn to arrange a Studio.',
+  read_only_preview: 'Eadwyn is off while you preview a member\u2019s Studio.',
+  unknown_page: 'That option runs on your Studio only.',
+  layout_unreadable: 'Your saved Studio layout could not be read. Reset it to start again.',
+};
+
 /** The routes, with the model runner injectable: the app passes `run()`; a test passes a stub. */
 export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
   const runModel = deps.run ?? aiRun;
@@ -124,11 +138,81 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
   const r = new Hono<{ Bindings: Env }>();
   const refuse = (c: any, status: number, code: string) => c.json({ error: code, detail: SENTENCES[code] }, status);
 
+  /**
+   * D1420 (#3864): `studio:layout`. Every refusal comes before the quote, the
+   * hold and the run. The run reads the member's layout and catalogue (and a
+   * founder's Lab week and readiness), and writes `ai_rail_proposals` rows
+   * only: never `studio_layouts`, which Accept saves through `PUT /api/studio/layout`.
+   */
+  async function studioLayoutRun(c: any, user: User, page: string, option: string, body: Record<string, any> | null) {
+    const no = (status: number, code: string, message?: string) => c.json({ error: code, detail: message ?? STUDIO_SENTENCES[code] }, status);
+    // An Explorer with no Studio of their own; a Spin-Out Lab member keeps the founder Studio (studioProfile).
+    if (isExplorer(user) && Number(user.spinout_lab_active ?? 0) !== 1) return no(403, 'no_profile');
+    if ((await selectJwt(c))?.payload?.impersonated_by) return no(403, 'support_session_refused');
+    if (String(user.role) === 'admin') return no(403, 'read_only_preview');
+    const answer = studioProfile(user, null);
+    if ('refusal' in answer) return no(answer.refusal.status, answer.refusal.code, answer.refusal.message);
+    const profile = answer.profile;
+    if (STUDIO_RAIL_PAGES[profile] !== page) return no(404, 'unknown_page');
+
+    let view: ReturnType<typeof layoutView>;
+    try { view = layoutView(user, profile, await savedRow(c.env, user.id, profile)); }
+    catch { return no(500, 'layout_unreadable'); }
+    const ctx: FounderContext | null = profile === 'founder' ? await founderContext(c.env, user) : null;
+    const { messages, guardText } = studioLayoutMessages(profile, user, view.layout, ctx);
+    const runInput: RunOptions = {
+      task: 'studio_layout', userId: Number(user.id), messages, guardText, maxTokens: 500, temperature: 0.2,
+      model: typeof body?.model === 'string' && body.model ? body.model : undefined,
+      rail: { page, option, record: null },
+    };
+    const events: string[] = [];
+    const finish = () => new Response(events.join(''), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' } });
+    const refusalDone = (res: { refusal?: string | null; error?: string }) => {
+      const v = runRefusalView(res) ?? { status: 503 as const, code: res.refusal || 'model_unavailable', message: 'Eadwyn could not be reached. Nothing was proposed.' };
+      events.push(sse('done', { refusal: v, proposals: [], dropped: [] }));
+      console.warn('[rail-run] refused', option, v.code);
+      return finish();
+    };
+    // The hold is said before the run: `meta` comes from the same arithmetic as the hold.
+    const q = await quote(c.env, runInput);
+    if (!q.ok) return refusalDone(q);
+    events.push(sse('meta', { model: q.model, hold_microusd: q.hold_microusd }));
+    const result = await runModel(c.env, runInput);
+    if (result.guard) events.push(sse('guard', { input: result.guard.input, output: result.guard.output }));
+    if (!result.ok) return refusalDone(result);
+
+    const usageLogId = result.usageLogId ?? null;
+    const model = result.usage?.model ?? null;
+    const { kept, dropped } = validateOps(result.output, profile, user, view.layout);
+    const source = sourceSentence(profile, ctx);
+    const proposals: Array<Record<string, unknown>> = [];
+    for (const k of kept) {
+      const payload = { ...k, source, base_revision: view.revision };
+      const p = await proposeRail(c.env, { userId: Number(user.id), page, option, record: null, kind: 'proposal', payload, model, usageLogId });
+      proposals.push({ uid: p.uid, ...payload });
+    }
+    let charged: number | null = null;
+    if (usageLogId) {
+      const env = c.env as Env;
+      const u = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?')
+        .bind(usageLogId, user.id).first<{ charged_microusd: number | null }>().catch(() => null);
+      charged = u?.charged_microusd ?? null;
+    }
+    let budget: unknown = null;
+    try { budget = await loadAiBudget(c.env, Number(user.id)); } catch { budget = null; }
+    events.push(sse('done', proposals.length
+      ? { proposals, dropped, usage_log_id: usageLogId, charged_microusd: charged, budget }
+      : { proposals: [], dropped, reason: 'nothing_to_change', usage_log_id: usageLogId, charged_microusd: charged, budget }));
+    return finish();
+  }
+
   r.post('/run', async (c) => {
     const user = await requireAuth(c) as User;
     const body = (await c.req.json().catch(() => null)) as Record<string, any> | null;
     const page = String(body?.page ?? '');
     const option = String(body?.option ?? '');
+    // D1420 (#3864): `studio:layout` branches before the form path, with its own refusals before any quote.
+    if (/^studio:layout$/.test(option)) return studioLayoutRun(c, user, page, option, body);
     // D1596 (#3869): `sessions:block` runs no model. It branches before the form path and never quotes or holds.
     if (/^sessions:block$/.test(option)) return sessionsBlockRun(c, user, page, option, body);
     const m = /^form:([a-z0-9_-]{1,60})$/.exec(option);

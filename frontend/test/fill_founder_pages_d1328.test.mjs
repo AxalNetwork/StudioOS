@@ -25,6 +25,7 @@ import {
   FILL_PAGES, acceptReport, fillTarget, moduleFillTarget, placeValues, placedProposals, rowLines, savedId, stillPlaced, waitingRows,
 } from '../src/lib/fillForms.js';
 import { BUILD_FORMS, VALIDATE_FORMS } from '../src/pages/cycles/forms.js';
+import { fieldsOf as fieldsOfPage } from '../src/lib/fillFields.js';
 import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { FillModule } from '../src/pages/cycles/FillRowsPanel.jsx';
 
@@ -41,7 +42,9 @@ test('each founder form FILL_FIELDS lists has a sheet; no other form does', () =
   assert.deepEqual(fillTarget('validate', 'experiments', 'hypothesis')?.form, 'hypothesis');
   assert.deepEqual(fillTarget('build', 'solution-design', 'feature'), { page: SOLUTION, form: 'feature' });
   assert.deepEqual(fillTarget('build', 'prototype-mvp', 'must-have')?.form, 'must-have');
-  for (const [c, s, f] of [['validate', 'market-intelligence', 'competitor'], ['validate', 'demand-signals', 'signal'], ['build', 'product-roadmap', 'item'], ['validate', 'problem-discovery', 'segment'], ['raise', 'pitch-deck', 'theme'], ['validate', 'problem-discovery', '']]) {
+  // #3740 part 2a: a roadmap item has a sheet now (its title).
+  assert.deepEqual(fillTarget('build', 'product-roadmap', 'item')?.form, 'item');
+  for (const [c, s, f] of [['validate', 'market-intelligence', 'competitor'], ['validate', 'demand-signals', 'signal'], ['validate', 'problem-discovery', 'segment'], ['raise', 'pitch-deck', 'theme'], ['validate', 'problem-discovery', '']]) {
     assert.equal(fillTarget(c, s, f), null, `${c}/${s}/${f}`);
   }
   for (const [slug, forms] of Object.entries(VALIDATE_FORMS)) {
@@ -478,7 +481,9 @@ test('#3740: the KPI form draws Ask with the neutral glyph, and its sheet lists 
 // The guard: every (page, form) FILL_FIELDS lists has an Add mount and an Edit mount that pass `fill`, or a named exemption.
 const src = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 const FOUNDER = { theme: ['validate', 'problem-discovery'], segment: ['validate', 'ideal-customer-profile'], hypothesis: ['validate', 'experiments'],
-  feature: ['build', 'solution-design'], 'must-have': ['build', 'prototype-mvp'], kpi: ['grow', 'revenue-and-traction'] };
+  feature: ['build', 'solution-design'], 'must-have': ['build', 'prototype-mvp'], kpi: ['grow', 'revenue-and-traction'],
+  // #3740 part 2a.
+  item: ['build', 'product-roadmap'], investor: ['raise', 'capital-relationships'], role: ['grow', 'team-expansion'] };
 const MOUNTS = {
   'Investor · Deals · Commit | ic-memo': { add: 'exempt: an IC decision is opened by the decision flow, and its memo is written on the decision page', edit: ['pages/ICDecisionPage.jsx', /scope: SCOPED_FORMS\.icMemo, record:/] },
   'Advisor · Expertise · Services | service': { add: ['pages/advisor/expertise/ServicesZone.jsx', /scope: SCOPED_FORMS\.service/], edit: 'exempt: Services has no Edit form today; the advisor sections are redrawn under #3700' },
@@ -521,4 +526,29 @@ test('#3740 guard: every FILL_FIELDS form has an Add mount and an Edit mount tha
     }
   }
   assert.deepEqual(Object.keys(MOUNTS).filter((k) => !pairs.includes(k)), [], 'an exemption for a form FILL_FIELDS no longer lists');
+});
+
+test('#3740 part 2a: a roadmap item, an investor and a role draw Ask on their composition field, Add and Edit alike', async () => {
+  // Mutation checked: dropping a FILL_PAGES key, or an EDIT_FILL_FORMS entry, turns this red.
+  const { FORMS: forms, editFor: edit } = await import('../src/pages/cycles/forms.js');
+  for (const [cycle, slug, form, field, column] of [
+    ['build', 'product-roadmap', 'item', 'title', 'objective'],
+    ['raise', 'capital-relationships', 'investor', 'notes', 'notes'],
+    ['grow', 'team-expansion', 'role', 'title', 'title'],
+  ]) {
+    const add = (forms[cycle]?.[slug] ?? []).find((f) => f.key === form);
+    assert.ok(add, `${cycle}/${slug} has its Add form ${form}`);
+    assert.deepEqual(fillTarget(cycle, slug, form), { page: FILL_PAGES[`${cycle}/${slug}`], form });
+    const e = edit(cycle, slug);
+    assert.deepEqual(fillTarget(cycle, slug, e?.key), { page: FILL_PAGES[`${cycle}/${slug}`], form }, `${cycle}/${slug}: its Edit fills the same form`);
+    const fields = fieldsOfPage(FILL_PAGES[`${cycle}/${slug}`], form);
+    assert.deepEqual(fields.map((f) => [f.field, f.column, f.class]), [[field, column, 'composition']], 'only the composition field');
+    assert.ok(add.fields.some((f) => f.name === field), 'the Add form draws that field');
+    assert.ok(e.fields.some((f) => f.name === field), 'the Edit form draws that field');
+  }
+  // Signal, founder, filing, narrative version, partner and market have no composition field, so no sheet.
+  for (const [cycle, slug, key] of [['validate', 'demand-signals', 'signal'], ['build', 'founding-team', 'founder'], ['build', 'company-creation', 'filing'],
+    ['raise', 'investor-narrative', 'narrative-version'], ['grow', 'partner-network', 'partner'], ['grow', 'market-expansion', 'market']]) {
+    assert.equal(fillTarget(cycle, slug, key), null, `${key} draws no Ask`);
+  }
 });

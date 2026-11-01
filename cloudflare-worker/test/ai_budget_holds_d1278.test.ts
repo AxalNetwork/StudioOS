@@ -17,6 +17,8 @@ import budgetRoute from '../src/routes/ai_budget.ts';
 import { HOLD_TTL_MS, memberHolds, reserveAiBudget, settleAiReservation } from '../src/services/aiBudget.ts';
 import { METERING_POLICY, OPERATION_INFO, meteredCall, priceList, toolOperation } from '../src/services/metering.ts';
 import { registeredTools } from '../src/mcp/server.ts';
+import { withGuard } from './_guard_stub.mjs';
+import { __resetForTest, run } from '../src/services/aiRouter.ts';
 
 const migration = (n: string) => readFileSync(new URL(`../sql/migrations/${n}`, import.meta.url), 'utf8');
 const ME = 2, OTHER = 3;
@@ -169,9 +171,27 @@ test('the callers name their surface, and the AI run names its task, never its p
   const src = (p: string) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
   assert.match(src('mcp/server.ts'), /apiKeyUid, signal, surface: 'mcp' \}/);
   assert.match(src('services/flows.ts'), /STEP_TIMEOUT_MS, now, surface: 'flow',/);
-  assert.match(src('services/aiRouter.ts'), /\{ context: \{ operation: `ai\.\$\{opts\.task\}`, surface: 'ai' \} \}/);
+  // D1496 part 2 (#3842): the run's hold is named by `holdOperation`: `ai.<task>`, or `agent.<role>` for a team agent.
+  assert.match(src('services/aiRouter.ts'), /\{ context: \{ operation: holdOperation\(opts\), surface: 'ai' \} \}/);
+  assert.match(src('services/aiRouter.ts'), /\? `agent\.\$\{o\.agentRole\}` : `ai\.\$\{String\(o\.task\)\}`/);
   assert.match(src('services/metering.ts'), /context: \{ operation: input\.operation, surface: input\.surface \?\? null, apiKeyUid: keyUid, executionId: input\.executionId \}/);
   const sql = migration('632_ai_hold_context.sql');
   assert.doesNotMatch(sql.split('\n').filter((l) => !l.startsWith('--')).join('\n'), /BEGIN|COMMIT|PRAGMA/);
   for (const col of ['operation', 'surface', 'api_key_uid', 'execution_id']) assert.match(sql, new RegExp(`ADD COLUMN ${col} TEXT`));
+});
+
+test('D1496 part 2 (#3842): an agent\'s run holds on the ai surface as agent.<role>, a member\'s as ai.<task>; neither names the prompt', async () => {
+  // Mutation checked: the hold named `ai.${opts.task}` for every run → the agent row reads ai.rail_numbers and fails.
+  __resetForTest();
+  const w = world();
+  try {
+    w.f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,5000000)').run(ME);
+    w.env.AI = withGuard({ run: async () => ({ response: 'ok', usage: { prompt_tokens: 5, completion_tokens: 5 } }) });
+    const ask = { task: 'rail_numbers' as const, userId: ME, text: 'secret runway figure', rail: { page: 'Founder · Raise · Use of funds', option: 'draft:raise/use-of-funds-runway' } };
+    assert.equal((await run(w.env, { ...ask, agentId: 9, agentRole: 'cfo' })).ok, true);
+    assert.equal((await run(w.env, ask)).ok, true);
+    const rows = w.f.db.prepare('SELECT operation, surface FROM ai_budget_reservations ORDER BY rowid').all().map((r: any) => ({ ...r }));
+    assert.deepEqual(rows, [{ operation: 'agent.cfo', surface: 'ai' }, { operation: 'ai.rail_numbers', surface: 'ai' }]);
+    assert.ok(!JSON.stringify(rows).includes('secret'));
+  } finally { w.f.db.close(); }
 });

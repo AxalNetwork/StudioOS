@@ -21,6 +21,8 @@ import AgentsCard from './AgentsCard.jsx';
 import AddAgentSheet from './AddAgentSheet.jsx';
 import AgentProfileSheet from './AgentProfileSheet.jsx';
 import RulebooksTab from './RulebooksTab.jsx';
+import SkillsTab from './SkillsTab.jsx';
+import TeamCoverageCard from './TeamCoverageCard.jsx';
 import ApprovalsTab from './ApprovalsTab.jsx';
 import TeamSettingsTab from './TeamSettingsTab.jsx';
 import * as agents from './agentsAdapter.js';
@@ -366,9 +368,11 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           <AgentsCard block={agentsBlock} loading={!agentsBlock} kind={kind} companyName={name}
             canAdd={!!agentsBlock?.value?.can_manage && !planLocked} planLocked={planLocked} onAdd={() => setSheet({ kind: 'agent' })}
             onOpen={(row) => setSheet({ kind: 'profile', uid: row.uid })} onRetry={loadAgents} />
+          <TeamCoverageCard kind={kind} id={id} />
           {kind === 'company' && ['founder', 'admin'].includes(me().role) ? <p className={`m-0 ${MUTED}`}>{ROSTER_LINE} <Link to="/build/team" className={BTN_TEXT}>Open Build › Team</Link></p> : null}
         </>
       ) : null}
+      {tab === 'skills' ? <SkillsTab scope={scope} rolesBlock={rolesBlock} agentsBlock={agentsBlock} onAddAgent={!planLocked && agentsBlock?.value?.can_manage ? () => setSheet({ kind: 'agent' }) : null} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
       {tab === 'approvals' ? <ApprovalsTab scope={scope} /> : null}
       {tab === 'settings' ? (

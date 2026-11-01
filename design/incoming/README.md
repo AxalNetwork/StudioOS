@@ -185,6 +185,25 @@ route draws its unavailable state through
 `frontend/src/pages/incorporate/incorporateAdapter.js` (#3855, #3706). All four
 files stay here: some bodies are outstanding. No file moved, so no count
 changed.
+## Landed 2026-11-01 — Team › Agents › Skills (#3945)
+
+The owner's two artifacts for #3945's consolidated prompt (boards SK0–SK9),
+decoded by `scripts/read-canvas.mjs`:
+- `Agent Skills Page.dc.html` is the page, one frame per `v` value (`sk0` to
+  `sk9b`, `ph1`, `ph2`, `tab`; a `-d` suffix is dark);
+- `Agent Skills · Boards.dc.html` is the board grid "Skills for AI agents",
+  SK0 to SK9 (10 sections, 18 frames). It imports the page by name.
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`, as in the earlier
+Team and Pitch intakes. No other value was edited.
+
+**Grade: NEW (D1612).** Skills is a new tab of the Team page (D1497), between
+People and agents and Roles and rule books, plus a Skills and Values card on
+the agent profile, a Skills step in Add an AI agent, and Team coverage on
+People and agents. Every read and write goes through
+`frontend/src/pages/team/agentsAdapter.js` and stays unavailable until A1
+(#3951) and A2 (#3956) land their routes.
 ## Landed 2026-11-01 — Calendar: AI agent sessions (#3723)
 
 The owner's artifacts `Bj7uoUqbMzkksEDU1XdUYK` (the page) and

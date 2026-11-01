@@ -16,6 +16,7 @@
  */
 import { sanitizeBinding, type SourceItem } from './sources';
 import { numberIn } from './newDeck';
+import { unrecordedLinks, untrustedBlock, withUntrustedRule } from '../ai/untrusted';
 
 export const ASSIST_PAGE = 'Founder · Raise · Pitch deck';
 
@@ -62,7 +63,8 @@ const ASK: Record<Exclude<TextAction, 'headline'>, (o: { tone?: string; language
   expand: () => 'Expand this text by a sentence or two, saying more about what it already says.',
   tone: (o) => `Rewrite this text in a ${o.tone} tone.`,
   translate: (o) => `Translate this text into ${o.language}.`,
-  ask: (o) => `Change this text as the founder asks: ${o.instruction}`,
+  // D1506: the founder's instruction is read as data; the rule in SYSTEM says so.
+  ask: (o) => `Change this text as the founder's instruction asks:\n${untrustedBlock('instruction', o.instruction ?? '')}`,
 };
 
 /** What a text press asks the model. */
@@ -73,7 +75,7 @@ export function textMessage(action: TextAction, text: string, o: { tone?: string
       user: `Write a headline for a card that shows these figures from the founder's records (their values are filled in by the records, not by you): ${(o.labels ?? []).join('; ')}.`,
     };
   }
-  return { system: SYSTEM, user: `${ASK[action](o)}\n\nText:\n${text}` };
+  return { system: withUntrustedRule(SYSTEM), user: `${ASK[action](o)}\n\nText:\n${untrustedBlock('deck_import', text)}` };
 }
 
 /** The wording from a model's answer: trimmed, its wrapping quotes taken off, cut to the field. */
@@ -84,7 +86,8 @@ export function wordingOf(output: unknown, max = TEXT_MAX): string {
   return s.slice(0, max);
 }
 
-const NUMBERISH = /\d+(?:[.,]\d+)*|[%$€£¥]/g;
+// D1506: digits in every script (`\p{Nd}`: ٣٠٠, ３, ३), and the full-width signs.
+const NUMBERISH = /\p{Nd}+(?:[.,]\p{Nd}+)*|[%$€£¥％＄￥￡]/gu;
 const numbersOf = (t: string) => new Set((t.match(NUMBERISH) ?? []).map((x) => x.replace(/,/g, '')));
 
 /**
@@ -96,6 +99,8 @@ const numbersOf = (t: string) => new Set((t.match(NUMBERISH) ?? []).map((x) => x
 export function wordingProblem(action: TextAction, before: string, after: string): string | null {
   if (!after) return 'Eadwyn returned no wording, so nothing was placed.';
   if (action === 'headline') return numberIn(after) ? 'Eadwyn’s headline named a figure, so it was not placed. Figures come from your records.' : null;
+  // D1506: a link or email address the founder's text does not hold is never placed.
+  if (unrecordedLinks(after, [before]).length) return 'Eadwyn’s wording added a link or email address your text did not have, so it was not placed.';
   const had = numbersOf(before);
   for (const n of numbersOf(after)) if (!had.has(n)) return 'Eadwyn’s wording named a figure your text did not, so it was not placed. Figures come from your records.';
   return null;

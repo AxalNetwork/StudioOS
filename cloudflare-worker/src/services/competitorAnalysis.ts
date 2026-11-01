@@ -15,6 +15,7 @@
 import type { Env } from '../types';
 import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
+import { untrustedBlock, withUntrustedRule, withoutUnrecordedLinks } from './ai/untrusted';
 import { fetchPage, pagesForDomain, normalizeUrl, type FetchedPage } from './webFetch';
 
 /**
@@ -405,20 +406,29 @@ export async function collectCandidateCrawl(
   }
 }
 
-async function distillPositioning(env: Env, userId: number, rail: RailContext, name: string, text: string): Promise<string> {
-  if (!text.trim()) return '';
-  const res = await runJson<{ positioning: string }>(
-    env,
-    userId,
-    rail,
-    'You extract a company\'s positioning/messaging from its website text. Respond ONLY as JSON: {"positioning": string (1-2 sentences, concrete)}.',
-    `Company: ${name}\n\nWebsite text:\n${text.slice(0, 6000)}`,
-    220,
-  );
-  return res?.positioning?.slice(0, 400) || '';
+/** D1506: the positioning run's prompt: the crawled pages as one untrusted block. */
+export function positioningPrompt(name: string, text: string): { system: string; user: string } {
+  return {
+    system: withUntrustedRule('You extract a company\'s positioning/messaging from its website text. Respond ONLY as JSON: {"positioning": string (1-2 sentences, concrete)}.'),
+    user: `Company: ${name}\n\nWebsite text:\n${untrustedBlock('web_page', text.slice(0, 6000))}`,
+  };
 }
 
-async function synthesize(env: Env, userId: number, inputs: AnalysisInputs, candidates: Candidate[], rail: RailContext): Promise<AnalysisOutput> {
+/** The positioning an answer gives, with links and emails the pages do not hold taken out. */
+export function positioningFromModel(res: { positioning?: unknown } | null, text: string): string {
+  return typeof res?.positioning === 'string' ? withoutUnrecordedLinks(res.positioning, [text]).slice(0, 400) : '';
+}
+
+async function distillPositioning(env: Env, userId: number, rail: RailContext, name: string, text: string): Promise<string> {
+  if (!text.trim()) return '';
+  // D1506: a crawled page is untrusted data, and a link it does not hold never comes back.
+  const p = positioningPrompt(name, text);
+  const res = await runJson<{ positioning: string }>(env, userId, rail, p.system, p.user, 220);
+  return positioningFromModel(res, text);
+}
+
+/** D1506: the landscape run's prompt: the candidates, which carry crawled site text, as one untrusted block. */
+export function landscapePrompt(inputs: AnalysisInputs, candidates: Candidate[]): { system: string; user: string } {
   const compactCands = candidates.map((c) => ({
     name: c.name,
     category: c.category,
@@ -427,10 +437,10 @@ async function synthesize(env: Env, userId: number, inputs: AnalysisInputs, cand
     pricing: c.details.pricing || [],
     positioning: c.details.positioning || '',
   }));
-  const system =
+  const system = withUntrustedRule(
     'You are a seed-stage VC analyst. Given the market context and a list of competitors (some enriched with real website data), produce a competitive-landscape report. Respond ONLY with JSON matching this exact shape: ' +
     '{"market_summary": string, "direct_competitors": string[], "adjacent_competitors": string[], "feature_comparison": {"features": string[], "rows": [{"competitor": string, "values": string[]}]}, "pricing_signals": [{"competitor": string, "signal": string}], "positioning": [{"competitor": string, "messaging": string}], "traction_signals": [{"competitor": string, "signal": string}], "gaps": string[], "wedge": string, "next_actions": string[]}. ' +
-    'Be specific and blunt. feature_comparison.rows[i].values must align 1:1 with feature_comparison.features. Keep arrays under 8 items.';
+    'Be specific and blunt. feature_comparison.rows[i].values must align 1:1 with feature_comparison.features. Keep arrays under 8 items.');
   const user = [
     `Market: ${inputs.market}`,
     inputs.target_customer ? `ICP: ${inputs.target_customer}` : '',
@@ -438,13 +448,19 @@ async function synthesize(env: Env, userId: number, inputs: AnalysisInputs, cand
     inputs.problem ? `Problem: ${inputs.problem}` : '',
     inputs.nudge ? `Nudge: ${inputs.nudge}` : '',
     '',
-    `Competitors JSON:\n${JSON.stringify(compactCands)}`,
+    // D1506: the candidates carry text crawled from their own sites.
+    `Competitors JSON:\n${untrustedBlock('web_page', JSON.stringify(compactCands))}`,
     '',
     'Return the report JSON now.',
   ]
     .filter(Boolean)
     .join('\n');
 
+  return { system, user };
+}
+
+async function synthesize(env: Env, userId: number, inputs: AnalysisInputs, candidates: Candidate[], rail: RailContext): Promise<AnalysisOutput> {
+  const { system, user } = landscapePrompt(inputs, candidates);
   const ai = await runJson<Partial<AnalysisOutput>>(env, userId, rail, system, user, 1600);
   return normalizeOutput(ai, inputs, candidates);
 }

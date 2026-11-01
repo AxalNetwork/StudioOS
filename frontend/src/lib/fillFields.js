@@ -29,6 +29,10 @@ const PROBLEM = 'Founder · Validate · Problem discovery';
 const ICP = 'Founder · Validate · Ideal customer profile';
 const EXPERIMENTS = 'Founder · Validate · Experiments and evidence';
 const PROTOTYPE = 'Founder · Build · Prototype / MVP';
+// #3740 part 2a: three founder Add forms whose rows have an id and a project.
+const ROADMAP = 'Founder · Build · Product roadmap';
+const CAPITAL = 'Founder · Raise · Capital relationships';
+const TEAM = 'Founder · Grow · Team expansion';
 
 export const FILL_FIELDS = Object.freeze([
   // AF1, AF3: Add feature. Impact is the founder's call, so it has no entry.
@@ -55,6 +59,11 @@ export const FILL_FIELDS = Object.freeze([
   { page: PROTOTYPE, form: 'must-have', field: 'hypothesis_id', label: 'Tests hypothesis', table: 'mvp_features', column: 'hypothesis_id', class: 'restatement', sources: ['module:validate/experiments', 'eadwyn'] },
   // A measured figure: a connector's, never Eadwyn's.
   { page: REVENUE, form: 'kpi', field: 'value', label: 'MRR', table: 'project_metrics', column: 'mrr', class: 'measured', sources: ['connector:stripe', 'connector:mercury'] },
+  // #3740 part 2a: a roadmap item's words, an investor's notes and a role's title. Composition only:
+  // a target date, an owner, a stage, a warm path, a band and equity are never filled (D777, D1325).
+  { page: ROADMAP, form: 'item', field: 'title', label: 'Item', table: 'roadmap_okrs', column: 'objective', class: 'composition', sources: ['eadwyn'] },
+  { page: CAPITAL, form: 'investor', field: 'notes', label: 'Notes', table: 'raise_prospects', column: 'notes', class: 'composition', sources: ['eadwyn'] },
+  { page: TEAM, form: 'role', field: 'title', label: 'Role', table: 'job_postings', column: 'title', class: 'composition', sources: ['eadwyn'] },
   // D1329 (#3490, #2431 part 6): every other profile. These records are not a
   // venture's; `scopes.ts` holds each one's own write check. No amount, legal
   // name, approval, decision, outcome, term or member's record is listed.
