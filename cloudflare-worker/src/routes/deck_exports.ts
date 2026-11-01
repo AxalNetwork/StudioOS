@@ -37,7 +37,8 @@ import { logCycleWriteStatement } from '../services/cycleActivity';
 import { getDeckBrand } from '../services/decks/branding';
 import { boundedDownload } from '../services/channels/providerHttp';
 import { imageDataUri, imageUrlsOf, sniffImage, writeOfflineDeck, type ImageKind } from '../services/decks/offlineHtml';
-import { exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken } from './decks';
+import { exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken, themeOfRow } from './decks';
+import { deckCompliance } from '../services/decks/compliance';
 import { context as workspaceContext, member } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { createPresentation, driveName } from '../services/google/driveCreate';
@@ -74,11 +75,11 @@ export async function sha256Hex(bytes: ArrayBuffer | Uint8Array): Promise<string
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-type DeckRow = { id: number; project_id: number; version: number | null; title: string | null; slides: string | null };
+type DeckRow = { id: number; project_id: number; version: number | null; title: string | null; slides: string | null; theme_json?: string | null };
 
 async function deckRow(env: Env, id: number): Promise<DeckRow | null> {
   if (!Number.isSafeInteger(id) || id < 1) return null;
-  return env.DB.prepare('SELECT id, project_id, version, title, slides FROM pitch_decks WHERE id = ?').bind(id).first<DeckRow>();
+  return env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<DeckRow>();
 }
 
 /** The ledger row, and (when asked) its audit row, as one batch. */
@@ -164,6 +165,7 @@ deckExports.post('/:id/export/html', async (c) => {
     watermark: brand.watermark_url ? images.get(brand.watermark_url) ?? null : null,
     notes: body?.notes === true,
     sources: body?.sources === true,
+    compliance: deckCompliance(slides, themeOfRow(row)),
   });
   const bytes = new TextEncoder().encode(html);
   const hash = await sha256Hex(bytes);
@@ -231,7 +233,7 @@ deckExports.post('/:id/export/odp', async (c) => {
   if (brand.watermark_url) urls.push(brand.watermark_url);
   const images = await fetchImages(urls);
   const odp = await writeOdp({
-    title: row.title || 'Pitch deck', version: row.version ?? null, slides, renderable: pages, images, brand,
+    title: row.title || 'Pitch deck', version: row.version ?? null, slides, renderable: pages, images, brand, compliance: deckCompliance(slides, themeOfRow(row)),
     notes: opts.notes, chartShot: await chartShotFor(c, row, opts),
   });
   const hash = await sha256Hex(odp.bytes);
@@ -289,7 +291,7 @@ deckExports.post('/:id/export/google-slides', async (c) => {
   const images = await fetchImages(imageUrlsOf(slides));
 
   const chartShot = await chartShotFor(c, row, opts);
-  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot });
+  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)) });
   const hash = await sha256Hex(deck.bytes);
 
   let created;

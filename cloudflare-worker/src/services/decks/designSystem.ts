@@ -55,8 +55,13 @@ export function boxOf(g: Grid): { x: number; y: number; w: number; h: number } {
 
 // ───────────────────────────────────────────────────────────── type
 
-export type TypeRole = 'display' | 'heading' | 'subheading' | 'paragraph' | 'list' | 'metric' | 'metric_label' | 'caption';
-/** Size, leading and weight in slide pixels. 22px is the floor: nothing on a slide is set smaller. */
+export type TypeRole = 'display' | 'heading' | 'subheading' | 'paragraph' | 'list' | 'metric' | 'metric_label' | 'caption' | 'kicker';
+/**
+ * Size, leading and weight in slide pixels. 22px is the floor: nothing on a
+ * slide is set smaller. D1517 (#3769) tunes it: every line sits on the 8 px
+ * baseline (`lineHeight`), and the scale gains the cover's kicker, the short
+ * capitalised line above a title.
+ */
 export const TYPE_SCALE: Record<TypeRole, { size: number; leading: number; weight: number; tracking: number }> = {
   display: { size: 104, leading: 1.04, weight: 700, tracking: -0.025 },
   heading: { size: 64, leading: 1.1, weight: 700, tracking: -0.02 },
@@ -66,10 +71,33 @@ export const TYPE_SCALE: Record<TypeRole, { size: number; leading: number; weigh
   metric: { size: 72, leading: 1.0, weight: 700, tracking: -0.02 },
   metric_label: { size: 24, leading: 1.3, weight: 600, tracking: 0.02 },
   caption: { size: 22, leading: 1.35, weight: 500, tracking: 0.01 },
+  kicker: { size: 24, leading: 1.3, weight: 600, tracking: 0.08 },
 };
 export const MIN_TYPE_SIZE = 22;
+/** The baseline every line sits on, in slide pixels (The Grid's, `structures.ts` BASELINE). */
+export const BASELINE = 8;
 /** The average glyph width, in em, of the theme families (measured for Space Grotesk and Inter). */
 export const GLYPH_EM = 0.52;
+
+/** A line's height at a size and leading, rounded up to the baseline so every line sits on it. */
+export const lineHeight = (size: number, leading: number) => Math.ceil((size * leading) / BASELINE) * BASELINE;
+
+/**
+ * D1517: the sizes step-down fit may take for each role, largest first, all
+ * within the scale and never under MIN_TYPE_SIZE. A text that does not fit at
+ * its own size shrinks one step at a time before anything leaves its area.
+ */
+export const TYPE_STEPS: Record<TypeRole, readonly number[]> = {
+  display: [104, 88, 76],
+  heading: [64, 56, 48],
+  subheading: [40, 36, 32],
+  paragraph: [32, 28, 26],
+  list: [30, 28, 26],
+  metric: [72, 64, 56],
+  metric_label: [24, 22],
+  caption: [22],
+  kicker: [24, 22],
+};
 
 /** A text block's style as the type scale names it; the title layout's heading is display size. */
 export function typeRoleOf(style: unknown, layout: string | null = null): TypeRole {
@@ -84,7 +112,7 @@ export function typeRoleOf(style: unknown, layout: string | null = null): TypeRo
  * line of thought. Geometry can only lower these.
  */
 export const DENSITY_MAX: Record<TypeRole, number> = {
-  display: 90, heading: 70, subheading: 90, paragraph: 280, list: 320, metric: 10, metric_label: 40, caption: 140,
+  display: 90, heading: 70, subheading: 90, paragraph: 280, list: 320, metric: 10, metric_label: 40, caption: 140, kicker: 40,
 };
 
 /**
@@ -92,11 +120,93 @@ export const DENSITY_MAX: Record<TypeRole, number> = {
  * D1554 (#3801): at the deck's aspect. 4:3 keeps the rows and narrows the columns, so a line holds less.
  */
 export function textCapacity(g: Grid, role: TypeRole, aspect: Aspect = '16:9'): { chars: number; lines: number; perLine: number } {
+  return capacityAt(g, role, TYPE_SCALE[role].size, aspect);
+}
+
+/** A range's capacity at one size of a role (D1517): lines on the baseline, characters per line at that size, at the deck's aspect. */
+export function capacityAt(g: Grid, role: TypeRole, size: number, aspect: Aspect = '16:9'): { chars: number; lines: number; perLine: number } {
   const { w, h } = boxOfAt(g, aspect);
-  const t = TYPE_SCALE[role];
-  const lines = Math.max(1, Math.floor(h / (t.size * t.leading)));
-  const perLine = Math.max(1, Math.floor(w / (t.size * GLYPH_EM)));
+  const lines = Math.max(1, Math.floor(h / lineHeight(size, TYPE_SCALE[role].leading)));
+  const perLine = Math.max(1, Math.floor(w / (size * GLYPH_EM)));
   return { chars: Math.min(lines * perLine, DENSITY_MAX[role]), lines, perLine };
+}
+
+// ───────────────────────────────────────────────────────────── wrap and fit
+
+const wordsOf = (text: string) => text.split(/\s+/).filter(Boolean);
+
+/** Greedy word wrap at `perLine` characters; a word longer than a line takes a line of its own. */
+export function wrapGreedy(text: string, perLine: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const w of wordsOf(text)) {
+    if (!line) line = w;
+    else if (line.length + 1 + w.length <= perLine) line += ` ${w}`;
+    else { lines.push(line); line = w; }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/**
+ * The balanced wrap: the same number of lines as the greedy wrap, at the
+ * narrowest measure that keeps it, so the lines are even rather than one long
+ * line over a short one. A heading never ends on one word when the line above
+ * can give it a second.
+ */
+export function wrapBalanced(text: string, perLine: number, title = false): string[] {
+  const greedy = wrapGreedy(text, perLine);
+  if (greedy.length < 2) return greedy;
+  const longest = Math.max(...wordsOf(text).map((w) => w.length));
+  let lo = Math.max(1, longest), hi = perLine;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (wrapGreedy(text, mid).length <= greedy.length) hi = mid; else lo = mid + 1;
+  }
+  const lines = wrapGreedy(text, lo);
+  if (title) {
+    const last = lines.length - 1;
+    const above = wordsOf(lines[last - 1] ?? '');
+    if (last > 0 && wordsOf(lines[last]).length === 1 && above.length >= 3) {
+      const moved = above.pop()!;
+      const next = `${moved} ${lines[last]}`;
+      if (next.length <= perLine) { lines[last - 1] = above.join(' '); lines[last] = next; }
+    }
+  }
+  return lines;
+}
+
+/** Whether a title's wrap leaves a line of one word that the line above could have shared. */
+export function singleWordLine(lines: string[]): boolean {
+  if (lines.length < 2) return false;
+  return lines.some((l, i) => wordsOf(l).length === 1 && wordsOf(lines[i === 0 ? 1 : i - 1]).length >= 3);
+}
+
+const TITLE_ROLES: readonly TypeRole[] = ['display', 'heading', 'subheading'];
+
+export type TextFit = { fits: boolean; size: number; step: number; lines: string[]; over: number };
+
+/**
+ * D1517 step-down fit: the text at its role's size, then one step smaller at
+ * a time (`TYPE_STEPS`), each wrapped balanced, until it sits in its range.
+ * `fits` is false only when even the smallest step overflows; `over` is then
+ * the characters past that step's capacity. Density (`DENSITY_MAX`) holds at
+ * every size: a slide is read in seconds, whatever its type.
+ */
+export function fitText(g: Grid, role: TypeRole, text: unknown, aspect: Aspect = '16:9'): TextFit {
+  const t = String(text ?? '').trim();
+  const steps = TYPE_STEPS[role];
+  const title = TITLE_ROLES.includes(role);
+  let last: TextFit = { fits: false, size: steps[0], step: 0, lines: [], over: 0 };
+  for (let i = 0; i < steps.length; i += 1) {
+    const cap = capacityAt(g, role, steps[i], aspect);
+    const lines = wrapBalanced(t, cap.perLine, title);
+    const tooLong = lines.some((l) => l.length > cap.perLine);
+    const fits = t.length <= DENSITY_MAX[role] && lines.length <= cap.lines && !tooLong;
+    last = { fits, size: steps[i], step: i, lines, over: fits ? 0 : Math.max(1, t.length - cap.chars) };
+    if (fits) return last;
+  }
+  return last;
 }
 
 // ───────────────────────────────────────────────────────────── colour
@@ -134,7 +244,12 @@ export type ThemeTokens = {
 
 const FONTS = { display: 'Space Grotesk', body: 'Inter', mono: 'Roboto Mono' } as const;
 
-/** The three treatments. Brand starts from Axal's own colours until a kit overrides them. */
+/**
+ * The six treatments. Brand starts from Axal's own colours until a kit
+ * overrides them. D1517 (#3769, pd7): Sand, Ocean and Forest from the final
+ * canvas, Sand's and Forest's muted text darkened from the canvas's until it
+ * reads 4.5:1 on the ground. Ocean is dark, as Neutral dark is.
+ */
 export const BASE_THEMES: Record<ThemeKind, ThemeTokens> = {
   neutral_light: {
     kind: 'neutral_light', version: DESIGN_SYSTEM_VERSION,
@@ -154,7 +269,29 @@ export const BASE_THEMES: Record<ThemeKind, ThemeTokens> = {
     chart: ['#7c3aed', '#0f766e', '#c2410c', '#1d4ed8', '#be185d', '#4d7c0f'],
     fonts: { ...FONTS }, image: { radius: 28, overlay: 'light' }, radius: 28,
   },
+  sand: {
+    kind: 'sand', version: DESIGN_SYSTEM_VERSION,
+    colours: { ground: '#f6efe6', surface: '#fffbf5', ink: '#2b2118', muted: '#6b5b4b', hairline: '#e6d8c3', accent: '#a16207', accent_ink: '#ffffff', positive: '#047857', negative: '#b91c1c' },
+    chart: ['#a16207', '#0f766e', '#9a3412', '#1d4ed8', '#86198f', '#3f6212'],
+    fonts: { ...FONTS }, image: { radius: 20, overlay: 'light' }, radius: 20,
+  },
+  ocean: {
+    kind: 'ocean', version: DESIGN_SYSTEM_VERSION,
+    colours: { ground: '#0f2740', surface: '#173554', ink: '#eaf2fb', muted: '#9fb3c8', hairline: '#24476b', accent: '#5eead4', accent_ink: '#0f2740', positive: '#34d399', negative: '#fca5a5' },
+    chart: ['#5eead4', '#93c5fd', '#fcd34d', '#f9a8d4', '#bef264', '#c4b5fd'],
+    fonts: { ...FONTS }, image: { radius: 20, overlay: 'strong' }, radius: 20,
+  },
+  forest: {
+    kind: 'forest', version: DESIGN_SYSTEM_VERSION,
+    colours: { ground: '#f3f6f1', surface: '#ffffff', ink: '#1f2a1c', muted: '#55604f', hairline: '#d5e0cc', accent: '#3f6212', accent_ink: '#ffffff', positive: '#047857', negative: '#b91c1c' },
+    chart: ['#3f6212', '#0f766e', '#b45309', '#1d4ed8', '#be185d', '#6d28d9'],
+    fonts: { ...FONTS }, image: { radius: 20, overlay: 'light' }, radius: 20,
+  },
 };
+
+/** The themes drawn light on dark: their art and overlays are the dark ones. */
+export const DARK_THEMES: readonly ThemeKind[] = Object.freeze(['neutral_dark', 'ocean']);
+export const isDarkTheme = (kind: unknown) => (DARK_THEMES as readonly unknown[]).includes(kind);
 
 /** A venture's brand kit, as `landing_pages` holds it (`branding.ts` BrandKitRow's palette). */
 export type BrandKit = { palette_bg?: string | null; palette_ink?: string | null; palette_accent?: string | null; theme_color?: string | null; palette_secondary?: string | null };
@@ -330,7 +467,7 @@ export function chooseLayout(role: string, evidence: Partial<Evidence> & { quote
 
 // ───────────────────────────────────────────────────────────── fit
 
-export type FitProblem = { card: number; block: string; kind: 'overflow' | 'too_many_series' | 'too_many_points' | 'too_many_items' | 'value_too_long' | 'too_small'; over: number; message: string };
+export type FitProblem = { card: number; block: string; kind: 'overflow' | 'single_word_line' | 'too_many_series' | 'too_many_points' | 'too_many_items' | 'value_too_long' | 'too_small'; over: number; message: string };
 
 /** The characters a metric tile's figure holds at an aspect. */
 export function metricValueChars(g: Grid, aspect: Aspect = '16:9'): number {
@@ -355,10 +492,12 @@ export function fitProblems(slides: unknown, aspectIn: unknown = '16:9'): FitPro
       if (!g || !(BLOCK_KINDS as readonly string[]).includes(b?.kind)) continue;
       const id = String(b.id ?? '?');
       if (b.kind === 'text') {
+        // D1517: the text steps down within the scale before it counts as overflowing.
         const role = typeRoleOf(b.style, s.layout ?? null);
-        const cap = textCapacity(g, role, aspect);
-        const len = String(b.text ?? '').length;
-        if (len > cap.chars) out.push({ card, block: id, kind: 'overflow', over: len - cap.chars, message: `Card ${card}: the text is ${len - cap.chars} characters longer than its space holds at ${TYPE_SCALE[role].size}px${at}.` });
+        const fit = fitText(g, role, b.text, aspect);
+        const smallest = TYPE_STEPS[role][TYPE_STEPS[role].length - 1];
+        if (!fit.fits) out.push({ card, block: id, kind: 'overflow', over: fit.over, message: `Card ${card}: the text is ${fit.over} characters longer than its space holds, even at ${smallest}px${at}.` });
+        else if (TITLE_ROLES.includes(role) && singleWordLine(fit.lines)) out.push({ card, block: id, kind: 'single_word_line', over: 1, message: `Card ${card}: the title leaves one word on a line of its own${at}.` });
       } else if (b.kind === 'metric') {
         const max = metricValueChars(g, aspect);
         const len = String(b.value ?? '').length;

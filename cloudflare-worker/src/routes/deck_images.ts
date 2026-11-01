@@ -56,6 +56,7 @@ import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
 import { imageCapability, imagePlan } from '../services/decks/visuals';
 import { fetchLandingPageForProject } from '../services/decks/branding';
+import { elementModelFor, runModelOf } from './deck_element_models';
 import { imageSize, sha256Hex, stripMetadata, tooManyPixels, type ImageMime } from '../services/decks/imageBytes';
 import { fetchExternalImage } from '../services/decks/imageFetch';
 
@@ -115,10 +116,14 @@ async function refusedAsk(c: any, ask: ImageAsk, projectId: number): Promise<Res
 }
 
 /** One image's run, as one options object, so the quote and the run read the same input. */
-function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[]): RunOptions {
+function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[], model?: string): RunOptions {
   const rail = { ...railFor(c, { page: IMAGE_PAGE, option: IMAGE_OPTION }, `deck:${deck.deckId}`), option: IMAGE_OPTION };
-  return { task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
+  // D1503 (#3754): the element's model is the caller's pick, which D1478's DK4 draw job weighs (`drawChoice`).
+  return { ...(model ? { model } : {}), task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
 }
+
+/** The grid element an image request is: a scene is a Generated photo, every other style an Illustration. */
+export const imageElementOf = (ask: ImageAsk): 'photo' | 'illustration' => (ask.style === 'scene' ? 'photo' : 'illustration');
 
 const coloursOf = (body: any): string[] => (Array.isArray(body?.colours) ? body.colours : []).filter((x: unknown): x is string => typeof x === 'string' && HEX.test(x)).slice(0, 4);
 
@@ -140,7 +145,12 @@ async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response
   if (refused) return refused;
   if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: NO_STORAGE });
   const colours = coloursOf(body);
-  const opts = runOptions(c, user, deck, read.ask, colours);
+  // D1503 (#3754): the image runs on its element's model, a scene as Generated photo and every other style as Illustration.
+  let element;
+  try { element = await elementModelFor(c.env, user, deck.projectId, imageElementOf(read.ask)); } catch {
+    return refuse(c, 503, { code: 'picks_unreadable', message: 'Your model picks for this deck could not be read. Nothing was run.' });
+  }
+  const opts = runOptions(c, user, deck, read.ask, colours, runModelOf(element));
   const q = await quoteRun(c.env, opts);
   if (!q.ok) {
     const stop = refuseRun(c, { refusal: q.refusal, error: q.error });

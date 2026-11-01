@@ -35,7 +35,8 @@ export const AUDIENCE_LABELS = {
   angel: 'Angel', pre_seed_fund: 'Pre-seed fund', seed_fund: 'Seed fund', series_a_fund: 'Series A fund',
   strategic: 'Strategic', grant: 'Grant', other: 'Other',
 };
-export const THEME_LABELS = { brand: 'From your brand kit', neutral_light: 'Neutral light', neutral_dark: 'Neutral dark' };
+// D1517 (#3769): Sand, Ocean and Forest are served by GET /api/decks/model beside the first three.
+export const THEME_LABELS = { brand: 'From your brand kit', neutral_light: 'Neutral light', neutral_dark: 'Neutral dark', sand: 'Sand', ocean: 'Ocean', forest: 'Forest' };
 
 export const KIND_LABELS = {
   text: 'Text', chart: 'Chart', graphic: 'Graphic', image: 'Image', video: 'Video link', audio: 'Audio link', link: 'Link button', metric: 'Metric tile',
@@ -297,9 +298,23 @@ export function saveState({ dirty, savedAt, now = Date.now(), readOnly = false, 
   return `Saved · ${Math.round(hours / 24)} d ago`;
 }
 
-/** The colours the centre card draws with: the brand kit, or a neutral theme, or neutral light when the kit is missing. */
+/**
+ * D1517: the three themes of #3769, as the Worker's `designSystem.ts`
+ * BASE_THEMES draws them (ground, ink, accent, muted); `pitch_themes_d1517`
+ * holds the two to the same colours.
+ */
+export const THEME_COLOURS = Object.freeze({
+  sand: Object.freeze({ bg: '#f6efe6', ink: '#2b2118', accent: '#a16207', muted: '#6b5b4b' }),
+  ocean: Object.freeze({ bg: '#0f2740', ink: '#eaf2fb', accent: '#5eead4', muted: '#9fb3c8' }),
+  forest: Object.freeze({ bg: '#f3f6f1', ink: '#1f2a1c', accent: '#3f6212', muted: '#55604f' }),
+});
+/** The themes drawn light on dark, as the Worker's DARK_THEMES. */
+export const isDarkTheme = (kind) => kind === 'neutral_dark' || kind === 'ocean';
+
+/** The colours the centre card draws with: the brand kit, or a named theme, or neutral light when the kit is missing. */
 export function cardColours(theme, kit) {
   if (theme?.kind === 'neutral_dark') return { bg: '#111827', ink: '#f9fafb', accent: '#a78bfa', muted: '#9ca3af' };
+  if (THEME_COLOURS[theme?.kind]) return { ...THEME_COLOURS[theme.kind] };
   const light = { bg: '#ffffff', ink: '#0f2a3d', accent: '#6d28d9', muted: '#6b7280' };
   if (theme?.kind === 'neutral_light' || !kit?.palette) return light;
   const p = kit.palette;
