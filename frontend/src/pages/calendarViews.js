@@ -53,6 +53,8 @@ export const FAMILIES = Object.freeze([
   { key: 'deadlines', label: 'Deadlines', kinds: ['compliance_due', 'cohort_date', 'deal_closing'] },
   // #3959: the member's own learning plan and registered webinars (its boards are LRN1–LRN3, CAL12).
   { key: 'learning', label: 'Learning', kinds: ['learning'] },
+  // D1486 §b (#3981): Publish's sends and Grow › Distribution's planned pieces.
+  { key: 'grow', label: 'Grow', kinds: ['publish_send', 'content_planned'] },
   { key: 'other', label: 'From other calendars', kinds: ['calendly_event'] },
 ]);
 

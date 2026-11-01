@@ -51,6 +51,9 @@ export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Objec
   manual: { family: 'tasks', module: 'Calendar', label: 'Your event', page_only: true, pushable: false },
   // #3959: the member's own learning plan; page only until its feed and provider copy are designed.
   learning: { family: 'learning', module: 'Learning › Your plan', label: 'Learning', page_only: true, pushable: false },
+  // D1486 §b (#3981): Grow's dated stores. Page only: a send's time and a planned day are not provider copies.
+  publish_send: { family: 'grow', module: 'Publish', label: 'Publish send', page_only: true, pushable: false },
+  content_planned: { family: 'grow', module: 'Grow › Distribution', label: 'Planned content', page_only: true, pushable: false },
 });
 
 export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];
