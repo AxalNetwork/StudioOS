@@ -270,7 +270,6 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
   const route = (fn: (c: C, user: User) => Promise<Response>) => async (c: C) => {
     try { return await fn(c, await requireAuth(c)); } catch (e) { return fail(c, e); }
   };
-  const SECTION = '/:section{validate|build|raise|grow}';
   const idOf = (v: unknown, code: string) => { const n = Number(v); if (!Number.isSafeInteger(n) || n <= 0) throw new Refused(400, code); return n; };
   const bodyOf = async (c: C) => { const b = await c.req.json().catch(() => null); return b && typeof b === 'object' && !Array.isArray(b) ? b as Record<string, any> : {}; };
   const moduleOf = (section: Section, raw: unknown) => {
@@ -311,7 +310,7 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
       .bind(user.id, await hashEmail(user.email), action, JSON.stringify(details)).run();
   };
 
-  router.get(`${SECTION}/posthog`, route(async (c, user) => {
+  router.get('/:section/posthog', route(async (c, user) => {
     const section = sectionOf(c);
     const module = moduleOf(section, c.req.query('module'));
     const projectId = idOf(c.req.query('project'), 'invalid_project');
@@ -322,7 +321,7 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
     return c.json({ ok: true, project_id: projectId, ...(await fromPosthog(c.env, projectId, module, user.id)), ...extra });
   }));
 
-  router.post(`${SECTION}/posthog/tracked`, route(async (c, user) => {
+  router.post('/:section/posthog/tracked', route(async (c, user) => {
     await noSupport(c);
     const section = sectionOf(c);
     const b = await bodyOf(c);
@@ -340,7 +339,7 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
     return c.json({ ok: true, tracked: { uid: m.uid, kpi: `posthog-${m.uid}`, name: m.insight_name, role: m.role, module: m.module, unit: m.unit } });
   }));
 
-  router.delete(`${SECTION}/posthog/tracked/:uid`, route(async (c, user) => {
+  router.delete('/:section/posthog/tracked/:uid', route(async (c, user) => {
     await noSupport(c);
     sectionOf(c);
     const p = await writable(c, user, c.req.query('project'));
@@ -350,18 +349,18 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
     return c.json({ ok: true });
   }));
 
-  router.delete(`${SECTION}/posthog/facts/:id{[0-9]+}`, route(async (c, user) => {
+  router.delete('/:section/posthog/facts/:id', route(async (c, user) => {
     await noSupport(c);
     sectionOf(c);
     const p = await writable(c, user, c.req.query('project'));
     if (!(await isTeamViewer(c.env, user, p.id))) throw new Refused(403, 'team_only');
-    if (!(await deleteFact(c.env, p.id, Number(c.req.param('id'))))) throw new Refused(404, 'fact_not_found');
+    if (!(await deleteFact(c.env, p.id, idOf(c.req.param('id'), 'invalid_fact')))) throw new Refused(404, 'fact_not_found');
     await log(c, user, 'posthog_fact_deleted', { project_id: p.id });
     return c.json({ ok: true });
   }));
 
   // D1605–: the section's sync, the owner's own PostHog only, pinned to the venture's project.
-  router.post(`${SECTION}/posthog/sync`, route(async (c, user) => {
+  router.post('/:section/posthog/sync', route(async (c, user) => {
     await noSupport(c);
     const section = sectionOf(c);
     const b = await bodyOf(c);
@@ -411,21 +410,24 @@ export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
     return c.json({ ok: true });
   }));
 
-  router.post(`${SECTION}/posthog/proposals/:id{[0-9]+}/:verb{accept|dismiss}`, route(async (c, user) => {
+  // Accept and Dismiss: plain paths, one per verb, so the API drift guard can read them.
+  const decide = (verb: 'accept' | 'dismiss') => route(async (c, user) => {
     await noSupport(c);
     sectionOf(c);
     const b = await bodyOf(c);
     const p = await writable(c, user, b.project);
     const link = await ownLink(c, user, p.id);
     const ctx = { integrationId: link.integration_id, projectId: p.id, userId: user.id };
-    const id = Number(c.req.param('id'));
-    const out = c.req.param('verb') === 'accept' ? await acceptProposal(c.env, ctx, id, b) : await dismissProposal(c.env, ctx, id);
+    const id = idOf(c.req.param('id'), 'invalid_proposal');
+    const out = verb === 'accept' ? await acceptProposal(c.env, ctx, id, b) : await dismissProposal(c.env, ctx, id);
     if (out === 'not_found') throw new Refused(404, 'proposal_not_found');
     if (out === 'decided') throw new Refused(409, 'proposal_decided');
     if (out === 'not_ready') throw new Refused(409, 'not_ready');
-    await log(c, user, `posthog_proposal_${c.req.param('verb') === 'accept' ? 'accepted' : 'dismissed'}`, { project_id: p.id, integration_id: link.integration_id });
+    await log(c, user, `posthog_proposal_${verb === 'accept' ? 'accepted' : 'dismissed'}`, { project_id: p.id, integration_id: link.integration_id });
     return c.json({ ok: true, ...(typeof out === 'object' ? { target_ref: out.target_ref } : {}) });
-  }));
+  });
+  router.post('/:section/posthog/proposals/:id/accept', decide('accept'));
+  router.post('/:section/posthog/proposals/:id/dismiss', decide('dismiss'));
 
   return router;
 }
