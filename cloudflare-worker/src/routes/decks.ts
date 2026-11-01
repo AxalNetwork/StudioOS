@@ -40,7 +40,7 @@ import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnaly
 import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
 import {
-  AUDIENCES, BLOCK_KINDS, CHART_RANGES, CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
+  AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
   TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
@@ -1146,7 +1146,9 @@ decks.get('/model', async (c) => {
     notes_max: NOTES_MAX,
     layouts: LAYOUTS,
     block_kinds: BLOCK_KINDS,
-    chart_types: CHART_TYPES,
+    // D1538 (#3787): the library's types (pd6, 12), and the two drawn from typed figures beside them.
+    chart_types: LIBRARY_CHART_TYPES,
+    typed_chart_types: TYPED_CHART_TYPES,
     chart_ranges: CHART_RANGES,
     text_styles: TEXT_STYLES,
     image_tags: IMAGE_TAGS,

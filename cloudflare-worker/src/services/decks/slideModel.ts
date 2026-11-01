@@ -10,7 +10,10 @@
  *               `{ id, kind, grid: { c1, c2, r1, r2 }, binding?, … }`: the
  *               range is inclusive, columns 1–12 and rows 1–6, and no two
  *               blocks on a card share a cell. A `graphic` block may carry
- *               a typed `diagram` (D898 §8.4, `diagramModel.ts`).
+ *               a typed `diagram` (D898 §8.4, `diagramModel.ts`). A `table`
+ *               block (D1538, #3787) holds up to 8 columns × 12 rows of
+ *               cells, each `{ text }`, `{ binding }` or `{ check }`; the
+ *               `market_circles` and `projection` chart types are D1538's.
  *
  * A deck version also carries a theme (PD8): the venture's brand kit or one of
  * two neutral themes, with a deck background.
@@ -38,6 +41,9 @@
  * which every reader shows as "Not recorded", never 0.
  */
 import { sanitizeBinding } from './sources';
+import { cellText, tableLines } from './tableCells';
+
+export { cellText, tableLines };
 import { diagramProblem, sanitizeDiagram } from './diagramModel';
 import { CUSTOM, STRUCTURE_IDS, areasProblem, sanitizeAreas } from './structures';
 
@@ -59,11 +65,22 @@ export const ACCENT_CONTRAST = 4.5;
 
 export type Grid = { c1: number; c2: number; r1: number; r2: number };
 
-export const BLOCK_KINDS = ['text', 'chart', 'graphic', 'image', 'video', 'audio', 'link', 'metric'] as const;
+export const BLOCK_KINDS = ['text', 'chart', 'graphic', 'image', 'video', 'audio', 'link', 'metric', 'table'] as const;
 export type BlockKind = typeof BLOCK_KINDS[number];
 
 /** The chart library (PD9b), in the canvas's order. */
-export const CHART_TYPES = ['line', 'columns', 'stacked', 'percent_bar', 'ranked_bars', 'funnel', 'cohort_heatmap', 'timeline', 'metric_tiles', 'comparison_table', 'waterfall', 'nested_bars'] as const;
+export const CHART_TYPES = ['line', 'columns', 'stacked', 'percent_bar', 'ranked_bars', 'funnel', 'cohort_heatmap', 'timeline', 'metric_tiles', 'comparison_table', 'waterfall', 'nested_bars', 'market_circles', 'projection'] as const;
+/**
+ * D1538 (#3787): the chart types drawn from typed figures rather than a dated
+ * series. The bound-series library (pd6, 12 tiles) leaves them out; the
+ * one-click rules (`visuals.chartTypeFor`) and a typed chart use them.
+ */
+export const TYPED_CHART_TYPES = ['market_circles', 'projection'] as const;
+export const LIBRARY_CHART_TYPES = CHART_TYPES.filter((t) => !(TYPED_CHART_TYPES as readonly string[]).includes(t));
+/** D1538 (#3787): a typed table holds at most 8 columns by 12 rows; each cell is text, a binding or a check. */
+export const TABLE_COLS = 8;
+export const TABLE_ROWS = 12;
+const CELL_MAX = 120;
 export const CHART_RANGES = ['3m', '6m', '12m', 'all'] as const;
 export const TEXT_STYLES = ['heading', 'paragraph', 'list'] as const;
 export const IMAGE_TAGS = ['illustration', 'photo', 'screenshot', 'logo'] as const;
@@ -167,6 +184,30 @@ function pointsOf(v: unknown): Array<{ x: string; y: number }> | null {
   const out = v.slice(0, 60).filter((p: any) => p && typeof p.x === 'string' && typeof p.y === 'number' && Number.isFinite(p.y))
     .map((p: any) => ({ x: p.x.slice(0, 20), y: p.y }));
   return out.length ? out : null;
+}
+
+/**
+ * D1538: one table cell. Text the founder typed (Stated), a D896 binding (the
+ * record's own grade), or a check mark; anything else is an empty cell, which
+ * readers draw blank and never as 0.
+ */
+function cellOf(v: any): Record<string, unknown> {
+  if (v && typeof v === 'object') {
+    const bd = bindingOf(v.binding);
+    if (bd) return { binding: bd };
+    if (typeof v.check === 'boolean') return { check: v.check };
+    if (typeof v.text === 'string') return { text: v.text.trim().slice(0, CELL_MAX) };
+  }
+  return { text: '' };
+}
+
+/** D1538: a table's rows, cut to 12 × 8 and squared to the widest row; null when it has no cell at all. */
+export function tableOf(v: any): { header: boolean; rows: Array<Array<Record<string, unknown>>> } | null {
+  const raw = Array.isArray(v?.rows) ? v.rows.slice(0, TABLE_ROWS).filter(Array.isArray) : [];
+  const width = Math.min(TABLE_COLS, raw.reduce((w: number, row: unknown[]) => Math.max(w, row.length), 0));
+  if (!raw.length || !width) return null;
+  const rows = raw.map((row: unknown[]) => Array.from({ length: width }, (_, i) => cellOf(row[i])));
+  return { header: v?.header !== false, rows };
 }
 
 /** Relative luminance of a #rrggbb colour (WCAG 2). */
@@ -309,6 +350,7 @@ function blockBody(kind: BlockKind, v: any, url: UrlGuard, ground = '#ffffff'): 
       return u ? { url: u, label: str(v.label, 120) } : null;
     }
     case 'metric': return { label: str(v.label, 60), value: typeof v.value === 'string' && v.value.trim() ? v.value.trim().slice(0, 80) : null };
+    case 'table': return tableOf(v);
   }
 }
 
@@ -322,7 +364,8 @@ export function sanitizeBlocks(input: unknown, url: UrlGuard, ground = '#ffffff'
     const body = blockBody(kind, v, url, ground);
     if (!body) continue;
     const block: Record<string, unknown> = { id: typeof v.id === 'string' && ID.test(v.id) ? v.id : `b${i + 1}`, kind, grid, ...body };
-    const bd = kind === 'chart' ? null : bindingOf(v.binding);
+    // A chart binds per series and a table per cell; neither carries a block binding.
+    const bd = kind === 'chart' || kind === 'table' ? null : bindingOf(v.binding);
     if (bd) block.binding = bd;
     out.push(block);
   }
@@ -418,7 +461,14 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
       if (!grid) { out.push(`${where}: the range must sit on the ${GRID_COLS} × ${GRID_ROWS} grid.`); return; }
       if (placed.some((p) => overlaps(p, grid))) out.push(`${where}: it overlaps another block.`);
       placed.push(grid);
-      if (!blockBody(kind, v, url, groundOf(s))) out.push(kind === 'video' ? `${where}: the video must be a YouTube or Vimeo link.` : `${where}: the link must be https on a public host.`);
+      if (!blockBody(kind, v, url, groundOf(s))) {
+        out.push(kind === 'video' ? `${where}: the video must be a YouTube or Vimeo link.`
+          : kind === 'table' ? `${where}: a table needs at least one row and one cell.`
+            : `${where}: the link must be https on a public host.`);
+      }
+      if (kind === 'table' && Array.isArray(v?.rows) && (v.rows.length > TABLE_ROWS || v.rows.some((row: unknown) => Array.isArray(row) && row.length > TABLE_COLS))) {
+        out.push(`${where}: a table holds at most ${TABLE_COLS} columns and ${TABLE_ROWS} rows.`);
+      }
       if (v?.binding != null && !bindingOf(v.binding)) out.push(`${where}: the binding is not a source.`);
       const dp = kind === 'graphic' ? diagramProblem(v?.diagram) : null;
       if (dp) out.push(`${where}: ${dp}`);
