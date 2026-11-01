@@ -417,7 +417,7 @@ test('no AIRail on /studio for any profile: railCount 0 rows for every member St
 
 test('Eadwyn’s layout proposals go through the seam, unavailable and keyed to #3864, until its route exists', async () => {
   // Tripwire: the day the Worker grows the `studio:layout` run, `propose` must stop answering unavailable.
-  assert.deepEqual(await propose('founder'), { available: false, reason: 'Eadwyn’s layout proposals aren’t available yet.', issue: '#3864' });
+  assert.deepEqual(await propose(), { available: false, reason: 'Eadwyn’s layout proposals aren’t available yet.', issue: '#3864' });
   assert.equal(PROPOSALS_ISSUE, '#3864');
   const worker = readdirSync(new URL('../../cloudflare-worker/src/routes/', import.meta.url)).map((f) => read(join('cloudflare-worker/src/routes', f))).join('\n');
   const wired = /['"]studio:layout['"]/.test(worker);
