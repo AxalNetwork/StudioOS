@@ -31,3 +31,4 @@ The tool is the Capital relationships module, not a page beside it.
 - **A commitment with no status is not counted as committed** (#2457 owner question 4).
 - **Every write goes through the one writer** (`cloudflare-worker/src/services/raiseWriters.ts`, `cyclesWrite.raise.*`, or the record's own actions), never `contacts.ts`' older PUT.
 - **Eadwyn proposes next steps, stage moves and message drafts.** It never writes an amount, a status or a Fit.
+- **An admin reads one private response per reason (D1464, #4021).** `CapRelSupport.jsx` draws the reason gate on every tab for `admin`, then that one response read only: name, firm and stage, never an email or a note. Each further page asks for a fresh reason. The founder's Activity carries the reads (`../SupportReadsCard.jsx`).

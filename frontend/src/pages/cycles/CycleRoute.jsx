@@ -72,6 +72,7 @@ import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters
 import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
 import { NarrativeHome, NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
 import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
@@ -784,6 +785,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const slug = lightbox ? underModule(def?.modules, location.state?.under, cycle, def?.path) : suppliedSlug ?? routeSlug;
   const [searchParams, setSearchParams] = useSearchParams();
   const [projectsKey, setProjectsKey] = useState(0);
+  // D1464 (#4021): a per-open support read of the Data room or Capital relationships is showing; the rail goes read only.
+  const [supportOpen, setSupportOpen] = useState(false);
   // Build's lightbox reads a sign-in's return or `?tool=` once; the venture's write drops those keys too (#1597).
   const [connectDrop] = useState(() => (lightbox && cycle === 'build' ? toolDeepLink(location.search, [])?.strip || [] : []));
   const { projectId, status: projectStatus, writeProject } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null, drop: connectDrop, immediate: record });
@@ -826,6 +829,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   }, [record, adding, lightbox, slug, forms, searchParams, cycle, navigate]);
   // D914 (#2698): an admin reads the Investor narrative read only, after giving a reason; no Add, edit, fill or draft.
   const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin(user);
+  // D1464 (#4021): the access pill and banner say HQ for the Super Admin, Studio admin for an Admin.
+  const supportViewer = isSuperAdminUser(user) ? 'super_admin' : 'admin';
   const drafts = !record && slug && !narrativeAdmin && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   const fillKind = !record && slug && !narrativeAdmin && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
@@ -1067,7 +1072,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     <WorkerRail
       workspace={name}
       role="founder"
-      readOnlyFor={narrativeAdmin ? 'founder-record' : null}
+      readOnlyFor={narrativeAdmin || supportOpen ? 'founder-record' : null}
       stance="Evidence-led view"
       fills
       note={ASSIST_SURFACES.workspace.desks[name]?.fills}
@@ -1127,7 +1132,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   } else if (dataRoomTab) {
     body = (
       <DataRoomTabPage tab={dataRoomTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} fileId={dataRoomFile ? recordId : null} />
+        search={location.search} cards={tabs} action={action} phone={phone} fileId={dataRoomFile ? recordId : null}
+        viewer={supportViewer} onSupportRead={setSupportOpen} />
     );
   } else if (uofTab) {
     body = (
@@ -1140,7 +1146,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   } else if (capRelTab) {
     body = (
       <CapRelTabPage tab={capRelTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} />
+        search={location.search} cards={tabs} action={action} phone={phone}
+        admin={String(user?.role || '') === 'admin'} viewer={supportViewer} onSupportRead={setSupportOpen} />
     );
   } else if (record) {
     const recordTitle = recordState.data?.title || moduleName;

@@ -132,8 +132,9 @@ export async function capitalSupportDetails(env: Env, projectId: number, page: n
 
 export async function capitalSupportHistory(env: Env, projectId: number, page: number) {
   const rows = await env.DB.prepare(
-    "SELECT a.id, a.details, a.created_at, u.name AS reader_name FROM activity_logs a LEFT JOIN users u ON a.actor = 'user:' || u.id WHERE a.project_id = ? AND a.action = ? ORDER BY a.id DESC LIMIT ? OFFSET ?",
-  ).bind(projectId, CAPITAL_SUPPORT_ACTION, 26, (page - 1) * 25).all<{ id: number; details: string; created_at: string; reader_name: string | null }>();
+    // D1464 (#4021): the reader's kind, so the founder's row says Studio admin or HQ; null when the account is gone.
+    "SELECT a.id, a.details, a.created_at, u.name AS reader_name, CASE WHEN u.id IS NULL THEN NULL WHEN EXISTS (SELECT 1 FROM super_admins s WHERE s.user_id = u.id) THEN 'super_admin' ELSE 'admin' END AS reader_kind FROM activity_logs a LEFT JOIN users u ON a.actor = 'user:' || u.id WHERE a.project_id = ? AND a.action = ? ORDER BY a.id DESC LIMIT ? OFFSET ?",
+  ).bind(projectId, CAPITAL_SUPPORT_ACTION, 26, (page - 1) * 25).all<{ id: number; details: string; created_at: string; reader_name: string | null; reader_kind: 'admin' | 'super_admin' | null }>();
   if (failed(rows) || !Array.isArray(rows.results)) throw new CapitalAccessError(503, 'support_history_unreadable', 'Support reads could not be read. Try again.');
   return { page, page_size: 25, has_more: rows.results.length > 25, reads: rows.results.slice(0, 25).map(row => {
     let reason: string | null = null; let page: number | null = null; let prospectId: number | null = null;
@@ -142,6 +143,6 @@ export async function capitalSupportHistory(env: Env, projectId: number, page: n
       page = Number.isSafeInteger(details.page) && details.page > 0 ? details.page : null;
       prospectId = Number.isSafeInteger(details.prospect_id) && details.prospect_id > 0 ? details.prospect_id : null;
     } catch { /* Historical invalid detail stays unrecorded. */ }
-    return { id: row.id, reader: { name: row.reader_name }, reason, page, prospect_id: prospectId, created_at: row.created_at, read_only: true };
+    return { id: row.id, reader: { name: row.reader_name, kind: row.reader_kind ?? null }, reason, page, prospect_id: prospectId, created_at: row.created_at, read_only: true };
   }) };
 }

@@ -65,3 +65,9 @@ Files and `?mode=access` to Access.
 - **The owner alone** shares, revokes, changes a grant, sends the NDA and
   answers an access request (D1103, D1104). Share picks one of this venture's
   prospects in Capital relationships; the Worker reads its address (D1107).
+- **An admin reads the room once per reason (D1464, #4021).** The Worker
+  answers an admin a summary, and `DataRoomSupport.jsx` draws the reason gate
+  (`../../../ui/ReasonGate.jsx`, per open, 1–500 characters) in its place on every tab.
+  The support answer is drawn read only: no upload, share, NDA or download.
+  Nothing is kept across a reload. The founder's Activity carries the reads
+  (`../SupportReadsCard.jsx`).

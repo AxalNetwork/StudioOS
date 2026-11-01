@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
-import { AdminRoomSummary } from './DataRoomSummary.jsx';
+import DataRoomSupport from './DataRoomSupport.jsx';
+import SupportReadsCard from '../SupportReadsCard.jsx';
+import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { DataRoomMovedNotice } from './DataRoomMoved.jsx';
 import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
@@ -26,7 +28,9 @@ import {
  * `DataRoomTabPage` for the tab words under the module. Every row comes from
  * a read on `main`; see `dataRoomModel.js`. D1108 (#2988): Activity, Checklist
  * and Preview draw D1105's and D1103's reads (`DataRoomActivity.jsx`,
- * `DataRoomChecklist.jsx`, `DataRoomPreview.jsx`).
+ * `DataRoomChecklist.jsx`, `DataRoomPreview.jsx`). D1464 (#4021): an admin
+ * meets the per-open reason gate in place of D1102's summary
+ * (`DataRoomSupport.jsx`), and the founder's Activity carries the reads.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -143,9 +147,14 @@ function RequestsTab({ read, retry }) {
 }
 
 function ActivityTab({ read, retry, phone }) {
+  // D1464 (#4021, RR09): the reasoned support reads sit with the rest of the room's activity.
+  const load = useCallback((page) => dataRoomApi.supportReads(read.uid, page), [read.uid]);
   return (
     <RoomState read={read} onRetry={retry} testId="dataroom-activity">
-      <DataRoomActivity projectUid={read.uid} phone={phone} />
+      <div className="flex flex-col gap-4">
+        <DataRoomActivity projectUid={read.uid} phone={phone} />
+        <SupportReadsCard record="data-room" load={load} testId="dataroom-support-reads" />
+      </div>
     </RoomState>
   );
 }
@@ -166,7 +175,7 @@ function PreviewTab({ read, retry }) {
   );
 }
 
-export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, fileId = null }) {
+export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, fileId = null, venture = null, viewer = 'admin', onSupportRead }) {
   const navigate = useNavigate();
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
@@ -176,7 +185,9 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <Skeleton testId="dataroom-loading" />;
-  else if (read.status === 'ready' && read.room?.mode === 'summary') body = <AdminRoomSummary room={read.room} reload={retry} />;
+  // D1464 (#4021, RR11): the Worker answers an admin a summary, never the room; the admin meets
+  // the reason gate, once per open, on every tab, and reads the room read only after it.
+  else if (read.status === 'ready' && read.room?.mode === 'summary') body = <DataRoomSupport key={read.uid} projectUid={read.uid} venture={venture} viewer={viewer} onOpen={onSupportRead} />;
   else if (tab === 'files') body = <FilesTab read={read} retry={retry} search={search} projectId={projectId} />;
   else if (tab === 'access') body = <AccessTab read={read} retry={retry} phone={phone} />;
   else if (tab === 'requests') body = <RequestsTab read={read} retry={retry} />;

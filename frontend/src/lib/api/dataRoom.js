@@ -30,6 +30,11 @@ import { api, request } from '../api.js';
 //   activityCsv(p, q)  GET /data-room/:p/activity.csv?… (the same rows; 413 too_many_rows past 10,000)
 //   checklist(p)       GET /data-room/:p/checklist → { grants_in_force, totals, items: [{ key, area, label, state, reason, files }] }
 // A refusal (`blocked`) is never counted as an open. `investor` is a grant's uid.
+// D1464 (#4021) — read with a reason, per open (D1102's routes):
+//   supportRead(p, reason)  POST /data-room/:p/support-read { reason } → the room read only (`mode: 'support'`);
+//                           an admin, 1–500 characters; 400 support_reason_required, 409 support_owner_unresolved, 503 support_read_unavailable
+//   supportReads(p, page)   GET  /data-room/:p/support-reads?page → { page, page_size, has_more, reads: [{ id, reader: { name, kind }, reason, created_at }] };
+//                           the owner and a co-founder; 503 support_history_unreadable
 const seg = (v) => encodeURIComponent(String(v));
 const activityQuery = (q = {}) => {
   const p = new URLSearchParams();
@@ -53,4 +58,6 @@ export const dataRoomApi = {
   activity: (projectUid, q) => request(`/data-room/${seg(projectUid)}/activity${activityQuery(q)}`),
   activityCsv: (projectUid, q) => api._downloadCsv(`/data-room/${seg(projectUid)}/activity.csv${activityQuery(q)}`, 'data-room-activity.csv'),
   checklist: (projectUid) => request(`/data-room/${seg(projectUid)}/checklist`),
+  supportRead: (projectUid, reason) => request(`/data-room/${seg(projectUid)}/support-read`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  supportReads: (projectUid, page = 1) => request(`/data-room/${seg(projectUid)}/support-reads?page=${encodeURIComponent(String(page))}`),
 };
