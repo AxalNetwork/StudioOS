@@ -30,6 +30,7 @@ import type { RenderableSlide } from './render';
 import type { DeckBrand } from './branding';
 import { buildNotesSlideXml, buildSlideXml, buildZip, notesPackageParts, tf, xmlEsc, type ZipEntry } from './pptx';
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES, chartLabel, type ImageKind } from './offlineHtml';
+import { tableLines } from './slideModel';
 
 /** The print card (D1112) the block geometry is measured on. */
 export const CARD_W = 1920;
@@ -121,6 +122,11 @@ export function blockParagraphs(b: any): string[] | null {
     }
     case 'chart': return chartParagraphs(b);
     case 'graphic': return [run(`Graphic · ${b.graphic || 'none chosen'}`, { size: pt(24), color: MUTED })];
+    // D1538: a typed table, one row per line; the header row in bold.
+    case 'table': {
+      const lines = tableLines(b);
+      return lines.length ? lines.map((l, i) => run(l, { size: pt(24), bold: i === 0 && b.header !== false })) : null;
+    }
     case 'video': return [run(`▶ ${b.title || (b.provider === 'vimeo' ? 'Vimeo video' : 'YouTube video')}`, { size: pt(30), bold: true }), run(String(b.url || ''), { size: pt(22), color: MUTED })];
     case 'audio':
     case 'link': return [run(b.label || (b.kind === 'audio' ? 'Audio clip' : 'Open'), { size: pt(30), bold: true }), run(String(b.url || ''), { size: pt(22), color: MUTED })];

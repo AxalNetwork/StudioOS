@@ -29,6 +29,13 @@ when adding a kind.
   into ISO. `done` reads "Recorded", and "Transcript ready" appears only when
   the run's session holds its final transcript. Page only. It never reads
   the meeting link or the participants.
+- `prefs.ts`: D1484 part 2 (#3978, migration 708), a member's own source
+  settings. `calendar_source_prefs` holds whether a source is shown and its
+  colour, a palette token and never hex. `calendar_settings` holds
+  `copy_target`. A missing row means "shown, family colour", and no default
+  row is written. Every read and write is `WHERE user_id = ?` bound. Only the
+  page read honours these settings (`hiddenKinds`); `.ics`, the feeds and the
+  push never read them.
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
   projections keep their separate, smaller event shape.
 - `itemRead.ts`: one item for the drawer (the page read's own reader and

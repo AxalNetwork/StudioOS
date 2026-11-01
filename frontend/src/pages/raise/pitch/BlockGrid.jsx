@@ -1,7 +1,8 @@
 import React from 'react';
 import { NOT_RECORDED, blockLabel, runsOf, tileValue } from './editorModel';
 import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './presentExportModel';
-import { faceOf, projectionOf } from './figuresModel';
+import { STATED_CHIP, TYPED_LINE, faceOf, projectionOf } from './figuresModel';
+import { isTypedChart, marketCircles, projectionLines, tableView } from './typedChartsModel';
 import { aspectOf, placeOf } from './gridModel';
 
 export { gridBlocks } from './presentExportModel';
@@ -36,6 +37,47 @@ function Projection({ block, colours, small }) {
       <span className="self-start rounded-full border border-dashed px-1.5 font-bold uppercase" style={{ borderColor: colours.muted }}>{p.label} · {p.grade}</span>
       <span className="italic">{p.note}</span>
     </span>
+  );
+}
+
+/**
+ * D1538 (#3787): market circles and the projection line, drawn the same way in
+ * the editor, Present and print. A market that does not nest, or a series
+ * with fewer than two points, says so in words instead of drawing a shape.
+ */
+function TypedChart({ block, colours, small }) {
+  if (block.chart_type === 'market_circles') {
+    const circles = marketCircles(block);
+    if (!circles) return <span className={`${small} italic`} style={{ color: colours.muted }}>Market circles need TAM, SAM and SOM, each inside the one before.</span>;
+    return (
+      <svg viewBox="0 0 100 100" className="h-full w-full" role="img" aria-label={circles.map((c) => c.text).join(', ')} data-testid={`deck-market-circles-${block.id}`}>
+        {circles.map((c, i) => (
+          <g key={c.key}>
+            <circle cx={c.cx} cy={c.cy} r={c.r} fill={colours.accent} fillOpacity={0.12 + i * 0.18} stroke={colours.accent} strokeWidth="0.6" />
+            <text x="50" y={+(c.cy - c.r + (i === 2 ? c.r : 6)).toFixed(2)} textAnchor="middle" fontSize="5" fontWeight="700" fill="currentColor">{c.text}</text>
+          </g>
+        ))}
+      </svg>
+    );
+  }
+  const lines = projectionLines(block);
+  if (!lines) return <span className={`${small} italic`} style={{ color: colours.muted }}>A projection needs two or more points.</span>;
+  return (
+    <svg viewBox="0 0 100 60" preserveAspectRatio="none" className="h-full w-full" role="img" aria-label={`${block.series?.[0]?.label || 'Series'}, dashed after ${lines.from || 'today'}`} data-testid={`deck-projection-chart-${block.id}`}>
+      {lines.solid ? <polyline points={lines.solid} fill="none" stroke={colours.accent} strokeWidth="1.4" vectorEffect="non-scaling-stroke" /> : null}
+      {lines.dashed ? <polyline points={lines.dashed} fill="none" stroke={colours.accent} strokeWidth="1.4" strokeDasharray="3 2" vectorEffect="non-scaling-stroke" data-testid={`deck-projection-dashed-${block.id}`} /> : null}
+    </svg>
+  );
+}
+
+/** D1538: a typed table: its head row, then its rows; a blank cell stays blank. */
+function TableView({ block, colours, para }) {
+  const { head, body } = tableView(block);
+  return (
+    <table className={`w-full border-collapse ${para}`} data-testid={`deck-table-${block.id}`}>
+      {head ? <thead><tr>{head.map((c, i) => <th key={i} scope="col" className="border px-1 text-left font-bold" style={{ borderColor: colours.muted }}>{c}</th>)}</tr></thead> : null}
+      <tbody>{body.map((row, r) => <tr key={r}>{row.map((c, i) => <td key={i} className="border px-1" style={{ borderColor: colours.muted }}>{c}</td>)}</tr>)}</tbody>
+    </table>
   );
 }
 
@@ -89,7 +131,8 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
         <span className={`${small} font-bold uppercase`} style={{ color: colours.muted }}>{b.label || 'Metric'}</span>
         <span className={v === NOT_RECORDED ? `${big ? 'text-[26px]' : 'text-[11.5px]'} italic` : `${big ? 'text-[60px]' : 'text-[20px]'} font-extrabold`}>{v}</span>
         {live ? (sources ? <span className={small} style={{ color: colours.muted }}>{sourceOf(b.binding) || SOURCE_NOT_RECORDED}</span> : null)
-          : b.binding ? (renderFace ? renderFace(b) : <span className="text-[10px]" style={{ color: colours.muted }} data-testid={`deck-block-face-${b.id}`}>{faceLine(b.binding)}</span>) : null}
+          : b.binding ? (renderFace ? renderFace(b) : <span className="text-[10px]" style={{ color: colours.muted }} data-testid={`deck-block-face-${b.id}`}>{faceLine(b.binding)}</span>)
+            : v !== NOT_RECORDED ? <span className="text-[10px]" style={{ color: colours.muted }} title={TYPED_LINE()} data-testid={`deck-block-face-${b.id}`}>{STATED_CHIP}</span> : null}
       </span>
     );
   }
@@ -116,6 +159,16 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
     return live && b.url ? <a href={b.url} target="_blank" rel="noopener noreferrer" className="no-underline" style={{ color: 'inherit' }}>{face}</a> : face;
   }
   if (b.kind === 'graphic') return <span className={big ? 'text-[24px]' : 'text-[11px]'} style={{ color: colours.muted }}>Graphic · {b.graphic || 'none chosen'}</span>;
+  if (b.kind === 'table') return <TableView block={b} colours={colours} para={para} />;
+  // D1538: market circles and projections are drawn from their typed points here, in every format, with the one Projection label.
+  if (isTypedChart(b)) {
+    return (
+      <span className="flex h-full flex-col gap-1">
+        <span className="min-h-0 flex-1"><TypedChart block={b} colours={colours} small={small} /></span>
+        <Projection block={b} colours={colours} small={small} />
+      </span>
+    );
+  }
   if (b.kind === 'chart' && renderChart) {
     return projectionOf(b)
       ? <span className="flex h-full flex-col gap-1"><span className="min-h-0 flex-1">{renderChart(b)}</span><Projection block={b} colours={colours} small={small} /></span>
@@ -129,7 +182,7 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
         {(b.series || []).map((s, i) => (
           <span key={i} style={{ color: colours.muted }}>
             {s.label || s.binding?.source_key || 'Series'}
-            {Array.isArray(s.points) && s.points.length ? (live ? `: ${s.points.map((p) => `${p.x} ${p.y}`).join(' · ')}` : ' · Typed') : ''}
+            {Array.isArray(s.points) && s.points.length ? (live ? `: ${s.points.map((p) => `${p.x} ${p.y}`).join(' · ')}` : ` · ${STATED_CHIP}`) : ''}
           </span>
         ))}
       </span>
