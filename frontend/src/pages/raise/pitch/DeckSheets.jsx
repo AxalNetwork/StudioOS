@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { CONFIDENTIAL, CONFIDENTIAL_HELP, keepSettings, settingsOf, withConfidential } from './complianceModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { BrandingCard } from './StudioActions';
 import CheckPanel from './CheckPanel';
@@ -68,7 +69,7 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
         {model.themes.map((k) => (
           <label key={k} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${(theme?.kind || 'brand') === k ? 'border-axal-violet dark:border-violet-500' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
             <input type="radio" name="theme" checked={(theme?.kind || 'brand') === k} disabled={readOnly}
-              onChange={() => onTheme(withAspect(k === 'brand' && !theme?.background ? null : { kind: k, background: theme?.background ?? null }, theme?.aspect))} data-testid={`pitch-theme-${k}`} />
+              onChange={() => onTheme(keepSettings(withAspect(k === 'brand' && !theme?.background ? null : { kind: k, background: theme?.background ?? null }, theme?.aspect), theme))} data-testid={`pitch-theme-${k}`} />
             <span className="flex flex-col">
               <span className="font-bold">{THEME_LABELS[k]}{k === 'brand' && kitData?.name ? ` · ${kitData.name}` : ''}</span>
               {k === 'brand' && kit.status === 'ok' && !kitData ? <span className={MUTED}>{NO_KIT}</span> : null}
@@ -77,6 +78,12 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
         ))}
       </div>
       {!readOnly ? <button type="button" className={GHOST} onClick={onApplyAll} data-testid="pitch-editor-apply-all">{APPLY} to all cards</button> : null}
+      {/* D1546 (pd3's chrome strip): Confidential, on by default, in the corner of every card in Present, share and every export. */}
+      <label className={`flex min-h-[44px] items-center gap-2 text-[12.5px] ${INK}`}>
+        <input type="checkbox" checked={settingsOf(theme).confidential} disabled={readOnly}
+          onChange={(e) => onTheme(withConfidential(theme, e.target.checked))} data-testid="pitch-theme-confidential" />
+        <span className="flex flex-col"><span className="font-bold">{CONFIDENTIAL}</span><span className={MUTED}>{CONFIDENTIAL_HELP}</span></span>
+      </label>
       <span className={EYE}>Audience</span>
       <select className={FIELD} value={audience || ''} disabled={readOnly} onChange={(e) => onAudience(e.target.value || null)} data-testid="pitch-editor-audience-select">
         <option value="">{NOT_RECORDED}</option>

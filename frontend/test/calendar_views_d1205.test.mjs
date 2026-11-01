@@ -49,7 +49,9 @@ test('every kind the page reads is in exactly one family; Deadlines holds the Co
   assert.deepEqual([...FAMILIES.flatMap((f) => f.kinds)].sort(), [...PAGE_KINDS].sort());
   assert.equal(familyOf('event_ticket'), 'events');
   assert.equal(familyOf('calendly_event'), 'other');
-  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due']);
+  // D1484 (#3977): the cohort dates and deal closings are deadlines too.
+  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing']);
+  assert.equal(PAGE_KINDS.length, 15, 'the page kind table parsed'); // #3959: Learning is the fifteenth.
 });
 
 test('a failed source counts a dash, never 0; a read list counts; no list counts nothing', () => {
