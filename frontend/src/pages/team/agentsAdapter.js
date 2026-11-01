@@ -46,6 +46,7 @@
  */
 import { teamAgentsApi } from '../../lib/api/teamAgents.js';
 import { FLOOR, RULEBOOK_SECTIONS, refusalWords } from './teamModel.js';
+import { skillRefusalWords } from './skillsModel.js';
 
 export const AGENTS_OFF_REASON = 'AI agents aren’t switched on yet.';
 
@@ -136,3 +137,47 @@ export const decide = (/* proposalUid, { decision, payload } */) => off();
 
 /** `GET /api/teams/tools` → the sponsor's approved read tools. */
 export const toolChoices = off;
+
+// ---------------------------------------------------------------- D1612 skills: A1 (#3951) and A2 (#3956)
+//
+// Team › Skills (boards SK0–SK9). Every body stays `off()` until its route
+// lands; the builder replaces only the body with
+// `throughSkill(() => teamAgentsApi.<method>(…))` and adds the method to
+// `lib/api/teamAgents.js` in the same PR. The shapes are #3951's and #3956's.
+
+/** `through`, with the skill refusals (A1, A2) in their own words. */
+export async function throughSkill(call) {
+  const out = await through(call);
+  if (out.refused && out.code) return { ...out, reason: skillRefusalWords(out.code) };
+  return out;
+}
+
+// A1 #3951 — the library
+/** `GET /api/teams/:scope/:id/skills?role=&category=&q=&sort=` → `{ can_edit, figures, roles, skills }`. */
+export const skillLibrary = (/* scope, id, { role, category, q, sort } */) => off();
+/** `GET /api/teams/skills/:uid` → `{ skill (with steps, markdown, versions), can_edit }`. */
+export const skill = (/* uid */) => off();
+/** `POST /api/teams/:scope/:id/skills` → 201 `{ skill }`, a draft. */
+export const createSkill = (/* scope, id, body */) => off();
+/** `PATCH /api/teams/skills/:uid` → `{ skill }`. */
+export const updateSkill = (/* uid, patch */) => off();
+/** `POST /api/teams/skills/:uid/publish` → `{ skill, version }`. */
+export const publishSkill = (/* uid, { note } */) => off();
+/** `POST /api/teams/:scope/:id/skills/import { markdown }` → 201 `{ skill, problems }`, always a draft. */
+export const importSkill = (/* scope, id, markdown */) => off();
+
+// A2 #3956 — agents and skills
+/** `GET /api/teams/agents/:uid/skills` → `{ can_manage, skills, radar, values }`. */
+export const agentSkills = (/* uid */) => off();
+/** `PUT /api/teams/agents/:uid/skills { skills: [{ uid, version }] }` → the same shape. */
+export const setAgentSkills = (/* uid, skills */) => off();
+/** `GET /api/teams/agents/:uid/skills/available` → `{ skills }`, each with `blocked`. */
+export const availableSkills = (/* uid */) => off();
+/** `GET /api/teams/skills/:uid/agents` → `{ agents }` the member can see. */
+export const skillAgents = (/* uid */) => off();
+/** `GET /api/teams/skills/:uid/assignable` → `{ agents }`, each with `assigned` and `blocked`. */
+export const assignable = (/* uid */) => off();
+/** `POST /api/teams/skills/:uid/assign { agent_uids }` → `{ added, refused }`. */
+export const assignSkill = (/* uid, agentUids */) => off();
+/** `GET /api/teams/:scope/:id/coverage` → `{ axes: [{ slug, label, people_level, agent_level }] }`. */
+export const coverage = (/* scope, id */) => off();
