@@ -1,0 +1,27 @@
+{
+  "$id": "deckTypedValues",
+  "title": "GET /api/decks/:id/typed-values (D1538, #3787)",
+  "description": "The reply the deck v2 adapter's `typedTables` method passes through: the figures the founder typed for the venture, each Stated. A key nobody typed is absent, never 0. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "values"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["key", "label", "value", "unit", "grade", "typed_by", "typed_at"],
+        "properties": {
+          "key": { "type": "string" },
+          "label": { "type": "string" },
+          "value": { "type": ["number", "string"] },
+          "unit": { "enum": ["count", "usd", "percent", "months", "text"] },
+          "grade": { "const": "Stated" },
+          "typed_by": { "type": ["object", "null"] },
+          "typed_at": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -11,6 +11,8 @@ reply against its schema, not only that the route exists.
 | `deckInvestorLinks.schema.json` | `GET /api/decks/:id/investor-links` (D1565, #3812): the deck, its version and its per-investor links. |
 | `deckRemix.schema.json` | `POST /api/decks/:id/remix` (D1553, #3800): the card's structure, the card and its layout options. |
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
+| `deckTypedValues.schema.json` | `GET /api/decks/:id/typed-values` (D1538, #3787): the figures the founder typed, each Stated. |
+| `deckConsistency.schema.json` | The `consistency` of `GET /api/decks/:id/check` (D1555, #3802): the state and each finding's key, rule, message and cards. |
 | `deckWithdrawInvestorLink.schema.json` | `POST /api/decks/:id/investor-links/:shareId/withdraw` (D1565, #3812): ok and the withdrawn link. |
 | `index.ts` | `CONTRACTS`: each adapter method with a route, its issue, its route and its schema file. The tests read the schemas; the Worker never loads one. |
 | `validate.ts` | `contractErrors`, the subset of JSON Schema the contracts use. A keyword it does not check is an error, never skipped. |

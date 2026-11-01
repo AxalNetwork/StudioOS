@@ -1,0 +1,23 @@
+{
+  "$id": "deckConsistency",
+  "title": "GET /api/decks/:id/check → consistency (D1555, #3802)",
+  "description": "The `consistency` the deck v2 adapter's `consistency` method passes through from the deck check's reply: the deck's own figures card against card (`services/deckConsistency.ts`). Free, no model. A reader who is not the founder gets null and the adapter answers none. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["state", "findings"],
+  "properties": {
+    "state": { "enum": ["ok", "unreadable"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["key", "rule", "message", "cards"],
+        "properties": {
+          "key": { "type": "string" },
+          "rule": { "enum": ["one_value", "use_of_funds", "runway", "round", "forecast"] },
+          "message": { "type": "string" },
+          "cards": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
+        }
+      }
+    }
+  }
+}

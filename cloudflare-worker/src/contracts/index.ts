@@ -20,6 +20,9 @@ export const CONTRACTS = Object.freeze({
   remix: { issue: 3800, route: 'POST /api/decks/:id/remix', schema: 'deckRemix.schema.json' },
   investorLinks: { issue: 3812, route: 'GET /api/decks/:id/investor-links', schema: 'deckInvestorLinks.schema.json' },
   withdrawInvestorLink: { issue: 3812, route: 'POST /api/decks/:id/investor-links/:shareId/withdraw', schema: 'deckWithdrawInvestorLink.schema.json' },
+  // D1538 (#3787) and D1555 (#3802) swapped these two without one; #3762 part 2 adds them.
+  typedTables: { issue: 3787, route: 'GET /api/decks/:id/typed-values', schema: 'deckTypedValues.schema.json' },
+  consistency: { issue: 3802, route: 'GET /api/decks/:id/check (its consistency)', schema: 'deckConsistency.schema.json' },
 });
 
 export type ContractMethod = keyof typeof CONTRACTS;

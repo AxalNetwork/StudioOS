@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Grid3x3 } from 'lucide-react';
 import { BlockView } from './BlockGrid';
 import { ChartBlock } from './ChartTools';
@@ -134,6 +134,8 @@ export default function GridStage({
   const byKey = useMemo(() => itemsByKey(items), [items]);
   const changed = useMemo(() => staleFigures(card, items, charts), [card, items, charts]);
   const [hover, setHover] = useState(null);
+  // D1511 (#3762): each area's name is its position, then what it draws (WCAG 2.5.3, label in name).
+  const nameId = useId();
   useEffect(() => { setHover(null); }, [index]);
   const face = (b) => {
     const f = faceOf(b.binding, byKey.get(b.binding?.source_key));
@@ -320,7 +322,7 @@ export default function GridStage({
                 <button type="button" key={a.id}
                   ref={(n) => { if (n) buttons.current.set(a.id, n); else buttons.current.delete(a.id); }}
                   tabIndex={tab}
-                  aria-label={areaTitle(a, i, areas.length)}
+                  aria-labelledby={`${nameId}-${a.id}-name ${nameId}-${a.id}-face`}
                   aria-pressed={on}
                   aria-disabled={ok.ok ? undefined : true}
                   title={ok.ok ? undefined : ok.why}
@@ -337,9 +339,12 @@ export default function GridStage({
                   className={`min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${on ? 'outline outline-2 outline-violet-500 dark:outline-violet-400' : block ? 'outline outline-1 outline-dashed outline-black/10 dark:outline-white/20' : 'outline outline-1 outline-dashed outline-transparent hover:outline-black/15 dark:hover:outline-white/20'} ${a.id === live ? 'ring-[6px] ring-violet-400/30' : ''} ${ok.ok ? '' : 'cursor-not-allowed opacity-70'}`}
                   style={at}
                   data-testid={block ? `pitch-editor-block-${a.id}` : `pitch-editor-area-${a.id}`}>
-                  {block
-                    ? <BlockView block={a.block} colours={colours} renderFace={face} renderChart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} />
-                    : on ? <span className="font-mono text-[10px]" style={{ color: colours.muted }}>Empty · {areaLabel(a.grid)}</span> : null}
+                  <span className="sr-only" id={`${nameId}-${a.id}-name`}>{areaTitle(a, i, areas.length)}</span>
+                  <span id={`${nameId}-${a.id}-face`} data-testid={`pitch-editor-face-${a.id}`}>
+                    {block
+                      ? <BlockView block={a.block} colours={colours} renderFace={face} renderChart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} />
+                      : on ? <span className="font-mono text-[10px]" style={{ color: colours.muted }}>Empty · {areaLabel(a.grid)}</span> : null}
+                  </span>
                 </button>
               );
             })}

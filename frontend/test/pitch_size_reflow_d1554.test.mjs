@@ -32,7 +32,7 @@ test('4:3 moves the words that no longer fit to the notes, says how many, and on
     deckUpdate: async (id, body) => { saved = body; return { ...deckWith(LONG), version: 4, slides: body.slides, theme: body.theme }; },
   } });
   try {
-    const textOf = () => m.text(m.by('pitch-editor-block-b2'));
+    const textOf = () => m.text(m.by('pitch-editor-face-b2'));
     assert.equal(textOf(), LONG);
     await m.press(m.by('deck-more-open'));
     await m.press(m.by('deck-more-size'));
@@ -66,6 +66,6 @@ test('a deck that fits at 4:3 moves nothing and shows no notice', async () => {
     await m.type(m.by('pitch-size-4x3'), true);
     assert.equal(m.pr(m.by('pitch-editor-card'))['data-aspect'], '4:3');
     assert.equal(m.by('pitch-size-moved'), undefined);
-    assert.equal(m.text(m.by('pitch-editor-block-b2')), 'Synthetic body words');
+    assert.equal(m.text(m.by('pitch-editor-face-b2')), 'Synthetic body words');
   } finally { await m.close(); }
 });
