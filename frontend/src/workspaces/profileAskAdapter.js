@@ -30,7 +30,10 @@ export function askAvailability() {
   return ASK_PANEL;
 }
 
-/** The proposals waiting on a rail page, or unavailable. Never a guessed 0. */
-export function waitingCount() {
+/**
+ * The proposals waiting on a rail page, or unavailable. Never a guessed 0.
+ * `pageKey` is the rail page the count will be read for once D1442 serves it.
+ */
+export function waitingCount(pageKey) { // eslint-disable-line no-unused-vars
   return ASK_WAITING;
 }
