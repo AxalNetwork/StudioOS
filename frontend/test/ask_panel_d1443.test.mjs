@@ -75,7 +75,8 @@ test('who Ask serves: every licence on its own pages; never a support session, a
   assert.equal(askServes({ page: null, viewer: 'founder', host: 'founder' }), false, 'no page key');
   // WorkerRail passes its own role as the host, and the support session from storage.
   const rail = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
-  assert.match(rail, /useAskRail\(askServes\(\{ page: pageKey, supportSession: supportOn, viewer, host: role \}\), pageKey, askLabel\);/);
+  // D1463 (#3713): never on a founder's record read behind a reason.
+  assert.match(rail, /useAskRail\(!founderRecord && askServes\(\{ page: pageKey, supportSession: supportOn, viewer, host: role \}\), pageKey, askLabel\);/);
   assert.match(rail, /activeSupportSession\(\)/);
 });
 

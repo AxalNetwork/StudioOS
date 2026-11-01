@@ -102,7 +102,8 @@ const row = (uid, payload, extra = {}) => ({ uid, rail_option: 'deck:rewrite', s
 
 test('a waiting card edit is this deck\'s open proposal, read from its rail row', () => {
   const text = cardEdit(row('u1', { deck_id: 31, card: 2, action: 'shorten', before: 'Old', after: 'New' }), 31);
-  assert.deepEqual({ ...text, at: undefined }, { uid: 'u1', option: 'deck:rewrite', card: 2, action: 'shorten', what: 'Shorter', at: undefined, kind: 'text', before: 'Old', after: 'New' });
+  // D1500: an edit made before card uids carries none, and is placed by its card's place.
+  assert.deepEqual({ ...text, at: undefined }, { uid: 'u1', option: 'deck:rewrite', card: 2, card_uid: null, action: 'shorten', what: 'Shorter', at: undefined, kind: 'text', before: 'Old', after: 'New' });
   const block = cardEdit(row('u2', { deck_id: 31, card: 0, action: 'timeline', block: { kind: 'chart' }, title: 'Synthetic milestones' }), 31);
   assert.equal(block.kind, 'block');
   assert.deepEqual(block.size, { cols: 12, rows: 2 });

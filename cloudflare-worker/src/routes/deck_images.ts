@@ -54,6 +54,7 @@ import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
+import { cardRefOf } from '../services/decks/cardUids';
 import { imageCapability, imagePlan } from '../services/decks/visuals';
 import { fetchLandingPageForProject } from '../services/decks/branding';
 import { elementModelFor, runModelOf } from './deck_element_models';
@@ -66,7 +67,7 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const UID = /^[0-9a-f-]{36}$/;
 const NO_STORAGE = 'Images cannot be stored here yet. Nothing was run and nothing was charged.';
 
-type Deck = { deckId: number; projectId: number };
+type Deck = { deckId: number; projectId: number; slides: unknown[] };
 
 /** The deck version and its venture, which the caller may write (or read, with `write: false`), or the refusal. */
 async function deckOf(c: any, user: User, write = true): Promise<Deck | Response> {
@@ -78,7 +79,19 @@ async function deckOf(c: any, user: User, write = true): Promise<Deck | Response
   try { await projectOwned(c, user, projectId, { write }); } catch (e: any) {
     return e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403);
   }
-  return { deckId, projectId };
+  let slides: unknown[] = [];
+  try { const parsed = JSON.parse(row.slides || '[]'); if (Array.isArray(parsed)) slides = parsed; } catch { slides = []; }
+  return { deckId, projectId, slides };
+}
+
+/**
+ * D1500: record the card's uid beside its place. Best effort, after the row is
+ * written: a database without migration 714 still keeps the image by place.
+ */
+async function recordCardUid(env: Env, imageUid: string, cardUid: string | null): Promise<void> {
+  if (!cardUid) return;
+  try { await env.DB.prepare('UPDATE deck_images SET card_uid = ? WHERE uid = ?').bind(cardUid, imageUid).run(); }
+  catch (e) { console.warn('[deck_images] card_uid not recorded', (e as Error)?.message); }
 }
 
 /** One image row by its uid, with the caller's write access to its venture checked. */
@@ -96,7 +109,7 @@ export const imageUrl = (requestUrl: string, uid: string) => new URL(`/api/decks
 
 function view(c: any, r: any) {
   return {
-    uid: r.uid, url: imageUrl(c.req.url, r.uid), state: r.state, use: r.use, source: r.source, card: r.card ?? null,
+    uid: r.uid, url: imageUrl(c.req.url, r.uid), state: r.state, use: r.use, source: r.source, card: r.card ?? null, card_uid: r.card_uid ?? null,
     style: r.style ?? null, aspect: r.aspect ?? null, overlay: r.overlay ?? null, alt: r.alt ?? '',
     width: r.width ?? null, height: r.height ?? null, model: r.model ?? null,
     model_label: imageModelLabel(r.model),
@@ -194,6 +207,8 @@ deckImages.post('/:id/images', async (c) => {
   try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, IMAGE_BYTES_ESTIMATE * p.ask.count, user); }
   catch (e) { if (e instanceof Response) return e; throw e; }
 
+  const ref = cardRefOf(deck.slides, { card: p.ask.card, card_uid: p.ask.card_uid });
+  const cardUid = 'error' in ref ? null : ref.uid;
   const images: any[] = [];
   let stopped: { code: string; message: string } | null = null;
   for (let i = 0; i < p.ask.count; i += 1) {
@@ -226,6 +241,7 @@ deckImages.post('/:id/images', async (c) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?, 'proposed', ?, ?, ?, ?)`)
       .bind(uid, deck.projectId, deck.deckId, p.ask.card, key, mime, drawn.byteLength, drawnSize?.width ?? r.image.width, drawnSize?.height ?? r.image.height, taken ? null : drawnSha,
         p.ask.description, p.ask.style, p.ask.aspect, p.ask.use, r.usage?.model ?? IMAGE_MODEL, r.usageLogId ?? null, charged, userId).run();
+    await recordCardUid(c.env, uid, cardUid);
     images.push(await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first());
   }
   await noteStorageLanded(c.env, ticket);
@@ -234,7 +250,7 @@ deckImages.post('/:id/images', async (c) => {
   return c.json({ images: images.map((r) => view(c, r)), ...(stopped ? { stopped } : {}) });
 });
 
-type Landing = { use: Use; card: number | null; alt: string; showsPerson: boolean; audit: string };
+type Landing = { use: Use; card: number | null; cardUid: string | null; alt: string; showsPerson: boolean; audit: string };
 
 /**
  * D1506 (#3757): an uploaded or imported image, stored. The type is sniffed,
@@ -270,19 +286,19 @@ async function landImage(c: any, user: User, deck: Deck, raw: Uint8Array, l: Lan
     .bind(uid, deck.projectId, deck.deckId, card, key, mime, bytes.byteLength, size.width, size.height, sha, use, alt, use === 'content' ? 'kept' : 'proposed',
       showsPerson ? 1 : 0, showsPerson ? new Date().toISOString() : null, showsPerson ? userId : null, userId,
       use === 'content' ? new Date().toISOString() : null, use === 'content' ? userId : null).run();
+  await recordCardUid(c.env, uid, l.cardUid);
   await noteStorageLanded(c.env, ticket);
   await auditDeckWrite(c, user, deck.projectId, 'deck_image_uploaded', `${card == null ? 'The deck' : `Card ${card + 1}`}: ${l.audit}${showsPerson ? ', with the person’s agreement recorded' : ''}`);
   return c.json({ image: view(c, await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first()) }, 201);
 }
 
 /** The use, card and alt a request names, or the refusal. */
-function landingOf(c: any, get: (k: string) => unknown): Omit<Landing, 'showsPerson' | 'audit'> | Response {
+function landingOf(c: any, deck: Deck, get: (k: string) => unknown): Omit<Landing, 'showsPerson' | 'audit'> | Response {
   const use = (USES as readonly string[]).includes(String(get('use'))) ? String(get('use')) as Use : 'content';
-  const cardRaw = get('card');
-  const card = cardRaw == null || cardRaw === '' ? null : Number(cardRaw);
-  if (card !== null && (!Number.isInteger(card) || card < 0 || card > 59)) return c.json({ error: 'card must be a card of the deck, from 0.' }, 400);
+  const ref = cardRefOf(deck.slides, { card: get('card'), card_uid: get('card_uid') });
+  if ('error' in ref) return c.json({ error: ref.error }, 400);
   const alt = String(get('alt') ?? '').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX);
-  return { use, card, alt };
+  return { use, card: ref.index, cardUid: ref.uid, alt };
 }
 
 deckImages.post('/:id/images/upload', async (c) => {
@@ -299,7 +315,7 @@ deckImages.post('/:id/images/upload', async (c) => {
   // #2434 owner question 7, A: a photo of a person goes in only with their agreement recorded.
   const showsPerson = form!.get('shows_person') === '1';
   if (showsPerson && form!.get('consent') !== '1') return refuse(c, 422, { code: 'person_consent_required', message: PERSON_CONSENT_MESSAGE });
-  const l = landingOf(c, (k) => form!.get(k));
+  const l = landingOf(c, deck, (k) => form!.get(k));
   if (l instanceof Response) return l;
   return landImage(c, user, deck, bytes, { ...l, showsPerson, audit: 'an image uploaded' });
 });
@@ -319,7 +335,7 @@ deckImages.post('/:id/images/import', async (c) => {
   if (!body || typeof body.url !== 'string' || body.url.length > 2048) return c.json({ error: 'url required: the https address of a PNG, JPEG or WebP image.' }, 400);
   const showsPerson = body.shows_person === true;
   if (showsPerson && body.consent !== true) return refuse(c, 422, { code: 'person_consent_required', message: PERSON_CONSENT_MESSAGE });
-  const l = landingOf(c, (k) => body[k]);
+  const l = landingOf(c, deck, (k) => body[k]);
   if (l instanceof Response) return l;
   const got = await fetchExternalImage(body.url, UPLOAD_MAX_BYTES);
   if (!got.ok) {

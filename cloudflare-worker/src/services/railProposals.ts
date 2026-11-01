@@ -197,6 +197,21 @@ export async function listRail(env: Env, userId: number, q: { option?: string | 
  * `edit` needs the member's version, and records it beside Eadwyn's.
  */
 export async function decideRail(env: Env, userId: number, uid: string, decision: RailDecision, edited?: Record<string, unknown> | null): Promise<RailProposal | null> {
+  return decideRailAs(env, { ownerId: userId, deciderId: null }, uid, decision, edited);
+}
+
+/**
+ * THE decide: the member's own press (`decideRail`) and, D1496 part 3
+ * (#3843), a team manager's or the agent's sponsor's press on an agent's
+ * proposal from the queue (`services/agents/queue.ts`, which checks the gate
+ * before it calls this). `ownerId` is the row's `user_id` (an agent's
+ * proposal is its sponsor's); `deciderId` is who pressed from the queue,
+ * written to `decided_by_user_id` (migration 712). The member's own press
+ * passes null and keeps the statements it had: its row's owner decided it.
+ * Once only, atomically; the never-fill check runs here for both. #3742 E3 hooks the Workflow `decision` event to this one function.
+ */
+export async function decideRailAs(env: Env, who: { ownerId: number; deciderId: number | null }, uid: string, decision: RailDecision, edited?: Record<string, unknown> | null): Promise<RailProposal | null> {
+  const userId = who.ownerId;
   const status: RailProposalStatus | null = decision === 'accept' ? 'accepted' : decision === 'edit' ? 'edited' : decision === 'discard' ? 'discarded' : null;
   if (!status) return null;
   // D1263: these decisions must pin/link and audit in their own atomic founder writer.
@@ -206,26 +221,41 @@ export async function decideRail(env: Env, userId: number, uid: string, decision
   // D777 part 3: keeping a value re-checks the never-fill registry. The stored
   // field may have been listed since it was proposed, and an edit may name one.
   if (status === 'accepted' || status === 'edited') {
-    const open = await getRail(env, userId, uid);
+    const open = routed;
     if (open && open.status === 'proposed') {
       const stored = open.payload.field;
       if (typeof stored === 'string' && neverFillReason(stored)) {
-        await env.DB.prepare(
-          `UPDATE ai_rail_proposals
-              SET status = 'discarded', decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-            WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
-        ).bind(uid, userId).run();
+        if (who.deciderId != null) {
+          await env.DB.prepare(
+            `UPDATE ai_rail_proposals
+                SET status = 'discarded', decided_at = CURRENT_TIMESTAMP, decided_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
+          ).bind(who.deciderId, uid, userId).run();
+        } else {
+          await env.DB.prepare(
+            `UPDATE ai_rail_proposals
+                SET status = 'discarded', decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+              WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
+          ).bind(uid, userId).run();
+        }
         throw new NeverFillRefusal(stored, true);
       }
       const named = status === 'edited' ? edited?.field : undefined;
       if (typeof named === 'string' && neverFillReason(named)) throw new NeverFillRefusal(named, false);
     }
   }
-  const res = await env.DB.prepare(
-    `UPDATE ai_rail_proposals
-        SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-      WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
-  ).bind(status, status === 'edited' ? JSON.stringify(edited) : null, uid, userId).run();
+  const kept = status === 'edited' ? JSON.stringify(edited) : null;
+  const res = who.deciderId != null
+    ? await env.DB.prepare(
+      `UPDATE ai_rail_proposals
+          SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, decided_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
+    ).bind(status, kept, who.deciderId, uid, userId).run()
+    : await env.DB.prepare(
+      `UPDATE ai_rail_proposals
+          SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
+    ).bind(status, kept, uid, userId).run();
   if (!res.meta?.changes) return null;
   return getRail(env, userId, uid);
 }

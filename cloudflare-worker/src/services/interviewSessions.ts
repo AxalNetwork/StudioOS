@@ -122,6 +122,7 @@ export interface SessionRow {
   // D685 §5.9–§5.10 (migration 453).
   processing_stage?: string | null; processing_done?: number | null; processing_total?: number | null;
   processing_error?: string | null; processing_updated_at?: string | null; processing_auto?: number | null;
+  processing_failed_stage?: string | null;
   expected_last_seq?: number | null;
   summary?: string | null; summary_model?: string | null; summarised_at?: string | null; summary_citations_json?: string | null;
   // D757 (migration 487): the Validate engine's state (services/validateEngine.ts).
