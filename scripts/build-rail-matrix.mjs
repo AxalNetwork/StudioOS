@@ -133,6 +133,8 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
     for (const s of suggested) {
       const m = modelOf(s.t);
       if (!m) continue;
+      // #3936: a kind may drop what the canvas lists but the kind's work cannot use (Listen lists no text model).
+      if ((shape.drop ?? []).some((c) => m.caps.includes(c))) continue;
       const id = onIndex && m.caps.includes('embedding') ? overrides.searchIndexModel : m.id;
       if (out.some((x) => x.id === id)) continue; // a second index model on axal-search collapses into the first
       out.push({ id, role: s.role, line: s.line });

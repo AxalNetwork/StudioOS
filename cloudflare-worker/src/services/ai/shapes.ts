@@ -541,7 +541,8 @@ export function searchIndexAccepts(model: string, vector: unknown): boolean {
  */
 export const websocketUnits = (minutes: number): Units => ({ audio_minutes_websocket: Number.isFinite(minutes) && minutes > 0 ? minutes : 0 });
 
-export interface SpeakInput { voice?: string; lang?: string }
+/** #3936: `format: 'opus_ogg'` asks for Opus in Ogg (GR9's voice notes), which only Aura makes. */
+export interface SpeakInput { voice?: string; lang?: string; format?: 'opus_ogg' }
 /** One request's text, at most: Aura bills per 1k characters, and the router bounds what one press can cost. */
 export const MAX_SPEAK_CHARS = 2000;
 /** The largest audio a voice may return before it is not one sentence's speech. */
@@ -562,11 +563,13 @@ export function speakRefusal(s: SpeakInput | undefined, text: string | undefined
   if (text.length > MAX_SPEAK_CHARS) return `at most ${MAX_SPEAK_CHARS} characters`;
   if (s.voice != null && (typeof s.voice !== 'string' || !VOICE_RE.test(s.voice))) return 'the voice is a speaker name';
   if (s.lang != null && (typeof s.lang !== 'string' || !LANG2_RE.test(s.lang))) return 'the language is a two-letter code';
+  if (s.format != null && s.format !== 'opus_ogg') return 'the format is opus_ogg or none';
   return null;
 }
 
 /**
- * The request a voice takes: Aura's `{ text, speaker?, encoding: 'mp3' }`, or
+ * The request a voice takes: Aura's `{ text, speaker?, encoding: 'mp3' }` (or Opus in
+ * Ogg when `format` asks for it, #3936), or
  * MeloTTS's `{ prompt, lang? }`. A speaker the model does not list is refused
  * (null), so the chain moves on rather than speaking in another voice; MeloTTS
  * has one voice per language and lists no speaker, so any named one is refused.
@@ -575,14 +578,17 @@ export function speakRequest(model: string, text: string, s: SpeakInput): Record
   const speakers = AURA_SPEAKERS[model];
   if (speakers) {
     if (s.voice != null && !speakers.includes(s.voice)) return null;
-    return { text, encoding: 'mp3', ...(s.voice ? { speaker: s.voice } : {}) };
+    const encoding = s.format === 'opus_ogg' ? { encoding: 'opus', container: 'ogg' } : { encoding: 'mp3' };
+    return { text, ...encoding, ...(s.voice ? { speaker: s.voice } : {}) };
   }
-  if (s.voice != null) return null;
+  // MeloTTS has one voice per language and makes MP3 only.
+  if (s.voice != null || s.format != null) return null;
   return { prompt: text, ...(s.lang ? { lang: s.lang } : {}) };
 }
 
-/** The mime type a voice's bytes are, from their first bytes: MP3 (ID3 or frame sync) or WAV; else MP3, which both models default to. */
+/** The mime type a voice's bytes are, from their first bytes: Ogg (#3936), WAV, or MP3 (ID3 or frame sync), which both models default to. */
 export function speechMime(bytes: Uint8Array): string {
+  if (bytes[0] === 0x4f && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) return 'audio/ogg';
   if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return 'audio/wav';
   return 'audio/mpeg';
 }
