@@ -5,7 +5,7 @@ import { asOfLine } from './fromPosthogModel';
 
 /**
  * D1606 (#3731, #2409 part 4) — PostHog in Build, on the shared "From
- * PostHog" part (D1604). Built from #2409's PH5 and PH8 brief: no canvas was
+ * PostHog" part (D1609). Built from #2409's PH5 and PH8 brief: no canvas was
  * drawn.
  *
  *   PrototypePosthog — Prototype / MVP: tracked metrics (activation by week),

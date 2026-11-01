@@ -4,7 +4,7 @@
  *
  * WHAT A SYNC LANDS, each a fact "From PostHog, as of":
  *   - every metric tracked in either module; each is a KPI row
- *     `posthog-<uid>` on Revenue and traction (D1604), read only from PostHog;
+ *     `posthog-<uid>` on Revenue and traction (D1609), read only from PostHog;
  *   - for a tracked metric whose role is retention, its cohorts by first-seen
  *     week (`retention:<uid>`): shown BESIDE revenue cohort retention,
  *     labelled apart, never written to `monthly_churn_pct` or merged;

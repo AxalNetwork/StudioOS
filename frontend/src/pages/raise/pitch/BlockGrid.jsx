@@ -1,6 +1,7 @@
 import React from 'react';
 import { NOT_RECORDED, blockLabel, tileValue } from './editorModel';
 import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './presentExportModel';
+import { faceOf, projectionOf } from './figuresModel';
 
 export { gridBlocks } from './presentExportModel';
 
@@ -17,10 +18,34 @@ export { gridBlocks } from './presentExportModel';
  * series' source chip; without it a chart is its type and series in words.
  * It is a prop, not an import, so Present and the print page never load the
  * editor's chart tools (and with them the shared UI that reaches the rail).
+ *
+ * D1604 (#3716, pd6, pd24): in the editor a bound tile's face says its
+ * source · grade (`renderFace`, the editor's `SourceChip`, else the same
+ * words in plain text). Present, share and print draw no such badge: only
+ * "Show sources"' line, as before. A chart that reaches past today carries
+ * "Projection" and its footnote in every format (`projectionOf`).
  */
 
+/** The Projection label and footnote under a chart (pd6), wherever the card is drawn. */
+function Projection({ block, colours, small }) {
+  const p = projectionOf(block);
+  if (!p) return null;
+  return (
+    <span className={`flex flex-col ${small}`} style={{ color: colours.muted }} data-testid={`deck-projection-${block.id}`}>
+      <span className="self-start rounded-full border border-dashed px-1.5 font-bold uppercase" style={{ borderColor: colours.muted }}>{p.label} · {p.grade}</span>
+      <span className="italic">{p.note}</span>
+    </span>
+  );
+}
+
+/** The editor's tile face line: source · grade, never the raw key. */
+function faceLine(binding) {
+  const f = faceOf(binding);
+  return f ? `${f.source} · ${f.grade}` : SOURCE_NOT_RECORDED;
+}
+
 /** One block's face. */
-export function BlockView({ block: b, colours, live = false, sources = false, size = 'card', renderChart = null }) {
+export function BlockView({ block: b, colours, live = false, sources = false, size = 'card', renderChart = null, renderFace = null }) {
   const big = size === 'print';
   const heading = big ? 'text-[64px]' : 'text-[20px]';
   const para = big ? 'text-[30px]' : 'text-[12.5px]';
@@ -38,7 +63,7 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
         <span className={`${small} font-bold uppercase`} style={{ color: colours.muted }}>{b.label || 'Metric'}</span>
         <span className={v === NOT_RECORDED ? `${big ? 'text-[26px]' : 'text-[11.5px]'} italic` : `${big ? 'text-[60px]' : 'text-[20px]'} font-extrabold`}>{v}</span>
         {live ? (sources ? <span className={small} style={{ color: colours.muted }}>{sourceOf(b.binding) || SOURCE_NOT_RECORDED}</span> : null)
-          : b.binding ? <span className="text-[10px]" style={{ color: colours.muted }}>{b.binding.source_key} · {b.binding.as_of || 'date not recorded'} · {b.binding.grade || NOT_RECORDED}</span> : null}
+          : b.binding ? (renderFace ? renderFace(b) : <span className="text-[10px]" style={{ color: colours.muted }} data-testid={`deck-block-face-${b.id}`}>{faceLine(b.binding)}</span>) : null}
       </span>
     );
   }
@@ -65,10 +90,15 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
     return live && b.url ? <a href={b.url} target="_blank" rel="noopener noreferrer" className="no-underline" style={{ color: 'inherit' }}>{face}</a> : face;
   }
   if (b.kind === 'graphic') return <span className={big ? 'text-[24px]' : 'text-[11px]'} style={{ color: colours.muted }}>Graphic · {b.graphic || 'none chosen'}</span>;
-  if (b.kind === 'chart' && renderChart) return renderChart(b);
+  if (b.kind === 'chart' && renderChart) {
+    return projectionOf(b)
+      ? <span className="flex h-full flex-col gap-1"><span className="min-h-0 flex-1">{renderChart(b)}</span><Projection block={b} colours={colours} small={small} /></span>
+      : renderChart(b);
+  }
   if (b.kind === 'chart') {
     return (
       <span className={`flex h-full flex-col gap-1 ${big ? 'text-[24px]' : 'text-[11px]'}`}>
+        <Projection block={b} colours={colours} small={small} />
         <b>{chartLabel(b.chart_type)} chart</b>
         {(b.series || []).map((s, i) => (
           <span key={i} style={{ color: colours.muted }}>

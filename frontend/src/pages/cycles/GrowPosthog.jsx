@@ -4,7 +4,7 @@ import { asOfLine } from './fromPosthogModel';
 
 /**
  * D1608 (#3731, #2409 part 6) — PostHog in Grow, on the shared "From PostHog"
- * part (D1604). Built from #2409's PH6, PH7 and PH8 brief: no canvas was drawn.
+ * part (D1609). Built from #2409's PH6, PH7 and PH8 brief: no canvas was drawn.
  *
  *   RevenuePosthog — Revenue and traction: the tracked metrics (each is also
  *     a KPI row "From PostHog", with no Enter by hand) and "Product retention

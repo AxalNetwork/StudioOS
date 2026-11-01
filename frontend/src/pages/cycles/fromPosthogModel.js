@@ -1,4 +1,4 @@
-// D1604 (#3731, #2409 part 2) — the words and figures of a module's "From
+// D1609 (#3731, #2409 part 2) — the words and figures of a module's "From
 // PostHog" part, kept apart from the drawing so a test can hold them.
 //
 // A figure is a number, or a dash with its reason: never 0 for a value that

@@ -18,10 +18,10 @@
  * named, never replaced. The project must be one the member's own PostHog
  * lists, so nobody links a project they cannot open.
  *
- *   GET /:uid/posthog-insights?project=&q=   D1604: the saved insights of the
+ *   GET /:uid/posthog-insights?project=&q=   D1609: the saved insights of the
  *       venture's linked PostHog project, for "Track a metric" (`insights-list`).
  *
- * D1604 (#3731 part 2): `/api/cycles` (`posthogCycleRoutes`, ahead of the
+ * D1609 (#3731 part 2): `/api/cycles` (`posthogCycleRoutes`, ahead of the
  * cycle routers so `/:section/posthog` is never read as a module):
  *   GET    /:section/posthog?project=&module=           the module's From PostHog
  *   POST   /:section/posthog/tracked                    { project, module, insight_short_id, role }
@@ -248,7 +248,7 @@ export function createPosthogRouter(deps: PosthogRouteDeps = {}) {
     return c.json({ ok: true, project_id: projectId, link: { posthog_project_id: link.posthog_project_id, name: link.posthog_project_name, region: link.region, organization_id: link.posthog_org_id, linked_at: link.linked_at } });
   }));
 
-  // D1604: the saved insights of the venture's linked project, for "Track a metric".
+  // D1609: the saved insights of the venture's linked project, for "Track a metric".
   router.get('/:uid/posthog-insights', route(async (c, user) => {
     const row = await connection(c, user);
     const projectId = Number(c.req.query('project'));
@@ -265,7 +265,7 @@ export function createPosthogRouter(deps: PosthogRouteDeps = {}) {
 const posthogRouter = createPosthogRouter();
 export default posthogRouter;
 
-// ═════════════════════════════════════════════ D1604: a module's From PostHog
+// ═════════════════════════════════════════════ D1609: a module's From PostHog
 
 export function createPosthogCycleRouter(deps: PosthogRouteDeps = {}) {
   const router = new Hono<{ Bindings: Env }>();

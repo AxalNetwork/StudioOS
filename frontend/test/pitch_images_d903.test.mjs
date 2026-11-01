@@ -9,7 +9,10 @@
  *     short balance holding Generate, AI off;
  *   · PD12b, PD12c: "Keep as background" waits until the contrast reads 4.5:1;
  *   · an upload showing a person waits for their agreement;
- *   · PD12d: the toolbar's Crop, Fit and Alt text, and the line under the card.
+ *   · PD12d: the toolbar's Crop, Fit and Alt text, and the line under the card;
+ *   · D1604 (#3716): the entry is the area lightbox's Generated photo, one
+ *     image drawn for the selected area's shape, quoted first, kept on Accept
+ *     and discarded on Discard; "More image options" opens this lightbox.
  *
  * Every venture, card and image is synthetic.
  *
@@ -30,6 +33,8 @@ import {
   REAL_PERSON, askBody, contrastLine, costLine, defaultDescription, imageTag, keepLabel, overlayStyle, placeImage, placedLine,
 } from '../src/pages/raise/pitch/imageModel.js';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { mountEditor } from './_pitch_editor_mount.mjs';
+import { rowPlan } from '../src/pages/raise/pitch/areaLightboxModel.js';
 
 const h = React.createElement;
 const MODEL = { grid: { cols: 12, rows: 6 } };
@@ -214,4 +219,78 @@ test('PD12d: Crop, Fit and Alt text patch the block; the line under the card nam
     assert.equal(up.by('pitch-image-regenerate'), undefined, 'an upload has nothing to regenerate');
     assert.match(up.text(up.by('pitch-image-placed')), /Alt text: None yet/);
   } finally { await up.unmount(); }
+});
+
+// ── D1604: the area lightbox's Generated photo ───────────────────────────────
+
+const GENERATED = { ...IMAGE, uid: 'synthetic-g1', url: 'https://synthetic.example/g1.png', alt: 'Synthetic heading' };
+const photoAnswers = (over = {}) => ({
+  'prefs.page': async () => ({ ok: true, models: [{ id: 'flux', name: 'FLUX.1 Schnell', price: '$0.0019' }], pick: 'flux' }),
+  'assist.quote': async () => ({ ai: true, hold_microusd: 1000 }),
+  'images.quote': async () => ({ ...QUOTE, count: 1, total_microusd: 1880 }),
+  'images.generate': async () => ({ images: [GENERATED] }),
+  'images.keep': async (uid) => ({ image: { ...GENERATED, uid, state: 'kept' } }),
+  'images.discard': async () => ({ ok: true }),
+  ...over,
+});
+async function photoRow(m) {
+  await m.press(m.by('pitch-editor-area-free:8-4'));
+  await m.press(m.by('pitch-editor-ask-area'));
+  await m.press(m.by('pitch-areas-row-free:8-4-element'));
+  await m.press(m.by('pitch-areas-row-free:8-4-pick-photo'));
+}
+
+test('D1604: the lightbox\'s Generated photo is quoted for the area\'s shape, runs under deck:image, and keeps on Accept', async () => {
+  const plan = rowPlan({ area: { id: 'free:1-1', kind: 'free', grid: { c1: 1, c2: 12, r1: 1, r2: 6 } }, element: 'illustration', card: CARD, cardIndex: 4 });
+  assert.deepEqual([plan.run, plan.option, plan.body.style, plan.body.aspect, plan.body.count, plan.body.card], ['image', 'deck:image', 'flat', '16:9', 1, 4]);
+  assert.equal(plan.body.description, defaultDescription(CARD), 'described from the card, without its figures');
+  const m = await mountEditor({ answers: photoAnswers() });
+  try {
+    await photoRow(m);
+    const quote = m.calls.filter((c) => c[0] === 'images.quote').at(-1);
+    assert.deepEqual([quote[2].use, quote[2].count, quote[2].aspect, quote[2].card], ['content', 1, '1:1', 0]);
+    assert.equal(m.text(m.by('pitch-areas-hold')), 'Holds up to $0.0019 · you pay what it uses');
+    assert.equal(m.calls.filter((c) => c[0] === 'images.generate').length, 0, 'nothing runs until Generate');
+    await m.press(m.by('pitch-areas-generate'));
+    const run = m.calls.find((c) => c[0] === 'images.generate');
+    assert.equal(run[3]['X-Rail-Option'], encodeURIComponent('deck:image'));
+    assert.match(m.text(m.by('pitch-area-result-free:8-4-pill')), /Proposed · FLUX\.1 Schnell · \$0\.0019/);
+    await m.press(m.by('pitch-area-result-free:8-4-accept'));
+    assert.deepEqual(m.calls.find((c) => c[0] === 'images.keep').slice(1), ['synthetic-g1', { use: 'content', alt: 'Synthetic heading' }]);
+    assert.ok(m.walk(m.by('pitch-editor-blocks')).some((x) => m.pr(x).src === GENERATED.url), 'the image is on the card');
+  } finally { await m.close(); }
+});
+
+test('D1604: Discard releases a generated photo and places nothing; More image options opens the image lightbox', async () => {
+  const m = await mountEditor({ answers: photoAnswers() });
+  try {
+    await photoRow(m);
+    await m.press(m.by('pitch-areas-generate'));
+    await m.press(m.by('pitch-area-result-free:8-4-discard'));
+    assert.deepEqual(m.calls.find((c) => c[0] === 'images.discard').slice(1), ['synthetic-g1']);
+    assert.ok(!m.calls.some((c) => c[0] === 'images.keep'));
+    assert.match(m.text(m.by('pitch-area-result-free:8-4-decided')), /Discarded\. Nothing was placed\./);
+    const onCard = m.walk(m.by('pitch-editor-blocks')).some((x) => m.pr(x).src === GENERATED.url);
+    assert.equal(onCard, false, 'nothing placed on the card');
+  } finally { await m.close(); }
+  const n = await mountEditor({ answers: photoAnswers() });
+  try {
+    await photoRow(n);
+    await n.press(n.by('pitch-areas-row-free:8-4-image-options'));
+    assert.ok(!n.by('pitch-areas'), 'the area lightbox gives way');
+    assert.ok(n.by('pitch-image-lightbox'), 'D903\'s lightbox, for style, palette and backgrounds');
+  } finally { await n.close(); }
+});
+
+test('D1604: deckImagesApi.plan reads GET /api/decks/:id/images/plan, a route on main', async () => {
+  // Mutation checked: point plan at `/decks/:id/images` → the path differs and this fails.
+  const seen = [];
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    seen.push([init.method || 'GET', String(url).replace(/^.*?\/api\//, '/api/').replace(/\?.*$/, '')]);
+    return new Response('{"capability":{"available":true},"cards":[]}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const restore = installDocument();
+  try { await deckImagesApi.plan('12 a'); } finally { globalThis.fetch = orig; restore(); }
+  assert.deepEqual(seen, [['GET', '/api/decks/12%20a/images/plan']]);
 });

@@ -5,7 +5,7 @@
  * adapted here until their registry owners merge; no registry is changed early.
  *
  * D1328 (#3489, part 5 of #2431): `fill` (`{ page, form, project, aiOff,
- * edited? }`) mounts Fill with Eadwyn on a form FILL_FIELDS lists. The form
+ * edited?, record? }`; #3740: `record` is the row an Edit form changes) mounts Fill with Eadwyn on a form FILL_FIELDS lists. The form
  * reads `GET /api/fills/sheet` once: a blank field the read gives a trigger
  * draws "Fill [field] with Eadwyn" beside its label, and the form draws its
  * "Fill" (AF3). Both open the one `FillSheet`. Accept places the values in
@@ -265,17 +265,21 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     if (!fill || refused || readOnly) return undefined;
     let live = true;
     setFillRead({ status: 'loading', data: null });
-    Promise.resolve().then(() => fillsApi.sheet({ page: fill.page, form: fill.form, project: fill.project }))
+    // #3740: an Edit names its row, so the sheet reads the saved values and offers only the blank ones.
+    Promise.resolve().then(() => fillsApi.sheet({ page: fill.page, form: fill.form, project: fill.project, record: fill.record ?? null }))
       .then((data) => { if (live) setFillRead({ status: 'ready', data }); },
         (error) => { if (live) { reportError('fill-form:read', error); setFillRead({ status: 'unreadable', data: null }); } });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fill?.page, fill?.form, fill?.project, fillTick, readOnly]);
+  }, [fill?.page, fill?.form, fill?.project, fill?.record, fillTick, readOnly]);
   const fillFields = fillRead?.status === 'ready' && Array.isArray(fillRead.data?.fields) ? fillRead.data.fields : [];
   const fillNames = fillFields.map((f) => f.field);
+  // #3740: a form no field of which is offered to Eadwyn (Revenue and traction's KPI: connectors only)
+  // draws the neutral glyph, "Ask (from your sources)", with AI on as well.
+  const sourcesOnly = fillFields.length > 0 && !fillFields.some((f) => f.offered_to_eadwyn);
   const fillCtl = !readOnly && fill && fillRead?.status === 'ready' ? {
     field: (name) => fillFields.find((f) => f.field === name) || null,
-    placed, aiOff: !!fill.aiOff, open: () => setFillOpen(true),
+    placed, aiOff: !!fill.aiOff || sourcesOnly, open: () => setFillOpen(true),
   } : null;
   const fillable = fillFields.some((f) => f.trigger && blankValue(values[f.field]) && !stillPlaced(placed, f.field, values[f.field]));
   const placedCount = fillNames.filter((n) => stillPlaced(placed, n, values[n])).length;
@@ -288,7 +292,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const afterSave = async (result, sent) => {
     if (!fill) return;
     const uids = placedProposals(placed);
-    const id = savedId(result);
+    const id = savedId(result) ?? fill.record ?? null;
     if (uids.length && id) {
       try { await fillsApi.record({ page: fill.page, form: fill.form, project: fill.project, record: id, proposals: uids }); }
       catch (error) { reportError('fill-form:record', error); }
@@ -360,13 +364,13 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
           <span className="text-xs text-axal-muted dark:text-gray-400" data-testid="fill-form-placed">{placedCount
             ? `${placedCount} ${placedCount === 1 ? 'value' : 'values'} placed. Nothing is saved until you press ${cleanFormCopy(base.cta || base.button || 'Save')}.`
             : fill.aiOff ? 'Ask fills the blank fields from your sources only.' : 'Ask Eadwyn to fill the blank fields, or fill them from your sources.'}</span>
-          {fillable ? <FillFormTrigger aiOff={!!fill.aiOff} disabled={busy} onOpen={() => setFillOpen(true)} /> : null}
+          {fillable ? <FillFormTrigger aiOff={!!fill.aiOff || sourcesOnly} disabled={busy} onOpen={() => setFillOpen(true)} /> : null}
         </div> : null}
         {loaded && fields.map((field) => <Field key={field.name} field={readOnly ? { ...field, note: null, hint: null } : field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy || !!readOnly} search={finder} fill={fillCtl} />)}
         {loaded && !readOnly && renderAssistant?.({ fields, values, setValue, busy })}
       </>}
     </form>}
-    {fillOpen && fill && !readOnly ? <FillSheet page={fill.page} form={fill.form} project={fill.project} title={cleanFormCopy(base.title || 'this form').toLowerCase()}
+    {fillOpen && fill && !readOnly ? <FillSheet page={fill.page} form={fill.form} project={fill.project} record={fill.record ? { id: fill.record } : null} title={cleanFormCopy(base.title || 'this form').toLowerCase()}
       values={Object.fromEntries(fillNames.map((n) => [n, values[n]]))} aiOff={!!fill.aiOff} onPlace={place} onClose={() => setFillOpen(false)} /> : null}
   </Lightbox>;
 }

@@ -8,7 +8,7 @@ import {
 } from './fromPosthogModel';
 
 /**
- * D1604 (#3731, #2409 part 2) — a module's "From PostHog" part, shared by every
+ * D1609 (#3731, #2409 part 2) — a module's "From PostHog" part, shared by every
  * module PostHog feeds (parts 3–6 mount it). It reads
  * `GET /api/cycles/:section/posthog?project&module` and draws:
  *   - the module's tracked metrics, each a figure "From PostHog, as of <date>"

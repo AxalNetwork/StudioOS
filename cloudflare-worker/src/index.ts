@@ -36,6 +36,7 @@ import authRecover from './routes/auth_recover';
 // /api/auth (magic link + TOTP); never the only path in. See
 // routes/auth_google.ts for the linking precedence and step-up rules.
 import authGoogle from './routes/auth_google';
+import { SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
 import authPasskey from './routes/auth_passkey';
 import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
@@ -1383,7 +1384,7 @@ app.route('/api/research', researchSectors);
 // D664 (#1477): the Grow cycle's overview, module reads and store writes.
 // D1086 (#2951): each section's Notion sync, ahead of the cycle routers so `/:section/notion` is never read as a module.
 app.route('/api/cycles', notionCycleRoutes);
-// D1604 (#3731): each module's From PostHog, ahead of the cycle routers for the same reason.
+// D1609 (#3731): each module's From PostHog, ahead of the cycle routers for the same reason.
 app.route('/api/cycles', posthogCycleRoutes);
 app.route('/api/cycles/grow', cycleGrow);
 app.route('/api/research', research);
@@ -2017,6 +2018,14 @@ export default {
         }
         return assetRes;
       }
+    }
+    // D1439 (#3914): a shared record link previews as itself. Before Hono, so
+    // the SPA shell never takes the Worker's nonce CSP or `no-referrer`; the
+    // shell's own headers come from `SHELL_HEADERS`. Only the prefixes in
+    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists).
+    if (env.ASSETS && SOCIAL_CARD_GLOBS.some((g) => pathname.startsWith(g.slice(0, -1)))) {
+      const card = await serveSocialCard(request, env);
+      if (card) return card;
     }
     // Static asset fallback and public page rendering need neither JWT secrets
     // nor role-schema repairs. With an apex-wide route, running those D1

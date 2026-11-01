@@ -6,7 +6,7 @@ import { asOfLine, figureText, refusalOf } from './fromPosthogModel';
 
 /**
  * D1605 (#3731, #2409 part 3) — PostHog in Validate, on the shared "From
- * PostHog" part (D1604). Built from #2409's PH4 and PH8 brief: no canvas was
+ * PostHog" part (D1609). Built from #2409's PH4 and PH8 brief: no canvas was
  * drawn.
  *
  *   ValidateExperimentsPosthog — Experiments and evidence: each experiment's

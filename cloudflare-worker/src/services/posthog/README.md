@@ -9,6 +9,12 @@ hosted MCP server.
   projects, saved insights and their results, trends, funnel, retention and
   lifecycle queries of their own kind only, the web overview, experiments,
   surveys and their answers, and feature flags.
+- `deckFacts.ts` — D1601 (#3880): what a pitch deck reads from a venture's
+  PostHog: its linked project (`posthogDeckLink`, the connection active and
+  switched on for the venture's company) and the facts #3731's feeds store
+  for it. No feed stores one yet, so `posthogDeckFacts` is empty and
+  `posthogWauWeekly` null, and the deck says "not recorded". It never calls
+  PostHog.
 
 The rules for adding to this folder:
 
@@ -26,7 +32,7 @@ The rules for adding to this folder:
   and nothing is requested.
 - **Nothing is logged** but codes and counts.
 
-- `metrics.ts` — D1604 (#3731 part 2): the metrics foundation. A tracked
+- `metrics.ts` — D1609 (#3731 part 2): the metrics foundation. A tracked
   metric is a saved insight the founder picked and gave a role and a module;
   its `uid` names the venture's KPI `posthog-<uid>` (`growKpis.ts`).
   `landFact` writes one aggregate and its `connector_fed_items` row, and a
@@ -43,6 +49,7 @@ The rules for adding to this folder:
   hypothesis and direction, through `addExperiment` and `addEvidence`) and
   `survey_signal` (through `writeDemandSignal`). It registers itself on import.
 
+PostHog parts 4–6 (#3731) add their syncs and acceptors beside these files
 - `build.ts` — D1606 (#3731 part 4): Build's sync (tracked metrics, each
   flag's daily state), the `flag_link` acceptor (the founder's must-have) and
   the `flag_shipped` acceptor (Done after 14 days active at 100%), the roadmap
@@ -59,4 +66,5 @@ The rules for adding to this folder:
   email).
 
 Every section's sync and acceptor now lives beside these files
+PostHog part 6 (#3731) adds its sync and acceptor beside these files
 and read PostHog through `reads.ts` alone.

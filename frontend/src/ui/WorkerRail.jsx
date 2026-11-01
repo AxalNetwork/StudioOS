@@ -19,6 +19,7 @@ import { useRailCrumbs, useRailPage } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent } from './eadwynPanel.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
+import { RailGroups, RailUsageExtra } from './RailGroups';
 import { ACCENT } from '../workspaces/shellConfig';
 import { PHONE_QUERY } from '../workspaces/lens.jsx';
 import { useViewMode } from '../contexts/ViewModeContext';
@@ -371,7 +372,7 @@ export const topUpState = (product, productError) => aiTokenState({ error: produ
  * `/account/usage`. While a hold waits on HQ every new run is refused
  * (`services/aiBudget.ts`), so the box says Runs paused, as an alert.
  */
-export function RailUsage({ reading }) {
+export function RailUsage({ reading, hideHeld = false }) {
   if (reading.loading) return <p className="fwr-absent">Loading…</p>;
   const b = reading.budget;
   if (reading.budgetError || !budgetReadable(b)) {
@@ -419,9 +420,9 @@ export function RailUsage({ reading }) {
           </div>
         );
       })}
-      <div className="fwr-usage-line" data-testid="text-worker-rail-usage-held">
+      {hideHeld ? null : <div className="fwr-usage-line" data-testid="text-worker-rail-usage-held">
         <span>Held by runs in progress</span><b title={microMoney(b.month_reserved_microusd + b.topup_reserved_microusd)}>{usageMoney(b.month_reserved_microusd + b.topup_reserved_microusd)}</b>
-      </div>
+      </div>}
       <div className="fwr-usage-line" data-testid="text-worker-rail-usage-balance">
         <span>Top-up balance</span><b>{microMoney(b.balance_microusd)}</b>
       </div>
@@ -462,6 +463,13 @@ export default function WorkerRail({
    * switch while AI is on.
    */
   note,
+  /**
+   * D1604 (#3716): a host's element groups (`ui/RailGroups.jsx`), drawn in
+   * place of the page's one suggestion block: `{ page, items, presets, usage }`
+   * (the pitch pages pass `deckRail()` from `pages/raise/pitch/deckRailGroups.js`).
+   * Models and consumption only. Without it, nothing changes.
+   */
+  groups = null,
   'data-testid': testId = 'worker-rail',
 }) {
   const pathname = useRailPathname();
@@ -538,7 +546,7 @@ export default function WorkerRail({
   });
   // D769: each All models row's price, from the Worker's rate card.
   const rates = railRates(useRailRates());
-  const groups = priceGroups(rail.groups, rates);
+  const allGroups = priceGroups(rail.groups, rates);
   const pick = useCallback((id) => {
     if (!pageKey) return;
     setPicked(id);
@@ -672,7 +680,10 @@ export default function WorkerRail({
 
       {/* SUGGESTED FOR THIS PAGE (AIR:23-28). */}
       <section className="fwr-sug" data-ai={aiOn ? 'on' : 'off'} data-testid="worker-rail-suggestions">
+        {aiOn && groups && <RailGroups groups={groups} page={pageKey} live={live} guardLine={rates.guardOn ? guardSentence(rates) : SAFETY_LINE} />}
         {aiOn && (
+        <>
+        {!groups && (
         <>
         <span className="fwr-eyebrow">Suggested for this page</span>
         {rail.state === 'loading' && <p className="fwr-absent">Loading…</p>}
@@ -743,7 +754,9 @@ export default function WorkerRail({
             </ul>
           </div>
         )}
-        {rail.state === 'ready' && groups.length > 0 && (
+        </>
+        )}
+        {rail.state === 'ready' && allGroups.length > 0 && (
           <>
             <button
               type="button"
@@ -758,7 +771,7 @@ export default function WorkerRail({
             {showAll && (
               <div className="fwr-groups" data-testid="worker-rail-all-models">
                 <p className="fwr-price-note" data-testid="text-worker-rail-price-note">{PRICE_NOTE}</p>
-                {groups.map((g) => (
+                {allGroups.map((g) => (
                   <div key={g.title} className="fwr-group">
                     <div className="fwr-group-title">{g.title}</div>
                     <div className="fwr-rows">
@@ -804,13 +817,14 @@ export default function WorkerRail({
         )}
         </>
         )}
-        <p className="fwr-safety" data-testid="text-worker-rail-safety">{rates.guardOn ? guardSentence(rates) : SAFETY_LINE}</p>
+        {!(aiOn && groups) && <p className="fwr-safety" data-testid="text-worker-rail-safety">{rates.guardOn ? guardSentence(rates) : SAFETY_LINE}</p>}
       </section>
 
       {/* USAGE (AIR:30-36): the allowance ledger, D629. */}
       <section className="fwr-usage" data-testid="worker-rail-usage">
         <span className="fwr-eyebrow">Usage</span>
-        <RailUsage reading={budgetReading} />
+        <RailUsage reading={budgetReading} hideHeld={Boolean(groups?.usage?.some((r) => r.id === 'held'))} />
+        {groups ? <RailUsageExtra rows={groups.usage} /> : null}
       </section>
     </div>
   );

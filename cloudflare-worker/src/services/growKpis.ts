@@ -15,7 +15,7 @@
  *   runway            refused (cash and burn)           runwayMonths(latest cash_balance, latest net_burn)
  *   custom-<uid>      custom_kpi_values                 the latest value
  *   posthog-<uid>     refused ("This figure comes from    the latest PostHog fact of a tracked metric
- *                     PostHog.")                          (D1604, services/posthog/metrics.ts)
+ *                     PostHog.")                          (D1609, services/posthog/metrics.ts)
  *
  * A hand entry is `source = 'manual'`, one KPI per call, and a second entry
  * for the same KPI on the same day updates that day's manual row. A typed
@@ -115,7 +115,7 @@ export async function customKpis(env: Env, projectId: number): Promise<CustomKpi
 }
 
 /**
- * A PostHog read for the KPI table (D1604). When the PostHog stores cannot be
+ * A PostHog read for the KPI table (D1609). When the PostHog stores cannot be
  * read, the table still answers with its other rows: the failure is logged
  * without a value and no PostHog row is shown.
  */
@@ -126,7 +126,7 @@ async function posthogRead<T>(read: () => Promise<T>, none: T): Promise<T> {
   }
 }
 
-/** Every KPI key the venture has: the seven, each custom KPI's `custom-<uid>`, then each tracked PostHog metric's `posthog-<uid>` (D1604). */
+/** Every KPI key the venture has: the seven, each custom KPI's `custom-<uid>`, then each tracked PostHog metric's `posthog-<uid>` (D1609). */
 export async function kpiKeys(env: Env, projectId: number): Promise<string[]> {
   return [
     ...KPI_KEYS,
@@ -235,7 +235,7 @@ export async function kpiRows(env: Env, projectId: number, now: number): Promise
     burn,
     runway,
     ...customRows,
-    // D1604: each tracked PostHog metric, read only from PostHog facts; never written here.
+    // D1609: each tracked PostHog metric, read only from PostHog facts; never written here.
     ...(await posthogRead(() => metricReadings(env, projectId), [])).map(({ metric: m, reading: r }): KpiRow => ({
       id: `${POSTHOG_PREFIX}${m.uid}`, kpi: m.insight_name || ROLE_WORDS[m.role], value: r.value, unit: m.unit,
       change_30d: r.change_30d, source: r.value == null ? null : 'posthog', as_of: r.as_of, period: r.period, reason: r.reason,
@@ -280,7 +280,7 @@ export async function enterKpi(env: Env, projectId: number, userId: number, b: K
   if (!key) throw new KpiRefused(400, 'kpi is required', 'kpi');
   const note = typeof b.note === 'string' && b.note.trim() ? b.note.trim().slice(0, 1000) : null;
   if (REFUSED[key as KpiKey]) throw new KpiRefused(400, REFUSED[key as KpiKey]!, 'kpi');
-  // D1604: a PostHog metric is read from PostHog only; nothing typed stands in for it.
+  // D1609: a PostHog metric is read from PostHog only; nothing typed stands in for it.
   if (key.startsWith(POSTHOG_PREFIX)) throw new KpiRefused(400, HAND_ENTRY_REFUSED, 'kpi');
 
   if (key in TYPED_UPSERT) {
