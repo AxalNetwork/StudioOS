@@ -18,11 +18,6 @@ written there once. A new module key must be a slug a cycle already has; a new
 rule book section is one entry in `rulebook.ts`'s `SECTIONS`; the floor only
 grows. An agent runs only through `agentRun.ts`. Part 3 adds the queue.
 `team_agents_d1496.test.ts` covers every file here.
-**The rule for adding here.** Pure files only: no binding, no fetch. A new
-module key must be a slug a cycle already has; a new rule book section is one
-entry in `rulebook.ts`'s `SECTIONS`; the floor only grows. Part 2 adds the run
-(`agentRun.ts`), part 3 the queue. `team_agents_d1496.test.ts` covers both
-files.
 
 ## `skills/` (#3953, D1612)
 
