@@ -1181,7 +1181,7 @@ async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT)",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER)",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
@@ -1201,9 +1201,11 @@ async function ensureLogSchema(env: Env): Promise<void> {
 async function addLogColumns493(env: Env): Promise<void> {
   const cols = await env.DB.prepare('PRAGMA table_info(ai_usage_logs)').all<{ name: string }>();
   const have = new Set((cols.results ?? []).map((c) => c.name));
-  for (const [name, type] of [...LOG_COLUMNS_493, ['agent_id', 'INTEGER'] as const]) {
+  for (const [name, type] of LOG_COLUMNS_493) {
     if (!have.has(name)) await env.DB.exec(`ALTER TABLE ai_usage_logs ADD COLUMN ${name} ${type}`);
   }
+  // Migration 712's column (D1496 part 2): the agent a run was for.
+  if (!have.has('agent_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN agent_id INTEGER');
   await env.DB.exec(LOG_PAGE_INDEX_493);
 }
 
@@ -1217,14 +1219,12 @@ const agentIdOf = (v: unknown): number | null => (Number.isSafeInteger(v) && (v 
 export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: RefusalReason | null, charge: RunCharge = NOTHING_CHARGED): Promise<number | null> {
   await ensureLogSchema(env);
   const charged = charge.charged == null ? null : Math.max(0, Math.round(charge.charged));
-  // D1496 part 2: an agent's run names its agent (migration 712's column, after `surface`);
-  // every other row keeps the statement it always had.
-  const agentId = agentIdOf(who.agentId);
-  // `surface` stays the last column bound before `agent_id`, as it was before migration 493.
+  // `surface` stays the last column bound before migration 712's `agent_id` (D1496 part 2:
+  // the agent a run was for, NULL on every member's own run).
   const insert = () => env.DB.prepare(
     `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
-       charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface${agentId ? ', agent_id' : ''})
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${agentId ? ', ?' : ''})`,
+       charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface, agent_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     who.userId,
     usage.task,
@@ -1245,7 +1245,7 @@ export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, ref
     charge.units ? JSON.stringify(charge.units) : null,
     charge.guardFor ?? null,
     normaliseSurface(who.surface),
-    ...(agentId ? [agentId] : []),
+    agentIdOf(who.agentId),
   ).run();
   // The row's id, which a guard row names in `guard_for` (D763); null when it could not be written.
   const idOf = (r: unknown): number | null => {
