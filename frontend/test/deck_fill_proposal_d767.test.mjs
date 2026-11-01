@@ -17,7 +17,7 @@ const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
 test('the studio\'s fill proposes and never writes: it opens the proposal at New deck', () => {
   const src = codeOnly(read('src/pages/raise/pitch/StudioActions.jsx'));
-  const fill = src.slice(src.indexOf('export function FillFromProject'), src.indexOf('export function SpinoutReadiness'));
+  const fill = src.slice(src.indexOf('export function AskDraftFromProject'), src.indexOf('export function SpinoutReadiness'));
   assert.match(fill, /await api\.deckAutofill\(deck\.id, railPressHeaders\('form:deck'\)\)/);
   assert.match(fill, /navigate\(proposalHref\(NEW_PATH, q, r\.proposal\.id\)\)/);
   // Mutation checked: keep the proposal on arrival → this fails.

@@ -325,7 +325,8 @@ test('refusals: model_unpriced, and model_not_offered for a beta model', async (
   const aiStub = makeAI();
   const ok = await runWithFallback('@cf/meta/llama-3.1-8b-instruct-fp8', routerEnv(aiStub));
   assert.equal(ok.ok, true);
-  assert.deepEqual(aiStub.calls, ['@cf/qwen/qwen2.5-coder-32b-instruct']);
+  // D1478 §3937 fix 1: `tool_call` runs glm-4.7-flash first.
+  assert.deepEqual(aiStub.calls, ['@cf/zai-org/glm-4.7-flash']);
 });
 
 // ── the reads ────────────────────────────────────────────────────────────────

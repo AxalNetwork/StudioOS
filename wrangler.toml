@@ -94,6 +94,8 @@ custom_domain  = true
 # Open Graph tags (`services/socialCards.ts`), setting the `_headers` values
 # itself. These are `[assets]` globs, never a path-scoped apex route. Patterns
 # use the same syntax as Workers routes (`*` wildcards, not regex).
+# The five token-link prefixes (`/esign/*` … `/join/*`) are #3916's Part D:
+# the Worker gives them the static "Sign in to view" card, with no D1 call.
 #
 # Vite is configured (frontend/vite.config.js) to build into the
 # repo-root `./docs/` directory. The path dates from when GitHub Pages
@@ -122,7 +124,7 @@ not_found_handling = "single-page-application"
 # URL, and the one every `location.replace('/login')` uses — and sends
 # `/login/` to `/login` once.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -760,7 +762,7 @@ not_found_handling = "single-page-application"
 # production deploy that kept the default would 307 `/login` back to
 # `/login/` — the URL Safari crashes on.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get

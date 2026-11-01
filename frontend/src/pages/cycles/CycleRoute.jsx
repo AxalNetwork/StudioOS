@@ -36,6 +36,7 @@ import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { CYCLE_GUTTER, RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
+import RaiseLead, { RaiseAsk } from './RaiseOverviewLead';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
@@ -828,6 +829,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D685 §5.12: the phone focus reads the overview as sent; adapting a card replaces its series.
   const [rawOverview, setRawOverview] = useState(null);
   const [overviewStatus, setOverviewStatus] = useState('loading');
+  // D1466 (#3714, RO15): a 403 or 404 on the overview is a refusal, drawn as the Worker's sentence.
+  const [overviewMessage, setOverviewMessage] = useState('');
   const [module, setModule] = useState(null);
   const [moduleStatus, setModuleStatus] = useState('loading');
   // D693 decision 7: a read refused on purpose keeps the Worker's sentence.
@@ -914,7 +917,12 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         if (typeof data?.can_read_decisions === 'boolean') setCanReadDecisions(data.can_read_decisions);
         setRawOverview(data); setOverview(adaptOverview(cycle, data)); setOverviewStatus('ready');
       })
-      .catch(() => { if (alive) setOverviewStatus('unreadable'); });
+      .catch((error) => {
+        if (!alive) return;
+        const refused = [403, 404].includes(error?.status);
+        setOverviewMessage(refused ? error?.message || '' : '');
+        setOverviewStatus(refused ? 'refused' : 'unreadable');
+      });
     return () => { alive = false; };
   }, [record, cycle, slug, reporting, buildPlan, projectId, reload, def]);
 
@@ -1159,7 +1167,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     // the overview and `AlsoIn`, never beside them. Both read the same overview.
     const overviewState = projectStatus === 'unreadable' ? 'unreadable' : overviewStatus;
     body = phone ? (
-      <PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId}
+      <PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId} message={overviewMessage}
         openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetry={() => setReload((n) => n + 1)} />
     ) : (
       <>
@@ -1167,14 +1175,19 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           cycle={cycle}
           data={overview}
           status={overviewState}
+          message={overviewStatus === 'refused' ? overviewMessage : undefined}
           onRetry={() => setReload((n) => n + 1)}
           onRetryCard={retryCard}
           action={action}
           search={q}
+          // D1466 (#3714): Raise's lead row (Next steps, From your tools), drawn from the read's own parts.
+          lead={cycle === 'raise' ? <RaiseLead data={rawOverview} search={q} onRetry={() => setReload((n) => n + 1)} /> : null}
           // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
           // D1321 (#3482): Publish to… from Grow's overview, on part 2's gate (D1333's `publish`).
           more={cycle === 'grow' && projectId ? <PublishTo part={rawOverview?.publish} projectId={projectId} module="overview" /> : null}
+          // D1466 (RO00): Raise's header Ask, beside Build your deck.
+          ask={cycle === 'raise' && projectId ? <RaiseAsk /> : null}
         />
         {cycle === 'grow' && <PublishedFromHere part={rawOverview?.publish} />}
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}

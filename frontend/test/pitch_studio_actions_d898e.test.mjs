@@ -25,7 +25,7 @@ import { api } from '../src/lib/api.js';
 import { StudioDecks } from '../src/pages/raise/pitch/PitchStudio.jsx';
 import { BrandingCard, SpinoutReadiness } from '../src/pages/raise/pitch/StudioActions.jsx';
 import {
-  SPINOUT_METHOD, WATERMARK_BAD, WATERMARK_PLAN, brandingView, fillRefusal, isSpinoutDeck, markRecommended,
+  SPINOUT_METHOD, WATERMARK_BAD, WATERMARK_PLAN, brandingView, draftRefusal, isSpinoutDeck, markRecommended,
   proposalHref, readinessView, recommendReason, watermarkInput, watermarkSentence,
 } from '../src/pages/raise/pitch/studioActionsModel.js';
 import { startOptions } from '../src/pages/raise/pitch/newDeckModel.js';
@@ -56,14 +56,14 @@ test('D1604: no Fill control on the Decks tab, for a writer or a reader; the fil
     assert.doesNotMatch(html, />[^<]*\bFill\b[^<]*</, 'no Fill label on the home');
   }
   const home = read('src/pages/raise/pitch/StudioHome.jsx');
-  assert.doesNotMatch(home, /FillFromProject|api\.deckAutofill\(/, 'the home mounts no fill');
-  assert.doesNotMatch(read('src/pages/raise/pitch/PitchStudio.jsx'), /FillFromProject/);
+  assert.doesNotMatch(home, /AskDraftFromProject|FillFromProject|api\.deckAutofill\(/, 'the home mounts no fill');
+  assert.doesNotMatch(read('src/pages/raise/pitch/PitchStudio.jsx'), /AskDraftFromProject|FillFromProject/);
   // Its proposal opens at New deck's step 4, on this venture.
   assert.equal(proposalHref('/raise/pitch/new', '?project_id=7', 55), '/raise/pitch/new?project_id=7&proposal=55');
   assert.equal(proposalHref('/raise/pitch/new', '', 55), '/raise/pitch/new?proposal=55');
   // A refused fill names its fix.
-  assert.deepEqual(fillRefusal({ status: 409 }, '/raise/pitch/new?project_id=7').link, { href: '/raise/pitch/new?project_id=7', text: 'New deck ›' });
-  assert.equal(fillRefusal({ status: 500, message: 'Synthetic outage.' }).message, 'The fill did not run. Nothing changed. Synthetic outage.');
+  assert.deepEqual(draftRefusal({ status: 409 }, '/raise/pitch/new?project_id=7').link, { href: '/raise/pitch/new?project_id=7', text: 'New deck ›' });
+  assert.equal(draftRefusal({ status: 500, message: 'Synthetic outage.' }).message, 'The draft did not run. Nothing changed. Synthetic outage.');
 });
 
 /* ------------------------------------------------------------------ *

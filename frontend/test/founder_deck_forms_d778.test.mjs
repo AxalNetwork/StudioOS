@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
-import { FillFromProject } from '../src/pages/raise/pitch/StudioActions.jsx';
+import { AskDraftFromProject } from '../src/pages/raise/pitch/StudioActions.jsx';
 import { api } from '../src/lib/api.js';
 import { clearRailPage, railPressHeaders, setRailPage } from '../src/lib/railPage.js';
 import { installDocument, mountContracts } from './_contracts_dom.mjs';
@@ -40,7 +40,7 @@ async function mount() {
   api.deckKeepProposal = async (id) => { calls.push(['keep', id]); return {}; };
   api.deckUpdate = async (...args) => { calls.push(['update', ...args]); return {}; };
   const m = await mountContracts(h(Routes, null,
-    h(Route, { path: '/raise/pitch', element: h(FillFromProject, { deck: DECK, q: '?project_id=7' }) }),
+    h(Route, { path: '/raise/pitch', element: h(AskDraftFromProject, { deck: DECK, q: '?project_id=7' }) }),
     h(Route, { path: '/raise/pitch/new', element: h(Landed) })), '/raise/pitch?project_id=7');
   const byId = (id) => m.nodes().find((n) => m.props(n)?.['data-testid'] === id);
   const press = async (id) => { const b = byId(id); assert.ok(b, `${id} present`); await act(async () => { m.props(b).onClick({ preventDefault() {}, stopPropagation() {} }); }); };
@@ -89,7 +89,7 @@ test('a fill is a proposal: it lands on New deck\'s review of it, and writes not
 test('a refused fill says why, and where to fix it', async () => {
   // Mutation checked: treat every 402 as the plan → a token shortfall points at Plans, not Add tokens.
   const cases = [
-    [Object.assign(new Error('Deck has no template.'), { status: 409, code: 'no_method_id' }), 'no template to fill', 'New deck'],
+    [Object.assign(new Error('Deck has no template.'), { status: 409, code: 'no_method_id' }), 'no template to draft from', 'New deck'],
     [Object.assign(new Error('paywall'), { status: 402, code: 'PAYWALL_PREMIUM_METHOD' }), 'on a paid plan', 'Plans'],
     [Object.assign(new Error('Not enough AI tokens.'), { status: 402, code: 'insufficient_tokens' }), 'Not enough AI tokens.', 'Add tokens'],
   ];
