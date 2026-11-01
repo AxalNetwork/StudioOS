@@ -37,6 +37,7 @@ import { logCycleWriteStatement } from '../services/cycleActivity';
 import { getDeckBrand } from '../services/decks/branding';
 import { imageDataUri, imageUrlsOf, sniffImage, writeOfflineDeck, type ImageKind } from '../services/decks/offlineHtml';
 import { fetchExternalImage } from '../services/decks/imageSafety';
+import type { ExportImageCopies } from '../services/decks/imageCopy';
 import { dohResolver } from '../integrations/customMcp';
 import { copyStoredDeckImages, exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken, themeOfRow } from './decks';
 import { deckCompliance } from '../services/decks/compliance';
@@ -197,9 +198,9 @@ deckExports.post('/:id/export/html', async (c) => {
  * null otherwise. #3655: through the documented `quickAction` (`renderUrl`), one try each
  * under one deadline; a chart that cannot be pictured goes in as words.
  */
-async function chartShotFor(c: any, row: DeckRow, opts: { notes: boolean; sources: boolean }): Promise<ChartShot | null> {
+async function chartShotFor(c: any, row: DeckRow, opts: { notes: boolean; sources: boolean }, imageCopies?: ExportImageCopies): Promise<ChartShot | null> {
   if (typeof c.env.BROWSER?.quickAction !== 'function') return null;
-  const token = await signDeckPrintToken(c.env, row.id, 300, opts);
+  const token = await signDeckPrintToken(c.env, row.id, 300, opts, imageCopies);
   const base = stripTrailingSlashes((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc');
   const deadline = Date.now() + CHART_SHOTS_BUDGET_MS;
   return async (i, r) => {
@@ -245,7 +246,7 @@ deckExports.post('/:id/export/odp', async (c) => {
   const images = await fetchImages(urls);
   const odp = await writeOdp({
     title: row.title || 'Pitch deck', version: row.version ?? null, slides, renderable: pages, images, brand, compliance: deckCompliance(slides, themeOfRow(row)),
-    notes: opts.notes, chartShot: await chartShotFor(c, row, opts),
+    notes: opts.notes, chartShot: await chartShotFor(c, row, opts, copied.imageCopies),
   });
   const hash = await sha256Hex(odp.bytes);
   try {
@@ -305,7 +306,7 @@ deckExports.post('/:id/export/google-slides', async (c) => {
   const brand = await ventureBrand(c.env, Number(row.project_id));
   const images = await fetchImages(imageUrlsOf(slides));
 
-  const chartShot = await chartShotFor(c, row, opts);
+  const chartShot = await chartShotFor(c, row, opts, copied.imageCopies);
   const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)) });
   const hash = await sha256Hex(deck.bytes);
 

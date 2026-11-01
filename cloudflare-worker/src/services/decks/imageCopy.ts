@@ -18,10 +18,36 @@
 import type { Env } from '../../types';
 import { dohResolver, type Resolver } from '../../integrations/customMcp';
 import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
-import { fetchExternalImage, prepareImage } from './imageSafety';
+import { fetchExternalImage, prepareImage, sha256Hex } from './imageSafety';
 
 /** The most outside images one save copies; more is refused rather than slowing a save without end. */
 export const MAX_COPIES_PER_SAVE = 12;
+export type ExportImageCopies = Record<string, string>;
+
+/** Bounded, signed print-link references: URL hashes to stored image ids, never arbitrary URLs. */
+export function checkedExportImageCopies(value: unknown): ExportImageCopies | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value);
+  if (entries.length > MAX_COPIES_PER_SAVE || entries.some(([key, uid]) => !/^[a-f0-9]{64}$/.test(key) || typeof uid !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(uid))) return null;
+  return Object.fromEntries(entries);
+}
+
+const urlHash = (url: string) => sha256Hex(new TextEncoder().encode(url));
+
+/** Apply only this venture's kept image references while rendering a signed export. */
+export async function applyExportImageCopies(env: Env, projectId: number, slides: any[], copies: ExportImageCopies, requestUrl: string): Promise<any[]> {
+  const rows = await env.DB.prepare("SELECT uid FROM deck_images WHERE project_id = ? AND state = 'kept' AND uid IN (SELECT value FROM json_each(?))")
+    .bind(projectId, JSON.stringify(Object.values(copies))).all<{ uid: string }>();
+  const allowed = new Set((rows.results ?? []).map((row) => row.uid));
+  const out = JSON.parse(JSON.stringify(slides));
+  for (const sp of spots(out)) {
+    const value = sp.get();
+    if (typeof value !== 'string') continue;
+    const uid = copies[await urlHash(value)];
+    if (uid && allowed.has(uid)) sp.set(new URL(`/api/decks/images/${uid}/file`, requestUrl).toString(), uid);
+  }
+  return out;
+}
 
 const OWN_PATH = /^\/api\/decks\/images\/[0-9a-f-]{36}\/file$/;
 const OWN_HOSTS = ['axal.vc', 'app.axal.vc'];
@@ -67,7 +93,7 @@ export function externalImageUrls(slides: any[], requestUrl?: string): string[] 
 }
 
 export type CopyDeps = { resolve?: Resolver; fetcher?: typeof fetch };
-export type CopyResult = { ok: true; slides: any[]; copied: number; failed: Array<{ image_url: string; code: string }> } | { ok: false; image_url: string; code: string; status?: number };
+export type CopyResult = { ok: true; slides: any[]; copied: number; failed: Array<{ image_url: string; code: string }>; imageCopies?: ExportImageCopies } | { ok: false; image_url: string; code: string; status?: number };
 
 /**
  * `save` refuses on the first image that cannot be copied (the owner's pick).
@@ -116,18 +142,38 @@ export async function copyExternalImages(
     const key = `deck-images/${o.projectId}/${uid}.${img.ext}`;
     try { await env.FILES.put(key, img.bytes, { httpMetadata: { contentType: img.mime }, customMetadata: { projectId: String(o.projectId), userId: String(o.user.id) } }); }
     catch { if (mode === 'save') return { ok: false, image_url: url, code: 'image_unsaved' }; failed.push({ image_url: url, code: 'image_unsaved' }); continue; }
-    await env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, r2_key, mime, size_bytes, width, height, sha256, source, use, alt, state, created_by, kept_at, kept_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'upload', 'content', '', 'kept', ?, datetime('now'), ?)`)
-      .bind(uid, o.projectId, o.deckId, key, img.mime, img.bytes.byteLength, img.width, img.height, img.sha256, o.user.id, o.user.id).run();
+    const removeUnlinkedCopy = async () => {
+      try { await env.FILES!.delete(key); } catch { console.warn('[deck-image-copy] cleanup_failed'); }
+    };
+    let inserted: { uid: string } | null;
+    try {
+      inserted = await env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, r2_key, mime, size_bytes, width, height, sha256, source, use, alt, state, created_by, kept_at, kept_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'upload', 'content', '', 'kept', ?, datetime('now'), ?)
+        ON CONFLICT DO NOTHING RETURNING uid`)
+        .bind(uid, o.projectId, o.deckId, key, img.mime, img.bytes.byteLength, img.width, img.height, img.sha256, o.user.id, o.user.id).first<{ uid: string }>();
+    } catch {
+      await removeUnlinkedCopy();
+      if (mode === 'save') return { ok: false, image_url: url, code: 'image_unsaved' };
+      failed.push({ image_url: url, code: 'image_unsaved' }); continue;
+    }
+    if (!inserted) {
+      // Another save/export won the hash's unique index after our initial read.
+      await removeUnlinkedCopy();
+      const winner = await env.DB.prepare('SELECT uid FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(o.projectId, img.sha256).first<{ uid: string }>();
+      if (winner) { copies.set(url, winner.uid); continue; }
+      if (mode === 'save') return { ok: false, image_url: url, code: 'image_unsaved' };
+      failed.push({ image_url: url, code: 'image_unsaved' }); continue;
+    }
     await noteStorageLanded(env, ticket);
-    copies.set(url, uid);
+    copies.set(url, inserted.uid);
   }
   for (const sp of spots(slides)) {
     const v = sp.get();
     const uid = typeof v === 'string' ? copies.get(v) : undefined;
     if (uid) sp.set(new URL(`/api/decks/images/${uid}/file`, o.requestUrl).toString(), uid);
   }
-  return { ok: true, slides, copied: copies.size, failed };
+  const imageCopies = Object.fromEntries(await Promise.all([...copies].map(async ([url, uid]) => [await urlHash(url), uid])));
+  return { ok: true, slides, copied: copies.size, failed, imageCopies };
 }
 
 /** The sentence a refused copy shows, by code. */

@@ -25,12 +25,12 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckImages from '../src/routes/deck_images.ts';
 import deckExports from '../src/routes/deck_exports.ts';
-import decks from '../src/routes/decks.ts';
+import decks, { signDeckPrintToken, verifyDeckPrintToken } from '../src/routes/decks.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import {
   MAX_PIXELS, fetchExternalImage, imageUrlRefusal, measure, prepareImage, sha256Hex, stripJpeg, stripMetadata, stripPng, stripWebp,
 } from '../src/services/decks/imageSafety.ts';
-import { externalImageUrls, isOwnImageUrl } from '../src/services/decks/imageCopy.ts';
+import { checkedExportImageCopies, copyExternalImages, externalImageUrls, isOwnImageUrl } from '../src/services/decks/imageCopy.ts';
 import { exportAllowPatterns, renderUrl } from '../src/services/browserRun.ts';
 import { imageInfo } from '../src/services/ai/shapes.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
@@ -235,6 +235,12 @@ async function fixture() {
     const dns = dohAnswer(url, ['inside.example.test']);
     if (dns) return dns;
     fetched.push(url);
+    const own = new URL(url);
+    if (own.origin === ORIGIN && own.pathname.startsWith('/api/decks/images/')) {
+      const row = db.prepare('SELECT r2_key FROM deck_images WHERE uid = ?').get(own.pathname.split('/')[4]) as any;
+      const bytes = row && r2.get(row.r2_key);
+      return bytes ? new Response(bytes, { status: 200 }) : new Response('', { status: 404 });
+    }
     if (url === 'https://img.example.test/a.jpg') return new Response(jpeg(800, 600), { status: 200 });
     if (url === 'https://img.example.test/huge.png') return new Response(png(9000, 9000), { status: 200 });
     if (url === 'https://hop.example.test/r') return new Response(null, { status: 302, headers: { Location: 'https://inside.example.test/x.png' } });
@@ -318,8 +324,102 @@ test('an export copies an older version\'s outside images first, and one it cann
     assert.equal(r.status, 200, JSON.stringify(r.body));
     const stored = JSON.parse((f.db.prepare('SELECT slides FROM pitch_decks WHERE id = 7').get() as any).slides);
     const [row] = f.rows();
-    assert.equal(stored[0].image_url, `${ORIGIN}/api/decks/images/${row.uid}/file`, 'the version now names the copy');
+    assert.equal(stored[0].image_url, 'https://img.example.test/a.jpg', 'export never rewrites a historical version');
+    assert.ok(f.fetched.includes(`${ORIGIN}/api/decks/images/${row.uid}/file`), 'the export uses the owned copy instead');
     assert.equal(stored[1].image_url, 'https://inside.example.test/x.png', 'one that could not be copied stays as it was');
     assert.equal(f.fetched.includes('https://inside.example.test/x.png'), false, 'and is never fetched');
+  } finally { f.close(); }
+});
+
+
+test('concurrent copies share one row and leave only its linked storage object', async () => {
+  const f = await fixture();
+  try {
+    const put = f.env.FILES.put;
+    let count = 0;
+    let release!: () => void;
+    const both = new Promise<void>((resolve) => { release = resolve; });
+    f.env.FILES.put = async (key: string, bytes: Uint8Array) => {
+      await put(key, bytes);
+      if (++count === 2) release();
+      await both;
+    };
+    const o = { projectId: 1, deckId: 7, user: { id: 2, role: 'founder' }, requestUrl: ORIGIN, slides: cardWith('https://img.example.test/a.jpg') };
+    const results = await Promise.all([copyExternalImages(f.env, o, { resolve: PUBLIC }), copyExternalImages(f.env, o, { resolve: PUBLIC })]);
+    assert.ok(results.every((r) => r.ok), JSON.stringify(results));
+    const rows = f.rows();
+    assert.equal(rows.length, 1);
+    assert.equal(f.r2.size, 1, 'the losing write removes its unlinked object');
+    assert.ok(f.r2.has(rows[0].r2_key));
+    for (const r of results) if (r.ok) assert.equal(r.slides[0].blocks[0].image_id, rows[0].uid);
+  } finally { f.close(); }
+});
+
+test('a failed copy insert removes its storage object and reports a copy failure', async () => {
+  const f = await fixture();
+  try {
+    const base = f.env.DB;
+    f.env.DB = { ...base, prepare: (sql: string) => {
+      const wrap = (q: any): any => ({ ...q, bind: (...args: unknown[]) => wrap(q.bind(...args)), first: (...args: unknown[]) => {
+        if (/^INSERT INTO deck_images/.test(sql.trim())) throw new Error('synthetic insert failure');
+        return q.first(...args);
+      } });
+      return wrap(base.prepare(sql));
+    } };
+    const r = await copyExternalImages(f.env, { projectId: 1, deckId: 7, user: { id: 2, role: 'founder' }, requestUrl: ORIGIN, slides: cardWith('https://img.example.test/a.jpg') }, { resolve: PUBLIC });
+    assert.deepEqual(r, { ok: false, image_url: 'https://img.example.test/a.jpg', code: 'image_unsaved' });
+    assert.equal(f.rows().length, 0);
+    assert.equal(f.r2.size, 0);
+  } finally { f.close(); }
+});
+
+
+test('browser exports use signed transient copies without rewriting deck history', async () => {
+  const f = await fixture();
+  try {
+    const original = JSON.stringify(cardWith('https://img.example.test/a.jpg'));
+    f.db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = 7').run(original);
+    let printed: any;
+    let printToken = '';
+    f.env.BROWSER = { quickAction: async (_action: string, options: any) => {
+      printToken = new URL(options.url).pathname.split('/').pop()!;
+      const r = await f.app.request(`${ORIGIN}/api/decks/print-export/${printToken}`, {}, f.env);
+      assert.equal(r.status, 200);
+      printed = await r.json();
+      return new Response(_action === 'pdf' ? enc('%PDF-1.7 synthetic') : new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7]), { status: 200 });
+    } };
+    for (const format of ['pdf', 'pptx']) {
+      const r = await call(f, '/api/decks/7/export', { json: { format } });
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(printed.slides[0].blocks[0].image_url, `${ORIGIN}/api/decks/images/${f.rows()[0].uid}/file`);
+      assert.equal(f.db.prepare('SELECT slides FROM pitch_decks WHERE id = 7').get()?.slides, original);
+    }
+    const [payload, signature] = printToken.split('.');
+    const tampered = Buffer.from(Buffer.from(payload, 'base64url').toString().replace(f.rows()[0].uid, crypto.randomUUID())).toString('base64url');
+    assert.equal(await verifyDeckPrintToken(f.env, `${tampered}.${signature}`), null, 'the copy references are signed too');
+  } finally { f.close(); }
+});
+
+test('print copy references are bounded hashes and UUIDs and cannot name another venture or an unkept image', async () => {
+  const f = await fixture();
+  try {
+    const hash = await sha256Hex(enc('https://img.example.test/a.jpg'));
+    const foreign = crypto.randomUUID();
+    const discarded = crypto.randomUUID();
+    f.db.prepare("INSERT INTO deck_images(uid, project_id, r2_key, mime, size_bytes, source, use, state, created_by) VALUES(?, 2, 'foreign', 'image/jpeg', 4, 'upload', 'content', 'kept', 2)").run(foreign);
+    f.db.prepare("INSERT INTO deck_images(uid, project_id, r2_key, mime, size_bytes, source, use, state, created_by) VALUES(?, 1, 'discarded', 'image/jpeg', 4, 'upload', 'content', 'discarded', 2)").run(discarded);
+    const original = JSON.stringify(cardWith('https://img.example.test/a.jpg'));
+    f.db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = 7').run(original);
+    for (const uid of [foreign, discarded]) {
+      const t = await signDeckPrintToken(f.env, 7, 180, { notes: false, sources: false }, { [hash]: uid });
+      const r = await f.app.request(`${ORIGIN}/api/decks/print-export/${t}`, {}, f.env);
+      assert.equal(r.status, 200);
+      const deck = await r.json() as any;
+      assert.equal(deck.slides[0].blocks[0].image_url, 'https://img.example.test/a.jpg', 'foreign/unkept copies never reach the print page');
+    }
+    assert.equal(checkedExportImageCopies({ invalid: foreign }), null);
+    assert.equal(checkedExportImageCopies({ [hash]: 'https://other.example.test/image' }), null);
+    assert.equal(checkedExportImageCopies(Object.fromEntries(Array.from({ length: 13 }, (_, n) => [n.toString(16).padStart(64, '0'), foreign]))), null);
+    assert.deepEqual(checkedExportImageCopies({ [hash]: foreign }), { [hash]: foreign });
   } finally { f.close(); }
 });
