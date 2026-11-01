@@ -29,7 +29,7 @@ const overlaps = (a, b) => a.c1 <= b.c2 && b.c1 <= a.c2 && a.r1 <= b.r2 && b.r1 
 const inside = (g, a) => a.c1 <= g.c1 && g.c2 <= a.c2 && a.r1 <= g.r1 && g.r2 <= a.r2;
 
 test('seventeen structures; each applied to a card keeps every block, on the slide or in the notes, with no overlap', () => {
-  // Mutations checked: a moved block dropped from the notes, two blocks given one area, the reading order ignored — each red.
+  // Mutations checked: a moved block dropped from the notes, a block given an area too small for it — each red.
   assert.equal(STRUCTURES.length, 17);
   const card = {
     ...CARD,
@@ -55,6 +55,7 @@ test('seventeen structures; each applied to a card keeps every block, on the sli
 });
 
 test('blocks take the areas in reading order; a chart passes over an area smaller than 4 × 3', () => {
+  // Mutation checked: the list order used instead of the reading order — red.
   const hero = applyStructure(CARD, 'hero_3');
   assert.deepEqual(readingOrder(CARD.blocks).map((b) => b.id), ['b1', 'b2', 'b3'], 'top to bottom, then left to right');
   assert.deepEqual(hero.card.blocks.map((b) => [b.id, b.grid]), [
@@ -63,6 +64,8 @@ test('blocks take the areas in reading order; a chart passes over an area smalle
     ['b3', { c1: 5, c2: 8, r1: 4, r2: 6 }],
   ]);
   assert.equal(hero.count, 0);
+  const shuffled = applyStructure({ ...CARD, blocks: [CARD.blocks[2], CARD.blocks[0], CARD.blocks[1]] }, 'hero_3');
+  assert.deepEqual(shuffled.card.blocks.map((b) => [b.id, b.grid.c1, b.grid.r1]), [['b1', 1, 1], ['b2', 1, 4], ['b3', 5, 4]], 'the order on the slide, not in the list');
   assert.equal(movedLine(0), 'Every block keeps a place.');
 
   const full = applyStructure(CARD, 'full');
