@@ -94,8 +94,9 @@ node scripts/prerender-og.mjs           # writes docs/new-thing/index.html
 node scripts/validate-og-tags.mjs       # confirms it
 ```
 
-Commit the generated PNG, the manifest, and the prerendered HTML — `docs/` is a
-tracked build artifact in this repo.
+Commit the generated PNG and the manifest. The prerendered HTML is build output:
+`docs/` is not committed (D529), and every job that ships it builds it from
+`frontend/src`.
 
 **Custom artwork instead of a generated card.** Drop a 1200×630 PNG in
 `frontend/public/og/` and reference it:
@@ -168,3 +169,9 @@ the shell from the `ASSETS` binding, look the item up in D1, and rewrite the
 asset on any error). The worker already serves `/p/*` and `/landing/*` this way,
 so the pattern exists. That change alters production request routing for those
 paths and deserves its own PR.
+
+**Being closed by D1439** (#3914, Part B of #3705): the Worker card injector
+does exactly this for `/events/*`, `/articles/*`, `/jobs/*`, `/u/*`,
+`/startups/*`, `/partners/*`, `/authors/*` and `/insights/public/*`. Which card
+each route group shows, and the token-link card that follows it (Part D), is in
+`SOCIAL_CARDS_MAP.md` (D1440).

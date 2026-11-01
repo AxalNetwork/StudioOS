@@ -23,6 +23,12 @@ HTMLs and 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 the root" until 2026-09-07; the root of `design/canvases/` holds only its
 `README.md`.)
 
+**Link previews are a separate map.** Which social card each route shares as —
+access, whether it is meant to be shared, the card key and where its title and
+image come from — is `SOCIAL_CARDS_MAP.md` (D1440, #3915), with the retirement
+calls for `/compliance`, `/account/companies*`, `/product-testing`, `/lp/*` and
+`/comarketing` in `decisions/D1440.md`.
+
 ## Status taxonomy
 
 ### Connectors Worker contract (D650, #1462)
