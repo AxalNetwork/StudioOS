@@ -257,14 +257,17 @@ test('the Eadwyn button is "Ask", its accessible name "Ask Eadwyn", and no Team 
 
 test('no client method exists for a route that does not exist', () => {
   const sources = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
-  // #3843's queue and #3844's tools read have no route yet, so no client string names them.
-  // #3842's run paths landed with their routes (runQuote and runAgent, below).
-  assert.doesNotMatch(sources, /\/teams\/[^'"`\n]*queue/, '#3843: /api/teams/:scope/:id/queue and /api/teams/queue/:proposalUid[/decide]');
+  // #3844's tools read has no route yet, so no client string names it.
+  // #3842's run paths and #3843's queue landed with their routes (below).
   assert.doesNotMatch(sources, /\/teams\/tools/, '#3844: GET /api/teams/tools');
   // teamAgents.js builds its paths from parts, so its own strings are read whole.
-  assert.doesNotMatch(codeOnly(read('frontend/src/lib/api/teamAgents.js')), /\/queue\b|\/tools\b/, 'no #3843–#3844 path in the agents client');
+  assert.doesNotMatch(codeOnly(read('frontend/src/lib/api/teamAgents.js')), /\/tools\b/, 'no #3844 path in the agents client');
   const client = read('frontend/src/lib/api/teamAgents.js');
-  for (const m of ['queue', 'queueItem', 'decide', 'toolChoices']) assert.doesNotMatch(client, new RegExp(`\\b${m}\\s*:`), `teamAgentsApi.${m} lands with its route`);
+  for (const m of ['toolChoices']) assert.doesNotMatch(client, new RegExp(`\\b${m}\\s*:`), `teamAgentsApi.${m} lands with its route`);
+  // #3843: the queue's three methods, on the Worker's three paths.
+  assert.match(client, /queue: \(scope, id, [^)]*\) =>[\s\S]*?`\$\{base\(scope, id\)\}\/queue\$\{qs/);
+  assert.match(client, /queueItem: \(proposalUid\) => request\(`\/teams\/queue\/\$\{enc\(proposalUid\)\}`\)/);
+  assert.match(client, /decide: \(proposalUid, [^)]*\) =>\s*request\(`\/teams\/queue\/\$\{enc\(proposalUid\)\}\/decide`, \{ method: 'POST'/);
   // #3842: the run's two methods, on the Worker's two paths.
   assert.match(client, /runQuote: \(uid, \{ module, option \} = \{\}\) =>[\s\S]*?`\/teams\/agents\/\$\{enc\(uid\)\}\/run\/quote\?/);
   assert.match(client, /runAgent: \(uid, [^)]*\) =>\s*request\(`\/teams\/agents\/\$\{enc\(uid\)\}\/run`, \{ method: 'POST'/);
@@ -273,7 +276,8 @@ test('no client method exists for a route that does not exist', () => {
   for (const m of ['roles', 'listAgents', 'addAgent', 'agent', 'updateAgent', 'removeAgent', 'rulebook', 'saveRulebook']) {
     assert.match(seam, new RegExp(`export const ${m} = [^\\n]*through\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} is wired to teamAgentsApi.${m}`);
   }
-  // S1 wires the seam's runQuote and runAgent to #3842's client; the rest wait for their routes.
+  // S1 wires the seam's runQuote and runAgent to #3842's client, and queue, queueItem and decide to #3843's;
+  // toolChoices waits for its route.
   for (const m of ['queue', 'queueItem', 'decide', 'toolChoices']) {
     assert.doesNotMatch(seam, new RegExp(`export const ${m} = [^\\n]*teamAgentsApi`), `${m} waits for its route`);
   }

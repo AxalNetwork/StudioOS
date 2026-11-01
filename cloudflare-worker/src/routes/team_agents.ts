@@ -12,6 +12,9 @@
  *   PUT    /:scope/:id/rulebooks/:role         a new version, within the floor (manage)
  *   GET    /agents/:uid/run/quote?module=&option=  what a run would hold (the sponsor)
  *   POST   /agents/:uid/run                    run it: a proposal, charged to the sponsor (part 2, #3842)
+ *   GET    /:scope/:id/queue?role=&module=&option=&status=&cursor=&include=projects   the approvals queue (part 3, #3843)
+ *   GET    /queue/:proposalUid                 one proposal and what the agent read for it
+ *   POST   /queue/:proposalUid/decide          accept, edit or discard it once (manage, or the sponsor)
  *
  * `:scope` is `company` (by uid) or `project` (by numeric id). Every route is
  * 404 `team_agents_off` unless `TEAM_AGENTS_ENABLED` is "true".
@@ -28,8 +31,11 @@
  * unrecorded, never 0 (the page says "Not recorded").
  *
  * Part 2 (#3842) adds the run: only the sponsor runs an agent, through
- * `services/agents/agentRun.ts`, which every refusal comes from. Part 3 adds
- * the queue.
+ * `services/agents/agentRun.ts`, which every refusal comes from. Part 3
+ * (#3843) adds the queue, through `services/agents/queue.ts`: a scope's
+ * agents' proposals, decided once by its manager or the agent's sponsor
+ * through the same `decideRailAs` the member route uses, with
+ * `decided_by_user_id` and a `proposal_decided` event.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -42,6 +48,9 @@ import { CATALOGUE } from '../services/ai/catalogue';
 import { MODEL_CONNECTIONS } from '../services/ai/moduleConnections';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { isAdmin, mapError, newUid } from './_t13t14t15_helpers';
+import { neverFillMessage } from '../services/fills/neverFill';
+import { NeverFillRefusal, type RailDecision, type RailProposalStatus } from '../services/railProposals';
+import { QUEUE_STATUSES, queueCount, queueDecide, queueItem, queueList, type QueueRefusal } from '../services/agents/queue';
 import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '../services/agents/catalogue';
 import { checkRules, diffRules } from '../services/agents/rulebook';
 import {
@@ -208,6 +217,58 @@ router.post('/agents/:uid/run', async (c) => {
     });
     if (!r.ok) return answer(c, r);
     return c.json({ proposal: r.proposal, charged: r.charged });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── The queue (part 3) ──────────────────────────────────────────────────────
+
+const DECISIONS: readonly RailDecision[] = ['accept', 'edit', 'discard'];
+const queueAnswer = (c: C, r: QueueRefusal) => say(c, r.status, r.code, r.message, r.extra);
+
+router.get('/:scope/:id/queue', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return notFound(c);
+    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its approvals.');
+    const status = c.req.query('status') || 'proposed';
+    if (!QUEUE_STATUSES.includes(status as RailProposalStatus)) return say(c, 400, 'invalid_status', 'Choose proposed, accepted, edited, discarded or withdrawn.');
+    const rawCursor = c.req.query('cursor');
+    if (rawCursor && !/^[1-9][0-9]{0,15}$/.test(rawCursor)) return say(c, 400, 'invalid_cursor', 'That page marker is not one this list gave.');
+    // TM1e: a company's editors may also see the projects inside it (the owner's authority rule).
+    const includeProjects = s.kind === 'company' && c.req.query('include') === 'projects' && await canManage(c.env, s, user);
+    const filter = {
+      role: c.req.query('role') || null, module: c.req.query('module') || null, option: c.req.query('option') || null,
+      status: status as RailProposalStatus, cursor: rawCursor ? Number(rawCursor) : null, includeProjects,
+    };
+    const page = await queueList(c.env, s, filter);
+    return c.json({ items: page.items, counts: { proposed: await queueCount(c.env, s, filter) }, next_cursor: page.next_cursor });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/queue/:proposalUid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const r = await queueItem(c.env, user, c.req.param('proposalUid'));
+    return r.ok ? c.json({ item: r.item, inputs: r.inputs }) : queueAnswer(c, r);
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/queue/:proposalUid/decide', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const b = await readBody(c);
+    const decision = String(b?.decision || '') as RailDecision;
+    if (!DECISIONS.includes(decision)) return say(c, 400, 'invalid_decision', 'Accept, edit or discard it.');
+    const payload = b?.payload && typeof b.payload === 'object' && !Array.isArray(b.payload) ? b.payload : null;
+    if (decision === 'edit' && !payload) return say(c, 400, 'payload_required', 'Send your edited version.');
+    try {
+      const r = await queueDecide(c.env, user, c.req.param('proposalUid'), decision, payload);
+      return r.ok ? c.json({ item: r.item }) : queueAnswer(c, r);
+    } catch (e) {
+      if (e instanceof NeverFillRefusal) return say(c, 422, 'never_fill', neverFillMessage(e.field), { field: e.field, discarded: e.discarded });
+      throw e;
+    }
   } catch (e) { return mapError(c, e); }
 });
 

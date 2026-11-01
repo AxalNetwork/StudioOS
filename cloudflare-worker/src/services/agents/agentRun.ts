@@ -187,7 +187,7 @@ export async function agentQuote(env: Env, input: Omit<AgentRunInput, 'prompt'> 
 }
 
 /** The usage row's charge with its guard rows', or unknown when any is unrecorded. */
-async function chargedFor(env: Env, usageLogId: number | null): Promise<Spend> {
+export async function chargedFor(env: Env, usageLogId: number | null): Promise<Spend> {
   if (!usageLogId) return { available: false };
   try {
     const row = await env.DB.prepare(

@@ -529,3 +529,176 @@ test('holdOperation: an agent run is agent.<role> on the ai surface; anything el
   assert.equal(holdOperation({ task: 'rail_numbers', agentId: 4, agentRole: 'Bad Role!' }), 'ai.rail_numbers');
   assert.equal(holdOperation({ task: 'rail_numbers', agentId: 0, agentRole: 'cfo' }), 'ai.rail_numbers');
 });
+
+// ── Part 3 (#3843): the approvals queue ─────────────────────────────────────
+
+/** An agent's proposal as part 2 writes it: the row under its sponsor, a usage row, and the run event naming both. */
+function proposed(w: W, agentUid: string, uid: string, o: { option?: string; module?: string; charged?: number | null; payload?: Record<string, unknown> } = {}) {
+  const a = w.db.prepare('SELECT id, sponsor_user_id FROM team_agents WHERE uid = ?').get(agentUid) as any;
+  const usage = w.db.prepare("INSERT INTO ai_usage_logs (user_id, task, model, charged_microusd, agent_id) VALUES (?, 'draft', ?, ?, ?)")
+    .run(a.sponsor_user_id, MODEL, o.charged === undefined ? 1234 : o.charged, a.id).lastInsertRowid;
+  w.db.prepare(`INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, kind, payload_json, usage_log_id, agent_id)
+    VALUES (?, ?, 'Founder · Raise · Cap table', ?, 'draft', ?, ?, ?)`)
+    .run(uid, a.sponsor_user_id, o.option ?? 'draft:raise/capital', JSON.stringify(o.payload ?? { text: `# Runway note ${uid}\nBody.` }), usage, a.id);
+  w.db.prepare("INSERT INTO team_agent_events (agent_id, actor_user_id, kind, usage_log_id, proposal_uid, detail_json) VALUES (?, ?, 'run', ?, ?, ?)")
+    .run(a.id, a.sponsor_user_id, usage, uid, JSON.stringify({ module: o.module ?? 'cap-table', option: o.option ?? 'draft:raise/capital' }));
+}
+/** A company agent whose sponsor is a plain member (no manage right): the sponsor path. */
+function memberSponsored(w: W, role = 'cmo'): string {
+  const uid = 'a'.repeat(31) + '1';
+  w.db.prepare(`INSERT INTO team_agents (uid, scope_kind, company_id, role_key, model_id, sponsor_user_id, monthly_cap_microusd, created_by)
+    VALUES (?, 'company', 1, ?, ?, ?, ?, ?)`).run(uid, role, MODEL, MEMBER, CAP, MEMBER);
+  return uid;
+}
+function withAdvisor(w: W) {
+  w.db.exec(`CREATE TABLE IF NOT EXISTS project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);
+  w.db.prepare("INSERT INTO project_members (project_id, user_id, role, status) VALUES (?, ?, 'advisor', 'accepted')").run(ALONE, ADVISOR);
+}
+
+test('the queue lists only its own scope: a project\'s agents stay out of the company\'s queue unless its editor asks include=projects', async () => {
+  // Mutations checked: SCOPE_WHERE's scope filter dropped (every agent proposal listed) → the company's own list and the
+  // project's list asserts fail; include=projects honoured for a plain member → the member's include assert fails.
+  const w = world();
+  const co = (await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.agent.uid;
+  const inCo = (await call(w, PROJECT_OWNER, 'POST', `/project/${IN_CO}/agents`, cfo())).body.agent.uid;
+  const alone = (await call(w, PROJECT_OWNER, 'POST', `/project/${ALONE}/agents`, cfo({ role_key: 'cto' }))).body.agent.uid;
+  proposed(w, co, 'q-co-1'); proposed(w, co, 'q-co-2', { option: 'draft:update', module: 'revenue-and-traction' });
+  proposed(w, inCo, 'q-inco'); proposed(w, alone, 'q-alone');
+  // A member's own proposal (no agent) is never in a queue.
+  w.db.prepare("INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, kind, payload_json) VALUES ('q-own', ?, 'Founder · Raise · Cap table', 'draft:raise/capital', 'draft', '{}')").run(EDITOR);
+
+  const q = await call(w, MEMBER, 'GET', `${CO}/queue`);
+  assert.equal(q.status, 200, q.text);
+  assert.deepEqual(q.body.items.map((i: any) => i.uid), ['q-co-2', 'q-co-1']);
+  assert.deepEqual(q.body.counts.proposed, { available: true, value: 2 });
+  assert.equal(q.body.next_cursor, null);
+  const item = q.body.items[1];
+  assert.deepEqual([item.kind, item.option, item.module, item.headline, item.status], ['draft', 'draft:raise/capital', 'cap-table', 'Runway note q-co-1', 'proposed']);
+  assert.deepEqual(item.agent, { uid: co, role_key: 'cfo', role_name: 'CFO', first_name: 'Carla', last_name: 'Cash' });
+  assert.deepEqual(item.sponsor, { uid: 'u-editor', name: 'Eve Editor' });
+  assert.deepEqual(item.cost, { available: true, value_microusd: 1234 });
+  assert.equal(item.decided_by, null);
+  noPrivateKeys(q.text);
+
+  assert.deepEqual((await call(w, MEMBER, 'GET', `${CO}/queue?include=projects`)).body.items.map((i: any) => i.uid), ['q-co-2', 'q-co-1'], 'a plain member cannot widen it');
+  assert.deepEqual((await call(w, EDITOR, 'GET', `${CO}/queue?include=projects`)).body.items.map((i: any) => i.uid), ['q-inco', 'q-co-2', 'q-co-1']);
+  assert.deepEqual((await call(w, PROJECT_OWNER, 'GET', `/project/${ALONE}/queue`)).body.items.map((i: any) => i.uid), ['q-alone']);
+  assert.deepEqual((await call(w, PROJECT_OWNER, 'GET', `/project/${IN_CO}/queue`)).body.items.map((i: any) => i.uid), ['q-inco']);
+
+  // The Ask panel's filters: option and module narrow the list and the count alike.
+  const ask = await call(w, MEMBER, 'GET', `${CO}/queue?option=draft:update`);
+  assert.deepEqual([ask.body.items.map((i: any) => i.uid), ask.body.counts.proposed], [['q-co-2'], { available: true, value: 1 }]);
+  assert.deepEqual((await call(w, MEMBER, 'GET', `${CO}/queue?module=cap-table`)).body.items.map((i: any) => i.uid), ['q-co-1']);
+  assert.deepEqual((await call(w, MEMBER, 'GET', `${CO}/queue?role=cto`)).body.items, []);
+
+  assert.deepEqual([(await call(w, STRANGER, 'GET', `${CO}/queue`)).status, (await call(w, STRANGER, 'GET', `${CO}/queue`)).body.error], [403, 'not_member']);
+  assert.equal((await call(w, MEMBER, 'GET', '/company/no-such/queue')).status, 404);
+  assert.equal((await call(w, MEMBER, 'GET', `${CO}/queue?status=maybe`)).body.error, 'invalid_status');
+});
+
+test('the queue pages by cursor; a cost whose charge is unrecorded is available: false, never 0', async () => {
+  // Mutation checked: chargedFor answering { available: true, value_microusd: 0 } for an unrecorded charge → the cost assert fails.
+  const w = world();
+  const co = (await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.agent.uid;
+  for (let i = 1; i <= 26; i += 1) proposed(w, co, `q-${String(i).padStart(2, '0')}`, { charged: i === 26 ? null : 10 });
+  const first = await call(w, EDITOR, 'GET', `${CO}/queue`);
+  assert.equal(first.body.items.length, 25);
+  assert.equal(first.body.items[0].uid, 'q-26');
+  assert.deepEqual(first.body.items[0].cost, { available: false });
+  assert.deepEqual(first.body.counts.proposed, { available: true, value: 26 });
+  assert.match(first.body.next_cursor, /^[0-9]+$/);
+  const second = await call(w, EDITOR, 'GET', `${CO}/queue?cursor=${first.body.next_cursor}`);
+  assert.deepEqual([second.body.items.map((i: any) => i.uid), second.body.next_cursor], [['q-01'], null]);
+  assert.equal((await call(w, EDITOR, 'GET', `${CO}/queue?cursor=abc`)).body.error, 'invalid_cursor');
+});
+
+test('counts.proposed is { available: false } when the count read throws, never 0', async () => {
+  // Mutation checked: queueCount's catch returning { available: true, value: 0 } → this assert fails.
+  const w = world();
+  const co = (await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.agent.uid;
+  proposed(w, co, 'q-1');
+  const prepare = w.env.DB.prepare.bind(w.env.DB);
+  w.env.DB.prepare = (s: string) => {
+    if (/SELECT COUNT\(\*\) AS n FROM ai_rail_proposals p/.test(s)) throw new Error('D1_ERROR: no such table');
+    return prepare(s);
+  };
+  const q = await call(w, EDITOR, 'GET', `${CO}/queue`);
+  assert.equal(q.status, 200, q.text);
+  assert.deepEqual(q.body.counts.proposed, { available: false });
+  assert.equal(q.body.items.length, 1, 'the list still reads');
+});
+
+test('decide: a manager decides once, decided_by is recorded, a second press is 409 not_open naming who; an advisor cannot; the sponsor can', async () => {
+  // Mutations checked: the manage-or-sponsor gate dropped (anyone who reads may decide) → the member's and the advisor's 403 asserts fail;
+  // decided_by_user_id dropped from decideRailAs → the decided_by and the column asserts fail; the sponsor check dropped → the sponsor's 200 fails.
+  const w = world();
+  withAdvisor(w);
+  const co = (await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.agent.uid;
+  const alone = (await call(w, PROJECT_OWNER, 'POST', `/project/${ALONE}/agents`, cfo())).body.agent.uid;
+  const own = memberSponsored(w);
+  proposed(w, co, 'd-1'); proposed(w, alone, 'd-2'); proposed(w, own, 'd-3');
+
+  const member = await call(w, MEMBER, 'POST', '/queue/d-1/decide', { decision: 'accept' });
+  assert.deepEqual([member.status, member.body.error], [403, 'not_manager']);
+  const adv = await call(w, ADVISOR, 'POST', '/queue/d-2/decide', { decision: 'accept' });
+  assert.deepEqual([adv.status, adv.body.error], [403, 'not_manager']);
+  assert.equal((await call(w, STRANGER, 'POST', '/queue/d-1/decide', { decision: 'accept' })).status, 403);
+  assert.equal((await call(w, ADVISOR, 'GET', '/queue/d-2')).status, 200, 'an advisor reads it');
+
+  const ok = await call(w, EDITOR, 'POST', '/queue/d-1/decide', { decision: 'edit', payload: { text: 'Kept, shorter.' } });
+  assert.equal(ok.status, 200, ok.text);
+  assert.deepEqual([ok.body.item.status, ok.body.item.payload, ok.body.item.decided_by], ['edited', { text: 'Kept, shorter.' }, { uid: 'u-editor', name: 'Eve Editor' }]);
+  assert.ok(ok.body.item.decided_at);
+  assert.equal((w.db.prepare("SELECT decided_by_user_id AS d FROM ai_rail_proposals WHERE uid = 'd-1'").get() as any).d, EDITOR);
+  noPrivateKeys(ok.text);
+
+  const again = await call(w, PROJECT_OWNER, 'POST', '/queue/d-2/decide', { decision: 'discard' });
+  assert.equal(again.status, 200);
+  const twice = await call(w, EDITOR, 'POST', '/queue/d-1/decide', { decision: 'discard' });
+  assert.deepEqual([twice.status, twice.body.error], [409, 'not_open']);
+  assert.deepEqual(twice.body.decided_by, { uid: 'u-editor', name: 'Eve Editor' });
+  assert.ok(twice.body.decided_at);
+
+  // The sponsor, though a plain member who cannot manage the company, decides their own agent's proposal.
+  const sponsor = await call(w, MEMBER, 'POST', '/queue/d-3/decide', { decision: 'accept' });
+  assert.equal(sponsor.status, 200, sponsor.text);
+  assert.deepEqual(sponsor.body.item.decided_by, { uid: 'u-member', name: 'Max Member' });
+
+  const ev = w.db.prepare("SELECT e.kind, e.actor_user_id, e.proposal_uid, e.usage_log_id, e.detail_json FROM team_agent_events e WHERE e.kind = 'proposal_decided' ORDER BY e.id").all() as any[];
+  assert.deepEqual(ev.map((e) => [e.proposal_uid, e.actor_user_id, JSON.parse(e.detail_json).status]), [['d-1', EDITOR, 'edited'], ['d-2', PROJECT_OWNER, 'discarded'], ['d-3', MEMBER, 'accepted']]);
+  assert.ok(ev.every((e) => e.usage_log_id), 'the decision names its run');
+  const profile = await call(w, EDITOR, 'GET', `/agents/${co}`);
+  assert.equal(profile.body.events[0].kind, 'proposal_decided');
+  assert.deepEqual((await call(w, EDITOR, 'GET', `${CO}/queue?status=edited`)).body.items.map((i: any) => i.uid), ['d-1']);
+});
+
+test('decide: a never-fill field is 422 never_fill and nothing is kept; a bad decision is 400; an unknown proposal 404', async () => {
+  const w = world();
+  const co = (await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.agent.uid;
+  proposed(w, co, 'n-1');
+  const nf = await call(w, EDITOR, 'POST', '/queue/n-1/decide', { decision: 'edit', payload: { field: 'ssn', value: 'x' } });
+  assert.deepEqual([nf.status, nf.body.error], [422, 'never_fill']);
+  assert.equal((w.db.prepare("SELECT status FROM ai_rail_proposals WHERE uid = 'n-1'").get() as any).status, 'proposed');
+  assert.equal((await call(w, EDITOR, 'POST', '/queue/n-1/decide', { decision: 'maybe' })).body.error, 'invalid_decision');
+  assert.equal((await call(w, EDITOR, 'POST', '/queue/n-1/decide', { decision: 'edit' })).body.error, 'payload_required');
+  assert.equal((await call(w, EDITOR, 'POST', '/queue/nope/decide', { decision: 'accept' })).status, 404);
+  // A member's own proposal (no agent) is not the queue's to decide.
+  w.db.prepare("INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, kind, payload_json) VALUES ('mine', ?, 'Founder · Raise · Cap table', 'draft:raise/capital', 'draft', '{}')").run(EDITOR);
+  assert.equal((await call(w, EDITOR, 'POST', '/queue/mine/decide', { decision: 'accept' })).status, 404);
+});
+
+test('GET /queue/:uid: the item and what the agent read, read-only; a stranger is 403', async () => {
+  const w = world();
+  const co = (await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.agent.uid;
+  proposed(w, co, 'i-1');
+  const r = await call(w, MEMBER, 'GET', '/queue/i-1');
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.item.uid, 'i-1');
+  assert.ok(r.body.inputs.length >= 2);
+  assert.ok(r.body.inputs.every((i: any) => i.read_only === true && typeof i.summary === 'string'));
+  assert.deepEqual(r.body.inputs.map((i: any) => i.source), ['request', 'module:cap-table']);
+  noPrivateKeys(r.text);
+  assert.deepEqual([(await call(w, STRANGER, 'GET', '/queue/i-1')).status, (await call(w, STRANGER, 'GET', '/queue/i-1')).body.error], [403, 'not_member']);
+  assert.equal((await call(w, MEMBER, 'GET', '/queue/none')).status, 404);
+});

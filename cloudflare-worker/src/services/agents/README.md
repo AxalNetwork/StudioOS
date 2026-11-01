@@ -11,12 +11,13 @@ is automatic. The routes are `routes/team_agents.ts`, mounted at `/api/teams`.
 | `rulebook.ts` | `checkRules`: a rule book's closed shape and its floor (`rule_floor` before `invalid_rules`); `diffRules`: what a scope changed from the default. |
 | `teams.ts` | The reads the routes and the run share: an agent's scope, the read and manage gates, the rule book in force, the month's spend (`{ available: false }`, never 0, when unknown) and the audit row. |
 | `agentRun.ts` | Part 2 (#3842): the only way an agent runs, as its sponsor, within its rule book and its monthly cap; its output is a proposal with `agent_id`. Also its quote. |
+| `queue.ts` | Part 3 (#3843): the approvals queue. A scope's agents' proposals, read by the agent's scope (never by `user_id`), decided once by the scope's manager or the agent's sponsor through `decideRailAs`, with `decided_by_user_id` and a `proposal_decided` event. A cost or a count it cannot read is `{ available: false }`, never 0. |
 
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
 written there once. A new module key must be a slug a cycle already has; a new
 rule book section is one entry in `rulebook.ts`'s `SECTIONS`; the floor only
-grows. An agent runs only through `agentRun.ts`. Part 3 adds the queue.
+grows. An agent runs only through `agentRun.ts`, and its proposals are decided through `queue.ts`.
 `team_agents_d1496.test.ts` covers every file here.
 
 ## `skills/` (#3953, D1612)
