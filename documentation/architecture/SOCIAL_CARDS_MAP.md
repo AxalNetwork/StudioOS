@@ -5,8 +5,7 @@ D1440 (#3915, Part A of #3705). This is one row per route group: who can open it
 **Sources.**
 - **Routes and guards:** `frontend/src/App.jsx` on `main` at `5c2288dbf5`.
 - **Card keys:** `frontend/src/lib/ogRegistry.js`.
-  - Keys marked **(D1604, pending)** arrive with PR #3913, which is open at the time of writing: `event`, `authors`, `terms`, `privacy`, `privacy-interviews`, `risk-disclosures`, `pricing-investor`, the six `trust*` keys, and `FAMILY_OG_KEYS` = `event`, `profile`, `private`.
-  - Until #3913 merges, those routes use their section card.
+  - The family keys landed with #3913 (#3705): `event`, `authors`, `terms`, `privacy`, `privacy-interviews`, `risk-disclosures`, `pricing-investor`, the six `trust*` keys, and `FAMILY_OG_KEYS` = `event`, `profile`, `private`.
 - **Record cards:** the Worker card injector, Part B (`decisions/D1439.md`, #3914).
 - **Token-link card:** Part D, after owner question B on #3705.
 
@@ -29,11 +28,11 @@ The title and description are the registry entry's. The image is the entry's `ke
 | `/for-founders`, `/for-investors`, `/for-service-partners`, `/for-advisors` | public | yes | `product-founders`, `-investors`, `-service-partners`, `-advisors` | registry, mirrored from `data/productPages.js` | own card each |
 | `/platform`, `/administrators`, `/intelligence` | public | yes | `product` (section) | registry | section card |
 | `/pricing` | public | yes | `pricing` | registry | own card |
-| `/pricing/investor` | public | yes | `pricing-investor` (D1604, pending; `company` until then) | registry | own card |
+| `/pricing/investor` | public | yes | `pricing-investor` | registry | own card |
 | `/demo`, `/about`, `/team`, `/methodology`, `/contact`, `/newsletter`, `/changelog`, `/status`, `/register`, `/login` | public | yes | `company` (section) | registry | section card |
-| `/terms`, `/privacy`, `/privacy/interviews`, `/risk-disclosures` | public | yes | `terms`, `privacy`, `privacy-interviews`, `risk-disclosures` (D1604, pending; `company` until then) | registry | own card |
-| `/trust` and its five tabs (`/security`, `/data`, `/subprocessors`, `/documents`, `/disclosure`) | public | yes | `trust`, `trust-security` … `trust-disclosure` (D1604, pending) | registry (D1604 adds the entries) | own card. **Until #3913 merges these routes have no entry and preview as `home`.** |
-| `/articles`, `/jobs`, `/events`, `/authors` (the section pages) | public | yes | `articles`, `jobs`, `event` (D1604; `content` until then), `authors` (D1604; `content` until then) | registry | section family card |
+| `/terms`, `/privacy`, `/privacy/interviews`, `/risk-disclosures` | public | yes | `terms`, `privacy`, `privacy-interviews`, `risk-disclosures` | registry | own card |
+| `/trust` and its five tabs (`/security`, `/data`, `/subprocessors`, `/documents`, `/disclosure`) | public | yes | `trust`, `trust-security` … `trust-disclosure` | registry | own card |
+| `/articles`, `/jobs`, `/events`, `/authors` (the section pages) | public | yes | `articles`, `jobs`, `event`, `authors` | registry | section family card |
 | `/circles`, `/directory` (prefix), `/resources` | public | yes | `content` (section) | registry | section card |
 
 ## 2. Public records (Part B, D1439)
@@ -42,14 +41,14 @@ Each prefix matches **exactly one** segment (two for `/insights/public/`). The W
 
 | Route | Access | Shareable | Card on a hit | Title source | Image source | On a miss or private |
 | --- | --- | --- | --- | --- | --- | --- |
-| `/events/:slug` | public (published, and admin-published or unlisted) | yes | `event` family (`content` until D1604) | the event's `title`; description from `summary`, start time, timezone, venue kind. Never price, capacity, seats or join link | its `cover_url` when https, else the family card | the `/events` card |
+| `/events/:slug` | public (published, and admin-published or unlisted) | yes | `event` family | the event's `title`; description from `summary`, start time, timezone, venue kind. Never price, capacity, seats or join link | its `cover_url` when https, else the family card | the `/events` card |
 | `/articles/:slug` | public (`status='published'`) | yes | `articles` | the article's `title`; excerpt, read time, author name | its cover (`/api/articles/cover/<id>`) when set, else `articles` | the `/articles` card |
 | `/insights/public/:slug` | public (its own published gate) | yes | `articles` | the insight's title | `articles` | the `/articles` card |
 | `/jobs/:slug` | public (published and admin-published) | yes | `jobs` | role, venture, location. **Never the pay band** | `jobs` | the `/jobs` card |
-| `/authors/:id` | public (the author read's gate) | yes | `authors` (D1604; `content` until then) | the author's display name | `authors` | the `/authors` card |
-| `/u/:handle` | public only when the person's effective visibility is Public (D702) | yes | `profile` (D1604; `default` until then) | name and headline only | `profile` | the Axal default card |
-| `/startups/:handle` | public (not archived, rejected or intake) | yes | `profile` (D1604; `default` until then) | name, stage, one line of description. No traction, no amounts | `profile` | the Axal default card |
-| `/partners/:slug` | public, **only when `DIRECTORY_LISTED_WHERE` holds** (stricter than the page's own `status='active'`) | yes | `profile` (D1604; `default` until then) | name, company, specialisation | `profile` | the Axal default card |
+| `/authors/:id` | public (the author read's gate) | yes | `authors` | the author's display name | `authors` | the `/authors` card |
+| `/u/:handle` | public only when the person's effective visibility is Public (D702) | yes | `profile` | name and headline only | `profile` | the Axal default card |
+| `/startups/:handle` | public (not archived, rejected or intake) | yes | `profile` | name, stage, one line of description. No traction, no amounts | `profile` | the Axal default card |
+| `/partners/:slug` | public, **only when `DIRECTORY_LISTED_WHERE` holds** (stricter than the page's own `status='active'`) | yes | `profile` | name, company, specialisation | `profile` | the Axal default card |
 
 **Reserved paths stay untouched** and keep the shell as served: `/events/new`, `/jobs/new`, `/articles/draft`, `/articles/mine`, `/partners/onboard`, `/partners/portal`, and every path two or more segments deep under these prefixes (`/events/:id/edit`, `/events/:id/manage…`, `/jobs/:id/edit|manage`).
 
@@ -59,7 +58,7 @@ Each prefix matches **exactly one** segment (two for `/insights/public/`). The W
 
 | Route | Access | Shareable | Card | Title source | Image source |
 | --- | --- | --- | --- | --- | --- |
-| `/esign/:token`, `/deck/share/:token`, `/share/deck/:token`, `/share/captable/:token`, `/share/captable/venture/:token`, `/invite/:token`, `/join/:token` | token | yes, to the named recipient | today `home`; with Part D, `private` ("Axal VC · Sign in to view") and `x-robots-tag: noindex` | fixed text, never the record (no D1 read) | `/og/private.png` (D1604) |
+| `/esign/:token`, `/deck/share/:token`, `/share/deck/:token`, `/share/captable/:token`, `/share/captable/venture/:token`, `/invite/:token`, `/join/:token` | token | yes, to the named recipient | today `home`; with Part D, `private` ("Axal VC · Sign in to view") and `x-robots-tag: noindex` | fixed text, never the record (no D1 read) | `/og/private.png` (#3705) |
 | `/verify/:token` | token (certificate verification) | yes | `home` | registry home entry | `home`. It stays so unless the owner makes it public |
 
 ## 4. Signed-in and admin pages
