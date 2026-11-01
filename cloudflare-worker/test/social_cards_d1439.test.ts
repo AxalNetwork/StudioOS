@@ -1,5 +1,7 @@
 /**
  * D1439 (#3914, Part B of #3705) — record links preview as themselves.
+ * Part D (#3916): token share links preview as the static "Sign in to view"
+ * card, with no D1 call (tests 14 to 16).
  *
  * `serveSocialCard` — the branch `index.ts` `fetch()` runs before Hono — over
  * a fake `ASSETS` that answers the built shell, and an in-memory D1 from the
@@ -16,7 +18,9 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import { CARD_DEADLINE_MS, SHELL_HEADERS, matchSocialPath, rewriteShell, sectionTags, serveSocialCard } from '../src/services/socialCards.ts';
+import {
+  CARD_DEADLINE_MS, PRIVATE_LINK_GLOBS, SHELL_HEADERS, matchPrivatePath, matchSocialPath, rewriteShell, sectionTags, serveSocialCard,
+} from '../src/services/socialCards.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
@@ -298,4 +302,80 @@ test('13. PublicInsight\'s tab tags come from usePageMeta, as the Worker\'s card
   assert.match(src, /usePageMeta\(\{ title: publication\.title, description: og\.description \|\| publication\.subtitle \|\| undefined, type: 'article' \}\)/);
   assert.match(src, /<InsightMeta publication=\{p\} \/>/, 'mounted once the publication has loaded, so one pageview');
   assert.doesNotMatch(src, /document\.head\.querySelector|BRAND_SITE_NAME|BRAND_TITLE_SUFFIX/);
+});
+
+// ─────────────────────────────────────────── Part D (#3916): token share links
+
+const TOKEN = 'tok_Synth3t1cBearerT0ken';
+const TOKEN_LINKS = [
+  `/esign/${TOKEN}`, `/deck/share/${TOKEN}`, `/share/captable/${TOKEN}`, `/share/captable/venture/${TOKEN}`,
+  `/share/deck/${TOKEN}`, `/share/lab-report/${TOKEN}`, `/invite/${TOKEN}`, `/join/${TOKEN}`,
+];
+
+test('14. every token link previews as the private card, and D1 is never touched', async () => {
+  // Mutation checked: a prefix dropped from PRIVATE_LINK_GLOBS → that link gets the untouched home shell;
+  // the private branch moved after `if (!env.DB)` with a resolveCard call → the spy sees a read.
+  const { env, calls } = envFor(fixture());
+  env.DB = new Proxy(env.DB, { get: (t: any, k) => { calls.push(`touched:${String(k)}`); return t[k]; } });
+  let first: string | null = null;
+  for (const p of TOKEN_LINKS) {
+    const r = await get(env, p);
+    assert.equal(r.status, 200, p);
+    assert.equal(titleOf(r.text), 'Sign in to view', p);
+    assert.equal(meta(r.text, 'og:title'), 'Sign in to view', p);
+    assert.equal(meta(r.text, 'og:description'), 'This link opens a private page on Axal VC.', p);
+    assert.match(meta(r.text, 'og:image')!, /^https:\/\/axal\.vc\/og\/private\.png\?v=[0-9a-f]+$/, p);
+    assert.equal(meta(r.text, 'og:image:width'), '1200', p);
+    for (const tag of SCRIPTS) assert.ok(r.text.includes(tag), `${p}: the shell's scripts are untouched`);
+    // One card for every link: the bytes are the same whatever the token and prefix.
+    if (first == null) first = r.text; else assert.equal(r.text, first, p);
+  }
+  assert.deepEqual(calls, [], 'no D1 read, nor even a property access, for a token link');
+  const head = await get(env, `/esign/${TOKEN}`, { method: 'HEAD' });
+  assert.equal(head.text, '');
+  assert.equal(head.headers.get('x-robots-tag'), 'noindex');
+  assert.deepEqual(calls, []);
+  // Even with no D1 binding at all, the card is served.
+  const bare = envFor(fixture());
+  delete bare.env.DB;
+  assert.equal(titleOf((await get(bare.env, `/join/${TOKEN}`)).text), 'Sign in to view');
+});
+
+test('15. every token link sends noindex and the shell\'s own headers', async () => {
+  // Mutation checked: the noindex header dropped from the private branch → every link fails.
+  const { env } = envFor(fixture());
+  for (const p of TOKEN_LINKS) {
+    const r = await get(env, p);
+    assert.equal(r.headers.get('x-robots-tag'), 'noindex', p);
+    for (const [k, v] of Object.entries(SHELL_HEADERS)) assert.equal(r.headers.get(k), v, `${p}: ${k}`);
+    assert.equal(r.headers.get('content-security-policy'), null, p);
+    assert.match(r.headers.get('content-type')!, /text\/html/, p);
+  }
+});
+
+test('16. the token never appears in any tag; bare prefixes, /verify and lookalikes are not token links', async () => {
+  // Mutation checked: og:url set from the request path → the token is in the page; `/verify/*` added → the
+  // verify link loses the home card; the "something after the prefix" rule dropped → bare /share/ is carded.
+  const { env } = envFor(fixture());
+  for (const p of TOKEN_LINKS) {
+    const r = await get(env, `${p}?ref=${TOKEN}`);
+    const block = /<!-- BEGIN og:managed[\s\S]*?<!-- END og:managed -->/.exec(r.text)?.[0] || '';
+    assert.ok(block, p);
+    assert.ok(!r.text.includes(TOKEN), `${p}: the token is nowhere in the page`);
+    assert.equal(/<link rel="canonical" href="([^"]*)"/.exec(block)?.[1], 'https://axal.vc', p);
+    assert.equal(meta(block, 'og:url'), 'https://axal.vc', p);
+  }
+  assert.deepEqual([...PRIVATE_LINK_GLOBS], ['/esign/*', '/deck/share/*', '/share/*', '/invite/*', '/join/*']);
+  for (const p of ['/esign/', '/share/', '/share//', '/invite', '/joinx/abc', '/verify/abc', '/deck/abc', '/shared/abc']) {
+    assert.equal(matchPrivatePath(p), false, p);
+  }
+  for (const p of TOKEN_LINKS) assert.equal(matchPrivatePath(p), true, p);
+  // A bare prefix reaches the Worker but is not a link: the shell, untouched.
+  const r = await get(env, '/share/');
+  assert.equal(r.text, SHELL);
+  assert.equal(r.headers.get('x-robots-tag'), null);
+  // A token link is never read as a record path either.
+  assert.equal(matchSocialPath('/share/captable/x'), null);
+  // POST to a token link is not carded (the SPA has no POST pages; the shell answers as before).
+  assert.equal((await get(env, `/esign/${TOKEN}`, { method: 'POST' })).text, SHELL);
 });

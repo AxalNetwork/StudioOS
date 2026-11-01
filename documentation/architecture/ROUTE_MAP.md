@@ -28,6 +28,10 @@ access, whether it is meant to be shared, the card key and where its title and
 image come from — is `SOCIAL_CARDS_MAP.md` (D1440, #3915), with the retirement
 calls for `/compliance`, `/account/companies*`, `/product-testing`, `/lp/*` and
 `/comarketing` in `decisions/D1440.md`.
+The Worker answers the record prefixes (D1439) and, since #3916, the token
+share links `/esign/*`, `/deck/share/*`, `/share/*`, `/invite/*` and `/join/*`
+before the SPA shell: those get the static "Sign in to view" card, `noindex`,
+and no D1 call (D1439 Part D).
 
 ## Status taxonomy
 
