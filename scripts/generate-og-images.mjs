@@ -97,6 +97,55 @@ const SECTION_CARDS = {
   },
 };
 
+/**
+ * D1604: the record-card families the canvas draws (SC4 event, SC5 profile,
+ * SC8 private). No fixed route uses them yet; the Worker card injector (D1439,
+ * #3705 Part B) and the private-link card (Part D) point record and token
+ * links at them. Drawn now so those parts reference art that already exists.
+ */
+const FAMILY_CARDS = {
+  event: {
+    eyebrow: 'Events',
+    title: 'Programs & Events',
+    description: 'Cohorts, demo days, LP briefings, and office hours.',
+  },
+  profile: {
+    eyebrow: 'Axal VC',
+    title: 'Profiles on the Axal VC network',
+    description: 'Founders, investors, advisors and partners on Axal VC.',
+  },
+  private: {
+    eyebrow: 'Axal VC',
+    title: 'Sign in to view',
+    description: 'This link opens a private page on Axal VC.',
+    kind: 'lock',
+  },
+};
+
+/**
+ * D1604: per-key art from the canvas — the eyebrow the board draws, the card
+ * kind, and SC2's tier chips (plan NAMES only, never a price; pinned against
+ * `frontend/src/lib/sitePricing.js` by `social_cards_art_d1604.test.mjs`).
+ */
+const KEY_STYLE = {
+  pricing: { chips: ['Free', 'Validate + Build', 'Raise + Grow', 'Investor Plus', 'Investor Pro', 'Institutional'] },
+  'pricing-investor': { chips: ['Investor Plus', 'Investor Pro', 'Institutional'] },
+  articles: { eyebrow: 'Insights' },
+  authors: { eyebrow: 'Insights' },
+  jobs: { eyebrow: 'Jobs' },
+  event: { eyebrow: 'Events' },
+  trust: { eyebrow: 'Trust', kind: 'doc' },
+  'trust-security': { eyebrow: 'Trust', kind: 'doc' },
+  'trust-data': { eyebrow: 'Trust', kind: 'doc' },
+  'trust-subprocessors': { eyebrow: 'Trust', kind: 'doc' },
+  'trust-documents': { eyebrow: 'Trust', kind: 'doc' },
+  'trust-disclosure': { eyebrow: 'Trust', kind: 'doc' },
+  terms: { eyebrow: 'Legal', kind: 'doc' },
+  privacy: { eyebrow: 'Legal', kind: 'doc' },
+  'privacy-interviews': { eyebrow: 'Legal', kind: 'doc' },
+  'risk-disclosures': { eyebrow: 'Legal', kind: 'doc' },
+};
+
 /** Human label for the eyebrow chip, by section. */
 const SECTION_EYEBROW = {
   home: 'Axal VC',
@@ -189,7 +238,49 @@ function titleSize(title) {
   return 44;
 }
 
-function cardHtml({ eyebrow, title, description }, assets) {
+/*
+ * D1604 (#3705): the canvas's light family cards
+ * (`design/incoming/Share Cards Page.dc.html`, boards SC1–SC10).
+ *
+ * One light image per URL. A lavender art band fills x 0–268; the text block
+ * starts at x 300 so the mark, the eyebrow and the title's first words survive
+ * the centred square crop (x 285–915) that WhatsApp and iMessage take. Three
+ * kinds: `plain` (concentric violet circles in the band), `doc` (trust and
+ * legal: a lavender ground, a hairline frame and a document tile) and `lock`
+ * (the private-link card: a lock tile, violet, never red). The old dark card
+ * is board SC0, kept on the canvas for reference only.
+ */
+const PALETTE = {
+  bg: '#ffffff', band: '#f4f0fe', ink: '#18181b', mut: '#6b6577',
+  vio: '#7c3aed', vdeep: '#6d28d9', lavE: '#ddd0fb', tile: '#ffffff',
+};
+
+const GLYPHS = {
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path>',
+  doc: '<path d="M6 2.5h8l4 4V21.5H6z"></path><path d="M14 2.5v4h4M9 11h6M9 14.5h6M9 18h4"></path>',
+};
+
+function glyph(kind, size, stroke = 1.6) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${PALETTE.vio}" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPHS[kind]}</svg>`;
+}
+
+function bandHtml(kind) {
+  if (kind === 'lock' || kind === 'doc') {
+    const fill = kind === 'lock' ? `background:${PALETTE.band};` : '';
+    return `<div class="band" style="${fill}display:grid;place-items:center"><div class="tile">${glyph(kind, 64, kind === 'lock' ? 1.8 : 1.6)}</div></div>`;
+  }
+  const rings = [44, 84, 124, 164, 204, 244, 284].map((r) => `<circle cx="150" cy="430" r="${r}"></circle>`).join('');
+  let dots = '';
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 7; j++) dots += `<circle cx="${26 + i * 22}" cy="${34 + j * 22}" r="2.4"></circle>`;
+  return `<div class="band" style="background:${PALETTE.band}"><svg viewBox="0 0 268 630" width="268" height="630">`
+    + `<g fill="none" stroke="${PALETTE.vio}" stroke-opacity=".28" stroke-width="1.5">${rings}</g>`
+    + `<circle cx="150" cy="430" r="40" fill="${PALETTE.vio}" fill-opacity=".85"></circle>`
+    + `<circle cx="150" cy="430" r="14" fill="${PALETTE.band}"></circle>`
+    + `<g fill="${PALETTE.vio}" fill-opacity=".45">${dots}</g></svg></div>`;
+}
+
+function cardHtml({ eyebrow, title, description, kind = 'plain', chips = null }, assets) {
+  const doc = kind === 'doc';
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
 <style>
@@ -203,56 +294,35 @@ function cardHtml({ eyebrow, title, description }, assets) {
   html, body { width: ${WIDTH}px; height: ${HEIGHT}px; }
   body {
     font-family: 'Space Grotesk', 'Liberation Sans', sans-serif;
-    background: #0B0A14;
-    color: #fff;
+    background: ${doc ? PALETTE.band : PALETTE.bg};
+    color: ${PALETTE.ink};
     position: relative;
     overflow: hidden;
   }
-  /* Brand glow — violet, matching the app's declared theme-color #7c3aed. */
-  .glow {
-    position: absolute; inset: 0;
-    background:
-      radial-gradient(900px 520px at 88% -12%, rgba(124,58,237,.55), transparent 62%),
-      radial-gradient(700px 460px at -8% 108%, rgba(99,102,241,.34), transparent 60%),
-      linear-gradient(145deg, #0B0A14 0%, #150F28 58%, #1B1036 100%);
+  .band { position: absolute; left: 0; top: 0; bottom: 0; width: 268px; overflow: hidden; }
+  .tile {
+    width: 132px; height: 132px; border-radius: 32px;
+    background: ${PALETTE.tile}; border: 1.5px solid ${PALETTE.lavE};
+    display: grid; place-items: center;
   }
-  /* Fine grid, kept very low contrast so it reads as texture not pattern. */
-  .grid {
-    position: absolute; inset: 0;
-    background-image:
-      linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
-    background-size: 48px 48px;
-    mask-image: radial-gradient(760px 420px at 22% 42%, #000 35%, transparent 78%);
+  .frame-line { position: absolute; inset: 26px; border: 1px solid ${PALETTE.lavE}; border-radius: 18px; }
+  .block {
+    position: absolute; left: 300px; top: 62px; right: 72px; bottom: 58px;
+    display: flex; flex-direction: column;
   }
-  .frame {
-    position: relative;
-    height: 100%;
-    padding: 62px 72px 58px;
-    display: flex; flex-direction: column; justify-content: space-between;
-  }
-  .top { display: flex; align-items: center; gap: 18px; }
-  .badge {
-    width: 60px; height: 60px; border-radius: 16px;
-    background: #fff;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 8px 30px rgba(124,58,237,.42);
-    flex: none;
-  }
-  .badge img { width: 42px; height: 42px; object-fit: contain; display: block; }
-  .wordmark { font-size: 27px; font-weight: 700; letter-spacing: -.015em; }
-  .wordmark span { color: #C4B5FD; font-weight: 500; }
-  .body { max-width: 1000px; }
+  .top { display: flex; align-items: center; gap: 14px; }
+  .top img { width: 46px; height: 46px; border-radius: 11px; object-fit: contain; display: block; }
+  .wordmark { font-size: 27px; font-weight: 700; letter-spacing: .06em; }
   .eyebrow {
-    display: inline-block;
+    align-self: flex-start; margin-top: 26px;
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 42px; padding: 0 18px; border-radius: 999px;
+    border: 1.5px solid ${PALETTE.lavE};
     font-size: 20px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase;
-    color: #C4B5FD;
-    border: 1px solid rgba(196,181,253,.34);
-    border-radius: 999px;
-    padding: 9px 20px;
-    margin-bottom: 26px;
+    color: ${PALETTE.vdeep}; white-space: nowrap;
   }
   h1 {
+    margin-top: 22px;
     font-size: ${titleSize(title)}px;
     font-weight: 700; line-height: 1.06; letter-spacing: -.028em;
     /* Cap at three lines; long registry titles shrink via titleSize() first. */
@@ -260,35 +330,35 @@ function cardHtml({ eyebrow, title, description }, assets) {
     overflow: hidden;
   }
   p {
-    margin-top: 24px;
+    margin-top: 16px;
     font-size: 29px; line-height: 1.42; font-weight: 400;
-    color: #B9B2D6;
-    max-width: 900px;
+    color: ${PALETTE.mut};
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  .foot { display: flex; align-items: center; justify-content: space-between; }
-  .domain { font-size: 25px; font-weight: 500; color: #fff; }
-  .rule { height: 5px; width: 132px; border-radius: 999px;
-          background: linear-gradient(90deg, #A78BFA, #6366F1); }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+  .chip {
+    display: inline-flex; align-items: center; height: 42px; padding: 0 16px;
+    border-radius: 999px; background: ${PALETTE.tile}; border: 1.5px solid ${PALETTE.lavE};
+    font-size: 21px; font-weight: 600; white-space: nowrap;
+  }
+  .foot { margin-top: auto; display: flex; align-items: center; gap: 12px; height: 30px; }
+  .rule { width: 28px; height: 3px; border-radius: 2px; background: ${PALETTE.vio}; }
+  .domain { font-size: 25px; line-height: 30px; font-weight: 500; }
 </style></head>
 <body>
-  <div class="glow"></div>
-  <div class="grid"></div>
-  <div class="frame">
+  ${bandHtml(kind)}
+  ${doc ? '<div class="frame-line"></div>' : ''}
+  <div class="block">
     <div class="top">
-      <div class="badge"><img src="${assets.mark}" alt="" /></div>
-      <div class="wordmark">AXAL <span>VC</span></div>
+      <img src="${assets.mark}" alt="" />
+      <div class="wordmark">AXAL VC</div>
     </div>
-    <div class="body">
-      ${eyebrow ? `<div class="eyebrow">${esc(eyebrow)}</div>` : ''}
-      <h1>${esc(title)}</h1>
-      ${description ? `<p>${esc(cardDescription(description))}</p>` : ''}
-    </div>
-    <div class="foot">
-      <div class="domain">axal.vc</div>
-      <div class="rule"></div>
-    </div>
+    ${eyebrow ? `<div class="eyebrow">${doc ? glyph('doc', 20) : ''}${esc(eyebrow)}</div>` : ''}
+    <h1>${esc(title)}</h1>
+    ${description ? `<p>${esc(cardDescription(description))}</p>` : ''}
+    ${chips ? `<div class="chips">${chips.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>` : ''}
+    <div class="foot"><div class="rule"></div><div class="domain">axal.vc</div></div>
   </div>
 </body></html>`;
 }
@@ -302,12 +372,13 @@ function buildCards() {
         eyebrow: SECTION_EYEBROW[r.section] || 'Axal VC',
         title: r.title,
         description: r.description,
+        ...KEY_STYLE[r.key],
       });
     }
   }
   for (const key of ogImageKeys()) {
     if (byKey.has(key)) continue;
-    const preset = SECTION_CARDS[key];
+    const preset = SECTION_CARDS[key] || FAMILY_CARDS[key];
     if (preset) {
       byKey.set(key, preset);
       continue;
@@ -336,21 +407,27 @@ const BASE_FLAGS = [
 /**
  * Chromium's `--window-size` sizes the *window*, not the viewport: asking for
  * 1200x630 yields a 1200x543 viewport on this platform, so a naive screenshot
- * loses the bottom ~87px of the card (the footer row) and pads it with black.
+ * loses the bottom ~87px of the card (the footer row).
  *
  * The offset is not a documented constant and varies by platform and Chromium
- * build, so measure it once per run instead of hardcoding it: screenshot a
- * blank page and compare the result to the window size we asked for.
+ * build, so measure it once per run instead of hardcoding it.
  *
- * We measure the screenshot rather than asking the page to report its own
- * innerHeight, because the screenshot is the thing we actually care about —
- * and it keeps this script free of any inline <script>, which static analysis
- * flags on sight even when the markup is a hardcoded literal.
+ * D1604: measure the VIEWPORT, not the screenshot's size. Builds differ in how
+ * they show the shortfall. Older ones return a screenshot as short as the
+ * viewport (1200x543). Chromium 1194 returns a full 1200x630 screenshot whose
+ * bottom 87px are simply unpainted, so comparing sizes measured no offset at
+ * all and every card lost its footer. The probe page paints a black block
+ * exactly `100vh` tall on a white page; the black rows in its screenshot are
+ * the viewport height on every build. Still no inline <script>: static
+ * analysis flags one on sight even in a hardcoded literal.
  */
 function measureChromeOffset(chrome, workDir) {
   const probeFile = path.join(workDir, 'probe.html');
   const probeShot = path.join(workDir, 'probe.png');
-  fs.writeFileSync(probeFile, '<html><body></body></html>');
+  fs.writeFileSync(
+    probeFile,
+    '<html style="background:#fff"><body style="margin:0"><div style="width:100vw;height:100vh;background:#000"></div></body></html>',
+  );
   try {
     execFileSync(
       chrome,
@@ -360,12 +437,60 @@ function measureChromeOffset(chrome, workDir) {
     );
     const got = pngSize(probeShot);
     if (!got) return { dx: 0, dy: 0 };
-    return { dx: WIDTH - got.width, dy: HEIGHT - got.height };
+    const viewport = blackRowsFromTop(probeShot);
+    return { dx: WIDTH - got.width, dy: HEIGHT - (viewport ?? got.height) };
   } catch {
     // Probe failed — fall back to no correction and let the size assertion
     // in renderCard() surface the problem rather than shipping a bad card.
     return { dx: 0, dy: 0 };
   }
+}
+
+/**
+ * Count the rows, from the top, whose first pixel is black. Decodes the PNG
+ * (8-bit RGB/RGBA, not interlaced, as Chromium writes it) and undoes each
+ * row's filter. Returns null for any other format.
+ */
+function blackRowsFromTop(file) {
+  const buf = fs.readFileSync(file);
+  let offset = 8;
+  let ihdr = null;
+  const idat = [];
+  while (offset < buf.length) {
+    const len = buf.readUInt32BE(offset);
+    const type = buf.toString('ascii', offset + 4, offset + 8);
+    if (type === 'IHDR') ihdr = buf.subarray(offset + 8, offset + 8 + len);
+    else if (type === 'IDAT') idat.push(buf.subarray(offset + 8, offset + 8 + len));
+    offset += 12 + len;
+  }
+  if (!ihdr || ihdr[8] !== 8 || ihdr[12] !== 0 || (ihdr[9] !== 2 && ihdr[9] !== 6)) return null;
+  const width = ihdr.readUInt32BE(0);
+  const height = ihdr.readUInt32BE(4);
+  const bpp = ihdr[9] === 6 ? 4 : 3;
+  const stride = width * bpp;
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  let prev = Buffer.alloc(stride);
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (stride + 1)];
+    const row = Buffer.from(raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
+    for (let i = 0; i < stride; i++) {
+      const a = i >= bpp ? row[i - bpp] : 0;
+      const b = prev[i];
+      const c = i >= bpp ? prev[i - bpp] : 0;
+      let add = 0;
+      if (filter === 1) add = a;
+      else if (filter === 2) add = b;
+      else if (filter === 3) add = (a + b) >> 1;
+      else if (filter === 4) {
+        const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c);
+        add = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+      }
+      row[i] = (row[i] + add) & 0xff;
+    }
+    if (row[0] > 16 || row[1] > 16 || row[2] > 16) return y;
+    prev = row;
+  }
+  return height;
 }
 
 /** Read a PNG's real pixel dimensions from its IHDR chunk. */

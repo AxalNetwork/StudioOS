@@ -45,6 +45,17 @@ absolute, correctly-sized `og:image`. No JavaScript required.
 `ogTagsFor()`, so client-side navigation keeps the tab title correct and cannot
 disagree with what the server served.
 
+**The card art (D1604, #3705).** Since 2026-11-01 the generator draws the
+owner's social-cards canvas (`design/incoming/Share Cards Page.dc.html`): one
+light 1200×630 image per URL, a lavender art band left of x 268 and the text
+block from x 300, so the mark, the eyebrow and the title survive the centred
+square crop WhatsApp and iMessage take. Trust and legal pages use the document
+card; `/pricing` shows the plan names (never a price). `FAMILY_OG_KEYS`
+(`event`, `profile`, `private`) are drawn for the record and private-link cards
+that §6's Worker injector (D1439) serves. The generator measures Chromium's
+viewport with a `100vh` probe: on Chromium 1194 the screenshot is full size but
+its bottom 87px are unpainted, which the old size comparison missed.
+
 ### Fallback hierarchy for `og:image`
 
 Highest priority first:

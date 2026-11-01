@@ -71,6 +71,14 @@ export const SECTION_OG_KEYS = {
 };
 
 /**
+ * D1604 (#3705): record-card families from the social-cards canvas that no
+ * fixed route uses yet. The generator draws them now; the Worker card injector
+ * (D1439) points record links at `profile` (and `event` for an event without
+ * an https cover), and the private-link card (#3705 Part D) uses `private`.
+ */
+export const FAMILY_OG_KEYS = ['event', 'profile', 'private'];
+
+/**
  * Public routes, in sitemap order.
  *
  * - `path`        exact pathname (no trailing slash except the root)
@@ -248,6 +256,7 @@ const ROUTES = [
     path: '/events',
     title: 'Programs & Events',
     description: 'Cohorts, demo days, LP briefings, and office hours.',
+    key: 'event',
     type: 'website',
     section: 'content',
     prefix: true,
@@ -279,6 +288,7 @@ const ROUTES = [
     path: '/authors',
     title: 'Authors',
     description: 'Writers publishing on Axal VC.',
+    key: 'authors',
     type: 'profile',
     section: 'content',
     prefix: true,
@@ -309,6 +319,7 @@ const ROUTES = [
     title: 'Terms of Service',
     description:
       'The agreement governing use of the Axal VC platform — definitions and parties, acceptance and acknowledgments, and the scope of what the platform does.',
+    key: 'terms',
     type: 'website',
     section: 'company',
   },
@@ -317,6 +328,7 @@ const ROUTES = [
     title: 'Privacy Policy',
     description:
       'How Axal VC collects, uses, and protects Non-Public Personal Information, and the privacy role each of the three operating entities plays.',
+    key: 'privacy',
     type: 'website',
     section: 'company',
   },
@@ -325,6 +337,7 @@ const ROUTES = [
     title: 'When a founder records you',
     description:
       'What is kept when a founder using Axal VC records an interview with you, why, who can read it, how long it is kept, and how to say no or ask for deletion.',
+    key: 'privacy-interviews',
     type: 'website',
     section: 'company',
   },
@@ -333,6 +346,7 @@ const ROUTES = [
     title: 'Risk Disclosures & Disclaimers',
     description:
       'Investing in private, early-stage companies carries a high degree of risk and suits only sophisticated investors who can afford to lose their entire investment.',
+    key: 'risk-disclosures',
     type: 'website',
     section: 'company',
   },
@@ -341,6 +355,60 @@ const ROUTES = [
     title: 'Investor plans',
     description:
       'Plans for investors and LPs, and what each tier includes. The investor-side counterpart to the main pricing page.',
+    key: 'pricing-investor',
+    type: 'website',
+    section: 'company',
+  },
+
+  // ---- Trust center (D1604, #3705) ---------------------------------------
+  // The public trust center and its five tabs (`pages/site/trustCenterModel.js`
+  // TABS). Copy is the page's own: its headline and each tab's subject. The
+  // Subprocessors line says the list is with counsel, as the tab does.
+  {
+    path: '/trust',
+    title: 'Trust center',
+    description: 'How we protect your data and your money: security, data and privacy, subprocessors, documents and how to report a vulnerability.',
+    key: 'trust',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/security',
+    title: 'Security',
+    description: 'How Axal VC hosts the platform, signs you in, encrypts your data, backs it up and tests it.',
+    key: 'trust-security',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/data',
+    title: 'Data and privacy',
+    description: 'Who holds your data on Axal VC, and what you can do about it.',
+    key: 'trust-data',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/subprocessors',
+    title: 'Subprocessors',
+    description: 'The services that process data for Axal VC. The list is being reviewed by counsel.',
+    key: 'trust-subprocessors',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/documents',
+    title: 'Documents',
+    description: 'Axal VC’s legal documents and when each was last updated.',
+    key: 'trust-documents',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/trust/disclosure',
+    title: 'Disclosure',
+    description: 'Report a vulnerability privately. We answer by severity, within set times, and take no legal action against good-faith research.',
+    key: 'trust-disclosure',
     type: 'website',
     section: 'company',
   },
@@ -383,7 +451,7 @@ export const OG_ROUTES = ROUTES;
 
 /** Every distinct card key the generator must render. */
 export function ogImageKeys() {
-  const keys = new Set([DEFAULT_OG_KEY, ...Object.values(SECTION_OG_KEYS)]);
+  const keys = new Set([DEFAULT_OG_KEY, ...Object.values(SECTION_OG_KEYS), ...FAMILY_OG_KEYS]);
   for (const r of ROUTES) if (r.key) keys.add(r.key);
   return [...keys];
 }

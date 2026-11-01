@@ -123,6 +123,20 @@ visualiser points at `ring-viz.js` instead of its asset id. No other value was e
 the grid does not draw; they are not landed here.
 
 **Grade: UPGRADE.** D1330 ports `ring-viz.js`'s maths into `frontend/src/lib/ringViz.js`.
+## Landed 2026-11-01 — Social share cards (#3705)
+
+The owner's artifacts on #3705:
+- `Share Cards Page.dc.html` (`NuqvJUKoNJbwYfqwZG44WY`) is the card renderer, every family at 1200×630 (SC0 to SC12);
+- `Share Cards · Boards.dc.html` (`XJKVGprpDKwwSVNiNbZehv`) is the board grid; it imports the page by name.
+
+Decoded by `scripts/read-canvas.mjs`. **No value was edited.**
+
+**Grade: REDESIGN.** The Open Graph pipeline already exists (`ogRegistry.js`, `scripts/generate-og-images.mjs`,
+the prerender and the CI gate); its card was the dark SC0. D1604 replaces the generator's template with the
+canvas's light families, adds the trust and legal document cards (SC7), the pricing tier chips (SC2), and
+draws the record families (`event`, `profile`, `private`) ahead of the Worker card injector (D1439) and the
+private-link card. SC9's crops and SC11's fallbacks belong to D1439's tests; SC12 (dark) does not ship.
+
 ## Landed 2026-10-31 — Event syndication (#3725)
 
 The owner's artifacts on #3725:
