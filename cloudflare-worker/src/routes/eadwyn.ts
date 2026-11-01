@@ -542,6 +542,7 @@ async function askInputs(env: Env, user: User, conv: ConversationRow, body: AskB
  * cannot drift from the hold the run places.
  */
 export function askRunOptions(c: Context<{ Bindings: Env }>, user: User, x: AskInputs): RunOptions {
+  const { question, fileText } = x;
   const context = [
     x.reads.length
       ? `Connector data:\n${x.reads.map((r) => `[${r.source.name}]\n${r.facts.map((f) => `- ${f}`).join('\n')}`).join('\n\n')}`
@@ -565,7 +566,7 @@ export function askRunOptions(c: Context<{ Bindings: Env }>, user: User, x: AskI
     // D763: the guard checks what the member typed and attached, once, before
     // the model runs; the connector data and the earlier turns are not theirs
     // to be checked again.
-    guardText: x.fileText ? `${x.question}\n\n${x.fileText}` : x.question,
+    guardText: fileText ? `${question}\n\n${fileText}` : question,
     role: user.role,
   };
 }
@@ -622,10 +623,10 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
   if ((await activeCompanyFor(c, user)) !== conv.company_id) return companyChanged(c);
 
   const inputs = await askInputs(c.env, user, conv, body, question);
-  const { reads, sendable, fileName } = inputs;
+  const { reads, sendable, fileName, page } = inputs;
   const opts = askRunOptions(c, user, inputs);
-  // D765's listing reads each call's task and rail at the call: both are the builder's, named here.
-  const r = await aiRun(c.env, { ...opts, task: opts.task, rail: opts.rail });
+  // D765's and D552's listings read each call's task, page and rail at the call: all three are the builder's, named here.
+  const r = await aiRun(c.env, { ...opts, task: opts.task, surface: page, rail: opts.rail });
 
   if (r.refusal === 'assist_off') return refuseAssistOff(c);
   if (r.refusal === 'guard_blocked') {

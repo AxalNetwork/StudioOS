@@ -134,7 +134,7 @@ test('the quote and the ask build their run from one helper, so the hold prices 
   const ask = code.slice(code.indexOf("eadwyn.post('/conversations/:uid/ask'"), code.indexOf('// RULE 2 in the route'));
   assert.match(quote, /quoteRun\(c\.env, askRunOptions\(c, user, await askInputs\(/);
   assert.match(ask, /const opts = askRunOptions\(c, user, inputs\)/);
-  assert.match(ask, /aiRun\(c\.env, \{ \.\.\.opts, task: opts\.task, rail: opts\.rail \}\)/);
+  assert.match(ask, /aiRun\(c\.env, \{ \.\.\.opts, task: opts\.task, surface: page, rail: opts\.rail \}\)/);
 
   const w = world();
   const uid = await start(w);
