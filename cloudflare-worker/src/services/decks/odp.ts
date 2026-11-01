@@ -25,6 +25,7 @@
  * Every text node goes through `xmlEsc`. Nothing here logs a title, a figure or
  * a URL.
  */
+import { CONFIDENTIAL, type DeckCompliance } from './compliance';
 import type { RenderableSlide } from './render';
 import type { DeckBrand } from './branding';
 import { buildZip, xmlEsc, type ZipEntry } from './pptx';
@@ -146,6 +147,8 @@ export type OdpInput = {
   brand: DeckBrand;
   notes: boolean;
   chartShot?: ChartShot | null;
+  /** D1546: Confidential and each card's footnotes (`compliance.ts`). */
+  compliance?: DeckCompliance;
 };
 export type OdpReport = { bytes: Uint8Array; charts: { pictured: number; as_text: number }; images: { placed: number; not_placed: number } };
 
@@ -212,6 +215,10 @@ export async function writeOdp(input: OdpInput): Promise<OdpReport> {
     }
     if (watermarkHref) shapes.push(imageFrame(id('Watermark'), { x: SLIDE.width - 112 - 160, y: FOOT_Y - 8, w: 160, h: 48 }, watermarkHref, ''));
     if (input.brand.show_footer) shapes.push(textFrame(id('Footer'), { x: 112, y: FOOT_Y, w: 1200, h: 40 }, [para('S', input.brand.footer_text)]));
+    // D1546: a projection's footnote and proposed round terms above the footer; Confidential beside the page number.
+    const lines = input.compliance?.footnotes[i] ?? [];
+    if (lines.length) shapes.push(textFrame(id('Footnote'), { x: 112, y: FOOT_Y - 24 - 32 * lines.length, w: 1500, h: 32 * lines.length }, lines.map((l) => para('S', l))));
+    if (input.compliance?.confidential) shapes.push(textFrame(id('Confidential'), { x: SLIDE.width - 112 - 400, y: FOOT_Y, w: 400, h: 32 }, [para('S', CONFIDENTIAL)]));
     shapes.push(textFrame(id('Page number'), { x: SLIDE.width - 112 - 400, y: FOOT_Y + 32, w: 400, h: 32 }, [para('S', `${i + 1} / ${total}`)]));
     const bg = String(stored?.background?.color || '');
     const style = COLOUR.test(bg) ? `dp${i + 2}` : 'dp1';
