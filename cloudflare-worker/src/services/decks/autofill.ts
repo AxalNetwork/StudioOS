@@ -11,6 +11,7 @@
  *
  * The render layer (HTML/PPTX) chooses how to display each kind.
  */
+import { unrecordedLinks, untrustedBlock, withUntrustedRule } from '../ai/untrusted';
 import type { Env } from '../../types';
 import type { DeckMethodSpec, DeckSlideField } from './methods';
 import { formatUseOfFundsText } from '../../util/useOfFunds';
@@ -190,6 +191,33 @@ export function parseJsonLoose<T>(raw: string | undefined): T | null {
  */
 export interface DeckFillRun { userId: number; projectId: number; railOption?: string; rail?: RailContext; mercuryOwnerUserId?: number | null }
 
+/** D1506 (#3757): the batch fill's message, the venture's records framed as untrusted data. */
+export function batchFillPrompt(ctx: Record<string, unknown>, hints: string[], aiHint: string): string {
+  return `You are a senior VC associate drafting a pitch deck. Style: ${aiHint}.
+Startup data (the founder's records, framed):
+${untrustedBlock('record_text', JSON.stringify(ctx))}
+
+For EACH hint below produce one of:
+- A short headline (≤8 words) — for *_headline keys
+- A 1-2 sentence paragraph — for *_story / *_pitch / *_contact / *_moat keys
+- An array of 3-4 punchy bullets (≤18 words each) — for *_bullets / *_channels / *_motion / *_landscape / *_quarters / *_uses / *_milestones / *_hiring keys
+- A short string — for *_cta keys
+
+Return ONLY valid JSON of the form: {"<hint>": <value>, ...}.
+Hints: ${JSON.stringify(hints)}
+Never write a link or an email address that the startup data does not hold.`;
+}
+
+/** The batch fill's answer: a JSON object, each value without a link or email address the records do not hold. */
+export function batchFillParse(output: unknown, ctx: Record<string, unknown>): Record<string, any> {
+  const parsed = parseJsonLoose<Record<string, any>>(String(output ?? ''));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const out: Record<string, any> = {};
+  const held = [JSON.stringify(ctx)];
+  for (const [k, v] of Object.entries(parsed)) if (!unrecordedLinks(JSON.stringify(v), held).length) out[k] = v;
+  return out;
+}
+
 async function aiBatchFill(
   env: Env, project: any, hints: string[], aiHint: string, who: DeckFillRun | null,
 ): Promise<Record<string, any>> {
@@ -207,17 +235,7 @@ async function aiBatchFill(
     traction_summary: project.traction_summary,
     cac: project.cac, gross_margin_pct: project.gross_margin_pct,
   };
-  const prompt = `You are a senior VC associate drafting a pitch deck. Style: ${aiHint}.
-Startup data: ${JSON.stringify(ctx)}
-
-For EACH hint below produce one of:
-- A short headline (≤8 words) — for *_headline keys
-- A 1-2 sentence paragraph — for *_story / *_pitch / *_contact / *_moat keys
-- An array of 3-4 punchy bullets (≤18 words each) — for *_bullets / *_channels / *_motion / *_landscape / *_quarters / *_uses / *_milestones / *_hiring keys
-- A short string — for *_cta keys
-
-Return ONLY valid JSON of the form: {"<hint>": <value>, ...}.
-Hints: ${JSON.stringify(hints)}`;
+  const prompt = batchFillPrompt(ctx, hints, aiHint);
 
   try {
     const res = await aiRun(env, {
@@ -227,14 +245,13 @@ Hints: ${JSON.stringify(hints)}`;
       surface: AI_SURFACE.raisePitch,
       // D765: the member's rail context; run() records it as D767's page, option and record.
       rail: who.rail ?? { page: AI_SURFACE.raisePitch, option: who.railOption ?? null, record: `project:${who.projectId}` },
-      systemPrompt: 'You are a senior VC associate. Always return valid JSON.',
+      systemPrompt: withUntrustedRule('You are a senior VC associate. Always return valid JSON.'),
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.5,
       maxTokens: 2200,
     });
     if (!res.ok || !res.output) return {};
-    const parsed = parseJsonLoose<Record<string, any>>(res.output);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    return batchFillParse(res.output, ctx);
   } catch { return {}; }
 }
 

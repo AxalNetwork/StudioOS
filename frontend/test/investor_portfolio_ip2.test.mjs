@@ -279,7 +279,7 @@ test('the three ops reasons are each true about their own object', () => {
   // and the chase is the other direction: the page hands the route its own
   // overdue set, the route re-checks tenancy per id, logs one row per company
   // and notifies the founder. What is pinned is the wiring, not the reason.
-  assert.match(row, /\{ label: 'Chase all overdue', kind: 'handler', handler: 'chaseOverdue' \}/,
+  assert.match(row, /\{ label: 'Chase all overdue', kind: 'handler', handler: 'chaseOverdue', primary: true \}/,
     'the chase is not the page-performed op D464 made it');
   const PORTFOLIO = read('cloudflare-worker/src/routes/portfolio.ts');
   assert.match(PORTFOLIO, /portfolio_update_chases/, 'the chase log store is gone');
@@ -369,5 +369,6 @@ test('the strip, the instrument and the header row still match the artboard', ()
   }
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Updates eyebrow is back');
-  assert.match(P, /<h1>Updates &amp; KPI collection<\/h1>/, 'the heading went with the eyebrow');
+  // D1424 (#3700): the heading is drawn by the shared ZoneHeader.
+  assert.match(P, /<ZoneHeader bucketPath="\/portfolio" title="Updates & KPI collection"/, 'the heading went with the eyebrow');
 });

@@ -30,8 +30,10 @@ test('a company: "Company settings" with Team, Company settings (General, Legal)
   assert.deepEqual(s.entries.map((e) => e.label), ['Team', 'Company settings', 'Projects']);
   assert.deepEqual(entryLabels(s), ['Team', 'Company settings', 'General', 'Legal', 'Projects']);
   const legal = s.entries[1].children.find((c) => c.key === 'legal');
-  assert.equal(legal.path, null, 'Legal has no page on this base, so it is not a link');
-  assert.match(legal.reason, /not open yet/);
+  // D1413 (#3696, PF6a/PF8): Legal is Company settings › Legal, a page of its own now.
+  assert.equal(legal.path, '/account/portfolio/nw1/settings/legal');
+  assert.equal(legal.reason, undefined);
+  assert.equal(s.entries[2].path, '/account/portfolio/nw1/settings/projects', 'Projects is Company settings › Projects (PF6c)');
 });
 
 test('a project inside a company is governed by it: the company\'s block, with the project under Projects', () => {
@@ -91,14 +93,14 @@ function sidebar(company) {
       h(SidebarNav, { groups: [], role: 'founder', user: { role: 'founder' } }))));
 }
 
-test('the sidebar draws the block by scope, keeps "Companies and projects", and Billing is a link under it', () => {
+test('the sidebar draws the block by scope, keeps the Portfolio row (D1413), and Billing is a link under it', () => {
   const co = sidebar(NORTHWIND);
   const text = renderedText(co);
   assert.match(co, /data-testid="settings-scope-block" data-scope="company"/);
   assert.match(co, /data-testid="settings-scope-label">Company settings</);
   assert.match(co, /href="\/account\/companies\/nw1\/settings\/team"/);
-  assert.match(co, /aria-disabled="true" title="The company’s Legal page is not open yet\."/);
-  assert.match(text, /Companies and projects/);
+  assert.match(co, /data-testid="scope-row-legal"[^>]*href="\/account\/portfolio\/nw1\/settings\/legal"/);
+  assert.match(text, /Portfolio/);
   assert.match(co, /data-testid="settings-scope-billing"[^>]*>Billing · in Account/);
   assert.match(co, new RegExp(`data-testid="settings-scope-billing"[^>]*href="${BILLING_PATH}"`));
   assert.match(co, /data-testid="settings-scope-billing-pending">pending owner</, 'Billing\'s place is the owner\'s call');
@@ -131,7 +133,8 @@ test('Projects lists every project of the company, the one in view with its Team
   const co = scopeFor({ company: { uid: 'nw1', name: '[Northwind Labs]' }, projects });
   assert.deepEqual(entryLabels(co), ['Team', 'Company settings', 'General', 'Legal', 'Projects', '[Atlas Pilot]', '[Orbit]']);
   assert.equal(co.entries[2].count, 2);
-  assert.equal(co.entries[2].children[1].path, '/account/companies/nw1/settings/projects/8/team');
+  // D1413 (PF6c): a project under Projects opens its settings inside the company.
+  assert.equal(co.entries[2].children[1].path, '/account/portfolio/nw1/settings/projects/8');
   const inView = scopeFor({ project: ATLAS, projects });
   assert.deepEqual(entryLabels(inView), ['Team', 'Company settings', 'General', 'Legal', 'Projects', '[Atlas Pilot]', 'Team', 'Settings', '[Orbit]']);
   assert.equal(projectsOfCompany(null, 'nw1'), null, 'an unread list is not "none"');
@@ -145,11 +148,11 @@ test('projectCompany: the read\'s company, else the switcher\'s, else governed b
   assert.equal(projectCompany({ company_id: null }, { companies: [{ id: 9, uid: 'nw1' }] }), null);
 });
 
-const block = (props) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/account/companies/nw1/settings'] }, h(SettingsScopeBlock, props)));
+const block = (props) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/account/portfolio/nw1/settings'] }, h(SettingsScopeBlock, props)));
 
 test('one page lights one row: "Company settings" is the label of General, not a second link to it', () => {
   const html = block({ scope: scopeFor({ company: { uid: 'nw1', name: 'x' } }), drawer: false, activeUid: 'nw1' });
-  assert.equal((html.match(/href="\/account\/companies\/nw1\/settings"/g) || []).length, 1, 'only General links to the settings page');
+  assert.equal((html.match(/href="\/account\/portfolio\/nw1\/settings"/g) || []).length, 1, 'only General links to the settings page');
   assert.match(html, /<span class="[^"]*" data-testid="scope-row-company">/);
   assert.match(html, /max-h-\[38vh\] overflow-y-auto/, 'the block scrolls on its own on a desktop');
 });
@@ -166,7 +169,7 @@ test('the phone drawer: one row per entry, its sub-label right-aligned, no child
 
 test('Company settings for a company not active here is off with its reason, never a dead end', () => {
   const html = block({ scope: scopeFor({ company: { uid: 'nw1', name: 'x' } }), drawer: false, activeUid: 'other' });
-  assert.doesNotMatch(html, /href="\/account\/companies\/nw1\/settings"/);
+  assert.doesNotMatch(html, /href="\/account\/portfolio\/nw1\/settings"/);
   assert.match(html, /data-testid="scope-row-general"[^>]*>|aria-disabled="true" title="Full company settings open for the company active on this device/);
   assert.match(html, /title="Full company settings open for the company active on this device\. Make it active from its page\."/);
   assert.match(html, /href="\/account\/companies\/nw1\/settings\/team"/, 'Team serves any company');

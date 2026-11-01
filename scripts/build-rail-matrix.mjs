@@ -56,6 +56,10 @@ export const OPTION_LISTS = [
   // D1596 (#3869): Ask chips that run no model, listed with no models.
   { file: 'advisor.js', name: 'ADVISOR_ASK_CHIPS', profile: 'Advisor' },
   { file: 'partner.js', name: 'PARTNER_RAIL_OPTIONS', profile: 'Operating Partner' },
+  // D1420 (#3864): `studio:layout`, an Ask chip that runs a model, on each /studio rail page.
+  { file: 'founder.js', name: 'FOUNDER_ASK_CHIPS', profile: 'Founder' },
+  { file: 'investor.js', name: 'INVESTOR_ASK_CHIPS', profile: 'Investor' },
+  { file: 'partner.js', name: 'PARTNER_ASK_CHIPS', profile: 'Operating Partner' },
   { file: 'superAdmin.js', name: 'SUPER_ADMIN_RAIL_OPTIONS', profile: 'Super Admin' },
 ];
 
@@ -129,6 +133,8 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
     for (const s of suggested) {
       const m = modelOf(s.t);
       if (!m) continue;
+      // #3936: a kind may drop what the canvas lists but the kind's work cannot use (Listen lists no text model).
+      if ((shape.drop ?? []).some((c) => m.caps.includes(c))) continue;
       const id = onIndex && m.caps.includes('embedding') ? overrides.searchIndexModel : m.id;
       if (out.some((x) => x.id === id)) continue; // a second index model on axal-search collapses into the first
       out.push({ id, role: s.role, line: s.line });

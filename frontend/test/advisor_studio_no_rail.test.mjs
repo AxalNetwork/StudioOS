@@ -18,3 +18,14 @@ test('Advisor Studio renders without an AI rail, including unavailable reads', a
     assert.equal(practice.drawn.at(-1).rails, 1, 'the removal is scoped to Studio');
   } finally { renderer.close(); }
 });
+
+test('D1424 (#3700): Advisor Studio has no header Ask either, even once the Ask panel serves advisors', async () => {
+  const { headerAskGate } = await import('../src/workspaces/ProfileHeaderAsk.jsx');
+  // The panel slides out of the rail, so a page with no rail has no Ask. The
+  // gate is asked as if #3706's panel were live, so the rail check alone answers.
+  const gate = headerAskGate({ role: 'advisor', pathname: '/studio', panel: { available: true } });
+  assert.equal(gate.show, false);
+  assert.equal(gate.reason, 'no_rail');
+  // A zone with a rail would show it then, so the refusal above is the rail's.
+  assert.equal(headerAskGate({ role: 'advisor', pathname: '/practice/sessions', panel: { available: true } }).show, true);
+});

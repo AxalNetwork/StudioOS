@@ -1,0 +1,144 @@
+/*
+ * D1443 (#3706, canvas AK) — the Ask panel.
+ *
+ * DOCKED (1024px and up). `WorkerRail` draws `.fwr-ask-dock` inside its own
+ * <aside>, which runs from under the app header to the footer. The dock spans
+ * that column's height at the rail's left edge (`right: 100%`); the panel is
+ * sticky inside it, as tall as the window under the header and never taller
+ * than the column, so it can pass neither the header nor the footer. It
+ * overlays the content column only: never the header, the sidebar, the rail or
+ * the footer (AK12). This is the one sticky element in the rail's column
+ * (workerRail.css keeps the rail itself without a scroll of its own).
+ *
+ * OVER (640–1023px) and SHEET (below 640px) are portalled to <body>: over the
+ * content under the header, or a bottom sheet at 92% with a scrim.
+ */
+.ead-ask {
+  --ask-ink: #18181b;
+  --ask-body: #3f3a47;
+  --ask-mut: #6b6577;
+  --ask-line: #ececf1;
+  --ask-line2: #e2dfe8;
+  --ask-card: #ffffff;
+  --ask-raised: #faf9fc;
+  --ask-vio: #7c3aed;
+  --ask-vdeep: #6d28d9;
+  --ask-lav: #f4f0fe;
+  --ask-lav-edge: #ddd0fb;
+  --ask-red: #b91c1c;
+  --ask-red-bg: #fef2f2;
+  --ask-red-edge: #fecaca;
+  --ask-amb-bg: #fef3c7;
+  --ask-amb-edge: #fcd34d;
+  --ask-amb: #92400e;
+  display: flex; flex-direction: column; min-height: 0; box-sizing: border-box;
+  width: 420px; background: var(--ask-card); color: var(--ask-ink);
+  border-left: 1px solid var(--ask-line);
+  box-shadow: -10px 0 28px rgba(24, 24, 27, .08);
+  font-size: 13px; line-height: 1.45;
+}
+.dark .ead-ask {
+  --ask-ink: #e5e7eb;
+  --ask-body: #d1d5db;
+  --ask-mut: #9ca3af;
+  --ask-line: #1f2937;
+  --ask-line2: #374151;
+  --ask-card: #111827;
+  --ask-raised: #1f2937;
+  --ask-vio: #a78bfa;
+  --ask-vdeep: #c4b5fd;
+  --ask-lav: rgba(167, 139, 250, .14);
+  --ask-lav-edge: rgba(167, 139, 250, .42);
+  --ask-red: #f87171;
+  --ask-red-bg: rgba(248, 113, 113, .12);
+  --ask-red-edge: rgba(248, 113, 113, .45);
+  --ask-amb-bg: rgba(252, 211, 77, .13);
+  --ask-amb-edge: rgba(252, 211, 77, .45);
+  --ask-amb: #fcd34d;
+  box-shadow: -10px 0 28px rgba(0, 0, 0, .35);
+}
+
+.ead-ask-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--ask-line); }
+.ead-ask-mark.is-grey { filter: grayscale(1); opacity: .6; }
+.ead-ask-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ead-ask-title b { font-size: 14.5px; font-weight: 800; color: var(--ask-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ead-ask-eyebrow { font: 700 10.5px ui-monospace, 'Roboto Mono', monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--ask-mut); }
+.ead-ask-eyebrow.is-violet { color: var(--ask-vdeep); }
+.ead-ask-close { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--ask-body); cursor: pointer; }
+.ead-ask-close:focus-visible, .ead-ask-btn:focus-visible, .ead-ask-chip:focus-visible { outline: 2px solid var(--ask-vio); outline-offset: 2px; }
+
+.ead-ask-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.ead-ask-chips { display: flex; flex-direction: column; gap: 7px; }
+.ead-ask-chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.ead-ask-chip {
+  display: inline-flex; align-items: center; min-height: 30px; padding: 0 11px; border-radius: 999px;
+  border: 1px solid var(--ask-vio); background: var(--ask-card); color: var(--ask-vdeep);
+  font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer;
+}
+.ead-ask-chip:disabled { border-color: var(--ask-line2); color: var(--ask-mut); cursor: not-allowed; }
+
+.ead-ask-log { display: flex; flex-direction: column; gap: 12px; }
+.ead-ask-you { align-self: flex-end; max-width: 86%; margin: 0; padding: 9px 12px; border-radius: 12px 12px 4px 12px; background: var(--ask-raised); border: 1px solid var(--ask-line2); color: var(--ask-ink); white-space: pre-wrap; }
+.ead-ask-said { display: flex; flex-direction: column; gap: 6px; }
+.ead-ask-said p { margin: 0; color: var(--ask-body); white-space: pre-wrap; }
+.ead-ask-who { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 12.5px; color: var(--ask-ink); }
+
+.ead-ask-cards { display: flex; flex-direction: column; gap: 8px; }
+.ead-ask-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--ask-lav-edge); background: var(--ask-card); }
+.ead-ask-card[data-status="accepted"], .ead-ask-card[data-status="discarded"] { border-color: var(--ask-line2); }
+.ead-ask-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ead-ask-source { margin-left: auto; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; color: var(--ask-mut); }
+.ead-ask-card-text { font-size: 13.5px; font-weight: 600; color: var(--ask-ink); }
+.ead-ask-card-acts { display: flex; gap: 6px; }
+.ead-ask-decided { font-size: 12px; font-weight: 600; color: var(--ask-mut); }
+.ead-ask-all { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ead-ask-mono { font: 600 11px ui-monospace, 'Roboto Mono', monospace; color: var(--ask-mut); }
+
+.ead-ask-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 0 11px;
+  border-radius: 9px; border: 1px solid var(--ask-line2); background: var(--ask-card); color: var(--ask-ink);
+  font-size: 12.5px; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.ead-ask-btn.is-primary { border-color: #7c3aed; background: #7c3aed; color: #fff; }
+.dark .ead-ask-btn.is-primary { border-color: #7c3aed; background: #7c3aed; color: #fff; }
+.ead-ask-btn.is-ghost { border-color: transparent; background: transparent; color: var(--ask-body); }
+.ead-ask-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.ead-ask-running { display: flex; align-items: center; gap: 8px; padding: 12px; border-radius: 10px; background: var(--ask-lav); border: 1px solid var(--ask-lav-edge); font-weight: 700; color: var(--ask-vdeep); }
+.ead-ask-spin { width: 14px; height: 14px; border-radius: 999px; border: 2px solid var(--ask-lav-edge); border-top-color: var(--ask-vio); animation: ead-ask-spin 1s linear infinite; }
+@keyframes ead-ask-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ead-ask-spin { animation: none; } }
+
+.ead-ask-state { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; border-radius: 10px; border: 1px solid var(--ask-line2); background: var(--ask-raised); color: var(--ask-body); }
+.ead-ask-state b { color: var(--ask-ink); }
+.ead-ask-state[data-tone="red"] { background: var(--ask-red-bg); border-color: var(--ask-red-edge); }
+.ead-ask-state[data-tone="red"] b { color: var(--ask-red); }
+.ead-ask-state[data-tone="amber"] { background: var(--ask-amb-bg); border-color: var(--ask-amb-edge); }
+.ead-ask-state[data-tone="amber"] b { color: var(--ask-amb); }
+
+.ead-ask-composer { flex: none; display: flex; flex-direction: column; gap: 7px; padding: 10px 14px 12px; border-top: 1px solid var(--ask-line); }
+.ead-ask-input { min-height: 52px; box-sizing: border-box; resize: vertical; border: 1px solid var(--ask-line2); border-radius: 9px; padding: 9px 11px; font: inherit; color: var(--ask-ink); background: var(--ask-card); }
+.ead-ask-input::placeholder { color: var(--ask-mut); }
+.ead-ask-input:disabled { background: var(--ask-raised); }
+.ead-ask-send-row { display: flex; align-items: center; gap: 8px; }
+.ead-ask-send-row .ead-ask-mono { flex: 1; }
+.ead-ask-foot { font-size: 11.5px; color: var(--ask-mut); }
+.ead-ask-grip { align-self: center; flex: none; width: 40px; height: 4px; margin-top: 8px; border-radius: 999px; background: var(--ask-line2); }
+
+/* DOCKED: inside the rail's <aside>, at its left edge, header to footer. */
+.fwr-ask-dock { display: none; }
+@media (min-width: 1024px) {
+  aside.fwr:has(> .fwr-ask-dock) { position: relative; }
+  .fwr-ask-dock { display: block; position: absolute; top: 0; bottom: 0; right: 100%; width: 420px; z-index: 30; pointer-events: none; }
+  .fwr-ask-dock > .ead-ask { pointer-events: auto; position: sticky; top: 0; height: min(calc(100dvh - 56px), 100%); }
+}
+
+/* OVER and SHEET: portalled below 1024px. */
+.ead-ask-layer { position: fixed; inset: 56px 0 0 0; z-index: 55; display: flex; justify-content: flex-end; pointer-events: none; }
+.ead-ask-layer > .ead-ask { pointer-events: auto; width: min(420px, 100%); height: 100%; }
+.ead-ask-scrim { position: fixed; inset: 0; z-index: 55; background: rgba(24, 24, 27, .42); border: 0; padding: 0; }
+.ead-ask-layer[data-layout="sheet"] { inset: auto 0 0 0; height: 92dvh; z-index: 56; }
+.ead-ask-layer[data-layout="sheet"] > .ead-ask { width: 100%; border-left: 0; border-radius: 16px 16px 0 0; box-shadow: 0 -12px 40px rgba(24, 24, 27, .22); }
+.ead-ask-layer[data-layout="sheet"] .ead-ask-btn,
+.ead-ask-layer[data-layout="sheet"] .ead-ask-close { min-height: 44px; min-width: 44px; }
+@media (min-width: 1024px) { .ead-ask-layer, .ead-ask-scrim { display: none; } }

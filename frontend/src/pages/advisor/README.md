@@ -14,7 +14,7 @@ booking still requires the existing authenticated role and subscription gates.
 | --- | --- |
 | `advisory/` | Clients, contracts and retained advisory tabs. |
 | `cohorts/` | Assigned cohort guidance and outcome screens. |
-| `expertise/` | The advisor's own profile, services, proof and thinking. |
+| `expertise/` | The advisor's own profile, services, proof, thinking and visibility (`VisibilityZone.jsx`, D1597 mounted by D1424: requests per booking link and opens of your writing; profile views "Not recorded"). |
 | `network/` | Relationships, introductions and organisations. |
 | `practice/` | Opportunities, engagements, delivery, sessions and earnings. |
 

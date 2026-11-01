@@ -70,7 +70,11 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   brand_logo: 'Draw a logo',
   deck_image: 'Draw a deck image',
   article_image: 'Draw an article image',
+  event_cover: 'Draw an event cover',
+  course_cover: 'Draw a course cover',
   mail_draft: 'Draft an email',
+  // D1420 (#3864).
+  studio_layout: 'Arrange your Studio',
   // D764 (#2089) — the rail's kinds of work, in the canvas's words.
   rail_chat: 'Chat on a page',
   rail_synth: 'Group notes into themes',

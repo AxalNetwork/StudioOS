@@ -205,7 +205,7 @@ test('the artboard\'s heading, stats and ledger columns are on the page', () => 
   const art = if2();
   const src = read(PAGE);
   assert.match(art, /h1:'Capital calls'/);
-  assert.ok(src.includes('<h1>Capital calls</h1>'));
+  assert.ok(src.includes('title="Capital calls"'), 'D1424: the heading is drawn by ZoneHeader');
   assert.match(art, /sub:'Schedule builder, letters, wire tracking and delinquency\.'/);
   assert.ok(src.includes('Schedule builder, letters, wire tracking and delinquency.'));
   // The four stat tiles, by the canvas's own labels.

@@ -274,6 +274,10 @@ export interface Units {
   output_tiles?: number;
   first_megapixels?: number;
   subsequent_megapixels?: number;
+  /** #3935: the reference images sent with a draw (`DrawInput.references`), in the input unit the model bills. */
+  input_tiles?: number;
+  input_tile_steps?: number;
+  input_image_megapixels?: number;
 }
 
 export const estTokens = (s: string): number => (s ? Math.max(1, Math.ceil(s.length / 4)) : 0);
@@ -537,7 +541,8 @@ export function searchIndexAccepts(model: string, vector: unknown): boolean {
  */
 export const websocketUnits = (minutes: number): Units => ({ audio_minutes_websocket: Number.isFinite(minutes) && minutes > 0 ? minutes : 0 });
 
-export interface SpeakInput { voice?: string; lang?: string }
+/** #3936: `format: 'opus_ogg'` asks for Opus in Ogg (GR9's voice notes), which only Aura makes. */
+export interface SpeakInput { voice?: string; lang?: string; format?: 'opus_ogg' }
 /** One request's text, at most: Aura bills per 1k characters, and the router bounds what one press can cost. */
 export const MAX_SPEAK_CHARS = 2000;
 /** The largest audio a voice may return before it is not one sentence's speech. */
@@ -558,11 +563,13 @@ export function speakRefusal(s: SpeakInput | undefined, text: string | undefined
   if (text.length > MAX_SPEAK_CHARS) return `at most ${MAX_SPEAK_CHARS} characters`;
   if (s.voice != null && (typeof s.voice !== 'string' || !VOICE_RE.test(s.voice))) return 'the voice is a speaker name';
   if (s.lang != null && (typeof s.lang !== 'string' || !LANG2_RE.test(s.lang))) return 'the language is a two-letter code';
+  if (s.format != null && s.format !== 'opus_ogg') return 'the format is opus_ogg or none';
   return null;
 }
 
 /**
- * The request a voice takes: Aura's `{ text, speaker?, encoding: 'mp3' }`, or
+ * The request a voice takes: Aura's `{ text, speaker?, encoding: 'mp3' }` (or Opus in
+ * Ogg when `format` asks for it, #3936), or
  * MeloTTS's `{ prompt, lang? }`. A speaker the model does not list is refused
  * (null), so the chain moves on rather than speaking in another voice; MeloTTS
  * has one voice per language and lists no speaker, so any named one is refused.
@@ -571,14 +578,17 @@ export function speakRequest(model: string, text: string, s: SpeakInput): Record
   const speakers = AURA_SPEAKERS[model];
   if (speakers) {
     if (s.voice != null && !speakers.includes(s.voice)) return null;
-    return { text, encoding: 'mp3', ...(s.voice ? { speaker: s.voice } : {}) };
+    const encoding = s.format === 'opus_ogg' ? { encoding: 'opus', container: 'ogg' } : { encoding: 'mp3' };
+    return { text, ...encoding, ...(s.voice ? { speaker: s.voice } : {}) };
   }
-  if (s.voice != null) return null;
+  // MeloTTS has one voice per language and makes MP3 only.
+  if (s.voice != null || s.format != null) return null;
   return { prompt: text, ...(s.lang ? { lang: s.lang } : {}) };
 }
 
-/** The mime type a voice's bytes are, from their first bytes: MP3 (ID3 or frame sync) or WAV; else MP3, which both models default to. */
+/** The mime type a voice's bytes are, from their first bytes: Ogg (#3936), WAV, or MP3 (ID3 or frame sync), which both models default to. */
 export function speechMime(bytes: Uint8Array): string {
+  if (bytes[0] === 0x4f && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) return 'audio/ogg';
   if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return 'audio/wav';
   return 'audio/mpeg';
 }
@@ -636,7 +646,18 @@ async function readBytes(raw: unknown, field: 'audio' | 'image', max: number): P
 
 // ─────────────────────────────────────────────────────────── image generation (PR 4)
 
-export interface DrawInput { width?: number; height?: number; steps?: number; seed?: number; negativePrompt?: string }
+/** #3935: an aspect ratio a page asks for; a model that takes a size gets a true size for it (`aspectSize`). */
+export const ASPECTS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] as const;
+export type Aspect = typeof ASPECTS[number];
+/** #3935: an image a draw starts from (edit, restyle), as bytes the Worker read and sniffed. */
+export interface DrawReference { bytes: Uint8Array; mime: 'image/png' | 'image/jpeg' | 'image/webp'; width: number; height: number }
+export interface DrawInput {
+  width?: number; height?: number; steps?: number; seed?: number; negativePrompt?: string;
+  /** #3935: a ratio instead of a size. Ignored where width or height is given, and by a model that takes no size (FLUX.1 Schnell). */
+  aspect?: Aspect;
+  /** #3935: reference images, sent as `input_image_<n>` to a model that takes them (FLUX.2). */
+  references?: readonly DrawReference[];
+}
 /** What an image model answered, with the size the Worker read from its bytes (or, unreadable, the size it asked for). */
 export interface GeneratedImage { bytes: Uint8Array; mime: string; width: number; height: number }
 
@@ -662,6 +683,8 @@ interface ImageSpec {
   fixedSteps?: number;
   negativePrompt?: boolean;
   billing: Billing;
+  /** #3935: how many reference images the model takes (`input_image_0`…); 0 where it takes none. */
+  maxReferences: number;
 }
 
 /**
@@ -669,14 +692,17 @@ interface ImageSpec {
  * FLUX.2 launch notes, through the Cloudflare docs connector, 2026-10-19).
  * FLUX.2 [dev] gives no step range: 25 is its example's, 50 is the Worker's own bound.
  * Lucid Origin gives no default step count, so the Worker sends 25.
+ * #3935: references, from the FLUX.2 launch notes (2026-11-01): Klein 4B and 9B
+ * take up to 4 (`input_image_0` to `_3`), FLUX.2 [dev] names three; each must
+ * be smaller than 512 by 512.
  */
 export const IMAGE_SPECS: Readonly<Record<string, ImageSpec>> = Object.freeze({
-  '@cf/black-forest-labs/flux-1-schnell': { wire: 'json', maxSide: null, defaultSize: { width: 1024, height: 1024 }, steps: { min: 1, max: 8, def: 4, key: 'steps' }, billing: 'tiles_steps' },
-  '@cf/black-forest-labs/flux-2-dev': { wire: 'multipart', maxSide: 1920, defaultSize: { width: 1024, height: 768 }, steps: { min: 1, max: 50, def: 25, key: 'steps' }, billing: 'tile_steps' },
-  '@cf/black-forest-labs/flux-2-klein-4b': { wire: 'multipart', maxSide: 1920, defaultSize: { width: 1024, height: 768 }, steps: null, fixedSteps: 4, billing: 'tiles' },
-  '@cf/black-forest-labs/flux-2-klein-9b': { wire: 'multipart', maxSide: 1920, defaultSize: { width: 1024, height: 768 }, steps: null, fixedSteps: 4, billing: 'megapixels' },
-  '@cf/leonardo/lucid-origin': { wire: 'json', maxSide: 2500, defaultSize: { width: 1120, height: 1120 }, steps: { min: 1, max: 40, def: 25, key: 'num_steps' }, billing: 'tiles_steps' },
-  '@cf/leonardo/phoenix-1.0': { wire: 'json', maxSide: 2048, defaultSize: { width: 1024, height: 1024 }, steps: { min: 1, max: 50, def: 25, key: 'num_steps' }, negativePrompt: true, billing: 'tiles_steps' },
+  '@cf/black-forest-labs/flux-1-schnell': { wire: 'json', maxSide: null, defaultSize: { width: 1024, height: 1024 }, steps: { min: 1, max: 8, def: 4, key: 'steps' }, billing: 'tiles_steps', maxReferences: 0 },
+  '@cf/black-forest-labs/flux-2-dev': { wire: 'multipart', maxSide: 1920, defaultSize: { width: 1024, height: 768 }, steps: { min: 1, max: 50, def: 25, key: 'steps' }, billing: 'tile_steps', maxReferences: 3 },
+  '@cf/black-forest-labs/flux-2-klein-4b': { wire: 'multipart', maxSide: 1920, defaultSize: { width: 1024, height: 768 }, steps: null, fixedSteps: 4, billing: 'tiles', maxReferences: 4 },
+  '@cf/black-forest-labs/flux-2-klein-9b': { wire: 'multipart', maxSide: 1920, defaultSize: { width: 1024, height: 768 }, steps: null, fixedSteps: 4, billing: 'megapixels', maxReferences: 4 },
+  '@cf/leonardo/lucid-origin': { wire: 'json', maxSide: 2500, defaultSize: { width: 1120, height: 1120 }, steps: { min: 1, max: 40, def: 25, key: 'num_steps' }, billing: 'tiles_steps', maxReferences: 0 },
+  '@cf/leonardo/phoenix-1.0': { wire: 'json', maxSide: 2048, defaultSize: { width: 1024, height: 1024 }, steps: { min: 1, max: 50, def: 25, key: 'num_steps' }, negativePrompt: true, billing: 'tiles_steps', maxReferences: 0 },
 });
 
 const isWhole = (n: unknown, max: number): boolean => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= max;
@@ -690,7 +716,34 @@ export function drawRefusal(d: DrawInput | undefined, text: string | undefined):
   }
   if (d.seed != null && !isWhole(d.seed, Number.MAX_SAFE_INTEGER)) return 'the seed is a whole number';
   if (d.negativePrompt != null && (typeof d.negativePrompt !== 'string' || d.negativePrompt.length > MAX_DRAW_PROMPT_CHARS)) return 'the negative prompt is text';
+  if (d.aspect != null && !(ASPECTS as readonly string[]).includes(d.aspect)) return `the aspect is one of ${ASPECTS.join(', ')}`;
+  if (d.references != null) {
+    if (!Array.isArray(d.references) || d.references.length > MAX_REFERENCES) return `at most ${MAX_REFERENCES} reference images`;
+    for (const r of d.references) {
+      if (!r || !(r.bytes instanceof Uint8Array) || r.bytes.byteLength === 0 || r.bytes.byteLength > MAX_REFERENCE_BYTES) return 'a reference image is at most 1 MB';
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(r.mime)) return 'a reference image is PNG, JPEG or WebP';
+      if (!isWhole(r.width, REFERENCE_MAX_SIDE_PX) || !isWhole(r.height, REFERENCE_MAX_SIDE_PX) || !r.width || !r.height) return `a reference image is at most ${REFERENCE_MAX_SIDE_PX} by ${REFERENCE_MAX_SIDE_PX}`;
+    }
+  }
   return null;
+}
+
+/** #3935: the most reference images any draw model takes, and each one's limits (the FLUX.2 notes: smaller than 512 by 512). */
+export const MAX_REFERENCES = 4;
+export const MAX_REFERENCE_BYTES = 1024 * 1024;
+export const REFERENCE_MAX_SIDE_PX = 512;
+/** #3935: the long side an aspect ratio is drawn at, the size these models draw by default. */
+export const ASPECT_LONG_SIDE_PX = 1024;
+
+/**
+ * #3935: a true size for an aspect ratio: the long side 1024, the short side
+ * in proportion, both rounded down to a multiple of 16 (FLUX's latent grid).
+ */
+export function aspectSize(aspect: Aspect): { width: number; height: number } {
+  const [w, h] = aspect.split(':').map(Number);
+  const long = ASPECT_LONG_SIDE_PX;
+  const short = Math.floor((long * Math.min(w, h)) / Math.max(w, h) / 16) * 16;
+  return w >= h ? { width: long, height: short } : { width: short, height: long };
 }
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
@@ -701,19 +754,33 @@ const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.m
  * fixed, and the fields as its page names them. `sent` is what the units and the
  * quote are measured from.
  */
-export function drawRequest(model: string, text: string, d: DrawInput): { wire: 'json' | 'multipart'; fields: Record<string, string | number>; sent: { width: number; height: number; steps: number } } | null {
+export function drawRequest(model: string, text: string, d: DrawInput): DrawRequest | null {
   const spec = IMAGE_SPECS[model];
   if (!spec) return null;
+  const refs = d.references ?? [];
+  // #3935: a model that takes fewer references than asked draws nothing, rather than silently dropping one.
+  if (refs.length > spec.maxReferences) return null;
   const side = (asked: number | undefined, def: number): number => (spec.maxSide == null ? def : clamp(asked ?? def, MIN_SIDE_PX, spec.maxSide));
-  const width = side(d.width, spec.defaultSize.width);
-  const height = side(d.height, spec.defaultSize.height);
+  // #3935: an aspect ratio becomes a true size, unless the caller gave one.
+  const base = d.aspect && d.width == null && d.height == null ? aspectSize(d.aspect) : spec.defaultSize;
+  const width = side(d.width, base.width);
+  const height = side(d.height, base.height);
   const steps = spec.steps ? clamp(d.steps ?? spec.steps.def, spec.steps.min, spec.steps.max) : spec.fixedSteps ?? 1;
   const fields: Record<string, string | number> = { prompt: text };
   if (spec.maxSide != null) { fields.width = width; fields.height = height; }
   if (spec.steps) fields[spec.steps.key] = steps;
   if (d.seed != null) fields.seed = d.seed;
   if (spec.negativePrompt && d.negativePrompt) fields.negative_prompt = d.negativePrompt;
-  return { wire: spec.wire, fields, sent: { width, height, steps } };
+  const files = refs.map((r, i) => ({ name: `input_image_${i}`, bytes: r.bytes, mime: r.mime }));
+  return { wire: spec.wire, fields, files, sent: { width, height, steps, references: refs.map((r) => ({ width: r.width, height: r.height })) } };
+}
+
+export interface DrawRequest {
+  wire: 'json' | 'multipart';
+  fields: Record<string, string | number>;
+  /** #3935: the reference images, appended to the multipart form under their own names. */
+  files: Array<{ name: string; bytes: Uint8Array; mime: string }>;
+  sent: { width: number; height: number; steps: number; references: Array<{ width: number; height: number }> };
 }
 
 /** 512 by 512 tiles covering an image, each side rounded up. */
@@ -723,18 +790,26 @@ export const tilesOf = (width: number, height: number): number => Math.ceil(widt
  * An image's units, in the units its model is billed in (D760's catalogue):
  * tiles and steps (FLUX.1 Schnell, Lucid Origin, Phoenix), tile-steps (FLUX.2
  * [dev]), tiles (FLUX.2 Klein 4B), or megapixels (FLUX.2 Klein 9B: the first,
- * then each further one, rounded up). Output only: no input image is sent.
+ * then each further one, rounded up).
+ *
+ * #3935: each reference image adds the model's input unit, as the catalogue
+ * prints it: input tiles (Klein 4B), input tile-steps (FLUX.2 [dev]), or
+ * input-image megapixels (Klein 9B, the references' total rounded up). A model
+ * that takes no reference adds nothing; `drawRequest` refuses to send one.
  */
-export function imageUnits(model: string, width: number, height: number, steps: number): Units {
+export function imageUnits(model: string, width: number, height: number, steps: number, references: ReadonlyArray<{ width: number; height: number }> = []): Units {
   const spec = IMAGE_SPECS[model];
   const tiles = tilesOf(width, height);
+  const refTiles = references.reduce((n, r) => n + tilesOf(r.width, r.height), 0);
+  const withRefs = (u: Units, input: Units): Units => (references.length ? { ...u, ...input } : u);
   switch (spec?.billing) {
     case 'tiles_steps': return { tiles, steps };
-    case 'tile_steps': return { output_tile_steps: tiles * steps };
-    case 'tiles': return { output_tiles: tiles };
+    case 'tile_steps': return withRefs({ output_tile_steps: tiles * steps }, { input_tile_steps: refTiles * steps });
+    case 'tiles': return withRefs({ output_tiles: tiles }, { input_tiles: refTiles });
     case 'megapixels': {
       const mp = (width * height) / 1_000_000;
-      return { first_megapixels: 1, subsequent_megapixels: Math.max(0, Math.ceil(mp - 1)) };
+      const refMp = references.reduce((n, r) => n + (r.width * r.height) / 1_000_000, 0);
+      return withRefs({ first_megapixels: 1, subsequent_megapixels: Math.max(0, Math.ceil(mp - 1)) }, { input_image_megapixels: Math.ceil(refMp) });
     }
     default: return {};
   }
