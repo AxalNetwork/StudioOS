@@ -205,6 +205,8 @@ import './integrations/providers/notion';
 import './integrations/providers/posthog';
 // D855 §4 (#3733 part 1) — a member's own Linear, read-only, through Linear's read-only MCP server: sign-in only, not listed yet.
 import './integrations/providers/linear';
+// D855 §4 (#3733 part 2) — a member's own Cloudflare, read-only, through Cloudflare's REST API: sign-in only, not listed yet.
+import './integrations/providers/cloudflare';
 // D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
 import './services/notion/build';
 import crunchbaseRoutes from './routes/crunchbase';
@@ -249,6 +251,7 @@ import deckNotes from './routes/deck_notes';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
+import deckGrid from './routes/deck_grid';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
@@ -403,6 +406,8 @@ import publicRoutes from './routes/public';
 import eventsRoutes from './routes/events';
 import eventsPublicRoutes from './routes/events_public';
 import adminEventsRoutes from './routes/admin_events';
+import adminEventSyndicationRoutes from './routes/admin_event_syndication';
+import eventSyndicationRoutes from './routes/event_syndication';
 // Task #68 — Public Job Board (Worker on D1): founder /api/jobs, public feed +
 // apply on /api/public/jobs*, admin review queue on /api/admin/jobs.
 import jobsRoutes from './routes/jobs';
@@ -1147,6 +1152,8 @@ app.route('/api/venture-scores', ventureScoreModels);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
 // so /api/admin/events/* resolves here, not in the generic admin router.
 app.route('/api/admin/events', adminEventsRoutes);
+// D1490 — HQ › Platform › Event syndication; before the /api/admin catch-all.
+app.route('/api/admin/event-syndication', adminEventSyndicationRoutes);
 // Task #68 — Job Board admin review queue. Mount BEFORE the catch-all
 // /api/admin so /api/admin/jobs/* resolves here, not in the generic admin router.
 app.route('/api/admin/jobs', adminJobsRoutes);
@@ -1357,6 +1364,8 @@ app.route('/api/decks', deckNotes);
 app.route('/api/decks', deckReview);
 // D900 (#2679): `/checks`, `/:id/check` and `/:id/claims/:uid/use-record`, before `decks` so `GET /:id` cannot answer `/checks`.
 app.route('/api/decks', deckCheck);
+// D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
+app.route('/api/decks', deckGrid);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
@@ -1459,6 +1468,8 @@ app.route('/api/dashboard', dashboard);
 // D1421 (#3699): the Studio's module catalogue and the member's saved layout.
 app.route('/api/studio', studioLayout);
 // Task #39 — Event engine authed routes (§8.1).
+// D1490 — one event's syndication (`/:id/syndication…`), before events.ts.
+app.route('/api/events', eventSyndicationRoutes);
 app.route('/api/events', eventsRoutes);
 // Task #68 — Job Board founder routes (post/manage roles, read applicants).
 app.route('/api/jobs', jobsRoutes);
