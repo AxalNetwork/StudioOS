@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 193 canonical canvases at `design/canvases/`, listed
-310 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 195 canonical canvases at `design/canvases/`, listed
+316 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -123,7 +123,7 @@ it, where in their nav, and how do they get there.*
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
 
-## Advisor — 28 canvases
+## Advisor — 30 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -155,8 +155,10 @@ it, where in their nav, and how do they get there.*
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Practice | NEW | Low |
+| Zone Headers · Boards | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| Zone Headers Page | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 
-## LP / Investor — 41 canvases
+## LP / Investor — 43 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -201,8 +203,10 @@ it, where in their nav, and how do they get there.*
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | Headerless | Full page | Sidebar → Headerless → Trust | NEW | High |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | Headerless | Full page (proposed) | Sidebar → Headerless → Deals | NEW | Low |
+| Zone Headers · Boards | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| Zone Headers Page | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 
-## Partner / Operator — 26 canvases
+## Partner / Operator — 28 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -232,6 +236,8 @@ it, where in their nav, and how do they get there.*
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Venture scorecard | `/deals/:id/scorecard` · `/deals?view=table` · `/raise/scorecard` · `/raise/scorecard/trajectory` · `/practice/scorecards/:projectId` · `/scoring/method` · `/admin/platform/scoring` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Zone Headers · Boards | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| Zone Headers Page | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 
 ## Subsidiary Admin — 45 canvases
 
@@ -393,7 +399,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 123 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 93 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 94 | Not routed. Proposed route only. |
+| Low | 100 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

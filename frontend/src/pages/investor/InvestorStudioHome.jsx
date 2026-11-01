@@ -20,6 +20,7 @@ import { CustomiseButton, StudioFixedLock } from '../studio/StudioParts';
 import { PURPOSE } from '../studio/studioLayoutModel';
 import { useStudioLayout } from '../studio/useStudioLayout';
 import { investorTiles } from '../studio/tiles/investorTiles';
+import InvestorThesisBand from './InvestorThesisBand';
 import './investorStudioHome.css';
 
 const list = (data, keys = []) => Array.isArray(data) ? data : keys.reduce((found, key) => found || (Array.isArray(data?.[key]) ? data[key] : null), null) || [];
@@ -93,6 +94,9 @@ export default function InvestorStudioHome({
       </header>
       {previewing && <div className="is-source-note" role="status" data-testid="status-investor-preview"><CircleAlert size={15} />You are previewing the Investor workspace as an administrator. Investor-scoped values are withheld because this session is not an investor identity.</div>}
       {!previewing && dashboardUnavailable && <div className="is-source-note" data-testid="status-investor-dashboard-unavailable"><CircleAlert size={15} />The deal-flow summary is temporarily unavailable. Independent Investor Studio sources remain visible.<button type="button" onClick={refreshContext}>Retry</button></div>}
+
+      {/* D1424 (#3700, PH8, owner E): the thesis band, linking to its Settings card. Withheld in an admin preview. */}
+      {!previewing && <InvestorThesisBand />}
 
       <div className={`is-advisor ${studio.editing ? 'sm-dim' : ''}`} data-testid="section-investor-advisor">
         {previewing ? <AdvisorUnavailable previewing /> : <StudioInterview persona="investor" disablePersistedFullscreen onAvailabilityChange={setAdvisorAvailable} />}

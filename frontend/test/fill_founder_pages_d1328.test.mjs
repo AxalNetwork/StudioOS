@@ -486,9 +486,10 @@ const MOUNTS = {
   'Admin · Approvals · Events | event': { add: 'exempt: /events/new is an owner call, under #3724', edit: ['pages/events/EventEditorPage.jsx', /record: isEdit \? Number\(id\) : null/] },
   'Admin · Approvals · Events | agenda-item': { add: ['pages/events/EventManagePage.jsx', /parent: editing \? null : Number\(id\)/], edit: ['pages/events/EventManagePage.jsx', /record: editing \?\? null/] },
   'Super Admin · Content · Publications | publication': { add: 'exempt: a publication is created from its source, then its summary is written on its detail page', edit: ['pages/admin/PublicationDetail.jsx', /scope: SCOPED_FORMS\.publication, record: pubId/] },
-  'Investor · Portfolio · Value-add | support': { add: 'exempt: the investor sections are redrawn under #3700, which carries their Ask', edit: 'exempt: as Add, #3700' },
-  'Operating Partner · Offers · Catalog | offering': { add: 'exempt: the operating-partner sections are redrawn under #3700, which carries their Ask', edit: 'exempt: as Add, #3700' },
-  'Operating Partner · Offers · Perk deals | perk': { add: 'exempt: the operating-partner sections are redrawn under #3700, which carries their Ask', edit: 'exempt: as Add, #3700' },
+  // D1424 (#3700) mounted D1595's three forms.
+  'Investor · Portfolio · Value-add | support': { add: ['pages/investor/InvestorPortfolioValueAdd.jsx', /scope: SCOPED_FORMS\.support, parent: parentId/], edit: 'exempt: an entry is delivered, withdrawn or amended on its row (PATCH), and no form re-opens its summary' },
+  'Operating Partner · Offers · Catalog | offering': { add: ['pages/ServiceCatalogPage.jsx', /parent: offering \? null : ownerId/], edit: ['pages/ServiceCatalogPage.jsx', /record: offering\?\.id \?\? null/] },
+  'Operating Partner · Offers · Perk deals | perk': { add: ['pages/PerksPage.jsx', /scope: SCOPED_FORMS\.perk, parent: ownerId/], edit: 'exempt: a submitted perk is reviewed before it lists, and this console edits only its end date (Extend)' },
 };
 
 test('#3740 guard: every FILL_FIELDS form has an Add mount and an Edit mount that pass fill, or a named exemption', async () => {

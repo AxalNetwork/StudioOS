@@ -128,7 +128,8 @@ test('the closing ops are live over the stores migration 335 built', () => {
   for (const [label, handler] of [['Apply template', 'applyTemplate'], ['Export packet', 'exportPacket'], ['Record wire', 'recordWire']]) {
     assert.match(
       rowsrc,
-      new RegExp(`\\{ label: '${label}', kind: 'handler', handler: '${handler}' \\}`),
+      // D1424 (#3700): Record wire is Closing's indigo primary.
+      new RegExp(`\\{ label: '${label}', kind: 'handler', handler: '${handler}'${label === 'Record wire' ? ', primary: true' : ''} \\}`),
       `${label} is not the page-performed op D462 made it`,
     );
   }

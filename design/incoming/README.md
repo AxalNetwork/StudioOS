@@ -111,6 +111,29 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-01 — Profile zone headers (#3700)
+
+The owner's two exports for #3700 arrived unpacked (the page's and the grid's
+bundles, read as data only), were rebuilt into their bundled form, and were
+decoded by `scripts/read-canvas.mjs`:
+- `Zone Headers Page.dc.html` is the page, one component drawn per board
+  through its `v` prop (`hero`, `ph0` to `ph22c-d`; a `-d` suffix is dark);
+- `Zone Headers · Boards.dc.html` is the board grid: Page and PH0 to PH22. It
+  imports the page by name; its captions and notes are inline in its `B(...)`
+  calls (it has no `RENAME` or `NOTES` map).
+
+**Two edits, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png` and the Eadwyn mark (`eadwyn-ai.png`) at `/eadwyn-ai.png`;
+the bundles carried neither image. No other value was edited.
+
+**Grade: UPGRADE for both (D1424).** Every Investor, Advisor and Operating
+Partner zone header draws one filled primary from a live action in the
+licence's accent, or none. Where the canvas departs from `main` (zone order,
+page-type badges, Research › Companies, the IC memo's three preview fields),
+`main` wins, as D1424 §5 lists. The header Ask, its panel and its "N waiting"
+chip wait on #3706 (D1443, D1442), so both files stay here. No file moved, so
+no count changed.
+
 ## Landed 2026-11-01 — Studio modularity (#3698)
 
 The owner's two exports for #3698 arrived unpacked (the page's and the grid's

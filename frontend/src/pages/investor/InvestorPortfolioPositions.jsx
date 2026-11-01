@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import FromMercury from './FromMercury';
 import { WorkerRail } from '../../ui';
-import ZoneNav from '../../workspaces/ZoneNav';
-import { bucketForPath } from '../../workspaces/shellConfig';
+import ZoneHeader from '../../workspaces/ZoneHeader';
+import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { exportView } from '../../lib/csvExport';
@@ -115,9 +115,9 @@ export default function InvestorPortfolioPositions() {
   const latestMark = rows.map((row) => row.mark_as_of).filter(Boolean).sort().at(-1);
   const anyPartial = Object.values(state.unavailable).some(Boolean);
 
-  return <div className="i4-shell ip1-shell"><main className="i4-portfolio ip1-positions" data-testid="investor-portfolio-positions">
-    <header className="i4-heading"><div><h1>Positions book</h1><p>Lots, marks history and ownership changes from the investor-accessible portfolio ledger.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh positions book"><RefreshCw size={15} /></button></header>
-    <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
+  return <ZonePrimaryScope><div className="i4-shell ip1-shell"><main className="i4-portfolio ip1-positions" data-testid="investor-portfolio-positions">
+    <ZoneHeader bucketPath="/portfolio" title="Positions book" intro="Lots, marks history and ownership changes from the investor-accessible portfolio ledger."
+      refresh={<button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh positions book"><RefreshCw size={15} /></button>} />
     {/* All four predicates are real and none of them moved. The stage
         `<select>` stays where it was, below, because `By stage` reveals a
         control rather than applying one — there is no single stage a chip
@@ -167,7 +167,7 @@ export default function InvestorPortfolioPositions() {
       <FromMercury section="portfolio" />
       <footer className="i4-boundary">Investor workspace · data shown is restricted to this investor’s accessible position book.</footer>
     </>}
-  </main><PositionsRail rows={rows} analytics={state.analytics} unavailable={state.unavailable} sourceError={state.error} /></div>;
+  </main><PositionsRail rows={rows} analytics={state.analytics} unavailable={state.unavailable} sourceError={state.error} /></div></ZonePrimaryScope>;
 }
 
 function PositionsTable({ rows, healthUnavailable, updatesUnavailable, filter }) {
