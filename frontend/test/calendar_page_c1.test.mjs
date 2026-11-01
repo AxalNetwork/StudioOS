@@ -82,8 +82,8 @@ const canvasKinds = [...KINDS_BLOCK.matchAll(/\{\s*id:'(\w+)',\s*label:'([^']+)'
 
 /** The page's kind table, likewise. */
 const pageKinds = [...(codeOnly(pageRaw).match(/const KINDS = \[([\s\S]*?)\n\];/)?.[1] || '')
-  .matchAll(/\{ id: '(\w+)', label: '([^']+)', src: '([^']+)' \}/g)]
-  .map((m) => ({ id: m[1], label: m[2], src: m[3] }));
+  .matchAll(/\{ id: '(\w+)', label: '([^']+)', from: '([^']+)' \}/g)]
+  .map((m) => ({ id: m[1], label: m[2], from: m[3] }));
 
 test('the canvas and the page were both parsed, so a silent zero-match cannot pass', () => {
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
@@ -114,7 +114,10 @@ test('the five kinds the canvas draws keep its labels, sources, hues and dot sha
     const mine = pageKinds.find((p) => p.id === k.id);
     assert.ok(mine, `the canvas draws ${k.id} and the page does not`);
     assert.equal(mine.label, k.label, `${k.id} is labelled differently from the canvas`);
-    assert.equal(mine.src, k.src, `${k.id} names a different source from the canvas`);
+    // D1613 (#3723): the canvas's `src` is the D1 table; the page names the
+    // module in plain words instead, and never the table.
+    assert.notEqual(mine.from, k.src, `${k.id} shows its table name`);
+    assert.doesNotMatch(mine.from, /_/, `${k.id} shows a table-like name`);
     // Hue and shape live in the stylesheet, one rule per kind, both themes.
     assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.hue)};`), `${k.id} lost its light hue`);
     assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.dHue)};`), `${k.id} lost its dark hue`);
@@ -184,12 +187,12 @@ test('D1033: the two My events kinds are derived in the same idiom, apart from e
       takenHues.add(h);
     }
   }
-  assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label, k.src]), [
-    ['event_ticket', 'Event ticket', 'event_registrations'],
-    ['event_hosted', 'Hosting', 'events'],
+  assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label, k.from]), [
+    ['event_ticket', 'Event ticket', 'Events · your tickets'],
+    ['event_hosted', 'Hosting', 'Events · you host'],
   ]);
-  assert.deepEqual(pageKinds.filter((k) => k.id === 'investor_meeting').map((k) => [k.id, k.label, k.src]), [
-    ['investor_meeting', 'Investor meeting', 'raise_prospect_events'],
+  assert.deepEqual(pageKinds.filter((k) => k.id === 'investor_meeting').map((k) => [k.id, k.label, k.from]), [
+    ['investor_meeting', 'Investor meeting', 'Raise › Capital relationships'],
   ]);
 });
 
@@ -306,10 +309,11 @@ test('the rail carries the three promises and the source legend', () => {
   assert.match(pageRaw, /Ongoing, per provider\./);
   assert.match(pageRaw, /One-time, per event\. A copy is written once; later changes here do not follow it\./);
   assert.match(pageRaw, /Read-only feed for any client\. No account connection, no write access\./);
-  // The legend lists every kind with the store it comes from.
-  assert.match(page, /<span className="cal-mono">\{k\.src\}<\/span>/, 'the legend no longer names each kind\'s source');
+  // The legend lists every kind with the module it comes from, in plain words (D1613).
+  assert.match(page, /<span className="cal-mono">\{k\.from\}<\/span>/, 'the legend no longer names each kind\'s source');
   for (const k of pageKinds) {
-    assert.ok(page.includes(`src: '${k.src}'`), `${k.id} lost its source`);
+    assert.ok(page.includes(`from: '${k.from}'`), `${k.id} lost its source`);
+    assert.doesNotMatch(k.from, /^[a-z]+(?:_[a-z]+)+$/, `${k.id}'s legend shows a table name`);
   }
 });
 

@@ -4,6 +4,7 @@
  */
 import assignments from './moduleModels';
 import { isOffered, modelById, type CatalogueSwitches } from './catalogue';
+import { RAIL_KIND_JOBS, jobStep, selectorFor } from './modelUseCases';
 
 export type ModuleOperation = 'chat' | 'vision' | 'decision' | 'image_labels' | 'embed' | 'rerank' | 'sentiment' | 'translate' | 'stream' | 'transcribe' | 'turn' | 'voice' | 'draw' | 'guard';
 export type ModelConnection = { operation: ModuleOperation; kinds: string[]; purpose: string };
@@ -19,12 +20,40 @@ export function connectionOnPage(id: string, page: Pick<Page, 'pageKey' | 'kind'
   return c.kinds.includes(page.kind);
 }
 
-/** #3741: connected models are explicit choices under All models, never extra cards. */
+/**
+ * Whether a model can do a rail kind's run, by its connection: a text kind
+ * needs a chat model, a vision kind one that also reads images, speech one
+ * that transcribes, and each of #3934's kinds its own operation.
+ */
+export function fitsRailKind(kind: string, id: string): boolean {
+  const op = MODEL_CONNECTIONS[id]?.operation;
+  switch (kind) {
+    case 'speech': return op === 'transcribe';
+    case 'vision': return chatCompatible(id, true);
+    case 'draw': case 'edit_image': return op === 'draw';
+    case 'decide': return op === 'decision';
+    case 'sentiment': return op === 'sentiment' || op === 'decision';
+    case 'translate': return op === 'translate';
+    default: return op === 'chat';
+  }
+}
+
+/**
+ * The models a page row or an option shows. #3934: a rail kind's row reads
+ * its job step in `modelUseCases.ts` (RAIL_KIND_JOBS): at most three
+ * suggested (Default, Alternative, Deeper) and the rest of the step and its
+ * kind under All models, each a model the row's run can do and a rail may
+ * list. #3741's `{ models, more }` shape is unchanged.
+ */
 export function withModuleModels<T extends Page>(row: T): T & { more: Array<{ id: string; line: string }> } {
   const models = row.models.filter(m => MODEL_CONNECTIONS[m.id]?.operation !== 'vision').map(m => ({ ...m }));
   const more = (row.more ?? []).map(({ id, line }) => ({ id, line }));
   // D1478 (#3721): a transcription option lists what transcribes; no chat model joins it.
   if ((row as { handler?: string }).handler === 'transcribe') return { ...row, models, more };
+  const ref = RAIL_KIND_JOBS[row.kind];
+  const job = ref ? jobStep(ref.id, ref.step) : null;
+  if (job) return { ...row, ...selectorFor(job, (id) => fitsRailKind(row.kind, id)) };
+  // An option kind with no job here yet (D1478's `image`, whose readers #3935 replaces) keeps its list.
   for (const [id, c] of Object.entries(MODEL_CONNECTIONS)) {
     if (c.operation !== 'chat' || !connectionOnPage(id, row) || [...models, ...more].some(m => m.id === id)) continue;
     more.push({ id, line: c.purpose });

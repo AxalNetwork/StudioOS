@@ -1,0 +1,29 @@
+{
+  "skill": "data-room-document-summary",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "data_room.index": [
+        {
+          "file": "MSA Acme.pdf",
+          "text": "Master services agreement between Fixture Robotics and Acme Fixtures. Term: 12 months. Either party may terminate on 30 days notice."
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Acme Fixtures",
+      "12 months",
+      "30 days"
+    ],
+    "must_say_not_recorded": [
+      "date"
+    ],
+    "must_not_include": [
+      "we advise"
+    ]
+  }
+}

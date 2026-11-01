@@ -43,7 +43,7 @@ export const NOTES_PATH = '/raise/pitch/notes';
 export const MOVED_KEY = 'pitch-workspace';
 export const MOVED_NOTICE = 'Pitch deck has a new address. Update your bookmark.';
 export const BUILDER_MOVED_KEY = 'pitch-builder';
-export const BUILDER_MOVED_NOTICE = 'The template builder is now part of the studio: Fill from project and Branding are on Decks, and templates are in New deck.';
+export const BUILDER_MOVED_NOTICE = 'The template builder is now part of the studio: Ask Eadwyn to draft from project and Branding are on Decks, and templates are in New deck.';
 /** Every moved notice the studio's pages draw, by its `?moved=` key. */
 export const MOVED_NOTICES = Object.freeze({ [MOVED_KEY]: MOVED_NOTICE, [BUILDER_MOVED_KEY]: BUILDER_MOVED_NOTICE });
 

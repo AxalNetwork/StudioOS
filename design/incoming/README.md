@@ -185,6 +185,30 @@ route draws its unavailable state through
 `frontend/src/pages/incorporate/incorporateAdapter.js` (#3855, #3706). All four
 files stay here: some bodies are outstanding. No file moved, so no count
 changed.
+## Landed 2026-11-01 — Calendar: AI agent sessions (#3723)
+
+The owner's artifacts `Bj7uoUqbMzkksEDU1XdUYK` (the page) and
+`HQTr1DAQrsQx3Eb6eagVQn` (the board grid) were re-exported for #3723 and
+decoded by `scripts/read-canvas.mjs`. They replace the pair that landed
+2026-10-25 under #2420 (below), which they contain unchanged. What they add:
+- board **CAL1b**, Ask beside New;
+- the field triggers "Ask Eadwyn to fill …";
+- the Eadwyn spine;
+- the addendum **"A sixth source family: AI agents"**: AG8 (Schedule an AI
+  agent, and its drag-on-a-slot form), AG9 and AG9D (agent blocks on the week
+  and the day), AG10 and AG10B (the session sheet and the meeting brief), AG11
+  and AG11P (the states, and the phone), and AG9-D and AG10-D (dark).
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`. No other value was
+edited.
+
+**Grade: UPGRADE (D1613).** The agent sessions are built behind
+`frontend/src/pages/calendarAgentsAdapter.js`, which is off until #3957's
+routes land. The rail's source legend now names modules, not tables. The Ask
+button is mounted the way Team mounts it: it draws nothing until #3706's Ask
+panel exists. Two files were replaced and none left, so the folder counts above
+do not move.
 
 ## Landed 2026-10-31 — Pitch deck studio v2 (#3716)
 
@@ -248,6 +272,21 @@ visualiser points at `ring-viz.js` instead of its asset id. No other value was e
 the grid does not draw; they are not landed here.
 
 **Grade: UPGRADE.** D1330 ports `ring-viz.js`'s maths into `frontend/src/lib/ringViz.js`.
+## Landed 2026-11-01 — Raise › Overview (#3714)
+
+The owner's artifacts on #3714:
+- `Raise Overview Page.dc.html` (`GxGHkfiM5nwEz3WTF8ZhQM`) is the page renderer, one frame per board;
+- `Raise Overview · Boards.dc.html` (`4AduBLiHjYy6yETpzTyNN3`) is the board grid (RO00 to RO18); it imports the page by name.
+
+Decoded by `scripts/read-canvas.mjs`. **No value was edited.**
+
+**Grade: REDESIGN** of D661's shared overview (D1466). The grid rules (figure columns by count, equal-height
+cards, the last card filling its row, compact empty states, the cut-off) apply to all four cycle overviews,
+S1's pick C1. Raise gains the header Ask and the lead row (Next steps, From your tools); those two cards wait
+on D1610's `next_steps` and `connectors`, and the six-figure row on its `deck_views_8w` and `data_room_files`.
+RO05's fourth evidence shade (Stated) and RO13's plan lock on the cap table card are Worker parts of D1610.
+RO08 and RO12's panel states are #3706's; RO16 and RO17 keep `PhoneCycleRoot` as it is.
+
 ## Landed 2026-11-01 — Social share cards (#3705)
 
 The owner's artifacts on #3705:

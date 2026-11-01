@@ -3,7 +3,7 @@
  * builder, now the studio's own. Their words and derivations are kept pure so
  * the tests read them without a browser.
  *
- *   Fill from project   `POST /api/decks/:id/autofill` (the Decks tab). The
+ *   Ask Eadwyn to draft from project   `POST /api/decks/:id/autofill` (the Decks tab). The
  *                       fill is a proposal beside the current version, kept
  *                       card by card at New deck's step 4 (`?proposal=`).
  *   Recommended         `GET /api/decks/recommend` (New deck's Start from).
@@ -28,26 +28,26 @@ export function isSpinoutDeck(deck) {
   return Array.isArray(slides) && slides.some((s) => s?.method_id === SPINOUT_METHOD);
 }
 
-// ─────────────────────────────────────────────────── Fill from project
+// ──────────────────────────────── Ask Eadwyn to draft from project (#3930)
 
-export const FILL_TITLE = 'Fill from project';
-export const FILL_SENTENCE = 'Eadwyn fills this deck\'s template again from your records, as a proposal beside the current version. Nothing changes until you keep cards and save.';
-export const FILL_NO_TEMPLATE = 'This deck has no template to fill. Start a new deck from a template first.';
-export const FILL_PLAN = 'This deck\'s template is on a paid plan. Upgrade to fill it again.';
-export const FILL_FAILED = 'The fill did not run. Nothing changed.';
+export const DRAFT_TITLE = 'Ask Eadwyn to draft from project';
+export const DRAFT_SENTENCE = 'Eadwyn drafts this deck\'s template again from your records, as a proposal beside the current version. Nothing changes until you keep cards and save.';
+export const DRAFT_NO_TEMPLATE = 'This deck has no template to draft from. Start a new deck from a template first.';
+export const DRAFT_PLAN = 'This deck\'s template is on a paid plan. Upgrade to draft from it again.';
+export const DRAFT_FAILED = 'The draft did not run. Nothing changed.';
 
 /**
  * A refused fill, as a sentence and, where there is one, the place that fixes
  * it. The template's plan (`PAYWALL_PREMIUM_METHOD`) is not the token balance:
  * any other 402 is New deck's own refusal, with its Add tokens link.
  */
-export function fillRefusal(e, newPath) {
+export function draftRefusal(e, newPath) {
   const data = e?.data && typeof e.data === 'object' ? e.data : {};
   const code = e?.code || data.code || data.error || null;
-  if (e?.status === 409 || code === 'no_method_id') return { message: FILL_NO_TEMPLATE, link: { href: newPath, text: 'New deck ›' }, topUp: null };
-  if (e?.status === 402 && (code === 'PAYWALL_PREMIUM_METHOD' || code === 'paywall')) return { message: FILL_PLAN, link: { href: '/pricing', text: 'Plans ›' }, topUp: null };
+  if (e?.status === 409 || code === 'no_method_id') return { message: DRAFT_NO_TEMPLATE, link: { href: newPath, text: 'New deck ›' }, topUp: null };
+  if (e?.status === 402 && (code === 'PAYWALL_PREMIUM_METHOD' || code === 'paywall')) return { message: DRAFT_PLAN, link: { href: '/pricing', text: 'Plans ›' }, topUp: null };
   const r = refusalOf(e) || {};
-  return { message: e?.message ? `${FILL_FAILED} ${e.message}` : FILL_FAILED, link: r.link || null, topUp: r.topUp || null };
+  return { message: e?.message ? `${DRAFT_FAILED} ${e.message}` : DRAFT_FAILED, link: r.link || null, topUp: r.topUp || null };
 }
 
 /** Where a fill's proposal is reviewed: New deck's step 4, on this venture. */

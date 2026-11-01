@@ -1,0 +1,35 @@
+{
+  "skill": "customer-interview-summary",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "session": {
+          "consent": "given",
+          "label": "Ops lead A",
+          "transcript": "We schedule inspections on a spreadsheet; it takes a day a week."
+        },
+        "hypotheses": [
+          {
+            "title": "Scheduling is the bottleneck"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "spreadsheet",
+      "Scheduling is the bottleneck"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "@"
+    ],
+    "refuse_when": {
+      "validate.records.session.consent": "not_given"
+    }
+  }
+}
