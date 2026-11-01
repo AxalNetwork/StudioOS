@@ -51,6 +51,9 @@ export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Objec
   manual: { family: 'tasks', module: 'Calendar', label: 'Your event', page_only: true, pushable: false },
   // #3959: the member's own learning plan; page only until its feed and provider copy are designed.
   learning: { family: 'learning', module: 'Learning › Your plan', label: 'Learning', page_only: true, pushable: false },
+  // #3982 (D1486 §c): Raise's dated stores.
+  round_close: { family: 'raise', module: 'Raise › Round', label: 'Round close', page_only: true, pushable: false },
+  nda_expiry: { family: 'raise', module: 'Raise › NDAs', label: 'NDA expiry', page_only: true, pushable: false },
 });
 
 export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];

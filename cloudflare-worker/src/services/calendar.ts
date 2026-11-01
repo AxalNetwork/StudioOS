@@ -433,7 +433,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'round_close' | 'nda_expiry';
   source_id: number;
   source_uid: string;
   title: string;
@@ -898,6 +898,9 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   manual: manualEvents,
   // #3959: the "Learning" source — the member's own plan occurrences and the webinars they registered for.
   learning: async (env, userId, from, to) => (await (await import('./learningPlan')).learningEvents(env, userId, from, to)) as CalendarEvent[],
+  // #3982 (D1486 §c): Raise's dated stores, page only, all day: a round's close for the venture's members, an NDA's expiry for its two parties.
+  round_close: async (env, userId, from, to) => (await (await import('./calendar/raiseDates')).roundCloseEvents(env, userId, from, to)),
+  nda_expiry: async (env, userId, from, to) => (await (await import('./calendar/raiseDates')).ndaExpiryEvents(env, userId, from, to)),
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
@@ -974,7 +977,7 @@ export async function fetchUserEventsWithSources(
 /** Private external meetings and wellbeing sessions never enter a staff scope. */
 export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as const;
 /** D1484: read for their owner alone; a staff scope has no reader for them, so it does not list them. */
-export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual'] as const;
+export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual', 'round_close', 'nda_expiry'] as const;
 export const SCOPED_SOURCE_LIMIT = 1000;
 export function validScopeWindow(from: string, to: string): boolean {
   const start = Date.parse(from), end = Date.parse(to);

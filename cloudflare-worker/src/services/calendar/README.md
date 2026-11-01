@@ -24,6 +24,10 @@ when adding a kind.
   carries `source`. D1484 also wires D1208's interview calls, cohort dates and
   deal closings and the `manual` reader for "New event", all page only and for
   their owner alone (`PERSONAL_ONLY_KINDS`: no staff scope lists them).
+- `raiseDates.ts`: #3982 (D1486 §c), Raise's dated stores, page only and all
+  day: `round_close` (an active round's close, for the venture's founder and
+  its accepted owners and co-founders) and `nda_expiry` (an active, unvoided
+  NDA's expiry, for its two parties only, by the other party's name).
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
   projections keep their separate, smaller event shape.
 - `itemRead.ts`: one item for the drawer (the page read's own reader and
