@@ -120,7 +120,9 @@ export function pageNumberOf(cards, index) {
 /** A text block's rich runs (read-only here; editing them is A4c's), or null to draw its plain text. */
 export function runsOf(block) {
   if (!Array.isArray(block?.paras)) return null;
-  const paras = block.paras.map((p) => (Array.isArray(p?.runs) ? p.runs.filter((r) => typeof r?.text === 'string' && r.text) : [])).filter((r) => r.length);
+  // A link is drawn only when it is https, whatever the store held (the server keeps only https on a public host).
+  const safe = (r) => (typeof r.href === 'string' && /^https:\/\//i.test(r.href) ? r : (({ href, ...rest }) => rest)(r));
+  const paras = block.paras.map((p) => (Array.isArray(p?.runs) ? p.runs.filter((r) => typeof r?.text === 'string' && r.text).map(safe) : [])).filter((r) => r.length);
   return paras.length ? paras : null;
 }
 

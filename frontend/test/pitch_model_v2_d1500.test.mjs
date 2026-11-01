@@ -155,6 +155,10 @@ test('5. the chrome is set once on the theme and drawn on every card; rich text 
   assert.match(drawn, /<span style="font-weight:800">bold<\/span>/);
   assert.match(drawn, /<a href="https:\/\/example.com\/report" target="_blank" rel="noopener noreferrer"[^>]*style="color:#1a4f8b">a link<\/a>/);
   assert.doesNotMatch(drawn, /contenteditable/i, 'read-only here; editing is A4c\'s');
+  const unsafe = { kind: 'text', text: 'x', paras: [{ runs: [{ text: 'a script link', href: 'javascript:alert(1)' }] }] };
+  const unsafeDrawn = renderToStaticMarkup(h(BlockView, { block: unsafe, colours: {} }));
+  assert.doesNotMatch(unsafeDrawn, /<a |javascript:/, 'a link that is not https is drawn as plain text');
+  assert.match(unsafeDrawn, /a script link/);
 });
 
 test('6. every save sends model version 2, and the card list keys on the card uid', () => {
