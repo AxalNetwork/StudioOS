@@ -15,7 +15,7 @@ import type { CalendarEvent } from '../calendar';
 import { sourceOf, type ItemSource } from './registry';
 
 /** The canvas's five families (D1205's `FAMILIES`), by kind. */
-export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'learning' | 'grow' | 'other';
+export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'learning' | 'grow' | 'tasks' | 'other';
 export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   event_ticket: 'events',
   event_hosted: 'events',
@@ -41,6 +41,11 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   // #3982 (D1486 §c): a round's close and an NDA's expiry are deadlines.
   round_close: 'deadlines',
   nda_expiry: 'deadlines',
+  // #3983 (D1486 §d): the member's own tasks and milestones.
+  workflow_task: 'tasks',
+  mvp_task: 'tasks',
+  contact_task: 'tasks',
+  engagement_milestone: 'tasks',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -68,6 +73,8 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   your_send: 'You confirmed this send',
   venture_round: 'Your venture’s round',
   nda_party: 'A party to this NDA',
+  your_task: 'Your task',
+  your_firm: 'Your firm’s engagement',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -87,6 +94,10 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   content_planned: 'venture_team',
   round_close: 'venture_round',
   nda_expiry: 'nda_party',
+  workflow_task: 'your_task',
+  mvp_task: 'your_task',
+  contact_task: 'your_task',
+  engagement_milestone: 'your_firm',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
@@ -126,6 +137,11 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'publish_send': return typeof ev.url === 'string' && ev.url.startsWith('/grow') ? ev.url : '/grow';
     case 'content_planned': return '/grow/distribution';
     case 'round_close': return '/raise/capital-relationships';
+    // #3983 (D1486 §d): where each task lives.
+    case 'workflow_task': return '/dashboard';
+    case 'mvp_task': return '/build/board';
+    case 'contact_task': return '/contacts';
+    case 'engagement_milestone': return '/partner/operations/engagements';
     default: return null;
   }
 }
