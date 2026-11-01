@@ -16,7 +16,7 @@ import { workBoardRoutes } from '../src/routes/work_board.ts';
 import { projectBoard, setWorkDeps, updateWorkTask, WorkRefusal, type WorkRunReader, type WorkTask } from '../src/services/agents/workBoard.ts';
 import { taskByUid } from '../src/services/agents/tasks.ts';
 import { loadScope } from '../src/services/agents/teams.ts';
-import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
+import { removeMigratedDatabases } from './_storage_schema.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`,import.meta.url),'utf8');
 const baseline = sql('schema_baseline.sql');
@@ -191,7 +191,7 @@ test('an assigned agent moves within its work, cannot close, cannot take a block
     const agent=made.body.agent.uid,agentId=w.db.prepare('SELECT id FROM team_agents WHERE uid=?').get(agent).id as number;
     const a=await create(w,{module:'use-of-funds',assignee:{kind:'agent',uid:agent}});
     const moved=await updateWorkTask(w.env,await raw(w,a.uid),{column:'in_progress'},{agentId});assert.equal(moved.status,'in_progress');
-    await assert.rejects(()=>updateWorkTask(w.env,moved,{column:'done'},{agentId}),(e:any)=>e instanceof WorkRefusal&&e.code==='agent_cannot_close');
+    await assert.rejects(()=>updateWorkTask(w.env,moved,{column:'done'},{agentId}),(e:any)=>(e instanceof WorkRefusal) && e.code==='agent_cannot_close');
     await assert.rejects(()=>updateWorkTask(w.env,moved,{status:'done'},{agentId}),(e:any)=>e.code==='agent_cannot_close');
     const ev=w.db.prepare("SELECT actor_agent_id FROM scope_task_events WHERE task_id=? AND kind='moved'").get(moved.id) as any;assert.equal(ev.actor_agent_id,agentId);
     const blocker=await create(w),waiting=await create(w,{module:'use-of-funds'});
