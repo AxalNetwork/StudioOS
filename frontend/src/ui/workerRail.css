@@ -712,3 +712,15 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
 .fwr-rgroup-chev { font-size: 14px; color: var(--d698-faint); }
 .fwr-rgroup-off { font-size: 10.5px; color: var(--d698-faint); }
 .fwr-rgroup[data-off="true"] .fwr-rgroup-name { color: var(--d698-faint); }
+
+/* D1463 (#3713): an admin on a founder's record. One lavender note in place of
+   the switch, the suggestions and the usage; the collapsed spine greys the mark. */
+p.fwr-founder-record {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid #e4d8fb;
+  background: var(--fwr-accent-soft); color: var(--fwr-ink); font-size: 12.5px; line-height: 1.5;
+}
+.fwr-founder-record-mark { flex: none; margin-top: 2px; }
+.fwr-founder-record-spine { display: block; width: 8px; height: 8px; border-radius: 999px; background: var(--fwr-line); }
+.fwr[data-founder-record="true"] .fwr-title .fwr-mark { filter: grayscale(1); opacity: .55; }
+.dark p.fwr-founder-record { border-color: #3b2a63; color: var(--d698-ink); }

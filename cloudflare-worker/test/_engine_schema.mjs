@@ -31,6 +31,7 @@ export function applyEngineSchema(db) {
   db.exec(migration('465_ai_rail_preferences.sql'));
   // Every source now gets a summary (453's columns and receipts), not only recordings.
   if (!cols('interview_sessions').has('processing_stage')) db.exec(migration('453_interview_processing.sql'));
+  if (!cols('interview_sessions').has('processing_failed_stage')) db.exec(migration('760_interview_processing_failed_stage.sql'));
   if (!cols('interview_sessions').has('digest_status')) db.exec(migration('487_interview_session_digest.sql'));
   // enqueueDigest queues the engine's job (session_structure).
   if (!cols('queue_jobs').size) db.exec(tableFromBaseline(BASELINE, 'queue_jobs'));
