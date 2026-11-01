@@ -36,7 +36,7 @@ import authRecover from './routes/auth_recover';
 // /api/auth (magic link + TOTP); never the only path in. See
 // routes/auth_google.ts for the linking precedence and step-up rules.
 import authGoogle from './routes/auth_google';
-import { SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
+import { PRIVATE_LINK_GLOBS, SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
 import authPasskey from './routes/auth_passkey';
 import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
@@ -97,6 +97,7 @@ import mailShares from './routes/mail_shares';
 import mailPeople from './routes/mail_people';
 import { bindMailTools } from './services/mail/mcpTools';
 import dealContext from './routes/deal_context';
+import deckGrants from './routes/deck_grants';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
 import dealViews from './routes/deal_views';
@@ -205,6 +206,8 @@ import './integrations/providers/notion';
 import './integrations/providers/posthog';
 // D855 §4 (#3733 part 1) — a member's own Linear, read-only, through Linear's read-only MCP server: sign-in only, not listed yet.
 import './integrations/providers/linear';
+// D855 §4 (#3733 part 2) — a member's own Cloudflare, read-only, through Cloudflare's REST API: sign-in only, not listed yet.
+import './integrations/providers/cloudflare';
 // D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
 import './services/notion/build';
 import crunchbaseRoutes from './routes/crunchbase';
@@ -253,6 +256,10 @@ import deckGrid from './routes/deck_grid';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
+// D1589 (#3836): a venture's stage norms, the benchmarks a deck critic may cite.
+import deckStageNorms from './routes/deck_stage_norms';
+// D1556 (#3803): a venture's consented interview quotes, ranked for a deck.
+import deckQuotes from './routes/deck_quotes';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -992,6 +999,8 @@ app.route('/api/mail', mailDrafts);
 app.route('/api/mail', mailShares);
 app.route('/api/mail', mailPeople);
 app.route('/api/deals', dealViews);
+// D1587 (#3834): the investor's granted deck on their deal page, and the founder's grants. Before dealContext.
+app.route('/api/deals', deckGrants);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);
 // D1153 (#3058): the working tabs' room access, round summary and reasoned withdrawal. Before deals.
@@ -1374,6 +1383,10 @@ app.route('/api/decks', deckNew);
 app.route('/api/decks', deckAssist);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
+// D1589 (#3836): `/stage-norms`, before `decks` so `GET /:id` cannot answer it.
+app.route('/api/decks', deckStageNorms);
+// D1556 (#3803): `/quotes/search` and `/quotes/index`, before `decks` so `/:id` routes cannot answer them.
+app.route('/api/decks', deckQuotes);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are
@@ -2035,8 +2048,10 @@ export default {
     // D1439 (#3914): a shared record link previews as itself. Before Hono, so
     // the SPA shell never takes the Worker's nonce CSP or `no-referrer`; the
     // shell's own headers come from `SHELL_HEADERS`. Only the prefixes in
-    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists).
-    if (env.ASSETS && SOCIAL_CARD_GLOBS.some((g) => pathname.startsWith(g.slice(0, -1)))) {
+    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists), and the
+    // token share links in `PRIVATE_LINK_GLOBS` (#3916), which get the static
+    // "Sign in to view" card with no D1 call.
+    if (env.ASSETS && [...SOCIAL_CARD_GLOBS, ...PRIVATE_LINK_GLOBS].some((g) => pathname.startsWith(g.slice(0, -1)))) {
       const card = await serveSocialCard(request, env);
       if (card) return card;
     }

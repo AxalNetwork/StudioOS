@@ -56,6 +56,10 @@ export const OPTION_LISTS = [
   // D1596 (#3869): Ask chips that run no model, listed with no models.
   { file: 'advisor.js', name: 'ADVISOR_ASK_CHIPS', profile: 'Advisor' },
   { file: 'partner.js', name: 'PARTNER_RAIL_OPTIONS', profile: 'Operating Partner' },
+  // D1420 (#3864): `studio:layout`, an Ask chip that runs a model, on each /studio rail page.
+  { file: 'founder.js', name: 'FOUNDER_ASK_CHIPS', profile: 'Founder' },
+  { file: 'investor.js', name: 'INVESTOR_ASK_CHIPS', profile: 'Investor' },
+  { file: 'partner.js', name: 'PARTNER_ASK_CHIPS', profile: 'Operating Partner' },
   { file: 'superAdmin.js', name: 'SUPER_ADMIN_RAIL_OPTIONS', profile: 'Super Admin' },
 ];
 

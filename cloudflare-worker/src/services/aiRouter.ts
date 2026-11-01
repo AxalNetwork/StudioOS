@@ -40,6 +40,7 @@ import * as guard from './ai/guard';
 import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './ai/railMatrix';
 import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleConnections';
 import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
+import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,6 +85,9 @@ export type TaskClass =
   // traction review, valuation, buyer matching, LPA drafting, equity), run as
   // a system call (userId 0): logged at cost and charged to no member.
   | 'system_job'
+  // D1478 §3937 fix 14 (IN6, IN7): the LPA draft and the traction review get routes of their own.
+  | 'system_legal'
+  | 'system_review'
   // D766 (#2094) — system calls that used to call env.AI.run directly: the
   // monitoring summary, and the X post image screen and alt text.
   | 'ops_summary'
@@ -101,15 +105,28 @@ export type TaskClass =
   | 'article_image'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
+  // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
+  | 'studio_layout'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
   | RailTask;
 
 /** The canvas's fourteen kinds of work (D720 §1), in its order. */
-export const RAIL_KINDS = [
+export const CANVAS_RAIL_KINDS = [
   'chat', 'synth', 'speech', 'research', 'reason', 'vision', 'code',
   'numbers', 'write', 'match', 'plan', 'legal', 'multi', 'search',
+] as const;
+/**
+ * #3934 (task 0 of #3721's model use-case plan): the rail's kinds are the
+ * canvas's fourteen plus the plan's seven new generation kinds. No page row
+ * takes one of the seven yet; the tasks that wire their jobs (#3935 Draw, and
+ * the speech, text and decision tasks) give them pages. Each has a route, so
+ * a press that names one is quoted, guarded and metered by `run()`.
+ */
+export const RAIL_KINDS = [
+  ...CANVAS_RAIL_KINDS,
+  'draw', 'edit_image', 'voice_turn', 'agent', 'decide', 'sentiment', 'translate',
 ] as const;
 export type RailKind = (typeof RAIL_KINDS)[number];
 export type RailTask = `rail_${RailKind}`;
@@ -150,7 +167,10 @@ export type RefusalReason =
   | 'assist_off'
   // D791 (#2216): a Super Admin paused the member's AI (HQ › AI usage). Refused
   // at the hold (`reserveAiBudget`), before anything is held; nothing is charged.
-  | 'ai_paused';
+  | 'ai_paused'
+  // #3935 (A (c)): the member named, or had stored, a model their plan does not
+  // run. Refused with the plan's label, before any hold; never swapped silently.
+  | 'plan_locked';
 
 /**
  * D765 (#2090) — where a member's run was asked from: the rail's page (D768's
@@ -235,6 +255,10 @@ export interface RunOptions {
   // D761 PR 4: an image drawn from `text` (the prompt) by an image model; the
   // result carries `image`. The size and steps are clamped to the model's range.
   draw?: shapes.DrawInput;
+  // #3935 (D1478 task 1): the use-case job a draw press runs (`ai/drawJobs.ts`):
+  // its Default or fallback by the legal hold, the partner switch and the
+  // member's plan lock. A draw run without one keeps its route's model.
+  drawJob?: string;
   // D765 (#2090): the rail context of a MEMBER's run. `run()` copies it into
   // `railPage`, `railOption` and `recordRef`, and refuses `assist_off` when the
   // member turned AI assistance off on that page. Every member call passes it
@@ -255,6 +279,13 @@ export interface RunOptions {
   // D763: the member's role, so an S11 refusal links to Wellbeing only for a
   // role that page opens for (`guard.refusalFor`).
   role?: string | null;
+  // D1496 part 2 (#3842, of #3727): the team agent this run is for. Only
+  // `services/agents/agentRun.ts` sets them. `recordUsage` writes `agentId` to
+  // `ai_usage_logs.agent_id` (migration 712), which the agent's monthly cap
+  // sums; the hold is named `agent.<agentRole>` instead of `ai.<task>`. The run
+  // is still the sponsor's (`userId`), paid from their tokens.
+  agentId?: number;
+  agentRole?: string;
 }
 
 /**
@@ -598,8 +629,11 @@ export const PRICE_USD_PER_1K_CHARACTERS: Record<string, number> = Object.fromEn
  * `shapes.imageUnits`); this set names which of them the router prices, and
  * fails at load if the catalogue cannot price one in its billing unit.
  */
+const IMAGE_UNIT_KEYS = { tiles: 1, steps: 1, output_tile_steps: 1, output_tiles: 1, first_megapixels: 1, subsequent_megapixels: 1, input_tiles: 1, input_tile_steps: 1, input_image_megapixels: 1 } as const;
 export const IMAGE_PRICED_MODELS: ReadonlySet<string> = new Set(Object.keys(shapes.IMAGE_SPECS).map((id) => {
-  for (const unit of Object.keys(shapes.imageUnits(id, 1024, 1024, 4)) as Array<'tiles' | 'steps' | 'output_tile_steps' | 'output_tiles' | 'first_megapixels' | 'subsequent_megapixels'>) {
+  // #3935: with one reference too, so a model that takes references must price its input unit.
+  const refs = (shapes.IMAGE_SPECS[id].maxReferences > 0 ? [{ width: 512, height: 512 }] : []);
+  for (const unit of Object.keys(shapes.imageUnits(id, 1024, 1024, 4, refs)) as Array<keyof typeof IMAGE_UNIT_KEYS>) {
     if (!unitPrice(id, unit)) throw new Error(`${id} has no ${unit} price in the catalogue`);
   }
   return id;
@@ -663,6 +697,9 @@ const VISION_SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
 // D1478 (#3721): every draw model, FLUX.1 Schnell first (the routes' default).
 const DRAW_MODELS = ['@cf/black-forest-labs/flux-1-schnell',
   ...Object.keys(MODEL_CONNECTIONS).filter((id) => MODEL_CONNECTIONS[id].operation === 'draw' && id !== '@cf/black-forest-labs/flux-1-schnell')];
+/** #3934: Draw and Edit image while Legal reads the image vendors' terms (D (a)): Schnell and Klein 4B only. */
+const RAIL_DRAW_MODELS = ['@cf/black-forest-labs/flux-1-schnell', '@cf/black-forest-labs/flux-2-klein-4b'];
+const RAIL_EDIT_MODELS = ['@cf/black-forest-labs/flux-2-klein-4b'];
 
 export const ROUTE: Record<TaskClass, RouteEntry> = {
   ...MODULE_ROUTES,
@@ -676,7 +713,9 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // stays out of the advisor analytics namespace. MID_LLAMA primary →
   // SMALL_LLAMA fallback.
   onboarding_chat: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
-  tool_call:    { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
+  // D1478 §3937 fix 1 (ST3, ON2): tool calls run on glm-4.7-flash, which carries Cloudflare's function-calling
+  // badge (131,072 tokens); qwen2.5-coder carries none. glm-4.7-flash already runs (rail_chat's Default), so no model is new.
+  tool_call:    { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
   // Personal Advisor next-question re-ranker (advisor/rerank.ts).
   // Structured JSON pick over a bounded candidate list — qwen-coder
   // is the strongest at obeying the {"id": "..."} schema; fall back
@@ -718,6 +757,15 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // page explanation. A mid model with the same priced alternates; no cache: a
   // draft quotes figures read at the press.
   mail_draft: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  // D1420 (#3864): Eadwyn proposes a Studio layout as add, remove, resize and
+  // move ops. Its own class, so the pricing read and Usage name it apart; a mid
+  // model with the same priced alternates. No cache: the layout is read at the press.
+  studio_layout: {
     provider: 'workers-ai',
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],
@@ -889,9 +937,17 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
   // D1409 (#3695): an article's images, on the same model as the deck's.
   article_image: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
-  paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // D1478 §3937 fix 5 (MI1): a snippet paraphrase is a short rewrite, so the 8B fp8 answers it and the 70B is its fallback.
+  paraphrase:   { provider: 'workers-ai', model: SMALL_LLAMA, fallbackChain: [MID_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
-  system_job:   { provider: 'workers-ai', model: SMALL_LLAMA },
+  // D1478 §3937 fix 14: no queue job runs on the 8B. IN5 valuation and equity (Numbers) run gpt-oss-120b with
+  // granite as the fallback, as `rail_numbers` does; IN4 deal scoring rides this route until its clef score lands.
+  system_job:   { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/ibm-granite/granite-4.0-h-micro'] },
+  // IN6 LPA drafting (Legal): gpt-oss-120b, as `rail_legal`; the 70B answers when it fails.
+  system_legal: { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: [MID_LLAMA] },
+  // IN7 traction review (Numbers): granite, the plan's Fast pick and already wired, then gpt-oss-120b. The
+  // Balanced pick, qwen3-30b, is new to the router, so it waits for the job table and the owner's spend answer.
+  system_review: { provider: 'workers-ai', model: '@cf/ibm-granite/granite-4.0-h-micro', fallbackChain: ['@cf/openai/gpt-oss-120b'] },
   // High-stakes synthesis (Task #2 AU admin publication summaries,
   // dd synthesis). Task #31: Anthropic removed from production. Both
   // task classes now route through Workers AI MID_LLAMA primary →
@@ -934,6 +990,18 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   rail_legal:    { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813'] },
   rail_multi:    { provider: 'workers-ai', model: '@cf/mistralai/mistral-small-3.1-24b-instruct', alternates: ['@cf/mistralai/mistral-small-3.1-24b-instruct'] },
   rail_search:   { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', alternates: ['@cf/moonshotai/kimi-k2.6'] },
+  // #3934: the seven kinds the use-case plan adds. Each primary is its job's
+  // Default that every plan runs, from `ai/modelUseCases.ts` (RAIL_KIND_JOBS);
+  // the alternates are that job step's other models a member may pick. No
+  // caller names these tasks yet, so nothing new runs until a press does.
+  // An image is priced per image (D766), as brand_logo and deck_image are; D (a) keeps Draw to Schnell and Klein 4B.
+  rail_draw:       { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
+  rail_edit_image: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-2-klein-4b', alternates: RAIL_EDIT_MODELS },
+  rail_voice_turn: { provider: 'workers-ai', model: '@cf/daily-co/phonellm-mini-alpha-2', fallbackChain: ['@cf/zai-org/glm-4.7-flash'], alternates: ['@cf/daily-co/phonellm-mini-alpha-2', '@cf/zai-org/glm-4.7-flash'] },
+  rail_agent:      { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: ['@cf/qwen/qwen3-30b-a3b-fp8'], alternates: ['@cf/zai-org/glm-4.7-flash', '@cf/qwen/qwen3-30b-a3b-fp8', '@cf/openai/gpt-oss-120b'] },
+  rail_decide:     { provider: 'workers-ai', model: '@cf/cloudflare/clef', alternates: ['@cf/cloudflare/clef', '@cf/cloudflare/clef-flash'] },
+  rail_sentiment:  { provider: 'workers-ai', model: '@cf/huggingface/distilbert-sst-2-int8', alternates: ['@cf/huggingface/distilbert-sst-2-int8', '@cf/cloudflare/clef-flash'] },
+  rail_translate:  { provider: 'workers-ai', model: '@cf/meta/m2m100-1.2b', alternates: ['@cf/meta/m2m100-1.2b', '@cf/ai4bharat/indictrans2-en-indic-1B'] },
 };
 
 // D761: the latency budget is per attempt and per class (`shapes.TIMEOUT_MS`),
@@ -1061,8 +1129,8 @@ export function estimateCostUsd(
   if (model === '@cf/microsoft/resnet-50') return costMicro(model, { images: image.images ?? 0 }) / 1_000_000;
   // D761 PR 4: an image model is priced on its image units, at the catalogue's figure.
   if (IMAGE_PRICED_MODELS.has(model)) {
-    const { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels } = image;
-    return costMicro(model, { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels }) / 1_000_000;
+    const { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels, input_tiles, input_tile_steps, input_image_megapixels } = image;
+    return costMicro(model, { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels, input_tiles, input_tile_steps, input_image_megapixels }) / 1_000_000;
   }
   // D761 PR 3: a voice priced by the character has no token rate either.
   const perK = PRICE_USD_PER_1K_CHARACTERS[model];
@@ -1174,7 +1242,7 @@ async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT)",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER)",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
@@ -1197,20 +1265,26 @@ async function addLogColumns493(env: Env): Promise<void> {
   for (const [name, type] of LOG_COLUMNS_493) {
     if (!have.has(name)) await env.DB.exec(`ALTER TABLE ai_usage_logs ADD COLUMN ${name} ${type}`);
   }
+  // Migration 712's column (D1496 part 2): the agent a run was for.
+  if (!have.has('agent_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN agent_id INTEGER');
   await env.DB.exec(LOG_PAGE_INDEX_493);
 }
 
-export type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef'>;
+export type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef' | 'agentId'>;
+/** D1278: a hold names its run's task; D1496 part 2: an agent's run names its role instead, on the same 'ai' surface. */
+export const holdOperation = (o: Pick<RunOptions, 'task' | 'agentId' | 'agentRole'>): string =>
+  agentIdOf(o.agentId) && typeof o.agentRole === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(o.agentRole) ? `agent.${o.agentRole}` : `ai.${String(o.task)}`;
+/** D1496 part 2: the agent a usage row is for, or null; anything but a positive whole number is not one. */
+const agentIdOf = (v: unknown): number | null => (Number.isSafeInteger(v) && (v as number) > 0 ? (v as number) : null);
 /** Also D851's provider runs (`aiProviders.ts`), so their rows read the same. */
 export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: RefusalReason | null, charge: RunCharge = NOTHING_CHARGED): Promise<number | null> {
   await ensureLogSchema(env);
   const charged = charge.charged == null ? null : Math.max(0, Math.round(charge.charged));
-  // `surface` stays the last column bound, as it was before migration 493.
-  const insert = () => env.DB.prepare(
-    `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
-       charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(
+  // `surface` stays the last column bound, as it was before migration 493. D1496 part 2: an
+  // agent's run has its own statement naming migration 712's `agent_id`; a member's own run keeps
+  // the statement it always had. Both are literal, so the schema guards read them.
+  const agentId = agentIdOf(who.agentId);
+  const values = [
     who.userId,
     usage.task,
     usage.model,
@@ -1230,6 +1304,18 @@ export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, ref
     charge.units ? JSON.stringify(charge.units) : null,
     charge.guardFor ?? null,
     normaliseSurface(who.surface),
+  ];
+  const insert = () => (agentId
+    ? env.DB.prepare(
+      `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
+         charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface, agent_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values, agentId)
+    : env.DB.prepare(
+      `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
+         charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values)
   ).run();
   // The row's id, which a guard row names in `guard_for` (D763); null when it could not be written.
   const idOf = (r: unknown): number | null => {
@@ -1410,12 +1496,14 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       if (req.wire === 'multipart') {
         const form = new FormData();
         for (const [k, v] of Object.entries(req.fields)) form.append(k, String(v));
+        // #3935: each reference image in binary, under the name the model reads.
+        for (const f of req.files) form.append(f.name, new Blob([f.bytes], { type: f.mime }), `${f.name}.${f.mime.split('/')[1]}`);
         const body = new Response(form);
         input = { multipart: { body: body.body, contentType: body.headers.get('content-type') } };
       }
       const image = await shapes.readImage(await ai.run(model, input, runOpt), req.sent);
       if (!image) return { ok: false, status: 502, error: 'unexpected image response' };
-      const units = shapes.imageUnits(model, image.width, image.height, req.sent.steps);
+      const units = shapes.imageUnits(model, image.width, image.height, req.sent.steps, req.sent.references);
       return { ok: true, output: '', image, prompt_tokens: 0, completion_tokens: 0, units };
     }
     if (opts.translate) {
@@ -1702,7 +1790,7 @@ export function budgetRefusalMessage(refusal: string, detail?: { limit_microusd?
 
 /** The models one run may reach, or why it may reach none. `record`: the refusal writes a usage row. */
 type ModelChoice =
-  | { ok: true; primary: string; chain: string[] }
+  | { ok: true; primary: string; chain: string[]; draw?: DrawReceipt }
   | { ok: false; refusal: RefusalReason; error: string; record: boolean };
 
 /**
@@ -1711,7 +1799,25 @@ type ModelChoice =
  * route's, with the caller's own model only when the route offers it. Reads
  * the member's picks; writes nothing, so `run()` and `quoteRun()` share it.
  */
+/** #3935: how a draw job's model was chosen, for the receipt: the Default, the fallback (and why the Default did not run), or the member's choice. */
+export interface DrawReceipt { job: string; source: DrawSource; skipped: null | { model: string; reason: DrawSkip } }
+
 async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
+  // ---- #3935 (D1478 task 1): a draw job's model ------------------------------
+  if (opts.draw && opts.drawJob) {
+    let pick: string | null = null;
+    const optionRow = opts.rail?.option ? resolveRailOption(opts.rail.page, opts.rail.option) : null;
+    let tier: PlanTier;
+    try {
+      if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
+      tier = await memberPlanTier(env, opts.userId);
+    } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
+    const c = drawChoice(opts.drawJob, { switches: env as catalogue.CatalogueSwitches, tier, caller: opts.model ?? null, pick });
+    if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
+    // An image is never redrawn on another model: no chain.
+    return { ok: true, primary: c.model, chain: [], draw: { job: c.job, source: c.source, skipped: c.skipped } };
+  }
+
   // ---- D764 PR 3: a rail run's models come from its page's row ------------
   // A text run (or a vision run) with rail context whose page, or option, has
   // a matrix row: the caller's model when it can do the work, else the
@@ -1799,7 +1905,7 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
   const quoteImage = (model: string): shapes.Units => {
     if (opts.specialist?.operation === 'image_labels') return { images: 1 };
     const req = opts.draw ? shapes.drawRequest(model, opts.text ?? '', opts.draw) : null;
-    return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps) : {};
+    return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps, req.sent.references) : {};
   };
   const quote = Math.max(...models.map((model) => estimateCostUsd(model, promptBound, outputBound, quoteMinutes, 0, quoteChars, quoteImage(model))));
   // D763: the guard is held inside this hold, never in one of its own: every
@@ -1812,7 +1918,7 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
 }
 
 export type RunQuote =
-  | { ok: true; hold_microusd: number; model: string }
+  | { ok: true; hold_microusd: number; model: string; draw?: DrawReceipt }
   | { ok: false; refusal: RefusalReason; error: string };
 
 /**
@@ -1842,11 +1948,12 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
     const refusal = modelRefusal(env, model);
     if (refusal) return { ok: false, refusal, error: `${model} ${refusal === 'model_unpriced' ? 'has no price' : 'is not offered'}` };
   }
-  if (opts.userId <= 0) return { ok: true, hold_microusd: 0, model: choice.primary };
+  const draw = choice.draw ? { draw: choice.draw } : {};
+  if (opts.userId <= 0) return { ok: true, hold_microusd: 0, model: choice.primary, ...draw };
   try {
     const multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
     const guardOn = guarded(opts);
-    return { ok: true, hold_microusd: holdQuoteMicro(opts, route, models, guardOn, guardOn ? guardInputFor(opts) : '', multiplier), model: choice.primary };
+    return { ok: true, hold_microusd: holdQuoteMicro(opts, route, models, guardOn, guardOn ? guardInputFor(opts) : '', multiplier), model: choice.primary, ...draw };
   } catch {
     return { ok: false, refusal: 'misconfigured', error: 'Unreadable: the price of this run could not be worked out.' };
   }
@@ -2051,7 +2158,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
       multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
       // D1278: the hold names the run's task, never its prompt.
       const held = await aiBudget.reserveAiBudget(env, opts.userId, holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier),
-        new Date(), { context: { operation: `ai.${opts.task}`, surface: 'ai' } });
+        new Date(), { context: { operation: holdOperation(opts), surface: 'ai' } });
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
         await recordUsage(env, opts, usage, held.refusal);

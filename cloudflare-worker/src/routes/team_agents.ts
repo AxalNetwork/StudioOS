@@ -2,7 +2,7 @@
  * D1496 (#3840, part 1 of #3727) — team agents: the registry and the rule
  * books. Mounted at `/api/teams`.
  *
- *   GET    /roles                              the catalogue: eleven roles and their default rule books
+ *   GET    /roles                              the catalogue: eleven roles, their default rule books, and the models an agent may run on
  *   GET    /:scope/:id/agents?include=projects&module=
  *   POST   /:scope/:id/agents                  add one (manage + paid plan)
  *   GET    /agents/:uid                        its profile: rule book, matrix, spend, proposals, events
@@ -10,6 +10,8 @@
  *   DELETE /agents/:uid                        remove: rows kept, open proposals withdrawn (manage)
  *   GET    /:scope/:id/rulebooks/:role         default, effective, versions, diff, floor
  *   PUT    /:scope/:id/rulebooks/:role         a new version, within the floor (manage)
+ *   GET    /agents/:uid/run/quote?module=&option=  what a run would hold (the sponsor)
+ *   POST   /agents/:uid/run                    run it: a proposal, charged to the sponsor (part 2, #3842)
  *
  * `:scope` is `company` (by uid) or `project` (by numeric id). Every route is
  * 404 `team_agents_off` unless `TEAM_AGENTS_ENABLED` is "true".
@@ -25,7 +27,9 @@
  * Spend is `{ available: false }` when its read fails or a run's charge is
  * unrecorded, never 0 (the page says "Not recorded").
  *
- * Nothing here runs a model: part 2 adds the run, part 3 the queue.
+ * Part 2 (#3842) adds the run: only the sponsor runs an agent, through
+ * `services/agents/agentRun.ts`, which every refusal comes from. Part 3 adds
+ * the queue.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -34,21 +38,18 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { userMeetsTier } from '../middleware/requireTier';
 import { modelRefusal } from '../services/aiRouter';
-import { canAccessProject, isProjectManager } from '../services/projectAccess';
-import { canEdit } from '../services/companyAccess';
+import { CATALOGUE } from '../services/ai/catalogue';
+import { MODEL_CONNECTIONS } from '../services/ai/moduleConnections';
+import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { isAdmin, mapError, newUid } from './_t13t14t15_helpers';
-import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf, type Rules } from '../services/agents/catalogue';
+import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '../services/agents/catalogue';
 import { checkRules, diffRules } from '../services/agents/rulebook';
+import {
+  agentByUid, bookRows, canManage, canRead, effectiveBook, loadScope, logEvent, monthSpend, scopeCols, scopeOfAgent,
+  type AgentRow,
+} from '../services/agents/teams';
 
 type C = Context<{ Bindings: Env }>;
-export type Scope = { kind: 'company'; id: number; uid: string; name: string } | { kind: 'project'; id: number; name: string; founder_id: number | null; company_id: number | null };
-export type AgentRow = {
-  id: number; uid: string; scope_kind: 'company' | 'project'; company_id: number | null; project_id: number | null;
-  role_key: string; first_name: string | null; last_name: string | null; model_id: string; tool_grants_json: string;
-  sponsor_user_id: number; monthly_cap_microusd: number; status: 'active' | 'paused' | 'removed'; paused_reason: string | null;
-  created_at: string; updated_at: string; removed_at: string | null;
-};
-type Spend = { available: false } | { available: true; value_microusd: number };
 
 export const teamAgentsEnabled = (env: Env) => env.TEAM_AGENTS_ENABLED === 'true';
 export const NAME_MAX = 40;
@@ -66,44 +67,8 @@ const say = (c: C, status: number, code: string, message: string, extra?: Record
   refuse(c, status, { code, message, extra });
 const notFound = (c: C) => say(c, 404, 'not_found', 'There is no such team.');
 
-// ── Scope and gates ─────────────────────────────────────────────────────────
-
-export async function loadScope(env: Env, kind: string, id: string): Promise<Scope | null> {
-  if (kind === 'company') {
-    const row = await env.DB.prepare('SELECT id, uid, company_name, archived_at FROM company_profiles WHERE uid = ?')
-      .bind(id).first<{ id: number; uid: string; company_name: string; archived_at: string | null }>();
-    return row && !row.archived_at ? { kind: 'company', id: row.id, uid: row.uid, name: row.company_name } : null;
-  }
-  if (kind === 'project' && /^[1-9][0-9]{0,15}$/.test(id)) {
-    const row = await env.DB.prepare('SELECT id, name, founder_id, company_id FROM projects WHERE id = ?')
-      .bind(Number(id)).first<{ id: number; name: string; founder_id: number | null; company_id: number | null }>();
-    return row ? { kind: 'project', ...row } : null;
-  }
-  return null;
-}
-
-export async function scopeOfAgent(env: Env, a: AgentRow): Promise<Scope | null> {
-  if (a.scope_kind === 'company') {
-    const row = await env.DB.prepare('SELECT uid FROM company_profiles WHERE id = ?').bind(a.company_id).first<{ uid: string }>();
-    return row ? loadScope(env, 'company', row.uid) : null;
-  }
-  return loadScope(env, 'project', String(a.project_id));
-}
-
-export async function canRead(env: Env, s: Scope, user: User): Promise<boolean> {
-  if (s.kind === 'company') {
-    if (isAdmin(user)) return true;
-    const link = await env.DB.prepare('SELECT 1 AS ok FROM user_company_links WHERE company_id = ? AND user_id = ?')
-      .bind(s.id, user.id).first<{ ok: number }>();
-    return !!link;
-  }
-  return canAccessProject(env, user, s);
-}
-
-export async function canManage(env: Env, s: Scope, user: User): Promise<boolean> {
-  if (s.kind === 'company') return canEdit(env, { id: s.id }, user);
-  return isProjectManager(user, s);
-}
+// ── Gates ───────────────────────────────────────────────────────────────────
+// Scope, read and manage live in `services/agents/teams.ts`, shared with the run.
 
 /** Owner Q6 = A: a founder on a paid plan (the D852 rule), or HQ's admin. */
 export function planOk(user: User): boolean {
@@ -111,51 +76,7 @@ export function planOk(user: User): boolean {
   return String(user.role) === 'founder' && userMeetsTier(user, 'growth');
 }
 
-const scopeCols = (s: Scope): [number | null, number | null] => (s.kind === 'company' ? [s.id, null] : [null, s.id]);
-
-// ── Rule books ──────────────────────────────────────────────────────────────
-
-type BookRow = { version: number; rules_json: string; created_at: string; by_uid: string | null; by_name: string | null };
-
-async function bookRows(env: Env, s: Scope, roleKey: string): Promise<BookRow[]> {
-  const [companyId, projectId] = scopeCols(s);
-  const r = await env.DB.prepare(
-    `SELECT b.version, b.rules_json, b.created_at, u.uid AS by_uid, u.name AS by_name
-       FROM team_rulebooks b LEFT JOIN users u ON u.id = b.created_by
-      WHERE b.scope_kind = ? AND IFNULL(b.company_id, 0) = ? AND IFNULL(b.project_id, 0) = ? AND b.role_key = ?
-      ORDER BY b.version DESC`,
-  ).bind(s.kind, companyId ?? 0, projectId ?? 0, roleKey).all<BookRow>();
-  return r.results ?? [];
-}
-
-/** The rule book in force: the highest version, else the catalogue's default (version 0). */
-async function effectiveBook(env: Env, s: Scope, roleKey: string): Promise<{ rules: Rules; version: number }> {
-  const role = roleOf(roleKey);
-  const [top] = await bookRows(env, s, roleKey);
-  if (top) {
-    try { return { rules: JSON.parse(top.rules_json), version: top.version }; } catch { /* a corrupt row falls back to the default */ }
-  }
-  return { rules: role!.default_rules, version: 0 };
-}
-
 // ── Agents ──────────────────────────────────────────────────────────────────
-
-async function monthSpend(env: Env, agentId: number): Promise<Spend> {
-  try {
-    const start = new Date(); start.setUTCDate(1); start.setUTCHours(0, 0, 0, 0);
-    const row = await env.DB.prepare(
-      `SELECT COUNT(*) AS runs, SUM(charged_microusd) AS charged,
-              SUM(CASE WHEN charged_microusd IS NULL THEN 1 ELSE 0 END) AS unrecorded
-         FROM ai_usage_logs WHERE agent_id = ? AND created_at >= ?`,
-    ).bind(agentId, start.toISOString().slice(0, 19).replace('T', ' ')).first<{ runs: number; charged: number | null; unrecorded: number | null }>();
-    if (!row) return { available: false };
-    // A run whose charge is not recorded makes the month's sum unknown, not smaller.
-    if (Number(row.unrecorded) > 0) return { available: false };
-    return { available: true, value_microusd: row.runs ? Number(row.charged) : 0 };
-  } catch {
-    return { available: false };
-  }
-}
 
 async function lastActivity(env: Env, agentId: number): Promise<string | null> {
   try {
@@ -201,16 +122,6 @@ async function agentDto(env: Env, a: AgentRow) {
   };
 }
 
-export async function agentByUid(env: Env, uid: string): Promise<AgentRow | null> {
-  if (!/^[a-f0-9]{32}$/.test(uid)) return null;
-  return env.DB.prepare('SELECT * FROM team_agents WHERE uid = ?').bind(uid).first<AgentRow>();
-}
-
-async function logEvent(env: Env, agentId: number, actor: number | null, kind: string, detail?: unknown) {
-  await env.DB.prepare('INSERT INTO team_agent_events (agent_id, actor_user_id, kind, detail_json) VALUES (?, ?, ?, ?)')
-    .bind(agentId, actor, kind, detail === undefined ? null : JSON.stringify(detail)).run();
-}
-
 /** A name part: trimmed, at most 40 characters, no control characters; '' and null clear it. `undefined` = not sent. */
 export function namePart(v: unknown): { ok: true; value: string | null } | { ok: false } {
   if (v === null || v === undefined) return { ok: true, value: null };
@@ -219,6 +130,23 @@ export function namePart(v: unknown): { ok: true; value: string | null } | { ok:
   if (t.length > NAME_MAX || /[\u0000-\u001f\u007f]/.test(t)) return { ok: false };
   return { ok: true, value: t || null };
 }
+
+/**
+ * #3842 add-on (S1, for TM3b): the models an agent may run on. Every text
+ * model the module connections give chat work (`MODEL_CONNECTIONS`), from the
+ * catalogue; `plan_locked` when the run would refuse it today
+ * (`modelRefusal`: a beta, the partner gate shut, unpriced) or the caller's
+ * plan cannot add agents, so the list and the add route's
+ * `model_not_offered` agree. Deprecated models are not listed.
+ */
+export function agentModels(env: Env, user: User) {
+  const plan = planOk(user);
+  return CATALOGUE
+    .filter((m) => MODEL_CONNECTIONS[m.id]?.operation === 'chat' && m.status !== 'deprecated' && m.status !== 'not_found')
+    .map((m) => ({ id: m.id, label: m.name, kind: m.kind, beta: m.status === 'beta', plan_locked: !plan || modelRefusal(env, m.id) !== null }));
+}
+
+const answer = (c: C, r: AgentRefusal) => say(c, r.status, r.code, r.message, r.extra);
 
 const validCap = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0 && (v as number) <= CAP_MAX_MICROUSD;
 
@@ -230,7 +158,7 @@ async function readBody(c: C): Promise<Record<string, any> | null> {
 
 router.get('/roles', async (c) => {
   try {
-    await requireAuth(c);
+    const user = await requireAuth(c);
     return c.json({
       roles: ROLES.map((r) => ({
         key: r.key, name: r.name, mission: r.mission,
@@ -238,7 +166,48 @@ router.get('/roles', async (c) => {
         default_rules: r.default_rules,
         ...(r.disclaimer_key ? { disclaimer_key: r.disclaimer_key } : {}),
       })),
+      models: agentModels(c.env, user),
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── The run (part 2) ────────────────────────────────────────────────────────
+
+/** The agent, when the caller is its sponsor: only the sponsor runs it, paid from their tokens (owner Q2 = B). */
+async function sponsored(c: C, user: User) {
+  const a = await agentByUid(c.env, c.req.param('uid') ?? '');
+  const s = a && await scopeOfAgent(c.env, a);
+  if (!a || !s || !(await canRead(c.env, s, user))) return { refusal: say(c, 404, 'not_found', 'There is no such agent.') };
+  if (a.sponsor_user_id !== user.id) return { refusal: say(c, 403, 'not_sponsor', 'Only the person who added this agent can run it.') };
+  return { agent: a };
+}
+
+router.get('/agents/:uid/run/quote', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const got = await sponsored(c, user);
+    if (!got.agent) return got.refusal;
+    const q = await agentQuote(c.env, { agent: got.agent, module: c.req.query('module') ?? '', option: c.req.query('option') ?? '' });
+    return q.ok ? c.json({ quote: q.quote }) : answer(c, q);
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/agents/:uid/run', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const got = await sponsored(c, user);
+    if (!got.agent) return got.refusal;
+    if (!planOk(user)) return say(c, 403, 'plan_required', 'Agents come with a paid Founder plan.');
+    const b = await readBody(c);
+    if (!b) return say(c, 400, 'invalid_body', 'Send the module, the option and what the agent should work on.');
+    const record = b.record == null ? null : typeof b.record === 'string' ? b.record : undefined;
+    if (record === undefined) return say(c, 400, 'invalid_record', 'The record is a reference such as project:7.');
+    const r = await agentRun(c.env, {
+      agent: got.agent, module: typeof b.module === 'string' ? b.module : '', option: typeof b.option === 'string' ? b.option : '',
+      record, prompt: b.prompt,
+    });
+    if (!r.ok) return answer(c, r);
+    return c.json({ proposal: r.proposal, charged: r.charged });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -263,10 +232,10 @@ router.get('/agents/:uid', async (c) => {
       for (const row of r.results ?? []) if (row.status in proposals) proposals[row.status] = Number(row.n);
     } catch { proposals = null; }
     const ev = await c.env.DB.prepare(
-      `SELECT e.kind, e.created_at, e.detail_json, u.uid AS actor_uid, u.name AS actor_name
+      `SELECT e.kind, e.created_at, e.detail_json, e.proposal_uid, u.uid AS actor_uid, u.name AS actor_name
          FROM team_agent_events e LEFT JOIN users u ON u.id = e.actor_user_id
         WHERE e.agent_id = ? ORDER BY e.id DESC LIMIT 50`,
-    ).bind(a.id).all<{ kind: string; created_at: string; detail_json: string | null; actor_uid: string | null; actor_name: string | null }>();
+    ).bind(a.id).all<{ kind: string; created_at: string; detail_json: string | null; proposal_uid: string | null; actor_uid: string | null; actor_name: string | null }>();
     const agent = await agentDto(c.env, a);
     return c.json({
       agent,
@@ -281,6 +250,8 @@ router.get('/agents/:uid', async (c) => {
         actor: e.actor_uid ? { uid: e.actor_uid, name: e.actor_name } : null,
         at: e.created_at,
         detail: e.detail_json ? JSON.parse(e.detail_json) : null,
+        // Part 2: a run's proposal, so the page links to it.
+        proposal_uid: e.proposal_uid ?? null,
       })),
     });
   } catch (e) { return mapError(c, e); }

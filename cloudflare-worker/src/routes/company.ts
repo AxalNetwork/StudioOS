@@ -26,6 +26,7 @@ import {
 import { membershipEvent } from '../services/companyMembershipEvents';
 import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { legalPatch, MESSAGES as LEGAL_MESSAGES } from './company_legal';
+import { currencyCode, CURRENCY_INVALID_MESSAGE } from '../services/currencies';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -39,6 +40,8 @@ type Company = {
   description: string | null;
   /** D1137 (migration 597): set while the company is archived. */
   archived_at?: string | null;
+  /** #3932 (migration 757): an ISO 4217 code; null is not recorded, never USD. */
+  default_currency?: string | null;
   created_at: string; updated_at: string;
 };
 type Link = {
@@ -71,6 +74,8 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
   out.created_at = c.created_at;
   out.updated_at = c.updated_at;
   out.archived_at = c.archived_at ?? null;
+  // #3932: null is "Not recorded"; no currency is assumed.
+  out.default_currency = c.default_currency ?? null;
   const isMember = await viewerIsMember(env, c.id, viewer);
   // D431 — economics are the member's and the editors'. `canEdit` is the rule
   // that already decides who may WRITE carry; the same rule decides who may
@@ -330,9 +335,15 @@ r.patch('/company/:uid', async (c) => {
       if (clash) return c.json({ code: 'company_name_clash', detail: 'You already belong to a company with that name.' }, 409);
       body.company_name = name;
     }
+    // #3932 (#3696 Q4): a currency on the ISO 4217 list, or null to clear it. Anything else is refused before any write.
+    if (body.default_currency !== undefined && body.default_currency !== null) {
+      const code = currencyCode(body.default_currency);
+      if (!code) return c.json({ code: 'currency_invalid', detail: CURRENCY_INVALID_MESSAGE }, 422);
+      body.default_currency = code;
+    }
     const updatable = ['company_name', 'stage', 'revenue_range', 'employee_count',
       'current_products', 'international_presence', 'expansion_goals',
-      'logo_url', 'website', 'linkedin_url', 'description'] as const;
+      'logo_url', 'website', 'linkedin_url', 'description', 'default_currency'] as const;
     const sets: string[] = []; const params: any[] = [];
     for (const f of updatable) {
       if (body[f] !== undefined) { sets.push(`${f} = ?`); params.push(body[f]); }
@@ -342,9 +353,13 @@ r.patch('/company/:uid', async (c) => {
       const update = c.env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ?`).bind(...params);
       // D1137: a rename is a membership event, recorded with the update.
       const renamed = body.company_name !== undefined && body.company_name !== company.company_name;
-      await c.env.DB.batch(renamed
-        ? [update, membershipEvent(c.env, { kind: 'rename', companyId: company.id, actorUserId: user.id, before: { company_name: company.company_name }, after: { company_name: body.company_name } })]
-        : [update]);
+      // #3932: a currency change is a company event too, in the same batch.
+      const currencyChanged = body.default_currency !== undefined && body.default_currency !== (company.default_currency ?? null);
+      await c.env.DB.batch([
+        update,
+        ...(renamed ? [membershipEvent(c.env, { kind: 'rename', companyId: company.id, actorUserId: user.id, before: { company_name: company.company_name }, after: { company_name: body.company_name } })] : []),
+        ...(currencyChanged ? [membershipEvent(c.env, { kind: 'currency_change', companyId: company.id, actorUserId: user.id, before: { default_currency: company.default_currency ?? null }, after: { default_currency: body.default_currency } })] : []),
+      ]);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
     return c.json(await detailDto(c.env, fresh!, user));

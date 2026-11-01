@@ -126,7 +126,8 @@ test('the wiring: the card and From Notion on Distribution, From Notion on Produ
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /<ContentCalendar part=\{data\?\.parts\?\.content_calendar\} channels=\{data\?\.records\?\.rows\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
   assert.match(route, /<FromNotion section="grow" projectId=\{ctx\.projectId\} module="distribution" \/>/);
-  assert.match(route, /'product-improvement': \(_data, ctx\) => <FromNotion section="grow" projectId=\{ctx\.projectId\} module="product_improvement" \/>/);
+  // D1608 (#3731): PostHog's part sits beside From Notion on Product improvement.
+  assert.match(route, /'product-improvement': \(_data, ctx\) => \(<>\s*<FromNotion section="grow" projectId=\{ctx\.projectId\} module="product_improvement" \/>/);
   const card = read('frontend/src/pages/cycles/ContentCalendar.jsx');
   assert.doesNotMatch(card, /window\.(alert|confirm|prompt)/);
   for (const m of card.matchAll(/'([^']*\bbg-white\b[^']*)'/g)) assert.match(m[1], /dark:bg-/, m[1]);

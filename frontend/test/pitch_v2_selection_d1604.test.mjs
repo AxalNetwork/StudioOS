@@ -17,6 +17,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { placeOf } from '../src/pages/raise/pitch/gridModel.js';
+// D1499: a block's place is `placeOf` (boxOf on the slide), so a range is read back from its box.
+const cols = (st, c1, c2) => st?.left === placeOf({ c1, c2, r1: 1, r2: 1 }).left && st?.width === placeOf({ c1, c2, r1: 1, r2: 1 }).width;
+const rows = (st, r1, r2) => st?.top === placeOf({ c1: 1, c2: 1, r1, r2 }).top && st?.height === placeOf({ c1: 1, c2: 1, r1, r2 }).height;
 import { readFileSync } from 'node:fs';
 
 import { areaLabel, askAreaName } from '../src/pages/raise/pitch/deckV2Model.js';
@@ -120,31 +124,45 @@ test('a drag to a free range moves the block; a drop on a taken range is refused
   assert.equal(cellAt(1, 1, null, MODEL), null, 'no box, no cell');
 });
 
-test('one geometry: the pointer is read on the blocks layer\'s own box, its width-based padding and its gutter', () => {
-  // A 16:9 blocks layer, 1600 × 900, p-[3%] (48 px on all four sides: CSS takes a
-  // percentage padding from the width) and gap-2 (8 px). Each row is
-  // (900 − 96 − 5 × 8) / 6 ≈ 127.3 px tall: row 1 spans 48–175.3, the gutter
-  // 175.3–183.3, row 2 183.3–310.7; row 5 starts at 589.3.
+test('one geometry (D1499): the pointer is read back onto the slide, the inverse of boxOf, at 16:9 and 4:3', () => {
+  // A 16:9 face 1600 × 900 is the 1920 × 1080 slide at 5/6. Rows: the top
+  // margin is 96 × 5/6 = 80, each row (1080 − 96 − 88 − 5 × 24) / 6 = 129.3 slide
+  // px, so 107.8 here, with a 20 px gutter: row 1 is 80–187.8, row 2 starts 207.8.
   const box = { left: 0, top: 0, width: 1600, height: 900 };
-  const at = (x, y) => cellAt(x, y, box, MODEL, { gap: 8 });
-  assert.equal(at(800, 185).r, 2, 'just below the visible top edge of row 2');
-  assert.equal(at(800, 172).r, 1, 'just above the visible bottom edge of row 1 is still row 1');
-  assert.equal(at(800, 590).r, 5, 'just below the visible top edge of row 5');
-  assert.equal(at(800, 178).r, 1, 'the upper half of a gutter belongs to the row above');
-  assert.equal(at(800, 181).r, 2, 'the lower half to the row below');
-  // Columns: (1600 − 96 − 11 × 8) / 12 = 118 px; column 2 spans 174–292.
-  assert.equal(at(175, 300).c, 2);
-  assert.equal(at(169, 300).c, 1, 'just right of column 1, in its half of the gutter');
+  const at = (x, y) => cellAt(x, y, box, MODEL);
+  assert.equal(at(800, 209).r, 2, 'just below the top edge of row 2');
+  assert.equal(at(800, 186).r, 1, 'just above the bottom edge of row 1');
+  assert.equal(at(800, 196).r, 1, 'the upper half of a gutter belongs to the row above');
+  assert.equal(at(800, 200).r, 2, 'the lower half to the row below');
+  // Columns: the side margin is 112 × 5/6 = 93.3, each column 119.3 slide px (99.4 here): column 2 starts 212.8.
+  assert.equal(at(214, 300).c, 2);
+  assert.equal(at(201, 300).c, 1, 'just right of column 1, in its half of the gutter');
   assert.deepEqual(at(0, 0), { c: 1, r: 1 }, 'the margin clamps to the edge cell');
   assert.deepEqual(at(1600, 900), { c: 12, r: 6 });
-  // The stage reads the blocks layer (its ref, its gutter), and the overlay and
-  // the drag layer share the blocks layer's classes: no inset-[3%] anywhere.
+  // 4:3: the same face height, 1200 wide, is the 1440 × 1080 slide at 5/6;
+  // the columns narrow to 79.3 slide px (66.1 here): column 2 starts 179.4.
+  const four = (x, y) => cellAt(x, y, { left: 0, top: 0, width: 1200, height: 900 }, MODEL, { aspect: '4:3' });
+  assert.equal(four(181, 300).c, 2);
+  assert.equal(four(168, 300).c, 1);
+  assert.equal(at(181, 300).c, 1, 'the same point at 16:9 is still column 1: the aspect is read, not assumed');
+  // Every cell's centre, placed with placeOf on a face of any size, reads back as that cell.
+  for (const [aspect, w, h] of [['16:9', 1600, 900], ['16:9', 733, 412.3125], ['4:3', 1200, 900], ['4:3', 517, 387.75]]) {
+    for (let r = 1; r <= 6; r += 1) {
+      for (let c = 1; c <= 12; c += 1) {
+        const p = placeOf({ c1: c, c2: c, r1: r, r2: r }, aspect);
+        const x = ((parseFloat(p.left) + parseFloat(p.width) / 2) / 100) * w;
+        const y = ((parseFloat(p.top) + parseFloat(p.height) / 2) / 100) * h;
+        assert.deepEqual(cellAt(x, y, { left: 0, top: 0, width: w, height: h }, MODEL, { aspect }), { c, r }, `${aspect} ${w}: c${c} r${r}`);
+      }
+    }
+  }
+  // The stage places every area from placeOf and reads the pointer with the deck's aspect: no CSS gap or padding.
   const stage = read('GridStage.jsx');
-  assert.doesNotMatch(stage, /inset-\[3%\]/, 'no height-based inset');
-  assert.equal((stage.match(/className=\{LAYER\} style=\{TRACKS\}/g) || []).length, 2, 'the overlay cells and the blocks layer');
-  assert.match(stage, /<div ref=\{layer\} className=\{LAYER\} style=\{TRACKS\}/);
-  assert.match(stage, /className=\{`pointer-events-none \$\{LAYER\}`\} style=\{TRACKS\}/, 'the marquee and the ghost');
-  assert.match(stage, /cellAt\(e\?\.clientX, e\?\.clientY, rect\(\), model, \{ gap: layer\.current \? gutterOf\(layer\.current\) : 0 \}\)/);
+  for (const css of [/p-\[3%\]/, /inset-\[3%\]/, /inset-0 grid/, /gridTemplateColumns/, /gridColumn/, /gutterOf/]) assert.doesNotMatch(stage, css, String(css));
+  assert.match(stage, /const at = placeOf\(a\.grid, aspect\)/, 'the blocks and the free areas');
+  assert.match(stage, /style=\{placeOf\(box, aspect\)\}/, 'the marquee');
+  assert.match(stage, /cellAt\(e\?\.clientX, e\?\.clientY, rect\(\), model, \{ aspect \}\)/);
+  assert.match(stage, /aspectRatio: ratioOf\(aspect\)/, 'the face is the deck\'s slide');
 });
 
 test('the focus follows the card: a free range a block now covers hands the focus to that block', () => {
@@ -285,12 +303,12 @@ test('a drop on a taken range is refused and changes nothing; on a free range it
     await m.fire(m.by('pitch-editor-block-b3'), 'onDragStart', { dataTransfer: { setData() {} } });
     await m.fire(m.by('pitch-editor-area-free:8-4'), 'onDrop');
     assert.ok(!m.by('pitch-editor-drop-refused'));
-    assert.equal(m.pr(m.by('pitch-editor-block-b3')).style.gridRow, '4 / 6', 'the block moved to row 4, its size kept');
+    assert.ok(rows(m.pr(m.by('pitch-editor-block-b3')).style, 4, 5), 'the block moved to row 4, its size kept');
     assert.ok(m.by('pitch-editor-save'), 'held until Save');
     // Alt + arrow nudges the one selected block a cell.
     await m.press(m.by('pitch-editor-block-b3'));
     await m.fire(m.by('pitch-editor-card'), 'onKeyDown', { key: 'ArrowRight', altKey: true });
-    assert.equal(m.pr(m.by('pitch-editor-block-b3')).style.gridColumn, '9 / 12');
+    assert.ok(cols(m.pr(m.by('pitch-editor-block-b3')).style, 9, 11));
   } finally { await m.close(); }
 });
 
@@ -304,11 +322,11 @@ test('block tools edit the block in place: words, style, and a span that overlap
     assert.equal(m.pr(m.by('pitch-tools-style-list'))['aria-pressed'], true);
     await m.type(m.by('pitch-tools-cols'), '9');
     assert.match(m.text(m.by('pitch-tools-span-problem')), /overlaps the 3 × 2 metric tile\. Nothing changed\./);
-    assert.equal(m.pr(m.by('pitch-editor-block-b2')).style.gridColumn, '1 / 8', 'the block kept its range');
+    assert.ok(cols(m.pr(m.by('pitch-editor-block-b2')).style, 1, 7), 'the block kept its range');
     await m.type(m.by('pitch-tools-rows'), '4');
     await m.type(m.by('pitch-tools-cols'), '6');
     assert.ok(!m.by('pitch-tools-span-problem'));
-    assert.equal(m.pr(m.by('pitch-editor-block-b2')).style.gridColumn, '1 / 7');
+    assert.ok(cols(m.pr(m.by('pitch-editor-block-b2')).style, 1, 6));
   } finally { await m.close(); }
 });
 

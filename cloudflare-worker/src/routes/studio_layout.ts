@@ -47,7 +47,7 @@ async function who(c: Context<{ Bindings: Env }>): Promise<Who | Response> {
 }
 
 type Row = { layout: string; updated_at: string; revision: number };
-async function savedRow(env: Env, userId: number, profile: StudioProfile): Promise<Row | null> {
+export async function savedRow(env: Env, userId: number, profile: StudioProfile): Promise<Row | null> {
   return await env.DB.prepare('SELECT layout, updated_at, revision FROM studio_layouts WHERE user_id = ?1 AND profile = ?2')
     .bind(userId, profile).first<Row>();
 }
@@ -71,7 +71,7 @@ type Dropped = { key: string; title: string | null; reason: 'not_offered' | 'pla
  * this member can place now, the row's revision, and every saved module that
  * left named in `dropped` with a title (or null) and a reason. Read-only.
  */
-function layoutView(user: User, profile: StudioProfile, row: Row | null) {
+export function layoutView(user: User, profile: StudioProfile, row: Row | null) {
   const catalogue = new Map(catalogueOf(profile, user).map((m) => [m.key, m]));
   const source = row ? 'saved' as const : 'default' as const;
   const entries: Array<{ key: string; size: StudioSize }> = row ? JSON.parse(row.layout) : STUDIO_DEFAULTS[profile].map((e) => ({ ...e }));

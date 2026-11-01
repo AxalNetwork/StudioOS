@@ -7,13 +7,19 @@
  *
  * The answer keeps Workers AI's `{ response }` shape, so each job's parsing
  * and its fallback on an empty answer are unchanged; a refusal reads as empty.
+ *
+ * D1478 §3937 fix 14: each job names its route, and none of them is the 8B —
+ * `system_job` (valuation, equity, deal scoring), `system_legal` (the LPA) and
+ * `system_review` (traction).
  */
 import type { Env } from '../src/types';
 import { run } from '../src/services/aiRouter';
 
 type Message = { role: 'system' | 'user' | 'assistant'; content: string };
 
-export async function systemRun(env: Env, input: { messages: Message[]; max_tokens: number }): Promise<{ response: string }> {
-  const r = await run(env, { task: 'system_job', userId: 0, messages: input.messages, maxTokens: input.max_tokens });
+export type SystemTask = 'system_job' | 'system_legal' | 'system_review';
+
+export async function systemRun(env: Env, input: { messages: Message[]; max_tokens: number; task?: SystemTask }): Promise<{ response: string }> {
+  const r = await run(env, { task: input.task ?? 'system_job', userId: 0, messages: input.messages, maxTokens: input.max_tokens });
   return { response: r.ok ? String(r.output ?? '') : '' };
 }

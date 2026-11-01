@@ -3,13 +3,23 @@
  * domain into one of the canonical personas with a confidence score and a
  * persona-specific 3-5 question follow-up bank.
  *
- * Strategy: cheap email-domain heuristic + Llama 3.1 8B reasoning.
+ * Strategy: cheap email-domain heuristic + a Clef decision.
  * - Domain hits jump confidence by 0.25 (capped at 0.95).
- * - If model JSON is unparseable we fall back to a heuristic-only label
- *   with a low confidence score so the caller surfaces a disambiguation.
+ * - When the decision is refused or unreadable we fall back to a
+ *   heuristic-only label with a low confidence score so the caller surfaces a
+ *   disambiguation.
+ *
+ * D1478 §3937 (ON3): the decision is clef-flash through `run()`, so it is
+ * quoted, held, guarded and charged like every other run, and recorded on
+ * `/onboarding/persona`. It replaces a direct `ai.run` of
+ * `@cf/meta/llama-3.1-8b-instruct`, which Cloudflare deprecated on
+ * 2026-05-30. Clef returns a probability for every persona, so the
+ * alternatives are the model's own ranking rather than prose it wrote.
  */
 import type { Env } from '../src/types';
 import { PERSONAS, PERSONA_BY_ID, type Persona, type PersonaId } from '../src/personas';
+import { run } from '../src/services/aiRouter';
+import { AI_SURFACE } from '../src/services/aiSurfaces';
 
 export interface PersonaClassifyInput {
   first_message: string;
@@ -48,22 +58,21 @@ function domainHeuristic(email: string): Array<{ persona_id: PersonaId; score: n
   return hits.sort((a, b) => b.score - a.score);
 }
 
-const SYSTEM_PROMPT = `You classify a new user of the Axal venture studio into ONE of the personas below based on their first message and email. Output strict JSON only — no prose, no code fences.
+/** The decision model ON3 names: hot-path, 24,576 tokens, probabilities per option. */
+export const PERSONA_MODEL = '@cf/cloudflare/clef-flash';
 
-Personas:
-${PERSONAS.map((p) => `- ${p.id}: ${p.label} — ${p.short_description}`).join('\n')}
+/** The one question asked: which persona, from the canonical list, each with its short description. */
+export const PERSONA_QUESTION = {
+  persona: {
+    type: 'choice' as const,
+    instructions: 'Which kind of Axal venture studio member wrote this first message?',
+    criteria: Object.fromEntries(PERSONAS.map((p) => [p.id, `${p.label}: ${p.short_description}`.slice(0, 100)])),
+  },
+};
 
-Output schema:
-{"persona_id": "<one of the ids above>", "confidence": <number 0..1>, "alternatives": [{"persona_id": "<id>", "confidence": <number>}], "rationale": "<one short sentence>"}`;
-
-const USER_PROMPT = (i: PersonaClassifyInput) => `Email: ${i.email}
+/** What Clef reads: the email domain (never the full address) and the first message. */
+const STATE = (i: PersonaClassifyInput) => `Email domain: ${emailDomain(i.email) || 'unknown'}
 First message: ${i.first_message.slice(0, 1000)}`;
-
-function safeParse(text: string): Partial<PersonaClassifyOutput> {
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) return {};
-  try { return JSON.parse(m[0]); } catch { return {}; }
-}
 
 function clamp01(n: unknown): number {
   const x = Number(n);
@@ -71,7 +80,8 @@ function clamp01(n: unknown): number {
   return Math.max(0, Math.min(1, x));
 }
 
-export async function classifyPersona(env: Env, input: PersonaClassifyInput): Promise<PersonaClassifyOutput> {
+/** `userId` is who the run is charged to; without one, only the email-domain heuristic runs. */
+export async function classifyPersona(env: Env, input: PersonaClassifyInput, userId?: number | null): Promise<PersonaClassifyOutput> {
   const heuristics = domainHeuristic(input.email);
 
   let aiPersonaId: PersonaId | null = null;
@@ -79,32 +89,31 @@ export async function classifyPersona(env: Env, input: PersonaClassifyInput): Pr
   let aiAlternatives: Array<{ persona_id: PersonaId; confidence: number }> = [];
   let rationale = '';
 
-  try {
-    const ai = (env as unknown as { AI?: { run: (m: string, p: unknown) => Promise<{ response?: string }> } }).AI;
-    if (ai) {
-      const out = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: USER_PROMPT(input) },
-        ],
-        max_tokens: 400,
-      });
-      const parsed = safeParse(out?.response ?? '');
-      const id = parsed.persona_id;
-      if (typeof id === 'string' && id in PERSONA_BY_ID) {
-        aiPersonaId = id as PersonaId;
-        aiConfidence = clamp01(parsed.confidence);
-      }
-      if (Array.isArray(parsed.alternatives)) {
-        aiAlternatives = parsed.alternatives
-          .filter((a) => a && typeof a.persona_id === 'string' && a.persona_id in PERSONA_BY_ID)
-          .map((a) => ({ persona_id: a.persona_id as PersonaId, confidence: clamp01(a.confidence) }))
-          .slice(0, 3);
-      }
-      rationale = typeof parsed.rationale === 'string' ? parsed.rationale.slice(0, 240) : '';
+  if (userId) {
+    const res = await run(env, {
+      task: 'module_decision',
+      model: PERSONA_MODEL,
+      userId,
+      surface: AI_SURFACE.onboardingPersona,
+      specialist: { operation: 'decision', questions: PERSONA_QUESTION },
+      text: STATE(input),
+    });
+    if (res.ok) {
+      try {
+        const answer = (JSON.parse(res.output ?? '') as any)?.persona;
+        if (answer && typeof answer.choice === 'string' && answer.choice in PERSONA_BY_ID) {
+          aiPersonaId = answer.choice as PersonaId;
+          const probs = (answer.probabilities ?? {}) as Record<string, number>;
+          aiConfidence = clamp01(probs[aiPersonaId] ?? answer.confidence);
+          aiAlternatives = Object.entries(probs)
+            .filter(([id]) => id !== aiPersonaId && id in PERSONA_BY_ID)
+            .map(([id, p]) => ({ persona_id: id as PersonaId, confidence: clamp01(p) }))
+            .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, 3);
+          rationale = `Decided by clef-flash from the first message${heuristics.length ? ' and the email domain' : ''}.`;
+        }
+      } catch { /* an unreadable answer falls back to the heuristic below */ }
     }
-  } catch (e) {
-    console.error('[persona-router] AI error', e);
   }
 
   // Boost AI confidence when the email-domain heuristic agrees.

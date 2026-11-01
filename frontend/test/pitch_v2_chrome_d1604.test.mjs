@@ -50,10 +50,11 @@ test('the save state: ✓ Saved with its time, ● Unsaved changes with Save ver
 test('⋯: three sections; adapter items are Coming later with the adapter\'s reason; AI-off items count into the name', () => {
   assert.deepEqual(MORE_MENU.map((s) => s.label), ['This deck', 'This card', 'Whole deck · uses AI']);
   const all = MORE_MENU.flatMap((s) => s.items);
-  for (const id of ['theme', 'brand', 'sources', 'versions', 'save_named', 'structure', 'duplicate', 'appendix', 'background', 'check']) {
+  // D1499 (#3749): Slide size is wired on main, a theme write held until a version is saved.
+  for (const id of ['theme', 'size', 'brand', 'sources', 'versions', 'save_named', 'structure', 'duplicate', 'appendix', 'background', 'check']) {
     assert.ok(all.find((i) => i.id === id && !i.adapter), `${id} is wired on main`);
   }
-  for (const [id, adapter] of [['stage', 'stagePlan'], ['size', 'grid'], ['reorder', 'deckActions'], ['remix', 'remix'], ['hide', 'media'], ['section', 'media'], ['replace_images', 'deckActions'], ['critique', 'critique']]) {
+  for (const [id, adapter] of [['stage', 'stagePlan'], ['reorder', 'deckActions'], ['remix', 'remix'], ['hide', 'media'], ['section', 'media'], ['replace_images', 'deckActions'], ['critique', 'critique']]) {
     assert.equal(all.find((i) => i.id === id).adapter, adapter, id);
   }
   assert.equal(MORE_MENU[0].items.findIndex((i) => i.id === 'reorder') >= 0, true, 'Reorder for stage sits under This deck');

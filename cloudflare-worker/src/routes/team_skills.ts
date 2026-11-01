@@ -21,7 +21,7 @@
  *  - Write: an HQ skill by a Super Admin only; a company skill by that
  *    company's editors (`canEdit`).
  *  - An agent's skills: changed only by those who manage the agent's company
- *    or project (`team_agents.ts`'s `canManage`, called, never copied).
+ *    or project (`services/agents/teams.ts`'s `canManage`, called, never copied).
  *  - Attach: the skill must be published, readable from the agent's company,
  *    of the agent's role, and its tools a subset of the agent's
  *    `tool_grants_json`; otherwise 409 with a sentence per skill.
@@ -41,7 +41,8 @@ import {
   OUTPUT_LABELS, SKILL_MESSAGES, attachRefusal, checkDraft, parseSkillMd, skillsRadar, toSkillMd,
   type OutputKind, type SkillDraft, type Tag,
 } from '../services/agents/skills';
-import { agentByUid, canManage, canRead, scopeOfAgent, teamAgentsEnabled, toolsOf, type AgentRow } from './team_agents';
+import { teamAgentsEnabled, toolsOf } from './team_agents';
+import { agentByUid, canManage, canRead, scopeOfAgent, type AgentRow } from '../services/agents/teams';
 
 type C = Context<{ Bindings: Env }>;
 type SkillRow = {

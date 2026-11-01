@@ -102,6 +102,9 @@ import { NewComplianceDialog } from './CalendarComplianceSheet';
 import { COMPLIANCE_KIND, stateLine, stateOf } from './calendarComplianceModel';
 import { itemOf, itemPath } from './calendarItemModel';
 import { DayPopover, KindsPanel, MonthGrid, WeekGrid } from './CalendarGrids';
+import AgentSessionSheet, { ScheduleAgentSheet } from './CalendarAgentSessions';
+import { AGENT_KIND } from './calendarAgentModel';
+import AskButton from './team/AskButton.jsx';
 import { ConnectedPanel, ConnectedSummary, GooglePanel, SubscribeDialog } from './CalendarConnected';
 import { CONNECTED_PATH, connectedOf, stripLabel, weekStrip } from './calendarConnectedModel';
 import {
@@ -110,24 +113,27 @@ import {
 import './calendarPage.css';
 
 /**
- * The six kinds, in the canvas's reading order. `src` is the store the events
+ * The six kinds, in the canvas's reading order. `from` is the module the events
  * come from, which is what the rail's legend shows — a reader who wonders why
- * something is or is not here can see where each row originates.
+ * something is or is not here can see where each row originates. D1613 (#3723):
+ * it names the module in plain words. It used to print the D1 table each kind
+ * is read from (`ic_meetings`, `raise_prospect_events`), and the page never
+ * shows a table name.
  * D1384 (#3692): `compliance_due` is the Compliance layer, which replaced the
  * /compliance page; the canvas draws no deadline kind, so its mark is derived
  * in the same idiom as the others (calendarPage.css).
  */
 const KINDS = [
-  { id: 'ic_meeting', label: 'IC meeting', src: 'ic_meetings' },
-  { id: 'founder_checkin', label: 'Check-in', src: 'founder_checkins' },
-  { id: 'advisor_booking', label: 'Advisor', src: 'advisor_bookings' },
-  { id: 'partner_office_hour', label: 'Office hour', src: 'office_hours' },
-  { id: 'calendly_event', label: 'Calendly', src: 'calendly' },
-  { id: 'expert_booking', label: 'Expert session', src: 'expert_bookings' },
-  { id: 'event_ticket', label: 'Event ticket', src: 'event_registrations' },
-  { id: 'event_hosted', label: 'Hosting', src: 'events' },
-  { id: 'investor_meeting', label: 'Investor meeting', src: 'raise_prospect_events' },
-  { id: 'compliance_due', label: 'Compliance', src: 'compliance_events' },
+  { id: 'ic_meeting', label: 'IC meeting', from: 'Deal room' },
+  { id: 'founder_checkin', label: 'Check-in', from: 'Check-ins' },
+  { id: 'advisor_booking', label: 'Advisor', from: 'Advisors' },
+  { id: 'partner_office_hour', label: 'Office hour', from: 'Office hours' },
+  { id: 'calendly_event', label: 'Calendly', from: 'Calendly' },
+  { id: 'expert_booking', label: 'Expert session', from: 'Wellbeing' },
+  { id: 'event_ticket', label: 'Event ticket', from: 'Events · your tickets' },
+  { id: 'event_hosted', label: 'Hosting', from: 'Events · you host' },
+  { id: 'investor_meeting', label: 'Investor meeting', from: 'Raise › Capital relationships' },
+  { id: 'compliance_due', label: 'Compliance', from: 'Compliance' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 
@@ -387,6 +393,7 @@ export default function CalendarPage() {
   const [microsoftResult, setMicrosoftResult] = useState(null);
   const [showIc, setShowIc] = useState(false);
   const [showCk, setShowCk] = useState(false);
+  const [showAgent, setShowAgent] = useState(false); // D1613 (CAL8): Schedule an AI agent
   const [showCompliance, setShowCompliance] = useState(false);
 
   const me = safeReadJSON('user', {});
@@ -559,7 +566,9 @@ export default function CalendarPage() {
         <div className="cal-head-actions">
           {/* D1211 (CAL8 A): one New menu. IC meeting is in it only where
               canScheduleIc allows (`newMenu`), so the gate strip below says why. */}
-          {!explorer && <NewMenu role={role} onPick={(k) => (k === 'compliance' ? setShowCompliance(true) : k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />}
+          {!explorer && <NewMenu role={role} onPick={(k) => (k === 'agent' ? setShowAgent(true) : k === 'compliance' ? setShowCompliance(true) : k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />}
+          {/* D1613 (CAL1b): Ask beside New. It draws nothing until #3706's Ask panel exists (Team's D1497 rule). */}
+          {!explorer && <AskButton />}
           {/* D1212 (CAL11): Subscribe opens its dialog: the private whole-calendar link, and the one-off .ics. */}
           <button type="button" className="cal-btn cal-btn-o" onClick={() => setSubscribing(true)} data-testid="cal-subscribe-open">
             <Download className="w-4 h-4" aria-hidden="true" /> Subscribe
@@ -754,7 +763,7 @@ export default function CalendarPage() {
                 <div key={k.id}>
                   <span className="cal-dot" data-kind={k.id} aria-hidden="true" />
                   <span>{k.label}</span>
-                  <span className="cal-mono">{k.src}</span>
+                  <span className="cal-mono">{k.from}</span>
                 </div>
               ))}
             </div>
@@ -777,6 +786,7 @@ export default function CalendarPage() {
       {dayOpen && <DayPopover date={dayOpen} items={pool} read={Array.isArray(inRange)} from={pathname} onClose={() => setDayOpen(null)} />}
       {showIc && <NewIcDialog meetAvailable={gState === 'connected'} onClose={() => setShowIc(false)} onSaved={() => { setShowIc(false); load(); }} />}
       {showCompliance && <NewComplianceDialog onClose={() => setShowCompliance(false)} onDone={() => { setShowCompliance(false); load(); }} />}
+      {showAgent && <ScheduleAgentSheet zone={Intl.DateTimeFormat().resolvedOptions().timeZone} onClose={() => setShowAgent(false)} onSaved={() => { setShowAgent(false); load(); }} />}
       {showCk && <NewCheckinDialog role={role} meetAvailable={gState === 'connected'} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
       {connected === 'list' && (
         <ConnectedPanel google={google} microsoft={microsoft} gState={gState} mState={mState}
@@ -786,7 +796,9 @@ export default function CalendarPage() {
         <GooglePanel google={google} gState={gState} reloadGoogle={loadGoogle} onClose={() => navigate(CONNECTED_PATH)} />
       )}
       {subscribing && <SubscribeDialog onClose={() => setSubscribing(false)} />}
-      {opened && (
+      {/* D1613 (CAL10, CAL11): a session has its own sheet and its own seam. */}
+      {opened?.kind === AGENT_KIND && <AgentSessionSheet id={opened.id} onClose={() => navigate(behind)} onChanged={load} />}
+      {opened && opened.kind !== AGENT_KIND && (
         <CalendarItemDrawer kind={opened.kind} id={opened.id} canCopy={anyConnected} onChanged={load}
                             onClose={() => navigate(behind)} />
       )}

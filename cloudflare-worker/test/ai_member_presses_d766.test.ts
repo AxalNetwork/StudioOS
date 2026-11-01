@@ -22,6 +22,7 @@ import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { ROUTE, ASSIST_OFF_MESSAGE, budgetRefusalMessage, __resetForTest } from '../src/services/aiRouter.ts';
+import { resolveRail, resolveRailOption } from '../src/services/ai/railMatrix.ts';
 import legalcap from '../src/routes/legalcap.ts';
 import pipeline from '../src/routes/pipeline.ts';
 import networkfx from '../src/routes/networkfx.ts';
@@ -82,7 +83,10 @@ test('marketplace match: the member\'s run on rail_match, with the browser\'s pa
   const w = world(ai);
   const r = await call(w, 'POST', '/api/networkfx/marketplace/match', { need: 'A logistics operator' }, { 'X-Rail-Page': encodeURIComponent('Founder · Network') });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.deepEqual(modelCalls(ai).map((c: any) => c.model), [ROUTE.rail_match.model]);
+  // #3934: the page's row (the option has none of its own, as in chooseModels) runs its job's Default (the use-case table), not the route's own default.
+  const matchRow = resolveRailOption('Founder · Network', 'match:marketplace') ?? resolveRail('Founder · Network');
+  assert.ok(matchRow?.models[0]?.id, 'the page has a row with a Default');
+  assert.deepEqual(modelCalls(ai).map((c: any) => c.model), [matchRow!.models[0].id]);
   const [row] = rows(w);
   assert.equal(row.user_id, MEMBER);
   assert.equal(row.task, 'rail_match');

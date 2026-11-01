@@ -12,7 +12,7 @@
  * are not on this page. `company_profiles` has no legal name, no jurisdiction and
  * no incorporation date — those live on `entities` and `compliance_events`, which
  * is a legal-filing surface and a different piece of work. What Company Settings
- * actually edits is eleven columns, and every one of them is refused:
+ * actually edits is twelve columns, and every one of them is refused:
  *
  *   company_name             IDENTITY. The legal-weight case the plan names.
  *   website, linkedin_url,   A URL IS A MODEL'S LIKELIEST FABRICATION. The
@@ -24,6 +24,10 @@
  *                            keep its promise, and `composition` may not occupy a
  *                            column holding a measured value.
  *   expansion_goals          INTENT, which only the founder has.
+ *   default_currency         A CHOICE ONLY THE COMPANY MAKES (#3932, #3696 Q4):
+ *                            the currency it reports and invoices in. Nothing to
+ *                            restate or cite, and a guess carries money's weight.
+ *                            Unset reads "Not recorded", never a filled default.
  *   description,             PROSE — and ALREADY SERVED. The brand builder's
  *   current_products         autofill drafts exactly this from
  *                            `project.description` and `.problem_statement`
@@ -66,6 +70,8 @@ const EDITABLE = [
   'company_name', 'stage', 'revenue_range', 'employee_count',
   'current_products', 'international_presence', 'expansion_goals',
   'logo_url', 'website', 'linkedin_url', 'description',
+  // #3932 (migration 757): reasoned about in the header, refused like the rest.
+  'default_currency',
 ];
 
 test('the route still edits exactly the columns this refusal was reasoned about', () => {
