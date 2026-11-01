@@ -1,0 +1,13 @@
+{
+  "$id": "deckDiscardDraft",
+  "title": "DELETE /api/decks/:id/draft (D1501, #3751)",
+  "description": "The reply the deck v2 adapter's `discardDraft` method passes through: ok, the deck and how many card copies were discarded (`routes/deck_draft.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "deck_id", "discarded"],
+  "properties": {
+    "ok": { "const": true },
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "discarded": { "type": "integer", "minimum": 0, "maximum": 60 }
+  }
+}

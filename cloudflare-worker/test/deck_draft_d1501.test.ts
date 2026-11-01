@@ -28,6 +28,9 @@ import decks, { createShareLink, ensureSchema } from '../src/routes/decks.ts';
 import deckDraft, { DRAFT_MAX_CARDS } from '../src/routes/deck_draft.ts';
 import { revOf } from '../src/services/decks/ifMatch.ts';
 import { MODEL_VERSION } from '../src/services/decks/slideModel.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
+
+const schema = (f: string) => JSON.parse(readFileSync(`cloudflare-worker/src/contracts/${f}`, 'utf8'));
 
 const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
@@ -88,9 +91,15 @@ test('715 applies twice; a card\'s working copy round-trips and its revision cli
     // The saved version is untouched until Save as version.
     assert.equal(JSON.parse((f.db.prepare(`SELECT slides FROM pitch_decks WHERE id = ${DECK}`).get() as any).slides)[0].title, 'Saved title');
     // An empty draft reads as no cards, not a 404.
+    // D1511: each reply the adapter passes on matches its contract.
+    assert.deepEqual(contractErrors(schema('deckSaveCard.schema.json'), r.body), []);
+    assert.deepEqual(contractErrors(schema('deckDraft.schema.json'), draft.body), []);
     const del = await f.call('DELETE', `/api/decks/${DECK}/draft`);
     assert.deepEqual([del.status, del.body.discarded], [200, 2]);
-    assert.deepEqual((await f.call('GET', `/api/decks/${DECK}/draft`)).body.cards, []);
+    assert.deepEqual(contractErrors(schema('deckDiscardDraft.schema.json'), del.body), []);
+    const empty = (await f.call('GET', `/api/decks/${DECK}/draft`)).body;
+    assert.deepEqual([empty.cards, empty.updated_at], [[], null]);
+    assert.deepEqual(contractErrors(schema('deckDraft.schema.json'), empty), [], 'an empty draft keeps its contract');
   } finally { f.db.close(); }
 });
 
