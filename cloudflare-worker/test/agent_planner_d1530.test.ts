@@ -233,6 +233,7 @@ test('Accept: every task in one batch with source_kind plan, its dependencies, t
     assert.deepEqual([...new Set(rows.map((x) => `${x.source_kind}:${x.source_ref}`))], [`plan:${r.proposal.uid}`]);
     assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM scope_task_events WHERE kind = 'created'").get() as any).n, 3);
     assert.equal((w.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid = ?').get(r.proposal.uid) as any).status, 'accepted');
+    assert.equal((w.db.prepare('SELECT decided_payload_json FROM ai_rail_proposals WHERE uid = ?').get(r.proposal.uid) as any).decided_payload_json, null, 'the transaction marker is never stored as the decision');
     const again = await call(w, EDITOR, 'POST', `/goals/${g}/plan/accept`, { proposal: r.proposal.uid });
     assert.deepEqual([again.status, again.body.code ?? again.body.error], [409, 'plan_decided']);
     assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM scope_tasks').get() as any).n, 3);
@@ -272,6 +273,8 @@ test('Accept with edits: removed items go (with every wait on them), retitled it
     assert.equal(a.status, 201, a.text);
     assert.deepEqual(a.body.tasks.map((t: any) => [t.title, t.depends_on.length]), [['Book investor calls', 0], ['Send the deck to five funds', 1]]);
     assert.equal((w.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid = ?').get(r.proposal.uid) as any).status, 'edited');
+    const decision = JSON.parse((w.db.prepare('SELECT decided_payload_json FROM ai_rail_proposals WHERE uid = ?').get(r.proposal.uid) as any).decided_payload_json);
+    assert.equal(decision.plan.items[1].title, 'Send the deck to five funds', 'the edited decision replaces the private marker');
     assert.deepEqual(applyEdits(r.proposal.plan, { remove: [0, 1, 2] }).ok, false, 'keep at least one item');
     assert.equal(applyEdits(r.proposal.plan, { titles: { 9: 'x' } }).ok, false);
   } finally { w.db.close(); }
@@ -295,6 +298,39 @@ test('Accept: a batch that fails creates no task and frees the plan to accept ag
     const other = await goal(w);
     assert.equal((await call(w, EDITOR, 'POST', `/goals/${other}/plan/accept`, { proposal: r.proposal.uid })).status, 404, 'a plan of another goal');
     assert.equal((await call(w, EDITOR, 'POST', `/goals/${g}/plan/accept`, { proposal: r.proposal.uid })).status, 201);
+  } finally { w.db.close(); }
+});
+
+test('Accept: a storage failure needs no separate claim-release write and leaves the plan retryable', async () => {
+  const w = world();
+  try {
+    const g = await goal(w);
+    const p = await plan(w, g, PLAN);
+    assert.ok(p.ok);
+    const prepare = w.env.DB.prepare.bind(w.env.DB);
+    const batch = w.env.DB.batch.bind(w.env.DB);
+    let separateWrites = 0;
+    w.env.DB.prepare = (sql: string) => {
+      const stmt = prepare(sql);
+      if (/^UPDATE ai_rail_proposals/.test(sql.trim())) stmt.run = async () => { separateWrites++; throw new Error('storage unavailable'); };
+      return stmt;
+    };
+    w.env.DB.batch = async () => { throw new Error('storage unavailable'); };
+    const failed = await call(w, EDITOR, 'POST', `/goals/${g}/plan/accept`, { proposal: p.proposal.uid });
+    assert.deepEqual([failed.status, failed.body.code ?? failed.body.error], [503, 'plan_not_saved']);
+    assert.equal(separateWrites, 0, 'no claim or release is a separate write');
+    const state = w.db.prepare('SELECT status, decided_at, decided_payload_json FROM ai_rail_proposals WHERE uid = ?').get(p.proposal.uid) as any;
+    assert.deepEqual({ ...state }, { status: 'proposed', decided_at: null, decided_payload_json: null });
+    assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM scope_tasks').get() as any).n, 0);
+    w.env.DB.batch = (statements: any[]) => batch([...statements, prepare('INSERT INTO missing_plan_test_table (id) VALUES (1)')]);
+    const rolledBack = await call(w, EDITOR, 'POST', `/goals/${g}/plan/accept`, { proposal: p.proposal.uid });
+    assert.equal(rolledBack.status, 503, 'a failure after every plan statement still rolls back');
+    assert.equal((w.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid = ?').get(p.proposal.uid) as any).status, 'proposed');
+    assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM scope_tasks').get() as any).n, 0, 'the claim and all inserted tasks roll back together');
+    assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM scope_task_events').get() as any).n, 0);
+    assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM scope_task_deps').get() as any).n, 0);
+    w.env.DB.batch = batch;
+    assert.equal((await call(w, EDITOR, 'POST', `/goals/${g}/plan/accept`, { proposal: p.proposal.uid })).status, 201, 'retry succeeds even while separate writes remain unavailable');
   } finally { w.db.close(); }
 });
 

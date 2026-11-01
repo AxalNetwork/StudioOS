@@ -277,9 +277,9 @@ export function applyEdits(plan: Plan, edits: PlanEdits): { ok: true; items: Pla
 const addDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
 /**
- * Accept a plan: claim the proposal (only an open one, once), then write every
- * task, its dependencies and its event in ONE batch. If the batch fails the
- * claim is released and no task exists.
+ * Accept a plan: claim the proposal (only an open one, once) and write every
+ * task, its dependencies and its event in ONE batch. A failed batch rolls
+ * back the claim too, without a second write to release it.
  */
 export async function acceptPlan(env: Env, s: Scope, goal: GoalRow, proposalUid: unknown, edits: PlanEdits, user: User): Promise<{ ok: true; tasks: string[] } | PlanRefusal> {
   if (typeof proposalUid !== 'string' || !proposalUid) return { ok: false, status: 400, code: 'invalid_plan', message: 'Name the plan to accept.' };
@@ -306,18 +306,22 @@ export async function acceptPlan(env: Env, s: Scope, goal: GoalRow, proposalUid:
     assignees.push(a && !(await agentFits(env, a, it.module, null)) ? a.id : null);
   }
 
-  const claim = await env.DB.prepare(
+  // This private marker exists only inside the transaction. A losing claim
+  // inserts no tasks; the final statement replaces it with the public decision.
+  const marker = JSON.stringify({ plan_claim: newUid() });
+  const decision = edited ? JSON.stringify({ goal: goal.uid, plan: { items: kept.items, dropped: plan.dropped } }) : null;
+  const claim = env.DB.prepare(
     `UPDATE ai_rail_proposals SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND status = 'proposed'`,
-  ).bind(edited ? 'edited' : 'accepted', edited ? JSON.stringify({ goal: goal.uid, plan: { items: kept.items, dropped: plan.dropped } }) : null, row.uid).run();
-  if (!claim.meta?.changes) return { ok: false, status: 409, code: 'plan_decided', message: 'This plan was already accepted or discarded.' };
+  ).bind(edited ? 'edited' : 'accepted', marker, row.uid);
 
   const uids = kept.items.map(() => newUid());
-  const statements: D1PreparedStatement[] = [];
+  const statements: D1PreparedStatement[] = [claim];
   kept.items.forEach((it, i) => {
     statements.push(env.DB.prepare(
       `INSERT INTO scope_tasks (uid, scope_kind, company_id, project_id, goal_id, title, module, kind, assignee_kind, assignee_agent_id, status, due_at, source_kind, source_ref, created_by_user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'work', ?, ?, 'open', ?, 'plan', ?, ?)`,
-    ).bind(uids[i], s.kind, companyId, projectId, goal.id, it.title, it.module, assignees[i] ? 'agent' : 'none', assignees[i], it.due_in_days == null ? null : addDays(it.due_in_days), row.uid, Number(user.id)));
+       SELECT ?, ?, ?, ?, ?, ?, ?, 'work', ?, ?, 'open', ?, 'plan', ?, ?
+       FROM ai_rail_proposals WHERE uid = ? AND decided_payload_json = ?`,
+    ).bind(uids[i], s.kind, companyId, projectId, goal.id, it.title, it.module, assignees[i] ? 'agent' : 'none', assignees[i], it.due_in_days == null ? null : addDays(it.due_in_days), row.uid, Number(user.id), row.uid, marker));
   });
   kept.items.forEach((it, i) => {
     statements.push(env.DB.prepare(
@@ -329,12 +333,13 @@ export async function acceptPlan(env: Env, s: Scope, goal: GoalRow, proposalUid:
       ).bind(uids[i], uids[d]));
     }
   });
+  statements.push(env.DB.prepare(
+    'UPDATE ai_rail_proposals SET decided_payload_json = ? WHERE uid = ? AND decided_payload_json = ?',
+  ).bind(decision, row.uid, marker));
   try {
-    await env.DB.batch(statements);
+    const results = await env.DB.batch(statements);
+    if (!results[0].meta?.changes) return { ok: false, status: 409, code: 'plan_decided', message: 'This plan was already accepted or discarded.' };
   } catch {
-    await env.DB.prepare(
-      "UPDATE ai_rail_proposals SET status = 'proposed', decided_payload_json = NULL, decided_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE uid = ?",
-    ).bind(row.uid).run();
     return { ok: false, status: 503, code: 'plan_not_saved', message: 'The plan’s tasks could not be saved, so none were. Try again.' };
   }
   return { ok: true, tasks: uids };
