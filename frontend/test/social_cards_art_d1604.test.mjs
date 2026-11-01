@@ -1,4 +1,4 @@
-// D1604 (#3705) — the social-cards canvas's light family art, the trust and
+// #3705 — the social-cards canvas's light family art, the trust and
 // legal cards, and the record families drawn ahead of the Worker injector.
 import test from 'node:test';
 import assert from 'node:assert/strict';

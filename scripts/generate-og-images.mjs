@@ -98,7 +98,7 @@ const SECTION_CARDS = {
 };
 
 /**
- * D1604: the record-card families the canvas draws (SC4 event, SC5 profile,
+ * #3705: the record-card families the canvas draws (SC4 event, SC5 profile,
  * SC8 private). No fixed route uses them yet; the Worker card injector (D1439,
  * #3705 Part B) and the private-link card (Part D) point record and token
  * links at them. Drawn now so those parts reference art that already exists.
@@ -123,7 +123,7 @@ const FAMILY_CARDS = {
 };
 
 /**
- * D1604: per-key art from the canvas — the eyebrow the board draws, the card
+ * #3705: per-key art from the canvas — the eyebrow the board draws, the card
  * kind, and SC2's tier chips (plan NAMES only, never a price; pinned against
  * `frontend/src/lib/sitePricing.js` by `social_cards_art_d1604.test.mjs`).
  */
@@ -239,7 +239,7 @@ function titleSize(title) {
 }
 
 /*
- * D1604 (#3705): the canvas's light family cards
+ * #3705: the canvas's light family cards
  * (`design/incoming/Share Cards Page.dc.html`, boards SC1–SC10).
  *
  * One light image per URL. A lavender art band fills x 0–268; the text block
@@ -412,7 +412,7 @@ const BASE_FLAGS = [
  * The offset is not a documented constant and varies by platform and Chromium
  * build, so measure it once per run instead of hardcoding it.
  *
- * D1604: measure the VIEWPORT, not the screenshot's size. Builds differ in how
+ * #3705: measure the VIEWPORT, not the screenshot's size. Builds differ in how
  * they show the shortfall. Older ones return a screenshot as short as the
  * viewport (1200x543). Chromium 1194 returns a full 1200x630 screenshot whose
  * bottom 87px are simply unpainted, so comparing sizes measured no offset at

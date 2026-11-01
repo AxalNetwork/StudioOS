@@ -71,7 +71,7 @@ export const SECTION_OG_KEYS = {
 };
 
 /**
- * D1604 (#3705): record-card families from the social-cards canvas that no
+ * #3705: record-card families from the social-cards canvas that no
  * fixed route uses yet. The generator draws them now; the Worker card injector
  * (D1439) points record links at `profile` (and `event` for an event without
  * an https cover), and the private-link card (#3705 Part D) uses `private`.
@@ -360,7 +360,7 @@ const ROUTES = [
     section: 'company',
   },
 
-  // ---- Trust center (D1604, #3705) ---------------------------------------
+  // ---- Trust center (#3705) ---------------------------------------------
   // The public trust center and its five tabs (`pages/site/trustCenterModel.js`
   // TABS). Copy is the page's own: its headline and each tab's subject. The
   // Subprocessors line says the list is with counsel, as the tab does.

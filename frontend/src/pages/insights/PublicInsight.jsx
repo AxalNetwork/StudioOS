@@ -2,9 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { publications } from '../../lib/api';
+import { usePageMeta } from '../../lib/seo';
 
-const BRAND_TITLE_SUFFIX = 'Axal VC';
-const BRAND_SITE_NAME = 'Axal VC Venture Studio';
+/**
+ * D1439 (#3914): the tab's tags through `usePageMeta`, the same `ogTagsFor` the
+ * Worker's record card for `/insights/public/<slug>` uses, so the tab and a
+ * link preview agree. Mounted once the publication has loaded, so the hook's
+ * one pageview beacon fires once, for the loaded page.
+ */
+function InsightMeta({ publication }) {
+  const og = publication.og || {};
+  usePageMeta({ title: publication.title, description: og.description || publication.subtitle || undefined, type: 'article' });
+  return null;
+}
 
 export default function PublicInsight() {
   const { slug } = useParams();
@@ -23,52 +33,6 @@ export default function PublicInsight() {
     })();
     return () => { cancelled = true; };
   }, [slug]);
-
-  // SEO + social-share metadata. Sets document.title and injects
-  // OpenGraph / Twitter meta tags so links shared on Slack, LinkedIn,
-  // email previewers, etc. render with the publication title +
-  // first-bullet description. Tags are removed on unmount so other
-  // pages don't inherit them.
-  useEffect(() => {
-    if (!data?.publication) return undefined;
-    const og = data.publication.og || {};
-    const ogTitle = og.title || `${data.publication.title} · ${BRAND_TITLE_SUFFIX}`;
-    const ogDesc = og.description || data.publication.subtitle || '';
-    const siteName = og.site_name || BRAND_SITE_NAME;
-    const url = typeof window !== 'undefined' ? window.location.href : '';
-    const prevTitle = document.title;
-    document.title = ogTitle;
-    const tags = [
-      ['property', 'og:title', ogTitle],
-      ['property', 'og:description', ogDesc],
-      ['property', 'og:type', 'article'],
-      ['property', 'og:site_name', siteName],
-      ['property', 'og:url', url],
-      ['name', 'twitter:card', 'summary_large_image'],
-      ['name', 'twitter:title', ogTitle],
-      ['name', 'twitter:description', ogDesc],
-      ['name', 'description', ogDesc],
-    ];
-    const created = tags.map(([attr, key, value]) => {
-      let el = document.head.querySelector(`meta[${attr}="${key}"]`);
-      const existed = !!el;
-      if (!el) {
-        el = document.createElement('meta');
-        el.setAttribute(attr, key);
-        document.head.appendChild(el);
-      }
-      const prev = el.getAttribute('content');
-      el.setAttribute('content', value || '');
-      return { el, existed, prev };
-    });
-    return () => {
-      document.title = prevTitle;
-      created.forEach(({ el, existed, prev }) => {
-        if (!existed) el.parentNode?.removeChild(el);
-        else if (prev !== null) el.setAttribute('content', prev);
-      });
-    };
-  }, [data]);
 
   if (err) return (
     <div className="max-w-2xl mx-auto px-6 py-16 text-center">
@@ -94,6 +58,7 @@ export default function PublicInsight() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
+      <InsightMeta publication={p} />
       {/* Header */}
       <header className="border-t-4 border-violet-600 bg-white dark:bg-gray-900">
         <div className="max-w-3xl mx-auto px-6 py-12">
