@@ -126,7 +126,7 @@ test('RR18 and a failed save: 409 draws the muted line with no form; 503 keeps t
         assert.equal(page.byId('dataroom-support'), undefined, 'no form');
         assert.doesNotMatch(page.text(), /Try again/);
       } else {
-        assert.match(page.text(), new RegExp(SAVE_REFUSED.replace(/\./g, '\\.')));
+        assert.ok(page.text().includes(SAVE_REFUSED), 'the save sentence');
         assert.equal(page.props(page.byId('dataroom-support-input')).value, 'Support request', 'the field is kept');
         assert.equal(page.byId('dataroom-support-view'), undefined);
       }
