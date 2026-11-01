@@ -37,6 +37,11 @@ D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
 provides investor-owned stage/visit metadata and author/firm-private notes.
 No admin bypass; migration 600; writes and audit rows share a batch.
 
+D1587 (#3834): `deck_grants.ts`, mounted before `deal_context.ts` at `/api/deals`.
+An investor reads the deck version the venture granted them on that deal (`GET /:id/deck`),
+with the share link's rules and no provenance. The venture's founder grants, lists and withdraws
+(`/:id/deck-grants`). The founder's answers never carry an investor's note, score or decision. Migration 745.
+
 D1153: `deal_workroom.ts`, mounted before `deals.ts` at `/api/deals`, serves
 the investor's working tabs: the data room's door and a request to the founder,
 the round as a count and a total, and a withdrawal with a required reason kept
@@ -341,9 +346,12 @@ D903 (#2682): `deck_images.ts` mounts the deck's card and background images — 
 
 D1409 (#3695): `article_assist.ts` mounts Eadwyn's writing options on an article — `POST /api/articles/:id/assist/quote` and `POST /api/articles/:id/assist` — before `articles.ts` at `/api/articles`. Each press is one of eight rail options on "<Profile> · Articles" (`../services/articleAssist.ts`), quoted, run once through `run()`, charged to the presser, and kept as one `ai_rail_proposals` row; nothing writes the article. The gate is `loadOwned` (the author or an admin), not published, not a support session. Part 2 adds the images: `POST /api/articles/:id/images/quote`, `/images/generate` (at most four, each one run of the `article_image` task, stored at `articles/<id>/img-<uuid>.<ext>` with one proposal) and `/images/:uid/discard`; `articles.ts`'s `POST /:id/cover` also takes `{ image }`, a copy of one of the article's own images. See `documentation/architecture/decisions/D1409.md`.
 
+D1490 (#3904): `admin_event_syndication.ts` mounts HQ's event syndication at `/api/admin/event-syndication` (channel accounts, settings, the log), before the `/api/admin` catch-all. `event_syndication.ts` mounts one event's listings at `/api/events/:id/syndication…`, before `events.ts`, gated by `events.ts`'s exported `canManage`. `events.ts` (PATCH, cancel) and `admin_events.ts` (approve, unpublish, cancel) call `../services/eventSyndication/hooks.ts`, which never fails the event write. See `documentation/architecture/decisions/D1490.md`.
 D1406 (#3892): `articles.ts` serves the author's revision reads — `GET /api/articles/:id/revisions` and `GET /api/articles/:id/revisions/:rev` — behind `loadOwned`, with a support session refused 403; the admin's twins stay in `admin_articles.ts`. Its `PUT /:id` writes an `autosave` revision at most once per 15 minutes of body edits, and its author shape carries `publish_at` with who set it by name. See `documentation/architecture/decisions/D1406.md`.
 
 D900 (#2679), the check: `deck_check.ts` mounts `GET /api/decks/checks` (each version's last check, `checked: false` for one never checked), `GET` and `POST /api/decks/:id/check` (D1264's claim check on that version, written to `raise_claims` with `surface = 'deck'` and stamped in `deck_checks`; Stale from the version's bindings), and `POST /api/decks/:id/claims/:uid/use-record` (the record's figure swapped in and saved as a new version), before `deck_sources.ts` and `decks.ts`. Only the venture's founder runs or swaps; other readers read states. "Keep mine, with a note" is `POST`/`DELETE /api/cycles/raise/evidence/claims/:id/note` in `cycle_raise.ts` (`../services/raiseClaimNotes.ts`). See `documentation/architecture/decisions/D900.md`.
+
+D1499 (#3749), The Grid: `deck_grid.ts` mounts `GET /api/decks/:id/grid` beside `deck_check.ts` — the deck's aspect (16:9 or 4:3), slide, frame, cell, 8 px baseline, the 17 structures and each card's structure and areas (derived from its blocks for a card saved before v2), every area with its box from `../services/decks/structures.ts`'s `boxOfAt`. Read by whoever may read the deck (`projectOwned`); writes nothing. See `documentation/architecture/decisions/D1499.md`.
 
 D900 (#2679): `deck_review.ts` mounts `POST /api/decks/:id/review` (a version's own review, each point naming a card, with the run's cost) and `GET /api/decks/:id/reviews` (the venture's reviews per version, the first reader of `deck_review_history`), after `deck_notes.ts` and before `decks.ts`. Founders run a review; an Admin and the Super Admin read. The review is `../services/deckVersionReview.ts`; uploads and pasted text stay `deck_reviewer.ts`'s. See `documentation/architecture/decisions/D900.md`.
 

@@ -169,7 +169,10 @@ bug in the first place.
 now answers `/events/*`, `/articles/*`, `/jobs/*`, `/u/*`, `/startups/*`,
 `/partners/*`, `/authors/*` and `/insights/public/*` with the record's own
 title, description and image, behind each page's own public gate. A missing or
-private record gets its section card. The record of the gap follows.
+private record gets its section card. Token share links (`/esign/*`,
+`/deck/share/*`, `/share/*`, `/invite/*`, `/join/*`) get the static "Sign in to
+view" card with `noindex` and no D1 call (D1439 Part D, #3916); `/verify/*` keeps
+the home card. The record of the gap follows.
 
 Prerendering covers the fixed public routes. It cannot cover one HTML file per
 *item* on content routes — `/articles/<slug>`, `/jobs/<slug>`, `/events/<slug>`,

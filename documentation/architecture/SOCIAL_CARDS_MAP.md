@@ -7,7 +7,7 @@ D1440 (#3915, Part A of #3705). This is one row per route group: who can open it
 - **Card keys:** `frontend/src/lib/ogRegistry.js`.
   - The family keys landed with #3913 (#3705): `event`, `authors`, `terms`, `privacy`, `privacy-interviews`, `risk-disclosures`, `pricing-investor`, the six `trust*` keys, and `FAMILY_OG_KEYS` = `event`, `profile`, `private`.
 - **Record cards:** the Worker card injector, Part B (`decisions/D1439.md`, #3914).
-- **Token-link card:** Part D, after owner question B on #3705.
+- **Token-link card:** Part D (`decisions/D1439.md` §Part D, #3916). The owner answered question B on #3705 with (a).
 
 **Columns.**
 - **Access:** `public` (no sign-in), `signed in` (any role the guard admits), `admin`, or `token` (a bearer link that needs no account).
@@ -54,11 +54,11 @@ Each prefix matches **exactly one** segment (two for `/insights/public/`). The W
 
 **Not yet carded.** `/advisors/:uid` needs its anonymous gate confirmed before it gets a card; until then it previews as `home`.
 
-## 3. Token links (Part D, after owner question B)
+## 3. Token links (Part D, #3916)
 
 | Route | Access | Shareable | Card | Title source | Image source |
 | --- | --- | --- | --- | --- | --- |
-| `/esign/:token`, `/deck/share/:token`, `/share/deck/:token`, `/share/captable/:token`, `/share/captable/venture/:token`, `/invite/:token`, `/join/:token` | token | yes, to the named recipient | today `home`; with Part D, `private` ("Axal VC · Sign in to view") and `x-robots-tag: noindex` | fixed text, never the record (no D1 read) | `/og/private.png` (#3705) |
+| `/esign/:token`, `/deck/share/:token`, `/share/deck/:token`, `/share/captable/:token`, `/share/captable/venture/:token`, `/share/lab-report/:token`, `/invite/:token`, `/join/:token` | token | yes, to the named recipient | `private` ("Sign in to view" / "This link opens a private page on Axal VC.") and `x-robots-tag: noindex` | fixed text, never the record or the token (no D1 call) | `/og/private.png` (#3913) |
 | `/verify/:token` | token (certificate verification) | yes | `home` | registry home entry | `home`. It stays so unless the owner makes it public |
 
 ## 4. Signed-in and admin pages
@@ -68,7 +68,7 @@ Each prefix matches **exactly one** segment (two for `/insights/public/`). The W
 | Workspaces: Founder (`/validate`, `/build`, `/raise`, `/grow` and below), Investor, Advisor, Partner, Explorer, `/account/*`, `/settings*`, `/calendar`, `/studio`, `/round-calls/:uid`, `/raise/capital-relationships/calls/:uid` | signed in | no (a link lands on sign-in for anyone else) | `home` (the SPA shell) | the home entry | `home` |
 | `/admin*` and the HQ consoles | admin | no | `home` | the home entry | `home` |
 
-The home card leaks nothing about the page. Owner question B on #3705 decides whether these get the `private` card instead. S1's pick is (a): token links only, since covering every signed-in path would make the Worker run on every page load.
+The home card leaks nothing about the page. The owner answered question B on #3705 with (a): token links get the `private` card, and these keep the home card, since covering every signed-in path would make the Worker run on every page load.
 
 ## 5. Founder sites (unchanged, out of scope)
 

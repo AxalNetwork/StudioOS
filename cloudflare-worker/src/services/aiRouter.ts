@@ -84,6 +84,9 @@ export type TaskClass =
   // traction review, valuation, buyer matching, LPA drafting, equity), run as
   // a system call (userId 0): logged at cost and charged to no member.
   | 'system_job'
+  // D1478 §3937 fix 14 (IN6, IN7): the LPA draft and the traction review get routes of their own.
+  | 'system_legal'
+  | 'system_review'
   // D766 (#2094) — system calls that used to call env.AI.run directly: the
   // monitoring summary, and the X post image screen and alt text.
   | 'ops_summary'
@@ -683,7 +686,9 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // stays out of the advisor analytics namespace. MID_LLAMA primary →
   // SMALL_LLAMA fallback.
   onboarding_chat: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
-  tool_call:    { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
+  // D1478 §3937 fix 1 (ST3, ON2): tool calls run on glm-4.7-flash, which carries Cloudflare's function-calling
+  // badge (131,072 tokens); qwen2.5-coder carries none. glm-4.7-flash already runs (rail_chat's Default), so no model is new.
+  tool_call:    { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
   // Personal Advisor next-question re-ranker (advisor/rerank.ts).
   // Structured JSON pick over a bounded candidate list — qwen-coder
   // is the strongest at obeying the {"id": "..."} schema; fall back
@@ -896,9 +901,17 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
   // D1409 (#3695): an article's images, on the same model as the deck's.
   article_image: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
-  paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // D1478 §3937 fix 5 (MI1): a snippet paraphrase is a short rewrite, so the 8B fp8 answers it and the 70B is its fallback.
+  paraphrase:   { provider: 'workers-ai', model: SMALL_LLAMA, fallbackChain: [MID_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
-  system_job:   { provider: 'workers-ai', model: SMALL_LLAMA },
+  // D1478 §3937 fix 14: no queue job runs on the 8B. IN5 valuation and equity (Numbers) run gpt-oss-120b with
+  // granite as the fallback, as `rail_numbers` does; IN4 deal scoring rides this route until its clef score lands.
+  system_job:   { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/ibm-granite/granite-4.0-h-micro'] },
+  // IN6 LPA drafting (Legal): gpt-oss-120b, as `rail_legal`; the 70B answers when it fails.
+  system_legal: { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: [MID_LLAMA] },
+  // IN7 traction review (Numbers): granite, the plan's Fast pick and already wired, then gpt-oss-120b. The
+  // Balanced pick, qwen3-30b, is new to the router, so it waits for the job table and the owner's spend answer.
+  system_review: { provider: 'workers-ai', model: '@cf/ibm-granite/granite-4.0-h-micro', fallbackChain: ['@cf/openai/gpt-oss-120b'] },
   // High-stakes synthesis (Task #2 AU admin publication summaries,
   // dd synthesis). Task #31: Anthropic removed from production. Both
   // task classes now route through Workers AI MID_LLAMA primary →

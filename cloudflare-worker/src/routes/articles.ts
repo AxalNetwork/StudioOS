@@ -38,6 +38,7 @@ import { countDailyView } from '../services/articleMetrics';
 import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes, isValidArticleImageName } from '../services/newsRender';
 import { SECTORS, isValidSector } from '../data/sectors';
 import { sniffMime } from '../services/aiImages';
+import { forgetArticleStorage } from '../services/storageUsage';
 import { refuse } from '../util/refusal';
 
 const articles = new Hono<{ Bindings: Env }>();
@@ -792,6 +793,7 @@ articles.post('/:id/cover', async (c) => {
   if (row.cover_r2_key && (row.cover_r2_key.startsWith('articles/') || row.cover_r2_key.startsWith('news/'))) {
     try { await c.env.FILES.delete(row.cover_r2_key); } catch (e) { console.warn('[articles] old cover delete failed', e); }
   }
+  forgetArticleStorage(id); // D1411: the author's storage reads this prefix afresh.
   await c.env.DB.prepare(
     `UPDATE articles SET cover_r2_key = ?, cover_mime = ?, updated_at = ? WHERE id = ?`,
   ).bind(key, mime, new Date().toISOString(), id).run();
@@ -818,6 +820,7 @@ articles.post('/:id/image', async (c) => {
   const filename = `img-${uuid}.${ext}`;
   const key = `articles/${id}/${filename}`;
   await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: mime } });
+  forgetArticleStorage(id); // D1411
   return c.json({ ok: true, url: `/api/articles/${id}/image/${filename}` });
 });
 

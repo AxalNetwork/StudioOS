@@ -456,11 +456,12 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
   return keep({
     title: row.kpi,
     sub: row.value == null ? notYet : joined(kpiValueText(row.value, row.unit), row.source, row.as_of ? `as of ${dMon(row.as_of)}` : null),
-    pills: [row.source ? { text: row.source, tone: row.source === 'manual' ? 'grey' : 'vio' } : { text: 'Not recorded', tone: 'grey' }],
+    // D1608: a PostHog row's chip and source say so; it is never entered by hand.
+    pills: [row.source ? { text: row.source === 'posthog' ? 'From PostHog' : row.source, tone: row.source === 'manual' ? 'grey' : 'vio' } : { text: id.startsWith('posthog-') ? 'From PostHog' : 'Not recorded', tone: 'grey' }],
     facts: [
       fact('Value', kpiValueText(row.value, row.unit), notYet),
       fact('Change · 30 d', change, row.value == null ? notYet : 'No value 30 days before'),
-      fact('Source', row.source, notYet),
+      fact('Source', id.startsWith('posthog-') ? 'From PostHog. This figure comes from PostHog.' : row.source, notYet),
       fact('As of', row.as_of, notYet),
     ],
   }, { row });
@@ -499,7 +500,8 @@ const revenue = spec('grow_kpis', 'revenue-and-traction', undefined, async (rc, 
   const { row } = loadedOf(record) as { row: KpiRow };
   const moneyKpi = row.unit === 'usd' || row.unit === 'usd_cents';
   const actions: RecordAction[] = [];
-  if (!DERIVED.has(id)) {
+  // D1608: a PostHog metric is read from PostHog only, so it has no Enter by hand.
+  if (!DERIVED.has(id) && !id.startsWith('posthog-')) {
     actions.push({
       key: 'enter-by-hand', label: 'Enter by hand', kind: 'form', tone: 'primary',
       form: { title: `Enter ${row.kpi}`, cta: 'Save', foot: 'A connected source overrides a hand entry.', fields: [
