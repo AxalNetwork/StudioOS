@@ -146,7 +146,9 @@ test('a rate limit ends the sync as partly synced and reads nothing more; a sect
   fake.state.status = 429;
   assert.equal((await sync(app, env)).status, 429, 'a limit before the session opens is PostHog asking us to wait');
   fake.state.status = null;
-  assert.equal((await call(app, env, FOUNDER, 'POST', '/api/cycles/grow/posthog/sync', { project: P })).body.error, 'no_sync');
+  // D1608: every section now registers its sync; the route still refuses a section with none (`no_sync`).
+  const { syncFor } = await import('../src/services/posthog/metrics.ts');
+  for (const s of ['validate', 'build', 'raise', 'grow'] as const) assert.ok(syncFor(s), s);
 });
 
 test('the parsers: latest value, funnel conversion, experiment summary, web overview and answers by question', () => {

@@ -33,6 +33,7 @@ export { NOT_RECORDED };
 
 export const TABS = [
   { key: 'people', label: 'People and agents' },
+  { key: 'skills', label: 'Skills' },
   { key: 'roles', label: 'Roles and rule books' },
   { key: 'approvals', label: 'Approvals' },
   { key: 'settings', label: 'Settings' },

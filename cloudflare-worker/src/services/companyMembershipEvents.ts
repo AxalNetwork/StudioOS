@@ -17,6 +17,8 @@ import type { Env } from '../types';
 export const MEMBERSHIP_EVENT_KINDS = [
   'join', 'role_change', 'remove', 'leave', 'transfer', 'archive', 'restore', 'rename',
   'project_move', 'project_transfer', 'seat_add', 'seat_remove',
+  // #3932 (migration 757): a change to the company's default currency, recorded beside 'rename'.
+  'currency_change',
 ] as const;
 export type MembershipEventKind = (typeof MEMBERSHIP_EVENT_KINDS)[number];
 

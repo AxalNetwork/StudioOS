@@ -130,7 +130,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
-import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, FIGURE_LABEL, figures, nonCapitalFigures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type FigureKey, type ModuleSlug } from '../services/raiseCycle';
+import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, INVESTOR_TYPE_LABEL, FIGURE_LABEL, figures, nonCapitalFigures, nextSteps, connectors, capTablePlan, ownerRoomFileCount, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type RoomFileCount, type FigureKey, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
   addCapHolder, updateCapHolder, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
@@ -276,6 +276,13 @@ function roomSummaryCard(env: Env, projectId: number): Promise<Card> {
   });
 }
 
+/** D1610 W1: the data-room file count for anyone but the room's owner, from D1102's summary. */
+const summaryRoomFileCount: RoomFileCount = async (ctx) => {
+  const summary: any = await roomSummary(ctx.env, { id: ctx.projectId, uid: '' });
+  if (summary?.files?.available !== true || !Number.isSafeInteger(summary.files.total)) throw new Error('Data room summary unavailable');
+  return summary.files.total;
+};
+
 async function capitalSummaryCard(env: Env, projectId: number): Promise<Card> {
   const summary = await capitalSummary(env, projectId);
   return { slug: 'capital-relationships', name: 'Capital relationships', range: 'This venture', source: 'Pipeline counts',
@@ -321,18 +328,21 @@ cycleRaise.get('/overview', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
+  // D1610 W5: the Cap table card says which plan records it.
+  const withPlan = (cs: Card[]) => cs.map((card) => (card.slug === 'cap-table' ? { ...card, plan: capTablePlan(s.user) } : card));
   if (capitalStaff(s.user)) {
-    const [figs, cs] = await Promise.all([nonCapitalFigures(ctx), Promise.all(MODULES.map(m =>
+    const [figs, cs, steps, tools] = await Promise.all([nonCapitalFigures(ctx, summaryRoomFileCount), Promise.all(MODULES.map(m =>
       m.slug === 'capital-relationships' ? capitalSummaryCard(c.env, s.projectId)
-        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx)))]);
-    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: cs });
+        : m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))), nextSteps(ctx), connectors(ctx)]);
+    return c.json({ cycle: CYCLE, question: QUESTION, mode: 'summary', read_only: true, figures: figs, cards: withPlan(cs), next_steps: steps, connectors: tools });
   }
   // D1102: the data-room card is the owner's; anyone else reads the room's summary there.
   // The other six cards are built as `cards()` builds them.
-  const cardsRead = isRoomOwner(s) ? cards(ctx)
+  const owner = isRoomOwner(s);
+  const cardsRead = owner ? cards(ctx)
     : Promise.all(MODULES.map((m) => (m.slug === 'data-room' ? roomSummaryCard(c.env, s.projectId) : CARD_FOR[m.slug](ctx))));
-  const [figs, cs] = await Promise.all([figures(ctx), cardsRead]);
-  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, ...(await raisePhone(ctx, figs, cs)) });
+  const [figs, cs, steps, tools] = await Promise.all([figures(ctx, owner ? ownerRoomFileCount : summaryRoomFileCount), cardsRead, nextSteps(ctx), connectors(ctx)]);
+  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: withPlan(cs), next_steps: steps, connectors: tools, ...(await raisePhone(ctx, figs, cs)) });
 });
 
 cycleRaise.get('/modules/:slug', async (c) => {

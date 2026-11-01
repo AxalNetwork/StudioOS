@@ -6,6 +6,7 @@ import { overlayStyle } from './imageModel';
 import { SOURCE_NOT_RECORDED, cardOf } from './presentExportModel';
 import { KIT_FAILED, NO_KIT } from './editorModel';
 import { areaLabel, askAreaName } from './deckV2Model';
+import { GRID, aspectOf, baselineShare, frameOf, placeOf, ratioOf } from './gridModel';
 import { SourceChip } from './SourcesBoards';
 import { ChangedNotice, FigureCard } from './FigureCard';
 import { faceOf, isFigure, itemsByKey, staleFigures } from './figuresModel';
@@ -34,10 +35,13 @@ import {
  *              this area"). Two or more: SELBAR, "N areas selected · Ask ·
  *              Clear". What Ask opens is the editor's (`onAsk`).
  *
- * One geometry: the blocks, the marquee, the drag ghost and the overlay are
- * all `LAYER` (`absolute inset-0 grid gap-2 p-[3%]` on `TRACKS`), and
- * `cellAt` reads a pointer against the blocks layer's own measured box, its
- * width-based padding and its gutter, so a drop lands where its ghost showed.
+ * One geometry (D1499, #3749): the face is the deck's slide, 16:9 (1920 ×
+ * 1080) or 4:3 (1440 × 1080) from the theme's `aspect`, and the blocks, the
+ * free areas, the marquee, the drag ghost and the overlay are each placed
+ * with `gridModel.placeOf`, which is `boxOf` (the Worker's `boxOfAt`, the
+ * margins 112 / 96 / 88 and the 24 px gutter) as a share of the slide: the
+ * fixed stage scaled to fit, never a CSS gap or padding. `cellAt` reads a
+ * pointer back onto that same slide, so a drop lands where its ghost showed.
  *
  * Figures (pd6, pd24): a bound tile's face says source · grade through
  * `SourceChip`; the area the pointer or the keyboard is on (else the one
@@ -51,10 +55,8 @@ import {
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const MONO = 'font-mono text-[10.5px] text-axal-muted dark:text-gray-400';
-/** The Grid's one geometry: a CSS percentage padding is taken from the width on all four sides. */
-const LAYER = 'absolute inset-0 grid gap-2 p-[3%]';
-const TRACKS = { gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gridTemplateRows: 'repeat(6, minmax(0, 1fr))' };
-const FRAME = 'absolute inset-0 p-[3%]';
+/** The layer every area is placed in: the face itself; each area carries its own `placeOf` box. */
+const LAYER = 'absolute inset-0';
 const CHIP = 'inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-bold max-sm:min-h-[44px]';
 
 /** A card saved before D898 has fields, not blocks: drawn as present mode draws it. */
@@ -75,36 +77,34 @@ function FieldedCard({ card, index, colours }) {
   );
 }
 
+/** The 72 cells, each one range wide, in reading order. */
+const CELLS = Array.from({ length: GRID.cols * GRID.rows }, (_, i) => ({ c1: (i % GRID.cols) + 1, c2: (i % GRID.cols) + 1, r1: Math.floor(i / GRID.cols) + 1, r2: Math.floor(i / GRID.cols) + 1 }));
+
 /**
- * "Show the Grid": columns, rows, the safe area and an 8-step baseline, on the
- * blocks layer's own geometry (`LAYER`, `FRAME`), so its rows frame the blocks.
- * Decoration only.
+ * "Show the Grid": the safe area, the 12 × 6 cells and the 8 px baseline,
+ * each placed with `placeOf` on the slide, so its cells are the blocks'
+ * cells. Decoration only.
  */
-function GridOverlay() {
+function GridOverlay({ aspect }) {
+  const frame = frameOf(aspect);
+  // The baseline's step as a share of the safe area's height (8 of 896 slide px), one hairline per step.
+  const step = (baselineShare(aspect) * 100) / (parseFloat(frame.height) / 100);
   return (
     <span className="pointer-events-none absolute inset-0" aria-hidden="true" data-testid="pitch-editor-grid-overlay">
-      <span className={FRAME}><span className="block h-full w-full rounded-[4px] outline outline-1 outline-dashed outline-violet-400/70" /></span>
-      <span className={LAYER} style={TRACKS} data-testid="pitch-editor-grid-overlay-cells">
-        {Array.from({ length: 72 }, (_, i) => <span key={i} className="rounded-[2px] bg-violet-400/10" />)}
+      <span className="rounded-[4px] outline outline-1 outline-dashed outline-violet-400/70" style={frame} data-testid="pitch-editor-grid-overlay-frame" />
+      <span className="absolute inset-0" data-testid="pitch-editor-grid-overlay-cells">
+        {CELLS.map((g, i) => <span key={i} className="rounded-[2px] bg-violet-400/10" style={placeOf(g, aspect)} />)}
       </span>
-      <span className={FRAME}><span className="block h-full w-full" style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 7px, rgba(124,58,237,0.12) 7px, rgba(124,58,237,0.12) 8px)' }} /></span>
+      <span style={{ ...frame, backgroundImage: 'linear-gradient(to bottom, transparent calc(100% - 1px), rgba(124,58,237,0.12) calc(100% - 1px))', backgroundSize: `100% ${step}%` }} data-testid="pitch-editor-grid-overlay-baseline" />
     </span>
   );
-}
-
-/** The gutter the blocks layer really has, in px (`gap-2`, 8 px at the default root size). */
-function gutterOf(node) {
-  try {
-    const css = globalThis.getComputedStyle?.(node);
-    const v = parseFloat(css?.rowGap ?? css?.gap);
-    return Number.isFinite(v) ? v : 8;
-  } catch { return 8; }
 }
 
 export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
   selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
 }) {
+  const aspect = aspectOf(theme?.aspect);
   const areas = useMemo(() => areasOf(card, model), [card, model]);
   const byKey = useMemo(() => itemsByKey(items), [items]);
   const changed = useMemo(() => staleFigures(card, items, charts), [card, items, charts]);
@@ -149,12 +149,12 @@ export default function GridStage({
   const bgImage = card?.background?.image_url || theme?.background?.image_url || null;
   const veil = bgImage ? overlayStyle((card?.background?.image_url ? card.background : theme?.background)?.overlay, ink) : null;
   const chosen = (areas || []).filter((a) => selection.includes(a.id));
-  // The blocks layer's own box (the face's padding box), its padding and its gutter.
+  // The blocks layer's own box: the face's padding box, the slide every area is placed on.
   const rect = () => {
     const n = layer.current || faceRef.current;
     return typeof n?.getBoundingClientRect === 'function' ? n.getBoundingClientRect() : null;
   };
-  const cellOf = (e, fallback = null) => cellAt(e?.clientX, e?.clientY, rect(), model, { gap: layer.current ? gutterOf(layer.current) : 0 }) || fallback;
+  const cellOf = (e, fallback = null) => cellAt(e?.clientX, e?.clientY, rect(), model, { aspect }) || fallback;
 
   const set = (next) => onSelection?.(next);
   const click = (e, area) => {
@@ -273,23 +273,23 @@ export default function GridStage({
 
       <div ref={faceRef}
         className="relative w-full select-none overflow-hidden rounded-[12px] border border-axal-hairline shadow-sm dark:border-gray-700"
-        style={{ aspectRatio: '16 / 9', background: bg, color: colours.ink, backgroundImage: bgImage ? `url("${bgImage}")` : undefined, backgroundSize: 'cover' }}
+        style={{ aspectRatio: ratioOf(aspect), background: bg, color: colours.ink, backgroundImage: bgImage ? `url("${bgImage}")` : undefined, backgroundSize: 'cover' }}
         role={areas ? 'group' : undefined} aria-label={areas ? `Card ${index + 1} on the Grid` : undefined}
         onKeyDown={keys} onKeyUp={keyUp}
         onPointerDown={(e) => { if (e.target === faceRef.current) down(e); }}
         onPointerMove={over} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
         onDragOver={(e) => dragOver(e, null)} onDrop={(e) => drop(e, null)}
-        data-testid="pitch-editor-card">
+        data-aspect={aspect} data-testid="pitch-editor-card">
         {veil ? <span className="absolute inset-0" style={{ background: veil }} aria-hidden="true" data-testid="pitch-editor-overlay" /> : null}
-        {grid ? <GridOverlay /> : null}
+        {grid ? <GridOverlay aspect={aspect} /> : null}
         {areas ? (
-          <div ref={layer} className={LAYER} style={TRACKS}
+          <div ref={layer} className={LAYER}
             onPointerDown={(e) => { if (e.target === e.currentTarget) down(e); }} data-testid="pitch-editor-blocks">
             {areas.map((a, i) => {
               const ok = selectable(a);
               const on = selection.includes(a.id);
               const tab = stop === a.id ? 0 : -1;
-              const at = { gridColumn: `${a.grid.c1} / ${a.grid.c2 + 1}`, gridRow: `${a.grid.r1} / ${a.grid.r2 + 1}` };
+              const at = placeOf(a.grid, aspect);
               const block = a.kind === 'block';
               return (
                 <button type="button" key={a.id}
@@ -309,7 +309,7 @@ export default function GridStage({
                   onPointerLeave={() => setHover((h) => (h === a.id ? null : h))}
                   onFocus={() => setHover(a.id)}
                   onClick={(e) => click(e, a)}
-                  className={`relative min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${on ? 'outline outline-2 outline-violet-500 dark:outline-violet-400' : block ? 'outline outline-1 outline-dashed outline-black/10 dark:outline-white/20' : 'outline outline-1 outline-dashed outline-transparent hover:outline-black/15 dark:hover:outline-white/20'} ${a.id === live ? 'ring-[6px] ring-violet-400/30' : ''} ${ok.ok ? '' : 'cursor-not-allowed opacity-70'}`}
+                  className={`min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${on ? 'outline outline-2 outline-violet-500 dark:outline-violet-400' : block ? 'outline outline-1 outline-dashed outline-black/10 dark:outline-white/20' : 'outline outline-1 outline-dashed outline-transparent hover:outline-black/15 dark:hover:outline-white/20'} ${a.id === live ? 'ring-[6px] ring-violet-400/30' : ''} ${ok.ok ? '' : 'cursor-not-allowed opacity-70'}`}
                   style={at}
                   data-testid={block ? `pitch-editor-block-${a.id}` : `pitch-editor-area-${a.id}`}>
                   {block
@@ -321,11 +321,11 @@ export default function GridStage({
           </div>
         ) : <FieldedCard card={card} index={index} colours={colours} />}
         {box || ghost ? (
-          <div className={`pointer-events-none ${LAYER}`} style={TRACKS} aria-hidden="true" data-testid="pitch-editor-drag-layer">
-            {box ? <span className="rounded-[6px] border-2 border-dashed border-violet-500 bg-violet-400/10" style={{ gridColumn: `${box.c1} / ${box.c2 + 1}`, gridRow: `${box.r1} / ${box.r2 + 1}` }} data-testid="pitch-editor-marquee" /> : null}
+          <div className={`pointer-events-none ${LAYER}`} aria-hidden="true" data-testid="pitch-editor-drag-layer">
+            {box ? <span className="rounded-[6px] border-2 border-dashed border-violet-500 bg-violet-400/10" style={placeOf(box, aspect)} data-testid="pitch-editor-marquee" /> : null}
             {ghost ? (
               <span className={`flex items-end rounded-[6px] border-2 border-dashed p-1 font-mono text-[10px] ${ghost.error ? 'border-gray-400 bg-gray-400/15 text-gray-600 dark:text-gray-300' : 'border-violet-500 bg-violet-400/15 text-violet-700 dark:text-violet-300'}`}
-                style={{ gridColumn: `${Math.max(1, ghost.grid.c1)} / ${Math.min(13, ghost.grid.c2 + 1)}`, gridRow: `${Math.max(1, ghost.grid.r1)} / ${Math.min(7, ghost.grid.r2 + 1)}` }}>
+                style={placeOf({ c1: Math.max(1, ghost.grid.c1), c2: Math.min(GRID.cols, ghost.grid.c2), r1: Math.max(1, ghost.grid.r1), r2: Math.min(GRID.rows, ghost.grid.r2) }, aspect)}>
                 {areaLabel(ghost.grid)}
               </span>
             ) : null}
