@@ -2,6 +2,8 @@
 
 D1409: `articleAuthoring.js` is the article editor's Eadwyn client (`/api/articles/:id/assist…`, `/images…`): a quote and a run per option, each leaving a proposal; the image quote, generate and discard; and the cover from one of the article's images. Only `coverFromImage` writes the article (its cover).
 
+D1503: `deckElementModels.js` is the client for a model per grid element (`GET`/`PUT /api/decks/:id/element-models`). `read` returns each element's suggested models, its `more` list and its pick. `pick` stores a pick for the deck or for the caller. It keeps no copy of the routes; the Worker answers every model and default.
+
 D1256: `ventureScores.js` is the venture scorecard's client (`/api/venture-scores`): the reads, the deal list's strip, reviews, corrections, weighting and sharing. It sends no computed field.
 
 D1239: `dealViews.js` reads personal thesis fit and saves, edits or removes private/firm view settings. The server rechecks deal and accepted-seat access.

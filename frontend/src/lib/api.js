@@ -80,6 +80,7 @@ export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
 export * from './api/deckCheck.js';
 export * from './api/deckEditor.js';
+export * from './api/deckElementModels.js';
 export * from './api/deckGrants.js';
 export * from './api/deckGrid.js';
 export * from './api/deckImages.js';
@@ -2879,7 +2880,8 @@ export const api = {
   deckGenerate: (projectId) => request('/decks/generate', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
   deckListVersions: (projectId) => request(`/decks/by-project/${projectId}`),
   deckGet: (id) => request(`/decks/${id}`),
-  deckUpdate: (id, payload) => request(`/decks/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  // D1500: every save names the document model it is in (editorModel's DECK_MODEL_VERSION); the Worker refuses another with 409 upgrade_required.
+  deckUpdate: (id, payload) => request(`/decks/${id}`, { method: 'PUT', body: JSON.stringify({ model_version: 2, ...payload }) }),
   deckRestore: (id) => request(`/decks/${id}/restore`, { method: 'POST', body: JSON.stringify({}) }),
   deckShare: (id, payload) => request(`/decks/${id}/share`, { method: 'POST', body: JSON.stringify(payload || {}) }),
   deckShareRead: (token) => request(`/decks/share/${encodeURIComponent(token)}`),
