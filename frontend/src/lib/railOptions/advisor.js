@@ -52,3 +52,14 @@ export const ADVISOR_RAIL_OPTIONS = [
   { page: 'Library', route: '/research/library', key: 'draft:index-gaps', label: 'Draft the gaps', kind: 'synth', handler: 'draft',
     source: { file: 'pages/research/LibraryZone.jsx', marker: 'surface="research/library"' } },
 ];
+
+// D1596 (#3869) — Ask chips that run no model: arithmetic over the advisor's
+// own records, at no charge. They are not rail options (the AIRail holds model
+// choice and consumption), so they stay out of ADVISOR_RAIL_OPTIONS and its
+// wiring tests. `scripts/build-rail-matrix.mjs` lists each one with no models,
+// so `GET /api/ai/rail?page=` offers it in the Ask panel. S1 draws the chip.
+export const ADVISOR_ASK_CHIPS = [
+  // Block proposals from the advisor's own calendar; an Accept leads to the board's own Block.
+  { page: 'Sessions', route: '/practice/sessions', key: 'sessions:block', label: 'Find a free afternoon', kind: 'plan', handler: 'none', noModel: true,
+    source: { file: 'pages/advisor/practice/SessionsZone.jsx', marker: 'api.blockMyAdvisorSlotRange(' } },
+];

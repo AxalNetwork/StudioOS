@@ -9,6 +9,8 @@
  *                                     seats, for every profile
  *   GET  /api/account/invitations   — pending company and project invitations
  *                                     addressed to the caller
+ *   GET  /api/account/people/search — #3841: people the caller shares a company
+ *                                     or a connection with, by name, never by email
  *   POST /api/company/invitations/:uid/(accept|decline)
  *   POST /api/projects/invitations/:id/(accept|decline)
  *
@@ -22,6 +24,10 @@
  * when they are that address or that account. A bare project link names no
  * one, so it is answered only through its token, never by id.
  *
+ * D1412 (#3857): each company also carries `archived_at`, `legal`,
+ * `primary_location`, `location_count`, `formation` and `status` for the
+ * Portfolio cards (PF1, PF5, PF7), each block read once for every company.
+ *
  * A block whose store failed is `{ available: false, reason }`, never a zero.
  * No member email, no token or hash, and no inviter address is returned.
  */
@@ -30,7 +36,8 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { cyclesActive, visitsFor, CYCLE_STORES } from '../services/companySheet';
-import { ensureProjectMembershipSchema, normalizeEmail } from '../services/projectAccess';
+import { canAccessProject, ensureProjectMembershipSchema, normalizeEmail } from '../services/projectAccess';
+import { SEARCH_MAX_LEN, SEARCH_MIN, searchPeople } from '../services/peopleReach';
 import { refuse } from '../util/refusal';
 
 type Row = Record<string, any>;
@@ -59,6 +66,53 @@ function countsBy(block: Block<Row[]>, key: string): Block<Map<number, number>> 
 const countFor = (block: Block<Map<number, number>>, id: number): Block<number> =>
   (block.available ? ok(block.value.get(id) ?? 0) : block);
 
+// ── D1412 (#3857): the card's legal line, location and status ──────────────
+
+/** The first row per company from one store, keyed by `key`: the store's failure, or a map. */
+function byCompany(block: Block<Row[]>, key: string): Block<Map<number, Row>> {
+  if (!block.available) return block;
+  const m = new Map<number, Row>();
+  for (const r of block.value) if (!m.has(Number(r[key]))) m.set(Number(r[key]), r);
+  return ok(m);
+}
+function groupedByCompany(block: Block<Row[]>): Block<Map<number, Row[]>> {
+  if (!block.available) return block;
+  const m = new Map<number, Row[]>();
+  for (const r of block.value) m.set(Number(r.company_id), [...(m.get(Number(r.company_id)) ?? []), r]);
+  return ok(m);
+}
+const orNull = (v: unknown) => (v == null || v === '' ? null : v);
+
+/**
+ * `archived_at`, `legal`, `primary_location`, `location_count`, `formation`
+ * and `status` for one company. The primary location is the open headquarters,
+ * else the open registered address, else the first open row (the read's
+ * order). Status: archived when archived; else in formation when an order is
+ * paid and not yet filed; else active; unavailable when the orders could not
+ * be read for a live company.
+ */
+export function cardFacts(id: number, archivedAt: string | null, legal: Block<Map<number, Row>>, locations: Block<Map<number, Row[]>>, formations: Block<Map<number, Row>>) {
+  const l = legal.available ? legal.value.get(id) : null;
+  const open = locations.available ? locations.value.get(id) ?? [] : null;
+  const f = formations.available ? formations.value.get(id) ?? null : null;
+  const first = open?.[0] ?? null;
+  return {
+    archived_at: archivedAt,
+    legal: legal.available
+      ? ok({ legal_name: orNull(l?.legal_name), legal_form: orNull(l?.legal_form), jurisdiction: orNull(l?.jurisdiction), incorporation_date: orNull(l?.incorporation_date) })
+      : legal,
+    primary_location: open === null ? locations as Block<never>
+      : ok(first ? { label: orNull(first.label), kind: first.kind, city: orNull(first.city), country: orNull(first.country) } : null),
+    location_count: open === null ? locations as Block<never> : ok(open.length),
+    formation: formations.available
+      ? ok(f ? { order_id: Number(f.order_id), order_status: f.order_status, jurisdiction_id: orNull(f.jurisdiction_id) } : null)
+      : formations,
+    status: archivedAt ? ok('archived' as const)
+      : !formations.available ? failed('The company\'s status')
+      : ok(f ? 'in_formation' as const : 'active' as const),
+  };
+}
+
 // ── GET /api/account/companies ─────────────────────────────────────────────
 
 /** Mounted at `/api`: every path below is written out in full. */
@@ -68,7 +122,7 @@ account.get('/account/companies', async (c) => {
   try {
     const user = await requireAuth(c);
     const links = await rows(c.env, 'Your companies', `SELECT l.company_id, l.role_in_company, l.title, l.authority, l.is_primary_admin, l.created_at,
-        cp.uid, cp.company_name, cp.stage, cp.logo_url
+        cp.uid, cp.company_name, cp.stage, cp.logo_url, cp.archived_at
         FROM user_company_links l JOIN company_profiles cp ON cp.id = l.company_id
         WHERE l.user_id = ? ORDER BY l.is_primary_admin DESC, l.created_at ASC, l.id ASC`, [user.id]);
     if (!links.available) return refuse(c, 503, { code: 'companies_unreadable', message: 'Your companies could not be read. That is not the same as none.' });
@@ -80,7 +134,7 @@ account.get('/account/companies', async (c) => {
     const editorOf = (l: Row) => isAdmin(user) || Number(l.is_primary_admin) === 1 || EDITOR_ROLES.includes(String(l.role_in_company));
     const editorIds = JSON.stringify(mine.filter(editorOf).map((l) => Number(l.company_id)));
 
-    const [members, invitations, projects, funds, engagements, quotes, offers, visits, cycles] = await Promise.all([
+    const [members, invitations, projects, funds, engagements, quotes, offers, visits, cycles, legal, locations, formations] = await Promise.all([
       rows(c.env, 'The member counts', `SELECT company_id, COUNT(*) AS n FROM user_company_links
           WHERE company_id IN (SELECT value FROM json_each(?)) GROUP BY company_id`, [ids]),
       rows(c.env, 'The pending invitations', `SELECT company_id, COUNT(*) AS n FROM company_invitations
@@ -98,7 +152,23 @@ account.get('/account/companies', async (c) => {
           WHERE company_id IN (SELECT value FROM json_each(?)) GROUP BY company_id`, [ids]),
       visitsFor(c.env, user.id),
       Promise.all(mine.map((l) => cyclesActive(c.env, user, Number(l.company_id)))),
+      // D1412 (#3857): the card's legal line, location and status, each read once for every company and failing alone.
+      // Never the tax ID, the registration number, officers or full addresses: `GET /api/company/:uid/legal` holds those.
+      rows(c.env, 'The legal record', `SELECT id, legal_name, legal_form, jurisdiction, incorporation_date FROM company_profiles
+          WHERE id IN (SELECT value FROM json_each(?))`, [ids]),
+      rows(c.env, 'The locations', `SELECT company_id, label, kind, city, country FROM company_locations
+          WHERE company_id IN (SELECT value FROM json_each(?)) AND closed_on IS NULL
+          ORDER BY company_id, CASE kind WHEN 'headquarters' THEN 0 WHEN 'registered' THEN 1 ELSE 2 END, id`, [ids]),
+      // An order in formation belongs to the company it was linked to, else its venture's company now.
+      rows(c.env, 'The formation orders', `SELECT COALESCE(i.company_id, p.company_id) AS company_id, i.id AS order_id, i.status AS order_status, i.jurisdiction_id
+          FROM incorporations i LEFT JOIN projects p ON p.id = i.project_id
+          WHERE i.status IN ('paid', 'packet_processing', 'packet_ready')
+            AND COALESCE(i.company_id, p.company_id) IN (SELECT value FROM json_each(?))
+          ORDER BY COALESCE(i.paid_at, i.created_at) DESC, i.id DESC`, [ids]),
     ]);
+    const legalOf = byCompany(legal, 'id');
+    const locationsOf = groupedByCompany(locations);
+    const formationOf = byCompany(formations, 'company_id');
     const memberN = countsBy(members, 'company_id');
     const invitesN = countsBy(invitations, 'company_id');
     const counts = {
@@ -128,6 +198,7 @@ account.get('/account/companies', async (c) => {
           // An invitation names a person's address, so even its count is the editors' (company.ts's rule).
           ...(editorOf(l) ? { pending_invitations: countFor(invitesN, id) } : {}),
           counts: Object.fromEntries(Object.entries(counts).map(([k, b]) => [k, countFor(b, id)])),
+          ...cardFacts(id, l.archived_at ?? null, legalOf, locationsOf, formationOf),
         };
       }),
     });
@@ -255,6 +326,47 @@ account.get('/account/invitations', async (c) => {
         can_accept: canJoinVentures,
       }))) : project,
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── GET /api/account/people/search ─────────────────────────────────────────
+
+/**
+ * #3841: find an account to invite by name (TM2b "Link an existing Axal
+ * account"). Only people who share a company or an accepted connection with
+ * the caller (`services/peopleReach.ts`); at most ten; never an email or a
+ * numeric id. `company=<uid>` or `project=<id>` names the team being built:
+ * the caller must belong to it, and its current members are left out. The
+ * per-caller rate limit is `people_search` in `middleware/rateLimit.ts`.
+ */
+account.get('/account/people/search', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const q = String(c.req.query('q') ?? '').trim();
+    if (q.length < SEARCH_MIN) return refuse(c, 400, { code: 'query_too_short', message: `Type at least ${SEARCH_MIN} letters of a name.` });
+    if (q.length > SEARCH_MAX_LEN) return refuse(c, 400, { code: 'query_too_long', message: 'That is longer than a name.' });
+    const exclude = new Set<number>();
+    const companyUid = c.req.query('company');
+    const projectId = c.req.query('project');
+    if (companyUid) {
+      const company = await c.env.DB.prepare('SELECT id FROM company_profiles WHERE uid = ?').bind(companyUid).first<{ id: number }>();
+      const mine = company && await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(company.id, user.id).first();
+      if (!company || (!mine && !isAdmin(user))) return refuse(c, 403, { code: 'not_member', message: 'You can only build a team you belong to.' });
+      const r = await c.env.DB.prepare('SELECT user_id FROM user_company_links WHERE company_id = ?').bind(company.id).all<{ user_id: number }>();
+      for (const row of r.results ?? []) exclude.add(Number(row.user_id));
+    } else if (projectId) {
+      const project = /^[1-9][0-9]{0,15}$/.test(projectId)
+        ? await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(Number(projectId)).first<{ id: number; founder_id: number | null }>()
+        : null;
+      if (!project || !(await canAccessProject(c.env, user, project))) return refuse(c, 403, { code: 'not_member', message: 'You can only build a team you belong to.' });
+      const r = await c.env.DB.prepare(`SELECT user_id FROM project_members WHERE project_id = ? AND status = 'accepted'`).bind(project.id).all<{ user_id: number }>();
+      for (const row of r.results ?? []) exclude.add(Number(row.user_id));
+      if (project.founder_id != null) {
+        const owners = await c.env.DB.prepare('SELECT id FROM users WHERE founder_id = ?').bind(project.founder_id).all<{ id: number }>();
+        for (const row of owners.results ?? []) exclude.add(Number(row.id));
+      }
+    }
+    return c.json({ people: await searchPeople(c.env, user.id, q, exclude) });
   } catch (e) { return mapError(c, e); }
 });
 

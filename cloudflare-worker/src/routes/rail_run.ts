@@ -43,6 +43,8 @@ import { MAX_RUN_ROWS, fieldsToAsk, formMessages, gatherForm, gatherScoped, pars
 import { isExplorer, parentKey, scopeOf } from '../services/fills/scopes';
 import { runRefusalView } from '../util/railContext';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
+import { sessionBlockProposals, windowDays } from '../services/sessionsBlock';
 import { ROW_READS } from './fills';
 
 /** The form fields an Add form needs before a whole row can be proposed (the writer's own rule). */
@@ -66,10 +68,12 @@ const SENTENCES: Record<string, string> = {
   record_not_found: 'That record is not on this venture.',
   nothing_to_fill: 'Every field Eadwyn can fill already holds a value.',
   // D1329 (#3490).
-  no_profile: 'Fill opens once you hold a venture or a profile.',
+  no_profile: 'Ask opens once you hold a venture or a profile.', // #3740: matches EXPLORER_OFF (lib/fillScoped.js)
   record_not_available: 'You cannot change this record.',
   // D1595 (#3868).
   rows_not_offered: 'This form adds one record at a time.',
+  // D1596 (#3869).
+  unknown_page: 'That option runs on Advisor · Practice · Sessions only.',
 };
 
 export type Runner = (env: Env, input: RunOptions) => Promise<RunResult>;
@@ -80,6 +84,38 @@ const sse = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.str
 /** The record's asked columns, for the before-and-after check. */
 const snapshot = (row: Record<string, unknown> | null, asked: readonly FillField[]) =>
   JSON.stringify(asked.map((f) => (row ? row[f.column] ?? null : null)));
+
+/** D1596 (#3869): the one page `sessions:block` runs on. */
+export const SESSIONS_PAGE = 'Advisor · Practice · Sessions';
+
+/**
+ * `sessions:block`: Block proposals from the advisor's own Axal records, at no
+ * charge (`services/sessionsBlock.ts`). Refused before any read for another
+ * page, an Explorer, a support session, or a caller with no advisor profile.
+ * Never calls the runner or the quoter; writes `ai_rail_proposals` rows only.
+ */
+async function sessionsBlockRun(c: any, user: User, page: string, option: string, body: Record<string, any> | null) {
+  const refuse = (status: number, code: string) => c.json({ error: code, detail: SENTENCES[code] }, status);
+  if (page !== SESSIONS_PAGE) return refuse(404, 'unknown_page');
+  if (isExplorer(user)) return refuse(403, 'no_profile');
+  if ((await selectJwt(c))?.payload?.impersonated_by) return refuse(403, 'support_session_refused');
+  // `requireMyAdvisor`'s rule: the advisor profile whose user is the caller.
+  const advisor = (await c.env.DB.prepare('SELECT id, timezone FROM advisors WHERE user_id = ?').bind(user.id).first()) as { id: number; timezone: string | null } | null;
+  if (!advisor) return refuse(403, 'no_profile');
+  await ensureAdvisorStoresSchema(c.env);
+  const days = windowDays(body?.input?.days);
+  const { proposals, dropped } = await sessionBlockProposals(c.env, { advisorId: Number(advisor.id), userId: Number(user.id), timezone: advisor.timezone, days });
+  const events = [sse('meta', { model: null, hold_microusd: 0 })];
+  const out: Array<Record<string, unknown>> = [];
+  for (const p of proposals) {
+    const row = await proposeRail(c.env, { userId: Number(user.id), page, option, record: `advisor:${advisor.id}`, kind: 'proposal', payload: { ...p }, model: null, usageLogId: null });
+    out.push({ uid: row.uid, ...p });
+  }
+  events.push(sse('done', out.length
+    ? { proposals: out, dropped, usage_log_id: null, charged_microusd: null }
+    : { proposals: [], dropped, reason: 'nothing_to_propose', usage_log_id: null, charged_microusd: null }));
+  return new Response(events.join(''), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
 
 /** The routes, with the model runner injectable: the app passes `run()`; a test passes a stub. */
 export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
@@ -93,6 +129,8 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     const body = (await c.req.json().catch(() => null)) as Record<string, any> | null;
     const page = String(body?.page ?? '');
     const option = String(body?.option ?? '');
+    // D1596 (#3869): `sessions:block` runs no model. It branches before the form path and never quotes or holds.
+    if (/^sessions:block$/.test(option)) return sessionsBlockRun(c, user, page, option, body);
     const m = /^form:([a-z0-9_-]{1,60})$/.exec(option);
     if (!m) return refuse(c, 400, 'unknown_handler');
     const form = m[1];

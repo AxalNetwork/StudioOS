@@ -6,7 +6,7 @@
  * GW1–GW8, and `Notion Page.dc.html`, NT1–NT8, with their board grids).
  *
  * A module can carry several parts now: GitHub's (D782), Vercel's,
- * Lovable's, Google's and Notion's. Each is one `[connector, render]` entry. A part not built yet is
+ * Lovable's, Google's, Notion's and PostHog's (D1606). Each is one `[connector, render]` entry. A part not built yet is
  * `null` on its own line, named with the task that builds it, so that task
  * replaces its own line and no other: the five connector tasks do not edit the
  * same lines of CycleRoute.jsx.
@@ -26,6 +26,7 @@ import FromNotion from './FromNotion';
 import HostingFromVercel from './HostingFromVercel';
 import { RoadmapFromGoogle, SolutionDesignFromGoogle } from './BuildFromGoogle';
 import RunsOnFromVercel from './RunsOnFromVercel';
+import { OperatingPosthog, PrototypePosthog, RoadmapPosthog } from './BuildPosthog';
 
 export const BUILD_PARTS = Object.freeze({
   'solution-design': [
@@ -47,6 +48,8 @@ export const BUILD_PARTS = Object.freeze({
     ['lovable', null],
     // NT3: a must-have database as facts (D1088, #2953), anchored at #from-notion.
     ['notion', (_data, ctx) => <FromNotion section="build" module="prototype_mvp" projectId={ctx.projectId} />],
+    // PH5: activation, flag links and Mark Done from PostHog (D1606, #3731), anchored at #from-posthog.
+    ['posthog', (_data, ctx) => <PrototypePosthog projectId={ctx.projectId} />],
   ],
   'product-roadmap': [
     // VC3: the Deploys strip sits ABOVE GitHub's Releases strip: #2963 (D1098), RoadmapFromVercel, #from-vercel.
@@ -57,12 +60,16 @@ export const BUILD_PARTS = Object.freeze({
     ['google', (_data, ctx) => <RoadmapFromGoogle projectId={ctx.projectId} reload={ctx.reload} />],
     // NT3: a roadmap database's rows (D1088, #2953), anchored at #from-notion.
     ['notion', (_data, ctx) => <FromNotion section="build" module="product_roadmap" projectId={ctx.projectId} />],
+    // The metrics a roadmap item's KPI can name, from PostHog (D1606, #3731), anchored at #from-posthog.
+    ['posthog', (_data, ctx) => <RoadmapPosthog projectId={ctx.projectId} />],
   ],
   'operating-systems': [
     // D686 §5.4: Tools history, with GitHub's Code system, anchored at #tools.
     ['tools', (data) => <ToolsHistory tools={data?.parts?.tools} />],
     // VC1: the Hosting block beside GitHub's Code system: #2962 (D1097), HostingFromVercel, #from-vercel.
     ['vercel', (data, ctx) => <HostingFromVercel hosting={data?.parts?.tools?.hosting} projectId={ctx.projectId} reload={ctx.reload} />],
+    // Decision D (a): PostHog as one Tools line, never a core system (D1606, #3731).
+    ['posthog', (_data, ctx) => <OperatingPosthog projectId={ctx.projectId} />],
   ],
   'founding-team': [
     // D782 (#2115): who builds (the founder matches each login) and where the code sits.

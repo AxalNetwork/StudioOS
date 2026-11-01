@@ -123,7 +123,7 @@ test('AF18: the advisor fills their own service; another advisor, an investor an
   assert.equal((await f.sheet(21, { page: SERVICES, form: 'service', record: 602 })).status, 403, 'another advisor\'s service');
   assert.equal((await f.sheet(41, { page: SERVICES, form: 'service' })).status, 403, 'an investor has no advisor profile');
   const explorer = await f.sheet(61, { page: SERVICES, form: 'service' });
-  assert.deepEqual([explorer.status, explorer.body.detail], [403, 'Fill opens once you hold a venture or a profile.']);
+  assert.deepEqual([explorer.status, explorer.body.detail], [403, 'Ask opens once you hold a venture or a profile.']);
   const support = await f.sheet(21, { page: SERVICES, form: 'service', record: 601 }, true);
   assert.deepEqual([support.status, support.body.can_fill, support.body.fields.some((x: any) => x.trigger)], [200, false, false]);
 });

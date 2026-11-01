@@ -33,6 +33,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 // that tag is not written in prose here). See frontend/src/routes/README.md;
 // routes_modules_d528.test.mjs fails the build for a module that is not wired in.
 import learningRoutes from './routes/learning';
+import teamRoutes from './routes/team';
 import BranchDigestRedirect from './pages/branch/BranchDigestRedirect';
 import HqCreditsRedirect from './pages/hq/HqCreditsRedirect';
 import { useRedirectBeacon } from './lib/redirectBeacon';
@@ -314,6 +315,8 @@ const HqPlatformAllowancesPage = lazy(() => import('./pages/hq/PlatformAllowance
 const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
 // D1172 (#3085, STG20): what members store, totals only.
 const HqPlatformStoragePage = lazy(() => import('./pages/hq/PlatformStoragePage'));
+// D1491 (#3725): HQ › Platform › Event syndication (SY1, SY5, SY6).
+const HqEventSyndicationPage = lazy(() => import('./pages/hq/eventSyndication/EventSyndicationPage'));
 // D1253 (#2428): the venture scorecard's method, the founder's page and HQ › Platform › Scoring.
 const ScoringMethodPage = lazy(() => import('./pages/scoring/ScoringMethodPage'));
 const FounderScorecardPage = lazy(() => import('./pages/scoring/FounderScorecardPage'));
@@ -471,6 +474,7 @@ const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
 const PitchEditor = lazy(() => import('./pages/raise/pitch/PitchEditor'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
 const NewDeck = lazy(() => import('./pages/raise/pitch/NewDeck'));
+const TemplatesGallery = lazy(() => import('./pages/raise/pitch/TemplatesGallery'));
 const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
 const FundAdminBoundary = lazy(() => import('./pages/admin/fundAdmin/Refusal'));
 const FUND_ADMIN_BOUNDARY_ROLES = new Set(['founder', 'partner', 'investor', 'advisor', 'exploring']);
@@ -3094,6 +3098,9 @@ function AppInner() {
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
       <Route path="/admin/platform/ai-usage" element={guard(['admin'], hqOnly(<HqAiUsagePage />))} />
       <Route path="/admin/platform/storage" element={guard(['admin'], hqOnly(<HqPlatformStoragePage />))} />
+      <Route path="/admin/platform/event-syndication" element={guard(['admin'], hqOnly(<HqEventSyndicationPage />))} />
+      <Route path="/admin/platform/event-syndication/log" element={guard(['admin'], hqOnly(<HqEventSyndicationPage />))} />
+      <Route path="/admin/platform/event-syndication/settings" element={guard(['admin'], hqOnly(<HqEventSyndicationPage />))} />
       <Route path="/admin/platform/scoring" element={guard(['admin'], hqOnly(<HqScoringPage />))} />
       <Route path="/scoring/method" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ScoringMethodPage />)} />
       {/* The owner's ruling (2026-10-20) — Integration keys, with GitHub Sync as
@@ -3169,6 +3176,8 @@ function AppInner() {
       <Route path="/articles" element={<ArticlesPage />} />
       <Route path="/articles/draft" element={authOnly(<ArticleAuthorPage />)} />
       <Route path="/articles/edit/:id" element={authOnly(<ArticleAuthorPage />)} />
+      {/* D1408 (#3694): the editor without an article shows the library. */}
+      <Route path="/articles/edit" element={authOnly(<ArticleAuthorPage />)} />
       {/* Articles hub is public-only; the writing workspace lives at /articles/draft. Legacy /articles/mine redirects there. */}
       <Route path="/articles/mine" element={<Navigate to="/articles/draft" replace />} />
       <Route path="/authors/:userId" element={<AuthorProfilePage />} />
@@ -3288,6 +3297,11 @@ function AppInner() {
       <Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />
       {/* D897 (#2677), PD3–PD6: New deck. A static path, so `/raise/:slug/new` never takes it. */}
       <Route path="/raise/pitch/new" element={guard(labRoles(['admin', 'founder']), <NewDeck />)} />
+      {/* D1604 (#3716, pd29): the templates gallery, behind the studio's own boundary (D905). */}
+      <Route path="/raise/pitch/templates" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring']),
+        (effectiveRole === 'advisor' || effectiveRole === 'partner' || effectiveRole === 'exploring') && user?.spinout_lab_active !== 1
+          ? <PitchBoundary role={effectiveRole} />
+          : <TemplatesGallery />)} />
       <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="analytics" />)} />
       {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
       <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />
@@ -4108,6 +4122,7 @@ function AppInner() {
           the block of the same name at the top of this file. Above the
           catch-all, so a module's routes are matched before it. */}
       {learningRoutes(routeTools)}
+      {teamRoutes(routeTools)}
       {/* ── end route modules ── */}
       {/* Task #11 — Catch-all 404. Must stay LAST so it only matches when no
           other route (public, alias, or guarded) does. */}

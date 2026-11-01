@@ -248,3 +248,34 @@ test('scoped Ask follows the mounted rail switch, including its neutral field ma
     } finally { await w.unmount(); clearRailPage(token); __resetAssistModeForTest(); }
   }
 });
+
+// #3740 part 1: editing an agenda item asks too, reading that item (`record`), never under the event (`parent`).
+function AgendaItem({ editing = null, event = 77 }) {
+  const [item, setItem] = React.useState({ title: '' });
+  fill = useScopedFill({ scope: SCOPED_FORMS.agendaItem, record: editing ?? null, parent: editing ? null : event, enabled: true,
+    values: { title: item.title }, onValues: (v) => setItem((o) => ({ ...o, ...v })) });
+  return h('div', null, h(FillFormBar, { fill }), h(FillLabel, { fill, name: 'title', label: 'Session', value: item.title }, h('span', null, 'Session')));
+}
+const AGENDA_SHEET = () => SHEET({ page: SCOPED_FORMS.agendaItem.page, form: 'agenda-item', scope: 'event:77',
+  fields: [{ ...view('title'), table: 'event_agenda_items' }], quote: { option: 'form:agenda-item', state: 'ok', runs: 0, average_microusd: null } });
+
+test('#3740: editing an agenda item reads with record, not parent; adding one reads under the event', async () => {
+  const page = read('pages/events/EventManagePage.jsx');
+  assert.match(page, /scope: SCOPED_FORMS\.agendaItem, record: editing \?\? null, parent: editing \? null : Number\(id\), enabled: screen === 'agenda',/);
+  assert.doesNotMatch(page, /enabled: screen === 'agenda' && !editing/, 'editing an item asks too');
+  assert.match(page, /await events\.updateAgendaItem\(id, editing, payload\); await agendaFill\.afterSave\(editing\);/, 'an edit records after its own Save');
+  assert.doesNotMatch(page, /\{!editing && <FillFormBar/, 'the form\'s Ask is drawn while editing as well');
+  const edit = await mount(h(AgendaItem, { editing: 55 }), { routes: { '/api/fills/sheet': () => json(AGENDA_SHEET()) } });
+  try {
+    const url = edit.calls.find((c) => c.url.includes('/api/fills/sheet')).url;
+    assert.match(url, /form=agenda-item&record=55$/);
+    assert.doesNotMatch(url, /parent=/);
+    assert.ok(edit.byTestId('fill-trigger-title'), 'a blank title draws its Ask while editing');
+  } finally { await edit.unmount(); }
+  const add = await mount(h(AgendaItem, { editing: null }), { routes: { '/api/fills/sheet': () => json(AGENDA_SHEET()) } });
+  try {
+    const url = add.calls.find((c) => c.url.includes('/api/fills/sheet')).url;
+    assert.match(url, /parent=77/);
+    assert.doesNotMatch(url, /record=/);
+  } finally { await add.unmount(); }
+});

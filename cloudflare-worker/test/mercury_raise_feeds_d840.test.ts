@@ -27,7 +27,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/mercury_raise_feeds_d840.test.ts
  */
-import test from 'node:test';
+import test, { beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import '../src/routes/cycle_raise.ts';
 import { MERCURY_READ_TOOLS } from '../src/services/mercury/mcp.ts';
@@ -46,6 +46,12 @@ const line = (o: Partial<RaiseLine>): RaiseLine => ({
   id: 'x', amount_cents: 0, posted_on: '2026-09-01', kind: 'externalTransfer', counterparty: null, category: null, last_four: '4242',
   posted: true, internal: false, voided: false, ...o,
 });
+
+// The sync route reads its own clock (`today()` in cycle_raise.ts), while the fake's cashflow and lines are
+// fixed at July–September 2026, the last three full months on TODAY. Pin the clock to TODAY so the route sees
+// the same months the fixture was written for; on the real calendar these tests went red on 2026-11-01.
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: Date.parse(`${TODAY}T12:00:00Z`) }));
+afterEach(() => mock.timers.reset());
 
 test('1. the rules: full months, runway, spend, sections, investment, matching and revenue', () => {
   // Mutations checked: the current month counted as full; the runway averaged over 2 months or with a missing

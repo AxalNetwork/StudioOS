@@ -18,7 +18,9 @@
  * PR 3: one row per registered option too, from each profile's list in
  * `frontend/src/lib/railOptions/` (D771–D775): `{ pageKey, optionKey,
  * optionLabel, kind, handler, routeTask, models }`. An option takes its own
- * kind's models; `handler: "none"` runs no model and gets no row. D1478
+ * kind's models; `handler: "none"` runs no model and gets no row, unless it
+ * is `noModel` (D1596, #3869): an Ask chip that runs arithmetic, listed with
+ * `models: []`, `more: []` and `routeTask: "none"` so the rail offers it. D1478
  * (#3721): an option may take a kind no page row has (`optionKinds`, today
  * `image`, the draw models), with `routeTask` the fixed job its list names
  * (`task` on the option); an option with handler `transcribe` lists only
@@ -51,6 +53,8 @@ export const OPTION_LISTS = [
   { file: 'founder.js', name: 'FOUNDER_OPTIONS', profile: 'Founder' },
   { file: 'investor.js', name: 'INVESTOR_RAIL_OPTIONS', profile: 'Investor' },
   { file: 'advisor.js', name: 'ADVISOR_RAIL_OPTIONS', profile: 'Advisor' },
+  // D1596 (#3869): Ask chips that run no model, listed with no models.
+  { file: 'advisor.js', name: 'ADVISOR_ASK_CHIPS', profile: 'Advisor' },
   { file: 'partner.js', name: 'PARTNER_RAIL_OPTIONS', profile: 'Operating Partner' },
   { file: 'superAdmin.js', name: 'SUPER_ADMIN_RAIL_OPTIONS', profile: 'Super Admin' },
 ];
@@ -181,8 +185,20 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
   const options = [];
   const pages = new Set(rows.map((r) => r.pageKey));
   for (const o of registered) {
-    if (o.handler === 'none') continue;
     const where = `${o.file} ${o.key}`;
+    if (o.handler === 'none') {
+      if (!o.noModel) continue;
+      // D1596: a no-model option, listed so the rail offers it; it names no model and no router task.
+      const page = optionPageKey(canvas, o.profile, o.page);
+      if (page.error) { problems.push(`${where}: ${page.error}`); continue; }
+      if (!pages.has(page.key)) { problems.push(`${where}: ${page.key} has no page row`); continue; }
+      if (!/^[a-z]{1,24}:[a-z0-9_/-]{1,80}$/.test(String(o.key))) problems.push(`${where}: the key is not <verb>:<object>`);
+      if (VOICE_BANNED.test(String(o.label))) problems.push(`${where}: "${o.label}" breaks the voice rule`);
+      if (options.some((x) => x.pageKey === page.key && x.optionKey === o.key)) { problems.push(`${where}: the key is used twice on ${page.key}`); continue; }
+      options.push({ pageKey: page.key, optionKey: o.key, optionLabel: o.label, kind: o.kind, handler: 'none', routeTask: 'none', models: [], more: [], noModel: true });
+      continue;
+    }
+    if (o.noModel) { problems.push(`${where}: only a handler "none" option may be noModel`); continue; }
     const page = optionPageKey(canvas, o.profile, o.page);
     if (page.error) { problems.push(`${where}: ${page.error}`); continue; }
     if (!pages.has(page.key)) { problems.push(`${where}: ${page.key} has no page row`); continue; }

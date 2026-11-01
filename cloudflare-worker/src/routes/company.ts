@@ -50,15 +50,6 @@ const PUBLIC_FIELDS = ['id', 'uid', 'company_name', 'stage', 'logo_url', 'websit
   'linkedin_url', 'description', 'international_presence'] as const;
 const PRIVATE_FIELDS = ['revenue_range', 'employee_count', 'current_products', 'expansion_goals'] as const;
 
-function maskEmail(email: string): string {
-  const at = email.indexOf('@');
-  if (at < 1) return '***';
-  const local = email.slice(0, at);
-  const dom = email.slice(at);
-  const head = local.slice(0, Math.min(2, local.length));
-  return `${head}***${dom}`;
-}
-
 async function memberCount(env: Env, companyId: number): Promise<number> {
   const r = await env.DB.prepare('SELECT COUNT(*) c FROM user_company_links WHERE company_id = ?')
     .bind(companyId).first<{ c: number }>();
@@ -94,7 +85,8 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
     if (!u) continue;
     members.push({
       user_id: u.id, name: u.name,
-      email: isMember ? u.email : maskEmail(u.email),
+      // #3841: a member's email goes to that member only (the canvas: "Never show another member's email").
+      ...(u.id === viewer.id ? { email: u.email } : {}),
       role_in_company: lnk.role_in_company,
       is_primary_admin: !!lnk.is_primary_admin,
       // Migration 191 — three independent axes. Null means NOT RECORDED, not

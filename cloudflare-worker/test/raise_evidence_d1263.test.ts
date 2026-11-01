@@ -104,7 +104,13 @@ test('freshness is one hour, force refresh works, safe proposal payloads carry n
  assert.equal((await buildCandidates(w.ctx,{now:'2026-10-26T12:30:00Z'})).refreshed,false);assert.equal((await buildCandidates(w.ctx,{force:true,now:'2026-10-26T12:30:00Z'})).refreshed,true);
  const q=proposal(w);await dismissItem(w.ctx,q.uid);w.db.exec('UPDATE project_metrics SET mrr=25');await buildCandidates(w.ctx,{force:true,now:'2026-10-26T13:31:00Z'});
  assert.equal(w.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid=?').get(q.uid)?.status,'discarded');assert.equal(w.db.prepare("SELECT COUNT(*) n FROM ai_rail_proposals WHERE json_extract(payload_json,'$.kind')='kpi-snapshot' AND json_extract(payload_json,'$.area')='Investor narrative and Pitch deck'").get()?.n,1);
- assert.doesNotMatch(JSON.stringify(w.db.prepare('SELECT payload_json FROM ai_rail_proposals').all()),/PRIVATE|123400|987654321|value_num/);
+ // Hashes can coincidentally contain a fixture's digits; inspect every other payload field.
+ const payloads=w.db.prepare('SELECT payload_json FROM ai_rail_proposals').all().map((row:any)=>{
+  const {snapshot_hash,...payload}=JSON.parse(row.payload_json);
+  assert.match(snapshot_hash,/^[a-f0-9]{64}$/);
+  return payload;
+ });
+ assert.doesNotMatch(JSON.stringify(payloads),/PRIVATE|123400|987654321|value_num/);
  assert.equal(auditCount(w),1);assert.equal(w.db.prepare("SELECT written_value FROM fill_provenance WHERE target_table='ai_rail_proposals'").get()?.written_value,'discarded');
  }finally{w.db.close();}
 });

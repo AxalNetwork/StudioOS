@@ -41,6 +41,8 @@ export const FIGURE_KINDS: Record<FigureKey, string[]> = {
   churn: ['kpi-snapshot', 'model-assumption'], cac: ['kpi-snapshot', 'model-assumption'],
   interviews: ['icp-fit', 'consented-quote'], lois: ['demand-signal', 'loi-file'], waitlist: ['demand-signal'], pilots: ['demand-signal'],
   raise: [],
+  // D1607: no pinned record kind holds a PostHog figure yet; the narrative check compares it with PostHog itself.
+  active_users: [],
 };
 
 /** A KPI snapshot or a model assumption holds one metric (`<row>:<metric>`): the one each figure reads. */

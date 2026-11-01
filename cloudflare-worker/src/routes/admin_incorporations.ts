@@ -43,8 +43,9 @@ r.post('/:id/filed', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { filed_on?: unknown };
   const out = await markFiled(c.env, id, body.filed_on, admin.id);
   if (!out.ok) return c.json({ error: out.error }, out.status);
+  // D1415 Part 3: the company's uid only; no name and no address in the log.
   await logAdminAction(c.env, admin.id, admin.email, 'incorporation_filed', {
-    incorporation_id: id, filed_on: body.filed_on,
+    incorporation_id: id, filed_on: body.filed_on, company_uid: out.company && 'uid' in out.company ? out.company.uid : null,
   });
   return c.json(out);
 });
