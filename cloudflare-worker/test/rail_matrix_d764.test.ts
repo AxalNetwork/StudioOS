@@ -26,7 +26,8 @@ import { readFileSync } from 'node:fs';
 import {
   OUT, VOICE_BANNED, buildMatrix, loadRegisteredOptions, optionPageKey, readPricing, render, rowProblems,
 } from '../../scripts/build-rail-matrix.mjs';
-import { PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, RAIL_KINDS, ROUTE } from '../src/services/aiRouter.ts';
+import { CANVAS_RAIL_KINDS, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, RAIL_KINDS, ROUTE } from '../src/services/aiRouter.ts';
+import { RAIL_KIND_JOBS, jobStep, offerable } from '../src/services/ai/modelUseCases.ts';
 import { MODEL_NAMES, TASK_LABELS } from '../src/services/aiCatalog.ts';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -164,10 +165,21 @@ test('the generator refuses a canvas or override that breaks a rule, and writes 
 });
 
 test('each rail_<kind> task is a ROUTE key that names only its kind\'s models, priced and named', () => {
-  assert.equal(RAIL_KINDS.length, 14);
-  assert.deepEqual([...RAIL_KINDS].sort(), Object.keys(CANVAS.suggested).sort(), 'one task per canvas kind');
+  // #3934: the canvas's fourteen kinds, plus the use-case plan's seven (checked against the table below).
+  assert.equal(CANVAS_RAIL_KINDS.length, 14);
+  assert.equal(RAIL_KINDS.length, 21);
+  assert.deepEqual([...CANVAS_RAIL_KINDS].sort(), Object.keys(CANVAS.suggested).sort(), 'one task per canvas kind');
   for (const r of ROWS) assert.ok(r.routeTask in ROUTE, `${r.routeTask} is not a ROUTE key`);
-  for (const kind of RAIL_KINDS) {
+  for (const kind of RAIL_KINDS.filter((k) => !(CANVAS_RAIL_KINDS as readonly string[]).includes(k))) {
+    const entry = (ROUTE as Record<string, any>)[`rail_${kind}`];
+    const ref = RAIL_KIND_JOBS[kind]; const job = jobStep(ref.id, ref.step)!;
+    // The route runs the job's Default unless no rail may list it (D (a)'s legal hold), then its fallback; plan locks are the run's to apply.
+    assert.equal(entry.model, offerable(job.default) ? job.default : job.fallback, `rail_${kind}: the job's Default, else its fallback`);
+    for (const id of entry.alternates) assert.ok([job.default, job.alternative, job.deeper, ...job.more, job.fallback].includes(id), `rail_${kind}: ${id} is one of ${job.id}'s models`);
+    assert.equal(entry.alternates[0], entry.model);
+    assert.ok(TASK_LABELS[`rail_${kind}` as keyof typeof TASK_LABELS], `rail_${kind} has a label`);
+  }
+  for (const kind of CANVAS_RAIL_KINDS) {
     const entry = (ROUTE as Record<string, any>)[`rail_${kind}`];
     const row = ROWS.find((r) => r.kind === kind)!;
     const ids = row.models.map((m) => m.id);
@@ -192,7 +204,7 @@ test('the rail_<kind> prices are what Cloudflare bills: each published neuron ra
   // (GLM-4.7 Flash: 5,500 neurons = $0.0605 per 1M input tokens, shown as $0.060).
   const md = read('design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md');
   const usdOf = (neurons: number) => (neurons * 11) / 1_000_000;
-  for (const kind of RAIL_KINDS) {
+  for (const kind of CANVAS_RAIL_KINDS) {
     const entry = (ROUTE as Record<string, any>)[`rail_${kind}`];
     for (const id of [entry.model, ...(entry.alternates ?? [])]) {
       const p = PRICE_USD_PER_1M_TOKENS[id];
@@ -397,19 +409,23 @@ test('the generator refuses an option on a missing board, a key used twice, a ba
   assert.match(problemsWith([{ ...base, page: 'Founder · Studio', key: 'draft:x', label: 'Draft', kind: 'poetry' }]), /kind poetry has no models/);
 });
 
-const RESEARCH = ROWS.find((r) => r.kind === 'research')!;
-const CHAT = ROWS.find((r) => r.kind === 'chat')!;
+// #3934: what a run reads is the resolved row (the table's job step), not the canvas file's.
+const RESEARCH = resolveRail(ROWS.find((r) => r.kind === 'research')!.pageKey)!;
+const CHAT = resolveRail(ROWS.find((r) => r.kind === 'chat')!.pageKey)!;
 const VISION = ROWS.find((r) => r.kind === 'vision')!;
 const OFF: Record<string, string> = {};
 const PAID_ON = { AI_PAID_MODELS: 'on' };
 
 test('a rail run resolves the caller\'s model, then the pick, then the default after the paid-only demotion', () => {
   const text = { vision: false };
-  // research: Kimi K2.6 (paid only) is the canvas default; a free plan starts on GPT-OSS 120B.
-  assert.equal(RESEARCH.models[0].id, '@cf/moonshotai/kimi-k2.6');
-  assert.deepEqual(compatibleModels(RESEARCH, text, OFF), ['@cf/moonshotai/kimi-k2.6', '@cf/openai/gpt-oss-120b'], 'the index and the reranker never answer a chat run');
-  assert.deepEqual(resolveRailChain(RESEARCH, text, OFF, {}), { ok: true, primary: '@cf/openai/gpt-oss-120b', chain: [], source: 'default' });
-  assert.deepEqual(resolveRailChain(RESEARCH, text, PAID_ON, {}), { ok: true, primary: '@cf/moonshotai/kimi-k2.6', chain: ['@cf/openai/gpt-oss-120b'], source: 'default' });
+  // research: Kimi K2.6 (paid only) is the canvas default; a free plan starts on GPT-OSS 120B. The demotion is
+  // resolveRailChain's own rule, so it is held on the canvas file's row; #3934's research job starts on GPT-OSS 120B.
+  const CANVAS_RESEARCH = ROWS.find((r) => r.kind === 'research')! as any;
+  assert.equal(CANVAS_RESEARCH.models[0].id, '@cf/moonshotai/kimi-k2.6');
+  assert.deepEqual(compatibleModels(CANVAS_RESEARCH, text, OFF), ['@cf/moonshotai/kimi-k2.6', '@cf/openai/gpt-oss-120b'], 'the index and the reranker never answer a chat run');
+  assert.deepEqual(resolveRailChain(CANVAS_RESEARCH, text, OFF, {}), { ok: true, primary: '@cf/openai/gpt-oss-120b', chain: [], source: 'default' });
+  assert.deepEqual(resolveRailChain(CANVAS_RESEARCH, text, PAID_ON, {}), { ok: true, primary: '@cf/moonshotai/kimi-k2.6', chain: ['@cf/openai/gpt-oss-120b'], source: 'default' });
+  assert.equal(RESEARCH.models[0].id, '@cf/openai/gpt-oss-120b', 'the resolved research row is VA13');
   // The member's pick: the option's wins over the page's, and a pick the row no longer offers is ignored.
   const [a, b, c] = CHAT.models.map((m) => m.id);
   assert.deepEqual(resolveRailChain(CHAT, text, OFF, { page: b }), { ok: true, primary: b, chain: [a, c], source: 'pick' });
@@ -547,7 +563,8 @@ test('#3741: every Worker page and option returns only curated roles, with price
       assert.deepEqual(m.price, unitPrices(m.id, multiplierFor('founder')));
     }
     for (const m of r.more) {
-      assert.deepEqual(Object.keys(m).sort(), ['id', 'name', 'line', 'price'].sort());
+      // #3934 (A (c)): `lock` is the plan label a locked model shows, null when every plan runs it.
+      assert.deepEqual(Object.keys(m).sort(), ['id', 'name', 'line', 'price', 'lock'].sort());
       assert.ok(m.name && m.line);
       assert.deepEqual(m.price, unitPrices(m.id, multiplierFor('founder')));
       assert.equal(r.models.some((c: any) => c.id === m.id), false);
@@ -565,8 +582,9 @@ test('#3741: every Worker page and option returns only curated roles, with price
     }
     assert.equal(seen.size, MATRIX.options.length);
     const r = await call(env, A, 'GET', q('Founder · Build · Solution design'));
-    assert.deepEqual(r.body.models.map((m: any) => m.id), ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b']);
-    assert.ok(r.body.more.some((m: any) => m.id === '@cf/deepseek-ai/deepseek-v4-flash-0731'));
+    // #3934: a Plan page reads BU2 (glm-4.7-flash; qwen3-30b; gpt-oss-120b), with the rest of the step and the Plan list under All models.
+    assert.deepEqual(r.body.models.map((m: any) => m.id), ['@cf/zai-org/glm-4.7-flash', '@cf/qwen/qwen3-30b-a3b-fp8', '@cf/openai/gpt-oss-120b']);
+    assert.ok(r.body.more.some((m: any) => m.id === '@cf/openai/gpt-oss-20b'));
     const option = railOptionRows().find(o => o.kind === 'plan')!;
     const active = await call(env, A, 'GET', q(option.pageKey, option.optionKey));
     assertRow(active.body);
@@ -578,7 +596,7 @@ test('#3741: every Worker page and option returns only curated roles, with price
 test('#3741: page and option overflow picks round-trip and stale picks are refused and cleared', async () => {
   const page = 'Founder · Build · Solution design';
   const { env, db, prefs } = world();
-  const model = '@cf/deepseek-ai/deepseek-v4-flash-0731';
+  const model = '@cf/openai/gpt-oss-20b';
   const option = railOptionRows().find(o => o.kind === 'plan' && o.more?.some(m => m.id === model))!;
   assert.ok(option);
   try {
@@ -603,7 +621,7 @@ test('#3741: page and option overflow picks round-trip and stale picks are refus
 
 test('#3741: run honours an overflow pick, and never adds connected extras to automatic fallbacks', async () => {
   const page = 'Founder · Build · Solution design';
-  const model = '@cf/deepseek-ai/deepseek-v4-flash-0731';
+  const model = '@cf/openai/gpt-oss-20b';
   const opt = railOptionRows().find(o => o.kind === 'plan' && o.more?.some(m => m.id === model))!;
   for (const option of [undefined, opt.optionKey]) {
     const onPage = option ? opt.pageKey : page;

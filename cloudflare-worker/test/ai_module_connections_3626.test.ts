@@ -8,6 +8,7 @@ import { CATALOGUE, isOffered } from '../src/services/ai/catalogue.ts';
 import { MODEL_CONNECTIONS, moduleConnections } from '../src/services/ai/moduleConnections.ts';
 import { pcmBytes, pcmMinutes, questionsValid, specialistOutput } from '../src/services/ai/moduleShapes.ts';
 import { railRows, railOptionRows, resolveRailChain } from '../src/services/ai/railMatrix.ts';
+import { MODEL_LOCKS, RAIL_KIND_JOBS, jobStep } from '../src/services/ai/modelUseCases.ts';
 import { publicModels } from '../src/services/ai/publicModels.ts';
 import { run, quoteRun, ROUTE, __resetForTest } from '../src/services/aiRouter.ts';
 import { searchIndexAccepts, parseEmbed } from '../src/services/ai/shapes.ts';
@@ -40,25 +41,32 @@ test.afterEach(() => __resetForTest());
 
 test('every offered model has a purpose and real module connection; no backend details enter public copy', () => {
   const models = publicModels(switches);
-  const failures = models.filter(m => !m.used_for || m.used_for === 'Use not recorded' || !m.pages.length
+  // #3934: phonellm is a Voice turn model only (§4.2 fix 10), and no page takes that kind until the speech task does.
+  const waiting = new Set(['@cf/daily-co/phonellm-mini-alpha-2']);
+  const failures = models.filter(m => !m.used_for || m.used_for === 'Use not recorded' || (!m.pages.length && !waiting.has(m.id))
     || /@cf|cloudflare|worker|neuron|provider|infrastructure/i.test(m.used_for));
-  assert.deepEqual({ count: models.length, failures: failures.map(m => m.id) }, { count: 61, failures: [] });
-  assert.deepEqual(models.map(m => m.id).sort(), CATALOGUE.filter(m => isOffered(m, switches)).map(m => m.id).sort());
+  assert.deepEqual({ count: models.length, failures: failures.map(m => m.id) }, { count: 59, failures: [] });
+  // #3934 (§4): glm-5.2 and the 3.1 70B are hidden everywhere, the Models tab included.
+  assert.deepEqual(models.map(m => m.id).sort(), CATALOGUE.filter(m => isOffered(m, switches) && MODEL_LOCKS[m.id] !== 'hidden').map(m => m.id).sort());
+  assert.deepEqual(CATALOGUE.filter(m => isOffered(m, switches) && MODEL_LOCKS[m.id] === 'hidden').map(m => m.id).sort(), ['@cf/meta/llama-3.1-70b-instruct-fp8-fast', '@cf/zai-org/glm-5.2']);
 });
 
-test('additional models do not change canvas defaults or automatic fallback chains', () => {
+test('a page row\'s default and automatic chain are its kind\'s job (the table), and connected extras never join them', () => {
   const original = JSON.parse(readFileSync(new URL('../src/services/ai/railMatrix.json', import.meta.url), 'utf8'));
-  const changed = rows.filter(r => {
-    const before = original.rows.find((b: any) => b.pageKey === r.pageKey);
-    const after = resolveRailChain(r, { vision: false }, {}, {});
-    const baseline = resolveRailChain(before, { vision: false }, {}, {});
-    return r.models[0].id !== before.models[0].id || JSON.stringify(after) !== JSON.stringify(baseline);
+  // #3934 replaces the canvas's per-kind models with modelUseCases.ts: each row reads its kind's job step.
+  const wrong = rows.filter(r => {
+    const ref = RAIL_KIND_JOBS[r.kind]; const job = jobStep(ref.id, ref.step)!;
+    const chain = resolveRailChain(r, { vision: r.kind === 'vision' }, switches, {});
+    return r.models[0].id !== job.default || (chain?.ok && [chain.primary, ...chain.chain].some(id => (r.more ?? []).some(m => m.id === id)));
   });
-  assert.deepEqual(changed.map(r => r.pageKey), []);
+  assert.deepEqual(wrong.map(r => r.pageKey), []);
+  assert.equal(original.rows.length, rows.length, 'the canvas matrix file itself is unchanged');
   const lost = rows.flatMap(r => {
     const demoted = original.rows.find((b: any) => b.pageKey === r.pageKey).more ?? [];
     const connected = moduleConnections(r, switches);
-    return demoted.filter((m: any) => !connected.some(c => c.id === m.id)).map((m: any) => [r.pageKey, m.id]);
+    // #3934 (§4.2 fix 9): a speech row's Listen selector lists no text model; structuring is the page's Synth option.
+    const fix9 = (m: any) => r.kind === 'speech' && MODEL_CONNECTIONS[m.id]?.operation === 'chat';
+    return demoted.filter((m: any) => !connected.some(c => c.id === m.id) && !fix9(m)).map((m: any) => [r.pageKey, m.id]);
   });
   assert.deepEqual(lost, [], 'demoting an existing model does not disconnect its module operation');
   const choice = rows.find(r => r.kind === 'chat')!;
@@ -308,9 +316,12 @@ test('every newly connected text model actually dispatches through its persona m
   for (const [id] of Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'chat')) {
     const f = fixture();
     try {
-      const page = pageFor(id), image = CATALOGUE.find(m => m.id === id)!.capabilities.includes('Vision') && page.kind === 'vision';
+      const page = pageFor(id), image = !!page && CATALOGUE.find(m => m.id === id)!.capabilities.includes('Vision') && page.kind === 'vision';
       // Run the same router path as existing handlers (the endpoint adds role checks).
-      const r = await run(f.env, { task: page.routeTask as any, userId: 2, model: id, text: 'Explain the supplied evidence.', rail: { page: page.pageKey }, ...(image ? { images: [png] } : {}) });
+      // #3934: a model whose kind has no page yet (phonellm, Voice turn) runs on that kind's own rail task.
+      const r = page
+        ? await run(f.env, { task: page.routeTask as any, userId: 2, model: id, text: 'Explain the supplied evidence.', rail: { page: page.pageKey }, ...(image ? { images: [png] } : {}) })
+        : await run(f.env, { task: `rail_${MODEL_CONNECTIONS[id].kinds[0]}` as any, userId: 2, model: id, text: 'Explain the supplied evidence.' });
       results.push([id, r.ok, r.usage.model, f.calls[0]?.id]);
     } finally { f.db.close(); }
   }
@@ -337,12 +348,11 @@ test('image specialists bound legitimate classifier output and refuse malformed 
   } finally { f.db.close(); }
 });
 
-test('a speech module can discuss supplied material without treating a chat model as transcription', async () => {
-  const f = fixture();
-  try {
-    const result = await post(f, { page: rows.find(r => r.kind === 'speech')!.pageKey, model: '@cf/daily-co/phonellm-mini-alpha-2', text: 'Draft a short follow-up question.' });
-    assert.deepEqual([result.body.ok, result.body.output, Object.keys(f.calls[0].input).sort()], [true, 'Result.', ['max_tokens', 'messages']]);
-  } finally { f.db.close(); }
+test('a speech page lists no text model, so a chat model is never treated as transcription (§4.2 fix 10)', async () => {
+  const speech = rows.find(r => r.kind === 'speech')!;
+  // #3934: Listen (file) is turbo, nova-3 and whisper, and nothing else.
+  assert.deepEqual([...speech.models, ...(speech.more ?? [])].map(m => m.id), ['@cf/openai/whisper-large-v3-turbo', '@cf/deepgram/nova-3', '@cf/openai/whisper']);
+  assert.ok(!moduleConnections(speech, switches).some(c => c.id === '@cf/daily-co/phonellm-mini-alpha-2'), 'phonellm is not connected to a speech page');
 });
 
 test('translation, voices, images, transcription, reranking and each decision model have executable module paths', async () => {
