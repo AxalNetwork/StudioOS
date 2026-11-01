@@ -1,3 +1,5 @@
+import { contractErrors } from '../src/contracts/validate.ts';
+const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckTypedValues.schema.json', import.meta.url), 'utf8'));
 /**
  * D1538 (#3787, deck v2 B11) — typed figures, the table block, the
  * market_circles and projection charts, and the one-click rules.
@@ -68,7 +70,9 @@ async function call(db: DatabaseSync, who: number, method: string, path: string,
     method, headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
-  return { status: res.status, body: await res.json().catch(() => null) as any };
+  const reply = await res.json().catch(() => null) as any;
+  if (res.status === 200 && method === 'GET') assert.deepEqual(contractErrors(replyContract, reply), [], 'typed values reply contract');
+  return { status: res.status, body: reply };
 }
 
 // 1 ───────────────────────────────────────────────────────────────────────────

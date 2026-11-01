@@ -13,6 +13,9 @@
  * tests; the Worker itself never loads one, so no reply pays for a check.
  */
 export const CONTRACTS = Object.freeze({
+  setDeckSource: { issue: 3881, route: 'PUT /api/data-room/:projectUid/files/:uid/deck-source', schema: 'deckSource.schema.json' },
+  typedTables: { issue: 3787, route: 'GET /api/decks/:id/typed-values', schema: 'deckTypedValues.schema.json' },
+  consistency: { issue: 3802, route: 'GET /api/decks/:id/check → consistency', schema: 'deckConsistency.schema.json' },
   grid: { issue: 3749, route: 'GET /api/decks/:id/grid', schema: 'deckGrid.schema.json' },
   // The five swaps that reached main before this file did (D1503, D1522, D1553, D1565).
   elementModels: { issue: 3754, route: 'GET /api/decks/:id/element-models', schema: 'deckElementModels.schema.json' },

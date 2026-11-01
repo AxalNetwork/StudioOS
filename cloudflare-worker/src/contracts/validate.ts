@@ -2,7 +2,7 @@
  * D1511 (#3762, deck v2 A18) — a reply checked against its contract schema.
  *
  * The subset of JSON Schema the contracts here use, and nothing more: `type`
- * (object, array, string, integer, number, boolean, null), `required`,
+ * (object, array, string, integer, number, boolean, null, or an array of these), `required`,
  * `properties`, `additionalProperties: false`, `items`, `minItems`,
  * `maxItems`, `enum`, `const`, `minimum`, `maximum` and a local `$ref` to
  * `#/$defs/<name>`. A keyword it does not know is an error, so a schema can
@@ -28,7 +28,8 @@ export function contractErrors(schema: Schema, value: unknown, root: Schema = sc
   if (schema.enum && !schema.enum.some((e: unknown) => same(e, value))) out.push(`${path}: must be one of ${JSON.stringify(schema.enum)}`);
   if (schema.type) {
     const t = typeOf(value);
-    const ok = t === schema.type || (schema.type === 'number' && t === 'integer');
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    const ok = types.some((type: string) => t === type || (type === 'number' && t === 'integer'));
     if (!ok) return [...out, `${path}: must be ${schema.type}, is ${t}`];
   }
   if (typeof value === 'number') {

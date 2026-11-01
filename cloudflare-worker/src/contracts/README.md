@@ -21,3 +21,9 @@ When a `deckV2Adapter.js` method's body becomes `through(() => client.method(…
 the same PR adds `<surface>.schema.json` for the reply that method passes on
 and one `CONTRACTS` entry. `cloudflare-worker/test/deck_contracts_d1511.test.ts`
 fails until both exist, and fails when the route's reply leaves its schema.
+
+| File | What it is |
+|---|---|
+| `deckSource.schema.json` | #3881: the public opt-in/extraction state, without internal job or billing fields. |
+| `deckTypedValues.schema.json` | D1538: typed figures, including numeric/text values and erased authors. |
+| `deckConsistency.schema.json` | D1555: the adapter passes the check reply’s consistency field; null for non-founders. |

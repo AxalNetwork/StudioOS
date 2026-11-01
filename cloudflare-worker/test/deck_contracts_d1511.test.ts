@@ -122,3 +122,13 @@ test('3. every adapter method swapped to through() has a contract, and every con
     assert.match(src, new RegExp(`${method}: \\{ issue: ${c.issue},`), `${method} keeps its issue`);
   }
 });
+
+
+test('nullable contract types accept only their named alternatives', () => {
+  assert.deepEqual(contractErrors({ type: ['object', 'null'] }, null), []);
+  assert.deepEqual(contractErrors({ type: ['object', 'null'] }, {}), []);
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, 1), []);
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, 'one'), []);
+  assert.deepEqual(contractErrors({ type: ['object', 'null'] }, []), ['$: must be object,null, is array']);
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, false), ['$: must be number,string, is boolean']);
+});

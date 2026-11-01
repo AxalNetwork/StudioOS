@@ -1,0 +1,57 @@
+{
+  "$id": "deckConsistency",
+  "type": [
+    "object",
+    "null"
+  ],
+  "additionalProperties": false,
+  "required": [
+    "state",
+    "findings"
+  ],
+  "properties": {
+    "state": {
+      "enum": [
+        "ok",
+        "unreadable"
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "rule",
+          "message",
+          "cards"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "rule": {
+            "enum": [
+              "one_value",
+              "use_of_funds",
+              "runway",
+              "round",
+              "forecast"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

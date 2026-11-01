@@ -1,3 +1,5 @@
+import { contractErrors } from '../src/contracts/validate.ts';
+const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckSource.schema.json', import.meta.url), 'utf8'));
 /** D1602: migrated SQLite, real router/billing, synthetic files and a stubbed AI binding. */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -55,7 +57,9 @@ async function fixture(kind = 'csv', answer = '[]', pageText = 'No supported fig
   const request = async (who = 1, body: any = { enabled: true }, suffix = '/deck-source', method = 'PUT') => {
     const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
     const r = await app.request(suffix === 'room' ? '/api/data-room/p-room' : '/api/data-room/p-room/files/file-a' + suffix, { method, headers: { authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, ...(method === 'GET' ? {} : { body: JSON.stringify(body) }) }, env);
-    return { status: r.status, body: await r.json() as any };
+    const bodyResult = await r.json() as any;
+    if (r.status === 200 && suffix === '/deck-source') assert.deepEqual(contractErrors(replyContract, bodyResult), [], 'deck source reply contract');
+    return { status: r.status, body: bodyResult };
   };
   const values = () => db.prepare('SELECT slot,value,unit,page,as_of,extracted_by FROM dataroom_deck_values ORDER BY slot').all().map(row => ({ ...row }));
   const payload = () => JSON.parse((db.prepare("SELECT payload FROM queue_jobs WHERE job_type = 'dataroom_extract' ORDER BY id DESC LIMIT 1").get() as any).payload);

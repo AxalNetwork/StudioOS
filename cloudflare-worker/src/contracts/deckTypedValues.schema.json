@@ -1,0 +1,84 @@
+{
+  "$id": "deckTypedValues",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "deck_id",
+    "values"
+  ],
+  "properties": {
+    "deck_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "values": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "value",
+          "unit",
+          "grade",
+          "typed_by",
+          "typed_at"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "number",
+              "string",
+              "null"
+            ]
+          },
+          "unit": {
+            "enum": [
+              "count",
+              "usd",
+              "percent",
+              "months",
+              "text"
+            ]
+          },
+          "grade": {
+            "const": "Stated"
+          },
+          "typed_by": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "typed_at": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
