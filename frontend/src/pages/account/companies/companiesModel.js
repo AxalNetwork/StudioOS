@@ -25,8 +25,21 @@
 import { NOT_RECORDED } from '../../../lib/absence.js';
 
 export const SECTION = 'companies';
-export const TITLE = 'Companies and projects';
-export const LINE = 'Every company you belong to, the ventures inside each, and who works on them.';
+/**
+ * D1413 (#3696, owner answer Q1): the section is "Portfolio" for every
+ * profile, at `/account/portfolio`. An investor also has `/portfolio`, their
+ * holdings; the same companies can sit in both, so each links to the other
+ * (`INVESTOR_LINK`, and `ACCOUNT_LINK` on the investor's page). Neither is
+ * renamed.
+ */
+export const TITLE = 'Portfolio';
+export const LINE = 'The companies and projects you belong to. A company is a legal entity. A project can stand alone, or sit inside a company.';
+/** PF1's one-time notice, dismissed on this device. */
+export const RENAME_NOTICE = 'Companies and projects is now Portfolio, at /account/portfolio.';
+export const RENAME_STORE = 'portfolio:renamed';
+/** Q1: the investor's own Portfolio (`/portfolio`), linked from here, and the way back. */
+export const INVESTOR_LINK = { label: 'Also in your investor Portfolio ›', to: '/portfolio' };
+export const ACCOUNT_LINK = { label: 'Also in your account Portfolio ›', to: '/account/portfolio' };
 export const ACTIVE_HERE = 'Active on this device';
 export const ACTIVE_LINE = 'The company marked Active is the one every page reads on this device. Switch it in the sidebar.';
 export const SHARED_LINE = 'Projects, deals, funds and quotes belong to the company selected. Marketplaces and your account settings are shared across your companies.';
@@ -37,8 +50,7 @@ export const ADVISOR_LINE = 'Practice and Expertise are not yet separated by com
 /**
  * D1415 part 4 (#3856): the section's address is `/account/portfolio`. Every
  * old `/account/companies…` address forwards here (`CompaniesMovedRedirect`,
- * `movedCompaniesTarget`); the labels stay "Companies and projects" until the
- * owner answers #3696's naming question.
+ * `movedCompaniesTarget`). D1413: the owner named it "Portfolio" (#3696 Q1).
  */
 export const BASE_PATH = '/account/portfolio';
 export const OLD_BASE_PATH = '/account/companies';
@@ -117,18 +129,18 @@ export function settingsUidFor(pathname = '') {
   return m && m[1].toLowerCase() !== SETTINGS_SEGMENT && !TAB_PATHS[m[1].toLowerCase()] ? m[1] : null;
 }
 
-export const MANAGE_LABEL = 'Manage companies and projects';
-export const SIDEBAR_LABEL = 'Companies and projects';
+export const MANAGE_LABEL = 'Open Portfolio';
+export const SIDEBAR_LABEL = 'Portfolio';
 export const MOVED_KEY = 'company-settings';
 /** D1415 part 4: the `?moved=` an old `/account/companies…` address lands with. */
 export const COMPANIES_MOVED_KEY = 'companies';
 /** The notices an old address lands with (CMP19b), by `?moved=`. */
 export const MOVED_NOTICES = Object.freeze({
   [MOVED_KEY]: 'Company Settings has a new address. Update your bookmark.',
-  [COMPANIES_MOVED_KEY]: 'Companies and projects has a new address. Update your bookmark.',
+  [COMPANIES_MOVED_KEY]: 'Companies and projects is now Portfolio, at a new address. Update your bookmark.',
 });
 /** Profile and identity's one-line notice (CMP19b), shown until dismissed on this device. */
-export const PROFILE_MOVED_TEXT = 'Your companies is now Companies and projects, under Account.';
+export const PROFILE_MOVED_TEXT = 'Your companies is now Portfolio, under Account.';
 export const PROFILE_MOVED_STORE = 'moved:your-companies';
 
 /**
@@ -547,4 +559,248 @@ export function lifecycleRefusal(e) {
   if (code === 'already_archived') return 'This company was archived a moment ago. Nothing changed.';
   if (code === 'already_pending') return 'An invitation to that address is already waiting. Nothing was sent.';
   return refusalWords(e);
+}
+
+/* ------------------------------------------------------------------ *
+ * D1413 (#3696) — Portfolio: the overview's cards with their projects
+ * nested, the company and project pages, the legal facts and the scoped
+ * settings. Every value drawn here is one of three things: a value, "Not
+ * recorded" (the store holds nothing) or "could not be read" (the read
+ * failed). A missing count is never 0.
+ * ------------------------------------------------------------------ */
+
+const enc = encodeURIComponent;
+
+/** PF3: a project's page, inside Account › Portfolio. */
+export const projectPagePath = (id) => `${BASE_PATH}/projects/${enc(id)}`;
+/** The project an address opens (`/account/portfolio/projects/<id>`), else null. */
+export function portfolioProjectFor(pathname = '') {
+  const m = String(pathname).match(/^\/account\/portfolio\/projects\/(\d{1,12})\/?$/);
+  return m ? m[1] : null;
+}
+/** PF6a/PF8: Company settings › Legal. PF6c: Company settings › Projects [› one project]. */
+export const companyLegalPath = (uid) => `${companySettingsPathFor(uid)}/legal`;
+export const companyProjectsPath = (uid, id = null) => `${companySettingsPathFor(uid)}/projects${id != null ? `/${enc(id)}` : ''}`;
+/** Make it a company (PF3b, PF6b): Incorporate, prefilled with the project (D1414). */
+export const incorporatePath = (id) => `/incorporate?project=${enc(id)}`;
+
+/** The entity types D1415 stores, in words (PF4a, PF8). */
+export const LEGAL_FORMS = Object.freeze([
+  ['c_corp', 'C-Corporation'], ['s_corp', 'S-Corporation'], ['llc', 'LLC'], ['lp', 'Limited partnership'],
+  ['ltd', 'Private limited company'], ['plc', 'Public limited company'], ['gmbh', 'GmbH'], ['sas', 'SAS'], ['bv', 'BV'], ['other', 'Other'],
+]);
+export const legalFormWord = (code) => (code ? (LEGAL_FORMS.find(([k]) => k === code)?.[1] || String(code)) : null);
+
+const SUBDIVISIONS = {
+  'US-DE': 'Delaware', 'US-WY': 'Wyoming', 'US-CA': 'California', 'US-NY': 'New York', 'US-NV': 'Nevada', 'US-TX': 'Texas',
+  'US-FL': 'Florida', 'US-MA': 'Massachusetts', 'US-WA': 'Washington', 'US-CO': 'Colorado', 'US-IL': 'Illinois',
+  'CA-ON': 'Ontario', 'CA-BC': 'British Columbia', 'CA-QC': 'Quebec', 'CA-AB': 'Alberta',
+  'GB-ENG': 'England', 'GB-SCT': 'Scotland', 'GB-WLS': 'Wales', 'GB-NIR': 'Northern Ireland',
+  'DE-BE': 'Berlin', 'DE-BY': 'Bavaria', 'AU-NSW': 'New South Wales', 'AU-VIC': 'Victoria',
+};
+/** A country's name from its ISO code ("PT" → "Portugal"); the code itself when the name is unknown. */
+export function countryName(code) {
+  const c = String(code || '').trim().toUpperCase();
+  if (!c) return null;
+  try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c) || c; } catch { return c; }
+}
+/** D1415's jurisdiction code in words: "US-DE" → "Delaware, United States", "PT" → "Portugal". */
+export function jurisdictionName(code) {
+  const c = String(code || '').trim().toUpperCase();
+  if (!c) return null;
+  const [cc, sub] = c.split('-');
+  const country = countryName(cc);
+  if (!sub) return country;
+  return `${SUBDIVISIONS[c] || sub}, ${country}`;
+}
+
+/** A place in words: "Lisbon, Portugal", else its label, else null. */
+export function placeLine(loc) {
+  if (!loc) return null;
+  const parts = [loc.city, loc.region && !loc.city ? loc.region : null, countryName(loc.country)].filter(Boolean);
+  return parts.length ? parts.join(', ') : (String(loc.label || '').trim() || null);
+}
+/** A full address on one line: "251 Little Falls Drive, Wilmington, DE 19808, United States". */
+export function addressLine(loc) {
+  if (!loc) return null;
+  const parts = [loc.line1, loc.line2, loc.city, [loc.region, loc.postal_code].filter(Boolean).join(' ') || null, countryName(loc.country)].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
+
+/**
+ * One fact as a page draws it: `{ kind: 'value', text }`, `{ kind: 'none' }`
+ * ("Not recorded", muted) or `{ kind: 'unread', what }` ("[what] could not be
+ * read"). A block that failed is never turned into "none".
+ */
+export const valueFact = (t) => (t == null || String(t).trim() === '' ? { kind: 'none' } : { kind: 'value', text: String(t) });
+export const unreadFact = (what) => ({ kind: 'unread', what });
+const blockValue = (b) => (b && b.available ? { ok: true, value: b.value } : { ok: false, reason: b?.reason || null });
+
+/** D1412's status block as a pill: Active, amber In formation, Archived; null when it could not be read. */
+export function statusPill(block, archivedAt = null) {
+  if (archivedAt) return { label: 'Archived', tone: 'neutral' };
+  const v = blockValue(block);
+  if (!v.ok) return null;
+  if (v.value === 'in_formation') return { label: 'In formation', tone: 'warn' };
+  if (v.value === 'archived') return { label: 'Archived', tone: 'neutral' };
+  if (v.value === 'active') return { label: 'Active', tone: 'ok' };
+  return null;
+}
+
+/** "8 people" from a count block; "1 person"; unread is a fact of its own, never 0. */
+export function peopleFact(block, what = 'Team') {
+  const v = blockValue(block);
+  if (!v.ok || !Number.isFinite(Number(v.value))) return unreadFact(what);
+  const n = Number(v.value);
+  return valueFact(`${n} ${n === 1 ? 'person' : 'people'}`);
+}
+
+/**
+ * PF1's company card, from one `GET /api/account/companies` row (D1136 and
+ * D1412) and, when the switcher answered, the company's address (`paths`,
+ * uid → `/c/<slug|uid>`).
+ */
+export function portfolioCard(c, { activeUid = null, paths = null } = {}) {
+  const legal = blockValue(c.legal);
+  const loc = blockValue(c.primary_location);
+  const more = blockValue(c.location_count);
+  const place = loc.ok ? placeLine(loc.value) : null;
+  const extra = loc.ok && loc.value && more.ok && Number(more.value) > 1 ? ` +${Number(more.value) - 1}` : '';
+  return {
+    uid: c.uid,
+    name: String(c.company_name || '').trim() || NOT_RECORDED,
+    path: paths?.get?.(c.uid) || null,
+    active: activeUid != null && c.uid === activeUid,
+    role: c.is_primary_admin ? 'Primary admin' : roleWord(c.my_role),
+    status: statusPill(c.status, c.archived_at),
+    statusUnread: !c.archived_at && !blockValue(c.status).ok,
+    jurisdiction: legal.ok ? valueFact(jurisdictionName(legal.value?.jurisdiction)) : unreadFact('Legal facts'),
+    entityType: legal.ok ? valueFact(legalFormWord(legal.value?.legal_form)) : unreadFact('Legal facts'),
+    team: peopleFact(c.member_count),
+    location: loc.ok ? (place ? valueFact(`${place}${extra}`) : { kind: 'none' }) : unreadFact('Locations'),
+  };
+}
+
+/** A project row under a company or in a section (PF1): from `GET /api/account/projects`, addressed by the switcher when it answered. */
+export function portfolioProject(p, paths = null) {
+  const team = blockValue(p.member_count);
+  return {
+    id: p.id,
+    name: String(p.name || '').trim() || 'Untitled project',
+    path: paths?.get?.(`p-${p.id}`) || null,
+    stage: stageWord(p.stage),
+    team: team.ok && Number.isFinite(Number(team.value)) ? String(Number(team.value)) : null,
+    teamUnread: !team.ok,
+    seat: seatWord(p.my_seat),
+    owner: p.my_seat === 'owner',
+    companyUid: p.company_uid || null,
+    companyName: p.company_name || null,
+  };
+}
+
+/**
+ * The switcher's addresses (`GET /api/account/switcher`, D1415): uid → path
+ * for each company, and `p-<id>` → path for each project it lists. Empty when
+ * the switcher did not answer: the chips are then not drawn, never guessed.
+ */
+export function switcherPaths(sw) {
+  const out = new Map();
+  if (!sw || !Array.isArray(sw.companies)) return out;
+  const addProjects = (b) => { if (b?.available) for (const p of b.value || []) if (p.path) out.set(`p-${p.id}`, p.path); };
+  for (const c of sw.companies) {
+    if (c.path) out.set(c.uid, c.path);
+    addProjects(c.projects);
+  }
+  addProjects(sw.standalone);
+  addProjects(sw.elsewhere);
+  return out;
+}
+
+/**
+ * PF1's sections from the reads the pane already makes: each of my companies
+ * with its projects (`projects` is a block: unread when `GET
+ * /api/account/projects` failed, so "Its projects could not be read" draws
+ * under each card alone, pf7c2), then my standalone projects, then seats on
+ * projects in companies I am not in. Never the every-project read.
+ */
+export function portfolioSections(summary, projectsRead, { activeUid = null, switcher = null } = {}) {
+  const paths = switcherPaths(switcher);
+  const list = Array.isArray(summary?.companies) ? summary.companies : [];
+  const read = projectsRead && Array.isArray(projectsRead.projects) ? projectsRead.projects : null;
+  const mine = new Set(list.map((c) => c.uid));
+  const companies = list.map((c) => ({
+    ...portfolioCard(c, { activeUid, paths }),
+    projects: read ? { available: true, value: read.filter((p) => p.company_uid === c.uid).map((p) => portfolioProject(p, paths)) } : { available: false },
+  }));
+  const standalone = read ? { available: true, value: read.filter((p) => !p.company_uid && p.my_seat === 'owner').map((p) => portfolioProject(p, paths)) } : { available: false };
+  const seats = read
+    ? { available: true, value: read.filter((p) => (p.company_uid ? !mine.has(p.company_uid) : p.my_seat !== 'owner')).map((p) => portfolioProject(p, paths)) }
+    : { available: false };
+  return { companies, standalone, seats };
+}
+
+/** A legal record (`GET /api/company/:uid/legal`) as PF2's and PF8's facts, each a fact. */
+export function legalFacts(legal) {
+  if (!legal) return null;
+  const reg = blockValue(legal.registered_address);
+  const mail = blockValue(legal.mailing_address);
+  const tax = blockValue(legal.tax_id);
+  const off = blockValue(legal.officers);
+  return {
+    legalName: valueFact(legal.legal_name),
+    entityType: valueFact(legalFormWord(legal.legal_form)),
+    jurisdiction: valueFact(jurisdictionName(legal.jurisdiction)),
+    registrationNumber: valueFact(legal.registration_number),
+    taxId: tax.ok ? (tax.value?.recorded ? valueFact(maskedTaxId(tax.value.last4)) : { kind: 'none' }) : unreadFact('The tax ID'),
+    registeredAddress: reg.ok ? valueFact(addressLine(reg.value)) : unreadFact('The registered address'),
+    registeredAgent: valueFact(legal.registered_agent_name),
+    mailingAddress: mail.ok ? valueFact(addressLine(mail.value)) : unreadFact('The mailing address'),
+    incorporationDate: valueFact(day(legal.incorporation_date)),
+    officers: off.ok
+      ? (off.value || []).filter((o) => !o.ceased_on).length
+        ? valueFact((off.value || []).filter((o) => !o.ceased_on).map((o) => [o.name, o.title, o.office === 'director' ? 'Director' : null].filter(Boolean).join(' · ')).join('; '))
+        : { kind: 'none' }
+      : unreadFact('Officers and directors'),
+  };
+}
+
+/** A tax ID never shown whole on a page: "•••• 4821". */
+export const maskedTaxId = (last4) => (last4 ? `•••• ${String(last4).slice(-4)}` : null);
+
+/** PF2's Locations card: each open location, labelled by its kind. */
+const KIND_WORDS = { registered: 'Registered office', headquarters: 'Headquarters', office: 'Office', mailing: 'Mailing address', other: 'Other' };
+export function locationRows(block) {
+  const v = blockValue(block);
+  if (!v.ok) return null;
+  return (v.value || []).filter((l) => !l.closed_on).map((l) => ({
+    uid: l.uid, label: String(l.label || '').trim() || KIND_WORDS[l.kind] || 'Location', place: placeLine(l) || NOT_RECORDED, kind: l.kind,
+  }));
+}
+
+/** PF2's Documents card: the four slots, each a document or "Not recorded", then the others. */
+export function documentRows(read) {
+  const slots = Array.isArray(read?.slots) ? read.slots : [];
+  return slots.map((s) => ({
+    kind: s.kind, label: s.label || s.kind,
+    doc: s.document ? { uid: s.document.uid, title: s.document.title, meta: [s.document.has_file ? 'File' : null, day(s.document.created_at)].filter(Boolean).join(' · '), hasFile: !!s.document.has_file } : null,
+  }));
+}
+
+/** A slug field's address preview: `/c/` + slug, or `/c/<company>/p/` + slug, or `/p/` + slug. */
+export function slugPrefix({ kind, companySlug = null, companyUid = null } = {}) {
+  if (kind === 'company') return '/c/';
+  if (companySlug || companyUid) return `/c/${companySlug || companyUid}/p/`;
+  return '/p/';
+}
+/** A slug from a name, as the Worker would make one (lower-case letters, digits and hyphens, at most 50). */
+export function slugFrom(name) {
+  return String(name || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50).replace(/-+$/g, '');
+}
+/** D1591's answer while the member types, in words. */
+export function slugCheckLine(answer) {
+  if (!answer) return null;
+  if (answer.available) return { ok: true, text: '✓ Available' };
+  if (answer.reason === 'slug_invalid') return { ok: false, text: 'Use 1 to 50 lower-case letters, digits and hyphens.' };
+  if (answer.reason === 'slug_reserved') return { ok: false, text: 'That word is used by the address itself. Choose another.' };
+  return { ok: false, text: answer.suggestion ? `That address is taken. Try ${answer.suggestion}.` : 'That address is taken.' };
 }

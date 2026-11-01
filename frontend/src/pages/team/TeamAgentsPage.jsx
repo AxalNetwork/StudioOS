@@ -69,7 +69,7 @@ function NotAMember({ name }) {
     <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-axal-lg border border-axal-hairline bg-white px-6 py-10 text-center dark:border-gray-700 dark:bg-gray-900" data-testid="team-not-member">
       <h1 className="m-0 text-[18px] font-extrabold text-axal-ink dark:text-gray-100">{name ? `You're not a member of ${name}.` : 'You can’t see this team.'}</h1>
       <p className={`m-0 ${MUTED}`}>Ask one of its editors to invite you.</p>
-      <Link to="/account/companies" className={BTN_TEXT}>Back to my companies</Link>
+      <Link to="/account/portfolio" className={BTN_TEXT}>Back to Portfolio</Link>
     </div>
   );
 }

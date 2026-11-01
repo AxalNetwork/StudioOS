@@ -4,6 +4,8 @@ import { ChevronDown, Plus } from 'lucide-react';
 import { useActiveCompany as _useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
 import { companyActionsApi } from '../lib/api/companyActions';
+import { clearActiveProject, selectProject, useActiveProject } from '../lib/activeProject.js';
+import { switcher as readPortfolioSwitcher } from '../pages/account/companies/portfolioAdapter.js';
 
 /**
  * CompanySwitcher — the ONLY way the active company changes.
@@ -80,8 +82,35 @@ import { companyActionsApi } from '../lib/api/companyActions';
  * is actually scoped — the rows a person owns — and the shared half is named
  * beside it, so neither sentence can be read as the other's bug.
  */
-/** D1140 (#3020): the switcher's way to every company (CMP19a). */
-export const MANAGE_LABEL = 'Manage companies and projects';
+/** D1140 (#3020): the switcher's way to every company (CMP19a). D1413 (#3696 Q1): the section is Portfolio. */
+export const MANAGE_LABEL = 'Open Portfolio';
+/** D1413 (#3696, PF5): the project rows' read failed; the companies still list. */
+export const PROJECTS_UNREAD = 'Projects could not be read';
+
+/**
+ * D1413 (#3696, PF5) — the switcher's projects, from `GET /api/account/switcher`
+ * (D1415 part 2): each company's projects nested under it, then the standalone
+ * projects. A block that failed is null, never [].
+ */
+export function switcherProjects(answer) {
+  if (!answer || !Array.isArray(answer.companies)) return { byCompany: null, standalone: null };
+  const byCompany = new Map();
+  let ok = true;
+  for (const c of answer.companies) {
+    if (c.projects?.available) byCompany.set(c.uid, c.projects.value || []);
+    else ok = false;
+  }
+  return { byCompany: ok ? byCompany : null, standalone: answer.standalone?.available ? answer.standalone.value || [] : null };
+}
+
+/** The trigger's words: the project picked (with its company or "Standalone"), else the company. */
+export function selectionLabel(company, project, state) {
+  if (project && project.id != null) {
+    const name = project.name || 'A project';
+    return { name, type: 'Project', sub: project.company?.name ? `in ${project.company.name}` : (project.company ? 'in its company' : 'Standalone') };
+  }
+  return { name: companyLabel(company, state), type: company?.company_name ? 'Company' : null, sub: null };
+}
 export const SHARED_NOTICE = 'Projects, deals, funds and quotes belong to the company selected here. Marketplaces and your account settings are shared across your companies.';
 const ADVISOR_NOTICE = 'Practice and Expertise are not yet separated by company.';
 
@@ -137,8 +166,9 @@ export function useCompanySwitch() {
     setActiveCompanyId(next.id);
     setCompany(next);
   }
-  async function create(name) {
-    const created = await api.createCompany({ company_name: name });
+  // D1413 (#3696, PF4a): Portfolio's New company sends the address and the legal fields too (D1415 part 2).
+  async function create(name, extra = {}) {
+    const created = await api.createCompany({ ...extra, company_name: name });
     setCompanies([...companies, created]);
     setActiveCompanyId(created.id);
     setCompany(created);
@@ -155,9 +185,26 @@ export function useCompanySwitch() {
   return { company, companies, switchTo, create, leave };
 }
 
+/** PF5: a project row in the list, with its dashed mark and "Project" badge; a violet check when it is the one picked. */
+function ProjectRow({ p, picked, onPick, indent = false }) {
+  const mark = String(p.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?';
+  return (
+    <button type="button" onClick={onPick} data-testid={`switcher-project-${p.id}`}
+      className={`w-full flex items-center gap-2 ${indent ? 'pl-8' : 'pl-3'} pr-3 py-2 text-xs text-left transition-colors ${picked ? 'text-violet-700 dark:text-violet-300 font-semibold bg-violet-50 dark:bg-violet-900/30' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+      <span aria-hidden="true" className="w-5 h-5 rounded border border-dashed border-gray-300 dark:border-gray-600 text-[8.5px] font-bold flex items-center justify-center flex-none">{mark}</span>
+      <span className="truncate flex-1">{p.name}</span>
+      <span className="flex-none rounded-full border border-gray-200 px-1.5 text-[9.5px] font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-400">Project</span>
+      {picked && <span className="flex-none">✓</span>}
+    </button>
+  );
+}
+
 function CompanySwitcher({ collapsed, role }) {
   const { company, setCompany, companies, setCompanies } = _useActiveCompany();
   const { switchTo, create } = useCompanySwitch();
+  const activeProject = useActiveProject();
+  const [projectsRead, setProjectsRead] = useState({ status: 'loading', byCompany: null, standalone: null });
+  const [projectsTick, setProjectsTick] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -215,6 +262,19 @@ function CompanySwitcher({ collapsed, role }) {
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // D1413 (#3696, PF5): the projects nested under each company, read when the list opens.
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    setProjectsRead((s) => ({ ...s, status: 'loading' }));
+    readPortfolioSwitcher().then((out) => {
+      if (!alive) return;
+      const parts = out.available ? switcherProjects(out.value) : { byCompany: null, standalone: null };
+      setProjectsRead({ status: out.available ? 'ready' : 'error', ...parts });
+    });
+    return () => { alive = false; };
+  }, [open, projectsTick]);
+
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
@@ -227,7 +287,8 @@ function CompanySwitcher({ collapsed, role }) {
   // No fallback company name. "My Company" here read as a real company that the
   // dropdown then contradicted with "No company yet." — the button and the list
   // must agree about whether anything exists.
-  const displayName = companyLabel(company, { loading, failed: !!loadError });
+  const selection = selectionLabel(company, activeProject, { loading, failed: !!loadError });
+  const displayName = selection.name;
   const abbr = (displayName === '…' ? '…' :
     displayName.replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?');
 
@@ -249,9 +310,13 @@ function CompanySwitcher({ collapsed, role }) {
       {!loading && !loadError && companies.length === 0 && (
         <div className="px-3 py-2.5 text-xs text-gray-500">No company yet.</div>
       )}
+      {!loading && companies.length > 0 && (
+        <div className="px-3 pt-2 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[.11em] text-gray-500 dark:text-gray-400">Companies</div>
+      )}
       {!loading && companies.map((co) => {
         const coAbbr = (co.company_name || '?').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-        const isActive = company?.id === co.id;
+        const isActive = company?.id === co.id && !activeProject;
+        const nested = projectsRead.byCompany?.get(co.uid) || [];
         // Only when a name is genuinely ambiguous. `/company/create` now
         // refuses a name the caller already holds and migration 192 dedupes
         // repeated LINKS, but neither touches two SEPARATE companies that were
@@ -262,10 +327,11 @@ function CompanySwitcher({ collapsed, role }) {
         // workspace with no way to tell why. Silent on the normal path.
         const ambiguous = sameName.get(co.company_name) > 1;
         return (
+          <React.Fragment key={co.uid ?? co.id}>
           <button
-            key={co.uid ?? co.id}
             type="button"
-            onClick={() => { switchTo(co); setOpen(false); }}
+            onClick={() => { switchTo(co); clearActiveProject(); setOpen(false); }}
+            data-testid={`switcher-company-${co.uid ?? co.id}`}
             className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs text-left transition-colors ${
               isActive
                 ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50 dark:bg-violet-900/30'
@@ -283,10 +349,31 @@ function CompanySwitcher({ collapsed, role }) {
                 </span>
               )}
             </span>
+            <span className="flex-none rounded-full border border-violet-200 bg-violet-50 px-1.5 text-[9.5px] font-semibold text-violet-700 dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300">Company</span>
             {isActive && <span className="flex-none">✓</span>}
           </button>
+          {nested.map((p) => (
+            <ProjectRow key={p.id} p={p} picked={String(activeProject?.id) === String(p.id)}
+              onPick={() => { selectProject({ id: p.id, name: p.name, company: { uid: co.uid, name: co.company_name } }, { companies, switchTo }); setOpen(false); }} indent />
+          ))}
+          </React.Fragment>
         );
       })}
+      {!loading && projectsRead.status === 'error' && (
+        <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] text-gray-600 dark:text-gray-400" role="alert" data-testid="switcher-projects-unread">
+          {PROJECTS_UNREAD}
+          <button type="button" className="font-semibold text-violet-700 underline dark:text-violet-300" onClick={() => setProjectsTick((n) => n + 1)}>Try again</button>
+        </div>
+      )}
+      {!loading && projectsRead.standalone?.length > 0 && (
+        <div className="border-t border-gray-100 dark:border-gray-800" data-testid="switcher-standalone">
+          <div className="px-3 pt-2 pb-1 font-mono text-[10px] font-semibold uppercase tracking-[.11em] text-gray-500 dark:text-gray-400">Standalone projects</div>
+          {projectsRead.standalone.map((p) => (
+            <ProjectRow key={p.id} p={p} picked={String(activeProject?.id) === String(p.id)}
+              onPick={() => { selectProject({ id: p.id, name: p.name, company: null }, { companies, switchTo }); setOpen(false); }} />
+          ))}
+        </div>
+      )}
       <div className={companies.length > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}>
         {role !== 'exploring' && !adding && (
           <button
@@ -295,8 +382,15 @@ function CompanySwitcher({ collapsed, role }) {
             className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
             <Plus size={12} />
-            Add a new company
+            Create company
           </button>
+        )}
+        {role !== 'exploring' && !adding && (
+          <Link to="/account/portfolio?new=project" onClick={() => setOpen(false)}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" data-testid="switcher-create-project">
+            <Plus size={12} />
+            Create project
+          </Link>
         )}
         {role !== 'exploring' && adding && (
           <form onSubmit={submitNew} className="px-3 py-2.5 space-y-2">
@@ -368,12 +462,21 @@ function CompanySwitcher({ collapsed, role }) {
         data-company-switcher=""
         type="button"
         onClick={() => setOpen(v => !v)}
+        aria-label={selection.type ? `Switch company or project. Current: ${displayName}, ${selection.type}` : 'Switch company or project'}
+        aria-expanded={open}
+        data-testid="switcher-trigger"
         className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition-colors text-left"
       >
-        <div className="w-6 h-6 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[10px] font-bold flex items-center justify-center flex-none">
+        <div className={`w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center flex-none ${selection.type === 'Project' ? 'border border-dashed border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200' : 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300'}`}>
           {abbr}
         </div>
-        <span className="flex-1 text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{displayName}</span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{displayName}</span>
+            {selection.type ? <span className="flex-none rounded-full border border-gray-200 px-1.5 text-[9.5px] font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-400" data-testid="switcher-type">{selection.type}</span> : null}
+          </span>
+          {selection.sub ? <span className="truncate text-[10.5px] text-gray-500 dark:text-gray-400" data-testid="switcher-sub">{selection.sub}</span> : null}
+        </span>
         <ChevronDown size={12} className={`flex-none text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && dropdownContent}

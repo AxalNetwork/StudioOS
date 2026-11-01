@@ -33,6 +33,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 // that tag is not written in prose here). See frontend/src/routes/README.md;
 // routes_modules_d528.test.mjs fails the build for a module that is not wired in.
 import learningRoutes from './routes/learning';
+import portfolioRoutes from './routes/portfolio';
 import teamRoutes from './routes/team';
 import BranchDigestRedirect from './pages/branch/BranchDigestRedirect';
 import HqCreditsRedirect from './pages/hq/HqCreditsRedirect';
@@ -217,6 +218,8 @@ const AdminCommissions = lazy(() => import('./pages/admin/AdminCommissions'));
 const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
 // D1140 (#3020): the full company settings live under Companies and projects; /company-settings forwards.
 const CompanySettingsAt = lazy(() => import('./pages/account/companies/CompanySettingsAt'));
+// D1413 (#3696, PF6c, PF8): Company settings › Legal and › Projects.
+const CompanySettingsTabs = lazy(() => import('./pages/account/companies/CompanySettingsTabs'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
 const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
@@ -2640,6 +2643,11 @@ function AppInner() {
       {/* D1415 part 4 (#3856): the section is at /account/portfolio; settings still before :tab. */}
       <Route path="/account/portfolio/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
       <Route path="/account/portfolio/:uid/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsAt /></Suspense>)} />
+      {/* D1413 (#3696): Company settings › Legal (PF8) and › Projects (PF6c); a project's page (PF3) in Account. */}
+      <Route path="/account/portfolio/:uid/settings/legal" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsTabs tab="legal" /></Suspense>)} />
+      <Route path="/account/portfolio/:uid/settings/projects" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsTabs tab="projects" /></Suspense>)} />
+      <Route path="/account/portfolio/:uid/settings/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsTabs tab="projects" /></Suspense>)} />
+      <Route path="/account/portfolio/projects/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/account/portfolio/:tab" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       {/* D1415 part 4: every old address forwards in one hop, its query and hash kept, ?moved=companies added. */}
       <Route path="/account/companies" element={<CompaniesMovedRedirect />} />
@@ -4122,6 +4130,7 @@ function AppInner() {
           the block of the same name at the top of this file. Above the
           catch-all, so a module's routes are matched before it. */}
       {learningRoutes(routeTools)}
+      {portfolioRoutes(routeTools)}
       {teamRoutes(routeTools)}
       {/* ── end route modules ── */}
       {/* Task #11 — Catch-all 404. Must stay LAST so it only matches when no

@@ -111,6 +111,37 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-01 — Portfolio and Incorporate (#3696)
+
+The owner's three artifacts for #3696 (`389dc42b`, the Portfolio grid;
+`588b23d8`, the Portfolio page; `76568bc4`, the Incorporate grid with its page
+inside) were read as data only:
+- `Portfolio Account Page.dc.html` is the page, one component drawn per board
+  through its `v` prop (25 values, `pf1` to `pf2-d`), decoded by
+  `scripts/read-canvas.mjs`;
+- `Portfolio · Boards.dc.html` is the board grid "Portfolio": PF1 to PF8, with
+  PF6m and PF7. It imports the page by name;
+- `Incorporate Flow Page.dc.html` is the Incorporate page (`inc1` to `inc6d`),
+  copied from the grid's bundle, where it arrived unpacked. It still carries
+  dead Team canvas code no frame calls; it was not edited out;
+- `Incorporate · Boards.dc.html` is the grid "Incorporate": INC1 to INC7, with
+  INC5p. It imports the page by name.
+
+**Two edits, named.** In both pages the Axal VC mark (`uploads/axal-logo-200x200.png`)
+points at `/axal-mark.png`, and in the Incorporate page the Eadwyn mark
+(`eadwyn-ai.png`) at `/eadwyn-ai.png`; the bundles carried neither image. The
+grids' runtime references were rewritten to the shared support script by
+`read-canvas.mjs`. No other value was edited.
+
+**Grade: UPGRADE for both (D1413, D1414).** Portfolio is built on
+`/account/portfolio` with the Worker's D1136, D1412, D1415, D1591, D1592 and
+D1593 routes; Incorporate on `/incorporate` with `legal.ts`. What waits on a
+route draws its unavailable state through
+`frontend/src/pages/account/companies/portfolioAdapter.js` (#3932); Incorporate's
+screens follow under D1414. All four
+files stay here: some bodies are outstanding. No file moved, so no count
+changed.
+
 ## Landed 2026-10-31 — Pitch deck studio v2 (#3716)
 
 The owner's two exports for #3716's v2 prompt arrived unpacked (the page's and

@@ -123,7 +123,7 @@ test('D699 one switch writer and account sheet member routes', () => {
   assert.match(companyHtml, /Switch company/);
   assert.match(companyHtml, /Create a company/);
   assert.match(companyHtml, /A new sidebar, scoped to it/);
-  assert.match(companyHtml, /Company Settings/);
+  assert.match(companyHtml, /Company settings/);
   const accountHtml = render(h(ActiveCompanyContext.Provider, { value: { company: { company_name: 'Juniper Labs' } } },
     h(AccountSheet, { user: { name: 'Ada Quill' }, onClose() {}, onLogout() {} })));
   assert.match(accountHtml, />AQ<\/span>/);

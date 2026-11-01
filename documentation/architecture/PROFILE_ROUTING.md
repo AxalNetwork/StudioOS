@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 187 canonical canvases at `design/canvases/`, listed
-295 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 189 canonical canvases at `design/canvases/`, listed
+297 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 86 canvases
+## Founder — 87 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -87,6 +87,7 @@ it, where in their nav, and how do they get there.*
 | Pitch Deck Studio | `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/builder` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Pitch Deck Studio v2 · Boards | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Pitch Deck Studio v2 Page | `/raise/pitch` · `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/templates` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Portfolio · Boards | — | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Profiling | `/spinout-lab/profiling` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Raise evidence | `/raise/evidence` · `/raise/evidence/item/:id` · `/raise/evidence/claim/:id` · `/deals/:id/evidence` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | NEW | Low |
 | Reporting to investors | `/portfolio/updates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -363,7 +364,7 @@ it, where in their nav, and how do they get there.*
 | Spin-Out Lab-print-1vkgcux | `/spinout-lab` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
 | Trust center (public) | `/trust/me` · `/admin/security/trust-center` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
-## Unassigned — no persona in ROUTE_MAP — 4 canvases
+## Unassigned — no persona in ROUTE_MAP — 5 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -371,14 +372,15 @@ it, where in their nav, and how do they get there.*
 | AI tokens | `/account/usage/ai-tokens` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Brand & Landing Page copy | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
 | My events | `/my/events` · `/my/events/hosting` · `/my/events/discover` · `/my/events/past` · `/my/events/ticket/:eventId` · `/my/events/hosting/:eventId` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| Portfolio Account Page | `/account/portfolio` · `/account/portfolio/:uid/settings` · `/c/*` · `/p/*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
 ## Confidence tally
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 118 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 89 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 88 | Not routed. Proposed route only. |
+| Medium | 90 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Low | 89 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

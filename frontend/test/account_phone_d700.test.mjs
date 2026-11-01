@@ -113,8 +113,8 @@ test('1. A1m: a founder\'s index draws the Settings rows in order, the plan by D
   const markup = html(h(AccountPhoneIndex, { role: 'founder', follows: ready(FOLLOWS), billing: ready(GROWTH) }));
   assert.deepEqual(rowsOf(markup), [
     ['/account/profile', 'Profile and identity Personal details, identity, company profile ›'],
-    // D1134 (#2422): Companies and projects, below Profile and identity.
-    ['/account/portfolio', 'Companies and projects Your companies, projects and invitations ›'],
+    // D1134 (#2422): the companies section, below Profile and identity; D1413 (#3696 Q1): "Portfolio".
+    ['/account/portfolio', 'Portfolio Your companies, projects and invitations ›'],
     ['/account/notifications', 'Notifications Each type, in-app, email and push ›'],
     ['/account/security-privacy', 'Sign-in and security Password, authenticator app, SMS ›'],
     // D1050: the row names the plan; its price is the Billing pane's, read from the plans read.
@@ -244,8 +244,8 @@ test('4. SettingsPage reads its section from the address on every change, and wr
   assert.doesNotMatch(page, /initialSection|useState\(initial/);
   // D753 — the canonicalising call keeps a connector's key.
   // D1138 — and a Companies and projects tab.
-  // D1315 — and Builder's page or drawer.
-  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid, builderView \}\);/);
+  // D1315 — and Builder's page or drawer. D1413 — and a Portfolio project's page.
+  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid, projectId, builderView \}\);/);
   assert.match(page, /\}, \[active, phone, location\.pathname\]\);/, 'the URL effect re-runs when the path moves');
   assert.doesNotMatch(src, /const PATH_TO_SECTION/, 'the map moved to accountPhone.js');
   // On a phone a section is pushed, so Back returns to the index; desktop replaces, as before.

@@ -9,6 +9,7 @@ import CompanySwitcher from './CompanySwitcher';
 import { usePhoneWidth } from './phone/usePhoneWidth';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { BILLING_PATH, useScopeInView } from '../lib/settingsScope.js';
+import { useActiveProject } from '../lib/activeProject.js';
 import useLicenceNeeds from '../hooks/useLicenceNeeds';
 import { needsCount } from '../lib/licencePage';
 
@@ -27,7 +28,7 @@ import { needsCount } from '../lib/licencePage';
  * from getSidebarGroups() in sidebarConfig.js, keyed by the active role.
  *
  * Note the render order, which is the app's universal chrome and is deliberate:
- * CompanySwitcher → search filter → role groups → Companies and projects (D1140). The search
+ * CompanySwitcher → search filter → role groups → Portfolio (D1140, D1413). The search
  * here is a client-side filter over already-rendered nav labels; it is NOT the
  * global Vectorize-backed /search.
  */
@@ -35,8 +36,10 @@ import { needsCount } from '../lib/licencePage';
 export default function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
   const navLocation = useLocation();
   // D1497 (#3727, TM1e–TM1i): the bottom block follows the scope in view.
+  // D1413 (#3696, PF5/PF6): with no page publishing one, a project picked in the switcher decides it.
   const { company: activeCompany } = useActiveCompany();
-  const settingsScope = useScopeInView(activeCompany);
+  const activeProject = useActiveProject();
+  const settingsScope = useScopeInView(activeCompany, activeProject);
   // D800 (#2233): a row may name a count (`count: 'licence_needs'`, the
   // Licences row), drawn as a pill beside its label. Read only when a row asks
   // for it; an unread or zero count draws nothing, never "0".
@@ -309,7 +312,7 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
     </nav>
     <div className="flex-none border-t border-gray-200 dark:border-gray-700">
       {settingsScope ? <SettingsScopeBlock scope={settingsScope} collapsed={collapsed} onNavigate={onNavigate} activeUid={activeCompany?.uid || null} /> : null}
-      {/* D1140 (#3020, CMP19a): the last row is Companies and projects; Company Settings moved under it. */}
+      {/* D1140 (#3020, CMP19a): the last row is the section; Company Settings moved under it. D1413 (#3696 Q1): it is "Portfolio". */}
       <NavLink
         to="/account/portfolio"
         onClick={onNavigate}
@@ -318,13 +321,13 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
             ? `flex flex-col items-center gap-0.5 px-1 py-2.5 text-[10px] w-full transition-colors ${isActive ? partnerAccent ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
             : `flex items-center gap-3 px-5 py-2.5 text-sm w-full transition-colors ${isActive ? partnerAccent ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
         }
-        title={collapsed ? 'Companies and projects' : undefined}
+        title={collapsed ? 'Portfolio' : undefined}
       >
         <Building2 size={collapsed ? 18 : 16} />
         {collapsed ? (
-          <span className="truncate w-full text-center">Co.</span>
+          <span className="truncate w-full text-center">Port.</span>
         ) : (
-          <span className="truncate">Companies and projects</span>
+          <span className="truncate">Portfolio</span>
         )}
       </NavLink>
     </div>
@@ -350,8 +353,8 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
  *            per top-level entry, its sub-label right-aligned ("General ·
  *            Legal", "Projects [2]"), children hidden (TM1i).
  *
- * An entry with no address yet (the company's Legal page) is drawn off, with
- * its reason, never as a link that 404s; so is a page that reads only the
+ * An entry with no address yet is drawn off, with its reason, never as a link
+ * that 404s (D1413 gave the company's Legal its page); so is a page that reads only the
  * company active on this device (`activeOnly`) when another company is in view.
  */
 const SCOPE_ROW = 'flex items-center gap-2 py-1.5 text-[13px] w-full transition-colors';
