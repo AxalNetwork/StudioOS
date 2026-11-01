@@ -36,7 +36,7 @@ import authRecover from './routes/auth_recover';
 // /api/auth (magic link + TOTP); never the only path in. See
 // routes/auth_google.ts for the linking precedence and step-up rules.
 import authGoogle from './routes/auth_google';
-import { SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
+import { PRIVATE_LINK_GLOBS, SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
 import authPasskey from './routes/auth_passkey';
 import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
@@ -2036,8 +2036,10 @@ export default {
     // D1439 (#3914): a shared record link previews as itself. Before Hono, so
     // the SPA shell never takes the Worker's nonce CSP or `no-referrer`; the
     // shell's own headers come from `SHELL_HEADERS`. Only the prefixes in
-    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists).
-    if (env.ASSETS && SOCIAL_CARD_GLOBS.some((g) => pathname.startsWith(g.slice(0, -1)))) {
+    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists), and the
+    // token share links in `PRIVATE_LINK_GLOBS` (#3916), which get the static
+    // "Sign in to view" card with no D1 call.
+    if (env.ASSETS && [...SOCIAL_CARD_GLOBS, ...PRIVATE_LINK_GLOBS].some((g) => pathname.startsWith(g.slice(0, -1)))) {
       const card = await serveSocialCard(request, env);
       if (card) return card;
     }
