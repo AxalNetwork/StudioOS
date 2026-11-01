@@ -46,6 +46,7 @@ import type { IntegrationRow } from '../../integrations/registry';
 import { posthogDeckFacts, posthogDeckLink, type PosthogDeckFact, type PosthogDeckFactKey } from '../posthog/deckFacts';
 import { linearReadsFor, type LinearReads } from '../linear/reads';
 import { hubspotPipelineCounts, type HubspotFetch } from './hubspotCounts';
+import { CONTENT_CALENDAR_TABLE, contentCountFrom } from '../growWriters';
 
 export type SourceLabel = 'Connector' | 'Document' | 'Recorded' | 'Signed' | 'Typed';
 export type Grade = 'Measured' | 'Reviewed' | 'Sourced' | 'Stated' | 'Projected' | 'Not recorded';
@@ -611,9 +612,9 @@ const notionSource: Adapter = {
     const dn = await linkedCount(env,
       `SELECT COUNT(*) AS n, MAX(created_at) AS at FROM solution_design_notes WHERE project_id = ? AND source_path LIKE 'notion/%'`, projectId);
     if (dn) out['build.notion_design_notes'] = { value: dn.n, as_of: dn.at, origin: 'linked_document', record_ref: `solution_design_notes:notion:${dn.n}` };
-    const ct = await linkedCount(env,
-      `SELECT COUNT(*) AS n, MAX(updated_at) AS at FROM content_calendar_items WHERE project_id = ? AND source = 'notion'`, projectId);
-    if (ct) out['grow.notion_content'] = { value: ct.n, as_of: ct.at, origin: 'linked_typed', record_ref: `content_calendar_items:notion:${ct.n}` };
+    // The content calendar is read through its writer (growWriters), the only module that names its table.
+    const ct = await contentCountFrom(env, projectId, 'notion');
+    if (ct.n) out['grow.notion_content'] = { value: ct.n, as_of: day(ct.at), origin: 'linked_typed', record_ref: `${CONTENT_CALENDAR_TABLE}:notion:${ct.n}` };
     return out;
   },
 };
