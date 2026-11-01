@@ -25,6 +25,7 @@ import {
 import { getPainGroupsView, loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings, severityLevel, type PainGroupModel } from '../painGroups';
 import { linkCandidatesToDirectory } from '../competitorDirectoryLink';
 import { KPI_LABEL, evidenceFor } from '../validateEvidence';
+import { setInterviewIcpFit } from '../../routes/_founder_validate_writes';
 import { deleteInterview, updateInterviewDetails } from '../interviewWriters';
 import {
   COMPETITOR_SIGNAL_TYPES, DEMAND_STATUSES, EVIDENCE_KINDS, EVIDENCE_STRENGTHS, EXPERIMENT_STATUSES, KPI_KEYS,
@@ -403,7 +404,7 @@ const STATE_WORD: Record<string, [string, string]> = {
 const CONSENT_WORD: Record<string, string> = {
   verbal: 'Said yes out loud', written: 'In writing', in_app: 'In the app', pre_agreed: 'Agreed beforehand', chat_reply: 'Agreed in the chat',
 };
-const IMPORTED: Record<string, string> = { whatsapp: 'WhatsApp', telegram: 'Telegram', zoom: 'Zoom', google_meet: 'Google Meet' };
+const IMPORTED: Record<string, string> = { whatsapp: 'WhatsApp', telegram: 'Telegram', zoom: 'Zoom', google_meet: 'Google Meet', meeting_bot: 'Eadwyn AI', upload: 'an uploaded recording' };
 
 type InterviewData = {
   iv: Any;
@@ -440,6 +441,19 @@ function capturedWord(d: InterviewData): string {
   if (s.channel === 'text') return 'Pasted in StudioOS';
   if (s.channel === 'manual') return 'Entered by hand';
   return 'Recorded in Axal VC';
+}
+
+/** D1456: only a recorded channel is named; an unknown bot platform is not guessed. */
+async function interviewChannel(ctx: RecordContext, session: Any | null): Promise<string | null> {
+  if (!session) return null;
+  const channels: Record<string, string> = { in_person: 'In person', zoom: 'Zoom', google_meet: 'Google Meet', teams: 'Teams', whatsapp: 'WhatsApp', telegram: 'Telegram', text: 'Pasted' };
+  const word = (key: unknown) => typeof key === 'string' && Object.hasOwn(channels, key) ? channels[key] : null;
+  if (session.submitted_via === 'meeting_bot') {
+    const bot = await ctx.env.DB.prepare('SELECT platform FROM meeting_bots WHERE session_id = ? ORDER BY created_at DESC LIMIT 1')
+      .bind(session.id).first<{ platform: string }>();
+    return bot ? word(bot.platform) : null;
+  }
+  return word(session.submitted_via) ?? word(session.channel);
 }
 
 /** Yes when a pain was judged Severe or Real, No when every judged pain is Mild. */
@@ -512,18 +526,22 @@ const customerResearch: ModuleSpec = {
     const state = interviewState(d.session ? { status: d.session.status, submitted_via: d.session.submitted_via, processing_stage: d.session.processing_stage, consent_status: d.session.consent_status } : null, iv.stage ?? null);
     const fit = iv.icp_fit ? FIT[String(iv.icp_fit)] : null;
     const method = d.session?.consent_method ? CONSENT_WORD[String(d.session.consent_method)] : null;
+    const channel = await interviewChannel(ctx, d.session);
+    const need = await needToHave(ctx, Number(iv.id));
+    const writer = isWriter(ctx);
     return {
       title: String(iv.interviewee_name ?? 'Interview'),
       sub: joined(who, dMon(heldOf(iv)), minutes != null ? `${minutes} min` : null),
       pills: [
+        ...(channel ? [{ text: channel, tone: 'grey' }] : []),
         ...(fit ? [{ text: `${fit[0]} fit`, tone: fit[1] }] : []),
         { text: STATE_WORD[state][0], tone: STATE_WORD[state][1] },
       ],
       facts: [
         { label: 'Captured', value: capturedWord(d) },
         fact('Consent', method, d.session ? 'No consent method recorded' : 'No session recorded'),
-        fact('ICP fit', fit ? joined(fit[0], d.segment) : null, 'No fit recorded'),
-        fact('Need-to-have', await needToHave(ctx, Number(iv.id)), 'No pain judged yet'),
+        { ...fact('ICP fit', fit ? joined(fit[0], d.segment) : null, 'No fit recorded'), ...(writer && !fit ? { action: 'judge-fit' } : {}) },
+        { ...fact('Need-to-have', need, 'No pain judged yet'), ...(writer && need == null ? { action: 'judge-need' } : {}) },
       ],
       createdAt: iv.created_at ?? null,
     };
@@ -681,10 +699,33 @@ const customerResearch: ModuleSpec = {
         execute: (c) => refusing(async () => ({ ok: true, record: await deleteInterview(c.env, { projectId: c.projectId, userId: userId(c), interviewId }) })),
       },
     ];
+    if (!FIT[String(d.iv.icp_fit)]) actions.push({
+      key: 'judge-fit', label: 'Judge fit', kind: 'form',
+      form: { title: 'Judge ICP fit', cta: 'Save', fields: [
+        { key: 'icp_fit', label: 'ICP fit', kind: 'CH', required: true, options: opts([['strong', 'Strong'], ['partial', 'Partial'], ['none', 'None']]) },
+      ] },
+      execute: async (c, _id, body) => {
+        const fit = field(body, 'icp_fit');
+        if (typeof fit !== 'string' || !['strong', 'partial', 'none'].includes(fit)) {
+          throw new Response(JSON.stringify({ detail: 'icp_fit must be strong, partial or none' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        }
+        await setInterviewIcpFit(c.env, interviewId, fit);
+        return { ok: true };
+      },
+    });
+    if (await needToHave(ctx, interviewId) == null) actions.push({
+      key: 'judge-need', label: 'Judge need', kind: 'link', href: `/validate/customer-research/${interviewId}?project=${ctx.projectId}#interview-tools`,
+    });
+    const pending = d.session ? Number((await ctx.env.DB.prepare("SELECT COUNT(*) AS n FROM validate_proposals WHERE session_id = ? AND status = 'pending'")
+      .bind(d.session.id).first<{ n: number }>())?.n ?? 0) : 0;
+    if (pending > 0) actions.push({
+      key: 'review-findings', label: `Review findings (${pending})`, kind: 'link', tone: 'primary',
+      href: `/validate/customer-research/${interviewId}?project=${ctx.projectId}#interview-review-findings`,
+    });
     if (d.session && d.chunks > 0) {
       const sessionId = Number(d.session.id);
       actions.push({
-        key: 'open-recording', label: 'Open recording', kind: 'write', tone: 'primary',
+        key: 'open-recording', label: 'Open recording', kind: 'write', tone: pending > 0 ? 'default' : 'primary',
         // The same `parts` as `GET /sessions/:id/audio` (decision 11).
         execute: async (c) => {
           const session = await loadSession(c.env, sessionId);

@@ -453,7 +453,12 @@ export const NO_CONSENT_SENTENCE = 'The interviewee’s consent to be recorded i
 
 /** Stage `failed` with a sentence. The sweeper also uses it, for a stale run it cannot resume. */
 export async function failProcessing(env: Env, session: SessionRow, sentence: string) {
-  await setStage(env, session.id, 'failed', { error: sentence });
+  const stage = ['uploading', 'transcribing', 'summarising', 'placing'].includes(session.processing_stage ?? '') ? session.processing_stage : null;
+  await env.DB.prepare(
+    `UPDATE interview_sessions SET processing_stage = 'failed', processing_failed_stage = ?,
+       processing_done = NULL, processing_total = NULL, processing_error = ?,
+       processing_updated_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
+  ).bind(stage, sentence, session.id).run();
   // Back to where a person can act: stopped (retry), or transcribed if the transcript is in.
   await env.DB.prepare(
     `UPDATE interview_sessions SET status = 'stopped', updated_at = datetime('now') WHERE id = ? AND status = 'transcribing'`,
@@ -642,7 +647,7 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
     const safeCodes = new Set(['bot_audio_incomplete', 'bot_transcript_incomplete', 'bot_stage_invalid', 'bot_manifest_invalid', 'bot_assembly_unreadable', 'bot_not_ready']);
     const code = e instanceof Error && safeCodes.has(e.message) ? e.message : 'processing_exception';
     console.warn('[processing] job failed', { session_id: session.id, stage, code });
-    await failProcessing(env, session, `${step} stopped unexpectedly. Try again to resume this step.`);
+    await failProcessing(env, { ...session, processing_stage: stage }, `${step} stopped unexpectedly. Try again to resume this step.`);
     return 'failed';
   }
 }
@@ -727,7 +732,7 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
     `UPDATE interview_sessions
         SET expected_last_seq = ?, processing_auto = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(processing_auto, 0) END,
             status = CASE WHEN status = 'transcribing' THEN 'stopped' ELSE status END,
-            processing_stage = ?, processing_done = NULL, processing_total = NULL, processing_error = ?,
+            processing_stage = ?, processing_done = NULL, processing_total = NULL, processing_error = ?, processing_failed_stage = NULL,
             processing_updated_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ? AND processing_stage IS ? AND processing_updated_at IS ? AND status = ?`,
   ).bind(lastSeq, voiceNotes ? 1 : 0, resumeAt, note, session.id, session.processing_stage ?? null, session.processing_updated_at ?? null, session.status).run();
@@ -743,6 +748,7 @@ export function processingOf(session: SessionRow) {
   if (!session.processing_stage) return null;
   return {
     stage: session.processing_stage,
+    failed_stage: session.processing_failed_stage ?? null,
     done: session.processing_done ?? null,
     total: session.processing_total ?? null,
     error: session.processing_error ?? null,

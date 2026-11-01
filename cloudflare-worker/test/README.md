@@ -181,3 +181,5 @@ D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen memb
 | `stripe_mode_d1433.test.ts` | D1433 (#3703): mode-stamped catalogue, checkout readiness before provider calls, webhook receipts/retries/concurrency and signature timestamp boundaries; mocked Stripe only. |
 | `project_deck_hard_delete_3747.test.ts` | #3747: migrated SQLite deck/share/note/image cleanup, venture isolation, 500-object R2 pages, rollback, durable retries and per-sweep schema discovery; synthetic records only. |
 | `deck_atomic_save_3748.test.ts` | #3748: migration 713 preserves duplicate deck payloads and enforces unique version/current rows. |
+
+D1456 (#4014): the existing record, recovery, bot-control and migration-runner suites cover channel/fact actions, recorded failed steps, creator-only safe bot details and migration 760 replay through the ledger. The engine fixture applies migration 760 from its SQL source.

@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
+import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import cycleValidate from '../src/routes/cycle_validate.ts';
 import { ownedRow } from '../src/services/records/owned.ts';
@@ -35,6 +36,7 @@ function fixture() {
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(migration('447_assistant_interviews.sql'));
   db.exec(migration('453_interview_processing.sql'));
+  db.exec(migration('531_meeting_bots.sql'));
   db.exec(migration('459_cycle_activity_convention.sql'));
   // D690 (#1692): Validate's record stores, and what the interview record reads.
   db.exec(migration('460_validate_record_stores.sql'));
@@ -98,11 +100,11 @@ async function call(db: DatabaseSync, who: number, method: string, path: string,
   app.onError((error: Error, c) => c.json({ detail: error.message }, 500));
   const token = await new SignJWT({ user_id: who, role: roles[who] }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(KEY));
-  const res = await app.request(`/api/cycles${path}`, { method, headers: {
+  const res = await withThrownResponses(() => app.request(`/api/cycles${path}`, { method, headers: {
     Authorization: `Bearer ${token}`,
     ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
   }, body: body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body) },
-  { DB: recording(db), JWT_SECRET: KEY, ENVIRONMENT: 'development' } as any);
+  { DB: recording(db), JWT_SECRET: KEY, ENVIRONMENT: 'development' } as any));
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
 
@@ -618,4 +620,84 @@ test('D704 PR 2c: a partner reads the same counts; a theme no interview names ge
   db.exec("INSERT INTO pain_groups (id, project_id, title) VALUES (12, 1, 'Quiet theme')");
   const quiet = (await real(db, 10, 'GET', rec('problem-discovery', '12'))).body.side.find((x: any) => x.key === 'segments');
   assert.deepEqual([quiet.rows, quiet.empty], [[], 'No interview that names it has a segment.']);
+});
+
+
+test('D1456 channels and capture labels use the latest recorded source, never infer an absent platform', async () => {
+  const db = seeded();
+  for (const [via, channel, label] of [
+    [null, 'in_person', 'In person'], [null, 'text', 'Pasted'],
+    ['zoom', 'video', 'Zoom'], ['google_meet', 'video', 'Google Meet'], ['teams', 'video', 'Teams'],
+    ['whatsapp', 'text', 'WhatsApp'], ['telegram', 'text', 'Telegram'],
+  ]) {
+    db.prepare('UPDATE interview_sessions SET submitted_via=?, channel=? WHERE id=4').run(via, channel);
+    const r = await real(db, 10, 'GET', rec('customer-research', '1'));
+    assert.equal(r.status, 200);
+    assert.equal(r.body.pills[0].text, label);
+  }
+  db.exec("UPDATE interview_sessions SET submitted_via='meeting_bot',channel='video' WHERE id=4");
+  for (const [index, platform, label] of [[1,'zoom','Zoom'],[2,'google_meet','Google Meet'],[3,'teams','Teams']] as const) {
+    db.prepare(`INSERT INTO meeting_bots(uid,user_id,project_id,session_id,platform,meeting_url_enc,status,scheduled_at,limit_minutes,cost_per_minute_microusd,rate_per_minute_microusd,created_at)
+      VALUES (?,10,1,4,?,'synthetic','failed',0,30,1,2,?)`).run('synthetic-bot-'+index,platform,index);
+    const r = await real(db,10,'GET',rec('customer-research','1'));
+    assert.equal(r.body.pills[0].text,label);
+    assert.equal(r.body.facts[0].value,'Imported from Eadwyn AI');
+  }
+  db.exec('DELETE FROM meeting_bots');
+  const unknown = await real(db,10,'GET',rec('customer-research','1'));
+  assert.equal(unknown.body.pills.some((p:any)=>['Zoom','Google Meet','Teams'].includes(p.text)),false);
+  db.exec("UPDATE interview_sessions SET submitted_via='upload' WHERE id=4");
+  assert.equal((await real(db,10,'GET',rec('customer-research','1'))).body.facts[0].value,'Imported from an uploaded recording');
+  db.exec('DELETE FROM interview_sessions WHERE id=4');
+  const noSession = await real(db,10,'GET',rec('customer-research','1'));
+  assert.equal(noSession.body.pills[0].text,'Strong fit');
+  assert.equal(noSession.body.facts[0].value,'Entered by hand');
+});
+
+test('D1456 only null facts offer declared writer actions; consent never offers a repair', async () => {
+  const db=seeded();
+  const writer=(await real(db,10,'GET',rec('customer-research','2'))).body;
+  const reader=(await real(db,40,'GET',rec('customer-research','2'))).body;
+  assert.deepEqual(writer.facts.map((f:any)=>f.action??null),[null,null,'judge-fit','judge-need']);
+  assert.deepEqual(reader.facts.map((f:any)=>f.action??null),[null,null,null,null]);
+  assert.deepEqual(reader.actions,[]);
+  assert.equal(writer.actions.find((a:any)=>a.key==='judge-need').href,'/validate/customer-research/2?project=1#interview-tools');
+  const fit=writer.actions.find((a:any)=>a.key==='judge-fit');
+  assert.equal(fit.kind,'form');
+  assert.equal(fit.form.fields.length,1);
+  assert.deepEqual(fit.form.fields[0].options.map((o:any)=>o.value),['strong','partial','none']);
+  const judged=(await real(db,10,'GET',rec('customer-research','1'))).body;
+  assert.equal(judged.facts.some((f:any)=>f.action),false);
+  assert.equal(judged.actions.some((a:any)=>['judge-fit','judge-need'].includes(a.key)),false);
+});
+
+test('D1456 judge-fit uses the existing writer gate and refuses invalid fits and foreign records', async () => {
+  const db=seeded();
+  const path=rec('customer-research','2','/actions/judge-fit');
+  assert.equal((await real(db,40,'POST',path,{icp_fit:'strong'})).status,403);
+  assert.equal((await real(db,10,'POST',rec('customer-research','22','/actions/judge-fit'),{icp_fit:'strong'})).status,404);
+  for (const icp_fit of [null,'invalid',{},'strong', 'partial','none']) {
+    db.exec('UPDATE discovery_interviews SET icp_fit=NULL WHERE id=2');
+    const r=await real(db,10,'POST',path,{icp_fit});
+    assert.equal(r.status,['strong','partial','none'].includes(icp_fit as string)?200:400);
+    assert.equal(db.prepare('SELECT icp_fit FROM discovery_interviews WHERE id=2').get()!.icp_fit,r.status===200?icp_fit:null);
+  }
+});
+
+test('D1456 pending findings are primary only for the latest session, without another primary recording action', async () => {
+  const db=seeded();
+  const read=async()=> (await real(db,10,'GET',rec('customer-research','1'))).body;
+  let body=await read();
+  assert.deepEqual(body.actions.find((a:any)=>a.key==='review-findings'),{key:'review-findings',label:'Review findings (1)',kind:'link',tone:'primary',href:'/validate/customer-research/1?project=1#interview-review-findings',multipart:false});
+  assert.equal(body.actions.find((a:any)=>a.key==='open-recording').tone,'default');
+  db.exec("INSERT INTO validate_proposals(project_id,kind,payload_json,status,session_id,run_id) VALUES (1,'icp_fit','{}','pending',4,'synthetic-second')");
+  assert.equal((await read()).actions.find((a:any)=>a.key==='review-findings').label,'Review findings (2)');
+  db.exec("UPDATE validate_proposals SET status='discarded'");
+  body=await read();
+  assert.equal(body.actions.some((a:any)=>a.key==='review-findings'),false);
+  assert.equal(body.actions.find((a:any)=>a.key==='open-recording').tone,'primary');
+  db.exec("UPDATE validate_proposals SET status='pending'; INSERT INTO interview_sessions(id,uid,interview_id,project_id,created_by_user_id,channel) VALUES (99,'synthetic-latest',1,1,10,'text')");
+  body=await read();
+  assert.equal(body.pills[0].text,'Pasted');
+  assert.equal(body.actions.some((a:any)=>a.key==='review-findings'),false);
 });

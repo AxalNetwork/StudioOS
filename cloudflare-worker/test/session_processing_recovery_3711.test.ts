@@ -1,9 +1,10 @@
 /** #3711: synthetic recordings only; recovery reuses durable work. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fixture, seed, FOUNDER } from './_call_audio_fixture.ts';
+import { fixture, seed, FOUNDER, call } from './_call_audio_fixture.ts';
 import { loadSession } from '../src/services/interviewSessions.ts';
-import { recoverSession, runInterviewProcessJob } from '../src/services/interviewProcessing.ts';
+import { failProcessing, processingOf, recoverSession, runInterviewProcessJob } from '../src/services/interviewProcessing.ts';
+import { sweepInterviewSessions } from '../src/services/sessionSweeper.ts';
 import { transcriptHash } from '../src/services/validateEngine.ts';
 import { toSegments } from '../src/services/interviewStructuring.ts';
 
@@ -59,6 +60,8 @@ test('processing exceptions name the persisted step without leaking provider tex
     try { assert.equal(await runInterviewProcessJob(w.env,{session_id:w.id,user_id:FOUNDER}),'failed'); }
     finally {console.warn=warn;}
     const row = (await loadSession(w.env,w.id))!;
+    assert.equal(row.processing_failed_stage,stage);
+    assert.equal((await call(w.env,FOUNDER,'GET',`/sessions/${w.id}`)).body.processing.failed_stage,stage);
     assert.equal(row.processing_error,`${stage==='placing'?'Placing findings':stage==='summarising'?'Summarising':'Transcribing'} stopped unexpectedly. Try again to resume this step.`);
     assert.doesNotMatch(JSON.stringify(warnings), /SYNTHETIC_PRIVATE_PROVIDER_TEXT|Nothing was lost/);
     assert.match(JSON.stringify(warnings), new RegExp(stage));
@@ -81,4 +84,43 @@ test('a failed diagnostic read still records the processing failure and safe int
   assert.equal((await loadSession(w.env,w.id))!.processing_stage,'failed');
   assert.match(JSON.stringify(warnings),/bot_not_ready/);
   assert.doesNotMatch(JSON.stringify(warnings),/SYNTHETIC_READ_FAILURE/);
+});
+
+
+test('D1456 retry clears the recorded failed stage in the process response and active read',async()=>{
+  const w=world();
+  w.db.prepare("UPDATE interview_sessions SET processing_failed_stage='placing',submitted_via=NULL WHERE id=?").run(w.id);
+  const before=await call(w.env,FOUNDER,'GET','/sessions/active');
+  assert.equal(before.body.items.find((s:any)=>s.id===w.id).processing.failed_stage,'placing');
+  const r=await call(w.env,FOUNDER,'POST',`/sessions/${w.id}/process`,{});
+  assert.equal(r.status,202);
+  assert.equal(r.body.processing.failed_stage,null);
+  assert.equal((await loadSession(w.env,w.id))!.processing_failed_stage,null);
+  const active=await call(w.env,FOUNDER,'GET','/sessions/active');
+  assert.equal(active.status,200);
+  const rows=active.body.items;
+  assert.equal(rows.find((s:any)=>s.id===w.id).processing.failed_stage,null);
+});
+
+test('D1456 failure stores only the recorded stage; an old or never-failed session has no guessed step',async()=>{
+  const w=world();
+  for (const stage of ['uploading','transcribing','summarising','placing',null,'failed']) {
+    w.db.prepare('UPDATE interview_sessions SET processing_stage=?,processing_failed_stage=NULL WHERE id=?').run(stage,w.id);
+    await failProcessing(w.env,(await loadSession(w.env,w.id))!,'Synthetic safe failure');
+    const row=(await loadSession(w.env,w.id))!;
+    assert.equal(row.processing_failed_stage,['uploading','transcribing','summarising','placing'].includes(stage as string)?stage:null);
+    assert.equal(processingOf(row)!.failed_stage,row.processing_failed_stage);
+  }
+  w.db.prepare("UPDATE interview_sessions SET processing_stage='transcribing',processing_failed_stage=NULL WHERE id=?").run(w.id);
+  assert.equal(processingOf((await loadSession(w.env,w.id))!)!.failed_stage,null);
+});
+
+
+test('D1456 an upload with no arrived parts records uploading when the sweeper fails it',async()=>{
+  const w=world(0);
+  w.db.prepare("UPDATE interview_sessions SET processing_stage='uploading',processing_updated_at='2026-10-01 00:00:00' WHERE id=?").run(w.id);
+  await sweepInterviewSessions(w.env,new Date('2026-11-01T12:00:00Z'));
+  const row=(await loadSession(w.env,w.id))!;
+  assert.equal(row.processing_stage,'failed');
+  assert.equal(row.processing_failed_stage,'uploading');
 });
