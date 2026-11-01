@@ -151,7 +151,13 @@ bug in the first place.
 
 ---
 
-## 6. Known gap: per-item cards on dynamic routes
+## 6. Per-item cards on dynamic routes: closed by D1439
+
+**Closed** (D1439, #3914): the Worker card injector (`cloudflare-worker/src/services/socialCards.ts`)
+now answers `/events/*`, `/articles/*`, `/jobs/*`, `/u/*`, `/startups/*`,
+`/partners/*`, `/authors/*` and `/insights/public/*` with the record's own
+title, description and image, behind each page's own public gate. A missing or
+private record gets its section card. The record of the gap follows.
 
 Prerendering covers the fixed public routes. It cannot cover one HTML file per
 *item* on content routes — `/articles/<slug>`, `/jobs/<slug>`, `/events/<slug>`,
