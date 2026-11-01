@@ -61,6 +61,8 @@ export function runRefusalView(r: { refusal?: string | null; error?: string }): 
   // D788: the spend limit's words name the member's limit and its reset, which only the run's own message carries.
   if (BUDGET_REFUSALS.has(why)) return { status: 402, code: why, message: why === 'spend_limit' && r.error ? r.error : budgetRefusalMessage(why) };
   if (why === 'guard_blocked' || why === 'guard_blocked_output') return { status: 422, code: why, message: r.error || 'Eadwyn cannot help with that.' };
+  // #3935 (A (c)): a model the member's plan does not run, named in the plan's words; never swapped.
+  if (why === 'plan_locked') return { status: 403, code: why, message: r.error || 'This model is not on your plan.' };
   if (why === 'guard_unavailable' || why === 'misconfigured') return { status: 503, code: why, message: r.error || 'The AI check could not run. Nothing was charged.' };
   return null;
 }
