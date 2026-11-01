@@ -18,7 +18,7 @@ async function body(c: C) {
   return b as Record<string,any>;
 }
 function failure(c: C, e: unknown) {
-  if (e instanceof WorkRefusal) return refuse(c,e.status,{code:e.code,message:e.message,extra:e.blockers?{blockers:e.blockers}:undefined});
+  if (e instanceof WorkRefusal) return refuse(c,e.status,{code:e.code,message:e.sentence,extra:e.blockers?{blockers:e.blockers}:undefined});
   return mapError(c,e);
 }
 const absent = () => new WorkRefusal(404,'not_found','There is no project board or task here.');

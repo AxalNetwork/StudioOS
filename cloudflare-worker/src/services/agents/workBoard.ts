@@ -22,9 +22,10 @@ export type WorkTask = TaskRow & {
 export type WorkActor = { user: User; agentId?: never } | { agentId: number; user?: never };
 type Blocker = { uid: string; task_number: number | null; title: string };
 export class WorkRefusal extends Error {
-  status: number; code: string; blockers?: Blocker[];
-  constructor(status: number, code: string, message: string, blockers?: Blocker[]) {
-    super(message); this.status = status; this.code = code; this.blockers = blockers;
+  status: number; code: string; sentence: string; blockers?: Blocker[];
+  /** sentence is authored domain copy, including E1's typed validation refusals. */
+  constructor(status: number, code: string, sentence: string, blockers?: Blocker[]) {
+    super(sentence); this.status = status; this.code = code; this.sentence = sentence; this.blockers = blockers;
   }
 }
 const bad = (message: string): never => { throw new WorkRefusal(400, 'invalid_task', message); };
