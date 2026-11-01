@@ -15,7 +15,7 @@ import type { CalendarEvent } from '../calendar';
 import { sourceOf, type ItemSource } from './registry';
 
 /** The canvas's five families (D1205's `FAMILIES`), by kind. */
-export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'learning' | 'other';
+export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'learning' | 'grow' | 'other';
 export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   event_ticket: 'events',
   event_hosted: 'events',
@@ -35,6 +35,9 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   manual: 'events',
   // #3959: the member's own learning plan.
   learning: 'learning',
+  // D1486 §b (#3981): Grow's sends and planned pieces.
+  publish_send: 'grow',
+  content_planned: 'grow',
   // #3982 (D1486 §c): a round's close and an NDA's expiry are deadlines.
   round_close: 'deadlines',
   nda_expiry: 'deadlines',
@@ -66,6 +69,8 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   investor_in_room: 'In your deal room',
   yours: 'Your event',
   learning_plan: 'Your learning plan',
+  venture_team: 'Your venture’s team',
+  your_send: 'You confirmed this send',
   venture_round: 'Your venture’s round',
   nda_party: 'A party to this NDA',
   assigned_to_you: 'Assigned to you',
@@ -86,6 +91,8 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   deal_closing: 'investor_in_room',
   manual: 'yours',
   learning: 'learning_plan',
+  publish_send: 'your_send',
+  content_planned: 'venture_team',
   round_close: 'venture_round',
   nda_expiry: 'nda_party',
   workflow_task: 'assigned_to_you',
@@ -127,6 +134,9 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'interview_call': return ev.project_id ? `/validate/customer-research?project=${ev.project_id}` : null;
     // #3959: the Learning page the plan item names (its course, lesson, video, webinar, exercise or exam).
     case 'learning': return typeof ev.url === 'string' && ev.url.startsWith('/learning') ? ev.url : '/learning';
+    // D1486 §b: the send's Grow module, and Distribution for a planned piece.
+    case 'publish_send': return typeof ev.url === 'string' && ev.url.startsWith('/grow') ? ev.url : '/grow';
+    case 'content_planned': return '/grow/distribution';
     case 'round_close': return '/raise/capital-relationships';
     // #3983: a workflow task has no page of its own; the others open their board.
     case 'mvp_task': return '/build/board';

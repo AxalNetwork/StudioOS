@@ -6,7 +6,8 @@ import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence';
 import { reportError } from '../../../lib/log';
 import { Lightbox, Pill } from '../../../ui';
 import {
-  CHECK_INTRO, DIRTY_FIRST, NEITHER_RIGHT, NOTE_MAX, STATE_LABELS, STATE_TONE, checkNote, checkPills, claimLine, lastChecked, recordSource,
+  CHECK_INTRO, CONSISTENCY_EMPTY, CONSISTENCY_FAILED, CONSISTENCY_TITLE, DIRTY_FIRST, NEITHER_RIGHT, NOTE_MAX, STATE_LABELS, STATE_TONE,
+  cardsLabel, checkNote, checkPills, claimLine, consistencyView, lastChecked, recordSource,
   isFounderOnly, mayRunCheck, refusalText, sortClaims, summaryLine, useRecordLabel,
 } from './checkModel';
 
@@ -31,6 +32,13 @@ import {
  *                   be lost under the new version)
  *   Keep mine, with a note  a dialog; the figure stays a Mismatch, with the note
  *   Open Evidence ›  the claim on its own page
+ *
+ * D1555 (#3802): "Consistency · free", the deck's own figures card against
+ * card (one value per metric, use of funds = raise, runway = cash ÷ burn, the
+ * round's terms, forecast year 1 = ARR). It comes in the same reply, needs no
+ * model and so works with AI off; each finding names its cards with "Go to
+ * card ›". It failed: "Could not be read." with Try again. None: "Every
+ * figure is linked and consistent."
  */
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
 const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
@@ -41,7 +49,7 @@ const EYE = 'font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axa
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const LINK = 'text-[12px] font-bold text-axal-violet hover:underline dark:text-violet-300';
 
-export default function CheckPanel({ deck, projectId, readOnly, dirty, onReplaced }) {
+export default function CheckPanel({ deck, projectId, readOnly, dirty, onReplaced, onGoToCard }) {
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
   const [dialog, setDialog] = useState(null);
   const run = useCallback(async (write) => {
@@ -72,6 +80,7 @@ export default function CheckPanel({ deck, projectId, readOnly, dirty, onReplace
   const data = state.data;
   const canCheck = mayRunCheck(data, readOnly);
   const claims = sortClaims(data?.claims);
+  const consistency = data ? consistencyView(data.consistency) : { kind: 'none', rows: [] };
   return (
     <div className="flex flex-col gap-3" data-testid="pitch-check">
       <span className={MUTED}>{CHECK_INTRO}</span>
@@ -129,6 +138,35 @@ export default function CheckPanel({ deck, projectId, readOnly, dirty, onReplace
             </li>
           ))}
         </ul>
+      ) : null}
+      {consistency.kind !== 'none' ? (
+        <section className="flex flex-col gap-2" aria-label={CONSISTENCY_TITLE} data-testid="pitch-check-consistency">
+          <span className={EYE}>{CONSISTENCY_TITLE}</span>
+          {consistency.kind === 'unreadable' ? (
+            <div role="alert" className="flex flex-wrap items-center gap-2" data-testid="pitch-check-consistency-failed">
+              <span className="text-[12.5px] text-red-700 dark:text-red-300">{CONSISTENCY_FAILED}</span>
+              <button type="button" className={GHOST} onClick={() => run(canCheck)} data-testid="pitch-check-consistency-retry">Try again</button>
+            </div>
+          ) : null}
+          {consistency.kind === 'empty' ? <span className={MUTED} data-testid="pitch-check-consistency-empty">{CONSISTENCY_EMPTY}</span> : null}
+          {consistency.kind === 'findings' ? (
+            <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="pitch-check-consistency-rows">
+              {consistency.rows.map((f) => (
+                <li key={f.key} className="flex flex-col gap-1 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" data-testid={`pitch-check-consistency-${f.key}`}>
+                  <span className={`text-[12.5px] ${INK}`}>{f.message}</span>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{cardsLabel(f.cards)}</span>
+                    {onGoToCard ? f.cards.map((n) => (
+                      <button key={n} type="button" className={LINK} onClick={() => onGoToCard(n - 1)} data-testid={`pitch-check-consistency-go-${f.key}-${n}`}>
+                        {f.cards.length > 1 ? `Go to card ${n} ›` : 'Go to card ›'}
+                      </button>
+                    )) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
       ) : null}
       {dialog?.kind === 'use' ? (
         <UseRecordDialog deck={deck} claim={dialog.claim} dirty={dirty} onClose={() => setDialog(null)}

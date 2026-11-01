@@ -47,6 +47,7 @@ const ROOT = resolve(process.cwd());
 const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
   ['cloudflare-worker/src/services/agents', 'team agents (D1496): the catalogue, rule books, goals, tasks, the queue and the run'],
+  ['cloudflare-worker/src/contracts', 'deck v2 adapter reply contracts (D1511): one JSON Schema per swapped method, and their validator'],
   ['cloudflare-worker/src/services/agents/skills', 'the Axal starter skill library (#3953, D1612): one SKILL.md per skill'],
   ['cloudflare-worker/src/services/agents/skills/cases', 'one golden evaluation case per starter skill, for part D (#3954)'],
   ['frontend/src',                    'the SPA root — what each subtree is for'],
