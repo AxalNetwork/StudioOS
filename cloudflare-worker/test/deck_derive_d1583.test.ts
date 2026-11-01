@@ -340,6 +340,18 @@ test('the memo: memo_write on the AIRail\'s model, quoted first; its figures are
   } finally { f.close(); }
 });
 
+test('a memo whose placeholders fuse into a figure the deck never states is refused: 422 figure_in_output, nothing proposed', async () => {
+  // Two placeholders side by side put two of the deck's own values together ("42" and "42" read "4242"). Every
+  // sentence survives memoFrom, so only the route's stray-figure check stands between that number and the memo.
+  const f = await fixture(() => '## Summary\nThe team serves {{F1}}{{F1}} teams today.');
+  try {
+    const r = await call(f, 2, '/api/decks/7/derive', { format: 'memo' });
+    assert.deepEqual([r.status, r.body.error], [422, 'figure_in_output'], JSON.stringify(r.body));
+    assert.deepEqual(f.proposals(), [], 'nothing waits in Ask');
+    assert.deepEqual(f.derivatives(), []);
+  } finally { f.close(); }
+});
+
 test('refused before anything runs: an unknown format, another venture\'s deck, an empty version', async () => {
   const f = await fixture();
   try {
