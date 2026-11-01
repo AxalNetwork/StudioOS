@@ -56,7 +56,12 @@ const REMIX_CARD = {
     ? { id: `b-${a.id}`, kind: 'text', style: 'heading', grid: { c1: a.c1, c2: a.c2, r1: a.r1, r2: a.r2 }, text: 'Synthetic heading' }
     : { id: `b-${a.id}`, kind: 'text', style: 'paragraph', grid: { c1: a.c1, c2: a.c2, r1: a.r1, r2: a.r2 }, text: `Synthetic words ${i}` })),
 };
-const CONTRACTS: Record<string, { schema: string; requests: (deck: number) => Ask[] }> = {
+/**
+ * `reads`, when set, is the part of the reply the adapter method hands on (its schema's `x-reads`):
+ * `consistency` answers `deckCheckApi.read(…).consistency`, a part of the check's reply.
+ */
+const CONTRACTS: Record<string, { schema: string; reads?: string; requests: (deck: number) => Ask[] }> = {
+  consistency: { schema: 'deckConsistency.schema.json', reads: 'consistency', requests: (d) => [{ path: `/api/decks/${d}/check` }] },
   grid: { schema: 'deckGrid.schema.json', requests: (d) => [`/api/decks/${d}/grid`, `/api/decks/${d}/grid?aspect=16:9`, `/api/decks/${d}/grid?aspect=4:3`].map((path) => ({ path })) },
   stagePlan: { schema: 'deckStagePlan.schema.json', requests: (d) => [{ path: `/api/decks/${d}/stage-plan` }, { path: `/api/decks/${d}/stage-plan?stage=seed&investor_type=angel` }] },
   remix: { schema: 'deckRemix.schema.json', requests: (d) => [{ path: `/api/decks/${d}/remix`, body: { card: REMIX_CARD } }, { path: `/api/decks/${d}/remix`, body: { card: REMIX_CARD, remove: 'b-a2' } }] },
@@ -66,6 +71,8 @@ const CONTRACTS: Record<string, { schema: string; requests: (deck: number) => As
   withdrawInvestorLink: { schema: 'deckWithdrawInvestorLink.schema.json', requests: (d) => [1, 2].map(() => ({ path: `/api/decks/${d}/investor-links/${10 * d + 3}/withdraw`, body: {} })) },
 };
 const schemaOf = (file: string) => JSON.parse(readFileSync(new URL(file, CONTRACTS_DIR), 'utf8'));
+/** The seeded deck versions every request form is asked on. */
+const DECKS = [1, 2, 3, 4];
 
 function world() {
   const db = migratedDatabase();
@@ -78,7 +85,10 @@ function world() {
     structure: s.id, areas: s.areas,
     blocks: s.areas.map((a) => ({ id: `b-${a.id}`, kind: 'text', style: 'paragraph', grid: { c1: a.c1, c2: a.c2, r1: a.r1, r2: a.r2 }, text: `${s.label} ${a.id}: ${'words that a narrower cell cannot hold '.repeat(20)}`.trim() })),
   }))), 0, JSON.stringify({ kind: 'neutral_dark' }));
-  deck.run(3, 3, 'Empty', '[]', 1, JSON.stringify({ kind: 'brand', aspect: '4:3' }));
+  deck.run(3, 3, 'Empty', '[]', 0, JSON.stringify({ kind: 'brand', aspect: '4:3' }));
+  // A deck whose figures disagree (MRR stated twice, two values), so the consistency reply carries a finding.
+  const mrr = (value: string) => ({ layout: 'metric_tiles', blocks: [{ id: 'm1', kind: 'metric', grid: { c1: 1, c2: 4, r1: 2, r2: 4 }, label: 'MRR', value, binding: { source_key: 'grow.mrr', grade: 'Stated' } }] });
+  deck.run(4, 4, 'Disagreeing figures', JSON.stringify([mrr('$15,100'), mrr('$21,000')]), 1, null);
   // Investor links on every deck: a prospect's with an accepted NDA and views; a named investor's on a
   // variant, with no expiry and no cap; and one with a cap, to be withdrawn (D1565's three row shapes).
   // A deck pick for one element, so the element-models reply carries a pick and a non-default source.
@@ -86,7 +96,7 @@ function world() {
   db.prepare("INSERT INTO raise_prospects (id, uid, project_id, name, firm) VALUES (1, 'prospect-1', 1, 'Synthetic Investor', 'Synthetic Fund')").run();
   const link = db.prepare(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at, view_limit, view_count, prospect_id, investor_label, nda_required, variant_id, watermark_text, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  for (const d of [1, 2, 3]) {
+  for (const d of DECKS) {
     db.prepare("INSERT INTO deck_variants (id, uid, deck_id, project_id, name, created_by) VALUES (?, ?, ?, 1, 'Synthetic variant', ?)").run(d, `variant-${d}`, d, FOUNDER);
     link.run(10 * d + 1, d, `hash-${d}-1`, '2026-12-31 00:00:00', 5, 2, 1, null, 1, null, 'Synthetic Investor', FOUNDER);
     link.run(10 * d + 2, d, `hash-${d}-2`, '9999-12-31 00:00:00', null, 0, null, 'Synthetic angel', 0, d, null, FOUNDER);
@@ -118,6 +128,7 @@ test('every swapped adapter method has a contract schema tagged with its method 
     assert.equal(schema['x-adapter'], name, `${name}: x-adapter`);
     assert.equal(schema['x-issue'], ISSUE_OF(name), `${name}: x-issue is its SURFACES row's issue`);
     assert.match(schema['x-route'], /^(GET|POST|PUT|PATCH|DELETE) \/api\//, `${name}: x-route`);
+    assert.equal(schema['x-reads'], CONTRACTS[name].reads, `${name}: x-reads names the part of the reply the method reads`);
   }
 });
 
@@ -129,19 +140,23 @@ test('the real Worker\'s replies match each schema, for every request form and e
     let expected = 0;
     for (const name of SWAPPED) {
       const schema = schemaOf(CONTRACTS[name].schema);
-      for (const deck of [1, 2, 3]) {
+      const reads = CONTRACTS[name].reads;
+      for (const deck of DECKS) {
         const asks = CONTRACTS[name].requests(deck);
         expected += asks.length;
         for (const { path, body } of asks) {
           const r = await get(env, path, body);
           assert.equal(r.status, 200, `${path}: ${JSON.stringify(r.body)}`);
-          assert.deepEqual(validate(schema, r.body), [], `${name} ${path}`);
+          if (reads) assert.ok(reads in r.body, `${path} carries ${reads}`);
+          assert.deepEqual(validate(schema, reads ? r.body[reads] : r.body), [], `${name} ${path}`);
           checked += 1;
         }
       }
     }
-    assert.ok(expected >= 3 * SWAPPED.length, 'every swapped method is asked on every seeded deck');
+    assert.ok(expected >= DECKS.length * SWAPPED.length, 'every swapped method is asked on every seeded deck');
     assert.equal(checked, expected);
+    const check = (await get(env, '/api/decks/4/check')).body.consistency;
+    assert.deepEqual(check.findings.map((f: any) => [f.rule, f.cards]), [['one_value', [1, 2]]], 'a finding validates too');
     const remix = await get(env, '/api/decks/2/remix', { card: REMIX_CARD });
     assert.ok(remix.body.options.length >= 1, 'the remix offers layouts, and each validated');
     const title = (await get(env, '/api/decks/1/element-models')).body.elements.find((e: any) => e.element === 'title');

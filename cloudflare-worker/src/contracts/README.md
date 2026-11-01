@@ -9,6 +9,7 @@ adapter swap change no screen.
 | --- | --- | --- | --- |
 | `deckGrid.schema.json` | `grid` | `GET /api/decks/:id/grid` (`cloudflare-worker/src/routes/deck_grid.ts`, D1499; `?aspect=` adds `reflow` and `reflow_map`, D1554) | #3749 |
 | `deckStagePlan.schema.json` | `stagePlan` | `GET /api/decks/:id/stage-plan` (`cloudflare-worker/src/routes/deck_stage.ts`, D1522) | #3774 |
+| `deckConsistency.schema.json` | `consistency` | the `consistency` part of `GET /api/decks/:id/check` (`cloudflare-worker/src/routes/deck_check.ts`, D1555); `x-reads` names the part, null for a reader who is not the founder | #3802 |
 | `deckElementModels.schema.json` | `elementModels` | `GET /api/decks/:id/element-models` (`cloudflare-worker/src/routes/deck_element_models.ts`, D1503) | #3754 |
 | `deckInvestorLinks.schema.json` | `investorLinks` | `GET /api/decks/:id/investor-links` (`cloudflare-worker/src/routes/deck_investor_links.ts`, D1565) | #3812 |
 | `deckWithdrawInvestorLink.schema.json` | `withdrawInvestorLink` | `POST /api/decks/:id/investor-links/:shareId/withdraw` (same route file). Its `$defs.link` is the list's, and the test holds the two equal | #3812 |

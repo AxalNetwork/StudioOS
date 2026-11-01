@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deckConsistency.schema.json",
+  "title": "The deck's consistency findings",
+  "description": "D1511 (#3762): the `consistency` part of the 200 reply of GET /api/decks/:id/check (routes/deck_check.ts, D1555, services/deckConsistency.ts), which is what deckV2Adapter.js `consistency` reads (`deckCheckApi.read(…).consistency`). It is null for a reader who is not the venture's founder. Every object is closed.",
+  "x-adapter": "consistency",
+  "x-route": "GET /api/decks/:id/check",
+  "x-reads": "consistency",
+  "x-issue": 3802,
+  "anyOf": [
+    { "type": "null" },
+    {
+      "type": "object",
+      "required": ["state", "findings"],
+      "additionalProperties": false,
+      "properties": {
+        "state": { "enum": ["ok", "unreadable"] },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "rule", "message", "cards"],
+            "additionalProperties": false,
+            "properties": {
+              "key": { "type": "string", "pattern": "^[a-z_]+(:[a-z0-9_]+)+$" },
+              "rule": { "enum": ["one_value", "use_of_funds", "runway", "round", "forecast"] },
+              "message": { "type": "string", "minLength": 1 },
+              "cards": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1 } }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
