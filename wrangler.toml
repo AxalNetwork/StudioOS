@@ -88,8 +88,12 @@ custom_domain  = true
 # invoking the Hono router. `/mcp` and `/mcp/*` are the MCP server
 # (D784), answered before the Hono app. `/account/developer` and
 # `/account/developer/*` are D1315's 308s to `/account/builder`, so a page load
-# of an old address is redirected by the Worker. Patterns use the same syntax as Workers
-# routes (`*` wildcards, not regex).
+# of an old address is redirected by the Worker. The eight record prefixes
+# (`/events/*` … `/insights/public/*`) are D1439's social cards: the Worker
+# reads the record behind the page's own public gate and rewrites the shell's
+# Open Graph tags (`services/socialCards.ts`), setting the `_headers` values
+# itself. These are `[assets]` globs, never a path-scoped apex route. Patterns
+# use the same syntax as Workers routes (`*` wildcards, not regex).
 #
 # Vite is configured (frontend/vite.config.js) to build into the
 # repo-root `./docs/` directory. The path dates from when GitHub Pages
@@ -118,7 +122,7 @@ not_found_handling = "single-page-application"
 # URL, and the one every `location.replace('/login')` uses — and sends
 # `/login/` to `/login` once.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -756,7 +760,7 @@ not_found_handling = "single-page-application"
 # production deploy that kept the default would 307 `/login` back to
 # `/login/` — the URL Safari crashes on.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get

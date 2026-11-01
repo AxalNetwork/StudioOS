@@ -27,6 +27,7 @@
 import type { Env } from '../../types';
 import { snapshotHash, sourceAndGrade, type Grade, type Origin, type SourceLabel, type Unit } from './sources';
 import { CHART_TYPES } from './slideModel';
+import { posthogDeckLink, posthogWauWeekly } from '../posthog/deckFacts';
 
 export type Point = { x: string; y: number };
 export type Cadence = 'monthly' | 'weekly';
@@ -106,6 +107,18 @@ const interviewsWeekly: Def['read'] = async (env, projectId) => {
   return { points, origin, record_ref: `discovery_interviews:${rows.length}`, asOf: held[held.length - 1] };
 };
 
+/**
+ * D1601 (#3880): weekly active users from the facts PostHog's feeds store for
+ * the venture's linked project. No feed stores them yet (#3731), so the series
+ * is not recorded, never a run of zeros.
+ */
+const wauWeekly: Def['read'] = async (env, projectId) => {
+  const link = await posthogDeckLink(env, projectId);
+  const got = link ? await posthogWauWeekly(env, link) : null;
+  if (!got) return null;
+  return { points: got.points.filter((p) => day(p.x) && num(p.y) != null), origin: 'connector', record_ref: `posthog:${got.ref}`, asOf: day(got.as_of) };
+};
+
 const REVENUE = { module: 'Grow › Revenue and traction', href: q('/grow/revenue-and-traction') };
 const METRICS: Array<{ key: string; label: string; unit: Unit; col: MetricCol }> = [
   { key: 'grow.mrr', label: 'MRR', unit: 'usd', col: 'mrr' },
@@ -121,6 +134,7 @@ export const CHART_SERIES: Def[] = [
     { key: `${m.key}.typed`, label: `Typed ${m.label}`, unit: m.unit, cadence: 'monthly' as const, ...REVENUE, read: metricSeries(m.col, false) },
   ]),
   { key: 'validate.interviews.weekly', label: 'Interviews per week', unit: 'count', cadence: 'weekly', module: 'Validate › Customer research', href: q('/validate/customer-research'), read: interviewsWeekly },
+  { key: 'grow.wau.weekly', label: 'Weekly active users', unit: 'count', cadence: 'weekly', module: 'Connectors › PostHog', href: () => '/account/connectors/posthog', read: wauWeekly },
 ];
 
 const DEFS = new Map(CHART_SERIES.map((d) => [d.key, d]));

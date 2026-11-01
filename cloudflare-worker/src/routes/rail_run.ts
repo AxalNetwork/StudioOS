@@ -68,7 +68,7 @@ const SENTENCES: Record<string, string> = {
   record_not_found: 'That record is not on this venture.',
   nothing_to_fill: 'Every field Eadwyn can fill already holds a value.',
   // D1329 (#3490).
-  no_profile: 'Fill opens once you hold a venture or a profile.',
+  no_profile: 'Ask opens once you hold a venture or a profile.', // #3740: matches EXPLORER_OFF (lib/fillScoped.js)
   record_not_available: 'You cannot change this record.',
   // D1595 (#3868).
   rows_not_offered: 'This form adds one record at a time.',

@@ -51,6 +51,12 @@ const line = (o: Partial<RaiseLine>): RaiseLine => ({
   posted: true, internal: false, voided: false, ...o,
 });
 
+// The sync route reads its own clock (`today()` in cycle_raise.ts), while the fake's cashflow and lines are
+// fixed at July–September 2026, the last three full months on TODAY. Pin the clock to TODAY so the route sees
+// the same months the fixture was written for; on the real calendar these tests went red on 2026-11-01.
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: Date.parse(`${TODAY}T12:00:00Z`) }));
+afterEach(() => mock.timers.reset());
+
 test('1. the rules: full months, runway, spend, sections, investment, matching and revenue', () => {
   // Mutations checked: the current month counted as full; the runway averaged over 2 months or with a missing
   // month; a credit counted as spend; an internal move counted; the $10,000 floor dropped; a card credit taken as a
