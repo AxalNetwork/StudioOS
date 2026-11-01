@@ -97,7 +97,8 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Validate · Customer research', key: 'transcribe:session', route: '/validate/record/live', label: 'Stop and process', kind: 'speech', handler: 'transcribe',
-    at: [['frontend/src/lib/activeRecording.js', 'api.finish('], ['frontend/src/lib/activeRecording.js', 'api.process(']],
+    // D1455 (#3710, REC2): the session page's Try again runs the same processing again.
+    at: [['frontend/src/lib/activeRecording.js', 'api.finish('], ['frontend/src/lib/activeRecording.js', 'api.process('], [SESSION, 'api.process(']],
     // The store runs it; the live view, which draws the processing, names it.
     rail: ['frontend/src/pages/founder/RecordingView.jsx'],
   },

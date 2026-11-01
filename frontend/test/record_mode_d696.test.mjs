@@ -89,14 +89,16 @@ test('6. record reads skip the module and render header/back, body, and paged ac
   const view = await mounted(defaultHandler);
   try {
     assert.match(view.text(), /Build · Solution designExample feature/);
-    assert.match(view.text(), /‹ Back to Solution design/);
+    // D1454 (#3710, IV-D1): "‹ Solution design" above the eyebrow, never a relabelled tab.
+    assert.match(view.text(), /‹ Solution design/); assert.doesNotMatch(view.text(), /Back to Solution design/);
     assert.match(view.text(), /RecordExample feature/);
     assert.ok(view.requests.some(r => r.url.includes('/records/7?project=3')));
     assert.ok(!view.requests.some(r => /modules\/solution-design\?/.test(r.url)));
     assert.ok(view.fiber('RecordView')); assert.equal(view.fiber('FillProposals'), null); assert.equal(view.fiber('ZoneDraft'), null);
     assert.ok(!view.nodes().some(n => view.props(n)?.['data-testid'] === 'cycle-action'));
-    const back = view.nodes().find(n => view.props(n)?.href === '/build/solution-design?project_id=3' && String(view.props(n)?.children).includes('Back'));
-    assert.ok(back); assert.equal(view.props(back)['aria-current'], undefined);
+    const back = view.nodes().find(n => view.props(n)?.['data-testid'] === 'record-back');
+    assert.ok(back); assert.equal(view.props(back).to ?? view.props(back).href, '/build/solution-design?project_id=3');
+    assert.ok(!view.nodes().some(n => view.props(n)?.['aria-current'] === 'page'), 'on a record no tab is the current page');
     await view.click('Show all'); assert.match(view.text(), /Later activity/);
     assert.ok(view.requests.some(r => r.url.endsWith('/activity?project=3&page=2')));
     assert.ok(!view.nodes().some(n => n.tagName === 'BUTTON' && view.props(n)?.children === 'Show all'));
@@ -111,11 +113,12 @@ test('6. writes confirm outside the size container; cancel sends nothing; delete
     return deleted && url.includes('/records/') ? response({ detail: 'Record not found.' }, 404) : defaultHandler(url, opts);
   });
   try {
-    await view.click('Delete'); assert.match(view.text(), /Delete feature\?[\s\S]*This removes the feature/);
+    // D1454: Delete sits in the header row's ⋯.
+    await view.click('⋯'); await view.click('Delete'); assert.match(view.text(), /Delete feature\?[\s\S]*This removes the feature/);
     const dialog = view.fiber('Lightbox'); assert.ok(dialog);
     let parent = dialog.return; while (parent) { assert.notEqual(parent.memoizedProps?.['data-testid'], 'cycle-route-body'); assert.ok(!String(parent.memoizedProps?.className).includes('@container/cycle')); parent = parent.return; }
     await view.click('Cancel'); assert.ok(!view.requests.some(r => r.options.method === 'POST'));
-    await view.click('Delete'); await view.click('Delete permanently'); await view.flush();
+    await view.click('⋯'); await view.click('Delete'); await view.click('Delete permanently'); await view.flush();
     assert.ok(view.requests.some(r => r.url.endsWith('/actions/delete?project=3')));
     assert.equal(view.out.location.pathname, '/build/solution-design');
   } finally { await view.close(); }
@@ -215,7 +218,7 @@ test('10. headers carry the canvas copy and the record select starts at its titl
   assert.match(html({}), /Validate · Is this worth building/);
   assert.match(html({}), /The cycle’s data at a glance; the tabs above move between modules/);
   const out = html({ record: true, active: 'problem-discovery', moduleName: 'Problem discovery', title: 'Example theme', sub: 'The stored description.', cards: [{ slug: 'problem-discovery', name: 'Problem discovery' }], action: { onClick() {}, label: 'Never on record' } });
-  assert.match(out, /Validate · Problem discovery/); assert.match(out, /‹ Back to Problem discovery/);
+  assert.match(out, /Validate · Problem discovery/); assert.match(out, /‹ Problem discovery/); assert.doesNotMatch(out, /Back to Problem discovery/);
   assert.match(out, /value="record" selected="">Example theme/); assert.doesNotMatch(out, /Never on record|aria-current="page"/);
 });
 

@@ -29,6 +29,8 @@ export const END_TITLE = 'End your read now?';
 export const END_BODY = 'The founder’s list shows it ended early. To read again you give a new reason.';
 export const END_FAILED = 'Your read could not be ended. Try again.';
 export const ENDED_EARLY = 'Ended early';
+/** RR05: the line above the gate once an admin ends their own read. */
+export const ENDED_NOW = 'Your read ended. The founder sees it ended early.';
 export const ONE_OPEN = 'one open';
 
 const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
