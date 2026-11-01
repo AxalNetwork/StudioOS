@@ -69,6 +69,8 @@ register(${JSON.stringify(pathToFileURL(hook).href)},import.meta.url);`);
 // A variant removes a real safety/control branch; a failing assertion must
 // reject it. Syntax/import failures do not count as killed mutations.
 const variants = [
+  {"name":"swap-archive-precondition","file":"cloudflare-worker/src/routes/data_room.ts","edits":[["AND EXISTS (SELECT 1 FROM data_room_file_versions WHERE id = ? AND file_id = ? AND r2_key = ?)","AND (? IS NOT NULL AND ? IS NOT NULL AND ? IS NOT NULL)"]],"pattern":"stale make-current pair"},
+  {"name":"swap-first-write-guard","file":"cloudflare-worker/src/routes/data_room.ts","edits":[["AND changes() = 1",""]],"pattern":"stale make-current pair"},
   {"name":"cofounder-owner-gate","file":"cloudflare-worker/src/routes/data_room.ts","edits":[["if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);","if (false) return c.json(OWNER_ONLY, 403);"]],"pattern":"untagged"},
   {"name":"admin-support-gate","file":"cloudflare-worker/src/routes/data_room.ts","edits":[["if (user.role === 'admin') return c.json({ code: 'support_read_required'","if (false) return c.json({ code: 'support_read_required'"]],"pattern":"untagged"},
   {"name":"boolean-body","file":"cloudflare-worker/src/routes/data_room.ts","edits":[["typeof body.enabled !== 'boolean'","false"]],"pattern":"untagged"},

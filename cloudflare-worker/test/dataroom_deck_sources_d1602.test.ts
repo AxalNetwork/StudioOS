@@ -206,6 +206,34 @@ test('replacing and making a version current invalidate and enqueue atomically; 
   } finally { f.db.close(); }
 });
 
+test('a stale make-current pair changes neither row, derived values nor queued attempts', async () => {
+  for (const changed of ['archive', 'current']) {
+    const f = await fixture();
+    try {
+      await f.request(); await extractDataroomFile(f.env, f.payload());
+      await replaceDataRoomFile(f.env, { project: { id: 7, uid: 'p-room' }, userId: 1, fileId: 11, bytes: new TextEncoder().encode('Revenue,2400000'), contentType: 'text/csv' });
+      await extractDataroomFile(f.env, f.payload());
+      const snapshot = () => ({
+        file: f.db.prepare('SELECT * FROM data_room_files WHERE id = 11').get(),
+        archive: f.db.prepare('SELECT * FROM data_room_file_versions WHERE file_id = 11').all(),
+        values: f.values(), jobs: f.db.prepare('SELECT * FROM queue_jobs').all(),
+      });
+      const batch = f.env.DB.batch.bind(f.env.DB); let before: any;
+      f.env.DB.batch = async (statements: any[]) => {
+        // Another writer wins after the route's reads, before this transaction.
+        if (changed === 'archive') f.db.exec("UPDATE data_room_file_versions SET r2_key = 'data-room/p-room/other' WHERE file_id = 11");
+        else f.db.exec("UPDATE data_room_files SET r2_key = 'data-room/p-room/current', deck_source_token = 'other-writer' WHERE id = 11");
+        before = snapshot(); f.env.DB.batch = batch;
+        return batch(statements);
+      };
+      const result = await f.request(1, {}, '/versions/1/current', 'POST');
+      assert.equal(result.status, 409, changed);
+      assert.equal(result.body.code, 'version_conflict');
+      assert.deepEqual(snapshot(), before, 'the losing request commits no partial swap or extraction reset');
+    } finally { f.db.close(); }
+  }
+});
+
 test('code readers reject ambiguous, missing and formula-only values and never turn a missing value into zero', () => {
   assert.deepEqual(valuesFromRows(csvRows('Metric,2026,2027\nRevenue,1000000,1200000\nNotes,2028'), null).map(v => v.value), [1200000], 'a date in a note cannot change the selected forecast column');
   assert.deepEqual(valuesFromRows(csvRows('Revenue 2027,"1,200,000"\nHeadcount,2027'), null).map(v => v.value), [1200000, 2027]);

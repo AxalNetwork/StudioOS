@@ -1181,16 +1181,20 @@ r.post('/:projectUid/files/:uid/versions/:n/current', async (c) => {
     const swapToken = crypto.randomUUID();
     const fileSwap = deckReady ? c.env.DB.prepare(
       `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ?, deck_source_token = ?
-        WHERE id = ? AND project_id = ? AND r2_key = ?`,
-    ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, swapToken, file.id, project.id, file.r2_key) : c.env.DB.prepare(
+        WHERE id = ? AND project_id = ? AND r2_key = ?
+          AND EXISTS (SELECT 1 FROM data_room_file_versions WHERE id = ? AND file_id = ? AND r2_key = ?)`,
+    ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, swapToken, file.id, project.id, file.r2_key, version.id, file.id, version.r2_key) : c.env.DB.prepare(
       `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ?
-        WHERE id = ? AND project_id = ? AND r2_key = ?`,
-    ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, file.id, project.id, file.r2_key);
+        WHERE id = ? AND project_id = ? AND r2_key = ?
+          AND EXISTS (SELECT 1 FROM data_room_file_versions WHERE id = ? AND file_id = ? AND r2_key = ?)`,
+    ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, file.id, project.id, file.r2_key, version.id, file.id, version.r2_key);
     const [toFile, toVersion] = await c.env.DB.batch([
       fileSwap,
+      // No intervening statement: changes() is the first swap's affected-row count.
+      // A stale pair must not move the archive even if another writer chose the same key.
       c.env.DB.prepare(
         `UPDATE data_room_file_versions SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by = ?, updated_at = ?
-          WHERE id = ? AND r2_key = ?
+          WHERE id = ? AND r2_key = ? AND changes() = 1
             AND EXISTS (SELECT 1 FROM data_room_files WHERE id = ? AND r2_key = ?)`,
       ).bind(file.r2_key, file.content_type, file.size_bytes, file.uploaded_by_user_id, at, version.id, version.r2_key, file.id, version.r2_key),
       ...(deckReady ? resetSourceStatements(c.env, file.id, project.id, version.r2_key, swapToken, Number(user.id)) : []),
