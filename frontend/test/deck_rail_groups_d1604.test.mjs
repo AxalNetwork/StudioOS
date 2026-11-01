@@ -38,6 +38,7 @@ import { railPrefsApi } from '../src/lib/api/railPrefs.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 import { DECK_RAIL_GROUPS, DECK_RAIL_PAGE, PRESETS, deckRail, groupAnswer, heldNow, railItems, usedBy } from '../src/pages/raise/pitch/deckRailGroups.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
+import { deckUsageApi } from '../src/lib/api/deckUsage.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -93,12 +94,19 @@ test('Held now is the holds read summed; a reply that is not a list is not $0.00
   assert.equal(heldNow(null), null);
 });
 
-test('the deck\'s estimate and spend read the adapter and are off on this base', async () => {
+test('the deck\'s estimate and spend read the adapter: off while the route answers 404, drawn from GET /api/decks/:id/usage (D1524)', async () => {
   const rail = deckRail(31);
   const rows = Object.fromEntries(rail.usage.map((r) => [r.id, r]));
-  assert.ok(rows.estimated.hideUnavailable && rows.spent.hideUnavailable, 'not drawn while off');
-  assert.deepEqual(await rows.estimated.read(), { available: false, reason: 'Not switched on yet.', issue: 3776 });
-  assert.deepEqual(await rows.spent.read(), { available: false, reason: 'Not switched on yet.', issue: 3776 });
+  assert.ok(rows.estimated.hideUnavailable && rows.spent.hideUnavailable && rows.units.hideUnavailable, 'not drawn while off');
+  const real = deckUsageApi.usage;
+  try {
+    deckUsageApi.usage = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await rows.estimated.read(), { available: false, reason: 'Not switched on yet.', issue: 3776 });
+    assert.deepEqual(await rows.spent.read(), { available: false, reason: 'Not switched on yet.', issue: 3776 });
+    deckUsageApi.usage = async () => ({ estimated: { available: true, value_microusd: 350000 }, spent: { available: true, value_microusd: 210000 }, units: {} });
+    assert.deepEqual(await rows.estimated.read(), { available: true, value: '$0.35' });
+    assert.deepEqual(await rows.spent.read(), { available: true, value: '$0.21' });
+  } finally { deckUsageApi.usage = real; }
   assert.equal((await PRESETS.read()).issue, 3796);
 });
 

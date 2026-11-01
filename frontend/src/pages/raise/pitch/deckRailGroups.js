@@ -119,6 +119,23 @@ const money = (micro) => `$${(Math.max(0, Number(micro) || 0) / 1e6).toFixed(2)}
  * hold and how many they are, or null when the reply is not a list (the row
  * then says it could not be read, never $0.00).
  */
+/**
+ * D1524 (#3776): the balance in plain units, "About 40 text areas or 12
+ * images", from the top-up balance and the deck's per-run prices. Dollars
+ * elsewhere, never credits. Null when either price or the balance is unknown.
+ */
+export function plainUnits(balanceMicro, units) {
+  if (balanceMicro == null || balanceMicro === '') return null;
+  const b = Number(balanceMicro);
+  const t = Number(units?.text_area_microusd);
+  const i = Number(units?.image_microusd);
+  if (!Number.isFinite(b) || b < 0 || !(t > 0) || !(i > 0)) return null;
+  return `About ${Math.floor(b / t)} text areas or ${Math.floor(b / i)} images`;
+}
+
+/** A row of the deck's usage: the formatted figure, or "Could not be read" when the Worker could not read it. */
+const usageRow = (a, key) => (a?.available ? (a.value?.[key] ? { available: true, value: a.value[key] } : { available: false, unreadable: true }) : a);
+
 export function heldNow(reply) {
   const list = Array.isArray(reply?.holds) ? reply.holds : null;
   if (!list) return null;
@@ -145,8 +162,19 @@ export function deckRail(deckId = null) {
           return v == null ? { available: false, unreadable: true } : { available: true, value: v };
         }),
       },
-      { id: 'estimated', label: 'Estimated for this deck', hideUnavailable: true, read: () => deckUsage(deckId).then((a) => (a?.available ? { available: true, value: a.value?.estimated } : a)) },
-      { id: 'spent', label: 'Spent on this deck', hideUnavailable: true, read: () => deckUsage(deckId).then((a) => (a?.available ? { available: true, value: a.value?.spent } : a)) },
+      { id: 'estimated', label: 'Estimated for this deck', hideUnavailable: true, read: () => deckUsage(deckId).then((a) => usageRow(a, 'estimated')) },
+      { id: 'spent', label: 'Spent on this deck', hideUnavailable: true, read: () => deckUsage(deckId).then((a) => usageRow(a, 'spent')) },
+      {
+        id: 'units', label: 'Your balance in plain units', hideUnavailable: true,
+        read: async () => {
+          const a = await deckUsage(deckId);
+          if (!a?.available) return a;
+          try {
+            const line = plainUnits((await aiBudgetApi.mine())?.balance_microusd, a.value?.units);
+            return line ? { available: true, value: line } : { available: false, unreadable: true };
+          } catch { return { available: false, unreadable: true }; }
+        },
+      },
     ],
   };
 }

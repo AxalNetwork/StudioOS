@@ -48,6 +48,7 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 
 export { NOT_ON };
 
@@ -108,7 +109,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'deckUsage']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -155,7 +156,16 @@ export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 export const figures = off('figures');
-export const deckUsage = off('deckUsage');
+/**
+ * D1524 (#3776): the deck's estimate and spend, formatted for the rail rows,
+ * with the per-run prices the plain-units line divides the balance by. A
+ * figure the Worker could not read is null, never $0.00.
+ */
+export const deckUsage = (deckId) => through(async () => {
+  const r = await deckUsageApi.usage(deckId);
+  const dollars = (m) => (m?.available && Number.isFinite(Number(m.value_microusd)) ? `$${(Number(m.value_microusd) / 1e6).toFixed(2)}` : null);
+  return { estimated: dollars(r?.estimated), spent: dollars(r?.spent), units: r?.units ?? null };
+}, SURFACES.deckUsage.issue);
 export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
 export const elementsLibrary = off('elementsLibrary');
