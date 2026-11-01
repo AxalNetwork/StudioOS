@@ -25,6 +25,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { dohAnswer } from './_doh_fake.mjs';
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const has = (b: Uint8Array, s: string) => Buffer.from(b).includes(Buffer.from(s, 'latin1'));
@@ -109,6 +110,8 @@ async function fixture() {
   const fetched: string[] = [];
   globalThis.fetch = (async (input: any) => {
     const url = String(input?.url ?? input);
+    const dns = dohAnswer(url);
+    if (dns) return dns;
     fetched.push(url);
     if (url === 'https://img.example.test/a.jpg') return new Response(jpeg(800, 600), { status: 200 });
     if (url === 'https://img.example.test/huge.png') return new Response(png(9000, 9000), { status: 200 });
@@ -147,7 +150,7 @@ test('a save copies an outside image in and names the copy; one that cannot be c
     const before = f.versions();
     // #3920: each save is made on top of the newest version.
     let current = s.body.id;
-    for (const [url, reason] of [['https://10.0.0.7/x.png', null], ['https://hop.example.test/r', 'unsafe_url'],
+    for (const [url, reason] of [['https://10.0.0.7/x.png', null], ['https://hop.example.test/r', 'host_refused'],
       ['http://img.example.test/a.jpg', null], ['https://img.example.test/huge.png', 'image_too_large'], ['https://img.example.test/gone.png', 'fetch_failed']] as const) {
       const r = await call(f, `/api/decks/${current}`, { method: 'PUT', json: { slides: cardWith(url), title: 'Synthetic deck' } });
       if (reason === null) {
@@ -211,7 +214,8 @@ test('an export copies an older version\'s outside images first, and one it cann
     assert.equal(r.status, 200, JSON.stringify(r.body));
     const stored = JSON.parse((f.db.prepare('SELECT slides FROM pitch_decks WHERE id = 7').get() as any).slides);
     const [row] = f.rows();
-    assert.equal(stored[0].image_url, `${ORIGIN}/api/decks/images/${row.uid}/file`, 'the version now names the copy');
+    assert.equal(stored[0].image_url, 'https://img.example.test/a.jpg', 'the historical version is unchanged');
+    assert.equal(row.state, 'kept', 'the export has an owned copy');
     assert.equal(stored[1].image_url, 'https://10.0.0.7/x.png', 'one that could not be copied stays as it was');
     assert.equal(f.fetched.includes('https://10.0.0.7/x.png'), false, 'and is never fetched');
   } finally { f.close(); }

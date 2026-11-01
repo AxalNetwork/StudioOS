@@ -66,6 +66,7 @@ function fixture() {
   // D1020: vesting rows carry their venture (migration 574's column).
   db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER');
   db.exec(sqlOf('567_deck_share_nda_include.sql')); // D902: a link's NDA and what it includes
+  addColumnsFrom(db, stripForeignKeys(sqlOf('738_deck_variants_and_investor_links.sql')), 'pitch_deck_share_tokens'); // D1565: the variant and the recipient watermark
   raiseEvidenceTables(db);
   db.exec(sqlOf('544_narrative_sections.sql')); // D908: a version based on another copies its narrative stores
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
@@ -463,6 +464,7 @@ function linksFixture() {
   addColumnsFrom(db, stripForeignKeys(sqlOf('463_raise_record_stores.sql')), 'pitch_deck_share_tokens');
   db.exec(sqlOf('549_deck_share_nullable_view_limit.sql'));
   db.exec(sqlOf('567_deck_share_nda_include.sql')); // D902, after 549's rebuild
+  addColumnsFrom(db, stripForeignKeys(sqlOf('738_deck_variants_and_investor_links.sql')), 'pitch_deck_share_tokens'); // D1565: the variant and the recipient watermark
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Kestrel Labs', 1001)`);
   db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides) VALUES (${DECK}, ${P}, 1, '[]')`);
   return db;
@@ -797,6 +799,7 @@ function cycleFixture() {
   raiseEvidenceTables(db);
   db.exec(sqlOf('549_deck_share_nullable_view_limit.sql'));
   db.exec(sqlOf('567_deck_share_nda_include.sql')); // D902, after 549's rebuild
+  addColumnsFrom(db, stripForeignKeys(sqlOf('738_deck_variants_and_investor_links.sql')), 'pitch_deck_share_tokens'); // D1565: the variant and the recipient watermark
   db.exec(sqlOf('544_narrative_sections.sql'));
   personalMatchTables(db); // D752: the trigger on raise_prospects
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');

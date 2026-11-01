@@ -35,9 +35,12 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { logCycleWriteStatement } from '../services/cycleActivity';
 import { getDeckBrand } from '../services/decks/branding';
-import { boundedDownload } from '../services/channels/providerHttp';
 import { imageDataUri, imageUrlsOf, sniffImage, writeOfflineDeck, type ImageKind } from '../services/decks/offlineHtml';
-import { copyStoredDeckImages, exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken } from './decks';
+import { fetchExternalImage } from '../services/decks/imageSafety';
+import type { ExportImageCopies } from '../services/decks/imageCopy';
+import { dohResolver } from '../integrations/customMcp';
+import { copyStoredDeckImages, exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken, themeOfRow } from './decks';
+import { deckCompliance } from '../services/decks/compliance';
 import { context as workspaceContext, member } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { createPresentation, driveName } from '../services/google/driveCreate';
@@ -74,11 +77,11 @@ export async function sha256Hex(bytes: ArrayBuffer | Uint8Array): Promise<string
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-type DeckRow = { id: number; project_id: number; version: number | null; title: string | null; slides: string | null };
+type DeckRow = { id: number; project_id: number; version: number | null; title: string | null; slides: string | null; theme_json?: string | null };
 
 async function deckRow(env: Env, id: number): Promise<DeckRow | null> {
   if (!Number.isSafeInteger(id) || id < 1) return null;
-  return env.DB.prepare('SELECT id, project_id, version, title, slides FROM pitch_decks WHERE id = ?').bind(id).first<DeckRow>();
+  return env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<DeckRow>();
 }
 
 /** The ledger row, and (when asked) its audit row, as one batch. */
@@ -110,10 +113,12 @@ export async function fetchImages(urls: string[]): Promise<Map<string, { kind: I
   const out = new Map<string, { kind: ImageKind; bytes: Uint8Array } | null>();
   const wanted = urls.slice(0, IMAGES_MAX);
   for (const u of urls.slice(IMAGES_MAX)) out.set(u, null);
+  const resolve = dohResolver(fetch);
   const got = await Promise.all(wanted.map(async (u) => {
     const safe = sanitizeImageUrl(u);
     if (!safe) return null;
-    const d = await boundedDownload(safe, { maxBytes: IMAGE_MAX_BYTES, deadlineMs: IMAGE_DEADLINE_MS });
+    // D1506: through the DNS-checked fetcher (public addresses only, redirects checked hop by hop).
+    const d = await fetchExternalImage(safe, resolve, fetch, IMAGE_DEADLINE_MS, IMAGE_MAX_BYTES);
     if (!d.ok) return null;
     const kind = sniffImage(d.bytes);
     return kind ? { kind, bytes: d.bytes } : null;
@@ -168,6 +173,7 @@ deckExports.post('/:id/export/html', async (c) => {
     watermark: brand.watermark_url ? images.get(brand.watermark_url) ?? null : null,
     notes: body?.notes === true,
     sources: body?.sources === true,
+    compliance: deckCompliance(slides, themeOfRow(row)),
   });
   const bytes = new TextEncoder().encode(html);
   const hash = await sha256Hex(bytes);
@@ -192,9 +198,9 @@ deckExports.post('/:id/export/html', async (c) => {
  * null otherwise. #3655: through the documented `quickAction` (`renderUrl`), one try each
  * under one deadline; a chart that cannot be pictured goes in as words.
  */
-async function chartShotFor(c: any, row: DeckRow, opts: { notes: boolean; sources: boolean }): Promise<ChartShot | null> {
+async function chartShotFor(c: any, row: DeckRow, opts: { notes: boolean; sources: boolean }, imageCopies?: ExportImageCopies): Promise<ChartShot | null> {
   if (typeof c.env.BROWSER?.quickAction !== 'function') return null;
-  const token = await signDeckPrintToken(c.env, row.id, 300, opts);
+  const token = await signDeckPrintToken(c.env, row.id, 300, opts, imageCopies);
   const base = stripTrailingSlashes((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc');
   const deadline = Date.now() + CHART_SHOTS_BUDGET_MS;
   return async (i, r) => {
@@ -239,8 +245,8 @@ deckExports.post('/:id/export/odp', async (c) => {
   if (brand.watermark_url) urls.push(brand.watermark_url);
   const images = await fetchImages(urls);
   const odp = await writeOdp({
-    title: row.title || 'Pitch deck', version: row.version ?? null, slides, renderable: pages, images, brand,
-    notes: opts.notes, chartShot: await chartShotFor(c, row, opts),
+    title: row.title || 'Pitch deck', version: row.version ?? null, slides, renderable: pages, images, brand, compliance: deckCompliance(slides, themeOfRow(row)),
+    notes: opts.notes, chartShot: await chartShotFor(c, row, opts, copied.imageCopies),
   });
   const hash = await sha256Hex(odp.bytes);
   try {
@@ -300,8 +306,8 @@ deckExports.post('/:id/export/google-slides', async (c) => {
   const brand = await ventureBrand(c.env, Number(row.project_id));
   const images = await fetchImages(imageUrlsOf(slides));
 
-  const chartShot = await chartShotFor(c, row, opts);
-  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot });
+  const chartShot = await chartShotFor(c, row, opts, copied.imageCopies);
+  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)) });
   const hash = await sha256Hex(deck.bytes);
 
   let created;

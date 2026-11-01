@@ -5,6 +5,7 @@
  * (markdown body) + image fields, version history, restore, and
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
+import { deckCompliance } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
@@ -29,7 +30,7 @@ import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
-import { copyExternalImages, copyRefusalMessage } from '../services/decks/imageCopy';
+import { applyExportImageCopies, checkedExportImageCopies, copyExternalImages, copyRefusalMessage, type ExportImageCopies } from '../services/decks/imageCopy';
 import { refuse } from '../util/refusal';
 import { DECK_PAGE_LOAD_MS, MAX_DECK_PDF_BYTES, MAX_SLIDE_PNG_BYTES, renderUrl, type RenderFailure } from '../services/browserRun';
 import { railFor } from '../util/railContext';
@@ -46,6 +47,7 @@ import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckShareUse';
+import { cleanOrder, variantSlides } from '../services/decks/variants';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -185,6 +187,9 @@ export async function ensureSchema(env: Env): Promise<void> {
       // Migration 567 — D902: the NDA gate and what the link includes.
       ['nda_required', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN nda_required INTEGER NOT NULL DEFAULT 0 CHECK (nda_required IN (0, 1))`],
       ['include_json', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN include_json TEXT`],
+      // Migration 738 — D1565: the variant a link opens and its recipient watermark.
+      ['variant_id', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN variant_id INTEGER REFERENCES deck_variants(id) ON DELETE SET NULL`],
+      ['watermark_text', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN watermark_text TEXT`],
     ];
     for (const [col, ddl] of add463) {
       if (!have.has(col)) {
@@ -263,15 +268,18 @@ async function deckPrintHmacKey(env: Env): Promise<CryptoKey> {
 export type PrintOptions = { notes: boolean; sources: boolean };
 const NO_PRINT_OPTIONS: PrintOptions = { notes: false, sources: false };
 
-export async function signDeckPrintToken(env: Env, deckId: number, ttlSec = 180, opts: PrintOptions = NO_PRINT_OPTIONS): Promise<string> {
+export async function signDeckPrintToken(env: Env, deckId: number, ttlSec = 180, opts: PrintOptions = NO_PRINT_OPTIONS, imageCopies: ExportImageCopies = {}): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + ttlSec;
   const flags = `${opts.notes ? 'n' : ''}${opts.sources ? 's' : ''}`;
-  const payload = `deck-print|${deckId}|${exp}${flags ? `|${flags}` : ''}`;
+  const checked = checkedExportImageCopies(imageCopies);
+  if (!checked) throw new Error('invalid export image references');
+  const suffix = Object.keys(checked).length ? `|${flags}|${JSON.stringify(checked)}` : flags ? `|${flags}` : '';
+  const payload = `deck-print|${deckId}|${exp}${suffix}`;
   const key = await deckPrintHmacKey(env);
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
   return `${b64url(new TextEncoder().encode(payload))}.${b64url(sig)}`;
 }
-export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ deckId: number } & PrintOptions) | null> {
+export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ deckId: number; imageCopies?: ExportImageCopies } & PrintOptions) | null> {
   try {
     const [pB64, sB64] = (token || '').split('.');
     if (!pB64 || !sB64) return null;
@@ -281,12 +289,15 @@ export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ 
     const ok = await crypto.subtle.verify('HMAC', key, sigBytes, payloadBytes);
     if (!ok) return null;
     const payload = new TextDecoder().decode(payloadBytes);
-    const [tag, idStr, expStr, flags = ''] = payload.split('|');
+    const [tag, idStr, expStr, flags = '', copiesText, ...extra] = payload.split('|');
+    if (extra.length) return null;
+    const imageCopies = copiesText === undefined ? undefined : checkedExportImageCopies(JSON.parse(copiesText));
+    if (imageCopies === null) return null;
     if (tag !== 'deck-print' || !idStr || !expStr) return null;
     if (Math.floor(Date.now() / 1000) > Number(expStr)) return null;
     const deckId = parseInt(idStr, 10);
     if (!Number.isFinite(deckId) || deckId <= 0) return null;
-    return { deckId, notes: flags.includes('n'), sources: flags.includes('s') };
+    return { deckId, notes: flags.includes('n'), sources: flags.includes('s'), ...(imageCopies ? { imageCopies } : {}) };
   } catch { return null; }
 }
 
@@ -506,6 +517,9 @@ export function publicDeckOf(row: any): any {
     void notes;
     return card;
   });
+  // D1546: every reader of a deck (share, present, the print page the PDF and PowerPoint photograph)
+  // gets Confidential and each card's footnotes from the one rule (`compliance.ts`).
+  deck.compliance = deckCompliance(deck.slides, themeOfRow(row));
   return deck;
 }
 
@@ -727,8 +741,13 @@ decks.get('/print-export/:token', async (c) => {
   const v = await verifyDeckPrintToken(c.env, token);
   if (!v) return c.json({ error: 'invalid_or_expired_token' }, 403);
   await ensureSchema(c.env);
-  const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(v.deckId).first<any>();
+  let row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(v.deckId).first<any>();
   if (!row) return c.json({ error: 'not_found' }, 404);
+  if (v.imageCopies) {
+    let slides: any[] = [];
+    try { slides = JSON.parse(row.slides || '[]'); } catch { /* unreadable stored slides render empty */ }
+    row = { ...row, slides: JSON.stringify(await applyExportImageCopies(c.env, Number(row.project_id), Array.isArray(slides) ? slides : [], v.imageCopies, c.req.url)) };
+  }
   const methodId = extractDeckMethodId(row);
   let projectName: string | null = null;
   try {
@@ -788,8 +807,8 @@ decks.get('/share/:token', async (c) => {
   // link sends no card, and uses no view, until the person opening it has
   // accepted the NDA on this link; the gate carries only what the NDA names.
   const link = await c.env.DB.prepare(
-    'SELECT id, nda_required, include_json, prospect_id, investor_label FROM pitch_deck_share_tokens WHERE token_hash = ?',
-  ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null; prospect_id: number | null; investor_label: string | null }>();
+    'SELECT * FROM pitch_deck_share_tokens WHERE token_hash = ?',
+  ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null; prospect_id: number | null; investor_label: string | null; variant_id?: number | null; watermark_text?: string | null }>();
   const ndaRequired = Number(link?.nda_required ?? 0) === 1;
   if (link && ndaRequired && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const gate = await ndaGate(c, Number(link.id), parseInt(m[1]));
@@ -873,9 +892,20 @@ decks.get('/share/:token', async (c) => {
   const included = parseShareInclude(link?.include_json);
   // D898's public fields (no audience, round, author or hash), with the cards
   // as the link includes them: speaker notes go only with notes on.
+  // D1565 (#3812): a link made with a variant opens the master's own cards in the variant's order.
+  let cards = rowToDeck(row).slides;
+  if (link?.variant_id) {
+    try {
+      const v = await c.env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE id = ? AND deck_id = ?').bind(Number(link.variant_id), id).first<{ slide_order_json: string }>();
+      const order = v ? cleanOrder(cards, JSON.parse(v.slide_order_json || '[]')) : null;
+      if (order) cards = variantSlides(cards, order);
+    } catch { /* an unreadable variant opens the master as it is */ }
+  }
   return c.json({
     ...publicDeckOf(row),
-    slides: shareSlides(rowToDeck(row).slides, included),
+    slides: shareSlides(cards, included),
+    // D1565: who the link was made for, drawn over every card ("Prepared for …").
+    watermark: link?.watermark_text ?? null,
     view_id: viewId,
     method_id: methodId,
     project_id: Number(row.project_id) || null,
@@ -2008,19 +2038,18 @@ decks.post('/:id/autofill', async (c) => {
  */
 /**
  * D1506: a stored version's outside images, copied before it is exported, so the
- * export browser loads only our own origin. The version is rewritten in place to
- * name the copies (the same picture, now ours). One that cannot be copied stays
+ * export browser loads only our own origin. The export uses an in-memory row naming
+ * the copies; historical versions remain immutable. One that cannot be copied stays
  * as it was: the export says it is missing, and the export browser cannot load it.
  */
-export async function copyStoredDeckImages(c: any, user: { id: number; role?: string | null }, row: any): Promise<{ row: any } | { refused: Response }> {
+export async function copyStoredDeckImages(c: any, user: { id: number; role?: string | null }, row: any): Promise<{ row: any; imageCopies?: ExportImageCopies } | { refused: Response }> {
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { return { row }; }
   const copy = await copyExternalImages(c.env, { projectId: Number(row.project_id), deckId: Number(row.id), user: { id: Number(user.id), role: user.role }, requestUrl: c.req.url, slides, mode: 'export' });
   if (!copy.ok) return { refused: refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } }) };
   if (!copy.copied) return { row };
   const text = JSON.stringify(copy.slides);
-  await c.env.DB.prepare('UPDATE pitch_decks SET slides = ? WHERE id = ?').bind(text, Number(row.id)).run();
-  return { row: { ...row, slides: text } };
+  return { row: { ...row, slides: text }, imageCopies: copy.imageCopies };
 }
 
 export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; renderable: RenderableDeck } {
@@ -2144,7 +2173,7 @@ decks.post('/:id/export', async (c) => {
         fallback: 'client_render',
       }, 503);
     }
-    const token = await signDeckPrintToken(c.env, id, 180, opts);
+    const token = await signDeckPrintToken(c.env, id, 180, opts, copied.imageCopies);
     const r = await renderUrl(c.env, 'pdf', {
       url: `${publicBase}/deck/print-export/${token}?print_mode=pdf`,
       viewport: SLIDE_VIEWPORT,
@@ -2195,7 +2224,7 @@ decks.post('/:id/export', async (c) => {
   // comfortably covers the longest deck (60-slide cap). #3655: a few at a
   // time under one deadline; the first slide that cannot be pictured stops
   // the export, and nothing is handed out or recorded.
-  const token = await signDeckPrintToken(c.env, id, 300, opts);
+  const token = await signDeckPrintToken(c.env, id, 300, opts, copied.imageCopies);
   // With sources, the last index is the appendix page the print page draws after the cards.
   const slideCount = renderable.slides.length;
   const deadline = Date.now() + PPTX_RENDER_BUDGET_MS;

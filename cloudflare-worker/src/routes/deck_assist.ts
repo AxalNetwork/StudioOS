@@ -30,6 +30,7 @@
  *
  * Mounted in index.ts BEFORE `decks`, beside the other `/api/decks/*` routers.
  */
+import { withoutGuarantees } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -187,7 +188,9 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
     payload = { deck_id: p.deckId, card: p.card, action: p.action, block: made.block, title: made.title };
     answer = { block: made.block, title: made.title };
   } else {
-    const after = wordingOf(res.output, p.action === 'headline' ? 120 : TEXT_MAX);
+    // D1546: the guarantee-language block before anything is proposed; words that only promised a return propose nothing.
+    const { text: after, dropped: promised } = withoutGuarantees(wordingOf(res.output, p.action === 'headline' ? 120 : TEXT_MAX));
+    if (promised && !after.trim()) return refuse(c, 422, { code: 'guarantee_language', message: 'Eadwyn’s words promised a return, which a deck may not, so nothing was proposed. It was charged for the run.', extra: { cost } });
     const problem = wordingProblem(p.action as TextAction, p.text, after);
     if (problem) return refuse(c, 422, { code: 'figure_in_output', message: `${problem} It was charged for the run.`, extra: { cost } });
     payload = { deck_id: p.deckId, card: p.card, action: p.action, before: p.text, after };
