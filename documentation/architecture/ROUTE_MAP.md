@@ -2031,3 +2031,13 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 | `POST /api/projects/:id/invitations` `{ mode: 'account', user_uid, role }` | the project's manager | A pending invitation addressed to that account (`invitee_user_id`, source `account`, no token), answered from the invitee's Account › Invitations. `{ invitation: { id, role, status, source, expires_at, created_at, invitee: { uid, name, avatar_url, shared } }, email_sent: null }`: never the invitee's email. 404 `account_not_found`; 403 `not_reachable`; 400 `investor`; 409 `already_member` / `already_pending`. |
 | `GET /api/account/people/search?q=&company=<uid>\|&project=<id>` | signed in | `{ people: [{ uid, name, avatar_url, shared: [{ kind: 'company' \| 'connection', name }] }] }`, at most 10, by name, only people reachable from the caller, never the caller. `company` or `project` names the team being built: the caller must belong to it (403 `not_member`) and its members are left out. `avatar_url` is null (users record none). 400 `query_too_short` (under 2 letters) / `query_too_long`. Rate bucket `people_search`, 30 a minute, fail-closed. |
 | `GET /api/company/:uid` · `GET /api/projects/:id/members` | as before | `members[]` carries `email` on the caller's own row only; another member's row has no `email` key (the canvas: "Never show another member's email"). Invitation addresses to editors are unchanged (owner question T3 is open). Company Settings › Members prints no address on another member's row. |
+
+### The Grid v2, part 1 (D1499, #3749)
+
+`routes/deck_grid.ts`, mounted at `/api/decks` beside `deck_check.ts`. Geometry and catalogue in `services/decks/structures.ts`, mirrored (geometry only) in `frontend/src/pages/raise/pitch/gridModel.js`. Client: `lib/api/deckGrid.js` (`deckGridApi.grid`). No page reads it yet: S1's `deckV2Adapter.grid` swaps to it in part 2, after #3885.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/decks/:id/grid` | whoever may read the deck (`projectOwned`) | `{ deck_id, version, aspect: '16:9' \| '4:3', slide, frame, cell, baseline: 8, grid: { cols: 12, rows: 6 }, structures: [17 × { id, label, use, areas, background?, recommended? }], cards: [{ index, structure, derived, areas: [{ id, c1, c2, r1, r2, order, inset, align, role?, box }] }] }`. A card saved before v2 reads `structure: 'custom', derived: true`, its areas derived from its blocks. Every `box` is `boxOfAt(area, aspect)` in slide pixels. 403 / 404. |
+
+Saves: `PUT`/`POST` of a version keep `card.structure` (one of the 17, or `custom`) and `card.areas` (≤ 12, whole cells, no overlap) and refuse a bad one with its sentence (`modelProblems`); `theme.aspect` keeps `4:3`, and 16:9 is the default left out.
