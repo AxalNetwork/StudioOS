@@ -36,7 +36,7 @@ import authRecover from './routes/auth_recover';
 // /api/auth (magic link + TOTP); never the only path in. See
 // routes/auth_google.ts for the linking precedence and step-up rules.
 import authGoogle from './routes/auth_google';
-import { SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
+import { PRIVATE_LINK_GLOBS, SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
 import authPasskey from './routes/auth_passkey';
 import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
@@ -97,6 +97,7 @@ import mailShares from './routes/mail_shares';
 import mailPeople from './routes/mail_people';
 import { bindMailTools } from './services/mail/mcpTools';
 import dealContext from './routes/deal_context';
+import deckGrants from './routes/deck_grants';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
 import dealViews from './routes/deal_views';
@@ -992,6 +993,8 @@ app.route('/api/mail', mailDrafts);
 app.route('/api/mail', mailShares);
 app.route('/api/mail', mailPeople);
 app.route('/api/deals', dealViews);
+// D1587 (#3834): the investor's granted deck on their deal page, and the founder's grants. Before dealContext.
+app.route('/api/deals', deckGrants);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);
 // D1153 (#3058): the working tabs' room access, round summary and reasoned withdrawal. Before deals.
@@ -2033,8 +2036,10 @@ export default {
     // D1439 (#3914): a shared record link previews as itself. Before Hono, so
     // the SPA shell never takes the Worker's nonce CSP or `no-referrer`; the
     // shell's own headers come from `SHELL_HEADERS`. Only the prefixes in
-    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists).
-    if (env.ASSETS && SOCIAL_CARD_GLOBS.some((g) => pathname.startsWith(g.slice(0, -1)))) {
+    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists), and the
+    // token share links in `PRIVATE_LINK_GLOBS` (#3916), which get the static
+    // "Sign in to view" card with no D1 call.
+    if (env.ASSETS && [...SOCIAL_CARD_GLOBS, ...PRIVATE_LINK_GLOBS].some((g) => pathname.startsWith(g.slice(0, -1)))) {
       const card = await serveSocialCard(request, env);
       if (card) return card;
     }

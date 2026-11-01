@@ -204,3 +204,8 @@ f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_complia
 # low-entropy runtime seed. Pin only the already-published finding, not its
 # whole file, commit, or the generic-api-key rule.
 46ae241fbd882aa6dc15a89fa67ff963eb6ea9ff:cloudflare-worker/test/advisor_visibility_d1597.test.ts:generic-api-key:22
+# #3939: a doc comment in the model-coverage check's first commit named two
+# model ids after the word "token"; gitleaks' generic-api-key rule read it as a
+# key. It is no credential. The next commit rewords the comment, so no later
+# commit carries it. Pin only the published finding, as D334's entry does.
+74a99469d1cf0398d9052b74175b5925bb026e30:scripts/check-model-coverage.mjs:generic-api-key:78

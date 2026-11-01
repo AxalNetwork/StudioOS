@@ -70,6 +70,7 @@ export async function aiGenerateLPA(env: Env, ctx: LPAContext): Promise<string> 
   const prompt = `Polish this LPA into a clean, professional, English legal document. Keep all numbers exactly. Return the body only.\n\n${fallback}`;
   try {
     const resp: any = await systemRun(env, {
+      task: 'system_legal',
       messages: [
         { role: 'system', content: 'You are a venture-fund paralegal. Output a well-structured LPA body (no markdown fences, no preamble).' },
         { role: 'user', content: prompt },

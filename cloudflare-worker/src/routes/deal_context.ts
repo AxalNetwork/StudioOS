@@ -21,7 +21,7 @@ r.use('/:id/whats-new', guard);
 r.use('/:id/notes', guard);
 r.use('/:id/notes/:uid', guard);
 
-async function context(c: any) {
+export async function context(c: any) {
   const user = await requireAuth(c);
   if (user.role !== 'investor') return { error: c.json({ error: 'investor_only' }, 403) };
   const raw = c.req.param('id');
@@ -102,8 +102,13 @@ r.get('/:id/whats-new', async c => {
     const answers = await c.env.DB.prepare(`SELECT q.id, q.responded_at AS at FROM dd_requests q JOIN dd_cases d ON d.id = q.case_id
       WHERE d.subject_type = 'project' AND d.subject_id = ? AND q.responded_at IS NOT NULL AND
       (d.owner_user_id = ? OR EXISTS (SELECT 1 FROM dd_reviewers v WHERE v.case_id = d.id AND v.user_id = ?))`).bind(x.deal.project_id,x.user.id,x.user.id).all<{id:number;at:string}>();
+    // D1587 (#3834): the deck version this venture granted this investor on this deal, when there is one.
+    const grant = await c.env.DB.prepare(`SELECT g.uid, d.version, g.created_at AS at FROM deck_grants g JOIN pitch_decks d ON d.id = g.deck_id
+      WHERE g.deal_id = ? AND g.investor_user_id = ? AND g.company_id IS ? AND g.revoked_at IS NULL ORDER BY g.id DESC LIMIT 1`)
+      .bind(x.id, x.user.id, x.company).first<{ uid: string; version: number; at: string }>();
     const sources = [
       { type: 'deal', ref: x.id, version: x.deal.status, at: x.deal.updated_at || x.deal.created_at },
+      ...(grant ? [{ type: 'deck', ref: grant.uid, version: String(grant.version), at: grant.at }] : []),
       ...(documents.results || []).map(d => ({ type: 'document', ref: d.id, version: '', at: d.at })),
       ...(notes.results || []).map(d => ({ type: 'firm_note', ref: d.id, version: '', at: d.at })),
       ...(others.results || []).map(d => ({ type: 'investor_commitment', ref: d.id, version: '', at: d.at })),
@@ -126,7 +131,7 @@ r.get('/:id/whats-new', async c => {
     const old = previous ? JSON.parse(previous.source_snapshot_json) : {};
     const consumed = Number(results[1].meta.changes) > 0;
     const changes = previous && consumed ? sources.filter(s => old[`${s.type}:${s.ref}`] !== snapshot[`${s.type}:${s.ref}`]).map(({ type, at }) => ({ type, at })) : [];
-    return c.json({ unavailable: [{ type: 'deck', reason: 'Deck versions use share-token access; this read has no caller-specific deck grant.' }], since, seen_at: at, first_visit: since === null, changes, coverage: 'Latest stored change in each accessible source and document catalog additions, firm notes, anonymous commitments and accessible diligence answers. A first visit establishes the baseline; historical intermediate changes are not reconstructed.' });
+    return c.json({ unavailable: grant ? [] : [{ type: 'deck', reason: 'The venture has not granted you a deck version on this deal (D1587).' }], since, seen_at: at, first_visit: since === null, changes, coverage: 'Latest stored change in each accessible source and document catalog additions, firm notes, anonymous commitments and accessible diligence answers. A first visit establishes the baseline; historical intermediate changes are not reconstructed.' });
   } catch { return c.json({ error: 'changes_unreadable', message: 'Changes are unreadable. Try again.' }, 503); }
 });
 

@@ -157,7 +157,7 @@ personas.post('/classify', async (c) => {
   if (!firstMessage.trim()) return c.json({ error: 'first_message required' }, 400);
   const statuses = await signUpStatuses(c);
   if (!statuses) return c.json(STATUSES_UNREADABLE, 503);
-  const result = await classifyPersona(c.env, { first_message: firstMessage, email: user.email });
+  const result = await classifyPersona(c.env, { first_message: firstMessage, email: user.email }, Number(user.id) || null);
   // D1000: a suggestion sign-up does not offer is not made; the member picks.
   const offered = (id: string | null) => !!id && statuses.get(id) === 'active';
   const alternatives = result.alternatives.filter((a) => offered(a.persona_id));

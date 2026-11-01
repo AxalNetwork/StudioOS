@@ -62,6 +62,8 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   translate_segment: 'Translate a session segment',
   detect_language: 'Detect a segment\'s language',
   system_job: 'Background job (no member)',
+  system_legal: 'Draft an LPA (no member)',
+  system_review: 'Review traction (no member)',
   ops_summary: 'Summarise the site metrics',
   image_screen: 'Screen an image',
   image_alt_text: 'Describe an image',

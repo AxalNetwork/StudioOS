@@ -165,7 +165,7 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   const navOf = (out) => [...out.matchAll(/data-testid="cycle-tabs"[\s\S]*?<\/nav>/g)][0][0];
   const own = [
     ...[...navOf(over).matchAll(/href="([^"]+)"/g)].map((m) => m[1]),
-    ...[...over.matchAll(/href="([^"]+)"[^>]*>[^<]* ›</g)].map((m) => m[1]),
+    ...[...over.matchAll(/href="([^"]+)"[^>]*>(?!More in the module)[^<]* ›</g)].map((m) => m[1]),
   ];
   // Overview, then each module and each card's title (D694).
   assert.equal(own.length, 1 + MODULES.validate.length * 2, 'the tabs and every card title');
@@ -181,7 +181,8 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   // 6 → 7 (D1101, #2456): the Data room tool's tab bar on its module page keeps it too.
   // 8 → 9 (D1173, #2455): the Use of funds tool's tab bar on its module page keeps it too.
   // 9 → 10 (D1188, #2457): the Capital relationships tool's tab bar on its module page keeps it too.
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 10, 'the overview, module, record header, Validate\'s phone focus, the Cap table, Data room, Use of funds and Capital relationships tabs, the plan door and the readiness door keep the venture');
+  // 10 → 11 (D1466, #3714): Raise's lead row (Next steps' links) keeps it too.
+  assert.equal((route.match(/search=\{q\}/g) || []).length, 11, 'the overview, module, record header, Validate\'s phone focus, the Cap table, Data room, Use of funds and Capital relationships tabs, the plan door, the readiness door and Raise\'s lead row keep the venture');
   assert.match(route, /search=\{tabSearch\(q, searchParams\.get\('version'\)\)\}/, 'the narrative tabs keep the venture, and the version');
 });
 
