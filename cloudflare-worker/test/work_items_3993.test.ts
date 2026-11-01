@@ -113,6 +113,8 @@ test('comment Markdown is cleaned: no raw HTML, no unsafe link target, encoded s
   assert.match(clean, /\[ok\]\(https:\/\/axal\.vc\/x\)/);
   assert.match(clean, /\[bad\]\(#/);
   assert.match(clean, /&lt;b$/);
+  // A nested tag cannot reassemble one after a single pass (CodeQL: incomplete multi-character sanitization).
+  for (const nested of ['<scr<script>ipt>alert(1)</script>', '<<!-- x -->script>alert(1)', '<sc<b></b>ript>']) assert.doesNotMatch(cleanMarkdown(nested), /<\s*script/i, nested);
   for (const ok of ['https://a.b', 'mailto:x@y.z', '/projects/7', '#top', 'relative/path']) assert.equal(safeTarget(ok), true, ok);
   for (const no of ['javascript:x', ' JavaScript:x', 'data:x', 'java%3ascript', 'file:///etc']) assert.equal(safeTarget(no), false, no);
 });

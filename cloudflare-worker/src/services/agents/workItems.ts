@@ -59,8 +59,12 @@ export function safeTarget(url: string): boolean {
 /** A comment's Markdown with no raw HTML and no unsafe link target. */
 export function cleanMarkdown(src: string): string {
   let s = src.replace(/\r\n?/g, '\n');
-  s = s.replace(/<!--[\s\S]*?(-->|$)/g, '');
-  s = s.replace(/<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>/g, '');
+  // Strip comments and tags until nothing changes, so a nested `<scr<script>ipt>` cannot reassemble one.
+  for (let prev = ''; prev !== s;) {
+    prev = s;
+    s = s.replace(/<!--[\s\S]*?(-->|$)/g, '').replace(/<\/?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?\/?>/g, '');
+  }
+  // Then no `<` that could open a tag survives at all.
   s = s.replace(/<(?=[A-Za-z!/?])/g, '&lt;');
   // Inline links and images: [text](target) and ![alt](target).
   s = s.replace(/(\]\(\s*)([^)\s]*)/g, (m, open: string, url: string) => (safeTarget(url) ? m : `${open}#`));
