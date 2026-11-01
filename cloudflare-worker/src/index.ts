@@ -259,6 +259,8 @@ import deckRemix from './routes/deck_remix';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
+// D1565 (#3812): one link per investor, and tailored variants.
+import deckInvestorLinks from './routes/deck_investor_links';
 // D1589 (#3836): a venture's stage norms, the benchmarks a deck critic may cite.
 import deckStageNorms from './routes/deck_stage_norms';
 // D1556 (#3803): a venture's consented interview quotes, ranked for a deck.
@@ -417,6 +419,7 @@ import eventsPublicRoutes from './routes/events_public';
 import adminEventsRoutes from './routes/admin_events';
 import adminEventSyndicationRoutes from './routes/admin_event_syndication';
 import eventSyndicationRoutes from './routes/event_syndication';
+import eventSyndicationAssistRoutes from './routes/event_syndication_assist';
 // Task #68 — Public Job Board (Worker on D1): founder /api/jobs, public feed +
 // apply on /api/public/jobs*, admin review queue on /api/admin/jobs.
 import jobsRoutes from './routes/jobs';
@@ -1394,6 +1397,8 @@ app.route('/api/decks', deckNew);
 app.route('/api/decks', deckAssist);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
+// D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckInvestorLinks);
 // D1589 (#3836): `/stage-norms`, before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckStageNorms);
 // D1556 (#3803): `/quotes/search` and `/quotes/index`, before `decks` so `/:id` routes cannot answer them.
@@ -1494,6 +1499,8 @@ app.route('/api/studio', studioLayout);
 // Task #39 — Event engine authed routes (§8.1).
 // D1490 — one event's syndication (`/:id/syndication…`), before events.ts.
 app.route('/api/events', eventSyndicationRoutes);
+// D1493 (#3906) — Ask proposes a channel's copy (`/:id/syndication/assist…`), before events.ts.
+app.route('/api/events', eventSyndicationAssistRoutes);
 app.route('/api/events', eventsRoutes);
 // Task #68 — Job Board founder routes (post/manage roles, read applicants).
 app.route('/api/jobs', jobsRoutes);

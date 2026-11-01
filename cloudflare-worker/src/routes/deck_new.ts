@@ -51,6 +51,7 @@
  * WHO. The deck routes' `projectOwned`: the venture's founders write, an admin
  * reads only (D895), and New deck is on the Raise + Grow plan as /generate was.
  */
+import { blockGuarantees } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -288,7 +289,8 @@ deckNew.post('/new/quote', async (c) => {
     if (!rows.length) return c.json({ error: 'index must be a card position in the outline' }, 400);
     const element = await buildModelOf(c, user, projectId);
     if (element instanceof Response) return element;
-    opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded) }), rows.length, element);
+    // D1517: the quote reads the same message the run sends, budgets included.
+    opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded), visuals: await visualsFor(c.env, projectId) }), rows.length, element);
   }
   const q = await quoteRun(c.env, opts);
   if (q.ok) return c.json({ step, ai: true, hold_microusd: q.hold_microusd, model: q.model });
@@ -376,6 +378,8 @@ deckNew.post('/outline', async (c) => {
   let reason: string | null = null;
   if (res.ok) {
     rows = outlineFromModel(parseJsonLoose<any>(res.output), inputs.length);
+    // D1546: no proposed words may promise a return; a sentence that does is dropped before it is shown.
+    if (rows) rows = blockGuarantees(rows).value;
     if (!rows) reason = 'Eadwyn’s outline could not be read, so this is the standard outline for the length you chose.';
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page, so this is the standard outline for the length you chose. Nothing was charged.';
@@ -457,7 +461,8 @@ deckNew.post('/generate', async (c) => {
   const userId = Number(user.id) || 0;
   const element = await buildModelOf(c, user, projectId);
   if (element instanceof Response) return element;
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude }), rows.length, element);
+  const visuals = await visualsFor(c.env, projectId);
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length, element);
   const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let wording: Wording[] = rows.map(() => ({ headline: null, body: null }));
   let dropped = 0;
@@ -465,8 +470,10 @@ deckNew.post('/generate', async (c) => {
   let reason: string | null = null;
   if (res.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length, recordTexts(items));
-    wording = w.byIndex;
-    dropped = w.dropped;
+    // D1546: the guarantee-language block, before the words are proposed; each sentence dropped counts.
+    const g = blockGuarantees(w.byIndex);
+    wording = g.value;
+    dropped = w.dropped + g.dropped;
     by = wording.some((x) => x.headline || x.body) ? 'Eadwyn' : 'none';
     if (by === 'none') reason = 'Eadwyn’s words could not be read. The figures are from your records; the cards carry their titles.';
   } else if (res.refusal === 'assist_off') {
@@ -477,7 +484,7 @@ deckNew.post('/generate', async (c) => {
     reason = 'Eadwyn could not answer. The figures are from your records; the cards carry their titles. Nothing was charged.';
   }
 
-  const built = buildCards(rows, items, wording, name, exclude, await visualsFor(c.env, projectId));
+  const built = buildCards(rows, items, wording, name, exclude, visuals);
   if (built.problems.length) return c.json({ error: 'cards_unsound', problems: built.problems }, 500);
   // D897 §9: a card the founder already kept stays as kept when its row is the same card; the rest are rebuilt.
   const kept = (proposal?.kept ?? []).filter((i: number) => proposal.slides[i]?.spec_id === built.slides[i]?.spec_id);
@@ -544,15 +551,17 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   const inputs = { audience: (o?.audience ?? FAST_PATH_AUDIENCE) as Audience, prompt: String(o?.prompt ?? '') };
   const element = await buildModelOf(c, user, projectId);
   if (element instanceof Response) return element;
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude }), 1, element);
+  const visuals = await visualsFor(c.env, projectId);
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude, visuals }), 1, element);
   const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let words: Wording = { headline: null, body: null };
   let reason: string | null = null;
   let dropped = 0;
   if (res.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), 1, recordTexts(items));
-    words = w.byIndex[0];
-    dropped = w.dropped;
+    const g = blockGuarantees(w.byIndex[0]);
+    words = g.value;
+    dropped = w.dropped + g.dropped;
     if (!words.headline && !words.body) reason = 'Eadwyn’s words could not be read. The card keeps its figures and its title.';
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page, so the card was rebuilt from your records with its title. Nothing was charged.';
@@ -561,7 +570,7 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
     if (stop) return stop;
     reason = 'Eadwyn could not answer. The card was rebuilt from your records with its title. Nothing was charged.';
   }
-  const card = cardOf(rowOf, items, words, name, exclude, await visualsFor(c.env, projectId));
+  const card = cardOf(rowOf, items, words, name, exclude, visuals);
   const next = sanitizeSlides(slides.map((s, i) => (i === index ? card : s)));
   await c.env.DB.prepare('UPDATE pitch_deck_proposals SET slides = ? WHERE id = ?').bind(JSON.stringify(next), row.id).run();
   await auditDeckWrite(c, user, projectId, 'deck_card_regenerated', `Card ${index + 1} of the proposal regenerated`);

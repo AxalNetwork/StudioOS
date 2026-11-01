@@ -41,7 +41,8 @@ import {
   OUTPUT_LABELS, SKILL_MESSAGES, attachRefusal, checkDraft, parseSkillMd, skillsRadar, toSkillMd,
   type OutputKind, type SkillDraft, type Tag,
 } from '../services/agents/skills';
-import { teamAgentsEnabled, toolsOf } from './team_agents';
+import { teamAgentsEnabled } from './team_agents';
+import { grantsOf } from '../services/agents/agentTools';
 import { agentByUid, canManage, canRead, scopeOfAgent, type AgentRow } from '../services/agents/teams';
 
 type C = Context<{ Bindings: Env }>;
@@ -363,7 +364,7 @@ async function refusalFor(env: Env, a: AgentRow, s: SkillRow, version: number): 
   if (!v) return `There is no version ${version} of this skill.`;
   const p = versionParts(v);
   const role = roleOf(a.role_key);
-  return attachRefusal({ roles: p.roles, tools: p.tools, status: s.status }, { role_key: a.role_key, role_label: role?.name ?? a.role_key, grants: toolsOf(a.tool_grants_json) });
+  return attachRefusal({ roles: p.roles, tools: p.tools, status: s.status }, { role_key: a.role_key, role_label: role?.name ?? a.role_key, grants: grantsOf(a.tool_grants_json) });
 }
 
 async function agentSkillsDto(env: Env, a: AgentRow) {

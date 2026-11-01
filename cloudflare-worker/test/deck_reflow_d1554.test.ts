@@ -24,7 +24,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import deckGrid from '../src/routes/deck_grid.ts';
-import { DENSITY_MAX, TYPE_SCALE, boxOf, fitProblems, metricValueChars, textCapacity, type TypeRole } from '../src/services/decks/designSystem.ts';
+import { DENSITY_MAX, TYPE_SCALE, TYPE_STEPS, boxOf, capacityAt, fitProblems, fitText, lineHeight, metricValueChars, textCapacity, type TypeRole } from '../src/services/decks/designSystem.ts';
 import { GRID_COLS, GRID_ROWS, NOTES_MAX } from '../src/services/decks/slideModel.ts';
 import { STRUCTURES } from '../src/services/decks/structures.ts';
 import { MOVED_HEADING, fitWords, fitsAt, reflowMap, reflowSlides } from '../src/services/decks/reflow.ts';
@@ -71,14 +71,24 @@ test('capacity at an aspect: 16:9 is what it was, 4:3 never holds more, and fitP
   for (const g of ALL_RANGES) for (const role of ROLES) {
     const { w, h } = boxOf(g);
     const t = TYPE_SCALE[role];
-    const old = Math.min(Math.max(1, Math.floor(h / (t.size * t.leading))) * Math.max(1, Math.floor(w / (t.size * 0.52))), DENSITY_MAX[role]);
+    // D1517 (#3769): each line's height is rounded up to the 8 px baseline.
+    const old = Math.min(Math.max(1, Math.floor(h / lineHeight(t.size, t.leading))) * Math.max(1, Math.floor(w / (t.size * 0.52))), DENSITY_MAX[role]);
     assert.equal(textCapacity(g, role).chars, old, `${role} ${JSON.stringify(g)}`);
     assert.ok(textCapacity(g, role, '4:3').chars <= textCapacity(g, role, '16:9').chars);
     if (textCapacity(g, role, '4:3').chars < old) less += 1;
     assert.ok(metricValueChars(g, '4:3') <= metricValueChars(g, '16:9'));
   }
   assert.ok(less > 0, '4:3 holds less somewhere');
-  const card = { layout: 'two_columns', blocks: [{ id: 'p', kind: 'text', style: 'paragraph', grid: { c1: 1, c2: 4, r1: 2, r2: 3 }, text: words(textCapacity({ c1: 1, c2: 4, r1: 2, r2: 3 }, 'paragraph').chars) }] };
+  // D1517 (#3769): a text steps down within the scale before it overflows, so the probe is a text that
+  // fits at 16:9 (at some step) and at no step at 4:3.
+  const pg = { c1: 1, c2: 4, r1: 2, r2: 3 };
+  let probe = '';
+  for (let n = capacityAt(pg, 'paragraph', TYPE_STEPS.paragraph[TYPE_STEPS.paragraph.length - 1], '16:9').chars; n > 0 && !probe; n -= 1) {
+    const t = words(n);
+    if (fitText(pg, 'paragraph', t, '16:9').fits && !fitText(pg, 'paragraph', t, '4:3').fits) probe = t;
+  }
+  assert.ok(probe, 'a text that fits at 16:9 and not at 4:3');
+  const card = { layout: 'two_columns', blocks: [{ id: 'p', kind: 'text', style: 'paragraph', grid: pg, text: probe }] };
   assert.deepEqual(fitProblems([card]), []);
   assert.deepEqual(fitProblems([card], '16:9'), []);
   const at43 = fitProblems([card], '4:3');
