@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Raise</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Raise › Overview</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">The founder’s at-a-glance page for the Raise cycle: how ready the venture is, how much runway it has, what is committed, and the next step. RO00 is the page canvas; RO01 to RO18 follow, three per row. Ask follows the 31 October addendum.</p>
+</header>
+<section id="RO00" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">RO00</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Page canvas · a venture mid-raise, 1440</h2></div>
+<p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47">Capital relationships spans the full last row, so no grid track is left empty.</p>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10);background:#f4f3f7"><dc-import name="Raise Overview Page" v="ro00" hint-size="1440px,1614px"></dc-import></div>
+</section>
+<div style="display:grid;grid-template-columns:repeat(3,max-content);gap:84px 56px;align-items:start">
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">{{ b.cap }}</h2>
+<sc-if value="{{ b.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:900px;font-size:13.5px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ b.note }}</p></sc-if>
+<div style="{{ b.fs }}">
+<sc-for list="{{ b.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Raise Overview Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const HT = { ro00: 1614, ro01: 1075, ro02: 396, ro03a: 860, ro03b: 900, ro03c: 106, ro04: 470, ro05: 629, ro06: 619, ro07: 384, ro08: 980, ro08b: 640, ro09a: 1772, ro09b: 2304, ro09c: 787, ro10: 1512, ro11a: 1614, ro11b: 640, ro12a: 900, ro12b: 900, ro12c: 254, ro13: 946, ro14: 1323, ro15a: 520, ro15b: 520, ro15c: 520, ph1: 844, ph2: 844, ph3: 844, ph4: 844, tab: 1024 };
+    const W = { ro02: 788, ro03b: 1280, ro03c: 1100, ro04: 1180, ro05: 1180, ro06: 1180, ro07: 640, ro08b: 420, ro09a: 1280, ro09b: 1024, ro09c: 1180, ro12c: 1180, ro13: 1180, ro15a: 1200, ro15b: 1200, ro15c: 1200, ph1: 390, ph2: 390, ph3: 390, ph4: 390, tab: 768 };
+    const F = (v, cap) => { const d = /-d$/.test(v); const k = v.replace(/-d$/, ''); const w = W[k] || 1440; return { v, cap: cap || '', wst: `width:${w}px;border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${HT[k] || 900}px` }; };
+    const B = (id, t, fr, row, note) => ({ id, cap: id + ' · ' + t, fr, note: note || '', fs: row ? 'display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap;max-width:1720px' : 'display:flex;flex-direction:column;gap:28px' });
+    return { boards: [
+      B('RO01', 'A venture early in Raise', [F('ro01')], 0, 'Readiness spans three rows on the left; the six empty modules pack two to a row beside it, in a lighter treatment, so every row stays even.'),
+      B('RO02', 'Figure tiles, every state', [F('ro02')], 0, 'OK with tooltip · empty · not recorded · stale · could not be read · committed with no target · a real 0 with a flat line · readiness with delta and sparkline.'),
+      B('RO03', 'Lead row on its own', [F('ro03a', '1440'), F('ro03b', '1280 · figures 3 + 3'), F('ro03c', 'Tabs without Calls')]),
+      B('RO04', 'Next steps', [F('ro04')], 0, 'OK · a gain that is not recorded · empty · could not be read. Team is never listed.'),
+      B('RO05', 'Fundraising readiness, compact', [F('ro05')], 0, 'Stated has its own shade and legend entry (pending owner, D1). Right: only the benchmark row fails.'),
+      B('RO06', 'Module card anatomy and states', [F('ro06')]),
+      B('RO07', 'From your tools', [F('ro07')], 0, 'Connected · not connected · last read not recorded · could not be read. Tool marks are plain letters, not logos.'),
+      B('RO08', 'Ask panel open on Raise › Overview', [F('ro08', '1440 · the content narrows to 3 + 3 figures and 2 module columns'), F('ro08b', 'Inset · on Fundraising readiness')], 0, 'Typed questions only on this page, so the panel has no chips (pending owner).'),
+      B('RO09', 'Widths 1280 and 1024', [F('ro09a', '1280'), F('ro09b', '1024 · lead row stacks'), F('ro09c', 'Figure-row columns follow the number of figures')]),
+      B('RO10', 'Loading', [F('ro10')], 0, 'Every skeleton sits at its final height, so nothing jumps.'),
+      B('RO11', 'Could not be read', [F('ro11a', '(a) One card'), F('ro11b', '(b) The whole overview')]),
+      B('RO12', 'Out of AI tokens, AI paused, AI off', [F('ro12a', 'Out of AI tokens'), F('ro12b', 'AI paused'), F('ro12c', 'Ask states, with accessible names')], 0, 'The overview itself uses no AI and is unchanged in each state.'),
+      B('RO13', 'Locked by plan', [F('ro13')]),
+      B('RO14', 'Read-only admin access', [F('ro14')], 0, 'Four figures only; Received and Investors in conversation are not shown at all. No Build your deck and no Ask.'),
+      B('RO15', 'Permission refused', [F('ro15a', '(a) No write access · the switcher highlighted'), F('ro15b', '(b) A support session'), F('ro15c', '(c) An unknown venture')]),
+      B('RO16', 'Phone, 390', [F('ph1', 'Mid-raise'), F('ph2', 'First time'), F('ph3', 'Top two next steps (pending owner, optional)'), F('ph4', 'Ask as a bottom sheet, 92%')], 1, 'Ask is an icon button in the collapsed header. No floating button.'),
+      B('RO17', 'Tablet, 768', [F('tab')], 0, 'The phone page in a 600px column; the rail shows models and consumption only, and Eadwyn is reached through Ask.'),
+      B('RO18', 'Dark', [F('ro00-d', 'RO00'), F('ro01-d', 'RO01')])
+    ] };
+  }
+}
+</script>
+</body></html>
