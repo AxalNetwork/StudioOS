@@ -198,7 +198,7 @@ test('From PostHog: the venture\'s team reads it; nobody else; no link says so; 
   assert.deepEqual((await call(app, env, FOUNDER, 'GET', `/api/cycles/grow/posthog?project=${P}&module=revenue_and_traction`)).body.link, { linked: false, active: false, mine: false });
 });
 
-test('proposals: proposed once, Dismiss keeps it decided, Accept runs its kind\'s acceptor or answers not_ready', async () => {
+test('proposals: proposed once, Dismiss keeps it decided, Accept runs its kind\'s acceptor', async () => {
   const { env, fake, db } = await fixture();
   const app = appFor(fake);
   const ctx = { integrationId: PH, projectId: P };
@@ -207,7 +207,10 @@ test('proposals: proposed once, Dismiss keeps it decided, Accept runs its kind\'
   assert.equal(await proposeOnce(env, ctx, p), 'refreshed');
   const id = (db.prepare('SELECT id FROM posthog_proposals').get() as any).id;
   const at = (verb: string, who = FOUNDER) => call(app, env, who, 'POST', `/api/cycles/grow/posthog/proposals/${id}/${verb}`, { project: P });
-  assert.equal((await at('accept')).body.error, 'not_ready', 'no part has registered an acceptor yet');
+  // D1608: Grow's acceptor is registered, and it refuses a proposal with no answer to add; it stays pending.
+  const refused = await at('accept');
+  assert.deepEqual([refused.status, refused.body.error], [409, 'answer_missing']);
+  assert.equal((db.prepare('SELECT status FROM posthog_proposals WHERE id = ?').get(id) as any).status, 'pending');
   assert.equal((await at('dismiss', COFOUNDER)).body.error, 'not_your_posthog');
   assert.equal((await at('dismiss')).status, 200);
   assert.equal((await at('dismiss')).body.error, 'proposal_decided');
