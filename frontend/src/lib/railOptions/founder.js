@@ -437,4 +437,6 @@ export const FOUNDER_QUIET_PAGES = {
 export const FOUNDER_ASK_CHIPS = [
   // D1420 (#3864): Eadwyn proposes layout changes as cards in the Ask panel; nothing changes until Accept.
   { page: 'Founder · Studio', route: '/studio', key: 'studio:layout', label: 'Arrange my Studio for this stage', kind: 'plan', handler: 'form' },
+  // D1530 (#3848, E4 of #3742): the goal planner. The Chief of staff agent (or the sponsor's own Eadwyn) proposes a goal's plan as tasks.
+  { page: 'Founder · Studio', route: '/studio', key: 'propose:goal-plan', label: 'Draft a plan for this goal', kind: 'plan', handler: 'draft' },
 ];

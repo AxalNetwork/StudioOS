@@ -15,6 +15,8 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `agentTools.ts` | Part 5 (#3844): the sponsor's approved read tools (D852). `checkGrants` (the sponsor's own connected server, approved and pinned read tools only), `grantsView` (the profile's tools with their server and status), `cleanReads` (granted, at most five) and `readTools` (each through `callCustomTool` in `meteredCall`, cut to 8 KB, wrapped by `toolResultsForModel`; a gone or drifted server answers `disconnected`). |
 | `goals.ts` | D1529 (#3845, E1 of #3742): a scope's goals. A project goal rolls up only to its own company's goal and links only its own OKR. Also `sumCosts`, which never sums an unknown as 0. |
 | `tasks.ts` | D1529: a scope's tasks, for a person, an agent within its rule book, or no one; dependencies within one scope and without a cycle; ready derived; cost `{ available: false }` until E3. |
+| `planner.ts` | D1530 (#3848, E4 of #3742): the goal planner. `parsePlan` (at most 20 items; an unknown module or role drops its item with a note; a loop is `plan_invalid`), `planQuote` and `draftPlan` (the CEO agent through `agentRun`, else the manager's Eadwyn, on `propose:goal-plan`), and `acceptPlan` (claims the proposal once, then writes every task, event and dependency in one `DB.batch`). `agent_planner_d1530.test.ts` covers it. |
+| `templates.ts` | D1530: one role template per catalogue role (model tier, suggested cap, duties), the wizard's stage mapping, `suggestRoles` (rule-based, no model) and `monthEstimate` (unknown, never 0). |
 
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is

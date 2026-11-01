@@ -2067,6 +2067,19 @@ Worker routes in `routes/agent_engine.ts`, mounted at `/api/teams` before `team_
 | `PATCH /api/teams/tasks/:uid` | manage; a person assignee may send `status` and `blocked_reason` only | `{ task }`, with the same refusals. 403 `not_manager`. |
 | `PUT /api/teams/tasks/:uid/deps` | manage | Takes `{ depends_on: [uid] }` (at most 50); `{ task }`. 422 `dependency_cycle` / `cross_scope` / `too_many_dependencies`. |
 
+### Agent engine E4: the planner, role templates and the team wizard (D1530, #3848)
+
+The same router (`routes/agent_engine.ts`) and flags as E1, backed by `services/agents/planner.ts` and `services/agents/templates.ts`. No migration. The client methods are on `agentEngineApi`: `planQuote`, `draftPlan`, `acceptPlan`, `suggestedTeam`, `templates` and `capabilities`. The planner is the rail option `propose:goal-plan` in Studio, run by the scope's CEO / Chief of staff agent through `agentRun`, else by the manager's own Eadwyn. Custom roles wait for migration 728 (#3847).
+
+| Route | Gate | What it does |
+| --- | --- | --- |
+| `GET /api/teams/goals/:uid/plan/quote` | manage | `{ quote: { available, value_microusd }, by: 'agent' \| 'eadwyn' }`: what a plan would hold, an upper bound; `available: false` when it cannot be read, never 0. The agent run's refusals. |
+| `POST /api/teams/goals/:uid/plan` | manage | 201 `{ proposal: { uid, by, plan: { items: [{ title, module, suggested_assignee, depends_on, due_in_days }], dropped } } }`, at most 20 items. 422 `plan_invalid` (a loop, or no readable plan: the proposal is discarded); every run refusal in its own words. |
+| `POST /api/teams/goals/:uid/plan/accept` | manage | Takes `{ proposal, remove?: [index], titles?: { index: title } }`; 201 `{ tasks }`, written in one batch with `source_kind 'plan'`. 400 `invalid_plan`; 404; 409 `plan_decided`; 503 `plan_not_saved` (no task written, the plan can be accepted again). |
+| `GET /api/teams/:scope/:id/suggested-team?goal=` | manage | `{ stage, suggestions: [{ role_key, why, already_on_team, template, est_month_microusd }] }`. Rule-based: no model, nothing written. The estimate is `{ available: false }` when unknown, never 0. |
+| `GET /api/teams/templates` | signed in | `{ templates: [{ key, role_key, name, model_tier, suggested_cap_microusd, duties: [key] }] }`. |
+| `GET /api/teams/capabilities` | signed in | `{ modules: [{ key, label, cycle }], reads, options: { module: [option] }, floor }`. |
+
 ### Team agents part 1: the registry and the rule books (D1496, #3840)
 
 Worker routes in `routes/team_agents.ts`, mounted at `/api/teams`, backed by `services/agents/catalogue.ts`, `services/agents/rulebook.ts` and migration 712 (`team_agents`, `team_rulebooks`, `team_agent_events`; `agent_id` and `decided_by_user_id` on `ai_rail_proposals`, `agent_id` on `ai_usage_logs`). The client is `lib/api/teamAgents.js` (`teamAgentsApi`). No page yet: S1's Team page integrates it (#3727 part 6). Every route is 404 `team_agents_off` unless `TEAM_AGENTS_ENABLED` is `"true"` (off in both `wrangler.toml` blocks). `:scope` is `company` (its uid) or `project` (its id). Read: a company's `user_company_links` row, or `canAccessProject`. Manage: the company's `canEdit`, or `isProjectManager`. A person is `{ uid, name }`, never an email or a numeric id. Part 2 (#3842) adds the run below, through `services/agents/agentRun.ts` (the gates, the rule book and the spend are `services/agents/teams.ts`'s); part 3 adds the queue.
