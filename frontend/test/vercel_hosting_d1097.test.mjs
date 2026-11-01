@@ -54,7 +54,7 @@ test('the words: stamps in UTC, the reconnect sentence, each health line, and ea
 });
 
 test('buildParts: the two #2962 lines draw; the other Vercel tasks keep their null lines', () => {
-  assert.deepEqual(builtParts('operating-systems').map(([k]) => k), ['tools', 'vercel']);
+  assert.deepEqual(builtParts('operating-systems').map(([k]) => k), ['tools', 'vercel', 'posthog']);
   // D1088 (#2953) draws From Notion after Runs on; D1093 (#2958) From Google between them.
   assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion']);
   for (const slug of ['prototype-mvp', 'product-roadmap', 'company-creation']) {

@@ -163,7 +163,7 @@ export default function FromPosthog({ section, projectId, module, api = posthogA
             <div key={p.id} className="flex flex-col gap-1 rounded-lg border border-axal-lavender-edge bg-axal-lavender px-3 py-2 dark:border-violet-900 dark:bg-violet-950/30" data-testid="posthog-proposal">
               {renderProposal
                 // D1605: a part that needs the founder's answers draws its own Accept and passes them.
-                ? renderProposal(p, { mine, busy: busy === p.id, accept: (extra) => acceptWith(p, extra), dismiss: () => decide(p, 'dismiss') })
+                ? renderProposal(p, { mine, data: d, busy: busy === p.id, accept: (extra) => acceptWith(p, extra), dismiss: () => decide(p, 'dismiss') })
                 : <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{String(p.payload?.title || 'From PostHog')}</p>}
               {mine && !renderProposal && (
                 <div className="flex flex-wrap gap-2 max-sm:flex-col">

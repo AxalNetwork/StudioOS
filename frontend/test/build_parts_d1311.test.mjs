@@ -19,14 +19,14 @@ const order = (slug) => BUILD_PARTS[slug].map(([key]) => key);
 
 test('each module lists its connectors in the canvases\' order', () => {
   // VC1: the Hosting block after Tools history and GitHub's Code system.
-  assert.deepEqual(order('operating-systems'), ['tools', 'vercel']);
+  assert.deepEqual(order('operating-systems'), ['tools', 'vercel', 'posthog']);
   // VC4a: Runs on under GitHub's From GitHub; D1314: Google's and Notion's proposals after.
   assert.deepEqual(order('solution-design'), ['github', 'vercel', 'google', 'notion']);
   // VC2 and LV7: From Lovable under From GitHub; Vercel's Live strip between.
-  assert.deepEqual(order('prototype-mvp'), ['github', 'vercel', 'lovable', 'notion']);
+  assert.deepEqual(order('prototype-mvp'), ['github', 'vercel', 'lovable', 'notion', 'posthog']);
   // VC3: "The Deploys strip sits above GitHub's Releases strip."
   // Mutation checked: put github first → this fails.
-  assert.deepEqual(order('product-roadmap'), ['vercel', 'github', 'google', 'notion']);
+  assert.deepEqual(order('product-roadmap'), ['vercel', 'github', 'google', 'notion', 'posthog']);
   assert.deepEqual(order('company-creation'), ['github', 'vercel']);
   assert.deepEqual(order('founding-team'), ['github']);
 });
@@ -43,8 +43,8 @@ test('a part not built yet is a null on its own line, named with the task that b
   // The unbuilt ones are left out of what draws; GitHub's stay.
   // D1088 (#2953) filled Notion's three lines: From Notion draws last on each module.
   // D1093 (#2958) filled Google's two lines: From Google draws before From Notion.
-  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['github', 'google', 'notion']);
-  assert.deepEqual(builtParts('prototype-mvp').map(([k]) => k), ['github', 'notion']);
+  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['github', 'google', 'notion', 'posthog']);
+  assert.deepEqual(builtParts('prototype-mvp').map(([k]) => k), ['github', 'notion', 'posthog']);
   assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion'], 'D1097\'s Runs on, From Google, then From Notion');
   // CycleRoute takes Build's parts from here, and from nowhere else.
   assert.match(read('frontend/src/pages/cycles/CycleRoute.jsx'), /parts: toFnMap\(buildPartsMap\(\)\),/);

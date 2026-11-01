@@ -50,4 +50,15 @@ The rules for adding to this folder:
   `survey_signal` (through `writeDemandSignal`). It registers itself on import.
 
 PostHog parts 4–6 (#3731) add their syncs and acceptors beside these files
+- `build.ts` — D1606 (#3731 part 4): Build's sync (tracked metrics, each
+  flag's daily state), the `flag_link` acceptor (the founder's must-have) and
+  the `flag_shipped` acceptor (Done after 14 days active at 100%), the roadmap
+  KPI words, the linked flags' chips and Operating systems' Tools line.
+
+- `raise.ts` — D1607 (#3731 part 5): Raise's sync (tracked metrics in its
+  three modules) and `posthogFigure`, the latest figure of a metric the
+  founder said measures a role, read by Traction proof's lines and the
+  consistency check's `active_users`. It never moves a score.
+
+PostHog part 6 (#3731) adds its sync and acceptor beside these files
 and read PostHog through `reads.ts` alone.

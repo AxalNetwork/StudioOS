@@ -146,7 +146,7 @@ test('a rate limit ends the sync as partly synced and reads nothing more; a sect
   fake.state.status = 429;
   assert.equal((await sync(app, env)).status, 429, 'a limit before the session opens is PostHog asking us to wait');
   fake.state.status = null;
-  assert.equal((await call(app, env, FOUNDER, 'POST', '/api/cycles/build/posthog/sync', { project: P })).body.error, 'no_sync');
+  assert.equal((await call(app, env, FOUNDER, 'POST', '/api/cycles/grow/posthog/sync', { project: P })).body.error, 'no_sync');
 });
 
 test('the parsers: latest value, funnel conversion, experiment summary, web overview and answers by question', () => {
