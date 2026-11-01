@@ -24,7 +24,8 @@
  *
  * Swapped here (`SWAPPED`): `grid`, whose route `GET /api/decks/:id/grid`
  * merged as D1499 part 1 (#3749). It keeps its row, so the plan's table still
- * reads whole, and answers through `deckGridApi.grid`.
+ * reads whole, and answers through `deckGridApi.grid`. `elementModels`
+ * (D1503, #3754) answers through `deckElementModelsApi.read`.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -33,6 +34,7 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
+import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 
 export { NOT_ON };
 
@@ -93,7 +95,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid']);
+export const SWAPPED = Object.freeze(['grid', 'elementModels']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -130,7 +132,8 @@ export const saveCard = off('saveCard');
 export const discardDraft = off('discardDraft');
 export const batch = off('batch');
 export const cancelBatch = off('cancelBatch');
-export const elementModels = off('elementModels');
+/** D1503 (#3754): each grid element's models and the pick its next run uses (`GET /api/decks/:id/element-models`). */
+export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
 export const areasQuote = off('areasQuote');
 export const areasGenerate = off('areasGenerate');
 export const history = off('history');

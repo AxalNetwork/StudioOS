@@ -21,12 +21,13 @@ const read = (p) => readFileSync(p, 'utf8');
 const PITCH = 'frontend/src/pages/raise/pitch';
 const HELPERS = new Set(['NOT_ON', 'SURFACES', 'SWAPPED', 'unavailable', 'through', 'shown', 'availability']);
 import { deckGridApi } from '../src/lib/api/deckGrid.js';
+import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
   assert.ok(methods.length >= 40);
-  assert.deepEqual([...adapter.SWAPPED], ['grid'], 'D1499 (#3749): the one row whose route is on main');
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'elementModels'], 'D1499 (#3749) and D1503 (#3754): the rows whose routes are on main');
   for (const name of methods.filter((n) => !adapter.SWAPPED.includes(n))) {
     const answer = await adapter[name]('synthetic-deck', { synthetic: true });
     assert.deepEqual(answer, { available: false, reason: NOT_ON, issue: adapter.SURFACES[name].issue }, name);
@@ -55,6 +56,21 @@ test('D1499 (#3749): grid is swapped — it answers through deckGridApi.grid, an
   assert.equal(adapter.SURFACES.grid.issue, 3749, 'the row stays, so the plan’s table reads whole');
 });
 
+test('D1503 (#3754): elementModels is swapped — it answers through deckElementModelsApi.read, and the AIRail greys nothing for it', async () => {
+  const real = deckElementModelsApi.read;
+  const asked = [];
+  try {
+    deckElementModelsApi.read = async (id) => { asked.push(id); return { deck_id: 7, elements: [], groups: [] }; };
+    assert.deepEqual(await adapter.elementModels(7), { available: true, value: { deck_id: 7, elements: [], groups: [] } });
+    assert.deepEqual(asked, [7]);
+    deckElementModelsApi.read = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.elementModels(7), { available: false, reason: NOT_ON, issue: 3754 });
+    deckElementModelsApi.read = async () => { throw Object.assign(new Error('The picks could not be read.'), { status: 503 }); };
+    assert.equal((await adapter.elementModels(7)).unreadable, true, 'anything else is unreadable, never an empty list');
+  } finally { deckElementModelsApi.read = real; }
+  assert.equal(adapter.availability('elementModels'), null);
+});
+
 test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
     grid: 3749, saveCard: 3751, discardDraft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
@@ -76,16 +92,19 @@ test('the seam reaches no network, and no client method exists for a route that 
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
   // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]), ['../../../lib/api/deckGrid.js']);
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]), ['../../../lib/api/deckGrid.js', '../../../lib/api/deckElementModels.js']);
   assert.doesNotMatch(codeOnly(read(`${PITCH}/deckV2Model.js`)), /request\(|fetch\(|lib\/api|from 'react'/);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
   // #3749 part 1 merged as #3925: Grid has a real read route and client (main's check, kept by the merge).
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_grid.ts')), /deckGrid\.get\(['"]\/:id\{\[0-9\]\+\}\/grid['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckGrid\)/);
-  for (const path of ['/areas', '/stage-plan', '/figures', '/element-models', '/remix', '/draft', '/areas/instruct']) {
+  // D1503 (#3754): the element models route is on main, with its client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_element_models.ts')), /deckElementModels\.get\(['"]\/:id\{\[0-9\]\+\}\/element-models['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckElementModels\)/);
+  for (const path of ['/areas', '/stage-plan', '/figures', '/remix', '/draft', '/areas/instruct']) {
     assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
   }
-  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deck(Draft|Areas|Instruct|Stage|Figures|ElementModels)\.js$/.test(f)));
+  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deck(Draft|Areas|Instruct|Stage|Figures)\.js$/.test(f)));
 });
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {

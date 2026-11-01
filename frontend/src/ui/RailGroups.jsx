@@ -20,6 +20,12 @@ import { Unreadable } from './Honesty';
  * (its title the adapter's reason); Safety is always on and not pickable.
  * Reads are lazy: a group's models load when it is opened.
  *
+ * D1503 (#3754): a host group may carry its own `read()` (an answer in
+ * `GET /api/ai/rail`'s shape, plus `free` for a group that runs no model)
+ * and `pick(model)`; the pitch pages' element groups do, from the Worker's
+ * per-element routes. A pick the Worker refuses (HQ's lock, the plan) is
+ * undone and its message shown. No other block or layout changes.
+ *
  *   RailPresets      Fast · Balanced · Best · Custom, greyed "Coming later"
  *                    while the presets read answers unavailable
  *   RailGroups       the blocks
@@ -51,18 +57,18 @@ export function RailPresets({ presets }) {
   );
 }
 
-function useGroupRow(page, option, open) {
+function useGroupRow(page, option, open, read) {
   const [reading, setReading] = useState({ loading: false, data: null, error: false, status: null });
   const load = useCallback(() => {
-    if (!page || !option || !open) return undefined;
+    if (!page || !(option || read) || !open) return undefined;
     let live = true;
     setReading((r) => ({ ...r, loading: true }));
     Promise.resolve()
-      .then(() => railPrefsApi.page(page, option))
+      .then(() => (read ? read() : railPrefsApi.page(page, option)))
       .then((data) => { if (live) setReading({ loading: false, data, error: false, status: 200 }); },
         (e) => { if (live) setReading({ loading: false, data: null, error: true, status: e?.status ?? null }); });
     return () => { live = false; };
-  }, [page, option, open]);
+  }, [page, option, open, read]);
   useEffect(() => load(), [load]);
   return { ...reading, reload: load };
 }
@@ -71,14 +77,22 @@ function RailGroup({ group, page, live, guardLine }) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState(null);
   const [kept, setKept] = useState([]);
-  const lead = group.options[0] || null;
-  const row = useGroupRow(page, lead, open);
-  const rail = lead && open
+  const [refused, setRefused] = useState(null);
+  const lead = group.read ? `group:${group.id}` : group.options[0] || null;
+  const row = useGroupRow(page, group.read ? null : lead, open, group.read);
+  const rail = lead && open && !row.data?.free
     ? railView({ reading: (row.loading || row.status == null) && !row.error && !row.data ? { loading: true } : row, page, option: lead, pick: picked, price: (m) => railModelPrice(m, row.data?.billing, true) })
     : null;
   const pick = useCallback((id) => {
     if (!page || !live) return;
-    setPicked(id); setKept([]);
+    setPicked(id); setKept([]); setRefused(null);
+    if (group.pick) {
+      Promise.resolve().then(() => group.pick(id)).then(() => row.reload(), (e) => {
+        setPicked(null);
+        setRefused(typeof e?.message === 'string' && e.message ? e.message : 'The pick was not saved.');
+      });
+      return;
+    }
     Promise.allSettled(group.options.map((o) => railPrefsApi.setPagePick(page, id, o)))
       .then((out) => {
         const refused = group.options.filter((_, i) => out[i].status === 'rejected');
@@ -86,7 +100,7 @@ function RailGroup({ group, page, live, guardLine }) {
         setKept(refused.filter((o) => o !== lead));
         row.reload();
       });
-  }, [page, live, group.options, lead, row.reload]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, live, group, lead, row.reload]); // eslint-disable-line react-hooks/exhaustive-deps
   const bodyId = `fwr-group-${group.id}`;
 
   if (group.safety) {
@@ -102,7 +116,7 @@ function RailGroup({ group, page, live, guardLine }) {
       <div className="fwr-rgroup" data-off="true" data-testid={`worker-rail-group-${group.id}`}>
         <div className="fwr-rgroup-head" title={group.unavailable?.reason || undefined}>
           <span className="fwr-rgroup-name">{group.label}</span>
-          <span className="fwr-rgroup-off" data-testid={`text-worker-rail-group-off-${group.id}`}>Not set up yet</span>
+          <span className="fwr-rgroup-off" data-testid={`text-worker-rail-group-off-${group.id}`}>{group.unavailable?.label || 'Not set up yet'}</span>
         </div>
         {group.usedBy ? <p className="fwr-models-note">Used by: {group.usedBy}</p> : null}
       </div>
@@ -119,6 +133,7 @@ function RailGroup({ group, page, live, guardLine }) {
       {open ? (
         <div id={bodyId}>
           {rail?.state === 'loading' ? <p className="fwr-absent">Loading…</p> : null}
+          {row.data?.free ? <p className="fwr-models-note" data-testid={`text-worker-rail-group-free-${group.id}`}>{row.data.free}</p> : null}
           {rail?.state === 'none' ? <p className="fwr-absent">{`Not recorded. ${rail.reason}`}</p> : null}
           {rail?.state === 'unreadable' ? (
             <Unreadable what={`The ${group.label} models`} claim="Which model runs here is unknown, not none." onRetry={row.reload} />
@@ -144,6 +159,7 @@ function RailGroup({ group, page, live, guardLine }) {
               })}
             </div>
           ) : null}
+          {refused ? <p className="fwr-models-note" role="status" data-testid={`text-worker-rail-group-refused-${group.id}`}>{refused}</p> : null}
           {kept.length ? <p className="fwr-models-note" role="status" data-testid={`text-worker-rail-group-kept-${group.id}`}>{`Kept its own model: ${kept.join(', ')}.`}</p> : null}
         </div>
       ) : null}

@@ -79,6 +79,7 @@ export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
 export * from './api/deckCheck.js';
 export * from './api/deckEditor.js';
+export * from './api/deckElementModels.js';
 export * from './api/deckGrants.js';
 export * from './api/deckGrid.js';
 export * from './api/deckImages.js';
