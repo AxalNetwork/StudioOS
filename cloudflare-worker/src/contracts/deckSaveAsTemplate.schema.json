@@ -1,0 +1,89 @@
+{
+  "$id": "deckSaveAsTemplate",
+  "title": "POST /api/decks/:id/save-as-template (D1535, #3782)",
+  "description": "The template a deck was saved as, text and figures removed, which the adapter's `saveAsTemplate` passes on. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "template"
+  ],
+  "properties": {
+    "template": {
+      "$ref": "#/$defs/meta"
+    }
+  },
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uid",
+        "name",
+        "description",
+        "stage",
+        "audience_tags",
+        "deck_audience",
+        "style",
+        "swatch",
+        "card_count"
+      ],
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "description": "text, or null"
+        },
+        "stage": {
+          "description": "pre_seed | seed | series_a | series_b_plus, or null for a member's own"
+        },
+        "audience_tags": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "angel",
+              "pre_seed_fund",
+              "seed_fund",
+              "series_a_fund",
+              "strategic",
+              "grant",
+              "other"
+            ]
+          }
+        },
+        "deck_audience": {
+          "description": "one of the seven, or null"
+        },
+        "style": {
+          "description": "editorial | bold | minimal, or null"
+        },
+        "swatch": {
+          "description": "one of the eight, or null"
+        },
+        "card_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "label"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -2167,6 +2167,12 @@ The slide model gains a `table` block (≤ 8 columns × 12 rows; each cell `{ te
 
 | Route | Who | What it answers |
 | --- | --- | --- |
+| `GET /api/decks/templates?stage=&audience=&style=` | signed in | D1535 (#3782). `{ templates: [Meta], filters: { stages, audiences (New deck's seven), styles } }`: HQ's templates (#3876's seeds). 400 `invalid_stage` / `invalid_audience` / `invalid_style`. |
+| `GET /api/decks/templates/mine` | signed in | D1535. `{ templates: [Meta] }`, the caller's own. |
+| `GET /api/decks/templates/pick?stage=&audience=&sector=` | signed in | D1535. `{ template_id, reason }`: the one-click pick, the same for the same inputs. |
+| `GET /api/decks/templates/:uid` | signed in (HQ's, or the caller's own) | D1535. `{ template: Meta, cards, theme }`. |
+| `POST /api/decks/templates/:uid/apply` `{ project_id }` | the venture's founders (`projectOwned`, write) | D1535. `{ proposal, template_id }`: a proposal (`method_id` `tpl:<uid>`), nothing kept before Accept. |
+| `POST /api/decks/:id/save-as-template` `{ name }` | the venture's founders | D1535. 201 `{ template: Meta }`: text and figures removed, structure, theme and decor kept, the caller's own. 422 `not_a_template`. |
 | `GET /api/decks/:id/element-models` | whoever may read the deck (`projectOwned`) | `{ deck_id, project_id, billing, plan_rank, elements: [{ element, group, job, kind, task, plan_min, expected_ms, per_run_microusd, suggested: [≤ 3], more, pick, resolved: { model, name, source, locked, notice } }], groups: [{ group, elements, lead, suggested, more, pick, resolved, free? }], free: [{ element, group, line: 'No model · free' }] }`. `suggested`, `more` and `pick` use #3741's shape. Stale deck, area and member picks are cleared by the read, and `notice` says "A model retired · Using …". |
 | `PUT /api/decks/:id/element-models` `{ scope: 'deck' \| 'member', key, model \| null }` | whoever may write the deck | Stores the deck's pick (scope id: the project) or the caller's own. `key` is a routed element or `group:<group>`, and `null` clears the pick. Refusals: 400 `invalid_scope`, `invalid_key` or `model_not_offered`; 403 `role_locked` when HQ locked the key, and 403 `plan_locked` (with `plan`) for a model the caller's plan does not include. |
 

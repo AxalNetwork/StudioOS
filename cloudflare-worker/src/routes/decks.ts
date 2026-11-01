@@ -1876,7 +1876,7 @@ decks.post('/apply-method', async (c) => {
  * earlier unkept proposal is replaced (it was never a version); the deck
  * versions in `pitch_decks` are not read for writing and not touched.
  */
-async function proposeFill(env: Env, base: any, slides: any[], methodId: string, userId: number): Promise<any> {
+export async function proposeFill(env: Env, base: any, slides: any[], methodId: string, userId: number): Promise<any> {
   const projectId = Number(base.project_id);
   const res = await env.DB.batch([
     env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE project_id = ?').bind(projectId),

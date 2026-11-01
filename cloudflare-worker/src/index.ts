@@ -254,6 +254,7 @@ import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
 import deckElementModels from './routes/deck_element_models';
+import deckTemplates from './routes/deck_templates';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
@@ -1386,6 +1387,7 @@ app.route('/api/decks', deckCheck);
 app.route('/api/decks', deckGrid);
 // D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckElementModels);
+app.route('/api/decks', deckTemplates);
 // D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
 app.route('/api/decks', deckStage);
 // D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.

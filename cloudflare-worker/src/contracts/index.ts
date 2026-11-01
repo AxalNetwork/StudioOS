@@ -19,6 +19,10 @@ export const CONTRACTS = Object.freeze({
   stagePlan: { issue: 3774, route: 'GET /api/decks/:id/stage-plan', schema: 'deckStagePlan.schema.json' },
   remix: { issue: 3800, route: 'POST /api/decks/:id/remix', schema: 'deckRemix.schema.json' },
   investorLinks: { issue: 3812, route: 'GET /api/decks/:id/investor-links', schema: 'deckInvestorLinks.schema.json' },
+  // D1535 (#3782): the template store.
+  templates: { issue: 3782, route: 'GET /api/decks/templates', schema: 'deckTemplates.schema.json' },
+  myTemplates: { issue: 3782, route: 'GET /api/decks/templates/mine', schema: 'deckMyTemplates.schema.json' },
+  saveAsTemplate: { issue: 3782, route: 'POST /api/decks/:id/save-as-template', schema: 'deckSaveAsTemplate.schema.json' },
   withdrawInvestorLink: { issue: 3812, route: 'POST /api/decks/:id/investor-links/:shareId/withdraw', schema: 'deckWithdrawInvestorLink.schema.json' },
 });
 

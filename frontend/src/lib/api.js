@@ -89,6 +89,7 @@ export * from './api/deckInvestorLinks.js';
 export * from './api/deckRemix.js';
 export * from './api/deckSources.js';
 export * from './api/deckStage.js';
+export * from './api/deckTemplates.js';
 export * from './api/deckTypedValues.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';

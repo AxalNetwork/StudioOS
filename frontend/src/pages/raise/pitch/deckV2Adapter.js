@@ -48,6 +48,7 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 
 export { NOT_ON };
 
@@ -108,7 +109,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'templates', 'myTemplates', 'saveAsTemplate']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -161,9 +162,12 @@ export const imageEdit = off('imageEdit');
 export const elementsLibrary = off('elementsLibrary');
 export const diagrams = off('diagrams');
 export const ventureElements = off('ventureElements');
-export const templates = off('templates');
-export const myTemplates = off('myTemplates');
-export const saveAsTemplate = off('saveAsTemplate');
+/** D1535 (#3782): HQ's Gallery templates, filtered by stage, New deck's seven audiences and style. */
+export const templates = (filters = {}) => through(() => deckTemplatesApi.templates(filters), SURFACES.templates.issue);
+/** D1535: the caller's own templates. */
+export const myTemplates = () => through(() => deckTemplatesApi.myTemplates(), SURFACES.myTemplates.issue);
+/** D1535: a deck saved as the caller's template, text and figures removed. */
+export const saveAsTemplate = (deckId, name) => through(() => deckTemplatesApi.saveAsTemplate(deckId, name), SURFACES.saveAsTemplate.issue);
 /** D1538 (#3787): the figures typed for the deck, each Stated, with who typed it. */
 export const typedTables = (deckId) => through(() => deckTypedValuesApi.list(deckId), SURFACES.typedTables.issue);
 export const media = off('media');
