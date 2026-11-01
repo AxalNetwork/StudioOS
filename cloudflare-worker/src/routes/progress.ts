@@ -1979,8 +1979,10 @@ function serializeSnap(s: MetricsSnapshot): SerializedSnap {
  * (`services/google/growFeeds.ts`), so a reader that takes "the latest row"
  * and reads a Stripe or Mercury column from it skips `google_sheets` rows
  * (`COALESCE(source, '') <> 'google_sheets'`, written out in each statement); otherwise a Sheet row dated later would hide their figures.
+ * D1609 adds `posthog`, which never writes a row here (#2409 decision G):
+ * listing it only refuses a typed snapshot that claims to be PostHog's.
  */
-export const CONNECTED_METRIC_SOURCES = Object.freeze(['stripe', 'mercury', 'google_sheets']);
+export const CONNECTED_METRIC_SOURCES = Object.freeze(['stripe', 'mercury', 'google_sheets', 'posthog']);
 export const isConnectedSource = (v: unknown): boolean =>
   typeof v === 'string' && CONNECTED_METRIC_SOURCES.includes(v.trim().toLowerCase());
 
@@ -2467,11 +2469,11 @@ type MetricDefinitionRow = {
 };
 
 /**
- * 'manual' | 'stripe' | 'derived' — where the founder INTENDS this metric to come
+ * 'manual' | 'stripe' | 'derived' | 'posthog' (D1609) — where the founder INTENDS this metric to come
  * from, which is not the same question as `project_metrics.source` (where one row
  * did come from). See migration 251: the two disagreeing is a finding.
  */
-const DEFINITION_SOURCES = new Set(['manual', 'stripe', 'derived']);
+const DEFINITION_SOURCES = new Set(['manual', 'stripe', 'derived', 'posthog']);
 
 // Keyed on `env.DB`, for the reason the comment above `METRIC_TARGETS_READY` gives.
 const METRIC_DEFINITIONS_READY = new WeakMap<object, boolean>();

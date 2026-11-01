@@ -45,6 +45,8 @@ import FromLovable from './FromLovable';
 import ValidateFromGoogle from './ValidateFromGoogle';
 import { DurableFromGoogle, RevenueFromGoogle } from './GrowFromGoogle';
 import FromNotion from './FromNotion';
+import { ValidateDemandPosthog, ValidateExperimentsPosthog } from './ValidatePosthog';
+import RaisePosthog from './RaisePosthog';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
 import ContentCalendar from './ContentCalendar';
@@ -151,7 +153,13 @@ const CYCLE_DEFS = {
       ),
       // D1087 (#2952): research pages from Notion, as sources (title and link).
       'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
-      'demand-signals': (data, ctx) => <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />,
+      'demand-signals': (data, ctx) => (
+        <>
+          <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />
+          {/* D1605 (#3731): the founder's PostHog, beside the waitlist and never added to it. */}
+          <ValidateDemandPosthog projectId={ctx.projectId} />
+        </>
+      ),
       'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
         onExport={() => api.exportValidatePainMap(ctx.projectId)}
         // #1692's `attach` on the theme record, so the theme's activity logs it.
@@ -169,6 +177,9 @@ const CYCLE_DEFS = {
             // Only until #1656 registers New hypothesis as the table's Add (decision 20).
             onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />
           <ValidateFromGoogle part={data?.parts?.from_google} module="experiments" projectId={ctx.projectId} reload={ctx.reload} />
+          {/* D1605 (#3731): PostHog experiments and surveys; the hypothesis and direction are the founder's. */}
+          <ValidateExperimentsPosthog projectId={ctx.projectId}
+            loadHypotheses={() => api.getValidationBoard(ctx.projectId).then((board) => (board?.hypotheses || []).filter((h) => !h.retired_at))} />
         </>
       ),
       // D693 decision 13 (#1704): the verdict zone's Export summary, under the Decisions table.
@@ -217,6 +228,8 @@ const CYCLE_DEFS = {
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => (
         <>
           {mercuryPart(m.slug, data, ctx)}
+          {/* D1607 (#3731): Pitch deck's PostHog metrics; Readiness and Narrative draw theirs below. */}
+          <RaisePosthog slug={m.slug} projectId={ctx.projectId} />
           <EvidencePart slug={m.slug} projectId={ctx.projectId} />
         </>
       )])),
@@ -226,6 +239,7 @@ const CYCLE_DEFS = {
         <>
           <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
           {mercuryPart('investor-narrative', data, ctx)}
+          <RaisePosthog slug="investor-narrative" projectId={ctx.projectId} />
           <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
         </>
       ),
@@ -234,6 +248,7 @@ const CYCLE_DEFS = {
         <>
           <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
           {mercuryPart('fundraising-readiness', data, ctx)}
+          <RaisePosthog slug="fundraising-readiness" projectId={ctx.projectId} />
           <EvidencePart slug="fundraising-readiness" projectId={ctx.projectId} />
         </>
       ),
