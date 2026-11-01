@@ -26,11 +26,12 @@ function results(value: { results?: Row[] }): Row[] {
   return value.results;
 }
 
-/** Publish's team rule as a join: the founder's venture, or a venture of a company the user is linked to. */
-const TEAM = `JOIN users u ON u.id = ? AND u.is_active = 1 AND u.deletion_requested_at IS NULL
-        AND ((u.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
-          OR (p.company_id IS NOT NULL AND EXISTS (SELECT 1 FROM user_company_links l WHERE l.company_id = p.company_id AND l.user_id = u.id)))`;
-
+/*
+ * Publish's team rule as a join, written out in each query below rather than
+ * interpolated: the founder's venture, or a venture of a company the user is
+ * linked to. Literal SQL lets the schema guard (check-sqlite-columns) read every
+ * column; an interpolated fragment would be skipped unread.
+ */
 /** The page a send opens: its Grow module, `overview` being Grow itself. */
 export function publishHref(module: unknown): string {
   const m = String(module || '');
@@ -48,7 +49,9 @@ export async function publishSendEvents(env: Env, userId: number, from: string, 
             strftime('%Y-%m-%dT%H:%M:%fZ', CASE WHEN s.status = 'sent' THEN COALESCE(s.sent_at, s.scheduled_for) ELSE s.scheduled_for END) AS at
        FROM publish_sends s
        JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
-       ${TEAM}
+       JOIN users u ON u.id = ? AND u.is_active = 1 AND u.deletion_requested_at IS NULL
+        AND ((u.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+          OR (p.company_id IS NOT NULL AND EXISTS (SELECT 1 FROM user_company_links l WHERE l.company_id = p.company_id AND l.user_id = u.id)))
       WHERE s.confirmed_by = u.id
         AND s.status IN ('ready', 'sending', 'sent', 'failed', 'unknown')
         AND (CASE WHEN s.status = 'sent' THEN COALESCE(s.sent_at, s.scheduled_for) ELSE s.scheduled_for END) IS NOT NULL
@@ -75,7 +78,9 @@ export async function contentPlannedEvents(env: Env, userId: number, from: strin
     `SELECT c.id, c.uid, c.title, c.status, c.project_id, date(c.planned_on) AS day
        FROM content_calendar_items c
        JOIN projects p ON p.id = c.project_id AND p.deleted_at IS NULL
-       ${TEAM}
+       JOIN users u ON u.id = ? AND u.is_active = 1 AND u.deletion_requested_at IS NULL
+        AND ((u.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+          OR (p.company_id IS NOT NULL AND EXISTS (SELECT 1 FROM user_company_links l WHERE l.company_id = p.company_id AND l.user_id = u.id)))
       WHERE c.planned_on IS NOT NULL AND c.status <> 'dropped'
         AND julianday(date(c.planned_on), '+1 day') > julianday(?)
         AND julianday(date(c.planned_on)) < julianday(?)
