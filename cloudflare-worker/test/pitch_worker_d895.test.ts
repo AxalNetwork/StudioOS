@@ -57,6 +57,8 @@ type F = Awaited<ReturnType<typeof fixture>>;
 /** D897: AI assistance off on Pitch deck for these members, so New deck builds figures only, at no cost. */
 function aiOff(f:F, ...users:number[]){ for(const u of users) f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES(?,?,'founder · raise · pitch deck','','manual')").run(`synthetic-off-${u}`,u); }
 async function call(f:F, who:number|null, method:string, path:string, json?:any, extra: {claims?:Record<string,any>;headers?:Record<string,string>} = {}) {
+  // D1500: a deck save is in model version 2.
+  if(method==='PUT'&&/^\/api\/decks\/\d+$/.test(path)&&json&&typeof json==='object'&&!('model_version' in json))json={...json,model_version:2};
   const headers:Record<string,string>={'Content-Type':'application/json',...extra.headers};
   if(who) headers.Authorization='Bearer '+await new SignJWT({...extra.claims,user_id:who}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res=await f.app.request(path,{method,headers,...(json===undefined?{}:{body:JSON.stringify(json)})},f.env);

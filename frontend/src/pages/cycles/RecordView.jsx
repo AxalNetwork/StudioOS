@@ -22,6 +22,7 @@ import { isPlainClick } from './cycleModel.js';
 import { declaredActions, dispatchOf, pillView, rowAction, rowView, sectionId, toneOf } from './recordModel.js';
 
 import { NR } from './CycleModulePage.jsx';
+import { RecordHeaderRow, useRecordHeader } from './RecordHeader.jsx';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
 const PILL = {
   v1: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
@@ -88,10 +89,13 @@ function RecordAction({ action, quiet = false, onLink, onForm, onWrite, onClient
 
 export function RecordActions({ actions = [], ...handlers }) {
   const phone = useRecordPhone();
+  const { emailTo } = useRecordHeader();
   if (phone) {
     const rows = actions.filter((action) => dispatchOf(action)).map((action) => ({
       key: action.key, title: action.tone === 'danger' ? danger(action.label) : action.label, ...runOf(action, handlers),
     }));
+    // D1454 (#3710): Email is one of the record's actions on a phone too, never a row of its own above the page.
+    if (emailTo) rows.splice(rows.findIndex((r) => r.key === 'delete') < 0 ? rows.length : rows.findIndex((r) => r.key === 'delete'), 0, { key: 'email', title: 'Email', href: emailTo });
     return rows.length ? <PhoneGroup testid="record-actions" label="Actions" rows={rows} /> : null;
   }
   return <div className="flex flex-wrap items-center gap-1.5" data-testid="record-actions">
@@ -99,20 +103,42 @@ export function RecordActions({ actions = [], ...handlers }) {
   </div>;
 }
 
-export function RecordFacts({ facts = [] }) {
+/**
+ * D1454 (#3710, IV-D2): the facts in one even row. A fact the read left null
+ * shows "Not recorded"; when the read names a declared action for it
+ * (`fact.action`, the key of one of the record's actions, e.g. Judge fit), that
+ * one action replaces the reason. A key the record did not declare draws nothing.
+ */
+export function RecordFacts({ facts = [], declarations = new Map(), handlers = {} }) {
+  const actionOf = (fact) => ((fact.value ?? null) === null && typeof fact.action === 'string' ? rowAction(fact.action, declarations) : null);
   if (useRecordPhone()) {
-    return <PhoneGroup testid="record-facts" label="At a glance" rows={facts.map((fact, index) => ((fact.value ?? null) === null
-      ? { key: index, title: fact.label, description: fact.reason || undefined, notRecorded: true, notRecordedReason: fact.reason || undefined }
-      : { key: index, title: fact.label, value: text(fact.value) }))} />;
+    return <PhoneGroup testid="record-facts" label="At a glance" rows={facts.map((fact, index) => {
+      if ((fact.value ?? null) !== null) return { key: index, title: fact.label, value: text(fact.value) };
+      const action = actionOf(fact);
+      return action
+        ? { key: index, title: fact.label, value: action.label, ...runOf(action, handlers) }
+        : { key: index, title: fact.label, description: fact.reason || undefined, notRecorded: true, notRecordedReason: fact.reason || undefined };
+    })} />;
   }
-  return <div className="grid grid-cols-1 gap-2.5 @[760px]/cycle:grid-cols-4" data-testid="record-facts">
-    {facts.map((fact, index) => <div key={index} className="flex min-w-0 flex-col gap-1 rounded-xl border border-axal-hairline bg-white px-3.5 py-3 dark:border-gray-700 dark:bg-gray-900">
-      <div className="text-[10px] font-extrabold uppercase tracking-[0.09em] text-axal-muted dark:text-gray-400">{fact.label}</div>
-      {fact.value == null ? <div><span className={NR}>Not recorded</span>
-        {fact.reason && <p className="mt-1 text-[11.5px] text-axal-muted dark:text-gray-400">{fact.reason}</p>}
-      </div> : <div className="break-words text-[15px] font-bold text-axal-ink dark:text-gray-100">{text(fact.value)}</div>}
-    </div>)}
+  return <div className="grid auto-rows-fr grid-cols-1 gap-2.5 @[760px]/cycle:grid-cols-4" data-testid="record-facts">
+    {facts.map((fact, index) => {
+      const action = actionOf(fact);
+      return <div key={index} className="flex h-full min-w-0 flex-col gap-1 rounded-xl border border-axal-hairline bg-white px-3.5 py-3 dark:border-gray-700 dark:bg-gray-900">
+        <div className="text-[10px] font-extrabold uppercase tracking-[0.09em] text-axal-muted dark:text-gray-400">{fact.label}</div>
+        {fact.value == null ? <div className="flex flex-col items-start gap-1.5"><span className={NR}>Not recorded</span>
+          {action ? <RecordAction action={action} {...handlers} />
+            : fact.reason && <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400">{fact.reason}</p>}
+        </div> : <div className="break-words text-[15px] font-bold text-axal-ink dark:text-gray-100">{text(fact.value)}</div>}
+      </div>;
+    })}
   </div>;
+}
+
+/** The record's pills, as the header draws them beside the title. */
+export function RecordPills({ pills = [] }) {
+  return (pills ?? []).length ? <>{pills.map((pill, index) => {
+    const view = pillView(pill); return <Status key={index} value={view.text} tone={view.tone} />;
+  })}</> : null;
 }
 
 export function RecordSection({ section, side = false, cycleName, moduleName, declarations = new Map(), ...handlers }) {
@@ -207,7 +233,7 @@ export default function RecordView({ record, activity, cycleName, moduleName, ..
       {(record.pills ?? []).length > 0 && <div className="flex flex-wrap items-center gap-2" data-testid="record-pills">{record.pills.map((pill, index) => {
         const view = pillView(pill); return <Status key={index} value={view.text} tone={view.tone} />;
       })}</div>}
-      <RecordFacts facts={record.facts} />
+      <RecordFacts facts={record.facts} declarations={declarations} handlers={handlers} />
       {(record.main ?? []).map((section) => <RecordSection key={section.key} section={section} {...context} />)}
       {(record.side ?? []).map((section) => <RecordSection key={section.key} section={section} side {...context} />)}
       <RecordActivity rows={phoneActivity} total={record.activity_total} {...context} />
@@ -215,13 +241,11 @@ export default function RecordView({ record, activity, cycleName, moduleName, ..
     </div>;
   }
   return <div className="space-y-3" data-testid="record-view">
-    <div className="flex flex-wrap items-center justify-between gap-3.5">
-      <div className="flex flex-wrap items-center gap-2">{(record.pills ?? []).map((pill, index) => {
-        const view = pillView(pill); return <Status key={index} value={view.text} tone={view.tone} />;
-      })}</div>
-      <RecordActions actions={record.actions} {...handlers} />
-    </div>
-    <RecordFacts facts={record.facts} />
+    {/* D1454 (#3710, IV-D1): the pills beside the title and the one action row at top right of the header. */}
+    <RecordHeaderRow pills={<RecordPills pills={record.pills} />} actions={record.actions} handlers={handlers}
+      inline={(pills, row) => <div className="flex flex-wrap items-center justify-between gap-3.5">
+        <div className="flex flex-wrap items-center gap-2" data-testid="record-pills">{pills}</div>{row}</div>} />
+    <RecordFacts facts={record.facts} declarations={declarations} handlers={handlers} />
     <div className="grid grid-cols-1 items-start gap-3 @[760px]/cycle:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-3">{(record.main ?? []).map((section) => <RecordSection key={section.key} section={section} {...context} />)}</div>
       <div className="min-w-0 space-y-3">{(record.side ?? []).map((section) => <RecordSection key={section.key} section={section} side {...context} />)}

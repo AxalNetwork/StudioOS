@@ -276,6 +276,7 @@ test('Delete confirms what goes with it, Cancel keeps it, and Delete the intervi
   const f = fakes();
   const m = await mount(f);
   try {
+    await m.press('⋯'); // D1454 (#3710, IV-D1): Delete sits in ⋯.
     await m.press('Delete');
     const dlg = m.by('delete-interview-confirm');
     assert.equal(m.pr(dlg).role, 'alertdialog');
@@ -285,6 +286,7 @@ test('Delete confirms what goes with it, Cancel keeps it, and Delete the intervi
     await m.click('button-cancel-delete');
     assert.equal(m.by('delete-interview-confirm'), undefined);
     assert.equal(f.calls.some((c) => c[0] === 'act'), false);
+    await m.press('⋯'); // D1454 (#3710, IV-D1): Delete sits in ⋯.
     await m.press('Delete');
     await m.click('button-confirm-delete');
     assert.deepEqual(f.calls.filter((c) => c[0] === 'act'), [['act', 'delete', {}]]);
@@ -294,6 +296,7 @@ test('Delete confirms what goes with it, Cancel keeps it, and Delete the intervi
   f2.act = async () => { throw new Error('Project not found'); };
   const m2 = await mount(f2);
   try {
+    await m2.press('⋯');
     await m2.press('Delete');
     await m2.click('button-confirm-delete');
     assert.ok(m2.text().includes('Project not found'));

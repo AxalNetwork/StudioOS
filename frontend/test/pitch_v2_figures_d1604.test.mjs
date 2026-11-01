@@ -65,7 +65,7 @@ test('the hover card: record, as of and grade, Open the record; a missing tile r
   // A typed tile no record backs is not "Not recorded": its face holds a value.
   const typed = figureCard({ id: 'm4', kind: 'metric', label: 'Raise', value: '$2M' }, [], null);
   assert.equal(typed.missing, null, 'the hover does not contradict the face');
-  assert.deepEqual(typed.lines, [TYPED_LINE]);
+  assert.deepEqual(typed.lines, [TYPED_LINE()], 'pd24: "Typed on the card · not linked to a record" when the typist is not known (D1538)');
 });
 
 test('a one-click Not recorded binding against a store that still records nothing is not "changed"', () => {

@@ -45,8 +45,10 @@ test('the Email action shows only on a record with a person', () => {
   assert.match(html, /href="\/email\?person=prospect%3A21&amp;compose=1&amp;from=Ben\+%C2%B7\+Capital\+relationships"/);
   assert.equal(emailHref('member:abc'), '/email?person=member%3Aabc&compose=1');
   // The action is mounted once, in the record route, for every record body.
+  // D1454 (#3710, IV-D1): it goes into the record's one action row (after Ask), never a row of its own.
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.match(route, /personOfRecord\(cycle, slug, recordId\) && <div[^>]*>\s*<EmailAction person=\{personOfRecord\(cycle, slug, recordId\)\}/);
+  assert.match(route, /<RecordHeaderProvider[\s\S]*?email=\{recordState\.data && personOfRecord\(cycle, slug, recordId\)\s*\?\s*<EmailAction person=\{personOfRecord\(cycle, slug, recordId\)\}/);
+  assert.doesNotMatch(route, /<div className="flex justify-end">\s*<EmailAction/, 'no lone Email row');
 });
 
 test('no other member\'s address is rendered unless the shares read serves it', () => {
