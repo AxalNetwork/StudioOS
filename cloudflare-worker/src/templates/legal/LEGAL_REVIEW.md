@@ -25,6 +25,10 @@ counterparty before counsel sign-off.
 | Copyright / DMCA policy | `dmca_policy_v1.md` | **NEW DRAFT** — safe harbor requires registering a designated agent with the U.S. Copyright Office first |
 | E-sign consent (ESIGN/UETA) | `esign_consent_v1.md` | **NEW DRAFT** — wire into the signing page before first signature |
 | Risk disclosures / no-advice page | frontend `/risk-disclosures` | Existing — see red flag 1 |
+| Terms of Service v4 (adds §4C, AI features and output) | `tos_v4.md` | **NEW DRAFT** (A19, #3763) — see section G; not imported, `tos_v3.md` stays live |
+| Privacy Policy v3 (adds §3A, AI features) | `privacy_v3.md` | **NEW DRAFT** (A19, #3763) — see section G; not imported, `privacy_v2.md` stays live |
+| Data Processing Addendum v2 (adds the Cloudflare AI and platform rows) | `dpa_v2.md` | **NEW DRAFT** (A19, #3763) — see section G |
+| AI-image marking and attribution (specification) | `ai_image_marking_spec_v1.md` | **NEW DRAFT** (A19, #3763) — see section G; a spec, not a counterparty document |
 
 ## B. Platform ↔ founders
 
@@ -113,6 +117,29 @@ D758, migration 484) — catalog stub for counsel to draft; the canvas draws
 it for Axal VC Management LLC, as Managing Partner. Question for counsel:
 does it replace "MSA + Equity-for-Services (Operating Partner)"
 (`msa_equity_for_services_v1.md`), or is it a separate document?
+
+## G. AI features (A19, #3763) — drafts for counsel
+
+Four drafts for the deck builder v2's AI features (plan #3716, §5.10).
+**Nothing here is published.** No file imports them; publishing is B17
+(#3793), after the owner's decisions below. Each versioned draft is the
+live text plus only the new section, so a diff against the live file
+shows exactly what changes (`cloudflare-worker/test/legal_drafts_a19.test.ts`
+checks this).
+
+| Draft | What it adds | Counsel to confirm |
+| --- | --- | --- |
+| `tos_v4.md` | §4C, AI features and output: the member owns Output as between the parties; §4A does not reach Output; Input and Output are used only to provide the Service and not to train models; no warranty of accuracy, originality or non-infringement; the member is responsible for what a deck tells investors, and figures come from records, not models; providers' use policies flow down; no depicting a real person without agreement; marking must not be removed. | Whether ownership "to the extent any rights exist" is the right framing for machine output; the flow-down mechanism (linked policies "as if part of these Terms"); whether §4C.6 is enforceable. Re-acceptance uses the existing gate (`cloudflare-worker/test/terms_reacceptance_gate.test.ts`). |
+| `privacy_v3.md` | §3A, AI features: what is sent to a model, Workers AI's statement that it does not train on customer content, other providers named before use, no training by Axal, and the run record (model, feature, cost, time; no content). The generated-asset deletion periods are in brackets. | The no-training sentence against Cloudflare's current Workers AI terms; the bracketed periods (decision W). |
+| `dpa_v2.md` | Four Cloudflare rows in the Sub-processor Schedule: Workers AI and AI Gateway; Vectorize; Browser Rendering; Queues, Durable Objects and Analytics Engine. `dpa_v1.md` listed Cloudflare for Workers, D1, R2 and KV only, although all of these are bound in production (`wrangler.toml`). | Whether these are new sub-processors needing §6.1's ten days' notice, or the same sub-processor (Cloudflare) under an existing listing. **Not added:** Anthropic, which runs only behind a switch that is off (`AI_PROVIDER_ANTHROPIC`), and third-party image models (Bria, Recraft), which need decision M and the ten-day notice before any row is added. |
+| `ai_image_marking_spec_v1.md` | How generated images (`deck_image`, `brand_logo`, `article_image`) are marked: XMP `DigitalSourceType = trainedAlgorithmicMedia` plus the model id and date, stamped after the image check and before storage, kept by every export; one on-screen attribution line, the existing `placedLine`, led by "AI image" when marking is on. | EU AI Act Article 50(2); whether C2PA is required; any visible label on slides; per-licence attribution (for example "Built with Llama"). |
+
+**Owner decisions these drafts wait on** (S1's picks, all pending):
+
+- **V · Marking AI images.** A: XMP `DigitalSourceType` and the model id (S1's pick); B: A plus a C2PA manifest, if counsel requires it; C: none.
+- **W · Retention periods for generated assets.** S1's pick: plan §5.9.5's periods (discarded images 24 hours, unreferenced proposals 14 days, text proposals 30 days), confirmed by counsel. The plan's decision text also names snapshots "hourly for 7 days then daily"; §5.9.5 itself gives no snapshot period, so `privacy_v3.md` does not state one.
+- **X · Model provider terms.** A: the owner accepts each provider's terms after a counsel summary in `documentation/architecture/MODEL_TERMS.md` (to be written under X), with "Built with Llama" shown if counsel confirms (S1's pick); B: Workers AI's terms only.
+- **Y · ToS v4 AI-output clause.** A: ship before the beta, with re-acceptance (S1's pick); B: after the beta.
 
 ## Seed skeletons (D758)
 

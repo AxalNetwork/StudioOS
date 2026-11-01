@@ -37,6 +37,11 @@ D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
 provides investor-owned stage/visit metadata and author/firm-private notes.
 No admin bypass; migration 600; writes and audit rows share a batch.
 
+D1587 (#3834): `deck_grants.ts`, mounted before `deal_context.ts` at `/api/deals`.
+An investor reads the deck version the venture granted them on that deal (`GET /:id/deck`),
+with the share link's rules and no provenance. The venture's founder grants, lists and withdraws
+(`/:id/deck-grants`). The founder's answers never carry an investor's note, score or decision. Migration 745.
+
 D1153: `deal_workroom.ts`, mounted before `deals.ts` at `/api/deals`, serves
 the investor's working tabs: the data room's door and a request to the founder,
 the round as a count and a total, and a withdrawal with a required reason kept

@@ -8,8 +8,8 @@ import { Lightbox } from '../../../ui';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { NEW_PATH } from './newDeckModel';
 import {
-  BRANDING_FAILED, BRANDING_TITLE, FILL_SENTENCE, FILL_TITLE, READINESS_FAILED, READINESS_TITLE, WATERMARK_BAD, WATERMARK_PLAN,
-  brandingView, fillRefusal, isSpinoutDeck, proposalHref, readinessView, watermarkInput, watermarkSentence,
+  BRANDING_FAILED, BRANDING_TITLE, DRAFT_SENTENCE, DRAFT_TITLE, READINESS_FAILED, READINESS_TITLE, WATERMARK_BAD, WATERMARK_PLAN,
+  brandingView, draftRefusal, isSpinoutDeck, proposalHref, readinessView, watermarkInput, watermarkSentence,
 } from './studioActionsModel';
 
 /**
@@ -17,7 +17,7 @@ import {
  * studio action (the owner's call, 2026-10-27). The builder is retired;
  * `/raise/pitch/builder` opens the studio.
  *
- *   FillFromProject   on the Decks tab's current deck. Its proposal is kept
+ *   AskDraftFromProject  on the Decks tab's current deck. Its proposal is kept
  *                     card by card at New deck's step 4, as a template start's is.
  *   SpinoutReadiness  beside it, for a Spin-Out deck: what is still empty, and
  *                     whether an export is a draft. A read.
@@ -70,34 +70,34 @@ function Refusal({ refusal, testId }) {
 }
 
 // ---------------------------------------------------------------------------
-// Fill from project
+// Ask Eadwyn to draft from project (#3930: was "Fill from project")
 // ---------------------------------------------------------------------------
 
-/** "Fill from project": the deck's template filled again as a proposal, reviewed at New deck. */
-export function FillFromProject({ deck, q }) {
+/** "Ask Eadwyn to draft from project": the deck's template drafted again as a proposal, reviewed at New deck. */
+export function AskDraftFromProject({ deck, q }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
   // D771: the rail names the option while its run is at the model.
-  useRailOption(busy ? 'form:deck' : null, FILL_TITLE);
-  const fill = async () => {
+  useRailOption(busy ? 'form:deck' : null, DRAFT_TITLE);
+  const draft = async () => {
     setBusy(true); setRefusal(null);
     try {
       const r = await api.deckAutofill(deck.id, railPressHeaders('form:deck'));
       if (!r?.proposal?.id) throw new Error('No proposal came back.');
       navigate(proposalHref(NEW_PATH, q, r.proposal.id));
     } catch (e) {
-      setRefusal(fillRefusal(e, `${NEW_PATH}${q}`)); setOpen(false);
+      setRefusal(draftRefusal(e, `${NEW_PATH}${q}`)); setOpen(false);
       if (e?.status !== 409 && e?.status !== 402) reportError('pitch-studio:fill', e);
     } finally { setBusy(false); }
   };
   return (
     <>
-      <button type="button" className={GHOST} onClick={() => setOpen(true)} data-testid="pitch-studio-fill">{FILL_TITLE}</button>
+      <button type="button" className={GHOST} onClick={() => setOpen(true)} data-testid="pitch-studio-fill">{DRAFT_TITLE}</button>
       <Refusal refusal={refusal} testId="pitch-studio-fill-refusal" />
       {open ? (
-        <Confirm title={FILL_TITLE} sentence={FILL_SENTENCE} action="Fill" busy={busy} onConfirm={fill} onClose={() => setOpen(false)} testId="pitch-studio-fill-dialog" />
+        <Confirm title={DRAFT_TITLE} sentence={DRAFT_SENTENCE} action="Draft" busy={busy} onConfirm={draft} onClose={() => setOpen(false)} testId="pitch-studio-fill-dialog" />
       ) : null}
     </>
   );

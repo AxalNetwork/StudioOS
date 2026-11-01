@@ -58,7 +58,8 @@ export interface ModelFacts {
 export const REASONING_CONTROLS: Readonly<Record<string, ReasoningControl>> = Object.freeze({
   '@cf/zai-org/glm-5.2': { via: 'none' },
   '@cf/qwen/qwen3-30b-a3b-fp8': { via: 'none' },
-  '@cf/qwen/qwen3.8-27b': { via: 'none' },
+  // D1478 §3937 fix 16: its page (read 2026-11-01) lists reasoning_effort low, medium and xhigh (default).
+  '@cf/qwen/qwen3.8-27b': { via: 'reasoning_effort' },
   '@cf/openai/gpt-oss-120b': { via: 'reasoning_effort' },
   '@cf/openai/gpt-oss-20b': { via: 'reasoning_effort' },
   '@cf/deepseek-ai/deepseek-v4-flash-0731': { via: 'reasoning_effort' },
