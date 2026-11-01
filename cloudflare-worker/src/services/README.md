@@ -656,4 +656,14 @@ cron retries up to 25 markers after its SQL sweep, rotating older attempts and
 requiring no project row. Soft deletion is unchanged.
 D1418 (#3862): `studioModules.ts` also holds the canvas's catalogue: `STUDIO_GROUPS` (each profile's groups, in order), a `purpose` and `href` on every module, the 27 founder cycle modules derived from `cycleValidate.ts`, `../routes/cycle_build.ts` (`BUILD_MODULES`), `raiseCycle.ts` and `growCycle.ts` with `CYCLE_PURPOSE`, and the canvas's defaults. `catalogueOf(profile, user)` leaves Grow out for a Spin-Out Lab member.
 
+#3959: `learningPlan.ts` holds a member's learning plan (migration 758). It
+resolves each planned subject through `canSeeLearning` (anything else is not
+found), expands daily and weekly repeats inside a range, reads "done" from what
+Learning already records (completion, an exercise submission, a submitted exam
+attempt, an attended webinar), registers a webinar through D560's
+capacity-checked insert, and feeds the calendar's page-only `learning` source
+(`learningEvents`: plan occurrences and registered webinars, each linked to its
+Learning page). `sendPlanReminders` runs on the 5-minute cron and claims each
+occurrence in `learning_plan_reminders` before calling `notify()`, so a
+reminder is sent once.
 D1420 (#3864): `studioLayoutRun.ts` is `studio:layout` on `POST /api/ai/rail/run`: the model's messages (the layout and its revision, the catalogue, a founder's Lab week and readiness tier; no other member's data and no table name), `validateOps` (add, remove, resize and move ops checked against the catalogue, the plan locks, the fixed blocks and the 12-module cap, each dropped op named by its title, never its key) and each profile's /studio rail key (`STUDIO_RAIL_PAGES`). It writes nothing; `../routes/rail_run.ts` files the kept ops as `ai_rail_proposals` rows.

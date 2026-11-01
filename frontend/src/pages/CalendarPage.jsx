@@ -138,6 +138,8 @@ const KINDS = [
   { id: 'cohort_date', label: 'Cohort date', from: 'Spin-Out Lab › Cohort' },
   { id: 'deal_closing', label: 'Deal closing', from: 'Deals › Closings' },
   { id: 'manual', label: 'Your event', from: 'Calendar' },
+  // #3959: the Learning source, page only.
+  { id: 'learning', label: 'Learning', from: 'Learning › Your plan' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 

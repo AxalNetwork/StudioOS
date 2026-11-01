@@ -433,7 +433,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning';
   source_id: number;
   source_uid: string;
   title: string;
@@ -896,6 +896,8 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   deal_closing: async (env, userId, from, to) => (await dealClosingEvents(env, userId, from, to)) as CalendarEvent[],
   // D1484: what "New event" writes (`POST /calendar/events`, kind 'other'), page only.
   manual: manualEvents,
+  // #3959: the "Learning" source — the member's own plan occurrences and the webinars they registered for.
+  learning: async (env, userId, from, to) => (await (await import('./learningPlan')).learningEvents(env, userId, from, to)) as CalendarEvent[],
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
@@ -906,6 +908,8 @@ export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'
  * and the Google and Outlook payloads do not write; `fetchUserEvents` leaves
  * these out, so a feed never holds one by accident.
  */
+// #3959: Learning is page-only until its feed and provider copy are designed (an occurrence id is not a row id);
+// the registry says so (`page_only`), as it does for every kind.
 export const PAGE_ONLY_KINDS: readonly CalendarEvent['kind'][] = pageOnlyKinds();
 export const FEED_KINDS = KNOWN_KINDS.filter((k) => !PAGE_ONLY_KINDS.includes(k));
 

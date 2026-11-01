@@ -17,8 +17,8 @@
  */
 import type { CalendarEvent } from '../calendar';
 
-export type SourceFamily = 'meetings' | 'events' | 'validate' | 'grow' | 'deadlines' | 'raise' | 'tasks' | 'external';
-export const SOURCE_FAMILIES: readonly SourceFamily[] = ['meetings', 'events', 'validate', 'grow', 'deadlines', 'raise', 'tasks', 'external'];
+export type SourceFamily = 'meetings' | 'events' | 'validate' | 'grow' | 'deadlines' | 'raise' | 'tasks' | 'learning' | 'external';
+export const SOURCE_FAMILIES: readonly SourceFamily[] = ['meetings', 'events', 'validate', 'grow', 'deadlines', 'raise', 'tasks', 'learning', 'external'];
 
 export interface SourceDef {
   family: SourceFamily;
@@ -49,6 +49,8 @@ export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Objec
   deal_closing: { family: 'deadlines', module: 'Deals › Closings', label: 'Deal closing', page_only: true, pushable: false },
   // The events a member adds with "New event" (`POST /calendar/events`).
   manual: { family: 'tasks', module: 'Calendar', label: 'Your event', page_only: true, pushable: false },
+  // #3959: the member's own learning plan; page only until its feed and provider copy are designed.
+  learning: { family: 'learning', module: 'Learning › Your plan', label: 'Learning', page_only: true, pushable: false },
 });
 
 export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];

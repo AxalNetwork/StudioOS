@@ -15,7 +15,7 @@ import type { CalendarEvent } from '../calendar';
 import { sourceOf, type ItemSource } from './registry';
 
 /** The canvas's five families (D1205's `FAMILIES`), by kind. */
-export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'other';
+export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'learning' | 'other';
 export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   event_ticket: 'events',
   event_hosted: 'events',
@@ -33,6 +33,8 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   cohort_date: 'deadlines',
   deal_closing: 'deadlines',
   manual: 'events',
+  // #3959: the member's own learning plan.
+  learning: 'learning',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -55,6 +57,7 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   cohort_member: 'Your cohort',
   investor_in_room: 'In your deal room',
   yours: 'Your event',
+  learning_plan: 'Your learning plan',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -69,6 +72,7 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   cohort_date: 'cohort_member',
   deal_closing: 'investor_in_room',
   manual: 'yours',
+  learning: 'learning_plan',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
@@ -102,6 +106,8 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'investor_meeting': return '/raise/capital-relationships';
     case 'deal_closing': return ev.deal_id ? `/deals/${ev.deal_id}` : null;
     case 'interview_call': return ev.project_id ? `/validate/customer-research?project=${ev.project_id}` : null;
+    // #3959: the Learning page the plan item names (its course, lesson, video, webinar, exercise or exam).
+    case 'learning': return typeof ev.url === 'string' && ev.url.startsWith('/learning') ? ev.url : '/learning';
     default: return null;
   }
 }

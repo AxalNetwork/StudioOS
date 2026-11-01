@@ -45,13 +45,13 @@ test('the week is Monday to Sunday; the month is the calendar month; the agenda 
 });
 
 test('every kind the page reads is in exactly one family; Deadlines holds the Compliance layer (D1384)', () => {
-  assert.deepEqual(FAMILIES.map((f) => f.label), ['Events', 'Meetings', 'Sessions', 'Deadlines', 'From other calendars']);
+  assert.deepEqual(FAMILIES.map((f) => f.label), ['Events', 'Meetings', 'Sessions', 'Deadlines', 'Learning', 'From other calendars']);
   assert.deepEqual([...FAMILIES.flatMap((f) => f.kinds)].sort(), [...PAGE_KINDS].sort());
   assert.equal(familyOf('event_ticket'), 'events');
   assert.equal(familyOf('calendly_event'), 'other');
   // D1484 (#3977): the cohort dates and deal closings are deadlines too.
   assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing']);
-  assert.equal(PAGE_KINDS.length, 14, 'the page kind table parsed');
+  assert.equal(PAGE_KINDS.length, 15, 'the page kind table parsed'); // #3959: Learning is the fifteenth.
 });
 
 test('a failed source counts a dash, never 0; a read list counts; no list counts nothing', () => {
