@@ -82,13 +82,14 @@ const canvasKinds = [...KINDS_BLOCK.matchAll(/\{\s*id:'(\w+)',\s*label:'([^']+)'
 
 /** The page's kind table, likewise. */
 const pageKinds = [...(codeOnly(pageRaw).match(/const KINDS = \[([\s\S]*?)\n\];/)?.[1] || '')
-  .matchAll(/\{ id: '(\w+)', label: '([^']+)', src: '([^']+)' \}/g)]
-  .map((m) => ({ id: m[1], label: m[2], src: m[3] }));
+  .matchAll(/\{ id: '(\w+)', label: '([^']+)' \}/g)]
+  .map((m) => ({ id: m[1], label: m[2] }));
 
 test('the canvas and the page were both parsed, so a silent zero-match cannot pass', () => {
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
   // D1384 (#3692): compliance_due, the Compliance layer, is the tenth.
-  assert.equal(pageKinds.length, 10, 'the page kind table no longer parses as ten entries');
+  // D1484 (#3977): D1208's three readers and "New event" make fourteen.
+  assert.equal(pageKinds.length, 14, 'the page kind table no longer parses as fourteen entries');
 });
 
 test('the page draws a chip for every kind the worker can emit, and no others', () => {
@@ -97,7 +98,7 @@ test('the page draws a chip for every kind the worker can emit, and no others', 
   // is added — which is exactly how partner_office_hour lost its chip.
   const union = service.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '';
   const emitted = [...union.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(emitted.length, 10, 'the CalendarEvent kind union did not parse');
+  assert.equal(emitted.length, 14, 'the CalendarEvent kind union did not parse');
   assert.deepEqual(pageKinds.map((k) => k.id).sort(), emitted,
     'a kind the worker can emit has no chip on /calendar, or a chip names a kind it cannot');
 
@@ -109,12 +110,13 @@ test('the page draws a chip for every kind the worker can emit, and no others', 
     'a kind in the union has no reader, or a reader has no kind');
 });
 
-test('the five kinds the canvas draws keep its labels, sources, hues and dot shapes', () => {
+test('the five kinds the canvas draws keep its labels, hues and dot shapes', () => {
   for (const k of canvasKinds) {
     const mine = pageKinds.find((p) => p.id === k.id);
     assert.ok(mine, `the canvas draws ${k.id} and the page does not`);
     assert.equal(mine.label, k.label, `${k.id} is labelled differently from the canvas`);
-    assert.equal(mine.src, k.src, `${k.id} names a different source from the canvas`);
+    // D1484 (#3977): the canvas names each kind's store; the page names none (the Worker's module words instead).
+    assert.ok(!('src' in mine), `${k.id} still names a store`);
     // Hue and shape live in the stylesheet, one rule per kind, both themes.
     assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.hue)};`), `${k.id} lost its light hue`);
     assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.dHue)};`), `${k.id} lost its dark hue`);
@@ -159,19 +161,30 @@ test('D1033: the two My events kinds are derived in the same idiom, apart from e
     event_ticket: /\.cal-dot\[data-kind='event_ticket'\] \{([^}]*)\}/,
     event_hosted: /\.cal-dot\[data-kind='event_hosted'\] \{([^}]*)\}/,
     investor_meeting: /\.cal-dot\[data-kind='investor_meeting'\] \{([^}]*)\}/,
+    compliance_due: /\.cal-dot\[data-kind='compliance_due'\] \{([^}]*)\}/,
+    interview_call: /\.cal-dot\[data-kind='interview_call'\] \{([^}]*)\}/,
+    cohort_date: /\.cal-dot\[data-kind='cohort_date'\] \{([^}]*)\}/,
+    deal_closing: /\.cal-dot\[data-kind='deal_closing'\] \{([^}]*)\}/,
+    manual: /\.cal-dot\[data-kind='manual'\] \{([^}]*)\}/,
   };
   const HUE = {
     expert_booking: /--k-expert_booking: (#[0-9a-f]{6});/g,
     event_ticket: /--k-event_ticket: (#[0-9a-f]{6});/g,
     event_hosted: /--k-event_hosted: (#[0-9a-f]{6});/g,
     investor_meeting: /--k-investor_meeting: (#[0-9a-f]{6});/g,
+    compliance_due: /--k-compliance_due: (#[0-9a-f]{6});/g,
+    interview_call: /--k-interview_call: (#[0-9a-f]{6});/g,
+    cohort_date: /--k-cohort_date: (#[0-9a-f]{6});/g,
+    deal_closing: /--k-deal_closing: (#[0-9a-f]{6});/g,
+    manual: /--k-manual: (#[0-9a-f]{6});/g,
   };
   const shapeOf = (id) => css.match(DOT[id])?.[1]?.match(/border-radius: ([^;]+);/)?.[1];
   const huesOf = (id) => [...css.matchAll(HUE[id])].map((m) => m[1]);
   const taken = new Set([...drawnShapes, shapeOf('expert_booking')]);
   const takenHues = new Set([...drawnHues, ...huesOf('expert_booking'), '#6d28d9']);
   // D1190 (#3124): the investor meeting joins in the same idiom, after them.
-  for (const id of ['event_ticket', 'event_hosted', 'investor_meeting']) {
+  // D1484 (#3977): compliance_due and the four new kinds take their own marks too.
+  for (const id of ['event_ticket', 'event_hosted', 'investor_meeting', 'compliance_due', 'interview_call', 'cohort_date', 'deal_closing', 'manual']) {
     const shape = shapeOf(id);
     assert.ok(shape, `${id} has no dot`);
     assert.ok(!taken.has(shape), `${id} reuses a shape another kind has`);
@@ -184,12 +197,12 @@ test('D1033: the two My events kinds are derived in the same idiom, apart from e
       takenHues.add(h);
     }
   }
-  assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label, k.src]), [
-    ['event_ticket', 'Event ticket', 'event_registrations'],
-    ['event_hosted', 'Hosting', 'events'],
+  assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label]), [
+    ['event_ticket', 'Event ticket'],
+    ['event_hosted', 'Hosting'],
   ]);
-  assert.deepEqual(pageKinds.filter((k) => k.id === 'investor_meeting').map((k) => [k.id, k.label, k.src]), [
-    ['investor_meeting', 'Investor meeting', 'raise_prospect_events'],
+  assert.deepEqual(pageKinds.filter((k) => k.id === 'investor_meeting').map((k) => [k.id, k.label]), [
+    ['investor_meeting', 'Investor meeting'],
   ]);
 });
 
@@ -306,11 +319,14 @@ test('the rail carries the three promises and the source legend', () => {
   assert.match(pageRaw, /Ongoing, per provider\./);
   assert.match(pageRaw, /One-time, per event\. A copy is written once; later changes here do not follow it\./);
   assert.match(pageRaw, /Read-only feed for any client\. No account connection, no write access\./);
-  // The legend lists every kind with the store it comes from.
-  assert.match(page, /<span className="cal-mono">\{k\.src\}<\/span>/, 'the legend no longer names each kind\'s source');
-  for (const k of pageKinds) {
-    assert.ok(page.includes(`src: '${k.src}'`), `${k.id} lost its source`);
-  }
+  // D1484 (#3977): the legend lists every kind with the module it comes from,
+  // in the Worker's words (the read's `sources[].module`), and the page names no table.
+  assert.match(page, /<span className="cal-mono">\{moduleOf\[k\.id\] \|\| ''\}<\/span>/, 'the legend no longer names each kind\'s source');
+  assert.match(page, /sources\.filter\(\(s\) => s\?\.kind && s\.module\)\.map\(\(s\) => \[s\.kind, s\.module\]\)/, 'the module comes from the read');
+  assert.doesNotMatch(page, /\bsrc: '/, 'a kind names its store again');
+  const tables = new Set([...service.matchAll(/FROM (\w+)/g)].map((m) => m[1]));
+  for (const t of ['ic_meetings', 'founder_checkins', 'advisor_bookings', 'event_registrations', 'raise_prospect_events', 'compliance_events', 'calendar_events']) tables.add(t);
+  for (const t of tables) if (t.includes('_')) assert.ok(!page.includes(`'${t}'`), `the page names the table ${t}`);
 });
 
 test('nothing absent renders as a dash or a plausible zero', () => {

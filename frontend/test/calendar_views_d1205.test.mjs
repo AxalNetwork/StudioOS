@@ -18,7 +18,8 @@ import { FAMILIES, NOT_YET, VIEWS, WAITS, chipCount, familyOf, viewOf, windowFor
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
-const PAGE_KINDS = [...read('frontend/src/pages/CalendarPage.jsx').matchAll(/\{ id: '([a-z_]+)', label: '[^']+', src: '/g)].map((m) => m[1]);
+// D1484 (#3977): a kind no longer names its store, so the table is read without `src`.
+const PAGE_KINDS = [...read('frontend/src/pages/CalendarPage.jsx').matchAll(/\{ id: '([a-z_]+)', label: '[^']+' \}/g)].map((m) => m[1]);
 
 /* ------------------------------------------------------------------ *
  * The model
@@ -49,7 +50,9 @@ test('every kind the page reads is in exactly one family; Deadlines holds the Co
   assert.deepEqual([...FAMILIES.flatMap((f) => f.kinds)].sort(), [...PAGE_KINDS].sort());
   assert.equal(familyOf('event_ticket'), 'events');
   assert.equal(familyOf('calendly_event'), 'other');
-  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due']);
+  // D1484 (#3977): the cohort dates and deal closings are deadlines too.
+  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing']);
+  assert.equal(PAGE_KINDS.length, 14, 'the page kind table parsed');
 });
 
 test('a failed source counts a dash, never 0; a read list counts; no list counts nothing', () => {

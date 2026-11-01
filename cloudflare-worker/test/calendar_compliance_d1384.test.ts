@@ -55,9 +55,10 @@ const page = (env: any, user: number, companyId?: number | null, kinds = ['compl
 
 test('the registry reads compliance as one more source, and no feed or file kind includes it', () => {
   assert.ok(KNOWN_KINDS.includes('compliance_due'), 'compliance_due is registered in READERS');
-  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due']);
+  // D1484 (#3977): D1208's three readers and the manual reader joined it, all page only.
+  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due', 'interview_call', 'cohort_date', 'deal_closing', 'manual']);
   assert.ok(!FEED_KINDS.includes('compliance_due'));
-  assert.deepEqual([...FEED_KINDS, 'compliance_due'].sort(), [...KNOWN_KINDS].sort());
+  assert.deepEqual([...FEED_KINDS, ...PAGE_ONLY_KINDS].sort(), [...KNOWN_KINDS].sort());
 });
 
 test('the page read: the founder\'s own deadlines, open and done, each with its state and facts; nobody else\'s', async () => {

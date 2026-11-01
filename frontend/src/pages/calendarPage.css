@@ -35,6 +35,7 @@
   --k-event_ticket: #4d7c0f; --k-event_hosted: #0369a1;
   --k-investor_meeting: #047857;
   --k-compliance_due: #57534e;
+  --k-interview_call: #9d174d; --k-cohort_date: #4338ca; --k-deal_closing: #b91c1c; --k-manual: #374151;
   background: var(--cal-shell);
   color: var(--cal-ink);
   min-height: 100%;
@@ -64,6 +65,7 @@
   --k-event_ticket: #bef264; --k-event_hosted: #7dd3fc;
   --k-investor_meeting: #6ee7b7;
   --k-compliance_due: #d6d3d1;
+  --k-interview_call: #f9a8d4; --k-cohort_date: #a5b4fc; --k-deal_closing: #fca5a5; --k-manual: #e5e7eb;
 }
 
 .cal-mono { font-family:var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -116,6 +118,11 @@
 .cal-dot[data-kind='investor_meeting'] { background: var(--k-investor_meeting); border-radius: 50% 0 50% 50%; }
 /* D1384: the Compliance layer, a deadline flag. */
 .cal-dot[data-kind='compliance_due'] { background: var(--k-compliance_due); border-radius: 0 50% 50% 0; }
+/* D1484 (#3977): D1208's three readers and "New event", each its own hue and shape. */
+.cal-dot[data-kind='interview_call'] { background: var(--k-interview_call); border-radius: 50% 50% 0 50%; }
+.cal-dot[data-kind='cohort_date'] { background: var(--k-cohort_date); border-radius: 50% 0 0 50%; }
+.cal-dot[data-kind='deal_closing'] { background: var(--k-deal_closing); border-radius: 0 0 0 50%; }
+.cal-dot[data-kind='manual'] { background: var(--k-manual); border-radius: 50% 0 0 0; }
 
 /* ── body: agenda beside the 328px rail ───────────────────────────────── */
 .cal-body { display: flex; align-items: stretch; }

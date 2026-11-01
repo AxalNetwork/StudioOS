@@ -107,7 +107,11 @@ test('D1206: source failures carry fixed codes, preserve other sources and leak 
     const response = await f.request(`/events?${window}&kinds=ic_meeting,advisor_booking`);
     assert.equal(response.status, 200);
     const body = await response.json() as any;
-    assert.deepEqual(body.sources, [{ kind: 'ic_meeting', ok: true, error: null }, { kind: 'advisor_booking', ok: false, error: 'not_configured' }]);
+    // D1484: the page's read also names each source in plain words, from the registry.
+    assert.deepEqual(body.sources, [
+      { kind: 'ic_meeting', ok: true, error: null, family: 'meetings', module: 'Deals › Investment committee', label: 'IC meeting' },
+      { kind: 'advisor_booking', ok: false, error: 'not_configured', family: 'meetings', module: 'Advisors › Sessions', label: 'Advisor session' },
+    ]);
     assert.equal(JSON.stringify(said).includes('synthetic private'), false);
     assert.equal(JSON.stringify(said).includes('user_id'), false);
     assert.ok(said.some(args => args.some((arg: any) => arg?.outcome === 'not_configured')));
@@ -484,7 +488,8 @@ test('D1206: set-based scope preserves every allowed source and filters private 
     const queries = f.statements().slice(before);
     assert.equal(queries.some(sql => /\b(?:m\.agenda|c\.notes|ev\.note|u\.email|location_uri|location_url)\b/.test(sql)),false,'scoped reads must not fetch private content only to strip it');
     const expected = new Set<string>();
-    const allowed = service.KNOWN_KINDS.filter(kind => !['calendly_event','expert_booking'].includes(kind));
+    // D1484: the personal page-only kinds have no staff projection, so the scope leaves them out too.
+    const allowed = service.KNOWN_KINDS.filter(kind => !['calendly_event','expert_booking'].includes(kind) && !(service.PERSONAL_ONLY_KINDS as readonly string[]).includes(kind));
     for (const member of f.db.prepare("SELECT id,role FROM users WHERE is_active=1 AND (role<>'admin' OR id=1)").all() as any[]) {
       const personal = await service.fetchUserEventsWithSources(f.env,member.id,member.role,FROM,TO,allowed,{ withCancelled:true });
       assert.ok(personal.sources.every(source=>source.ok));

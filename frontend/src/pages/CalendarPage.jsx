@@ -110,24 +110,30 @@ import {
 import './calendarPage.css';
 
 /**
- * The six kinds, in the canvas's reading order. `src` is the store the events
- * come from, which is what the rail's legend shows — a reader who wonders why
- * something is or is not here can see where each row originates.
+ * The kinds, in the canvas's reading order. D1484 (#3977): where each one comes
+ * from is the Worker's to say (`services/calendar/registry.ts`): the legend
+ * reads each source's `module` from the read, in plain words, and never a
+ * table name, which is what `src` used to show here.
  * D1384 (#3692): `compliance_due` is the Compliance layer, which replaced the
  * /compliance page; the canvas draws no deadline kind, so its mark is derived
  * in the same idiom as the others (calendarPage.css).
  */
 const KINDS = [
-  { id: 'ic_meeting', label: 'IC meeting', src: 'ic_meetings' },
-  { id: 'founder_checkin', label: 'Check-in', src: 'founder_checkins' },
-  { id: 'advisor_booking', label: 'Advisor', src: 'advisor_bookings' },
-  { id: 'partner_office_hour', label: 'Office hour', src: 'office_hours' },
-  { id: 'calendly_event', label: 'Calendly', src: 'calendly' },
-  { id: 'expert_booking', label: 'Expert session', src: 'expert_bookings' },
-  { id: 'event_ticket', label: 'Event ticket', src: 'event_registrations' },
-  { id: 'event_hosted', label: 'Hosting', src: 'events' },
-  { id: 'investor_meeting', label: 'Investor meeting', src: 'raise_prospect_events' },
-  { id: 'compliance_due', label: 'Compliance', src: 'compliance_events' },
+  { id: 'ic_meeting', label: 'IC meeting' },
+  { id: 'founder_checkin', label: 'Check-in' },
+  { id: 'advisor_booking', label: 'Advisor' },
+  { id: 'partner_office_hour', label: 'Office hour' },
+  { id: 'calendly_event', label: 'Calendly' },
+  { id: 'expert_booking', label: 'Expert session' },
+  { id: 'event_ticket', label: 'Event ticket' },
+  { id: 'event_hosted', label: 'Hosting' },
+  { id: 'investor_meeting', label: 'Investor meeting' },
+  { id: 'compliance_due', label: 'Compliance' },
+  // D1484 (#3977): D1208's three readers and "New event", page only.
+  { id: 'interview_call', label: 'Interview call' },
+  { id: 'cohort_date', label: 'Cohort date' },
+  { id: 'deal_closing', label: 'Deal closing' },
+  { id: 'manual', label: 'Your event' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 
@@ -477,6 +483,8 @@ export default function CalendarPage() {
   // not the same as an empty range.
   const inRange = items;
   const failedSources = useMemo(() => sources.filter((s) => s && s.ok === false), [sources]);
+  // D1484: each source's module, in the Worker's plain words.
+  const moduleOf = useMemo(() => Object.fromEntries(sources.filter((s) => s?.kind && s.module).map((s) => [s.kind, s.module])), [sources]);
   const failedKinds = useMemo(() => new Set(failedSources.map((s) => s.kind)), [failedSources]);
   const counts = useMemo(() => {
     const out = {};
@@ -754,7 +762,7 @@ export default function CalendarPage() {
                 <div key={k.id}>
                   <span className="cal-dot" data-kind={k.id} aria-hidden="true" />
                   <span>{k.label}</span>
-                  <span className="cal-mono">{k.src}</span>
+                  <span className="cal-mono">{moduleOf[k.id] || ''}</span>
                 </div>
               ))}
             </div>
