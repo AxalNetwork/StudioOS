@@ -15,6 +15,7 @@ const PILL = 'inline-flex items-center rounded-full border border-axal-lavender-
 /** What each kind was checked for before it reached the founder (the Worker refuses the rest). */
 const CHECKS = {
   text: 'Checked: no figure added to your words.',
+  notes: 'Speaker notes · checked: no figure that is not on the card.',
   block: 'Checked: every series is bound to its record; no value was written by a model.',
   image: 'Checked: no real person and no figures in the picture.',
   metric: 'The value is the record’s, with its source and grade.',
@@ -149,10 +150,10 @@ export default function AreaResults({ results, card, cards = null, model, items 
 }
 
 function Body({ result: r, id, items }) {
-  if (r.kind === 'text') {
+  if (r.kind === 'text' || r.kind === 'notes') {
     return (
       <span className="flex flex-col gap-1">
-        <del className="text-[12.5px] text-axal-muted line-through dark:text-gray-400" data-testid={`${id}-before`}>{r.before}</del>
+        {r.kind === 'notes' && !r.before ? null : <del className="text-[12.5px] text-axal-muted line-through dark:text-gray-400" data-testid={`${id}-before`}>{r.before}</del>}
         <span className={`rounded-[8px] bg-white/70 px-2 py-1.5 text-[13px] ${INK} dark:bg-violet-950/60`} data-testid={`${id}-after`}>{r.after}</span>
       </span>
     );

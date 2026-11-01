@@ -244,6 +244,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'deck:translate', route: '/raise/pitch/edit', label: 'Translate', kind: 'write', handler: 'draft',
     at: [[INSTRUCTION_BOX, 'deckAssistApi.run(']],
   },
+  // D1560 (#3807): the Speaker notes element writes the card's notes from its own words (POST /api/decks/:id/transform).
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:notes', route: '/raise/pitch/edit', label: 'Speaker notes', kind: 'write', handler: 'draft',
+    at: [[AREA_LIGHTBOX, 'deckTransformApi.run(']],
+  },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:chart', route: '/raise/pitch/edit', label: 'Chart from your records', kind: 'write', handler: 'draft',
     at: [[AREA_LIGHTBOX, 'deckAssistApi.run('], [ADD_MENU, 'deckAssistApi.run(']],

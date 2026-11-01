@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { Lightbox } from '../../../ui';
 import { deckAssistApi } from '../../../lib/api/deckAssist';
 import { deckImagesApi } from '../../../lib/api/deckImages';
+import { deckTransformApi } from '../../../lib/api/deckTransform';
 import { railPrefsApi } from '../../../lib/api/railPrefs';
 import { railPressHeaders } from '../../../lib/railPage';
 import { reportError } from '../../../lib/log';
@@ -79,7 +80,7 @@ export default function AreaLightbox({
   // The run in flight names its own option to the rail (each area's, one after another).
   useRailOption(busy ? ({
     rewrite: 'deck:rewrite', shorten: 'deck:shorten', expand: 'deck:expand', headline: 'deck:rewrite',
-    chart: 'deck:chart', table: 'deck:table', timeline: 'deck:timeline', image: 'deck:image',
+    chart: 'deck:chart', table: 'deck:table', timeline: 'deck:timeline', image: 'deck:image', speaker_notes: 'deck:notes',
   })[busy.action] ?? null : null, 'Generate');
 
   // Each charged row is quoted as its plan settles; a quote runs nothing and charges nothing.
@@ -91,7 +92,9 @@ export default function AreaLightbox({
       if (!charged(r.plan)) continue;
       const sig = `${r.plan.run}|${JSON.stringify(r.plan.body)}`;
       setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'loading' } }));
-      const ask = r.plan.run === 'image' ? deckImagesApi.quote(deckId, r.plan.body) : deckAssistApi.quote(deckId, r.plan.cardKey, assistBody(r.plan, cardIndex));
+      const ask = r.plan.run === 'image' ? deckImagesApi.quote(deckId, r.plan.body)
+        : r.plan.run === 'notes' ? deckTransformApi.quote(deckId, r.plan.body)
+          : deckAssistApi.quote(deckId, r.plan.cardKey, assistBody(r.plan, cardIndex));
       ask.then(
         (data) => { if (live) setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'ok', data } })); },
         (e) => {
@@ -155,6 +158,13 @@ export default function AreaLightbox({
       const base = { uid: r.proposal.uid, charged: r.cost?.charged_microusd ?? null, charges: true, modelName: modelName(plan.option) };
       if (r.block) return { ...base, kind: 'block', block: r.block, title: r.title || null };
       return { ...base, kind: 'text', before: String(r.before ?? plan.body.text ?? ''), after: String(r.after ?? '') };
+    }
+    if (plan.run === 'notes') {
+      // D1560: one transform run for this card's notes; the proposal is placed on Accept.
+      const r = await deckTransformApi.run(deckId, plan.body, railPressHeaders(plan.option));
+      const notes = (r?.cards || [])[0]?.notes;
+      if (!r?.proposal?.uid || !notes?.after) throw new Error('Eadwyn returned no notes to place. Nothing was placed.');
+      return { uid: r.proposal.uid, charged: r.cost?.charged_microusd ?? null, charges: true, modelName: modelName(plan.option), kind: 'notes', before: String(notes.before ?? ''), after: String(notes.after) };
     }
     if (plan.run === 'image') {
       const r = await deckImagesApi.generate(deckId, plan.body, railPressHeaders(plan.option));
