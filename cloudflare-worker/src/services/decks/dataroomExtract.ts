@@ -191,12 +191,14 @@ export async function extractDataroomFile(env: Env, payload: { project_id?: unkn
         values = unrecordedLinks(output, pages.map(p => p.text)).length ? [] : checkedDocumentValues(output, pages);
       }
     }
-    const guard = `EXISTS (SELECT 1 FROM data_room_files WHERE id = ? AND project_id = ? AND deck_source = 1 AND deck_source_token = ? AND deck_source_revision = ?)`;
+    // Keep both predicates literal so the schema guard can inspect every query.
     const binds = [file.id, file.project_id, payload.token, file.deck_source_revision];
     await env.DB.batch([
-      env.DB.prepare(`DELETE FROM dataroom_deck_values WHERE file_uid = ? AND project_id = ? AND ${guard}`).bind(file.uid, file.project_id, ...binds),
+      env.DB.prepare(`DELETE FROM dataroom_deck_values WHERE file_uid = ? AND project_id = ?
+        AND EXISTS (SELECT 1 FROM data_room_files WHERE id = ? AND project_id = ? AND deck_source = 1 AND deck_source_token = ? AND deck_source_revision = ?)`)
+        .bind(file.uid, file.project_id, ...binds),
       ...values.map(v => env.DB.prepare(`INSERT INTO dataroom_deck_values (project_id,file_uid,file_version,slot,value,unit,page,as_of,extracted_by)
-        SELECT ?,?,?,?,?,?,?,?,? WHERE ${guard}`)
+        SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM data_room_files WHERE id = ? AND project_id = ? AND deck_source = 1 AND deck_source_token = ? AND deck_source_revision = ?)`)
         .bind(file.project_id, file.uid, file.deck_source_revision, v.slot, v.value, v.unit, v.page, asOf, kind === 'csv' || kind === 'xlsx' ? 'code' : 'typed_job', ...binds)),
       env.DB.prepare(`UPDATE data_room_files SET deck_extract_state = ?, deck_source_as_of = ? WHERE id = ? AND project_id = ? AND deck_source = 1 AND deck_source_token = ?`)
         .bind(values.length ? 'done' : 'no_values', asOf, file.id, file.project_id, payload.token),
