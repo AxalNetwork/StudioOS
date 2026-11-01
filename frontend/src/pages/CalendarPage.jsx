@@ -107,6 +107,9 @@ import { AGENT_KIND } from './calendarAgentModel';
 import AskButton from './team/AskButton.jsx';
 import { ConnectedPanel, ConnectedSummary, GooglePanel, SubscribeDialog } from './CalendarConnected';
 import { CONNECTED_PATH, connectedOf, stripLabel, weekStrip } from './calendarConnectedModel';
+import CalendarSourcesPanel from './CalendarSourcesPanel';
+import { SOURCES_PATH, coloursOf, sourcesOpen } from './calendarSourcesModel';
+import { calendarSourcesApi } from '../lib/api/calendarSources';
 import {
   anchorOf, familiesFor, kindsFrom, kindsOfFamilies, needsFrom, needsMe, shiftAnchor, withDate, withKinds, withNeeds,
 } from './calendarGrid';
@@ -386,11 +389,13 @@ export default function CalendarPage() {
   const opened = itemOf(location.pathname);
   // D1212: /calendar/connected (and /google) opens its panel over the view it came from, else over Month.
   const connected = connectedOf(location.pathname);
-  const behind = opened || connected ? (location.state?.from || '/calendar') : location.pathname;
+  // D1484 part 2: /calendar/sources opens CAL4 over the view it came from, like /calendar/connected.
+  const sourcesPanel = sourcesOpen(location.pathname);
+  const behind = opened || connected || sourcesPanel ? (location.state?.from || '/calendar') : location.pathname;
   const pathname = behind;
   const phone = usePhoneWidth();
   // D1210: `?date=` anchors the view (else today); `?kinds=` and `?needs=1` narrow it.
-  const search = opened || connected ? '' : location.search;
+  const search = opened || connected || sourcesPanel ? '' : location.search;
   // D1212 (CAL21a): on a phone Agenda is the default; Month is `/calendar?view=month`.
   const phoneAgenda = phone && viewOf(pathname) === 'month' && !/(^|[?&])view=month(&|$)/.test(search.replace(/^\?/, ''));
   const range = phoneAgenda ? 'agenda' : viewOf(pathname);
@@ -457,6 +462,12 @@ export default function CalendarPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  // D1484 part 2: the member's source colours, for the rail's dots. A failed read leaves the family colours.
+  const [colours, setColours] = useState({});
+  const loadColours = useCallback(async () => {
+    try { setColours(coloursOf(await calendarSourcesApi.sources())); } catch { setColours({}); }
+  }, []);
+  useEffect(() => { loadColours(); }, [loadColours]);
   useEffect(() => {
     loadGoogle(); loadMicrosoft();
     // Surface OAuth callback result from query string.
@@ -772,12 +783,13 @@ export default function CalendarPage() {
             <div className="cal-sources">
               {shownKinds.map((k) => (
                 <div key={k.id}>
-                  <span className="cal-dot" data-kind={k.id} aria-hidden="true" />
+                  <span className="cal-dot" data-kind={k.id} data-colour={colours[k.id] || undefined} aria-hidden="true" data-testid={`cal-rail-dot-${k.id}`} />
                   <span>{k.label}</span>
                   <span className="cal-mono">{moduleOf[k.id] || k.from}</span>
                 </div>
               ))}
             </div>
+            <Link to={SOURCES_PATH} state={{ from: `${pathname}${search}` }} className="cal-btn cal-btn-o cal-btn-sm" data-testid="cal-sources-open">Show, hide and colour sources</Link>
             <p className="cal-foot">
               {shownKinds.length} kinds in {families.filter((f) => f.kinds.length).length} families. The Kinds filter above is generated
               from this list, so a kind cannot exist without a way to reach it.
@@ -802,6 +814,10 @@ export default function CalendarPage() {
       {connected === 'list' && (
         <ConnectedPanel google={google} microsoft={microsoft} gState={gState} mState={mState}
                         reloadGoogle={loadGoogle} reloadMicrosoft={loadMicrosoft} onClose={() => navigate(behind)} />
+      )}
+      {sourcesPanel && (
+        <CalendarSourcesPanel items={inRange} sources={sources} allowed={allowedKinds}
+          onChanged={async () => { await Promise.all([load(), loadColours()]); }} onClose={() => navigate(behind)} />
       )}
       {connected === 'google' && (
         <GooglePanel google={google} gState={gState} reloadGoogle={loadGoogle} onClose={() => navigate(CONNECTED_PATH)} />
