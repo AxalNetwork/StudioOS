@@ -59,6 +59,8 @@
  *   GET    /:projectUid                       aggregate summary, no names/identities
  *   POST   /:projectUid/support-read          required reason; founder-visible audit
  *                                             before read-only details
+ *   GET    /:projectUid/support-reads         D1464: the owner's and a co-founder's list of
+ *                                             those reads (who, Studio admin or HQ, reason, when)
  *
  * INVESTOR SIDE (holder of a grant; admins use support-read instead)
  *   GET    /shared                            rooms shared with me
@@ -110,6 +112,7 @@ import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { WriterError } from '../services/validateWriters';
 import { DECLINE_REASON_MAX, readRequests } from '../services/dataRoomRequests';
 import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
+import { SupportHistoryError, supportPage, supportReadHistory } from '../services/supportReads';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -636,6 +639,22 @@ r.get('/:projectUid', async (c) => {
     if (!room) return c.json({ detail: 'Project not found' }, 404);
     return c.json(await roomDetails(c.env, room.project, room.role));
   } catch (e) { return mapError(c, e); }
+});
+
+// D1464 (#4021): the founder's list of who opened the room with a reason —
+// the owner and an accepted co-founder read it; anyone else is 404, as every
+// room route answers. An admin reads the room only through support-read.
+r.get('/:projectUid/support-reads', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    return c.json(await supportReadHistory(c.env, Number(room.project.id), 'data_room_support_read', supportPage(c.req.query('page'))));
+  } catch (e) {
+    if (e instanceof Response) return e;
+    if (e instanceof SupportHistoryError) return refuse(c, 503, { code: 'support_history_unreadable', message: 'Support reads could not be read. Try again.' });
+    return mapError(c, e);
+  }
 });
 
 r.post('/:projectUid/support-read', async (c) => {
