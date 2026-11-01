@@ -19,8 +19,8 @@ import * as v2 from './deckV2Adapter.js';
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const EYE = 'font-mono text-[10px] font-semibold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const BTN = 'inline-flex min-h-[30px] items-center justify-center rounded-[8px] px-2.5 text-[12px] font-bold';
-const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`;
-const DANGER = `${BTN} bg-axal-destructive text-white hover:bg-red-800 dark:bg-red-600`;
+const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
+const DANGER = `${BTN} bg-axal-destructive text-white hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-700`;
 
 export const LINKS_UNREAD = 'Views on your links could not be read.';
 export const WITHDRAW_TITLE = 'Withdraw this link?';
