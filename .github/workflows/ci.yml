@@ -81,11 +81,10 @@ jobs:
   gate:
     name: test:drift (full suite)
     runs-on: ubuntu-latest
-    # 30, not 20 (#1544). The suite took 6.5-7 min on 10 Oct and 14 min on
-    # 11 Oct with no code to explain it, and #1543's passing run was cancelled
-    # at 20 mid-suite. A timeout reads as a red gate, and an agent cannot
-    # re-run a job. A real hang still stops here.
-    timeout-minutes: 60
+    # PR #3910's run 41246940069 reached the final static guards after all
+    # test suites passed, then hit the 60-minute job limit. Allow the complete
+    # gate to finish on slower runners; a real hang still has a finite limit.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
