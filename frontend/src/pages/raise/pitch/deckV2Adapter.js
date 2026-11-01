@@ -33,7 +33,8 @@
  * `deckInvestorLinksApi`, `deckTypedValuesApi.list`).
  * `elementModels` (D1503, #3754) answers through `deckElementModelsApi.read`.
  * And `consistency` (D1555, #3802): the free rules ride the deck check's own
- * reply, so it answers through `deckCheckApi.read`.
+ * reply, so it answers through `deckCheckApi.read`. `figures` (D1523, #3775)
+ * answers through `deckFiguresApi.list`.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -48,6 +49,7 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 
 export { NOT_ON };
 
@@ -108,7 +110,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'figures']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -154,7 +156,8 @@ export const narrativeOutline = off('narrativeOutline');
 export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
-export const figures = off('figures');
+/** D1523 (#3775): every figure on the version, Linked, Stated, Uncited or Not recorded, and the counts Check claims shows. Editor-only. */
+export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SURFACES.figures.issue);
 export const deckUsage = off('deckUsage');
 export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');

@@ -26,15 +26,16 @@ import { deckRemixApi } from '../src/lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../src/lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
+import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
   assert.ok(methods.length >= 40);
   // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
-  // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read. A swapped
-  // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency'], 'the rows whose routes are on main');
+  // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read; D1523 (#3775)
+  // figures. A swapped surface's body calls its client through().
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'figures'], 'the rows whose routes are on main');
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   for (const name of ['investorLinks', 'withdrawInvestorLink']) {
     assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
@@ -130,6 +131,31 @@ test('D1538 (#3787): typedTables is swapped — it answers through deckTypedValu
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckTypedValues\)/, 'the route is mounted');
 });
 
+test('D1523 (#3775): figures is swapped — it answers through deckFiguresApi.list, and a refusal is never a row of zeros', async () => {
+  // Mutation checked: figures left as off('figures') → the available answer fails; the issue key changed → the 404 answer fails.
+  const real = deckFiguresApi.list;
+  const asked = [];
+  try {
+    const reply = { deck_id: 7, figures: [{ card: 0, block_id: 'm1', kind: 'metric', label: 'Customers', at: null, state: 'stated', value: '42', source: null }], counts: { linked: 0, stated: 1, uncited: 0, not_recorded: 0 } };
+    deckFiguresApi.list = async (id) => { asked.push(id); return reply; };
+    assert.deepEqual(await adapter.figures(7), { available: true, value: reply });
+    assert.deepEqual(asked, [7]);
+    deckFiguresApi.list = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.figures(7), { available: false, reason: NOT_ON, issue: 3775 });
+    deckFiguresApi.list = async () => { throw Object.assign(new Error('The figures could not be read.'), { status: 500 }); };
+    const bad = await adapter.figures(7);
+    assert.equal(bad.unreadable, true, 'anything else is unreadable');
+    assert.equal(bad.reason, 'The figures could not be read.');
+    assert.doesNotMatch(adapter.shown(bad, (v) => String(v.counts?.linked ?? 0)), /^0$/, 'never "0 figures"');
+  } finally { deckFiguresApi.list = real; }
+  assert.equal(adapter.availability('figures'), null);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckFigures\)/, 'the route is mounted');
+  // Only the editor's Check claims reads it: Present, the share viewer and the print page never do.
+  for (const f of ['PitchPresent.jsx', 'PrintExtras.jsx', 'ShareViewerParts.jsx', 'ShareDialog.jsx', 'ExportDialog.jsx']) {
+    assert.doesNotMatch(codeOnly(read(`${PITCH}/${f}`)), /\bfigures\s*(as\s+\w+\s*)?[,}]|deckFiguresApi|checkCounts|toReview/, `${f} reads no badge`);
+  }
+});
+
 test('D1555 (#3802): consistency is swapped — the check read\'s `consistency`, null for a reader, unreadable on a failure', async () => {
   const real = deckCheckApi.read;
   try {
@@ -166,8 +192,8 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
 test('the seam reaches no network, and no client method exists for a route that is not on main', () => {
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
-  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
+  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`, D1523's `deckFigures.js`).
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckFigures.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckInvestorLinks\)/);
   assert.doesNotMatch(codeOnly(read(`${PITCH}/deckV2Model.js`)), /request\(|fetch\(|lib\/api|from 'react'/);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
@@ -183,10 +209,12 @@ test('the seam reaches no network, and no client method exists for a route that 
   // D1503 (#3754): the element models route is on main, with its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_element_models.ts')), /deckElementModels\.get\(['"]\/:id\{\[0-9\]\+\}\/element-models['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckElementModels\)/);
-  for (const path of ['/areas', '/figures', '/draft', '/areas/instruct']) {
+  // D1523 (#3775): the figures route is on main, with its client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_figures.ts')), /r\.get\(['"]\/:id\{\[0-9\]\+\}\/figures['"]/);
+  for (const path of ['/areas', '/draft', '/areas/instruct']) {
     assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
   }
-  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deck(Draft|Areas|Instruct|Figures)\.js$/.test(f)));
+  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deck(Draft|Areas|Instruct)\.js$/.test(f)));
 });
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {

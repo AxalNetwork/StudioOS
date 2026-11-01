@@ -133,6 +133,24 @@ test('Present and the print page draw no provenance badge on a tile; "Show sourc
   }
 });
 
+test('D1523 (#3775): "✎ Stated" and "! Uncited" are the editor\'s; Present and the print page draw neither', () => {
+  // Mutation checked: the Uncited chip drawn when live → the Present assert fails; never drawn → the editor assert fails.
+  const words = { id: 't1', kind: 'text', text: 'We grew 40% to $1.2M ARR.' };
+  const typed = { id: 'm3', kind: 'metric', label: 'Customers', value: '42' };
+  const editor = renderToStaticMarkup(h(BlockView, { block: words, colours: COLOURS }));
+  assert.match(editor, /! Uncited/);
+  assert.match(editor, /title="This number has no source"/);
+  assert.match(renderToStaticMarkup(h(BlockView, { block: typed, colours: COLOURS })), /✎ Stated/);
+  for (const sources of [false, true]) {
+    for (const block of [words, typed, TILE]) {
+      const live = renderToStaticMarkup(h(BlockView, { block, colours: COLOURS, live: true, sources }));
+      assert.ok(!/Uncited|✎ Stated|▤ Linked|deck-block-uncited/.test(live), `${block.id}: ${live}`);
+    }
+  }
+  const quiet = renderToStaticMarkup(h(BlockView, { block: { id: 't2', kind: 'text', text: 'No figure here.' }, colours: COLOURS }));
+  assert.ok(!/Uncited/.test(quiet), 'words with no number carry no badge');
+});
+
 test('a missing tile reads Not recorded on every face, never 0', () => {
   for (const live of [false, true]) {
     const html = renderToStaticMarkup(h(BlockView, { block: { id: 'm', kind: 'metric', label: 'Runway', value: null }, colours: COLOURS, live }));
