@@ -15,7 +15,7 @@ import { CONSENT_LINE } from './imageModel';
 import AreaResults from './AreaResults';
 import {
   HEADLINE_WHY, NO_MODEL, RAIL_PAGE, SEQUENCE_LINE, TEXT_ELEMENTS, VARIANTS,
-  batchMode, cardFigures, changesFor, charged, defaultElement, holdLine, holdOf, imageBlock, metricBlock, modelChip, rowLabel, rowPlan, runSequence, runnable, validLine, variantWhy,
+  assistBody, batchMode, cardFigures, cardKeyOf, changesFor, charged, defaultElement, holdLine, holdOf, imageBlock, metricBlock, modelChip, rowLabel, rowPlan, runSequence, runnable, validLine, variantWhy,
 } from './areaLightboxModel';
 import { COST, EYE, FIELD, GHOST, INK, MUTED, PRIMARY, RefusalLine } from './AssistParts';
 
@@ -62,7 +62,7 @@ const ELEMENT_LABEL = Object.fromEntries(ELEMENT_GROUPS.flatMap((g) => g.items.m
  * the bottom of the same sheet.
  */
 export default function AreaLightbox({
-  deckId, cardIndex, card, areas, model, items = [], aiOn = true,
+  deckId, cardIndex, card, cards = null, areas, model, items = [], aiOn = true,
   onPlace, onProposals, onClose, onDialog, onImageOptions, instruction = null, onTokens = null,
 }) {
   const [rows, setRows] = useState(() => (areas || []).map((a) => ({ key: a.id, area: a, element: defaultElement(a), choice: {} })));
@@ -91,7 +91,7 @@ export default function AreaLightbox({
       if (!charged(r.plan)) continue;
       const sig = `${r.plan.run}|${JSON.stringify(r.plan.body)}`;
       setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'loading' } }));
-      const ask = r.plan.run === 'image' ? deckImagesApi.quote(deckId, r.plan.body) : deckAssistApi.quote(deckId, cardIndex, r.plan.body);
+      const ask = r.plan.run === 'image' ? deckImagesApi.quote(deckId, r.plan.body) : deckAssistApi.quote(deckId, r.plan.cardKey, assistBody(r.plan, cardIndex));
       ask.then(
         (data) => { if (live) setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'ok', data } })); },
         (e) => {
@@ -150,7 +150,7 @@ export default function AreaLightbox({
   const runOne = async ({ plan, choice }) => {
     setBusy({ action: plan.run === 'image' ? 'image' : plan.action || plan.run });
     if (plan.run === 'assist') {
-      const r = await deckAssistApi.run(deckId, cardIndex, plan.body, railPressHeaders(plan.option));
+      const r = await deckAssistApi.run(deckId, plan.cardKey, assistBody(plan, cardIndex), railPressHeaders(plan.option));
       if (!r?.proposal?.uid) throw new Error('Eadwyn returned nothing to place. Nothing was placed.');
       const base = { uid: r.proposal.uid, charged: r.cost?.charged_microusd ?? null, charges: true, modelName: modelName(plan.option) };
       if (r.block) return { ...base, kind: 'block', block: r.block, title: r.title || null };
@@ -164,7 +164,7 @@ export default function AreaLightbox({
     }
     if (plan.run === 'metric') return { kind: 'block', block: metricBlock(plan.item), local: true };
     // An upload is stored as the venture's image at once; the card takes it only on Accept.
-    const r = await deckImagesApi.upload(deckId, plan.file, { use: 'content', card: cardIndex, alt: choice.alt || '', ...(choice.person ? { shows_person: true, consent: true } : {}) });
+    const r = await deckImagesApi.upload(deckId, plan.file, { use: 'content', card: cardIndex, ...(cardKeyOf(card, cardIndex) !== cardIndex ? { card_uid: cardKeyOf(card, cardIndex) } : {}), alt: choice.alt || '', ...(choice.person ? { shows_person: true, consent: true } : {}) });
     if (!r?.image?.uid) throw new Error('The image could not be stored. Nothing was placed.');
     return { kind: 'image', imageUid: r.image.uid, image: r.image, block: imageBlock(r.image, 'photo'), local: true };
   };
@@ -174,7 +174,7 @@ export default function AreaLightbox({
     let out;
     if (mode === 'batch') {
       // #3764 / #3766: one quote and one hold for every area. The adapter answers unavailable on main.
-      const a = await areasGenerate({ deckId, card: cardIndex, areas: list.map((r) => ({ id: r.key, grid: r.area.grid, element: r.element })), variants });
+      const a = await areasGenerate({ deckId, card: cardKeyOf(card, cardIndex), areas: list.map((r) => ({ id: r.key, grid: r.area.grid, element: r.element })), variants });
       out = a?.available ? { results: a.value?.results || [], refusal: null } : await runSequence(list, runOne);
     } else {
       out = await runSequence(list, runOne);
@@ -215,7 +215,7 @@ export default function AreaLightbox({
   return (
     <Lightbox label={title} title={title} width={680} onClose={() => !busy && onClose()} testId="pitch-areas" footer={footer}>
       {results ? (
-        <AreaResults results={results} card={card} model={model} items={items} onPlace={onPlace} onProposals={onProposals} />
+        <AreaResults results={results} card={card} cards={cards} model={model} items={items} onPlace={onPlace} onProposals={onProposals} />
       ) : (
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
