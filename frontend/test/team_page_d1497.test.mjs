@@ -892,6 +892,9 @@ test('#3840 Add agent: the sheet posts the role, names, model and cap, and a ref
     assert.ok(radio, 'the model radio');
     await act(async () => { radio.onChange(); });
     await v.click('add-agent-next');
+    // D1612 (SK6): the Skills step. Skills aren't open yet, so nothing is picked and no \`skills\` is sent.
+    assert.match(v.text(), /Skills aren’t open yet/);
+    await v.click('add-agent-next');
     await v.change('add-agent-first', '[Nora]');
     await v.change('add-agent-cap', '25');
     await v.click('add-agent-next');
