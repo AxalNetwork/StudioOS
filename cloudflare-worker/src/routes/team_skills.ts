@@ -42,6 +42,7 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { canEdit } from '../services/companyAccess';
 import { isAdmin, newUid } from './_t13t14t15_helpers';
 import { ROLES, roleOf } from '../services/agents/catalogue';
@@ -490,8 +491,12 @@ router.get('/skills/:uid/agents', async (c) => {
   return c.json({ agents });
 });
 
-/** The live agents the caller might manage: of their companies (and their projects), their own projects; every agent for HQ's admin. */
-async function candidateAgents(env: Env, user: User, roles: string[]): Promise<AgentRow[]> {
+/**
+ * The live agents the caller might manage: of their companies (and their projects), their own projects; every agent for HQ's admin.
+ * With a company chosen in the switcher (`active`), only that company's agents and those on a project with no company, as every
+ * founder-ownership read narrows (`projectInActiveCompany`); null means no company chosen.
+ */
+async function candidateAgents(env: Env, user: User, roles: string[], active: number | null): Promise<AgentRow[]> {
   if (!roles.length) return [];
   if (isAdmin(user)) {
     return all<AgentRow>(env, `SELECT * FROM team_agents WHERE status <> 'removed' AND role_key IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT 500`, JSON.stringify(roles));
@@ -502,7 +507,8 @@ async function candidateAgents(env: Env, user: User, roles: string[]): Promise<A
         AND (a.company_id IN (SELECT company_id FROM user_company_links WHERE user_id = ?)
           OR p.company_id IN (SELECT company_id FROM user_company_links WHERE user_id = ?)
           OR p.founder_id = ?)
-      ORDER BY a.id LIMIT 500`, JSON.stringify(roles), user.id, user.id, user.founder_id ?? -1);
+        AND (? IS NULL OR COALESCE(a.company_id, p.company_id) IS NULL OR COALESCE(a.company_id, p.company_id) = ?)
+      ORDER BY a.id LIMIT 500`, JSON.stringify(roles), user.id, user.id, user.founder_id ?? -1, active, active);
 }
 
 router.get('/skills/:uid/assignable', async (c) => {
@@ -512,7 +518,7 @@ router.get('/skills/:uid/assignable', async (c) => {
   const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version) : null;
   const roles = current ? versionParts(current).roles : [];
   const agents = [];
-  for (const a of await candidateAgents(c.env, user, roles)) {
+  for (const a of await candidateAgents(c.env, user, roles, await activeCompanyFor(c, user))) {
     const scope = await scopeOfAgent(c.env, a);
     if (!scope || !(await canManage(c.env, scope, user))) continue;
     const pinned = await c.env.DB.prepare('SELECT version FROM agent_skill_links WHERE agent_id = ? AND skill_id = ?').bind(a.id, s.id).first<{ version: number }>();

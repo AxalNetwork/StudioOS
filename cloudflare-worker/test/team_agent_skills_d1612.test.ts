@@ -89,10 +89,12 @@ function app() {
   a.route('/api/teams', teamAgents);
   return a;
 }
-async function call(w: W, who: number, method: string, path: string, body?: unknown) {
+async function call(w: W, who: number, method: string, path: string, body?: unknown, company?: number) {
   const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(w.env.JWT_SECRET));
-  const r = await app().request(`/api/teams${path}`, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
+  const headers: Record<string, string> = { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' };
+  if (company != null) headers['X-Company-Id'] = String(company);
+  const r = await app().request(`/api/teams${path}`, { method, headers,
     body: body === undefined ? undefined : JSON.stringify(body) }, w.env);
   const text = await r.text();
   return { status: r.status, body: (text ? JSON.parse(text) : null) as any, text };
@@ -201,6 +203,15 @@ test('A2 assign is partial: each agent it can is pinned at the current version, 
   assert.ok(!as.text.includes(GLOBEX_CFO), 'never another company\'s agent');
   assert.deepEqual((await call(w, MEMBER, 'GET', `/skills/${uid}/assignable`)).body.agents, [], 'a member manages none');
   noPrivate(as.text);
+
+  // The company switcher narrows the list: an editor of both companies sees Globex's agent only with no company or Globex
+  // chosen, and an agent on a project with no company under every choice (projectInActiveCompany's rule).
+  // Mutation checked: dropping the active-company clause → the Acme-only assert lists GLOBEX_CFO.
+  w.db.prepare("INSERT INTO user_company_links (uid, user_id, company_id, role_in_company) VALUES ('l4', ?, 2, 'Founder')").run(EDITOR);
+  const uids = async (company?: number) => (await call(w, EDITOR, 'GET', `/skills/${uid}/assignable`, undefined, company)).body.agents.map((a: any) => a.uid).sort();
+  assert.deepEqual(await uids(), [CFO, PROJECT_CFO, SOLO_CFO, GLOBEX_CFO].sort(), 'no company chosen: every company the editor belongs to');
+  assert.deepEqual(await uids(1), [CFO, PROJECT_CFO, SOLO_CFO].sort(), 'Acme chosen: no Globex agent');
+  assert.deepEqual(await uids(2), [SOLO_CFO, GLOBEX_CFO].sort(), 'Globex chosen: the unassigned project\'s agent stays');
 });
 
 test('A2 a retired skill stays pinned and readable, and cannot be added again', async () => {
