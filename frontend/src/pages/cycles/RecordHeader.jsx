@@ -20,10 +20,11 @@ import { isPlainClick } from './cycleModel.js';
 import { dispatchOf } from './recordModel.js';
 import { headerRow } from './recordHeaderModel.js';
 
-const Slots = createContext({ pills: null, actions: null, email: null, emailTo: null, ask: null });
+// #4017: `onEmail` opens the composer in the right Sheet over the record; `emailTo` stays the deep link.
+const Slots = createContext({ pills: null, actions: null, email: null, emailTo: null, onEmail: null, ask: null });
 
-export function RecordHeaderProvider({ pills = null, actions = null, email = null, emailTo = null, ask = null, children }) {
-  return <Slots.Provider value={{ pills, actions, email, emailTo, ask }}>{children}</Slots.Provider>;
+export function RecordHeaderProvider({ pills = null, actions = null, email = null, emailTo = null, onEmail = null, ask = null, children }) {
+  return <Slots.Provider value={{ pills, actions, email, emailTo, onEmail, ask }}>{children}</Slots.Provider>;
 }
 export const useRecordHeader = () => useContext(Slots);
 
@@ -76,7 +77,8 @@ export function MoreMenu({ actions = [], extra = [], handlers = {}, label = 'Mor
       <span aria-hidden="true">⋯</span>
     </button>
     {open && <div role="menu" className="absolute right-0 z-30 mt-1 min-w-[200px] overflow-hidden rounded-xl border border-axal-hairline bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="record-header-menu">
-      {extra.map((item) => <Link key={item.key} to={item.href} role="menuitem" className={`${ITEM} text-axal-ink dark:text-gray-100`} data-testid={`record-header-${item.key}`} onClick={close}>{item.label}</Link>)}
+      {extra.map((item) => <Link key={item.key} to={item.href} role="menuitem" className={`${ITEM} text-axal-ink dark:text-gray-100`} data-testid={`record-header-${item.key}`}
+        onClick={(event) => { close(); if (item.onSelect && isPlainClick(event)) { event.preventDefault(); item.onSelect(); } }}>{item.label}</Link>)}
       {actions.map((action) => <HeaderAction key={action.key} action={action} handlers={handlers} role="menuitem" onDone={close}
         className={`${ITEM} ${action.tone === 'danger' ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-gray-100'}`} />)}
     </div>}

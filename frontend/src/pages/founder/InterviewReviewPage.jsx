@@ -387,7 +387,7 @@ export default function InterviewRecord({
   if (phone) {
     // IV-M1 to M4, M7: one place per part; below 768px only the chosen section shows.
     const { primary, secondary, menu } = headerRow(read?.actions);
-    const emailItem = header.emailTo ? [{ key: 'email', label: 'Email', href: header.emailTo }] : [];
+    const emailItem = header.emailTo ? [{ key: 'email', label: 'Email', href: header.emailTo, onSelect: header.onEmail || undefined }] : [];
     const placed = { summary: [], transcript: [], findings: [], notes: [] };
     const sideOf = { summary: [], transcript: [], findings: [], notes: [] };
     if (summaryOf()) placed.summary.push(<section key="summary" className={CARD} data-testid="record-summary"><div className="px-4 py-3">{summaryOf()}</div></section>);
