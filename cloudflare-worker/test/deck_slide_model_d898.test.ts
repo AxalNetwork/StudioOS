@@ -64,7 +64,8 @@ const MODEL_CARD = {
       series: [{ label: 'MRR', binding: bind('revenue.mrr') }, { label: 'Typed', points: [{ x: 'Sep', y: 4 }, { x: 'Oct', y: 6 }] }] },
     { id: 'm1', kind: 'metric', grid: { c1: 7, c2: 9, r1: 3, r2: 4 }, label: 'Runway', value: '14 months', binding: bind('raise.runway') },
     { id: 'm2', kind: 'metric', grid: { c1: 10, c2: 12, r1: 3, r2: 4 }, label: 'Churn', value: null },
-    { id: 'i', kind: 'image', grid: { c1: 7, c2: 12, r1: 5, r2: 5 }, image_url: 'https://example.com/a.png', alt: 'Synthetic', tag: 'illustration' },
+    // D1506: one of our own stored images; a save copies an outside one first (untrusted_uploads_d1506.test.ts).
+    { id: 'i', kind: 'image', grid: { c1: 7, c2: 12, r1: 5, r2: 5 }, image_url: 'https://axal.vc/api/decks/images/0b6a2c1e-3f4d-4a5b-8c9d-0e1f2a3b4c5d/file', alt: 'Synthetic', tag: 'illustration' },
     { id: 'g', kind: 'graphic', grid: { c1: 10, c2: 10, r1: 2, r2: 2 }, graphic: 'arrow-up', ratio: '1x1' },
     { id: 'l', kind: 'link', grid: { c1: 7, c2: 12, r1: 6, r2: 6 }, url: 'https://example.com/data-room', label: 'Open the data room' },
   ],

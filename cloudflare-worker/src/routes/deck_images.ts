@@ -50,6 +50,7 @@ import {
 } from '../services/decks/images';
 import { figureRefusal } from '../services/decks/newDeck';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { MAX_PIXELS, prepareImage } from '../services/decks/imageSafety';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
@@ -225,9 +226,14 @@ deckImages.post('/:id/images/upload', async (c) => {
   const file = form?.get('file');
   if (!file || typeof file === 'string') return c.json({ error: 'Choose an image to upload.' }, 400);
   if (file.size > UPLOAD_MAX_BYTES) return c.json({ error: 'An image is at most 5 MB.' }, 413);
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const mime = sniffMime(bytes);
-  if (!mime) return c.json({ error: 'Upload a PNG, JPEG or WebP image.' }, 415);
+  // D1506: the format from the bytes, the size from the header (50 MP at most), the metadata stripped, the bytes hashed.
+  const prepared = await prepareImage(new Uint8Array(await file.arrayBuffer()));
+  if (!prepared.ok) {
+    return prepared.code === 'image_too_large'
+      ? refuse(c, 413, { code: 'image_too_large', message: `An image is at most ${MAX_PIXELS / 1_000_000} megapixels. Nothing was saved.` })
+      : c.json({ error: 'Upload a PNG, JPEG or WebP image.' }, 415);
+  }
+  const { bytes, mime } = prepared;
   // #2434 owner question 7, A: a photo of a person goes in only with their agreement recorded.
   const showsPerson = form!.get('shows_person') === '1';
   if (showsPerson && form!.get('consent') !== '1') return refuse(c, 422, { code: 'person_consent_required', message: PERSON_CONSENT_MESSAGE });
@@ -236,6 +242,14 @@ deckImages.post('/:id/images/upload', async (c) => {
   const card = cardRaw == null || cardRaw === '' ? null : Number(cardRaw);
   if (card !== null && (!Number.isInteger(card) || card < 0 || card > 59)) return c.json({ error: 'card must be a card of the deck, from 0.' }, 400);
   const alt = String(form!.get('alt') ?? '').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX);
+  // D1506: the same picture is stored once per venture; a second upload is the first one.
+  const same = await c.env.DB.prepare('SELECT * FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(deck.projectId, prepared.sha256).first<any>();
+  if (same && same.state !== 'discarded') return c.json({ image: view(c, same), duplicate: true });
+  if (same) {
+    await c.env.DB.prepare(`UPDATE deck_images SET state = ?, use = ?, card = ?, alt = ?, deck_id = ?, kept_at = ?, kept_by = ? WHERE id = ?`)
+      .bind(use === 'content' ? 'kept' : 'proposed', use, card, alt, deck.deckId, use === 'content' ? new Date().toISOString() : null, use === 'content' ? Number(user.id) : null, same.id).run();
+    return c.json({ image: view(c, await c.env.DB.prepare('SELECT * FROM deck_images WHERE id = ?').bind(same.id).first()), duplicate: true });
+  }
   let ticket;
   try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, bytes.byteLength, user); }
   catch (e) { if (e instanceof Response) return e; throw e; }
@@ -245,10 +259,10 @@ deckImages.post('/:id/images/upload', async (c) => {
   catch { return refuse(c, 503, { code: 'image_unsaved', message: 'The image could not be stored. Nothing was saved; try again in a moment.' }); }
   const userId = Number(user.id);
   // An uploaded background still has to read at 4.5:1: it is kept as a content image until Keep sets its overlay.
-  await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, r2_key, mime, size_bytes, source, use, alt, state,
+  await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, r2_key, mime, size_bytes, width, height, sha256, source, use, alt, state,
       shows_person, person_consent_at, person_consent_by, created_by, kept_at, kept_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'upload', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(uid, deck.projectId, deck.deckId, card, key, mime, bytes.byteLength, use, alt, use === 'content' ? 'kept' : 'proposed',
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'upload', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(uid, deck.projectId, deck.deckId, card, key, mime, bytes.byteLength, prepared.width, prepared.height, prepared.sha256, use, alt, use === 'content' ? 'kept' : 'proposed',
       showsPerson ? 1 : 0, showsPerson ? new Date().toISOString() : null, showsPerson ? userId : null, userId,
       use === 'content' ? new Date().toISOString() : null, use === 'content' ? userId : null).run();
   await noteStorageLanded(c.env, ticket);

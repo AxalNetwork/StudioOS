@@ -169,7 +169,26 @@ async function renderOnce(env: Env, action: 'pdf' | 'screenshot', options: Recor
   }
 }
 
+/** The web fonts the print page names (frontend/index.html), and inline data. */
+const EXPORT_THIRD_PARTY = ['/^https:\\/\\/fonts\\.(?:googleapis|gstatic)\\.com\\//', '/^data:/'];
+
+/**
+ * D1506: the requests the export browser may make, as Browser Run's
+ * `allowRequestPattern` takes them: the page's own origin, the web fonts the
+ * print page names, and data: URLs. Every other request is not made, so an
+ * outside image or script on a page can never be fetched from Cloudflare's
+ * browser. Null when the page's URL cannot be read.
+ */
+export function exportAllowPatterns(pageUrl: unknown): string[] | null {
+  let origin: string;
+  try { origin = new URL(String(pageUrl)).origin; } catch { return null; }
+  if (!/^https?:\/\//.test(origin)) return null;
+  return [`/^${origin.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\\//`, ...EXPORT_THIRD_PARTY];
+}
+
 export async function renderUrl(env: Env, action: 'pdf' | 'screenshot', options: Record<string, unknown>, opts: RenderUrlOptions): Promise<RenderResult> {
+  const allow = exportAllowPatterns(options.url);
+  if (allow) options = { ...options, allowRequestPattern: allow };
   const binding = env.BROWSER;
   if (!binding || typeof binding.quickAction !== 'function') return { ok: false, code: 'browser_unbound', attempts: 0 };
   const attempts = Math.max(1, opts.attempts ?? DECK_RENDER_ATTEMPTS);
