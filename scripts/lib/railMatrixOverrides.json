@@ -72,6 +72,10 @@
       { "t": "FLUX.2 Dev", "line": "The most detailed images, and the slowest" },
       { "t": "Lucid Origin", "line": "Graphic design and crisp text" },
       { "t": "Phoenix 1.0", "line": "Close to the prompt, with clear text" }
+    ] },
+    "memo": { "defaultNeeds": "text", "allow": ["text"], "models": [
+      { "t": "GPT-OSS 120B", "line": "A full memo from a long deck" },
+      { "t": "Nemotron 3 120B", "line": "A second reading, at a lower price" }
     ] }
   },
   "transcribeModels": [

@@ -111,7 +111,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/mistral/mistral-7b-instruct-v0.2-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
 | `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | · | · | O | · | · | · | G | O | · | G |
-| `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
+| `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | W | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | G | · | · | · | · | · | · | O | · | · | O |
 | `@cf/microsoft/phi-2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/leonardo/phoenix-1.0` | Text-to-Image | partner | tiles 0.005830, steps 0.000110 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
@@ -530,7 +530,7 @@ chat: Research synthesis, evidence comparison and detailed planning.
 - Validate: **wired**, `railMatrix.json "Founder · Validate · Experiments and evidence"`; `railMatrix.json "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 12 more
-- Raise: **wired**, `railMatrix.json "Founder · Raise · Fundraising readiness"`; `railMatrix.json "Founder · Raise"`
+- Raise: **wired**, `railMatrix.json "Founder · Raise · Fundraising readiness"`; `railMatrix.json "Founder · Raise"`; `routes/deck_derive.ts (memo_write)`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; and 7 more
 - Network: **offered**, `railMatrix.json option draft:single-contact-exposure`
 - Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Markets"`; and 50 more
@@ -822,7 +822,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`
+- Raise: **wired**, `routes/deck_derive.ts (memo_write)`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
 - Network: **gap**, `#3721`
 - Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`

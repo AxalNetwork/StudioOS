@@ -1,6 +1,6 @@
 /**
- * D898 (#2676) — migration 539's four `pitch_decks` columns, added where it
- * has not run. D1 has no `ADD COLUMN IF NOT EXISTS`, so the table is probed
+ * D898 (#2676) — migration 539's four `pitch_decks` columns (and 744's
+ * `format`, D1583), added where they have not run. D1 has no `ADD COLUMN IF NOT EXISTS`, so the table is probed
  * first. Every runtime `CREATE TABLE pitch_decks` awaits this right after
  * (`routes/decks.ts` `ensureSchema`, and the advisor's deck-draft seed in
  * `services/advisor/writeRouter.ts`), so whichever bootstrap wins, the
@@ -20,6 +20,9 @@ export async function ensureDeckVersionColumns(env: Env): Promise<void> {
       ['round_ref', 'ALTER TABLE pitch_decks ADD COLUMN round_ref TEXT'],
       ['theme_json', 'ALTER TABLE pitch_decks ADD COLUMN theme_json TEXT'],
       ['content_hash', `ALTER TABLE pitch_decks ADD COLUMN content_hash TEXT CHECK (content_hash IS NULL OR (length(content_hash) = 64 AND content_hash NOT GLOB '*[^0-9a-f]*'))`],
+      // D1583 (#3830) — migration 744: a deck row is always a deck; teasers,
+      // one-pagers and memos live in `deck_derivatives`.
+      ['format', `ALTER TABLE pitch_decks ADD COLUMN format TEXT NOT NULL DEFAULT 'deck' CHECK (format = 'deck')`],
     ];
     for (const [col, ddl] of add539) {
       if (!have.has(col)) {

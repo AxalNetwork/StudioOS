@@ -257,6 +257,7 @@ import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
+import deckDerive from './routes/deck_derive';
 import deckImages from './routes/deck_images';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
@@ -1391,6 +1392,8 @@ app.route('/api/decks', deckSources);
 app.route('/api/decks', deckNew);
 // D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
 app.route('/api/decks', deckAssist);
+// D1583 (#3830): teaser, one-pager and memo from one version; before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckDerive);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.

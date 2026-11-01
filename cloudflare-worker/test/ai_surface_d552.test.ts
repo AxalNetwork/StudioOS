@@ -201,6 +201,7 @@ const EXPECTED: Record<string, string[]> = {
   // D1113 retired decks.ts's old positioning call; the active deck/narrative calls remain below.
   'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here; D897 §9 (#3659): one card's regeneration
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
+  'routes/deck_derive.ts': ['AI_SURFACE.raisePitch'], // D1583: the memo from a deck
   'routes/deck_images.ts': ['AI_SURFACE.raisePitch'], // D903: the card and background images
   'routes/article_assist.ts': ['AI_SURFACE.articles', 'AI_SURFACE.articles'], // D1409: Eadwyn's writing options on an article, and its images
   'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool

@@ -187,6 +187,9 @@ export async function decideRail(env: Env, userId: number, uid: string, decision
   // D1263: these decisions must pin/link and audit in their own atomic founder writer.
   const routed = await getRail(env, userId, uid);
   if (routed && ['raise:evidence', 'raise:evidence-link'].includes(routed.rail_option)) return null;
+  // D1583 (#3830): a derived teaser, one-pager or memo is kept only by its own route, which stores it with the
+  // accept in one batch (`routes/deck_derive.ts`); here it can only be discarded.
+  if (routed && routed.rail_option.startsWith('derive:') && status !== 'discarded') return null;
   if (status === 'edited' && (!edited || typeof edited !== 'object' || JSON.stringify(edited).length > MAX_PAYLOAD_CHARS)) return null;
   // D777 part 3: keeping a value re-checks the never-fill registry. The stored
   // field may have been listed since it was proposed, and an edit may name one.

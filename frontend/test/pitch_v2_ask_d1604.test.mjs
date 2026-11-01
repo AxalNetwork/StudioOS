@@ -32,6 +32,9 @@ import { FIRST_RUN_KEY } from '../src/pages/raise/pitch/editorModel.js';
 import {
   ASK_UNREADABLE, DECK_ASK_OPTIONS, WAITING_TITLE, askAreaName, askName, cardEdit, placeTextEdit, waitingCount,
 } from '../src/pages/raise/pitch/deckV2Model.js';
+import { DERIVE_ASK_OPTIONS } from '../src/pages/raise/pitch/deriveModel.js';
+// D1583 (#3830): Ask reads each deck option, then each derive option (teaser, one-pager, memo), for this deck.
+const ASK_READS = [...DECK_ASK_OPTIONS, ...DERIVE_ASK_OPTIONS];
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -186,7 +189,7 @@ test('the count is the deck proposal plus this version\'s card edits, read per d
     assert.equal(m.pr(button)['aria-label'], 'Ask Eadwyn, 3 waiting');
     assert.equal(m.text(m.by('pitch-ask-waiting')), '3 waiting');
     const lists = source.calls.filter((c) => c[0] === 'list').map((c) => c[1]);
-    assert.deepEqual(lists.map((q) => q.option), DECK_ASK_OPTIONS);
+    assert.deepEqual(lists.map((q) => q.option), ASK_READS);
     assert.ok(lists.every((q) => q.record === 'deck:31' && q.status === 'proposed'), 'the current version only, open proposals only');
   } finally { await m.close(); }
 });
@@ -323,7 +326,7 @@ test('the edits are read again when the sheet opens and when the page says they 
   try {
     await m.render(h(DeckAsk, { projectId: 7, source, editsKey: 0 }));
     const first = reads();
-    assert.equal(first, DECK_ASK_OPTIONS.length);
+    assert.equal(first, ASK_READS.length);
     assert.equal(m.pr(m.by('pitch-ask'))['aria-label'], 'Ask Eadwyn, 1 waiting');
     // A card run in the editor's own bar left a proposal: the next open lists it.
     source.calls.length = 0;
@@ -331,12 +334,12 @@ test('the edits are read again when the sheet opens and when the page says they 
     const lists = source.proposals.list;
     source.proposals.list = async (q) => { source.calls.push(['list', q]); return { proposals: EDITS_LATER[q.option] || [] }; };
     await m.press(m.by('pitch-ask'));
-    assert.equal(reads(), DECK_ASK_OPTIONS.length, 'opening reads again');
+    assert.equal(reads(), ASK_READS.length, 'opening reads again');
     assert.equal(m.all('pitch-ask-edit').length, 1);
     assert.equal(m.pr(m.by('pitch-ask'))['aria-label'], 'Ask Eadwyn, 2 waiting');
     source.calls.length = 0;
     await m.render(h(DeckAsk, { projectId: 7, source, editsKey: 1 }));
-    assert.equal(reads(), DECK_ASK_OPTIONS.length, 'the page\'s signal reads again');
+    assert.equal(reads(), ASK_READS.length, 'the page\'s signal reads again');
     source.proposals.list = lists;
   } finally { await m.close(); }
 });
