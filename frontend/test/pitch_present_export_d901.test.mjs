@@ -100,10 +100,11 @@ test('the addresses: present carries the venture and the version; Esc goes back 
   assert.equal(exitHref(3), '/raise/pitch?project_id=3');
 });
 
-test('the export dialog: four formats, what it records said first, PD25 on failure', () => {
+test('the export dialog: five formats, what it records said first, PD25 on failure', () => {
   // Mutation checked: the failure without "Nothing was shared." → the PD25 check fails.
   // D904 (#2683): part 10 offers Google Slides; its own states are tested in pitch_google_slides_d904.
-  assert.deepEqual(FORMATS.map((f) => [f.id, f.available]), [['pdf', true], ['pptx', true], ['google_slides', true], ['html', true]]);
+  assert.deepEqual(FORMATS.map((f) => [f.id, f.available]), [['pdf', true], ['pptx', true], ['google_slides', true], ['html', true], ['odp', true]]);
+  // D1604 (#3716): the .odp card is D1603's route (#3882), no longer the adapter.
   assert.equal(FORMATS.find((f) => f.id === 'html').line, 'One file, offline');
   assert.deepEqual(['pdf', 'pptx', 'html'].map(exportButton), ['Export PDF', 'Export PowerPoint', 'Export HTML']);
   // D1112 (#2992): the two options apply to every format the dialog offers, and say where they go.

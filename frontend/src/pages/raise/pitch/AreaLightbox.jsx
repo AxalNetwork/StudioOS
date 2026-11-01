@@ -63,7 +63,7 @@ const ELEMENT_LABEL = Object.fromEntries(ELEMENT_GROUPS.flatMap((g) => g.items.m
  */
 export default function AreaLightbox({
   deckId, cardIndex, card, areas, model, items = [], aiOn = true,
-  onPlace, onProposals, onClose, onDialog, onImageOptions, instruction = null,
+  onPlace, onProposals, onClose, onDialog, onImageOptions, instruction = null, onTokens = null,
 }) {
   const [rows, setRows] = useState(() => (areas || []).map((a) => ({ key: a.id, area: a, element: defaultElement(a), choice: {} })));
   const [picker, setPicker] = useState(null);
@@ -94,7 +94,11 @@ export default function AreaLightbox({
       const ask = r.plan.run === 'image' ? deckImagesApi.quote(deckId, r.plan.body) : deckAssistApi.quote(deckId, cardIndex, r.plan.body);
       ask.then(
         (data) => { if (live) setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'ok', data } })); },
-        (e) => { if (live) setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'error', refusal: refusalOf(e) } })); },
+        (e) => {
+          const refusal = refusalOf(e);
+          if (refusal?.topUp) onTokens?.();
+          if (live) setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'error', refusal } }));
+        },
       );
     }
     return () => { live = false; };
@@ -182,7 +186,10 @@ export default function AreaLightbox({
       const i = rows.findIndex((x) => x.key === res.key);
       return { ...res, area: r.area, label: rowLabel(r.area, i), elementLabel: ELEMENT_LABEL[r.element] || null };
     }));
-    if (out.refusal) reportError('pitch-areas:run', out.refusal.error);
+    if (out.refusal) {
+      reportError('pitch-areas:run', out.refusal.error);
+      if (refusalOf(out.refusal.error)?.topUp) onTokens?.();
+    }
     if (list.some((r) => charged(r.plan))) onProposals?.();
   };
 

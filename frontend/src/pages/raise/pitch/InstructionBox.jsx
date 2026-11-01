@@ -44,7 +44,7 @@ import {
  */
 export default function InstructionBox({
   deckId, cardIndex, card, areas = [], items = [], aiOn = true, readOnly = false, sheet = false,
-  onRemove, onPlace, onProposals,
+  onRemove, onPlace, onProposals, onTokens = null,
 }) {
   const [text, setText] = useState('');
   const [step, setStep] = useState(null); // { kind: 'quote'|'running'|'refused'|'later', … }
@@ -79,7 +79,11 @@ export default function InstructionBox({
     setStep({ kind: 'quote', quote: null, change, body: sent });
     deckAssistApi.quote(deckId, cardIndex, sent).then(
       (q) => setStep((s) => (s?.kind === 'quote' && s.body === sent ? { ...s, quote: q } : s)),
-      (e) => setStep((s) => (s?.kind === 'quote' && s.body === sent ? { kind: 'refused', refusal: refusalOf(e) } : s)),
+      (e) => {
+        const refusal = refusalOf(e);
+        if (refusal?.topUp) onTokens?.();
+        setStep((s) => (s?.kind === 'quote' && s.body === sent ? { kind: 'refused', refusal } : s));
+      },
     );
   };
 
@@ -94,7 +98,11 @@ export default function InstructionBox({
         setProposal({ uid: r.proposal.uid, blockId: plan.block.id, before: String(r.before ?? plan.block.text ?? ''), after: String(r.after ?? ''), cost: r.cost?.charged_microusd == null ? null : aiTokens(r.cost.charged_microusd) });
         onProposals?.();
       },
-      (e) => { setStep({ kind: 'refused', refusal: refusalOf(e) }); reportError('pitch-instruction:run', e); },
+      (e) => {
+        const refusal = refusalOf(e);
+        if (refusal?.topUp) onTokens?.();
+        setStep({ kind: 'refused', refusal }); reportError('pitch-instruction:run', e);
+      },
     );
   };
 

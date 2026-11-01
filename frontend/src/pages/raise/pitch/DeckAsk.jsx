@@ -8,6 +8,7 @@ import Sheet from '../../../ui/Sheet.jsx';
 import { AskButtonView } from '../../../ui/AskButton.jsx';
 import { EDIT_PATH, asList, currentVersion, ventureQuery } from './pitchStudioModel';
 import { NEW_PATH, refusalOf } from './newDeckModel';
+import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import {
   ACCEPT, ACCEPT_ALL, ASK_OFF, ASK_UNREADABLE, CHARGED_LINE, DECK_ASK_OPTIONS, DISCARD, STILL_WORKS, WAITING_NONE, WAITING_TITLE,
   cardEdit, cardEditLine, waitingCount,
@@ -284,5 +285,20 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
         ) : null}
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * PD-9 (plan §8): the page's line for AI paused or out of tokens, from
+ * `aiOffState`. A polite status, never an alert; out of tokens carries the one
+ * link that lifts it. Nothing on the page is hidden by it.
+ */
+export function AiOffBanner({ state, testId = 'pitch-ai-off' }) {
+  if (!state) return null;
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12.5px] font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid={testId} data-state={state.kind}>
+      <span>{state.banner}</span>
+      {state.kind === 'tokens' ? <a href={ADD_TOKENS_PATH} className="font-bold text-axal-violet underline dark:text-violet-300" data-testid={`${testId}-add`}>Add tokens</a> : null}
+    </div>
   );
 }

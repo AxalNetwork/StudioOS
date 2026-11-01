@@ -18,6 +18,10 @@
  * here with `through(() => <client>.<method>(…))`. `through` maps a Worker
  * refusal onto what the surface draws, so the swap changes no screen.
  *
+ * Swapped out already: the Slides-suite (.odp) export (#3882) merged as
+ * D1603, so `ExportDialog.jsx` calls `api.deckExportOdp` directly and this
+ * file no longer lists it.
+ *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
  * no method here: the surfaces read them when the existing read carries them.
@@ -80,7 +84,6 @@ export const SURFACES = Object.freeze({
   unseenBatches: { issue: 3879, what: 'The banner for a build that finished while you were away' },
   markSeen: { issue: 3879, what: 'Mark a finished build as seen' },
   setDeckSource: { issue: 3881, what: 'Tag a data-room file as a deck source' },
-  exportOdp: { issue: 3882, what: 'Export a slides-suite (.odp) file' },
 });
 
 const off = (name) => async () => unavailable(SURFACES[name].issue);
@@ -159,7 +162,6 @@ export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');
 export const markSeen = off('markSeen');
 export const setDeckSource = off('setDeckSource');
-export const exportOdp = off('exportOdp');
 
 /** Synchronous: whether a surface is on, for a menu that greys its item before any read. */
 export const availability = (name) => (SURFACES[name] ? unavailable(SURFACES[name].issue) : null);

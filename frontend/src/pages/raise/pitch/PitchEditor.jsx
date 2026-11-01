@@ -25,7 +25,8 @@ import BlockTools, { SpeakerNotes } from './BlockTools';
 import ShareDialog from './ShareDialog';
 import ExportDialog from './ExportDialog';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
-import { EDITOR_WAITING, placeTextEdit, saveChip } from './deckV2Model';
+import { EDITOR_WAITING, aiOffState, placeTextEdit, saveChip } from './deckV2Model';
+import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
 import AreaLightbox from './AreaLightbox';
 import InstructionBox from './InstructionBox';
@@ -209,7 +210,7 @@ export default function PitchEditor() {
   }, [readOnly]);
   const tools = current?.id ? (
     <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} readOnly={readOnly} phone={phone}
-      onAction={onAction} labels={chrome?.labels} waiting={chrome ? null : EDITOR_WAITING} />
+      onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} />
   ) : null;
   const overlay = shareDialog === 'share' && projectId != null && current ? (
     <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}} />
@@ -318,6 +319,11 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const [dialog, setDialog] = useState(null);
   const [sheet, setSheet] = useState(null);
   const [compare, setCompare] = useState(null);
+  // PD-9: a run or a quote refused for tokens (a 402) turns Ask off for the
+  // session; adding tokens leaves the page, so the next visit starts on.
+  const [outOfTokens, setOutOfTokens] = useState(false);
+  const onTokens = useCallback(() => setOutOfTokens(true), []);
+  const off = aiOffState({ aiOn, outOfTokens });
 
   const next = { cards, theme, audience };
   const changes = useMemo(() => changesOf(base, next, model), [base, cards, theme, audience, model]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -409,8 +415,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const chip = saveChip({ dirty, readOnly, when: state, version: base.deck.version });
   const appendixLabel = card?.appendix ? 'Not an appendix' : 'Mark as appendix';
   useEffect(() => {
-    onChrome?.({ chip, labels: { appendix: appendixLabel, ...(readOnly ? { notes: 'Leave a note' } : {}) } });
-  }, [chip.text, chip.title, chip.save, appendixLabel, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+    onChrome?.({ chip, outOfTokens, labels: { appendix: appendixLabel, ...(readOnly ? { notes: 'Leave a note' } : {}) } });
+  }, [chip.text, chip.title, chip.save, appendixLabel, readOnly, outOfTokens]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onChrome?.(null), [onChrome]);
 
   const duplicate = (i) => {
@@ -443,7 +449,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
 
   // The selection's Ask opens "Generate into N areas" (`AreaLightbox.jsx`) on
   // the areas as they are now; a figure bound to a record says why not.
-  const askOff = aiOn ? null : 'AI is paused for your studio.';
+  const askOff = off?.ask ?? null;
   const ask = () => {
     const t = askTarget(areas, selection, { aiOn, items });
     if (!t || t.kind === 'off') return;
@@ -460,10 +466,11 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
 
   return (
     <>
+      {!readOnly ? <AiOffBanner state={off} /> : null}
       {phone ? (
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
           onNotes={(v) => setCard(sel, { ...card, notes: v })} notesMax={model.notes_max}
-          deckId={base.deck.id} items={items} aiOn={aiOn} model={model} onPlace={(c) => setCard(sel, c)} onProposals={onProposals} />
+          deckId={base.deck.id} items={items} aiOn={aiOn} off={off} onTokens={onTokens} model={model} onPlace={(c) => setCard(sel, c)} onProposals={onProposals} />
       ) : (
         <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
@@ -486,7 +493,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }} />
             )}
             {card && !readOnly && chosen.length ? (
-              <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn}
+              <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
                 onRemove={(id) => setPickState((p) => ({ selection: p.selection.filter((x) => x !== id), focus: p.focus }))}
                 onPlace={(c) => setCard(sel, c)} onProposals={onProposals} />
             ) : null}
@@ -588,7 +595,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : null}
       {dialog?.kind === 'areas' && card ? (
         <AreaLightbox deckId={base.deck.id} cardIndex={sel} card={card} areas={dialog.areas} model={model} items={items} aiOn={aiOn}
-          onPlace={(c) => setCard(sel, c)} onProposals={onProposals} onClose={() => setDialog(null)}
+          onTokens={onTokens} onPlace={(c) => setCard(sel, c)} onProposals={onProposals} onClose={() => setDialog(null)}
           onDialog={(plan, area) => {
             if (plan.open === 'structure') { setDialog(null); setSheet('structure'); return; }
             // "Add it here": the area's own range; a block that holds it gives way when Add places the new one.
@@ -818,7 +825,7 @@ function SaveDialog({ changes, save, onSaved, onClose, named = false, initialNam
 // Phone (PD26 frame 4): notes and order, no layout editing
 // ---------------------------------------------------------------------------
 
-function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesMax, deckId, items, aiOn, model, onPlace, onProposals }) {
+function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesMax, deckId, items, aiOn, off = null, onTokens, model, onPlace, onProposals }) {
   // pd9k / plan §8: tap one area on the card, then Ask opens "Generate into 1
   // area" as a full-height sheet, with the instruction field at its foot.
   const [tapped, setTapped] = useState(null);
@@ -872,20 +879,20 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
           {area ? (
             <div className="flex flex-wrap items-center gap-2" data-testid="pitch-editor-phone-actions">
               <button type="button" className={`${GHOST} min-h-[44px] min-w-[44px]`} aria-label="Ask Eadwyn about this area"
-                disabled={!target || target.kind !== 'areas'} onClick={() => setAsking(true)} data-testid="pitch-editor-phone-ask">
+                disabled={!target || target.kind !== 'areas' || Boolean(off)} onClick={() => setAsking(true)} data-testid="pitch-editor-phone-ask">
                 <img src="/eadwyn-ai.png" alt="" aria-hidden="true" className="h-4 w-4 rounded-full" /> Ask
               </button>
-              {target?.kind === 'off' ? <span className={MUTED} data-testid="pitch-editor-phone-ask-why">AI is paused for your studio.</span> : null}
-              {target?.kind === 'refused' ? <span className={MUTED} data-testid="pitch-editor-phone-ask-why">{target.why}</span> : null}
+              {off ? <span className={MUTED} data-testid="pitch-editor-phone-ask-why">{off.ask}</span> : null}
+              {!off && target?.kind === 'refused' ? <span className={MUTED} data-testid="pitch-editor-phone-ask-why">{target.why}</span> : null}
             </div>
           ) : null}
         </div>
       ) : null}
       {asking && area && target?.kind === 'areas' ? (
         <AreaLightbox deckId={deckId} cardIndex={sel} card={card} areas={[area]} model={model} items={items} aiOn={aiOn}
-          onPlace={onPlace} onProposals={onProposals} onClose={() => setAsking(false)}
+          onTokens={onTokens} onPlace={onPlace} onProposals={onProposals} onClose={() => setAsking(false)}
           instruction={words ? (
-            <InstructionBox sheet deckId={deckId} cardIndex={sel} card={card} areas={[area]} items={items} aiOn={aiOn}
+            <InstructionBox sheet deckId={deckId} cardIndex={sel} card={card} areas={[area]} items={items} aiOn={aiOn} onTokens={onTokens}
               onPlace={onPlace} onProposals={onProposals} />
           ) : null} />
       ) : null}

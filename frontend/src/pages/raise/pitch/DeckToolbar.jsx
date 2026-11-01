@@ -33,7 +33,7 @@ const BTN = 'inline-flex h-10 items-center justify-center gap-1.5 whitespace-now
 const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep dark:bg-violet-600 dark:hover:bg-violet-500`;
 
-export default function DeckToolbar({ chip, presentTo = null, readOnly = false, phone = false, onAction, labels, waiting = null, testId = 'deck-toolbar' }) {
+export default function DeckToolbar({ chip, presentTo = null, readOnly = false, phone = false, onAction, labels, outOfTokens = false, waiting = null, testId = 'deck-toolbar' }) {
   const [share, setShare] = useState(false);
   const menu = useMenuFocus(share, () => setShare(false));
 
@@ -45,7 +45,7 @@ export default function DeckToolbar({ chip, presentTo = null, readOnly = false, 
       {chip?.save && !readOnly ? (
         <button type="button" className={PRIMARY} onClick={() => onAction?.('save')} data-testid="pitch-editor-save">{SAVE_VERSION}</button>
       ) : null}
-      <DeckMoreMenu onPick={onAction} readOnly={readOnly} phone={phone} labels={labels} waiting={waiting} testId="deck-more" />
+      <DeckMoreMenu onPick={onAction} readOnly={readOnly} phone={phone} labels={labels} outOfTokens={outOfTokens} waiting={waiting} testId="deck-more" />
       {presentTo ? (
         <Link className={GHOST} to={presentTo} data-testid={`${testId}-present`}><Play size={13} aria-hidden="true" /> Present</Link>
       ) : null}

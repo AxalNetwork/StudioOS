@@ -39,14 +39,20 @@ export const numberIn = (text) => (typeof text === 'string' ? NUMBER_RE.exec(tex
 /** The prompt's own warning before anything is sent; the Worker's 422 is the rule. */
 export const promptWarning = (text) => (numberIn(text) ? 'Figures come from your records, never from the prompt. Take the figure out, or record it in its module.' : null);
 
+/** The plan gate's link (PD-9): the plans page, as the AIRail's "See plans ›". */
+export const SEE_PLANS = 'See plans ›';
+export const PLANS_PATH = '/pricing';
+
 /** A refused press, as the page draws it: the sentence, and the module to record the figure in. */
 export function refusalOf(e) {
   if (!e) return null;
   const data = e.data && typeof e.data === 'object' ? e.data : {};
   const code = e.code || data.error || null;
   const message = e.message || data.message || 'That did not work. Nothing was changed.';
+  // D1604 (PD-9 plan gate): a press the plan does not include links to the plans, never to a top-up.
   const link = code === 'figure_in_prompt' && typeof data.href === 'string' && data.href.startsWith('/')
-    ? { text: data.module ? `Open ${data.module} ›` : 'Open your sources ›', href: data.href } : null;
+    ? { text: data.module ? `Open ${data.module} ›` : 'Open your sources ›', href: data.href }
+    : code === 'tier_required' ? { text: SEE_PLANS, href: PLANS_PATH } : null;
   const topUp = e.status === 402 && code !== 'tier_required' ? { text: 'Add tokens', href: ADD_TOKENS_PATH } : null;
   return { code, message, link, topUp };
 }

@@ -29,7 +29,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
     const answer = await adapter[name]('synthetic-deck', { synthetic: true });
     assert.deepEqual(answer, { available: false, reason: NOT_ON, issue: adapter.SURFACES[name].issue }, name);
     assert.ok(Object.isFrozen(answer), `${name}: a surface must not be able to turn it into an answer`);
-    assert.ok(answer.issue >= 3749 && answer.issue <= 3882, `${name}: #${answer.issue} is outside the deck v2 backlog`);
+    assert.ok(answer.issue >= 3749 && answer.issue <= 3881, `${name}: #${answer.issue} is outside the deck v2 backlog`);
     assert.deepEqual(adapter.availability(name), answer, `${name}: the synchronous read agrees`);
   }
   assert.equal(adapter.availability('notASurface'), null);
@@ -45,8 +45,10 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
     media: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808,
     brandLocks: 3819, pptxImport: 3809, investorLinks: 3812, stock: 3813, comments: 3817, slideAnalytics: 3820,
     presence: 3824, cardStatus: 3826, rehearse: 3827, walkthrough: 3837, retryFailed: 3879, unseenBatches: 3879,
-    markSeen: 3879, setDeckSource: 3881, exportOdp: 3882,
+    markSeen: 3879, setDeckSource: 3881,
   };
+  // #3882 merged as D1603: the .odp export left the seam for its real client (pitch_v2_states_d1604).
+  assert.equal('exportOdp' in adapter, false, 'a surface whose route is on main is not in the adapter');
   assert.deepEqual(Object.fromEntries(Object.entries(adapter.SURFACES).map(([k, v]) => [k, v.issue])), want);
   for (const [k, v] of Object.entries(adapter.SURFACES)) assert.ok(typeof v.what === 'string' && v.what.length > 8, k);
 });

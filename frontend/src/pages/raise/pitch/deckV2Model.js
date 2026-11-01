@@ -167,6 +167,23 @@ export function askAreaName(n) {
 export const ASKING = 'Asking…';
 export const ASK_UNREADABLE = 'Eadwyn could not be reached. Try again.';
 export const ASK_OFF = 'AI is paused. What is waiting can still be accepted or discarded.';
+/**
+ * PD-9 (plan §8): the page's own line for the two AI-off states. AI paused is
+ * read from the studio's switch (D765); out of tokens is known once a run or a
+ * quote is refused with a 402 (main has no balance gate before the press). In
+ * either state Ask on an area is greyed with the same words, and the rest of
+ * the page keeps working.
+ */
+export const PAUSED_BANNER = 'AI is paused for your studio. Editing, Present, Share and Export still work.';
+export const TOKENS_BANNER = 'You are out of AI tokens. Runs wait until you add tokens; editing, Present, Share and Export still work.';
+export const ASK_OFF_PAUSED = 'AI is paused for your studio.';
+export const ASK_OFF_TOKENS = 'Out of AI tokens. Add tokens to run it.';
+/** The page's AI-off state: paused wins, because adding tokens would not lift it. */
+export function aiOffState({ aiOn = true, outOfTokens = false } = {}) {
+  if (!aiOn) return { kind: 'paused', banner: PAUSED_BANNER, ask: ASK_OFF_PAUSED };
+  if (outOfTokens) return { kind: 'tokens', banner: TOKENS_BANNER, ask: ASK_OFF_TOKENS };
+  return null;
+}
 export const WAITING_TITLE = 'Waiting for you';
 export const WAITING_NONE = 'Nothing is waiting. What Eadwyn proposes for this deck appears here until you accept or discard it.';
 export const STILL_WORKS = Object.freeze([

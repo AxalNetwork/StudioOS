@@ -13,7 +13,9 @@ import { useDeckChecks } from './DeckVersions';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import { SpinoutReadiness } from './StudioActions';
 import { availability } from './deckV2Adapter';
-import { LATER } from './deckV2Model';
+import { LATER, aiOffState } from './deckV2Model';
+import { AiOffBanner } from './DeckAsk';
+import useAssistMode from '../../../hooks/useAssistMode';
 import useMenuFocus from './useMenuFocus';
 import { NOT_CHECKED, checkPills } from './checkModel';
 import { presentHref } from './presentExportModel';
@@ -117,6 +119,8 @@ export default function StudioHome({ reads, readOnly, q }) {
   const sources = useDeckSources(projectId);
   const [sheet, setSheet] = useState(null);
   const [compare, setCompare] = useState(null);
+  // PD-9: with AI paused the one-click and Ask wait; the rest of home works.
+  const [aiOn] = useAssistMode('raise');
 
   if (busy) {
     return (
@@ -131,6 +135,7 @@ export default function StudioHome({ reads, readOnly, q }) {
 
   return (
     <div className="flex flex-col gap-3.5" data-testid="pitch-studio-home">
+      {!readOnly ? <AiOffBanner state={aiOffState({ aiOn })} testId="pitch-studio-ai-off" /> : null}
       {current?.id ? <NewInData current={current} q={q} /> : null}
       <div className="grid gap-3.5 lg:grid-cols-3">
         {current ? (
