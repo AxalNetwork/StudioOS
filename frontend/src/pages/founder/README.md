@@ -73,6 +73,10 @@ a failure in plain words with its causes and the right Try again
 `SessionLifecycle.jsx` draws the stepper and the one failure panel on
 `/validate/session/:id`; `MeetingBotPanel.jsx` hands the page its bot read
 (`onRead`) and leaves the failure to that panel (`hideFailure`).
+`ParticipantsTimeline.jsx` and `participantsTimeline.js` (#4018, REC3) draw who
+was on a bot call and when, with each speaker's share once transcribed; the
+panel hands the page the roster (`onParticipants`) and drops its own list
+(`hideParticipants`) there.
 `sessionPlayer.js` gained `seek(ms)` and `setRate` for D1454's tap-to-play and
 1×, 1.5×, 2×.
 
