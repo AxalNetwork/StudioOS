@@ -28,13 +28,15 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
 import { refuse } from '../util/refusal';
-import { newUid } from '../services/mercury/store';
 import {
   STAGES, STAGE_LABELS, NO_BENCHMARK, checkNorm, listNorms, normDto,
   type Stage, type StageNormRow,
 } from '../services/decks/stageNorms';
 
 const deckStageNorms = new Hono<{ Bindings: Env }>();
+
+/** A row's public id: 32 hex characters. */
+const newUid = () => crypto.randomUUID().replace(/-/g, '');
 
 async function owned(c: any, user: User, projectId: number, write = false) {
   try {
