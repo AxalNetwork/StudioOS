@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox } from '../ui';
 import { itemPath } from './calendarItemModel';
+import { AgentMark } from './CalendarAgentSessions';
+import { AGENT_KIND, stateChip } from './calendarAgentModel';
 import {
   HOURS, QUICK_SETS, WEEKDAY_SHORT, byDay, cellItems, dayKey, dayLabel, familyCounts, isAllDay,
   layoutDay, monthCells, moveFocus, nowLine, weekDays,
@@ -19,12 +21,15 @@ const cancelled = (ev) => ev?.status === 'cancelled';
 
 /** One item as a chip: its kind's mark, its time and title, opening its drawer when it has a record. */
 function Chip({ ev, from, compact = false }) {
-  const label = `${isAllDay(ev) ? 'All day' : timeOf(ev.start_at)} · ${ev.title || 'Untitled'}`;
+  // D1613 (CAL9): a session's chip carries the agent mark and its state in words, never colour alone.
+  const state = ev.kind === AGENT_KIND ? ` · ${stateChip(ev).words}` : '';
+  const label = `${isAllDay(ev) ? 'All day' : timeOf(ev.start_at)} · ${ev.title || 'Untitled'}${state}`;
   const body = (
     <>
-      <span className="cal-dot" data-kind={ev.kind} aria-hidden="true" />
+      {ev.kind === AGENT_KIND ? <AgentMark /> : <span className="cal-dot" data-kind={ev.kind} aria-hidden="true" />}
       {!isAllDay(ev) && !compact ? <span className="cal-mono">{timeOf(ev.start_at)}</span> : null}
       <span className="cal-chip-title">{ev.title || 'Untitled'}</span>
+      {state && !compact ? <span className="cal-mono" data-testid={`cal-gchip-state-${ev.id}`}>{stateChip(ev).words}</span> : null}
     </>
   );
   const cls = `cal-gchip${cancelled(ev) ? ' is-cancelled' : ''}`;

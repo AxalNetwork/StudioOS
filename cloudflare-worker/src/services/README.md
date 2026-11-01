@@ -240,7 +240,8 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `scoring/` | D1143 (#3029): the Product-market fit score, defined once (#2433). `pmf.ts` is model v1 as data and the pure `scorePmf` (value, band, confidence, coverage and the next steps ranked by gain); `pmfCollector.ts` reads Validate's stores for it with bound SQL, after the latest Pivot, and reads no interviewee name or quote. D1144 adds `pmfStore.ts`: signed, change-only snapshots, history and the atomic PMF checklist/audit update in shared migration 598. See `scoring/README.md`. |
 | `ventureScoring/` | D1255 (#3278): the venture scorecard engine for #2428's other ten scopes. `model.ts` is model v1 as data, `engine.ts` the pure `scoreScope`, `collectors.ts` one bound collector per scope (personal inputs aggregated, never-inputs unread), `store.ts` the recompute on read that keeps a signed row per scope only on change in migration 598's store (`state` from 625). PMF stays `scoring/`'s. See `ventureScoring/README.md`. |
 | `companyAccess.ts` | D1592 (#3860): the two company gates, `viewerIsMember` and `canEdit`, moved out of `../routes/company.ts` unchanged so `../routes/company.ts` and `../routes/company_documents.ts` share one rule. |
-| `companyMembershipEvents.ts` | D1137 (#3017): the membership audit, `company_membership_events` (migration 597). `membershipEvent` returns the bound INSERT for a join, role change, removal, leave, primary-admin transfer, archive, restore, rename, venture move, owner transfer or seat change, so the route batches it with the change; before and after hold the fields the change touched, never a token or an email. |
+| `companyMembershipEvents.ts` | D1137 (#3017): the membership audit, `company_membership_events` (migration 597). `membershipEvent` returns the bound INSERT for a join, role change, removal, leave, primary-admin transfer, archive, restore, rename, venture move, owner transfer, seat change or (#3932, migration 757) default-currency change, so the route batches it with the change; before and after hold the fields the change touched, never a token or an email. |
+| `currencies.ts` | #3932 (#3696 Q4): the ISO 4217 codes a company may name as its default currency (list one, money in circulation; no fund units, metals, SDR or test codes) and `currencyCode`, which `../routes/company.ts`'s `PATCH /company/:uid` uses to refuse anything else with 422 `currency_invalid`. |
 | `projectMove.ts` | D1415 Part 3 (#3855): the one writer of `projects.company_id`. `projectMoveStatements` returns the move's UPDATE and its `project_move` event, bound, for the move route and the filing batch; `ownerUserId` is the venture's owner account. |
 | `incorporationCompany.ts` | D1415 Part 3 (#3855): a filed formation order links or creates the company in `markFiled`'s batch, every statement guarded by "filed and not yet linked"; the jurisdiction map; the free company slug. |
 | `signals/` | Signal ingestion and evidence. |
@@ -319,6 +320,8 @@ only its card unreadable) and paging. `growCycle.ts` computes the Grow figures
 and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
 revenue ledger into new, expansion and churned by month (only when customers can
 be told apart; churn needs two billings) and rewrites `revenue_movements`.
+
+D1610: `raiseCycle.ts` also computes the overview's six figures (four for staff), `nextSteps` (readiness items by score gain, never Team), `connectors` (Mercury, GitHub and Google Workspace: a count and the last read, never a login or file name), the four evidence shades and the Cap table card's `capTablePlan`.
 
 D1150: `raiseCycle.ts` also owns the stored-receipt projection `receivedCommitment`: investor/commitment owner/company checked, only receipt id/time returned, no bank fields or provider read. It stays beside D752’s `receivedDates` boundary.
 
@@ -663,3 +666,4 @@ capacity-checked insert, and feeds the calendar's page-only `learning` source
 Learning page). `sendPlanReminders` runs on the 5-minute cron and claims each
 occurrence in `learning_plan_reminders` before calling `notify()`, so a
 reminder is sent once.
+D1420 (#3864): `studioLayoutRun.ts` is `studio:layout` on `POST /api/ai/rail/run`: the model's messages (the layout and its revision, the catalogue, a founder's Lab week and readiness tier; no other member's data and no table name), `validateOps` (add, remove, resize and move ops checked against the catalogue, the plan locks, the fixed blocks and the 12-module cap, each dropped op named by its title, never its key) and each profile's /studio rail key (`STUDIO_RAIL_PAGES`). It writes nothing; `../routes/rail_run.ts` files the kept ops as `ai_rail_proposals` rows.

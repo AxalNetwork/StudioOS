@@ -4,10 +4,11 @@ import { AgentTile, PersonAvatar } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MUTED, PendingOwner } from './teamUi.jsx';
 import { HOLD_LINE, RULEBOOK_SECTIONS, WHO_PAYS, heldLabel, initials, money } from './teamModel.js';
+import { SkillsStep } from './SkillSheets.jsx';
 
 /**
  * D1497 (#3727, TM3a–TM3c, TM9d2) — "Add an AI agent", a Sheet at 640 with
- * three steps: Role, Agent, Review.
+ * four steps: Role, Agent, Skills (D1612, SK6), Review.
  *
  * It writes through #3840's `addAgent` (wired) and is reached only when the
  * agents read is available and its `plan_ok` holds: otherwise "AI agent" in
@@ -51,7 +52,7 @@ function RuleRow({ label, text }) {
   );
 }
 
-const STEPS = ['Role', 'Agent', 'Review'];
+const STEPS = ['Role', 'Agent', 'Skills', 'Review'];
 
 function Stepper({ at }) {
   return (
@@ -76,13 +77,16 @@ export default function AddAgentSheet({ scope, roles, models, held = [], me, onC
   const [useTools, setUseTools] = useState(true);
   const [granted, setGranted] = useState(() => new Set());
   const [refusal, setRefusal] = useState('');
+  const [skillPicks, setSkillPicks] = useState(null);
+  const [skillList, setSkillList] = useState([]);
   useEffect(() => { let alive = true; agents.toolChoices().then((b) => { if (alive) setTools(b); }); return () => { alive = false; }; }, []);
   const picked = (roles || []).find((r) => r.key === role);
   const pickedModel = (models || []).find((m) => m.id === model);
   const capOk = Number(cap) > 0;
   const nameOk = [first, last].every((s) => s.trim().length <= 40);
-  const ready = step === 0 ? !!picked : step === 1 ? !!pickedModel : capOk && nameOk;
-  const titles = ['Pick a role', 'Pick the agent', 'Review and add'];
+  const ready = step === 0 ? !!picked : step === 1 ? !!pickedModel : step === 2 ? true : capOk && nameOk;
+  const titles = ['Pick a role', 'Pick the agent', 'Skills', 'Review and add'];
+  const chosenSkills = skillList.filter((sk) => skillPicks?.has(sk.uid));
   const servers = tools?.available && Array.isArray(tools.value?.servers) ? tools.value.servers : [];
   const grants = useTools ? servers.flatMap((sv) => (sv.tools || []).filter((t) => granted.has(grantKey(sv.integration_uid, t.name))).map((t) => ({ integration_uid: sv.integration_uid, tool: t.name }))) : [];
   const grantedLines = servers.map((sv) => ({ name: sv.name, tools: grants.filter((g) => g.integration_uid === sv.integration_uid).map((g) => g.tool) })).filter((x) => x.tools.length);
@@ -94,16 +98,18 @@ export default function AddAgentSheet({ scope, roles, models, held = [], me, onC
     const out = await agents.addAgent(kind, id, {
       role_key: role, first_name: first.trim() || null, last_name: last.trim() || null, model_id: model, tool_grants: grants,
       monthly_cap_microusd: Math.round(Number(cap) * 1e6),
+      // D1612 (SK6, A2 #3956): the skills step's picks, sent only when there are any.
+      ...(chosenSkills.length ? { skills: chosenSkills.map((sk) => ({ uid: sk.uid, version: sk.version })) } : {}),
     });
     if (!out.available) { setRefusal(out.reason); return; }
     onAdded?.(out.value);
   };
   return (
-    <Sheet title="Add an AI agent" sub={`Step ${step + 1} of 3 · ${titles[step]}`} width={640} onClose={onClose} testId="add-agent-sheet"
+    <Sheet title="Add an AI agent" sub={`Step ${step + 1} of ${STEPS.length} · ${titles[step]}`} width={640} onClose={onClose} testId="add-agent-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={step ? () => setStep(step - 1) : onClose}>{step ? 'Back' : 'Cancel'}</button>
-          <button type="button" className={BTN_PRIMARY} disabled={!ready} onClick={step < 2 ? () => setStep(step + 1) : add} data-testid="add-agent-next">{step < 2 ? 'Next' : 'Add agent'}</button>
+          <button type="button" className={BTN_PRIMARY} disabled={!ready} onClick={step < 3 ? () => setStep(step + 1) : add} data-testid="add-agent-next">{step < 3 ? 'Next' : 'Add agent'}</button>
         </div>
       )}>
       <div className="flex flex-col gap-4 px-5 py-5">
@@ -189,7 +195,8 @@ export default function AddAgentSheet({ scope, roles, models, held = [], me, onC
             </p>
           </>
         ) : null}
-        {step === 2 ? (
+        {step === 2 ? <SkillsStep scope={scope} role={role} picked={skillPicks} setPicked={setSkillPicks} onList={setSkillList} /> : null}
+        {step === 3 ? (
           <>
             <div className="grid grid-cols-2 gap-2">
               <label className="flex flex-col gap-1"><span className={MUTED}>First name</span><input className={FIELD} value={first} onChange={(e) => setFirst(e.target.value)} maxLength={40} data-testid="add-agent-first" /></label>
@@ -200,6 +207,8 @@ export default function AddAgentSheet({ scope, roles, models, held = [], me, onC
               <dt className={MUTED}>Name</dt><dd className="m-0 text-axal-ink dark:text-gray-100" data-testid="add-agent-review-name">{[first.trim(), last.trim()].filter(Boolean).join(' ') || picked?.name || <Unrecorded />}</dd>
               <dt className={MUTED}>Role</dt><dd className="m-0 flex items-center gap-1.5 text-axal-ink dark:text-gray-100"><AgentTile size={20} />{picked?.name}</dd>
               <dt className={MUTED}>Platform model</dt><dd className="m-0 text-axal-ink dark:text-gray-100">{pickedModel?.label}{pickedModel?.hold_microusd != null ? ` · holds up to ${money(pickedModel.hold_microusd)} a run · you pay what it uses` : ''}</dd>
+              <dt className={MUTED}>Skills</dt>
+              <dd className="m-0 text-axal-ink dark:text-gray-100" data-testid="add-agent-review-skills">{chosenSkills.length ? chosenSkills.map((sk) => sk.name).join(', ') : 'None yet'}</dd>
               <dt className={MUTED}>Tools granted</dt>
               <dd className="m-0 text-axal-ink dark:text-gray-100" data-testid="add-agent-review-tools">
                 {grantedLines.length ? grantedLines.map((g) => <span key={g.name} className="block">{g.name} · {g.tools.join(', ')} · read-only</span>) : 'None'}

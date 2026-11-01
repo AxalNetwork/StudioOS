@@ -471,11 +471,10 @@ test('no new "Fill" on a pitch page, and exactly one control is named "Ask Eadwy
   assert.doesNotMatch(codeOnly(read('frontend/src/ui/AskButton.jsx')), fill);
   // The v1 labels that remain; none may be added. NewDeck.jsx's ("Fill this template") went with the
   // New-deck step (plan §11, 14): a template start reads "Use this template".
-  // StudioActions.jsx keeps the unmounted `FillFromProject` because it is the only press site of the
-  // `form:deck` rail option: retiring it drops that option's row from the Worker's generated
-  // `railMatrix.json`, a Worker change this frontend-only build does not make. No pitch page mounts it.
+  // #3930: the last one, StudioActions.jsx's unmounted `FillFromProject`, is `AskDraftFromProject` now, and the
+  // `form:deck` rail option it presses reads "Ask Eadwyn to draft from project" in the Worker's railMatrix.json.
   const remaining = readdirSync(PITCH).filter((f) => f.endsWith('.jsx') && fill.test(codeOnly(read(`${PITCH}/${f}`)).replace(/import[^;]+;/g, '')));
-  assert.deepEqual(remaining.sort(), ['StudioActions.jsx']);
+  assert.deepEqual(remaining.sort(), []);
   const named = readdirSync(PITCH).filter((f) => /\.jsx$/.test(f) && /aria-label="Ask Eadwyn"|aria-label=\{?['"`]Ask Eadwyn['"`]/.test(read(`${PITCH}/${f}`)));
   assert.deepEqual(named, [], 'the name comes from ui/AskButton.jsx only');
   assert.doesNotMatch(codeOnly(read(`${PITCH}/PitchPage.jsx`)), /EadwynButton/);

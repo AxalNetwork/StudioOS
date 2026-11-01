@@ -32,6 +32,7 @@ import { aiLicenceKey } from '../services/aiBudget';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
 import { railCrumbs, railOptionRows, railOptionsOn, railRows, railSectionOf, resolveRail, resolveRailOption, rowOffers, type RailRow } from '../services/ai/railMatrix';
+import { MODEL_LOCKS, lockLabel } from '../services/ai/modelUseCases';
 import { railFor, refuseAssistOff } from '../util/railContext';
 import moduleRoutes from './ai_modules';
 import { MODEL_CONNECTIONS, moduleConnections } from '../services/ai/moduleConnections';
@@ -245,7 +246,8 @@ export function catalogueFor(env: Env, licence: string) {
   const multiplier = multiplierFor(licence);
   const safety = ROUTE.safety.model;
   const rank = (id: string, kind: string) => (id === safety ? KIND_ORDER.length + 1 : (KIND_ORDER.indexOf(kind) + 1 || KIND_ORDER.length));
-  const models = CATALOGUE.filter((m) => isOffered(m, env))
+  // #3934 (§4): a hidden model is offered nowhere, the member's catalogue included.
+  const models = CATALOGUE.filter((m) => isOffered(m, env) && MODEL_LOCKS[m.id] !== 'hidden')
     .map((m, i) => ({ m, i }))
     .sort((a, b) => rank(a.m.id, a.m.kind) - rank(b.m.id, b.m.kind) || a.i - b.i)
     .map(({ m }) => ({
@@ -512,12 +514,13 @@ ai.get('/rail', async (c) => {
   };
   const pagePick = pickFor('page', row);
   const pick = (option ? pickFor(option, active) : null) ?? (rowOffers(active, pagePick ?? '') ? pagePick : null);
+  // #3934 (A (c)): a locked model shows its plan label, `lock`, null when every plan runs it.
   const view = (r: RailRow) => r.models.map((m) => ({
-    id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, role: m.role, line: m.line, price: unitPrices(m.id, multiplier),
+    id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, role: m.role, line: m.line, price: unitPrices(m.id, multiplier), lock: lockLabel(m.id),
   }));
-  // Stable overflow shape: { id, name, line, price }; no suggested role or optional flag.
+  // Stable overflow shape: { id, name, line, price, lock }; no suggested role or optional flag.
   const more = (r: RailRow) => (r.more ?? []).map(m => ({
-    id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, line: m.line, price: unitPrices(m.id, multiplier),
+    id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, line: m.line, price: unitPrices(m.id, multiplier), lock: lockLabel(m.id),
   }));
   const options = railOptionsOn(row.pageKey).map((o) => ({
     key: o.optionKey, label: o.optionLabel, kind: o.kind, handler: o.handler, models: view(o), more: more(o), pick: pickFor(o.optionKey, o),

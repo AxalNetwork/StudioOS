@@ -57,6 +57,13 @@ export const MODEL_COPY = {
   // D857 (#2502): translate_segment's models.
   '@cf/meta/m2m100-1.2b': { name: 'M2M100' },
   '@cf/ai4bharat/indictrans2-en-indic-1B': { name: 'IndicTrans2' },
+  // D1478 task 0 (#3934): the models of the rail kinds the use-case table adds.
+  '@cf/qwen/qwen3-30b-a3b-fp8': { name: 'Qwen3 30B A3B' },
+  '@cf/black-forest-labs/flux-2-klein-4b': { name: 'FLUX.2 Klein 4B' },
+  '@cf/cloudflare/clef': { name: 'Clef' },
+  '@cf/cloudflare/clef-flash': { name: 'Clef Flash' },
+  '@cf/huggingface/distilbert-sst-2-int8': { name: 'DistilBERT SST-2' },
+  '@cf/daily-co/phonellm-mini-alpha-2': { name: 'PhoneLLM Mini' },
 };
 
 /** The guard: listed under Safety, never picked. */
@@ -67,19 +74,22 @@ export const GUARD_MODEL = '@cf/meta/llama-guard-3-8b';
  * (`canvas.json`, `all_models`), in its order, ten groups with Safety last.
  * Each name carries its router id, or null where `ROUTE` cannot send it work
  * yet (D761, #2018, adds them as they land); `airail_d698.test.mjs` holds the
- * two lists equal, the retired 8B aside. The last two Conversation and
- * writing rows are router models the canvas does not name.
+ * two lists equal, the retired 8B aside. Router models the canvas does not
+ * name close their group: the last two Conversation and writing rows, the
+ * last three Reasoning rows (decide and sentiment, #3934) and Voice's last row
+ * (voice turn, #3934).
  */
 const R = (name, id = null) => [name, id];
 export const ALL_MODELS = [
   ['Conversation and writing', [
     R('GLM-4.7 Flash', '@cf/zai-org/glm-4.7-flash'), R('GLM-5.3 Flash'), R('Llama 3.3 70B Fast', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'),
-    R('Mistral Small 3.1 24B', '@cf/mistralai/mistral-small-3.1-24b-instruct'), R('GPT-OSS 20B', '@cf/openai/gpt-oss-20b'), R('Qwen3 30B A3B'), R('Llama 3.1 8B', '@cf/meta/llama-3.1-8b-instruct-fp8'),
+    R('Mistral Small 3.1 24B', '@cf/mistralai/mistral-small-3.1-24b-instruct'), R('GPT-OSS 20B', '@cf/openai/gpt-oss-20b'), R('Qwen3 30B A3B', '@cf/qwen/qwen3-30b-a3b-fp8'), R('Llama 3.1 8B', '@cf/meta/llama-3.1-8b-instruct-fp8'),
     R('Granite 4.0 Micro', '@cf/ibm-granite/granite-4.0-h-micro'), R('Llama 3.2 3B', '@cf/meta/llama-3.2-3b-instruct'), R('Llama 3.1 8B Fast', '@cf/meta/llama-3.1-8b-instruct-fp8-fast'),
   ]],
   ['Reasoning', [
     R('GPT-OSS 120B', '@cf/openai/gpt-oss-120b'), R('DeepSeek V4 Pro', '@cf/deepseek-ai/deepseek-v4-pro-0813'), R('DeepSeek V4 Flash', '@cf/deepseek-ai/deepseek-v4-flash-0731'), R('GLM-5.3'),
     R('Nemotron 3 120B'), R('Qwen3.8 27B'), R('QwQ 32B', '@cf/qwen/qwq-32b'), R('Kimi K2.6', '@cf/moonshotai/kimi-k2.6'),
+    R('Clef', '@cf/cloudflare/clef'), R('Clef Flash', '@cf/cloudflare/clef-flash'), R('DistilBERT SST-2', '@cf/huggingface/distilbert-sst-2-int8'),
   ]],
   ['Code', [R('Kimi K2.7 Code', '@cf/moonshotai/kimi-k2.7-code'), R('Qwen2.5 Coder 32B', '@cf/qwen/qwen2.5-coder-32b-instruct')]],
   ['Reading images and files', [R('Llama 4 Scout', '@cf/meta/llama-4-scout-17b-16e-instruct'), R('Gemma 4 26B', '@cf/google/gemma-4-26b-a4b-it'), R('Llama 3.2 11B Vision'), R('Moondream 3.1')]],
@@ -89,8 +99,8 @@ export const ALL_MODELS = [
     R('Whisper Large v3 Turbo', '@cf/openai/whisper-large-v3-turbo'), R('Whisper', '@cf/openai/whisper'),
     R('Deepgram Nova-3', '@cf/deepgram/nova-3'), R('Deepgram Flux'), R('Smart Turn v2'),
   ]],
-  ['Voice', [R('Aura-2 EN'), R('Aura-2 ES'), R('MeloTTS')]],
-  ['Images', [R('FLUX.2 Klein 9B'), R('FLUX.2 Klein 4B'), R('FLUX.2 Dev'), R('FLUX.1 Schnell', '@cf/black-forest-labs/flux-1-schnell'), R('Lucid Origin'), R('Phoenix 1.0')]],
+  ['Voice', [R('Aura-2 EN'), R('Aura-2 ES'), R('MeloTTS'), R('PhoneLLM Mini', '@cf/daily-co/phonellm-mini-alpha-2')]],
+  ['Images', [R('FLUX.2 Klein 9B'), R('FLUX.2 Klein 4B', '@cf/black-forest-labs/flux-2-klein-4b'), R('FLUX.2 Dev'), R('FLUX.1 Schnell', '@cf/black-forest-labs/flux-1-schnell'), R('Lucid Origin'), R('Phoenix 1.0')]],
   ['Safety', [R('Llama Guard 3 8B', GUARD_MODEL)]],
 ];
 

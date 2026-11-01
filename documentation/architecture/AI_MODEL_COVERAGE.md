@@ -47,12 +47,12 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/baai/bge-m3` | Text Embeddings | ga | tokens_in 0.012 | Not recorded | all | O | · | · | W | W | W | W | · | · | · | G | W | · | W |
 | `@cf/baai/bge-reranker-base` | Text Classification | ga | tokens_in 0.003 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
 | `@cf/baai/bge-small-en-v1.5` | Text Embeddings | ga | tokens_in 0.020 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
-| `@cf/cloudflare/clef` | Text Generation | ga | tokens_in 0.240 | Not recorded | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
-| `@cf/cloudflare/clef-flash` | Text Generation | ga | tokens_in 0.038 | Not recorded | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
+| `@cf/cloudflare/clef` | Text Generation | ga | tokens_in 0.240 | 65536 | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
+| `@cf/cloudflare/clef-flash` | Text Generation | ga | tokens_in 0.038 | 24576 | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
 | `@cf/cloudflare/clef-omni` | Text Generation | ga | tokens_in 0.150 | 64000 | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
 | `@cf/cloudflare/clairic` | Text Generation | beta | tokens_in 0.100 | 65536 | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/daily-co/phonellm-mini-alpha-2` | Text Generation | ga | tokens_in 0.060, tokens_out 0.240 | 262140 | all | O | G | G | G | G | G | G | · | G | G | O | O | · | O |
-| `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` | Text Generation | ga | tokens_in 0.497, tokens_out 4.881 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
+| `@cf/daily-co/phonellm-mini-alpha-2` | Text Generation | ga | tokens_in 0.060, tokens_out 0.240 | 262140 | all | G | G | G | G | G | G | G | · | G | G | G | G | · | G |
+| `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` | Text Generation | ga | tokens_in 0.497, tokens_out 4.881 | 80000 | all | O | G | G | O | G | G | G | · | G | G | G | O | · | O |
 | `@cf/deepseek-ai/deepseek-v4-flash-0731` | Text Generation | ga | tokens_in 0.440, tokens_cached 0.014, tokens_out 1.320 | 1048576 | paid | O | O | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepseek-ai/deepseek-v4-pro-0813` | Text Generation | ga | tokens_in 1.320, tokens_cached 0.044, tokens_out 3.960 | 1048576 | paid | W | G | W | W | W | G | W | · | G | G | G | W | · | W |
 | `@cf/deepseek-ai/deepseek-v4.1-flash-1017` | Text Generation | ga | tokens_in 0.300, tokens_cached 0.006, tokens_out 1.200 | 1048576 | paid | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
@@ -72,12 +72,12 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/google/gemma-7b-it-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/aisingapore/gemma-sea-lion-v4-27b-it` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | G | G | G | O | O | G | O | · | G | G | O | O | · | O |
 | `@cf/zai-org/glm-4.7-flash` | Text Generation | ga | tokens_in 0.060, tokens_out 0.400 | 131072 | all | O | G | W | O | W | O | O | · | G | G | W | W | · | W |
-| `@cf/zai-org/glm-5.2` | Text Generation | ga | tokens_in 1.400, tokens_cached 0.260, tokens_out 4.400 | 262144 | paid | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
+| `@cf/zai-org/glm-5.2` | Text Generation | ga | tokens_in 1.400, tokens_cached 0.260, tokens_out 4.400 | 262144 | paid | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/zai-org/glm-5.3` | Text Generation | ga | tokens_in 1.400, tokens_cached 0.260, tokens_out 4.400 | Not recorded | paid | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
 | `@cf/zai-org/glm-5.3-flash` | Text Generation | ga | tokens_in 0.150, tokens_cached 0.030, tokens_out 0.500 | 1048576 | paid | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
 | `@cf/openai/gpt-oss-120b` | Text Generation | ga | tokens_in 0.350, tokens_out 0.750 | 128000 | all | W | G | O | W | O | O | O | · | G | G | O | W | · | W |
 | `@cf/openai/gpt-oss-20b` | Text Generation | ga | tokens_in 0.200, tokens_out 0.300 | 128000 | all | O | G | O | O | O | G | G | · | G | G | O | O | · | O |
-| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | O | O | · | O |
+| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | 131000 | all | O | G | O | O | O | G | O | · | G | G | O | O | · | O |
 | `@hf/nousresearch/hermes-2-pro-mistral-7b` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/ai4bharat/indictrans2-en-indic-1B` | Translation | ga | tokens_in 0.342, tokens_out 0.342 | Not recorded | all | O | O | · | · | O | · | O | · | G | G | G | · | · | O |
 | `@cf/moonshotai/kimi-k2.5` | Text Generation | deprecated | tokens_in 0.600, tokens_cached 0.100, tokens_out 3.000 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -89,7 +89,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/meta/llama-3-8b-instruct` | Text Generation | deprecated | tokens_in 0.282, tokens_out 0.827 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/meta/llama-3-8b-instruct-awq` | Text Generation | deprecated | tokens_in 0.123, tokens_out 0.266 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/meta/llama-3.1-70b-instruct` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/meta/llama-3.1-70b-instruct-fp8-fast` | Text Generation | ga | tokens_in 0.293, tokens_out 2.253 | Not recorded | all | O | G | G | O | O | G | G | · | G | G | O | O | · | O |
+| `@cf/meta/llama-3.1-70b-instruct-fp8-fast` | Text Generation | ga | tokens_in 0.293, tokens_out 2.253 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/meta/llama-3.1-8b-instruct` | Text Generation | deprecated | tokens_in 0.282, tokens_out 0.827 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/meta/llama-3.1-8b-instruct-awq` | Text Generation | deprecated | tokens_in 0.123, tokens_out 0.266 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/meta/llama-3.1-8b-instruct-fast` | Text Generation | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -99,7 +99,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/meta/llama-3.2-1b-instruct` | Text Generation | ga | tokens_in 0.027, tokens_out 0.201 | 60000 | all | O | G | G | G | O | G | G | · | G | G | O | O | · | O |
 | `@cf/meta/llama-3.2-3b-instruct` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 80000 | all | O | G | G | G | O | G | O | · | G | O | O | O | · | O |
 | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Text Generation | ga | tokens_in 0.293, tokens_out 2.253 | 24000 | all | W | W | O | W | W | O | W | · | G | W | W | W | · | W |
-| `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | Not recorded | all | G | G | G | O | G | G | O | · | G | G | G | W | · | G |
+| `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | 131000 | all | G | G | G | O | G | G | O | · | G | G | G | W | · | G |
 | `@cf/meta/llama-guard-3-8b` | Text Generation | ga | tokens_in 0.484, tokens_out 0.030 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | W | · |
 | `@cf/llava-hf/llava-1.5-7b-hf` | Image-to-Text | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/leonardo/lucid-origin` | Text-to-Image | partner | tiles 0.006996, steps 0.000132 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
@@ -109,7 +109,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/mistral/mistral-7b-instruct-v0.1` | Text Generation | deprecated | tokens_in 0.110, tokens_out 0.190 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@hf/mistral/mistral-7b-instruct-v0.2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/mistral/mistral-7b-instruct-v0.2-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | Not recorded | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
+| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
 | `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | · | · | O | · | · | · | G | O | · | G |
 | `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | G | · | · | · | · | · | · | O | · | · | O |
@@ -120,7 +120,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/qwen/qwen3-30b-a3b-fp8` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 32000 | all | O | G | O | O | O | G | G | · | G | G | O | O | · | O |
 | `@cf/qwen/qwen3-embedding-0.6b` | Text Embeddings | ga | tokens_in 0.012 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
 | `@cf/qwen/qwen3.8-27b` | Text Generation | ga | tokens_in 0.450, tokens_out 3.200 | 262144 | all | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
-| `@cf/qwen/qwq-32b` | Text Generation | ga | tokens_in 0.660, tokens_out 1.000 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
+| `@cf/qwen/qwq-32b` | Text Generation | ga | tokens_in 0.660, tokens_out 1.000 | 24000 | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/microsoft/resnet-50` | Image Classification | ga | images 2.51 | Not recorded | all | · | · | · | O | · | · | O | · | · | · | · | O | G | · |
 | `@cf/pipecat-ai/smart-turn-v2` | Voice Activity Detection | ga | audio_minutes 0.00033795 | Not recorded | all | O | G | · | · | · | · | · | · | · | · | G | · | · | O |
 | `@cf/defog/sqlcoder-7b-2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -288,7 +288,7 @@ decision: Classify evidence, urgency and next-step options with confidence score
 
 chat: Short conversational replies for recorded-session and voice workflows.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`
+- Validate: **gap**, `#3721`
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
 - Raise: **gap**, `#3721`
@@ -297,26 +297,26 @@ chat: Short conversational replies for recorded-session and voice workflows.
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Home"`
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`
+- Studio / Eadwyn: **gap**, `#3721`
+- Admin consoles: **gap**, `#3721`
+- Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`
 
 chat: Compare evidence, work through scenarios and explain planning assumptions.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
+- Build: **gap**, `#3721`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`
+- Grow: **gap**, `#3721`
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`
+- Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 19 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 17 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · LP applications"`; `/api/ai/modules on "Admin · Approvals · Spin-Out applications"`; `/api/ai/modules on "Admin · Approvals · Spin-Out moderation"`; `/api/ai/modules on "Admin · Approvals"`
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Investor · Deals · Commit"`; `/api/ai/modules on "Investor · Deals · Screening"`; `/api/ai/modules on "Investor · Deals"`
 
 ### `@cf/deepseek-ai/deepseek-v4-flash-0731`
 
@@ -480,26 +480,14 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 - Research: **offered**, `railMatrix.json option draft:checkpoint-brief`; `railMatrix.json option draft:index-gaps`; `railMatrix.json option draft:session-brief`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **wired**, `railMatrix.json "Advisor · Home"`; `railMatrix.json "Founder · Studio"`; `railMatrix.json "Investor · Home"`; `railMatrix.json "Operating Partner · Home"`
+- Studio / Eadwyn: **wired**, `railMatrix.json "Advisor · Home"`; `railMatrix.json "Founder · Studio"`; `railMatrix.json "Investor · Home"`; `railMatrix.json "Operating Partner · Home"`; and 1 more
 - Admin consoles: **wired**, `railMatrix.json "Admin · Accounts · Trash"`; `railMatrix.json "Admin · Approvals · Advisor cohort access"`; `railMatrix.json "Admin · Approvals · Events"`; `railMatrix.json "Admin · Community · Events"`; and 6 more
 - Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Cohorts · Calendar"`; `railMatrix.json "Advisor · Cohorts · This week"`; `railMatrix.json "Advisor · Practice · Delivery"`; `railMatrix.json "Advisor · Practice · Engagements"`; and 4 more
 
 ### `@cf/zai-org/glm-5.2`
 
-chat: Prototype code, technical plans and multi-step problem solving.
+No module connection.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
-- Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Prototype / MVP"`; and 2 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
-- Network: **gap**, `#3721`
-- Research: **gap**, `#3721`
-- Articles: **gap**, `#3721`
-- Email: **gap**, `#3721`
-- Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 13 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 7 more
 
 ### `@cf/zai-org/glm-5.3`
 
@@ -548,7 +536,7 @@ chat: Research synthesis, evidence comparison and detailed planning.
 - Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Markets"`; and 50 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 8 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 9 more
 - Admin consoles: **wired**, `railMatrix.json "Admin · Approvals · LP applications"`; `railMatrix.json "Admin · Approvals · Spin-Out applications"`; `railMatrix.json "Admin · Approvals · Spin-Out moderation"`; `railMatrix.json "Admin · Approvals"`
 - Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Investor · Deals · Commit"`; `railMatrix.json "Investor · Deals · Screening"`; `railMatrix.json "Investor · Deals"`
 
@@ -565,7 +553,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 1 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 2 more
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 19 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 17 more
 
@@ -635,20 +623,8 @@ chat: Prototype code, implementation drafts and technical review.
 
 ### `@cf/meta/llama-3.1-70b-instruct-fp8-fast`
 
-chat: Summarise research, explain records and draft member communications.
+No module connection.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`
-- Record a Session: **gap**, `#3721`
-- Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Product improvement"`
-- Network: **gap**, `#3721`
-- Research: **gap**, `#3721`
-- Articles: **gap**, `#3721`
-- Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Communities"`; `/api/ai/modules on "Admin · Approvals · Jobs"`; `/api/ai/modules on "Admin · Community · Communities"`; `/api/ai/modules on "Admin · Community · Jobs"`; and 13 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; `/api/ai/modules on "Advisor · Expertise · Profile"`; and 14 more
 
 ### `@cf/meta/llama-3.1-8b-instruct-fp8`
 
@@ -903,7 +879,7 @@ chat: Prototype code, implementation drafts and technical review.
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **wired**, `routes/advisor.ts (tool_call)`; `services/advisor/rerank.ts (rerank)`
+- Studio / Eadwyn: **wired**, `services/advisor/rerank.ts (rerank)`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Platform · GitHub sync"`; `/api/ai/modules on "Super Admin · Platform · Integration keys"`; `/api/ai/modules on "Super Admin · Platform · Monitoring"`; `/api/ai/modules on "Super Admin · Platform"`; and 4 more
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 

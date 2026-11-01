@@ -700,7 +700,7 @@ test('every link that carried the old address carries the new one', () => {
   assert.doesNotMatch(rail, /\/raise\/pitch\?mode=workspace/);
   // D898 group E: the builder retired; Fill from project is the studio's, a template New deck's.
   assert.equal((rail.match(/route: '\/raise\/pitch\/builder'/g) || []).length, 0);
-  assert.match(rail, /key: 'form:deck', route: '\/raise\/pitch', label: 'Fill from project'/);
+  assert.match(rail, /key: 'form:deck', route: '\/raise\/pitch', label: 'Ask Eadwyn to draft from project'/); // #3930: never "Fill"
   assert.match(rail, /key: 'form:deck-template', route: '\/raise\/pitch\/new', label: 'Use this template'/);
   for (const f of ['frontend/src/workspaces/founderZoneActions.js', 'frontend/src/workspaces/founderZoneFilters.js']) {
     assert.doesNotMatch(read(f), /'raise\/pitch'/, `${f} still holds the retired Pitch zone`);

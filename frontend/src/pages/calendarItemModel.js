@@ -178,5 +178,8 @@ export function newMenu(role) {
     out.push({ key: 'advisor', label: 'Book an advisor session ↗', sub: 'Opens Build › Team › Advisors', to: '/advisors' });
   }
   out.push({ key: 'event', label: 'Event ↗', sub: 'Opens New event', to: '/events/new' });
+  // D1613 (#3723, CAL8 of the AI agents addendum): last, for every role. The
+  // sheet it opens says when agents are not switched on for the viewer's team.
+  out.push({ key: 'agent', label: 'Schedule an AI agent', sub: 'Its work waits in Approvals' });
   return out;
 }

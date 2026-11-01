@@ -37,6 +37,11 @@ D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
 provides investor-owned stage/visit metadata and author/firm-private notes.
 No admin bypass; migration 600; writes and audit rows share a batch.
 
+D1587 (#3834): `deck_grants.ts`, mounted before `deal_context.ts` at `/api/deals`.
+An investor reads the deck version the venture granted them on that deal (`GET /:id/deck`),
+with the share link's rules and no provenance. The venture's founder grants, lists and withdraws
+(`/:id/deck-grants`). The founder's answers never carry an investor's note, score or decision. Migration 745.
+
 D1153: `deal_workroom.ts`, mounted before `deals.ts` at `/api/deals`, serves
 the investor's working tabs: the data room's door and a request to the founder,
 the round as a count and a total, and a withdrawal with a required reason kept
@@ -339,6 +344,8 @@ D897 (#2677): `deck_new.ts` mounts New deck — `GET /api/decks/new/context`, `P
 D899 (#2678): `deck_assist.ts` mounts Eadwyn's card tools — `POST /api/decks/:id/cards/:card/assist/quote` and `POST /api/decks/:id/cards/:card/assist` — after `deck_new.ts` and before `decks.ts`. Each press is one rail option on "Founder · Raise · Pitch deck" (`deck:rewrite`, `deck:shorten`, `deck:expand`, `deck:tone`, `deck:translate`, `deck:chart`, `deck:table`, `deck:timeline`), runs through `run()`, and leaves one `ai_rail_proposals` row; nothing writes a version. A bound figure is refused 422 `never_fill` before anything runs. See `documentation/architecture/decisions/D899.md`.
 
 D903 (#2682): `deck_images.ts` mounts the deck's card and background images — `POST /api/decks/:id/images/quote`, `POST /api/decks/:id/images`, `POST /api/decks/:id/images/upload`, `GET /api/decks/:id/images`, `GET /api/decks/:id/images/plan` (D903 §10, #3660: the artwork plan, a proposal only), `POST /api/decks/images/:uid/keep`, `POST /api/decks/images/:uid/discard` and `GET /api/decks/images/:uid/file` — after `deck_assist.ts` and before `decks.ts`, so `GET /:id` cannot answer `/images/…`. Each image is one `run()` of the `deck_image` task (FLUX.1 Schnell) on the rail option `deck:image`, stored in R2 and served at an https app URL; a real person, a figure and a chart are refused before anything is quoted or held. Migration 543. See `documentation/architecture/decisions/D903.md`.
+
+D1589 (#3836): `deck_stage_norms.ts` mounts a venture's stage norms (migration 746) — `GET /api/decks/stage-norms?project_id=&stage=`, `POST /api/decks/stage-norms`, `PUT` and `DELETE /api/decks/stage-norms/:uid` — after `deck_images.ts` and before `decks.ts`, so `GET /:id` cannot answer `/stage-norms`. `projectOwned` decides; writes need `write: true`. A norm without its source or sample size is refused, and a stage with no row reads "No stage benchmark recorded". The rules are `../services/decks/stageNorms.ts`. See `documentation/architecture/decisions/D1589.md`.
 
 D1409 (#3695): `article_assist.ts` mounts Eadwyn's writing options on an article — `POST /api/articles/:id/assist/quote` and `POST /api/articles/:id/assist` — before `articles.ts` at `/api/articles`. Each press is one of eight rail options on "<Profile> · Articles" (`../services/articleAssist.ts`), quoted, run once through `run()`, charged to the presser, and kept as one `ai_rail_proposals` row; nothing writes the article. The gate is `loadOwned` (the author or an admin), not published, not a support session. Part 2 adds the images: `POST /api/articles/:id/images/quote`, `/images/generate` (at most four, each one run of the `article_image` task, stored at `articles/<id>/img-<uuid>.<ext>` with one proposal) and `/images/:uid/discard`; `articles.ts`'s `POST /:id/cover` also takes `{ image }`, a copy of one of the article's own images. See `documentation/architecture/decisions/D1409.md`.
 

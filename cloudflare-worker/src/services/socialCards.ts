@@ -51,6 +51,15 @@ export const SOCIAL_CARD_GLOBS = [
   '/events/*', '/articles/*', '/jobs/*', '/u/*', '/startups/*', '/partners/*', '/authors/*', '/insights/public/*',
 ] as const;
 
+/**
+ * Part D (#3916): the token share links — bearer URLs that open a private page
+ * with no sign-in. Every one previews as the same static `private` card, with
+ * no record read and no D1 call: the token is never looked up, so a card can
+ * never confirm that it is live, and it never appears in a tag. `/verify/*`
+ * (certificate verification) is not here: it keeps the home card (#3705 B).
+ */
+export const PRIVATE_LINK_GLOBS = ['/esign/*', '/deck/share/*', '/share/*', '/invite/*', '/join/*'] as const;
+
 const PREFIXES: ReadonlyArray<[string, CardKind]> = [
   ['/insights/public/', 'insight'],
   ['/events/', 'event'],
@@ -123,6 +132,28 @@ export function matchSocialPath(pathname: string): SocialMatch | null {
     return { kind, key, path: `${prefix}${rest}` };
   }
   return null;
+}
+
+/** True for a token share link: one of the private prefixes with something after it. */
+export function matchPrivatePath(pathname: string): boolean {
+  for (const glob of PRIVATE_LINK_GLOBS) {
+    const prefix = glob.slice(0, -1);
+    if (pathname.startsWith(prefix) && pathname.slice(prefix.length).replace(/\/+$/, '') !== '') return true;
+  }
+  return false;
+}
+
+/** SC8: the one card every token link shows. Nothing in it comes from the URL. */
+export function privateTags(): CardTags {
+  return {
+    title: 'Sign in to view',
+    description: 'This link opens a private page on Axal VC.',
+    url: SITE_URL,
+    image: ogImageUrl('private'),
+    imageIsCard: true,
+    imageAlt: 'Sign in to view',
+    type: 'website',
+  };
 }
 
 const clip = (s: string, max: number) => (s.length <= max ? s : `${s.slice(0, max - 1).trimEnd()}…`);
@@ -335,14 +366,16 @@ function withShellHeaders(from: Headers, extra: Record<string, string> = {}): He
 class Deadline extends Error {}
 
 /**
- * The response for a record path, or null when the path is not one (the
- * caller goes on as before). Never throws.
+ * The response for a record path or a token share link, or null when there is
+ * no ASSETS binding (the caller goes on as before). Never throws.
  */
 export async function serveSocialCard(request: Request, env: Env): Promise<Response | null> {
-  const match = matchSocialPath(new URL(request.url).pathname);
+  const pathname = new URL(request.url).pathname;
+  const isPrivate = matchPrivatePath(pathname);
+  const match = isPrivate ? null : matchSocialPath(pathname);
   const method = request.method.toUpperCase();
   if (!env.ASSETS) return null;
-  if (!match || (method !== 'GET' && method !== 'HEAD')) {
+  if ((!match && !isPrivate) || (method !== 'GET' && method !== 'HEAD')) {
     const res = await env.ASSETS.fetch(request);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers: withShellHeaders(res.headers) });
   }
@@ -355,6 +388,14 @@ export async function serveSocialCard(request: Request, env: Env): Promise<Respo
   }
   const html = await shell.text();
   const untouched = () => new Response(method === 'HEAD' ? null : html, { status: 200, headers: withShellHeaders(shell.headers) });
+  if (isPrivate || !match) {
+    // Part D: the static card, before any D1 is touched.
+    const body = rewriteShell(html, privateTags());
+    if (body == null) return untouched();
+    const headers = withShellHeaders(shell.headers, { 'x-robots-tag': 'noindex' });
+    headers.set('content-type', 'text/html; charset=utf-8');
+    return new Response(method === 'HEAD' ? null : body, { status: 200, headers });
+  }
   if (!env.DB) return untouched();
 
   let timer: ReturnType<typeof setTimeout> | undefined;
