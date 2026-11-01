@@ -23,8 +23,13 @@
  * file no longer lists it.
  *
  * Swapped here (`SWAPPED`): `grid`, whose route `GET /api/decks/:id/grid`
- * merged as D1499 part 1 (#3749). It keeps its row, so the plan's table still
- * reads whole, and answers through `deckGridApi.grid`.
+ * merged as D1499 part 1 (#3749), `stagePlan`, whose route
+ * `GET /api/decks/:id/stage-plan` is D1522 (#3774), `remix`, whose route
+ * `POST /api/decks/:id/remix` is D1553 (#3800), and D1565's (#3812)
+ * `investorLinks` and `withdrawInvestorLink`. Each keeps its row, so the
+ * plan's table still reads whole, and answers through its client
+ * (`deckGridApi.grid`, `deckStageApi.stagePlan`, `deckRemixApi.remix`,
+ * `deckInvestorLinksApi`).
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -32,7 +37,10 @@
  */
 
 import { LATER, NOT_ON } from './deckV2Model.js';
+import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
+import { deckStageApi } from '../../../lib/api/deckStage.js';
+import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 
 export { NOT_ON };
 
@@ -54,7 +62,6 @@ export const SURFACES = Object.freeze({
   areasGenerate: { issue: 3764, what: 'Generate into several areas, with variants' },
   history: { issue: 3767, what: 'Undo and redo' },
   narrativeOutline: { issue: 3768, what: 'An outline from the investor narrative' },
-  themesV2: { issue: 3769, what: 'The six refreshed themes' },
   instruct: { issue: 3773, what: 'An instruction on several areas' },
   stagePlan: { issue: 3774, what: 'Stage, the order for it and missing proof' },
   figures: { issue: 3775, what: 'Linked, Stated and Uncited on every figure' },
@@ -78,6 +85,7 @@ export const SURFACES = Object.freeze({
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
   pptxImport: { issue: 3809, what: 'Start from a .pptx template' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
+  withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },
   slideAnalytics: { issue: 3820, what: 'Per-slide investor analytics' },
   presence: { issue: 3824, what: 'Who else is editing, and Suggest mode' },
@@ -93,7 +101,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'investorLinks', 'withdrawInvestorLink']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -135,9 +143,9 @@ export const areasQuote = off('areasQuote');
 export const areasGenerate = off('areasGenerate');
 export const history = off('history');
 export const narrativeOutline = off('narrativeOutline');
-export const themesV2 = off('themesV2');
 export const instruct = off('instruct');
-export const stagePlan = off('stagePlan');
+/** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
+export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 export const figures = off('figures');
 export const deckUsage = off('deckUsage');
 export const arrange = off('arrange');
@@ -153,12 +161,15 @@ export const media = off('media');
 export const presets = off('presets');
 export const orgLocks = off('orgLocks');
 export const critique = off('critique');
-export const remix = off('remix');
+/** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
+export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);
 export const consistency = off('consistency');
 export const deckActions = off('deckActions');
 export const brandLocks = off('brandLocks');
 export const pptxImport = off('pptxImport');
-export const investorLinks = off('investorLinks');
+// D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.
+export const investorLinks = (deckId) => through(() => deckInvestorLinksApi.investorLinks(deckId), SURFACES.investorLinks.issue);
+export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInvestorLinksApi.withdrawInvestorLink(deckId, shareId), SURFACES.withdrawInvestorLink.issue);
 export const comments = off('comments');
 export const slideAnalytics = off('slideAnalytics');
 export const presence = off('presence');

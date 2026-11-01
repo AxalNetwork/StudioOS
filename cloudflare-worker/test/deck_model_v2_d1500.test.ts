@@ -189,6 +189,7 @@ test('5. the theme\'s chrome, voice, art direction, language and direction, and 
   try {
     const theme = {
       kind: 'neutral_light', chrome: { page_number: true, footer_text: 'Synthetic Labs · Seed 2026', logo_corner: false, confidential: true },
+      compliance_fls: false, confidential: false,
       voice: 'Plain and direct', art_direction: 'Warm light, real people, no stock gradients', lang: 'fr-CA', dir: 'ltr',
     };
     const s = await call(f, 'PUT', '/api/decks/10', { model_version: 2, theme, slides: [card('a', 'Synthetic', { hidden: true, section: 'Appendix A', appendix: true }), card('b', 'Synthetic two')] });

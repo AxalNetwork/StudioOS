@@ -294,7 +294,9 @@ export function saveChip({ dirty, readOnly, when, version = null }) {
  */
 export const MORE_MENU = Object.freeze([
   { id: 'deck', label: 'This deck', items: [
-    { id: 'stage', label: 'Stage', adapter: 'stagePlan' },
+    // D1522 (#3774): the stage plan's route is on main, but its sheet is pd23's, built with the reorder action (#3808),
+    // so the item stays greyed on that adapter until the editor can open it.
+    { id: 'stage', label: 'Stage', adapter: 'deckActions' },
     // D1499 (#3749): the theme's aspect, written like a theme and held until a version is saved.
     { id: 'size', label: 'Slide size 16:9 · 4:3', write: true },
     { id: 'theme', label: 'Theme', write: true },
@@ -345,8 +347,9 @@ export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens
     ...s,
     items: s.items.map((it) => {
       if (it.adapter) {
+        // `availability` answers null for a row whose route is on main (`SWAPPED`, D1553): that item is live.
         const a = availability(it.adapter);
-        if (!a || a.available !== true) return { ...it, disabled: true, later: true, why: a?.reason || NOT_ON };
+        if (a && a.available !== true) return { ...it, disabled: true, later: true, why: a.reason || NOT_ON };
       }
       if (readOnly && it.write) return { ...it, disabled: true, why: 'Read only' };
       if (waiting && !shareIds.has(it.id)) return { ...it, disabled: true, why: waiting };

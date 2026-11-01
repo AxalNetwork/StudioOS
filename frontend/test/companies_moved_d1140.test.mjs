@@ -109,13 +109,14 @@ test('Manage opens the right company: the switcher, the sidebar row, and Your co
   assert.match(switcher, /<Link\s+to="\/account\/portfolio"[^>]*\n?[^>]*onClick=\{\(\) => setOpen\(false\)\}[\s\S]{0,200}data-testid="switcher-manage"/);
   const sidebar = read('frontend/src/ui/SidebarNav.jsx');
   assert.match(sidebar, /to="\/account\/portfolio"/);
-  assert.ok(sidebar.includes(SIDEBAR_LABEL), 'the sidebar row is not renamed');
+  assert.ok(sidebar.includes(SIDEBAR_LABEL), 'the sidebar row carries the section\'s name (D1413: Portfolio)');
   assert.doesNotMatch(sidebar, />\s*Company Settings\s*</);
   const settings = read('frontend/src/pages/SettingsPage.jsx');
   const card = settings.slice(settings.indexOf('function YourCompaniesSection'));
   assert.match(card, /to=\{c\.uid \? companyPathFor\(c\.uid\) : '\/account\/portfolio'\}/, 'Manage does not open the row\'s own company');
   assert.equal(companyPathFor('acme'), '/account/portfolio/acme');
-  assert.match(read('frontend/src/pages/account/companies/CompanyLightbox.jsx'), /to=\{companySettingsPathFor\(uid\)\}/);
+  // D1413 (#3696 Q3): the company page replaced the lightbox, and opens the company's settings.
+  assert.match(read('frontend/src/pages/account/companies/CompanyPage.jsx'), /to=\{companySettingsPathFor\(uid\)\}/);
   assert.doesNotMatch(read('frontend/src/ui/phone/CompanySheet.jsx'), /'\/company-settings'/);
   assert.doesNotMatch(read('frontend/src/workspaces/shellConfig.js'), /'\/company-settings'/);
 });
@@ -140,7 +141,7 @@ test('Profile and identity\'s moved notice shows once: dismissed, it does not co
   const restore = installDocument();
   try {
     let view = await mount(h(ProfileMovedNotice), '/account/profile');
-    assert.match(view.text(), /Your companies is now Companies and projects, under Account\. Open it/);
+    assert.match(view.text(), /Your companies is now Portfolio, under Account\. Open it/);
     await view.click('profile-companies-moved-dismiss');
     assert.equal(view.by('profile-companies-moved'), undefined);
     assert.equal(localStorage.getItem(PROFILE_MOVED_STORE), '1');
@@ -184,7 +185,8 @@ test('the settings address: the active company\'s page, another company says so,
     await view.unmount();
   } finally { setReadState({ loading: true, failed: false }); restore(); }
   const page = read('frontend/src/pages/account/companies/CompanySettingsAt.jsx');
-  assert.match(page, /if \(company\?\.uid === uid\) return <CompanySettingsPage \/>/);
+  // D1413 (PF6a): the General tab's head and card sit above the full editor, which is still the active company's only.
+  assert.match(page, /\{company\?\.uid === uid \? <CompanySettingsPage \/> : \(/);
   assert.match(page, /to=\{companyPathFor\(uid\)\}/);
 });
 
@@ -200,15 +202,15 @@ const OLD = [
 ];
 const split = (u) => { const m = u.match(/^([^?#]*)(\?[^#]*)?(#.*)?$/); return [m[1], m[2] || '', m[3] || '']; };
 
-test('D1415 part 4: the constants are /account/portfolio; the labels are unchanged', () => {
+test('D1415 part 4: the constants are /account/portfolio; D1413 (#3696 Q1) names the section Portfolio', () => {
   assert.equal(BASE_PATH, '/account/portfolio');
   assert.deepEqual(Object.values(TAB_PATHS), ['/account/portfolio', '/account/portfolio/projects', '/account/portfolio/funds', '/account/portfolio/engagements', '/account/portfolio/invitations']);
   assert.equal(companyPathFor('acme'), '/account/portfolio/acme');
   assert.equal(SETTINGS_PATH, '/account/portfolio/settings');
   assert.equal(companySettingsPathFor('acme'), '/account/portfolio/acme/settings');
-  assert.equal(SIDEBAR_LABEL, 'Companies and projects', 'a label renamed before #3696\'s naming question is answered');
-  assert.equal(MANAGE_LABEL, 'Manage companies and projects');
-  assert.equal(MOVED_NOTICES[COMPANIES_MOVED_KEY], 'Companies and projects has a new address. Update your bookmark.');
+  assert.equal(SIDEBAR_LABEL, 'Portfolio', 'the owner\'s answer to #3696 Q1');
+  assert.equal(MANAGE_LABEL, 'Open Portfolio');
+  assert.equal(MOVED_NOTICES[COMPANIES_MOVED_KEY], 'Companies and projects is now Portfolio, at a new address. Update your bookmark.');
 });
 
 test('D1415 part 4: every old address forwards to the same place, its query and hash kept, moved=companies added', () => {

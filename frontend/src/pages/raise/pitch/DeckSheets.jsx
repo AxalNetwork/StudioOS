@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { CONFIDENTIAL, CONFIDENTIAL_HELP, keepSettings, settingsOf, withConfidential } from './complianceModel';
 import Sheet from '../../../ui/Sheet.jsx';
 import { BrandingCard } from './StudioActions';
 import CheckPanel from './CheckPanel';
@@ -8,6 +9,8 @@ import { comparePair } from './compareModel';
 import { APPLY } from './deckV2Model';
 import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from './editorModel';
 import { SLIDE_SIZES, aspectOf, withAspect } from './gridModel';
+import { remix as remixAdapter, shown } from './deckV2Adapter';
+import { movedNotice } from './deckReflow';
 
 /**
  * D1604 (#3716, pd13) — the sheets the editor's ⋯ opens, each one v1 surface
@@ -30,6 +33,12 @@ import { SLIDE_SIZES, aspectOf, withAspect } from './gridModel';
  *                    dialog (`POST /api/decks/:id/restore`)
  *   SourcesSheet     D896's Sources panel, with the slide's own evidence
  *   CheckSheet       D900's Check panel ("Check claims · Free checks")
+ *   RemixSheet       This card › Remix this slide (pd5, D1553): four layouts
+ *                    from The Grid's structures, each keeping every block, and
+ *                    "Remove a block · the rest reflows inside the grid". Free:
+ *                    `POST /api/decks/:id/remix` runs no model, so it works
+ *                    with AI paused. Use this layout applies at once, one edit
+ *                    with its own Undo.
  *
  * A theme or a layout runs no model: it is applied at once, one edit like any
  * other, and nothing is saved until a version is.
@@ -60,7 +69,7 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
         {model.themes.map((k) => (
           <label key={k} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${(theme?.kind || 'brand') === k ? 'border-axal-violet dark:border-violet-500' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
             <input type="radio" name="theme" checked={(theme?.kind || 'brand') === k} disabled={readOnly}
-              onChange={() => onTheme(withAspect(k === 'brand' && !theme?.background ? null : { kind: k, background: theme?.background ?? null }, theme?.aspect))} data-testid={`pitch-theme-${k}`} />
+              onChange={() => onTheme(keepSettings(withAspect(k === 'brand' && !theme?.background ? null : { kind: k, background: theme?.background ?? null }, theme?.aspect), theme))} data-testid={`pitch-theme-${k}`} />
             <span className="flex flex-col">
               <span className="font-bold">{THEME_LABELS[k]}{k === 'brand' && kitData?.name ? ` · ${kitData.name}` : ''}</span>
               {k === 'brand' && kit.status === 'ok' && !kitData ? <span className={MUTED}>{NO_KIT}</span> : null}
@@ -69,6 +78,12 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
         ))}
       </div>
       {!readOnly ? <button type="button" className={GHOST} onClick={onApplyAll} data-testid="pitch-editor-apply-all">{APPLY} to all cards</button> : null}
+      {/* D1546 (pd3's chrome strip): Confidential, on by default, in the corner of every card in Present, share and every export. */}
+      <label className={`flex min-h-[44px] items-center gap-2 text-[12.5px] ${INK}`}>
+        <input type="checkbox" checked={settingsOf(theme).confidential} disabled={readOnly}
+          onChange={(e) => onTheme(withConfidential(theme, e.target.checked))} data-testid="pitch-theme-confidential" />
+        <span className="flex flex-col"><span className="font-bold">{CONFIDENTIAL}</span><span className={MUTED}>{CONFIDENTIAL_HELP}</span></span>
+      </label>
       <span className={EYE}>Audience</span>
       <select className={FIELD} value={audience || ''} disabled={readOnly} onChange={(e) => onAudience(e.target.value || null)} data-testid="pitch-editor-audience-select">
         <option value="">{NOT_RECORDED}</option>
@@ -82,7 +97,12 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
 /** The two slide sizes, in the words the sheet shows. */
 export const SIZE_LABELS = Object.freeze({ '16:9': 'Widescreen 16:9', '4:3': 'Standard 4:3' });
 
-export function SizeSheet({ theme, readOnly, onTheme, onClose }) {
+/**
+ * D1554 (#3801): choosing a size runs the reflow on the draft (`onSize`); what
+ * no longer fits moves to the speaker notes, and pd3c's amber notice says how
+ * many blocks moved, with one Undo back to the cards and size before.
+ */
+export function SizeSheet({ theme, readOnly, onSize, moved, onUndo, onClose }) {
   const now = aspectOf(theme?.aspect);
   return (
     <Frame title="Slide size" testId="pitch-sheet-size" onClose={onClose}>
@@ -90,7 +110,7 @@ export function SizeSheet({ theme, readOnly, onTheme, onClose }) {
         {Object.keys(SLIDE_SIZES).map((k) => (
           <label key={k} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${now === k ? 'border-axal-violet dark:border-violet-500' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
             <input type="radio" name="slide-size" checked={now === k} disabled={readOnly}
-              onChange={() => onTheme(withAspect(theme, k))} data-testid={`pitch-size-${k.replace(':', 'x')}`} />
+              onChange={() => onSize(k)} data-testid={`pitch-size-${k.replace(':', 'x')}`} />
             <span className="flex flex-col">
               <span className="font-bold">{SIZE_LABELS[k]}</span>
               <span className={MUTED}>{SLIDE_SIZES[k].width} × {SLIDE_SIZES[k].height}</span>
@@ -98,7 +118,13 @@ export function SizeSheet({ theme, readOnly, onTheme, onClose }) {
           </label>
         ))}
       </div>
-      <span className={MUTED}>Every card keeps its 12 × 6 grid and its margins, so each block keeps its cells; only the columns narrow.</span>
+      {moved ? (
+        <div role="status" className="flex items-center gap-2 rounded-[9px] border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pitch-size-moved">
+          <span className="flex-1">{movedNotice(moved)}</span>
+          <button type="button" className="min-h-[44px] font-bold underline" onClick={onUndo} data-testid="pitch-size-undo">Undo</button>
+        </div>
+      ) : null}
+      <span className={MUTED}>Every card keeps its 12 × 6 grid and its margins, so each block keeps its cells; only the columns narrow. Words that no longer fit move to the card&apos;s speaker notes.</span>
       <span className={MUTED}>{HELD}</span>
     </Frame>
   );
@@ -176,6 +202,97 @@ export function CheckSheet({ deck, projectId, readOnly, dirty, onReplaced, onClo
   return (
     <Frame title="Check claims" testId="pitch-sheet-check" onClose={onClose} width={560}>
       <CheckPanel key={deck.id} deck={deck} projectId={projectId} readOnly={readOnly} dirty={dirty} onReplaced={onReplaced} />
+    </Frame>
+  );
+}
+
+export const REMIX_TITLE = 'Remix this slide · 4 layouts, no AI charge';
+export const REMIX_FREE = 'Free · no AI charge';
+export const REMIX_NONE = 'No other layout holds every block on this card. Remove a block to see more.';
+
+/** A block as the sheet names it: a metric by its label, words by their first words, else its kind. */
+export function remixBlockName(b) {
+  if (b?.kind === 'metric' && b.label) return String(b.label);
+  if (b?.kind === 'text' && b.text) return String(b.text).split(/\s+/).slice(0, 5).join(' ');
+  return blockKindName(b?.kind);
+}
+const blockKindName = (k) => ({ chart: 'Chart', graphic: 'Diagram', image: 'Image', video: 'Video', audio: 'Audio', link: 'Link', metric: 'Figure', text: 'Words' }[k] || 'Block');
+
+function MiniLayout({ card, testId }) {
+  const areas = Array.isArray(card?.areas) ? card.areas : [];
+  return (
+    <div className="grid aspect-[16/9] w-full gap-[2px] rounded-[6px] border border-axal-hairline bg-axal-ground p-[3px] dark:border-gray-700 dark:bg-gray-950"
+      style={{ gridTemplateColumns: 'repeat(12, 1fr)', gridTemplateRows: 'repeat(6, 1fr)' }} aria-hidden="true" data-testid={testId}>
+      {areas.map((a) => (
+        <span key={a.id} className="rounded-[3px] bg-axal-lavender dark:bg-violet-950/50" style={{ gridColumn: `${a.c1} / ${a.c2 + 1}`, gridRow: `${a.r1} / ${a.r2 + 1}` }} />
+      ))}
+    </div>
+  );
+}
+
+export function RemixSheet({ deckId, card, index, readOnly, onApply, onClose }) {
+  const [state, setState] = useState({ status: 'loading', answer: null });
+  const [undo, setUndo] = useState(null);
+  const [asked, setAsked] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setState({ status: 'loading', answer: null });
+    remixAdapter(deckId, card).then((answer) => { if (live) setState({ status: answer.available ? 'ok' : 'off', answer }); });
+    return () => { live = false; };
+    // The card on screen is the input: a new card (or an applied layout) asks again.
+  }, [deckId, card, asked]);
+  const apply = (next, label) => {
+    if (readOnly || !onApply) return;
+    const back = onApply(next);
+    setUndo({ label, back });
+  };
+  const remove = async (block) => {
+    if (readOnly) return;
+    const answer = await remixAdapter(deckId, card, { remove: block.id });
+    if (answer.available) apply(answer.value.card, `Removed ${remixBlockName(block)}`);
+    else setState({ status: 'off', answer });
+  };
+  const options = state.answer?.available ? state.answer.value.options || [] : [];
+  const blocks = Array.isArray(card?.blocks) ? card.blocks : [];
+  return (
+    <Frame title={`${REMIX_TITLE} · card ${index + 1}`} testId="pitch-sheet-remix" onClose={onClose} width={620}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300" data-testid="pitch-remix-free">{REMIX_FREE}</span>
+        <span className={MUTED}>Every layout keeps every block and what it says; only where it sits changes.</span>
+      </div>
+      {undo ? (
+        <div className="flex items-center justify-between gap-2 rounded-[9px] border border-axal-hairline px-3 py-2 dark:border-gray-700" role="status" data-testid="pitch-remix-applied">
+          <span className={`text-[12.5px] ${INK}`}>{undo.label}. {HELD}</span>
+          <button type="button" className={GHOST} onClick={() => { undo.back?.(); setUndo(null); setAsked((n) => n + 1); }} data-testid="pitch-remix-undo">Undo</button>
+        </div>
+      ) : null}
+      {state.status === 'loading' ? <span className={MUTED} role="status">Reading the layouts that fit this card…</span> : null}
+      {state.status === 'off' ? <span className={MUTED} role="status" data-testid="pitch-remix-off">{shown(state.answer)}</span> : null}
+      {state.status === 'ok' && !options.length ? <span className={MUTED} data-testid="pitch-remix-none">{REMIX_NONE}</span> : null}
+      {options.length ? (
+        <div className="grid grid-cols-2 gap-2" data-testid="pitch-remix-options">
+          {options.map((o) => (
+            <div key={o.structure} className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline p-2 dark:border-gray-700" data-testid={`pitch-remix-option-${o.structure}`}>
+              <MiniLayout card={o.card} testId={`pitch-remix-preview-${o.structure}`} />
+              <span className={`text-[12.5px] font-bold ${INK}`}>{o.label}</span>
+              <span className={MUTED}>{o.line}</span>
+              <button type="button" className={GHOST} disabled={readOnly} onClick={() => apply(o.card, `Now ${o.label}`)} data-testid={`pitch-remix-use-${o.structure}`}>Use this layout</button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {blocks.length > 1 ? (
+        <div className="flex flex-col gap-1.5" data-testid="pitch-remix-remove">
+          <span className={EYE}>Remove a block · the rest reflows inside the grid</span>
+          <div className="flex flex-wrap gap-1.5">
+            {blocks.map((b) => (
+              <button key={b.id} type="button" className={GHOST} disabled={readOnly} onClick={() => remove(b)} data-testid={`pitch-remix-remove-${b.id}`}>
+                Remove {remixBlockName(b)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </Frame>
   );
 }

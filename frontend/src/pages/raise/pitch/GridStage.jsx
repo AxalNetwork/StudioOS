@@ -273,7 +273,7 @@ export default function GridStage({
   return (
     <div className="flex min-w-0 flex-col gap-2" data-testid="pitch-editor-stage">
       {kit.status === 'error' ? <div className={`${MUTED} text-amber-700 dark:text-amber-300`} role="status">{KIT_FAILED} <button type="button" className="font-bold underline" onClick={kit.retry}>Try again</button></div> : null}
-      {kit.status === 'ok' && !kit.data?.kit && theme?.kind !== 'neutral_light' && theme?.kind !== 'neutral_dark' ? <div className={MUTED}>{NO_KIT}</div> : null}
+      {kit.status === 'ok' && !kit.data?.kit && (!theme?.kind || theme.kind === 'brand') ? <div className={MUTED}>{NO_KIT}</div> : null}
 
       <div className="flex min-h-[40px] flex-wrap items-center justify-between gap-2">
         {one && !readOnly ? (

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
@@ -52,6 +52,13 @@ export default function ServicesZone() {
   const [note, setNote] = useState(null);
   // D392 — the canvas's chips over `kind`, the column the form above writes.
   const [view, setView] = useState('all');
+  // D1424 (#3700): the header's "New service" scrolls to this form and puts
+  // the cursor in Title. The form is the whole of adding one; nothing opens.
+  const titleRef = useRef(null);
+  const focusAddForm = useCallback(() => {
+    titleRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    titleRef.current?.focus?.({ preventScroll: true });
+  }, []);
   const fill = useScopedFill({
     scope: SCOPED_FORMS.service, values: { title: draft.title, scope: draft.scope },
     onValues: (v) => setDraft((d) => ({ ...d, ...v })),
@@ -197,7 +204,7 @@ export default function ServicesZone() {
         <FillFormBar fill={fill} />
         <form onSubmit={add} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Title" fill={{ ctl: fill, name: 'title', value: draft.title }}>
-            <input className={inputClass} value={draft.title}
+            <input ref={titleRef} className={inputClass} value={draft.title} data-testid="advisor-service-title"
               onChange={(e) => setDraft({ ...draft, title: e.target.value })}
               placeholder="Fractional CTO day" />
           </Field>
@@ -236,7 +243,7 @@ export default function ServicesZone() {
         className="mb-3"
         role="advisor"
         filters={advisorZoneFilters('expertise/services', { value: view, onChange: setView })}
-        actions={advisorZoneActions('expertise/services', { view: { header: ['Service', 'Kind', 'Active', 'Price (cents)', 'Units sold'], rows: shown, cells: (r) => [r.title, r.kind, r.is_active, r.price_cents, r.units_sold] } })}
+        actions={advisorZoneActions('expertise/services', { handlers: { focusAddForm }, view: { header: ['Service', 'Kind', 'Active', 'Price (cents)', 'Units sold'], rows: shown, cells: (r) => [r.title, r.kind, r.is_active, r.price_cents, r.units_sold] } })}
       />
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
         isEmpty={state.items.length === 0} empty={empty}>

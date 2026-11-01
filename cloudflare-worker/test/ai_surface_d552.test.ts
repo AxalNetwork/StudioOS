@@ -203,8 +203,10 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'routes/deck_images.ts': ['AI_SURFACE.raisePitch'], // D903: the card and background images
   'routes/article_assist.ts': ['AI_SURFACE.articles', 'AI_SURFACE.articles'], // D1409: Eadwyn's writing options on an article, and its images
+  'routes/event_syndication_assist.ts': ['AI_SURFACE.eventSyndication'], // D1493: Eadwyn's proposed copy for a syndication channel
   'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
+  'services/decks/quoteRetrieval.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1556 (#3803): the quote embedding and its rerank
   'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal; D1114: Story's Ask Eadwyn; D913: Answer it
   'routes/build_plan.ts': ['AI_SURFACE.buildPlan'], // D1071: Eadwyn words the build plan
   'services/capTableDocumentRead.ts': ['AI_SURFACE.raiseCapTable'], // D1021: Eadwyn's read of a signed document

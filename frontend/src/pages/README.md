@@ -24,6 +24,8 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 
 | Folder | What lives there |
 | --- | --- |
+| `work/` | D1614 (#3968): a project's Work (`/projects/:id/work`: board, backlog, burn-up, the item and run sheets) and a company's compliance tasks (`/account/companies/:uid/settings/compliance`). Every read goes through `work/workAdapter.js`, off until #3969–#3972 and #3976. Start at `work/README.md`. |
+| `incorporate/` | D1414 (#3696, INC1–INC7): Incorporate, the six-step flow that turns one of your own projects (or a new one) into a company: goals, compare, company details, review, pay & file (the catalog quote and the status timeline), done. `IncorporatePage.jsx` re-exports it. What is not on main yet comes through `incorporate/incorporateAdapter.js` (#3855's `company_uid`, #3706's Ask panel). Start at `incorporate/README.md`. |
 | `team/` | D1497 (#3727): Team, the people and AI agents working on a company or a project (TM1a–TM9f), and Project settings › General. People and invitations are wired; agents, rule books and approvals come through `team/agentsAdapter.js`, the one seam #3840–#3844 swap. Start at `team/README.md`. |
 | `trust/` | D1078: the member Trust Center’s requirement counts, explanations, detail sheet (D1317) and data controls at `/trust/me`. |
 | `site/` | The public site's pages from the owner's website canvas (D673–D680): each renders in `SitePage` (`frontend/src/components/site/SitePage.jsx`) and draws only live data or the owner's copy. |
@@ -46,6 +48,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `events/` | Public and host-side event screens. |
 | `jobs/` | Public and host-side job screens. |
 | `legal/` | Non-admin document origination (Send for signature). |
+| `studio/` | D1419 (#3698): the Studio modularity canvas — the module grid all four `/studio` homes draw below their fixed blocks, Customise with Done as the one save, the module map, the notices, and the tile builders (`studio/tiles/`). Layouts come from the Worker's `/api/studio` through `studioLayoutApi`; Eadwyn's layout proposals wait behind `studio/studioProposalsAdapter.js` (#3864). Start at `studio/README.md`. |
 | `testing/` | Product testing's owner side (D815): the programme form, the applicants panel with Pick and Decline, and the pure model they share. A partner's zone (`partner/offers/TestingZone.jsx`) and HQ's console (`admin/consoles/ProductTestingConsole.jsx`) both mount them. |
 | `wellbeing/` | Wellbeing's booking flow, the expert's practice zones and the admin resource library, with the pure model they share (D570). The member home is `WellbeingPage.jsx` and the practice page is `ExpertEditorPage.jsx`, both here. |
 | `subsidiary/` | A territory licence holder's read of their own licence. |

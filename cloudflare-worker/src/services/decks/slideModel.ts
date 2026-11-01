@@ -71,7 +71,8 @@ export const IMAGE_TAGS = ['illustration', 'photo', 'screenshot', 'logo'] as con
 export const IMAGE_FITS = ['cover', 'contain'] as const;
 export const OVERLAYS = ['none', 'light', 'strong'] as const;
 export const VIDEO_RATIOS = ['16:9', '9:16'] as const;
-export const THEME_KINDS = ['brand', 'neutral_light', 'neutral_dark'] as const;
+/** D1517 (#3769): Sand, Ocean and Forest join the three of D898 (pd7). */
+export const THEME_KINDS = ['brand', 'neutral_light', 'neutral_dark', 'sand', 'ocean', 'forest'] as const;
 
 /** The audiences a version is written for (PD3). */
 export const AUDIENCES = ['angel', 'pre_seed_fund', 'seed_fund', 'series_a_fund', 'strategic', 'grant', 'other'] as const;
@@ -365,12 +366,15 @@ export function chromeOf(v: any): { page_number: boolean; footer_text: string | 
 }
 
 /** The deck's theme (PD8), or null for the default (the brand kit, no deck background). */
-export function sanitizeTheme(v: any, url: UrlGuard): Record<string, unknown> & { kind: string; background: Background | null; aspect?: '4:3' } | null {
+export function sanitizeTheme(v: any, url: UrlGuard): Record<string, unknown> & { kind: string; background: Background | null; aspect?: '4:3'; compliance_fls?: false; confidential?: false } | null {
   if (!v || typeof v !== 'object') return null;
   const kind = oneOf(v.kind, THEME_KINDS);
   if (!kind) return null;
   // D1499: 4:3 is kept; 16:9 is the default and is left out, so a deck saved before v2 hashes as it did.
-  const out: Record<string, unknown> & { kind: string; background: Background | null; aspect?: '4:3' } = { kind, background: backgroundOf(v.background, url), ...(v.aspect === '4:3' ? { aspect: '4:3' as const } : {}) };
+  const out: Record<string, unknown> & { kind: string; background: Background | null; aspect?: '4:3'; compliance_fls?: false; confidential?: false } = { kind, background: backgroundOf(v.background, url), ...(v.aspect === '4:3' ? { aspect: '4:3' as const } : {}) };
+  // D1546: compliance is on by default; retain only flags explicitly turned off.
+  if (v.compliance_fls === false) out.compliance_fls = false;
+  if (v.confidential === false) out.confidential = false;
   // D1500: each kept only when set, so a theme saved before v2 hashes as it did.
   const chrome = chromeOf(v.chrome);
   if (chrome) out.chrome = chrome;

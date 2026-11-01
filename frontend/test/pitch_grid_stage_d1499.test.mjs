@@ -58,7 +58,8 @@ test('the slide size lives in the theme: 4:3 is written, 16:9 is left out, and a
   assert.deepEqual(withAspect({ kind: 'neutral_dark', background: null }, '4:3'), { kind: 'neutral_dark', background: null, aspect: '4:3' });
   assert.deepEqual(withAspect({ kind: 'neutral_dark', background: null, aspect: '4:3' }, undefined), { kind: 'neutral_dark', background: null });
   // A theme change keeps the size; the save summary says each on its own line.
-  assert.match(read('pages/raise/pitch/DeckSheets.jsx'), /onTheme\(withAspect\(k === 'brand' && !theme\?\.background \? null : \{ kind: k, background: theme\?\.background \?\? null \}, theme\?\.aspect\)\)/);
+  // D1546: and the deck's compliance settings (`keepSettings`).
+  assert.match(read('pages/raise/pitch/DeckSheets.jsx'), /onTheme\(keepSettings\(withAspect\(k === 'brand' && !theme\?\.background \? null : \{ kind: k, background: theme\?\.background \?\? null \}, theme\?\.aspect\), theme\)\)/);
   const base = { cards: [], theme: null, audience: null };
   assert.deepEqual(changesOf(base, { ...base, theme: { kind: 'brand', background: null, aspect: '4:3' } }), ['The slide size becomes Standard 4:3 (1440 × 1080).']);
   assert.deepEqual(changesOf(base, { ...base, theme: { kind: 'neutral_dark', background: null } }), ['The theme becomes Neutral dark.']);

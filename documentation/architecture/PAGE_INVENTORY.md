@@ -12,7 +12,7 @@ canvas behind it still shows up here.
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Headerless | Studio | `/studio` | Founder Studio |
+| Headerless | Studio | `/studio` | Founder Studio, Studio Modularity Page |
 | Headerless | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Page, Spin-Out Lab Workspace |
 | Headerless | Validate | `/validate` | Founder Workspaces Canvas |
 | Headerless | Build | `/build` | Founder Workspaces Canvas, Pages · Founder Build |
@@ -25,7 +25,7 @@ canvas behind it still shows up here.
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Headerless | Studio | `/studio` | Advisor Canvas |
+| Headerless | Studio | `/studio` | Advisor Canvas, Studio Modularity Page |
 | Headerless | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
 | Headerless | Practice | `/practice` | — (no canvas; shipped ahead of the design corpus) |
 | Headerless | Cohorts | `/cohorts` | — (no canvas; shipped ahead of the design corpus) |
@@ -37,7 +37,7 @@ canvas behind it still shows up here.
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Headerless | Studio | `/studio` | Investor LP Canvas |
+| Headerless | Studio | `/studio` | Investor LP Canvas, Studio Modularity Page |
 | Headerless | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
 | Headerless | Deals | `/deals` | Deal Flow, Deal flow list, Investor LP Canvas, Pages · Investor Deals |
 | Headerless | Portfolio | `/portfolio` | Investor LP Canvas |
@@ -51,7 +51,7 @@ canvas behind it still shows up here.
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Headerless | Studio | `/studio` | Partner Operator Canvas |
+| Headerless | Studio | `/studio` | Partner Operator Canvas, Studio Modularity Page |
 | Headerless | Spin-Out Lab | `/spinout-lab` | Partner Operator Canvas |
 | Headerless | Pipeline | `/pipeline` | — (no canvas; shipped ahead of the design corpus) |
 | Headerless | Delivery | `/delivery` | — (no canvas; shipped ahead of the design corpus) |
@@ -152,4 +152,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Licences (`/admin/my-licence`)
 
-**Canvas corpus:** 187. **Workspace assignments:** 295.
+**Canvas corpus:** 195. **Workspace assignments:** 316.

@@ -24,6 +24,8 @@ const ExpertiseProfileZone = lazy(() => import('../../pages/advisor/expertise/Pr
 const ExpertiseServicesZone = lazy(() => import('../../pages/advisor/expertise/ServicesZone'));
 const ExpertiseProofZone = lazy(() => import('../../pages/advisor/expertise/ProofZone'));
 const ExpertiseThinkingZone = lazy(() => import('../../pages/advisor/expertise/ThinkingZone'));
+// D1597 (#3870), mounted by D1424 (#3700): requests per booking link and opens of your writing.
+const ExpertiseVisibilityZone = lazy(() => import('../../pages/advisor/expertise/VisibilityZone'));
 const CohortsGuidanceZone = lazy(() => import('../../pages/advisor/cohorts/GuidanceZone'));
 const CohortsCalendarZone = lazy(() => import('../../pages/advisor/cohorts/CalendarZone'));
 
@@ -120,14 +122,16 @@ const ZONE_BLURB = {
   // `settlement` on the response, which a static blurb cannot read. It states
   // the rate and leaves the settlement question to the page. D75.
   earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed, with the platform rate recorded against each priced session.',
-  // Expertise — four zones read a store now. Only visibility does not, and it
-  // is written from COPY.
+  // Expertise — all five zones read a store now (visibility since D1424, over
+  // D1597's read).
   profile: 'What a founder sees before they book you.',
   services: 'What you sell and at what price. Nothing counts how often a service is booked.',
   proof: 'Claims you have made, and whether the person named has confirmed each one.',
   // Views are this hub's own count. Where a piece ran is not recorded anywhere,
   // so no blurb here may imply a combined reach figure.
   thinking: 'What you have published, and how many people opened it here.',
+  // No profile view is recorded, so this blurb names only the two recorded counts.
+  visibility: 'Requests through each booking link, and opens of your writing here. Profile views are not recorded.',
   // Cohorts — all five read a store since migration 212 and the calendar join.
   founders: 'The batch an admin has put in front of you, read from the Lab’s own record.',
   'this-week': 'Which cycles are running and where each sits in its window. What is due stays the Lab’s to say.',
@@ -200,6 +204,7 @@ const ZONE = {
     services: ExpertiseServicesZone,
     proof: ExpertiseProofZone,
     thinking: ExpertiseThinkingZone,
+    visibility: ExpertiseVisibilityZone,
   },
 };
 
@@ -228,10 +233,11 @@ const ZONE = {
  * reworded, and why every remaining card in this bucket was re-read against
  * `PRAGMA table_info` before this pass rather than trusted.
  *
- * `expertise/visibility` STAYS, and stays worded exactly as it is. Nothing in
- * the product counts a profile view — not for advisors, not for anyone — and
- * that needs an impression pipeline, not a table. It is the one gap here that a
- * migration cannot close, which is precisely why it is the one card left.
+ * `expertise/visibility` WAS THE LAST CARD, and D1597 (#3870) closed it the
+ * way Thinking's closed: not with a view counter (owner answer H declined one)
+ * but by reading what is recorded, requests per booking link and opens of
+ * the advisor's writing, with profile views drawn "Not recorded" on the page
+ * itself. D1424 (#3700) mounted it, so this bucket has no card left.
  */
 const COPY = ADVISOR_COPY;
 
@@ -311,7 +317,8 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     services: { h1: 'Service ledger', sub: 'Named services, durations and prices.' },
     proof: { h1: 'Evidence', sub: 'Completed engagements, published outcomes, credentials.' },
     thinking: { h1: 'Published thinking', sub: 'Points of view, newest first.' },
-    visibility: { h1: 'Surfaces & funnel', sub: 'Impressions, views, requests and engagements per surface.' },
+    // D1424: the canvas's sub named impressions and views, which nothing records (owner answer H).
+    visibility: { h1: 'Surfaces & funnel', sub: 'Requests per booking link and opens of your writing. Profile views are not recorded.' },
   };
   const zoneHead = prefix === '/expertise' && !isRoot ? EXPERTISE_ZONE_HEAD[slug] : null;
 

@@ -8,6 +8,7 @@
  *            total_microusd, balance: { ok, code?, message? } } | { ai: false, reason, message }
  *   POST /api/decks/:id/images           (the same body) → { images: [image], stopped? }
  *   POST /api/decks/:id/images/upload    multipart: file, use, card?, alt?, shows_person?, consent?
+ *   POST /api/decks/:id/images/import    D1506: { url, use?, card?, alt?, shows_person?, consent? }, an external image copied into R2
  *   GET  /api/decks/:id/images           the venture's kept images, generated or uploaded (PD12d's Design list)
  *   GET  /api/decks/:id/images/plan      D903 §10 (#3660): whether this Worker can draw, the deck's one art
  *        direction, and the words-only cards an illustration would help → { capability, direction, cards }.
@@ -56,6 +57,8 @@ import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
 import { cardRefOf } from '../services/decks/cardUids';
 import { imageCapability, imagePlan } from '../services/decks/visuals';
 import { fetchLandingPageForProject } from '../services/decks/branding';
+import { imageSize, sha256Hex, stripMetadata, tooManyPixels, type ImageMime } from '../services/decks/imageBytes';
+import { fetchExternalImage } from '../services/decks/imageFetch';
 
 const deckImages = new Hono<{ Bindings: Env }>();
 
@@ -127,7 +130,7 @@ async function refusedAsk(c: any, ask: ImageAsk, projectId: number): Promise<Res
 /** One image's run, as one options object, so the quote and the run read the same input. */
 function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[]): RunOptions {
   const rail = { ...railFor(c, { page: IMAGE_PAGE, option: IMAGE_OPTION }, `deck:${deck.deckId}`), option: IMAGE_OPTION };
-  return { task: 'deck_image', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
+  return { task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
 }
 
 const coloursOf = (body: any): string[] => (Array.isArray(body?.colours) ? body.colours : []).filter((x: unknown): x is string => typeof x === 'string' && HEX.test(x)).slice(0, 4);
@@ -210,18 +213,23 @@ deckImages.post('/:id/images', async (c) => {
     const mime = (MIMES as readonly string[]).includes(r.image.mime) ? r.image.mime as typeof MIMES[number] : sniffMime(r.image.bytes);
     const charged = await chargedOf(c.env, r.usageLogId, userId);
     if (!mime) { stopped = { code: 'image_unreadable', message: 'The image came back in a format the deck cannot show. It was charged; nothing was placed.' }; break; }
+    // D1506: a drawn image is stripped, measured and hashed like an upload. The same picture twice keeps no hash the second time.
+    const drawn = stripMetadata(r.image.bytes, mime as ImageMime);
+    const drawnSize = imageSize(drawn, mime as ImageMime);
+    const drawnSha = await sha256Hex(drawn);
+    const taken = await c.env.DB.prepare('SELECT 1 FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(deck.projectId, drawnSha).first();
     const uid = crypto.randomUUID();
     const key = `deck-images/${deck.projectId}/${uid}.${EXTENSION[mime]}`;
     try {
-      await c.env.FILES!.put(key, r.image.bytes, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(deck.projectId), userId: String(userId) } });
+      await c.env.FILES!.put(key, drawn, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(deck.projectId), userId: String(userId) } });
     } catch {
       stopped = { code: 'image_unsaved', message: 'Eadwyn drew the image, but it could not be stored. It was charged for the run; try again in a moment.' };
       break;
     }
-    await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, r2_key, mime, size_bytes, width, height, source, prompt, style, aspect, use,
+    await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, r2_key, mime, size_bytes, width, height, sha256, source, prompt, style, aspect, use,
         state, model, ai_usage_log_id, charged_microusd, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?, 'proposed', ?, ?, ?, ?)`)
-      .bind(uid, deck.projectId, deck.deckId, p.ask.card, key, mime, r.image.bytes.byteLength, r.image.width, r.image.height,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?, 'proposed', ?, ?, ?, ?)`)
+      .bind(uid, deck.projectId, deck.deckId, p.ask.card, key, mime, drawn.byteLength, drawnSize?.width ?? r.image.width, drawnSize?.height ?? r.image.height, taken ? null : drawnSha,
         p.ask.description, p.ask.style, p.ask.aspect, p.ask.use, r.usage?.model ?? IMAGE_MODEL, r.usageLogId ?? null, charged, userId).run();
     await recordCardUid(c.env, uid, cardUid);
     images.push(await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first());
@@ -231,6 +239,57 @@ deckImages.post('/:id/images', async (c) => {
   await auditDeckWrite(c, user, deck.projectId, 'deck_image_proposed', `${where}: ${images.length} image${images.length === 1 ? '' : 's'} proposed`);
   return c.json({ images: images.map((r) => view(c, r)), ...(stopped ? { stopped } : {}) });
 });
+
+type Landing = { use: Use; card: number | null; cardUid: string | null; alt: string; showsPerson: boolean; audit: string };
+
+/**
+ * D1506 (#3757): an uploaded or imported image, stored. The type is sniffed,
+ * the size read from the header (over 50 MP is refused), the metadata stripped
+ * and the stripped bytes hashed; a picture this venture already holds is
+ * answered with that row, not stored twice (`UNIQUE(project_id, sha256)`,
+ * migration 718). A discarded copy gives up its hash, so the new one is stored.
+ */
+async function landImage(c: any, user: User, deck: Deck, raw: Uint8Array, l: Landing): Promise<Response> {
+  const mime = sniffMime(raw) as ImageMime | null;
+  if (!mime) return c.json({ error: 'Upload a PNG, JPEG or WebP image.' }, 415);
+  const size = imageSize(raw, mime);
+  if (!size) return refuse(c, 415, { code: 'image_unreadable', message: 'This image’s size could not be read from the file. Save it again as PNG, JPEG or WebP and upload it.' });
+  if (tooManyPixels(size)) return refuse(c, 413, { code: 'image_too_large', message: 'An image is at most 50 megapixels. Make it smaller and upload it again.' });
+  const bytes = stripMetadata(raw, mime);
+  const sha = await sha256Hex(bytes);
+  const same = await c.env.DB.prepare('SELECT * FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(deck.projectId, sha).first() as any;
+  if (same && same.state !== 'discarded') return c.json({ image: view(c, same), duplicate: true });
+  if (same) await c.env.DB.prepare('UPDATE deck_images SET sha256 = NULL WHERE id = ? AND project_id = ?').bind(same.id, deck.projectId).run();
+  let ticket;
+  try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, bytes.byteLength, user); }
+  catch (e) { if (e instanceof Response) return e; throw e; }
+  const uid = crypto.randomUUID();
+  const key = `deck-images/${deck.projectId}/${uid}.${EXTENSION[mime]}`;
+  try { await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(deck.projectId), userId: String(user.id) } }); }
+  catch { return refuse(c, 503, { code: 'image_unsaved', message: 'The image could not be stored. Nothing was saved; try again in a moment.' }); }
+  const userId = Number(user.id);
+  const { use, card, alt, showsPerson } = l;
+  // An uploaded background still has to read at 4.5:1: it is kept as a content image until Keep sets its overlay.
+  await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, r2_key, mime, size_bytes, width, height, sha256, source, use, alt, state,
+      shows_person, person_consent_at, person_consent_by, created_by, kept_at, kept_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'upload', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(uid, deck.projectId, deck.deckId, card, key, mime, bytes.byteLength, size.width, size.height, sha, use, alt, use === 'content' ? 'kept' : 'proposed',
+      showsPerson ? 1 : 0, showsPerson ? new Date().toISOString() : null, showsPerson ? userId : null, userId,
+      use === 'content' ? new Date().toISOString() : null, use === 'content' ? userId : null).run();
+  await recordCardUid(c.env, uid, l.cardUid);
+  await noteStorageLanded(c.env, ticket);
+  await auditDeckWrite(c, user, deck.projectId, 'deck_image_uploaded', `${card == null ? 'The deck' : `Card ${card + 1}`}: ${l.audit}${showsPerson ? ', with the person’s agreement recorded' : ''}`);
+  return c.json({ image: view(c, await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first()) }, 201);
+}
+
+/** The use, card and alt a request names, or the refusal. */
+function landingOf(c: any, deck: Deck, get: (k: string) => unknown): Omit<Landing, 'showsPerson' | 'audit'> | Response {
+  const use = (USES as readonly string[]).includes(String(get('use'))) ? String(get('use')) as Use : 'content';
+  const ref = cardRefOf(deck.slides, { card: get('card'), card_uid: get('card_uid') });
+  if ('error' in ref) return c.json({ error: ref.error }, 400);
+  const alt = String(get('alt') ?? '').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX);
+  return { use, card: ref.index, cardUid: ref.uid, alt };
+}
 
 deckImages.post('/:id/images/upload', async (c) => {
   const user = await requireAuth(c);
@@ -242,36 +301,39 @@ deckImages.post('/:id/images/upload', async (c) => {
   if (!file || typeof file === 'string') return c.json({ error: 'Choose an image to upload.' }, 400);
   if (file.size > UPLOAD_MAX_BYTES) return c.json({ error: 'An image is at most 5 MB.' }, 413);
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const mime = sniffMime(bytes);
-  if (!mime) return c.json({ error: 'Upload a PNG, JPEG or WebP image.' }, 415);
+  if (!sniffMime(bytes)) return c.json({ error: 'Upload a PNG, JPEG or WebP image.' }, 415);
   // #2434 owner question 7, A: a photo of a person goes in only with their agreement recorded.
   const showsPerson = form!.get('shows_person') === '1';
   if (showsPerson && form!.get('consent') !== '1') return refuse(c, 422, { code: 'person_consent_required', message: PERSON_CONSENT_MESSAGE });
-  const use = (USES as readonly string[]).includes(String(form!.get('use'))) ? String(form!.get('use')) as Use : 'content';
-  // D1500: the card by its uid when the editor sends one, else by its place.
-  const ref = cardRefOf(deck.slides, { card: form!.get('card'), card_uid: form!.get('card_uid') });
-  if ('error' in ref) return c.json({ error: ref.error }, 400);
-  const card = ref.index;
-  const alt = String(form!.get('alt') ?? '').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX);
-  let ticket;
-  try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, bytes.byteLength, user); }
-  catch (e) { if (e instanceof Response) return e; throw e; }
-  const uid = crypto.randomUUID();
-  const key = `deck-images/${deck.projectId}/${uid}.${EXTENSION[mime]}`;
-  try { await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(deck.projectId), userId: String(user.id) } }); }
-  catch { return refuse(c, 503, { code: 'image_unsaved', message: 'The image could not be stored. Nothing was saved; try again in a moment.' }); }
-  const userId = Number(user.id);
-  // An uploaded background still has to read at 4.5:1: it is kept as a content image until Keep sets its overlay.
-  await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, r2_key, mime, size_bytes, source, use, alt, state,
-      shows_person, person_consent_at, person_consent_by, created_by, kept_at, kept_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'upload', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(uid, deck.projectId, deck.deckId, card, key, mime, bytes.byteLength, use, alt, use === 'content' ? 'kept' : 'proposed',
-      showsPerson ? 1 : 0, showsPerson ? new Date().toISOString() : null, showsPerson ? userId : null, userId,
-      use === 'content' ? new Date().toISOString() : null, use === 'content' ? userId : null).run();
-  await recordCardUid(c.env, uid, ref.uid);
-  await noteStorageLanded(c.env, ticket);
-  await auditDeckWrite(c, user, deck.projectId, 'deck_image_uploaded', `${card == null ? 'The deck' : `Card ${card + 1}`}: an image uploaded${showsPerson ? ', with the person’s agreement recorded' : ''}`);
-  return c.json({ image: view(c, await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first()) }, 201);
+  const l = landingOf(c, deck, (k) => form!.get(k));
+  if (l instanceof Response) return l;
+  return landImage(c, user, deck, bytes, { ...l, showsPerson, audit: 'an image uploaded' });
+});
+
+/**
+ * D1506 (#3757): an external image, copied in. `{ url, use?, card?, alt?, shows_person?, consent? }`.
+ * The URL is fetched once through `fetchExternalImage` (https, a public host at
+ * every hop, a deadline, the 5 MB cap) and stored like an upload; the deck then
+ * reads our copy, never the other server.
+ */
+deckImages.post('/:id/images/import', async (c) => {
+  const user = await requireAuth(c);
+  const deck = await deckOf(c, user);
+  if (deck instanceof Response) return deck;
+  if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: 'Images cannot be stored here yet. Nothing was saved.' });
+  const body = await c.req.json().catch(() => null) as any;
+  if (!body || typeof body.url !== 'string' || body.url.length > 2048) return c.json({ error: 'url required: the https address of a PNG, JPEG or WebP image.' }, 400);
+  const showsPerson = body.shows_person === true;
+  if (showsPerson && body.consent !== true) return refuse(c, 422, { code: 'person_consent_required', message: PERSON_CONSENT_MESSAGE });
+  const l = landingOf(c, deck, (k) => body[k]);
+  if (l instanceof Response) return l;
+  const got = await fetchExternalImage(body.url, UPLOAD_MAX_BYTES);
+  if (!got.ok) {
+    if (got.code === 'unsafe_url') return refuse(c, 422, { code: 'unsafe_url', message: 'Only a public https address can be copied in. Nothing was saved.' });
+    if (got.code === 'too_large') return c.json({ error: 'An image is at most 5 MB.' }, 413);
+    return refuse(c, 502, { code: 'image_unfetched', message: 'That address did not return an image. Nothing was saved.' });
+  }
+  return landImage(c, user, deck, got.bytes, { ...l, showsPerson, audit: 'an image copied in from a link' });
 });
 
 deckImages.get('/:id/images', async (c) => {

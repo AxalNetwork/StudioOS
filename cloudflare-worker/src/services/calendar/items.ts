@@ -12,9 +12,10 @@
  */
 import type { Env } from '../../types';
 import type { CalendarEvent } from '../calendar';
+import { sourceOf, type ItemSource } from './registry';
 
 /** The canvas's five families (D1205's `FAMILIES`), by kind. */
-export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'other';
+export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'learning' | 'other';
 export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   event_ticket: 'events',
   event_hosted: 'events',
@@ -27,6 +28,13 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   calendly_event: 'other',
   // D1384: the Compliance layer.
   compliance_due: 'deadlines',
+  // D1484 (#3977): D1208's readers and "New event".
+  interview_call: 'meetings',
+  cohort_date: 'deadlines',
+  deal_closing: 'deadlines',
+  manual: 'events',
+  // #3959: the member's own learning plan.
+  learning: 'learning',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -45,6 +53,11 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   hosting: 'Host',
   from_calendly: 'From Calendly',
   venture_deadline: 'Your venture’s deadline',
+  interviewer: 'You run this interview',
+  cohort_member: 'Your cohort',
+  investor_in_room: 'In your deal room',
+  yours: 'Your event',
+  learning_plan: 'Your learning plan',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -55,10 +68,17 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   investor_meeting: 'organiser',
   calendly_event: 'from_calendly',
   compliance_due: 'venture_deadline',
+  interview_call: 'interviewer',
+  cohort_date: 'cohort_member',
+  deal_closing: 'investor_in_room',
+  manual: 'yours',
+  learning: 'learning_plan',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
   family: ItemFamily;
+  /** D1484: where it comes from, in plain words (the registry), never a table name. */
+  source: ItemSource;
   my_role: { code: string; words: string };
   can: { rsvp: boolean; reschedule: boolean; cancel: boolean; copy: boolean };
   all_day: boolean;
@@ -84,6 +104,10 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'event_ticket': return ev.event_id ? `/my/events/ticket/${ev.event_id}` : null;
     case 'event_hosted': return ev.event_id ? `/my/events/hosting/${ev.event_id}` : null;
     case 'investor_meeting': return '/raise/capital-relationships';
+    case 'deal_closing': return ev.deal_id ? `/deals/${ev.deal_id}` : null;
+    case 'interview_call': return ev.project_id ? `/validate/customer-research?project=${ev.project_id}` : null;
+    // #3959: the Learning page the plan item names (its course, lesson, video, webinar, exercise or exam).
+    case 'learning': return typeof ev.url === 'string' && ev.url.startsWith('/learning') ? ev.url : '/learning';
     default: return null;
   }
 }
@@ -111,6 +135,7 @@ export function canOf(ev: CalendarEvent, isAdmin: boolean, nowMs = Date.now()): 
 
 /** A date with no time is a whole day. Every reader today writes a time. */
 export function isAllDay(ev: CalendarEvent): boolean {
+  // D1484: D1208's all-day readers write a bare date (`deadline()`), so this holds for them too.
   return /^\d{4}-\d{2}-\d{2}$/.test(String(ev.start_at));
 }
 
@@ -149,6 +174,7 @@ export async function describeItems(
     return {
       ...rest,
       family: FAMILY_OF[ev.kind],
+      source: sourceOf(ev.kind),
       my_role: { code, words: ROLE_WORDS[code] },
       can: canOf({ ...ev, my_role: code }, isAdmin, nowMs),
       all_day: isAllDay(ev),

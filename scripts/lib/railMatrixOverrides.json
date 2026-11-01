@@ -1,5 +1,5 @@
 {
-  "_about": "D764 (#2089): what scripts/build-rail-matrix.mjs adds to the owner's canvas tables (design/incoming/airail-every-page-data/canvas.json). The canvas names models by display name; `models` maps each to its Workers AI id and what it can do. `kinds` says which capabilities a kind's models may have and which its default must have. `searchIndexKinds` are the kinds whose embedding writes or reads axal-search, a 768-dimension bge-base index (wrangler.toml), so their embedding is `searchIndexModel`. `pages` adds the page rows the canvas has no board for, and, with `keepKind`, keeps a renamed board on the kind it had (D796). Every id is checked against the pricing file (cloudflare-pricing-2026-10-15.md) until D760's catalogue lands. D1478 (#3721): `optionKinds` are kinds an option may take and no page row does (`image`: the draw models, FLUX.1 Schnell first); `transcribeModels` are what an option with handler `transcribe` lists, the `transcribe` task's alternates.",
+  "_about": "D764 (#2089): what scripts/build-rail-matrix.mjs adds to the owner's canvas tables (design/incoming/airail-every-page-data/canvas.json). The canvas names models by display name; `models` maps each to its Workers AI id and what it can do. `kinds` says which capabilities a kind's models may have and which its default must have. `searchIndexKinds` are the kinds whose embedding writes or reads axal-search, a 768-dimension bge-base index (wrangler.toml), so their embedding is `searchIndexModel`. `pages` adds the page rows the canvas has no board for, and, with `keepKind`, keeps a renamed board on the kind it had (D796). Every id is checked against the pricing file (cloudflare-pricing-2026-10-15.md) until D760's catalogue lands. D1478 (#3721): `optionKinds` are kinds an option may take and no page row does (`image`: the draw models, FLUX.1 Schnell first); `transcribeModels` are what an option with handler `transcribe` lists, the `transcribe` task's alternates. #3936: a kind's `drop` names capabilities whose canvas models the kind leaves out (`speech` drops `text`: Record a Session's Listen row lists no text model; structuring is Synth's).",
   "models": {
     "Aura-2 EN": { "id": "@cf/deepgram/aura-2-en", "caps": ["voice"] },
     "Aura-2 ES": { "id": "@cf/deepgram/aura-2-es", "caps": ["voice"] },
@@ -51,7 +51,7 @@
   "kinds": {
     "chat": { "defaultNeeds": "text", "allow": ["text"] },
     "synth": { "defaultNeeds": "text", "allow": ["text"] },
-    "speech": { "defaultNeeds": "speech", "allow": ["speech", "text"] },
+    "speech": { "defaultNeeds": "speech", "allow": ["speech"], "drop": ["text"] },
     "research": { "defaultNeeds": "text", "allow": ["text", "embedding", "rerank"] },
     "reason": { "defaultNeeds": "text", "allow": ["text"] },
     "vision": { "defaultNeeds": "vision", "allow": ["vision"] },
