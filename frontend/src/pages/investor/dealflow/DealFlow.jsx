@@ -42,6 +42,7 @@ import {
   AddToFlowDialog, CardScopesPopover, ColumnsPopover, DeleteViewDialog, FilterChips, FiltersDrawer, SaveViewDialog, SortPopover, TOOL, ViewsMenu,
 } from './FlowControls';
 import NewForYou from './NewForYou';
+import { ZonePrimary } from '../../../workspaces/ZoneActions';
 import PeekDrawer from './PeekDrawer';
 import { CommitDialog, MoveBackDialog, PassDialog } from './StageDialogs';
 import { moveKind } from './movesModel';
@@ -164,6 +165,17 @@ function useScoresAndFit(ids) {
 
 const CLEAR_BTN = 'inline-flex w-fit items-center rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 
+/**
+ * The Deals root's one primary while no deal is in the flow (D1424, #3700,
+ * owner answer C: no "Add a deal"; an investor cannot log an off-platform deal,
+ * and `POST /api/deals` refuses one). A link to the "My thesis" card in
+ * Settings, which `PUT /api/investor-profile/me` saves. That card is on
+ * `/account/security-privacy`; the old empty-state link went to `/account`,
+ * whose default section does not show it. Once any deal is in the
+ * flow, the Deals root has no primary.
+ */
+export const THESIS_PRIMARY = Object.freeze({ label: 'Set your thesis', to: '/account/security-privacy', accent: 'investor', primary: true, testid: 'dealflow-empty-thesis' });
+
 /** DLS13: nothing in the flow yet, with the three ways in. Never "0 deals". */
 function EmptyFlow() {
   return (
@@ -172,7 +184,8 @@ function EmptyFlow() {
       <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400">Browse every round on the platform, or set your thesis so matches reach you in New for you.</p>
       <div className="flex flex-wrap gap-2">
         <Link to={viewHref({ view: 'table', scope: 'all' })} className={CLEAR_BTN} data-testid="dealflow-empty-all">Browse all deals</Link>
-        <Link to="/account" className={CLEAR_BTN} data-testid="dealflow-empty-thesis">Set your thesis</Link>
+        {/* D1424: the header's primary; portalled into the Deals header beside Ask. */}
+        <ZonePrimary item={THESIS_PRIMARY} />
         <Link to={viewHref({ scope: 'new' })} className={CLEAR_BTN} data-testid="dealflow-empty-new">See New for you</Link>
       </div>
     </section>

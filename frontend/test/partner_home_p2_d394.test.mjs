@@ -1,10 +1,11 @@
 /**
- * D394 — Partner Home P2, built and tested, NOT mounted.
+ * D394 — Partner Home P2: the tiles, the operating brief and the feed.
  *
  * Drives the page's own tile and feed helpers with real-shaped payloads and
- * renders the view in each state. The last test pins that nothing mounts it:
- * `/studio` stays `PartnerStudioHome` until the owner signs P2 off, and the
- * day Session 3 mounts it this assertion is the one that changes, on purpose.
+ * renders them in each state. D564 mounted P2 as Partner Studio's body; D1419
+ * (#3698) made its three parts the partner Studio's modules (`firm_tiles`,
+ * `operating_brief`, `firm_feed`), drawn by `StudioModules` in the member's
+ * layout, with no WorkerRail and no question heading.
  *
  * Run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/partner_home_p2_d394.test.mjs
  */
@@ -17,7 +18,17 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
-import { homeTiles, homeFeed, PartnerHomeP2View } from '../src/pages/partner/PartnerHomeP2.jsx';
+import { homeTiles, homeFeed, partnerTiles, UNLINKED_REASON } from '../src/pages/partner/PartnerHomeP2.jsx';
+import StudioModules from '../src/pages/studio/StudioModules.jsx';
+import { studioFromReads } from '../src/pages/studio/useStudioLayout.js';
+
+const PARTNER = { profile: 'partner', groups: [{ key: 'partner', label: 'Operating partner' }], modules: [
+  { key: 'firm_tiles', title: 'Firm tiles', group: 'partner', purpose: 'p', href: null, default_size: 'full', in_default: true, locked_by_plan: false, plan: null },
+  { key: 'operating_brief', title: 'Operating brief', group: 'partner', purpose: 'p', href: null, default_size: 'full', in_default: true, locked_by_plan: false, plan: null },
+  { key: 'firm_feed', title: 'Firm feed', group: 'partner', purpose: 'p', href: null, default_size: 'full', in_default: true, locked_by_plan: false, plan: null },
+] };
+const DEFAULT = { profile: 'partner', source: 'default', layout: PARTNER.modules.map((m) => ({ key: m.key, size: 'full' })), revision: null, updated_at: null, dropped: [] };
+const STUDIO = studioFromReads({ profile: 'partner', viewer: { role: 'partner' }, modules: PARTNER, layout: DEFAULT });
 
 const day = (offset) => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
 
@@ -89,28 +100,39 @@ test('D394: the feed names each line\'s receipt, and a seat reads as recorded by
   assert.ok(homeFeed({ board: { items: Array.from({ length: 10 }, (_, i) => ({ engagement_id: i, health: 'blocked', status: 'accepted' })) } }).length <= 6);
 });
 
-const render = (state) => renderedText(renderToStaticMarkup(
-  React.createElement(MemoryRouter, null, React.createElement(PartnerHomeP2View, { state, onRetry: () => {} })),
+const render = (state, studio = STUDIO) => renderedText(renderToStaticMarkup(
+  React.createElement(MemoryRouter, null, React.createElement(StudioModules, { studio, tiles: partnerTiles(state, () => {}) })),
 ));
 
-test('D394: the page draws the artboard\'s question, the tiles, the brief band and the feed', () => {
+test('D394, D1419: the tiles, the operating brief and the feed are the partner Studio\'s three modules', () => {
   const t = render({ status: 'ready', reads: { board: BOARD, retainers: RETAINERS, capacity: CAP_SET } });
-  assert.match(t, /Where does the firm stand today\?/);
-  assert.match(t, /3 milestones due this week · 1 at risk · 1 over capacity/);
+  for (const title of ['Firm tiles', 'Operating brief', 'Firm feed']) assert.match(t, new RegExp(title));
+  assert.ok(t.indexOf('Firm tiles') < t.indexOf('Operating brief') && t.indexOf('Operating brief') < t.indexOf('Firm feed'), 'the default order');
+  assert.match(t, /3 due this week · 1 at risk/);
   assert.match(t, /Proposal · operating brief/);
   assert.match(t, /Scope recorded by the firm: Board, KPIs/);
   assert.match(t, /Not on this page: messages from a client/);
   assert.doesNotMatch(t, /recommend/i);
+  // Owner answers G and J (#3698): no question heading, no rail, and the rail is never where asking lives.
+  assert.doesNotMatch(t, /Where does the firm stand today/);
+  assert.doesNotMatch(t, /lives in the rail|ask box/);
 });
 
 test('D394: unlinked, preview and failed reads each say what they are', () => {
-  assert.match(render({ status: 'unlinked' }), /No partner profile is attached to this sign-in/);
+  const u = render({ status: 'unlinked' });
+  assert.match(u, /Not recorded/);
+  assert.ok(u.includes(UNLINKED_REASON));
+  assert.match(UNLINKED_REASON, /No partner profile is attached to this sign-in/);
   const p = render({ status: 'preview' });
-  assert.match(p, /withheld in role preview/);
+  assert.match(p, /Withheld in administrator preview/);
   assert.doesNotMatch(p, /could not be read/);
   const bad = render({ status: 'ready', reads: { board: null, retainers: null, capacity: null } });
-  assert.match(bad, /Active engagements could not be read/);
+  assert.match(bad, /Firm tiles could not be read · Try again/);
+  assert.match(bad, /Firm feed could not be read · Try again/);
   assert.doesNotMatch(bad, /\b0 at risk\b/);
+  // One source down draws its own tile unreadable, and the module stays drawn.
+  const part = render({ status: 'ready', reads: { board: null, retainers: RETAINERS, capacity: CAP_SET } });
+  assert.match(part, /Active engagements could not be read/);
 });
 
 test('D394: the brief is the home/brief surface, run on a click and never on mount', () => {
@@ -138,21 +160,25 @@ test('D564: P2 is mounted as Partner Studio, inside the /studio frame that keeps
   walk(resolve(process.cwd(), 'frontend/src'));
   assert.deepEqual(importers.map((p) => p.slice(p.indexOf('frontend/'))), ['frontend/src/pages/partner/PartnerStudioHome.jsx']);
   const frame = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/partner/PartnerStudioHome.jsx'), 'utf8'));
-  assert.match(frame, /<PartnerHomeP2 previewing=\{previewing\} \/>/);
+  // D1419: P2's three parts are the partner Studio's modules, drawn in the member's layout.
+  assert.match(frame, /const home = usePartnerHome\(previewing\);/);
+  assert.match(frame, /const tiles = partnerTiles\(home\.state, home\.load\);/);
+  assert.match(frame, /<StudioModules studio=\{studio\} tiles=\{tiles\} withheld=\{previewing\} \/>/);
   assert.match(frame, /<StudioInterview persona="partner"/, 'Eadwyn left Partner Studio');
-  assert.match(frame, /data-testid="text-partner-studio-title">Partner Studio</);
+  // SM4's header: "Studio", as every profile's.
+  assert.match(frame, /data-testid="text-partner-studio-title">Studio</);
   assert.match(readFileSync(resolve(process.cwd(), 'frontend/src/pages/Dashboard.jsx'), 'utf8'), /<PartnerStudioHome/,
     '/studio no longer renders the partner frame');
   const p2 = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/partner/PartnerHomeP2.jsx'), 'utf8'));
   assert.doesNotMatch(p2 + frame, /\bHome\b(?!P2)/, 'Partner Studio still says Home');
 });
 
-test('D564: a partner on /studio sees Partner Studio, and nothing on it says Home', () => {
+test('D564, D1419: a partner on /studio sees their modules, and nothing on it says Home', () => {
   // The frame (Eadwyn, the profile band) mounts Worker-reaching imports, so the
-  // body it mounts is rendered here, as the partner's /studio draws it.
+  // modules it mounts are rendered here, as the partner's /studio draws them.
   const html = render({ status: 'ready', reads: { board: { mode: 'project', engagements: [], due_next_7_days: 0, needs_attention: [] }, retainers: { mrr_cents: 0, retainers: [] }, capacity: { over_committed_count: null, cap_note: 'No cap stated.' } } });
-  assert.match(html, /Where does the firm stand today\?/);
-  assert.match(html, /Partner Studio/, 'the rail does not name Partner Studio');
+  assert.match(html, /Your modules3 of 12 placed/);
   assert.doesNotMatch(html, /\bHome\b/);
-  assert.match(render({ status: 'preview' }), /nothing on Partner Studio is read while you preview it/);
+  // A preview withholds every module, and reads nothing (SM11).
+  assert.equal((render({ status: 'preview' }).match(/Withheld in administrator preview/g) || []).length, 3);
 });

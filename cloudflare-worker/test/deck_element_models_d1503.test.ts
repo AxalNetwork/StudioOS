@@ -281,6 +281,8 @@ async function fixture(extraEnv: Record<string, unknown> = {}) {
   for (const [id, role, fid, tier] of [[2, 'founder', 100, 'studio'], [3, 'founder', 300, 'free'], [4, 'founder', 400, 'studio'], [6, 'investor', null, 'studio']] as const) {
     insert.run(id, role, fid, `Synthetic member ${id}`, `synthetic-${id}@example.invalid`, tier);
   }
+  // D1478's plan lock reads a paid plan from the recorded subscription, not the tier column: member 2 pays for theirs.
+  db.exec("INSERT INTO member_subscription_amounts(subscription_id,user_id,plan_family,amount_cents,currency,interval,interval_count,status) VALUES ('sub_synthetic_2',2,'founder',7900,'usd','month',1,'active')");
   db.exec("INSERT INTO projects(id,name,founder_id) VALUES (1,'Synthetic venture',100),(3,'Synthetic free venture',300),(4,'Synthetic other venture',400)");
   db.exec("INSERT INTO pitch_decks(id,project_id,version,slides,title,is_current) VALUES (7,1,1,'[]','Synthetic deck',1),(8,3,1,'[]','Synthetic free deck',1)");
   db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,5000000)').run();

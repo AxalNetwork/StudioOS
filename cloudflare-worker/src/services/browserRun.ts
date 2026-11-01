@@ -169,8 +169,26 @@ async function renderOnce(env: Env, action: 'pdf' | 'screenshot', options: Recor
   }
 }
 
+/**
+ * D1506 (#3757): the origins the export browser may load, besides the page's
+ * own: the inline schemes, and the Google Fonts hosts the print page's type
+ * comes from. Anything else (an external image left in a deck, a tracking
+ * pixel) is never requested; the deck reads our copies (`/images/import`).
+ */
+export const EXPORT_EXTRA_ORIGINS = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'] as const;
+const reEscape = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+
+/** Browser Run's `allowRequestPattern` for a page at `url`: its own origin, the extra origins, data: and blob:. */
+export function exportAllowPatterns(url: string): string[] {
+  let origin: string;
+  try { origin = new URL(url).origin; } catch { return ['/^data:/', '/^blob:/']; }
+  return [origin, ...EXPORT_EXTRA_ORIGINS].map((o) => `/^${reEscape(o)}\\//`).concat(['/^data:/', '/^blob:/']);
+}
+
 export async function renderUrl(env: Env, action: 'pdf' | 'screenshot', options: Record<string, unknown>, opts: RenderUrlOptions): Promise<RenderResult> {
   const binding = env.BROWSER;
+  // D1506: a page opened by URL loads only the allow-listed origins.
+  if (typeof options.url === 'string' && !options.allowRequestPattern) options = { ...options, allowRequestPattern: exportAllowPatterns(options.url) };
   if (!binding || typeof binding.quickAction !== 'function') return { ok: false, code: 'browser_unbound', attempts: 0 };
   const attempts = Math.max(1, opts.attempts ?? DECK_RENDER_ATTEMPTS);
   const backoff = opts.backoffMs ?? DECK_RENDER_BACKOFF_MS;

@@ -88,6 +88,15 @@ export function withQuery(to, query) {
 }
 
 /**
+ * D1424 (#3700): the one primary a zone's header draws, or null. The first
+ * item still marked `primary` after the builder, and only if it can run: a
+ * link, or a handler the page supplied. Anything else is no primary at all.
+ */
+export function primaryOf(items = []) {
+  return (items || []).find((i) => i && i.primary === true && (i.to || typeof i.onClick === 'function')) || null;
+}
+
+/**
  * Bind a table, and get back the `(key, { query, view })` function a page calls.
  *
  * `view` is the export payload: `{ scope, header, rows, cells }`. `cells` maps
@@ -102,13 +111,19 @@ export function withQuery(to, query) {
  * moment the page has rows. A file with a header row and no body reads as
  * "there is no data" when the truth is almost always "it has not loaded yet".
  */
-export function makeZoneActions(TABLE) {
+export function makeZoneActions(TABLE, accent = null) {
   return function zoneActions(key, { query = '', view = null, handlers = {} } = {}) {
     const spec = TABLE[key];
     if (!spec) return [];
     const slug = key.split('/').pop();
     return spec.map((item) => {
       const testid = `action-${slug}-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      // D1424 (#3700, owner B): `primary: true` survives only on the two LIVE
+      // kinds, a link and a page-supplied handler, and carries the table's
+      // licence so `ZonePrimary` wears that accent (owner A). An export or an
+      // unbuilt op marked primary is drawn as the ghost it is: a button is a
+      // promise, and a zone with no live first step shows no primary.
+      const lead = item.primary === true ? { primary: true, accent } : {};
       // A page-supplied op. `handlers[name]` is either the click itself or
       // `{ onClick, disabled, busy, title }` when the page has more to say about
       // it — a server-side export knows when it is in flight, and a control that
@@ -119,6 +134,7 @@ export function makeZoneActions(TABLE) {
         const bound = typeof supplied === 'function' ? { onClick: supplied } : supplied;
         if (typeof bound?.onClick !== 'function') return null;
         return {
+          ...lead,
           label: item.label,
           testid,
           onClick: bound.onClick,
@@ -162,7 +178,7 @@ export function makeZoneActions(TABLE) {
         };
       }
       if (item.to) {
-        return { label: item.label, testid, to: withQuery(item.to, query), title: item.linkNote };
+        return { ...lead, label: item.label, testid, to: withQuery(item.to, query), title: item.linkNote };
       }
       if (item.unbuilt) {
         // No `onClick`: a control nothing performs must not be clickable, or a

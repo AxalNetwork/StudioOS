@@ -304,7 +304,8 @@ test('the false card is gone and the eyebrow with it', () => {
   assert.match(P, /Every valuation and ownership write is an admin action/);
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Positions eyebrow is back');
-  assert.match(P, /<h1>Positions book<\/h1>/, 'the heading went with the eyebrow');
+  // D1424 (#3700): the heading is drawn by the shared ZoneHeader.
+  assert.match(P, /<ZoneHeader bucketPath="\/portfolio" title="Positions book"/, 'the heading went with the eyebrow');
 });
 
 test('the strip and the instrument still match the artboard, column for column', () => {

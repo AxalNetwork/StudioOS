@@ -63,7 +63,7 @@ import { AUDIENCES } from '../services/decks/slideModel';
 import {
   AUDIENCE_CARDS, BUILD_SYSTEM, CARD_CATALOGUE, FAST_PATH_AUDIENCE, LENGTHS, LENGTH_IDS, OUTLINE_SYSTEM, PROMPT_MAX,
   buildCards, buildMessage, cardOf, cardProgress, excludedOf, figureRefusal, keptIndexes, outlineFromBody, outlineFromModel, outlineMessage,
-  planOf, standardOutline, wordingFromModel, type Audience, type CardVisuals, type FigureRefusal, type Length, type OutlineRow, type Wording,
+  planOf, recordTexts, standardOutline, wordingFromModel, type Audience, type CardVisuals, type FigureRefusal, type Length, type OutlineRow, type Wording,
 } from '../services/decks/newDeck';
 import { readAllSeries } from '../services/decks/chartSeries';
 import { recordDiagrams } from '../services/decks/visuals';
@@ -464,7 +464,7 @@ deckNew.post('/generate', async (c) => {
   let by: 'Eadwyn' | 'none' = 'none';
   let reason: string | null = null;
   if (res.ok) {
-    const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length);
+    const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length, recordTexts(items));
     wording = w.byIndex;
     dropped = w.dropped;
     by = wording.some((x) => x.headline || x.body) ? 'Eadwyn' : 'none';
@@ -550,7 +550,7 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   let reason: string | null = null;
   let dropped = 0;
   if (res.ok) {
-    const w = wordingFromModel(parseJsonLoose<any>(res.output), 1);
+    const w = wordingFromModel(parseJsonLoose<any>(res.output), 1, recordTexts(items));
     words = w.byIndex[0];
     dropped = w.dropped;
     if (!words.headline && !words.body) reason = 'Eadwyn’s words could not be read. The card keeps its figures and its title.';

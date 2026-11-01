@@ -47,6 +47,9 @@ export const eventsApi = {
   get: (id) => request(`/events/${id}`),
   // POST / — create an event (host).
   create: (data) => request('/events', { method: 'POST', body: JSON.stringify(data) }),
+  // #3935: the drawn cover (EV2), host or admin: one quote for the draw and its checks, then the draw.
+  coverQuote: (id, prompt) => request(`/events/${id}/cover/quote`, { method: 'POST', body: JSON.stringify({ prompt }) }),
+  coverDraw: (id, prompt) => request(`/events/${id}/cover/draw`, { method: 'POST', body: JSON.stringify({ prompt }) }),
   // PATCH /:id — edit (host or admin).
   update: (id, data) => request(`/events/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   // POST /:id/submit-review — founder "publish public" → pending_review.

@@ -254,11 +254,15 @@ import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
 import deckElementModels from './routes/deck_element_models';
+import deckStage from './routes/deck_stage';
+import deckRemix from './routes/deck_remix';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
 // D1589 (#3836): a venture's stage norms, the benchmarks a deck critic may cite.
 import deckStageNorms from './routes/deck_stage_norms';
+// D1556 (#3803): a venture's consented interview quotes, ranked for a deck.
+import deckQuotes from './routes/deck_quotes';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -308,6 +312,7 @@ import adminCreditRules from './routes/admin_credit_rules';
 import adminTicketReviews from './routes/admin_ticket_reviews';
 import communityTasksRoutes from './routes/community_tasks';
 import learningRoutes from './routes/learning';
+import learningPlanRoutes from './routes/learning_plan';
 import adminLearningRoutes from './routes/admin_learning';
 import learningAssessmentRoutes from './routes/learning_assessment';
 import adminLearningAssessmentRoutes from './routes/admin_learning_assessment';
@@ -457,7 +462,10 @@ import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
+import agentEngineRoutes from './routes/agent_engine';
 import teamAgentsRoutes from './routes/team_agents';
+// D1612 (#3951): the agent skill library, beside team agents.
+import teamSkillsRoutes from './routes/team_skills';
 import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
@@ -1374,6 +1382,10 @@ app.route('/api/decks', deckCheck);
 app.route('/api/decks', deckGrid);
 // D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckElementModels);
+// D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
+app.route('/api/decks', deckStage);
+// D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
+app.route('/api/decks', deckRemix);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
@@ -1384,6 +1396,8 @@ app.route('/api/decks', deckAssist);
 app.route('/api/decks', deckImages);
 // D1589 (#3836): `/stage-norms`, before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckStageNorms);
+// D1556 (#3803): `/quotes/search` and `/quotes/index`, before `decks` so `/:id` routes cannot answer them.
+app.route('/api/decks', deckQuotes);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are
@@ -1574,6 +1588,8 @@ app.all('/api/messages/*', messagesRetired);
 app.route('/api/perks', perksRoutes);
 // D545 — the approved community tasks the chat's Tasks panel lists.
 app.route('/api/community-tasks', communityTasksRoutes);
+// #3959 — a member's own learning plan. Before learningRoutes, so `plan` is never a course slug.
+app.route('/api/learning/plan', learningPlanRoutes);
 // D557 (#1158) — the Learning center, member side.
 app.route('/api/learning', learningRoutes);
 // D559 (#1160) — exercises and exams, graded on the server.
@@ -1683,7 +1699,12 @@ app.route('/api', companyLegal);
 app.route('/api', companyDocuments);
 app.route('/api', companyRoutes);
 // D1496 (#3840): team agents, their rule books and their audit; 404 `team_agents_off` until TEAM_AGENTS_ENABLED is "true".
+// D1529 (#3845, #3742 E1): goals, tasks and dependencies; 404 `agent_engine_off` until AGENT_ENGINE is on.
+// Before team_agents, whose `*` middleware would otherwise answer for these paths; each handler checks its own flag.
+app.route('/api/teams', agentEngineRoutes);
 app.route('/api/teams', teamAgentsRoutes);
+// D1612 (#3951): `/skills…` and `/agents/:uid/skills`, behind the same TEAM_AGENTS_ENABLED switch.
+app.route('/api/teams', teamSkillsRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);
@@ -3128,6 +3149,14 @@ export default {
             }
           } catch (e) {
             console.error('[cron] event reminder sweep failed', e);
+          }
+          // #3959: learning plan reminders, one per item and occurrence (insert-ledger-first), through notify().
+          try {
+            const { sendPlanReminders } = await import('./services/learningPlan');
+            const sent = await sendPlanReminders(env, now.getTime());
+            if (sent > 0) console.info(`[cron] learning plan reminders sent=${sent}`);
+          } catch (e) {
+            console.error('[cron] learning plan reminder sweep failed', e);
           }
         }
         // Task #14's watchlist follow-up reminder sweep stood here (and its

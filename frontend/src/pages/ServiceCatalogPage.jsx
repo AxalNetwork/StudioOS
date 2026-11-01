@@ -11,6 +11,8 @@ import {
 import { api } from '../lib/api';
 import Sheet from '../ui/Sheet.jsx';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
+import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../lib/fillScoped.js';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../workspaces/canvasKit';
 import { useRailPage } from '../ui/railCrumbs';
@@ -487,6 +489,8 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
       {showForm && (
         <OfferingFormModal
           offering={editing}
+          user={user}
+          fillOn={role === 'partner'}
           onClose={() => { setShowForm(false); setEditing(null); load(); }}
         />
       )}
@@ -527,7 +531,7 @@ function CatalogTile({ label, value, note, nr = false }) {
  * `description` is the same field as the store's `summary`; only the name
  * differed, so it is renamed rather than removed. `listed` is `is_active`.
  */
-function OfferingFormModal({ offering, onClose }) {
+function OfferingFormModal({ offering, onClose, user = null, fillOn = false }) {
   const [form, setForm] = useState({
     title: offering?.title || '',
     summary: offering?.summary || '',
@@ -541,6 +545,18 @@ function OfferingFormModal({ offering, onClose }) {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // D1595 (#3868) / D1424 (#3700): Ask on the summary only, in the partner's
+  // own shell. An Add form hangs under the caller (`owner:<id>`); an Edit
+  // form reads its own record. Price, title and category are never filled.
+  const ownerId = Number(user?.id) || null;
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.offering,
+    record: offering?.id ?? null,
+    parent: offering ? null : ownerId,
+    enabled: fillOn && (offering ? Number.isSafeInteger(Number(offering.id)) : !!ownerId),
+    values: { summary: form.summary },
+    onValues: (v) => setForm((f) => ({ ...f, ...v })),
+  });
 
   async function save() {
     setBusy(true); setError(null);
@@ -555,8 +571,8 @@ function OfferingFormModal({ offering, onClose }) {
         // a default would be this form deciding how a firm charges.
         engagement_model: form.engagement_model || null,
       };
-      if (offering) await api.updateServiceOffering(offering.id, payload);
-      else await api.createServiceOffering(payload);
+      const saved = offering ? await api.updateServiceOffering(offering.id, payload) : await api.createServiceOffering(payload);
+      await fill.afterSave(saved?.id ?? offering?.id);
       onClose();
     } catch (e) { setError(e.message); setBusy(false); }
   }
@@ -587,9 +603,13 @@ function OfferingFormModal({ offering, onClose }) {
             {MODELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </Field>
-        <Field label="Summary (what the founder gets)">
-          <textarea rows={3} value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
-        </Field>
+        <FillFormBar fill={fill} />
+        <div>
+          <FillLabel fill={fill} name="summary" label="Summary (what the founder gets)" value={form.summary}>
+            <label htmlFor="offering-summary" className="mb-1 block text-[11px] uppercase tracking-wide text-gray-500">Summary (what the founder gets)</label>
+          </FillLabel>
+          <textarea id="offering-summary" rows={3} value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
+        </div>
         {/* NO `Deliverables` FIELD. `service_offerings` has no column for it and
             neither handler reads one, so five rows of typing went into the
             request body and nowhere else. Listing it back is a migration.
