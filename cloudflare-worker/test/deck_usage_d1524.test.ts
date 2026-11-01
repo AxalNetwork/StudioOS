@@ -30,6 +30,8 @@ import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts'
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { CONTRACTS } from '../src/contracts/index.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
 
 const PAGE = 'Founder · Raise · Pitch deck';
 const LLAMA = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
@@ -104,6 +106,9 @@ test('the estimate equals the quote lines, and a 12-card Balanced deck is at mos
     assert.ok(r.body.estimated.value_microusd <= 400_000, `a 12-card Balanced deck quotes $${r.body.estimated.value_microusd / 1e6}, over $0.40`);
     assert.equal(r.body.units.text_area_microusd, per.body);
     assert.equal(r.body.units.image_microusd, per.photo);
+    // D1511: the reply the adapter's deckUsage reads matches its contract.
+    const schema = JSON.parse(readFileSync(new URL(`../src/contracts/${CONTRACTS.deckUsage.schema}`, import.meta.url), 'utf8'));
+    assert.deepEqual(contractErrors(schema, r.body), []);
   } finally { f.close(); }
 });
 
