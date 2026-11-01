@@ -36,6 +36,7 @@ import { normPhrase } from './painGroups';
 import { SOURCE_DELETED_TEXT } from './interviewSessions';
 import type { ModuleSlug } from './cycleValidate';
 import { FINDING_KINDS, norm, parseAmount, type FindingKind } from './interviewFindings';
+import { untrustedBlock } from './ai/untrusted';
 
 /** One transcript segment, as #1470 stores a `final` one. Offsets in ms. */
 export interface Segment {
@@ -748,10 +749,12 @@ export async function askTranscript(
   return { ok: true, answer: answers.join(' '), cites, receipt };
 }
 
-/** Delimiters vary per message; embedded delimiters remain part of the transcript data. */
+/**
+ * Delimiters vary per message; embedded delimiters remain part of the transcript data.
+ * D1506: the shared framing (`untrustedBlock`), so every outside text reaches a model the same way.
+ */
 export function transcriptData(segments: readonly Segment[]): string {
-  const delimiter = `TRANSCRIPT_${crypto.randomUUID()}`;
-  return `BEGIN_${delimiter}\n${transcriptLines(segments)}\nEND_${delimiter}`;
+  return untrustedBlock('transcript', transcriptLines(segments));
 }
 export function transcriptLimit(segments: readonly Segment[], calls: number): string | null {
   const bytes = segments.reduce((n, s) => n + new TextEncoder().encode(s.text).length + new TextEncoder().encode(s.speaker || '').length, 0);
