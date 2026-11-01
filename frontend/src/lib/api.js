@@ -4471,6 +4471,8 @@ export const api = {
   updateMyAdvisorSessionType: (id, data) =>
     request(`/advisors/me/session-types/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   listMyAdvisorBookingLinks: () => request('/advisors/me/booking-links'),
+  // D1597 (#3870): Advisor › Expertise › Visibility — requests per booking link, opens of your writing; views and engagements are not recorded.
+  getMyAdvisorVisibility: (days) => request(`/advisors/me/visibility${days ? `?days=${encodeURIComponent(days)}` : ''}`),
   // 409 on a slug another advisor already holds — the slug resolves from the
   // URL alone, so it is unique across the table rather than per advisor.
   createMyAdvisorBookingLink: (data) =>

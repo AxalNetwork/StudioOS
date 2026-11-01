@@ -22,13 +22,36 @@ export const FILL_PAGES = Object.freeze({
   'validate/experiments': 'Founder · Validate · Experiments and evidence',
   'build/solution-design': 'Founder · Build · Solution design',
   'build/prototype-mvp': 'Founder · Build · Prototype / MVP',
+  // #3740 part 1: the KPI form. Its one field is `measured`: connectors only, never Eadwyn.
+  'grow/revenue-and-traction': 'Founder · Grow · Revenue and traction',
 });
+
+/**
+ * #3740 part 1: each Edit form, by its key, and the FILL form it fills. An
+ * Edit reads its row (`record`), so a blank field of a saved row draws Ask.
+ */
+export const EDIT_FILL_FORMS = Object.freeze({
+  'edit-theme': 'theme',
+  'edit-segment': 'segment',
+  'edit-hypothesis': 'hypothesis',
+  'edit-feature': 'feature',
+  'edit-must-have': 'must-have',
+  // A KPI keeps its history: its Edit posts a new value, so it names no row.
+  'edit-kpi': 'kpi',
+});
+
+/** A row id an Edit sends as `record`: a positive integer, or null (a KPI's key is not a row). */
+export function fillRecordId(id) {
+  const n = typeof id === 'number' ? id : /^[1-9]\d*$/.test(String(id ?? '')) ? Number(id) : NaN;
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
 
 /** The sheet a cycle form opens, `{ page, form }`, or null when FILL_FIELDS lists none of its fields. */
 export function fillTarget(cycle, slug, formKey) {
   const page = FILL_PAGES[`${cycle}/${slug}`];
   if (!page || typeof formKey !== 'string' || !formKey) return null;
-  return fieldsOf(page, formKey).length ? { page, form: formKey } : null;
+  const form = EDIT_FILL_FORMS[formKey] || formKey;
+  return fieldsOf(page, form).length ? { page, form } : null;
 }
 
 /** A module's first Add form that has a sheet, for its "Fill with Eadwyn" (AF1), or null. */

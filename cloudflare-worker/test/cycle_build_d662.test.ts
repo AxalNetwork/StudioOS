@@ -254,9 +254,10 @@ test('solution links and founder risks share the project but not the analyst reg
 
 test('roadmap uses recorded done moves, owner, KPI and target date', async () => {
   const { db, env } = fixture();
+  const month = new Date().toISOString().slice(0, 7);
   const today = new Date().toISOString().slice(0, 10);
-  const month = today.slice(0, 7);
-  // Midnight is already recorded even when CI runs before noon on the first.
+  // Both moves sit at the first instant of this month: the read counts only moves at or before now, and a
+  // fixed 12:00 on the 1st is still in the future for the first half of every month's first day.
   db.exec(`INSERT INTO roadmap_okrs(id,project_id,objective,kanban_status) VALUES
       (1,101,'Launch beta','now'), (2,101,'Run pilots','done'), (3,101,'Ship report','done');
     INSERT INTO okr_column_moves(id,project_id,okr_id,to_status,moved_at) VALUES
