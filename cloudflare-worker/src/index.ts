@@ -256,6 +256,8 @@ import deckGrid from './routes/deck_grid';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
+// D1565 (#3812): one link per investor, and tailored variants.
+import deckInvestorLinks from './routes/deck_investor_links';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1377,6 +1379,8 @@ app.route('/api/decks', deckNew);
 app.route('/api/decks', deckAssist);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
+// D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckInvestorLinks);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

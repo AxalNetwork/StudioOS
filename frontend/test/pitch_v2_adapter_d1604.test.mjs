@@ -19,13 +19,20 @@ import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 
 const read = (p) => readFileSync(p, 'utf8');
 const PITCH = 'frontend/src/pages/raise/pitch';
-const HELPERS = new Set(['NOT_ON', 'SURFACES', 'unavailable', 'through', 'shown', 'availability']);
+const HELPERS = new Set(['NOT_ON', 'SURFACES', 'WIRED', 'unavailable', 'through', 'shown', 'availability']);
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
   assert.ok(methods.length >= 40);
-  for (const name of methods) {
+  // D1565 (#3812): a swapped surface is on; its body calls its client through().
+  assert.deepEqual([...adapter.WIRED].sort(), ['investorLinks', 'withdrawInvestorLink']);
+  const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
+  for (const name of adapter.WIRED) {
+    assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
+    assert.deepEqual(adapter.availability(name), { available: true, issue: adapter.SURFACES[name].issue });
+  }
+  for (const name of methods.filter((m) => !adapter.WIRED.has(m))) {
     const answer = await adapter[name]('synthetic-deck', { synthetic: true });
     assert.deepEqual(answer, { available: false, reason: NOT_ON, issue: adapter.SURFACES[name].issue }, name);
     assert.ok(Object.isFrozen(answer), `${name}: a surface must not be able to turn it into an answer`);
@@ -43,7 +50,7 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
     stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,
     media: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808,
-    brandLocks: 3819, pptxImport: 3809, investorLinks: 3812, comments: 3817, slideAnalytics: 3820,
+    brandLocks: 3819, pptxImport: 3809, investorLinks: 3812, withdrawInvestorLink: 3812, comments: 3817, slideAnalytics: 3820,
     presence: 3824, cardStatus: 3826, rehearse: 3827, walkthrough: 3837, retryFailed: 3879, unseenBatches: 3879,
     markSeen: 3879, setDeckSource: 3881,
   };
@@ -55,7 +62,10 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
 
 test('the seam reaches no network, and no client method exists for a route that is not on main', () => {
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
-  assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest|lib\/api/);
+  assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
+  // D1565 (#3812): the one client the seam may import is a swapped surface's, whose route is on this branch.
+  assert.deepEqual([...src.matchAll(/lib\/api[^'"]*/g)].map((m) => m[0]), ['lib/api/deckInvestorLinks.js']);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckInvestorLinks\)/);
   assert.doesNotMatch(codeOnly(read(`${PITCH}/deckV2Model.js`)), /request\(|fetch\(|lib\/api|from 'react'/);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
   // #3749 part 1 merged as #3925: Grid has a real read route and client.

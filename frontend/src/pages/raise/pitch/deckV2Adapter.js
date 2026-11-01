@@ -28,6 +28,7 @@
  */
 
 import { LATER, NOT_ON } from './deckV2Model.js';
+import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 
 export { NOT_ON };
 
@@ -73,6 +74,7 @@ export const SURFACES = Object.freeze({
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
   pptxImport: { issue: 3809, what: 'Start from a .pptx template' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
+  withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },
   slideAnalytics: { issue: 3820, what: 'Per-slide investor analytics' },
   presence: { issue: 3824, what: 'Who else is editing, and Suggest mode' },
@@ -149,7 +151,9 @@ export const consistency = off('consistency');
 export const deckActions = off('deckActions');
 export const brandLocks = off('brandLocks');
 export const pptxImport = off('pptxImport');
-export const investorLinks = off('investorLinks');
+// D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.
+export const investorLinks = (deckId) => through(() => deckInvestorLinksApi.investorLinks(deckId), SURFACES.investorLinks.issue);
+export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInvestorLinksApi.withdrawInvestorLink(deckId, shareId), SURFACES.withdrawInvestorLink.issue);
 export const comments = off('comments');
 export const slideAnalytics = off('slideAnalytics');
 export const presence = off('presence');
@@ -161,5 +165,8 @@ export const unseenBatches = off('unseenBatches');
 export const markSeen = off('markSeen');
 export const setDeckSource = off('setDeckSource');
 
+/** The surfaces whose route has landed: their reads go to the Worker. */
+export const WIRED = Object.freeze(new Set(['investorLinks', 'withdrawInvestorLink']));
+
 /** Synchronous: whether a surface is on, for a menu that greys its item before any read. */
-export const availability = (name) => (SURFACES[name] ? unavailable(SURFACES[name].issue) : null);
+export const availability = (name) => (!SURFACES[name] ? null : WIRED.has(name) ? Object.freeze({ available: true, issue: SURFACES[name].issue }) : unavailable(SURFACES[name].issue));
