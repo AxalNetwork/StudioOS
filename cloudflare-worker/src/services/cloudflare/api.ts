@@ -33,8 +33,9 @@ export const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4';
 /**
  * The OAuth scopes a Cloudflare grant may carry, every one a read. They are
  * the scopes Cloudflare's own Workers Builds and Workers Observability servers
- * asked for (cloudflare/mcp-server-cloudflare, read 2026-11-01), without
- * `offline_access` when no refresh is kept.
+ * asked for (cloudflare/mcp-server-cloudflare, read 2026-11-01).
+ * `offline_access` is accepted when granted but is optional; the required
+ * read scopes below do not require a refresh grant.
  */
 export const CLOUDFLARE_READ_SCOPES = Object.freeze([
   'user:read',
