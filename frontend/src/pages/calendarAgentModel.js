@@ -9,6 +9,9 @@
  * #3849's `agent_duties`). Nothing here says a number the read did not carry:
  * a count, a cost or an estimate that is missing is "Not recorded", never 0.
  */
+import { NOT_RECORDED } from '../lib/absence';
+import { ADD_TOKENS_PATH } from '../lib/aiTokens';
+
 
 /** The Worker's kind for a session, once #3957 adds it to the calendar read. */
 export const AGENT_KIND = 'agent_session';
@@ -16,7 +19,7 @@ export const AGENT_KIND = 'agent_session';
 /** The sixth source family the addendum draws (teal), added to `FAMILIES` with the kind by #3957. */
 export const AGENT_FAMILY = Object.freeze({ key: 'agents', label: 'AI agents' });
 
-export const NOT_RECORDED = 'Not recorded';
+export { NOT_RECORDED };
 
 /** CAL8: the line under Save, and the line under the estimate. */
 export const PROPOSALS_LINE = 'Its work comes back as proposals in Approvals. Nothing is applied until someone accepts it.';
@@ -91,7 +94,7 @@ export function skipReason(session) {
       return {
         key: 'out_of_tokens', title: 'Out of AI tokens',
         line: `Skipped. ${who}’s AI tokens cannot cover the hold${hold ? ` of ${hold}` : ''}. Nothing was charged. The next session runs if the balance allows.`,
-        actions: [{ label: 'Add tokens', to: '/pricing?for=models#add-tokens', primary: true }, { label: 'Open Usage ›', to: USAGE_PATH }],
+        actions: [{ label: 'Add tokens', to: ADD_TOKENS_PATH, primary: true }, { label: 'Open Usage ›', to: USAGE_PATH }],
       };
     }
     case 'tool_disconnected': {
@@ -146,7 +149,7 @@ export function repeatLine(schedule) {
     if (!d || Number.isNaN(d.getTime())) return NOT_RECORDED;
     const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: s.zone || undefined });
     const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: s.zone || undefined });
-    return `Once · ${day}, ${time}${city ? ` ${city}` : ''}`;
+    return `Once · ${day.replace(',', '')}, ${time}${city ? ` ${city}` : ''}`;
   }
   if (s.cadence === 'daily') return tail ? `Daily · ${tail}` : 'Daily';
   if (s.cadence === 'weekly') {
