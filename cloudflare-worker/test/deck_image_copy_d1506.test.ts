@@ -126,6 +126,7 @@ async function fixture() {
 type F = Awaited<ReturnType<typeof fixture>>;
 const token = (who: number) => new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
 async function call(f: F, path: string, init: { method?: string; json?: unknown; form?: FormData } = {}) {
+  if (init.method === 'PUT' && /^\/api\/decks\/\d+$/.test(path) && init.json && typeof init.json === 'object') init = { ...init, json: { model_version: 2, ...init.json } };
   const headers: Record<string, string> = { Authorization: `Bearer ${await token(2)}` };
   if (init.json !== undefined) headers['content-type'] = 'application/json';
   const res = await f.app.request(ORIGIN + path, { method: init.method ?? 'POST', headers, body: init.form ?? (init.json !== undefined ? JSON.stringify(init.json) : undefined) }, f.env);
@@ -150,7 +151,7 @@ test('a save copies an outside image in and names the copy; one that cannot be c
     const before = f.versions();
     // #3920: each save is made on top of the newest version.
     let current = s.body.id;
-    for (const [url, reason] of [['https://10.0.0.7/x.png', null], ['https://hop.example.test/r', 'host_refused'],
+    for (const [url, reason] of [['https://10.0.0.7/x.png', null], ['https://hop.example.test/r', 'ip_literal'],
       ['http://img.example.test/a.jpg', null], ['https://img.example.test/huge.png', 'image_too_large'], ['https://img.example.test/gone.png', 'fetch_failed']] as const) {
       const r = await call(f, `/api/decks/${current}`, { method: 'PUT', json: { slides: cardWith(url), title: 'Synthetic deck' } });
       if (reason === null) {

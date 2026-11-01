@@ -254,6 +254,7 @@ async function fixture() {
 type F = Awaited<ReturnType<typeof fixture>>;
 const token = (who: number) => new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
 async function call(f: F, path: string, init: { method?: string; json?: unknown; form?: FormData } = {}) {
+  if (init.method === 'PUT' && /^\/api\/decks\/\d+$/.test(path) && init.json && typeof init.json === 'object') init = { ...init, json: { model_version: 2, ...init.json } };
   const headers: Record<string, string> = { Authorization: `Bearer ${await token(2)}` };
   if (init.json !== undefined) headers['content-type'] = 'application/json';
   const res = await f.app.request(ORIGIN + path, { method: init.method ?? 'POST', headers, body: init.form ?? (init.json !== undefined ? JSON.stringify(init.json) : undefined) }, f.env);
