@@ -1,16 +1,13 @@
 import { count, day, summary, title, top, usdCents } from './format.js';
-import { ADVISOR_EXPERTISE_COPY } from '../noStoreCopy.js';
 
 /*
  * `/expertise` — Advisor Canvas V4, "Package what I know".
  *
- * VISIBILITY IS A GAP, AND THE GAP IS THE ZONE'S OWN WORDS. V4 draws a "Where
- * you appear" panel; `COPY['/expertise'].visibility` in `AdvisorBucketRoutes`
- * says why it is empty — "There is no impression or profile-view counter
- * anywhere in the product — not for advisors, not for anyone" — and that object
- * is handed to this section rather than a second, gentler sentence being
- * written here. A board section can never be kinder than the page behind it,
- * because it is reading the same object the page reads.
+ * VISIBILITY READS WHAT IS RECORDED (D1597, mounted by D1424). V4 draws a
+ * "Where you appear" panel. It was a gap card; it is now requests per booking
+ * link in the last 30 days, the same read the zone page makes, with the
+ * Worker's own sentence that no profile view is recorded as its footnote. A
+ * board section can never be kinder than the page behind it.
  *
  * THINKING COUNTS OPENS ON THIS HUB, AND SAYS SO. V4 subtitles it "6 pieces ·
  * 14,200 reads". `articles.views` is real, but it counts opens of the article
@@ -30,6 +27,13 @@ export default function advisorExpertiseBoard(role, api) {
       services: () => api.listMyAdvisorServices(),
       proof: () => api.listMyAdvisorProof(),
       thinking: () => api.listMyAdvisorThinking(),
+      // D1597 answers 200 with `surfaces: null` when that store failed. That is
+      // a failed read, so it rejects here and the board draws its own
+      // unreadable state, never this section's "no booking link" empty line.
+      visibility: () => api.getMyAdvisorVisibility(30).then((d) => {
+        if (!Array.isArray(d?.surfaces)) throw new Error('Your booking links could not be read');
+        return d;
+      }),
     },
     sections: [
       {
@@ -114,8 +118,14 @@ export default function advisorExpertiseBoard(role, api) {
         anchor: 'ex-visibility',
         title: 'Visibility',
         span: 'half',
-        // The zone page's own object, imported — not a second sentence.
-        gap: ADVISOR_EXPERTISE_COPY.visibility,
+        source: 'visibility',
+        cols: '1.8fr 1fr',
+        columns: ['Booking link', 'Requests'],
+        empty: 'You have no booking link yet.',
+        // A failed surfaces read rejects in `sources` above, so `surfaces` is a list here.
+        summary: (d) => summary(count(d.surfaces.reduce((n, s) => n + (Number(s.requests) || 0), 0), 'request')),
+        rows: (d) => top(d.surfaces).map((s) => [s.name, s.requests]),
+        footnote: (d) => summary('Requests in the last month, per link.', d?.views_note),
       },
     ],
   };

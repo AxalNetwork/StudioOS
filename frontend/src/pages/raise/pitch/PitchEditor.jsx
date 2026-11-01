@@ -34,6 +34,8 @@ import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { refreshCard } from './figuresModel';
 import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
+import { aspectOf, withAspect } from './gridModel';
+import { reflowCards } from './deckReflow';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
@@ -399,6 +401,24 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   }, [placeRef, readOnly, model]);
   const move = (from, to) => { setCards((cs) => moveCard(cs, from, to)); setSel(to); setPickState(NO_PICK); };
 
+  // D1554 (#3801): ⋯ › Slide size reflows the draft; what no longer fits moves
+  // to each card's notes (`deckReflow.js`). One Undo, while the sheet is open,
+  // puts the cards and the size back as they were.
+  const [sizeUndo, setSizeUndo] = useState(null);
+  const changeSize = (aspect) => {
+    if (aspectOf(theme?.aspect) === aspect) return;
+    const r = reflowCards(cards, aspect);
+    setSizeUndo(r.count ? { cards, theme, count: r.count } : null);
+    setCards(r.cards);
+    setTheme(withAspect(theme, aspect));
+  };
+  const undoSize = () => {
+    if (!sizeUndo) return;
+    setCards(sizeUndo.cards);
+    setTheme(sizeUndo.theme);
+    setSizeUndo(null);
+  };
+
   const saved = (fresh) => {
     const d = fresh?.deck || fresh;
     const b = { deck: d, cards: cardsOf(d), theme: d.theme ?? null, audience: d.audience ?? null };
@@ -520,7 +540,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <ThemeSheet model={model} theme={theme} audience={audience} kit={kit} readOnly={readOnly}
           onTheme={setTheme} onAudience={setAudience} onApplyAll={() => setDialog({ kind: 'apply-all' })} onClose={() => setSheet(null)} />
       ) : null}
-      {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onTheme={setTheme} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onSize={changeSize} moved={sizeUndo?.count ?? 0} onUndo={undoSize}
+        onClose={() => { setSizeUndo(null); setSheet(null); }} /> : null}
       {sheet === 'structure' && card ? (
         <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })} onClose={() => setSheet(null)} />
       ) : null}

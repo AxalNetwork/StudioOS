@@ -67,8 +67,9 @@ test('Explorer sees no create control; a working profile can create from the swi
       const view = await mount(h(Harness, { role }));
       try {
         const toggle = view.buttons()[0]; await act(async () => { view.pr(toggle).onClick(); });
-        if (role === 'exploring') assert.doesNotMatch(view.text(), /Add a new company/);
-        else assert.match(view.text(), /Add a new company/);
+        // D1413 (#3696, PF5): the row reads "Create company".
+        if (role === 'exploring') assert.doesNotMatch(view.text(), /Create company/);
+        else assert.match(view.text(), /Create company/);
       } finally { await view.unmount(); }
     }
   } finally { api.listMyCompanies = originalList; }

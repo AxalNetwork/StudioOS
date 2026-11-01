@@ -153,8 +153,6 @@ export function renderRatchet(cases, notYet, verdicts, inScope = () => true) {
  */
 export const RENDER_NOT_YET = {
   2097: [
-    'Founder /studio',
-    'Founder /studio/tickets/new',
     'Founder /validate/inbox',
     'Founder /build/team',
     'Founder /build/marketplace',
@@ -162,7 +160,6 @@ export const RENDER_NOT_YET = {
     'Founder /raise/legal-engine',
   ],
   2098: [
-    'Investor /studio',
     'Investor /funds/performance',
   ],
   2099: [
@@ -181,7 +178,6 @@ export const RENDER_NOT_YET = {
   offCanvas: [
     'Founder /spinout-lab',
     'Founder /profile',
-    'Founder /deals',
     'Founder /portfolio',
     'Founder /pipeline',
     'Founder /email', // D1344: Email, off the canvas like Messages
@@ -203,8 +199,6 @@ export const RENDER_NOT_YET = {
     'Investor /referrals',
     'Investor /updates',
     'Investor /studio/archetype',
-    'Investor /wellbeing',
-    'Investor /projects',
     'Advisor /email', // D1344: Email, off the canvas like Messages
     'Advisor /help',
     'Advisor /pricing',

@@ -7,6 +7,10 @@
  *   - each zone is loading, unreadable (with Retry), not recorded (with its
  *     reason), empty, or ready, and a missing store is never drawn as zero;
  *   - no founder route or label says "Home".
+ *
+ * D1419 (#3698): the zones are Studio modules now, drawn in the member's
+ * layout (here the founder default); "Do these next" and "Activity across the
+ * platform" are gone, and "Module map" is the module "Lab tools".
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,13 +21,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import FounderStudioBody from '../src/pages/founder/FounderStudioBody.jsx';
+import { studioFromReads } from '../src/pages/studio/useStudioLayout.js';
 import {
-  summaryOf, progressOf, actionsOf, activityOf, modulesOf, profileOf, questionsOf, headerOf, companyProgress,
+  summaryOf, progressOf, actionsOf, modulesOf, profileOf, questionsOf, headerOf, companyProgress,
   failedRead, READY, LOADING, UNREADABLE, NOT_RECORDED, EMPTY,
 } from '../src/pages/founder/founderStudioModel.js';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 
-const NOW = Date.parse('2026-10-06T12:00:00Z');
 const USER = { name: 'Fay Founder', email: 'fay@example.test' };
 const LAB = {
   active: true, week: 2, days_remaining: 18, cohort: '4',
@@ -53,29 +57,42 @@ const READS = {
     { key: 'b', label: 'Set a 90-day roadmap', done: true, href: '/build/roadmap' },
   ] },
   scores: { scores: [{ total_score: 71.4, tier: 'B' }] },
-  activity: { items: [
-    { action: 'customer_interview_logged', details: 'Ops lead, Acme', created_at: '2026-10-06 09:00:00' },
-    { action: 'okrs_created', details: '{"n":3}', created_at: '2026-10-05 09:00:00' },
-    { action: 'old_thing', details: null, created_at: '2026-09-20 09:00:00' },
-  ] },
 };
+// The Worker's founder catalogue and default (D1418), as `GET /api/studio/*` answer them.
+const MODULES = { profile: 'founder', groups: [{ key: 'studio', label: 'Studio' }], modules: [
+  { key: 'company_progress', title: 'Company progress', group: 'studio', purpose: 'p', href: null, default_size: 'full', in_default: true, locked_by_plan: false, plan: null },
+  { key: 'eadwyn_questions', title: 'Eadwyn’s questions', group: 'studio', purpose: 'p', href: null, default_size: '1/2', in_default: true, locked_by_plan: false, plan: null },
+  { key: 'lab_tools', title: 'Lab tools', group: 'studio', purpose: 'p', href: '/spinout-lab', default_size: '1/2', in_default: true, locked_by_plan: false, plan: null },
+] };
+const LAYOUT = { profile: 'founder', source: 'default', layout: [{ key: 'company_progress', size: 'full' }, { key: 'eadwyn_questions', size: '1/2' }, { key: 'lab_tools', size: '1/2' }], revision: null, updated_at: null, dropped: [] };
+const STUDIO = studioFromReads({ profile: 'founder', viewer: USER, modules: MODULES, layout: LAYOUT });
 const render = (reads, extra = {}) => renderedText(renderToStaticMarkup(createElement(MemoryRouter, null,
-  createElement(FounderStudioBody, { user: USER, reads, onRetry: () => {}, now: NOW, ...extra }))));
+  createElement(FounderStudioBody, { user: USER, reads, onRetry: () => {}, studio: STUDIO, ...extra }))));
 
-test('/studio draws the canvas’s zones for a founder', () => {
+test('/studio draws the fixed blocks and the founder default’s modules', () => {
   const t = render(READS);
-  for (const zone of ['Do these next', 'Company progress', 'Eadwyn’s questions', 'Activity across the platform', 'Module map', 'Your founder profile', 'Holding progress', 'What this adds up to']) {
+  for (const zone of ['Company progress', 'Eadwyn’s questions', 'Lab tools', 'Your founder profile', 'Holding progress', 'What this adds up to']) {
     assert.match(t, new RegExp(zone), `${zone} is missing`);
   }
   assert.match(t, /Week 2 · Day 11/);
   assert.match(t, /NovaCraft AI · Fay Founder · Cohort 4/);
-  assert.match(t, /Lock MVP scope/);
-  assert.doesNotMatch(t, /Set a 90-day roadmap/, 'a done checklist item was listed as next');
+  assert.match(t, /Continue where you left off/);
   assert.match(t, /Have you ever owned a revenue number end to end\?/);
   assert.match(t, /18 answered · 5 open/);
-  assert.match(t, /Customer interview logged · Ops lead, Acme/);
-  assert.doesNotMatch(t, /Old thing/, 'activity older than seven days was drawn');
   assert.match(t, /Readiness71/);
+});
+
+test('D1419: "Do these next", "Activity across the platform" and the activity read are gone', () => {
+  // Mutations checked: restoring either zone in FounderStudioBody, or the activity read in the home, turns this red.
+  const t = render(READS);
+  for (const gone of ['Do these next', 'Activity across the platform', 'Module map']) assert.doesNotMatch(t, new RegExp(gone), `${gone} is drawn`);
+  const body = codeOnly(readFileSync(new URL('../src/pages/founder/FounderStudioBody.jsx', import.meta.url), 'utf8'));
+  assert.doesNotMatch(body, /Do these next|Activity across the platform|activityOf/);
+  const home = codeOnly(readFileSync(new URL('../src/pages/founder/FounderStudioHome.jsx', import.meta.url), 'utf8'));
+  assert.doesNotMatch(home, /getRecentActivity/);
+  // Continue still links the checklist's first open item, never a done one.
+  const html = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(FounderStudioBody, { user: USER, reads: READS, onRetry: () => {}, studio: STUDIO })));
+  assert.match(html, /data-testid="link-founder-continue" href="\/build\/roadmap"/);
 });
 
 test('the summary strip reads each store, and a missing one is Not recorded, never a zero', () => {
@@ -101,40 +118,35 @@ test('the summary strip reads each store, and a missing one is Not recorded, nev
   assert.doesNotMatch(t, /Readiness0/);
 });
 
-test('a failed read is Unreadable in its own zone, with a retry, and blanks nothing else', () => {
-  const reads = { ...READS, lab: failedRead('lab down'), activity: failedRead('activity down') };
+test('a failed read is "could not be read · Try again" in its own module, and blanks nothing else', () => {
+  const reads = { ...READS, lab: failedRead('lab down') };
   assert.equal(progressOf(reads.lab).state, UNREADABLE);
   assert.equal(modulesOf(reads).state, UNREADABLE);
-  assert.equal(activityOf({ activity: reads.activity, now: NOW }).state, UNREADABLE);
   const s = summaryOf(reads);
   assert.equal(s.find((x) => x.k === 'Company progress').state, UNREADABLE);
   assert.equal(s.find((x) => x.k === 'Profile complete').state, READY, 'a Lab failure blanked the profile tile');
   const t = render(reads);
-  assert.match(t, /The Lab state could not be read/);
-  assert.match(t, /Your activity could not be read/);
-  assert.match(t, /Retry/);
-  assert.match(t, /Lock MVP scope/, 'one failure blanked the actions');
+  assert.match(t, /Company progress could not be read · Try again/);
+  assert.match(t, /Lab tools could not be read · Try again/);
   assert.match(t, /Have you ever owned a revenue number/, 'one failure blanked the questions');
 });
 
 test('every read still in flight is loading, never empty and never a zero', () => {
   const t = render({});
-  assert.doesNotMatch(t, /Nothing is waiting on you|Nothing recorded in the last 7 days|No question is waiting/);
+  assert.doesNotMatch(t, /No question is waiting/);
   assert.match(t, /Reading…/);
-  for (const z of [actionsOf({}), progressOf(undefined), questionsOf({}), activityOf({ activity: undefined, now: NOW }), modulesOf({})]) {
+  for (const z of [actionsOf({}), progressOf(undefined), questionsOf({}), modulesOf({})]) {
     assert.equal(z.state, LOADING);
   }
   assert.ok(summaryOf({}).every((x) => x.state === LOADING || x.state === NOT_RECORDED));
   assert.ok(summaryOf({}).every((x) => x.v === null));
 });
 
-test('empty is said as empty: nothing waiting, nothing this week', () => {
+test('empty is said as empty: nothing waiting', () => {
   assert.equal(actionsOf({ ...READS, lifecycle: { checklist: [{ label: 'x', done: true }] } }).state, EMPTY);
-  assert.equal(activityOf({ activity: { items: [] }, now: NOW }).state, EMPTY);
-  const t = render({ ...READS, lifecycle: { checklist: [] }, activity: { items: [] }, queue: { queue: [] } });
-  assert.match(t, /Nothing is waiting on you right now/);
-  assert.match(t, /Nothing recorded in the last 7 days/);
+  const t = render({ ...READS, lifecycle: { checklist: [] }, queue: { queue: [] } });
   assert.match(t, /No question is waiting on you/);
+  assert.doesNotMatch(t, /Continue where you left off/, 'Continue links nothing when nothing is open');
 });
 
 test('with no company record the strip and the actions say so', () => {
@@ -166,12 +178,17 @@ test('Company progress: the Lab’s ladder, what shipped, what is open this week
   assert.ok(indie.ladder.every((l) => l.state === 'Not started'));
 });
 
-test('the module map is Active or Locked from the Lab, and a per-module percent is not drawn', () => {
+test('Lab tools is Active or Locked from the Lab in a cohort, and Not recorded outside one', () => {
   const m = modulesOf({ lab: LAB });
   assert.equal(m.items.find((x) => x.key === 'roadmap').state, 'Active');
   assert.deepEqual([m.items.find((x) => x.key === 'scoring').state, m.items.find((x) => x.key === 'scoring').note], ['Locked', 'Week 3']);
   assert.ok(!render(READS).includes('%</span>'), 'a module percent was drawn');
   assert.ok(modulesOf({ lab: { ...LAB, active: false } }).items.every((x) => x.state === 'Locked' && x.note === 'Cohort only'));
+  assert.match(render(READS), /Lab tools\d+ of \d+ active/);
+  // D1419: `cohort_only` — outside a cohort the tile says why, never a list of Locked rows (or 0 of N).
+  const indie = render({ ...READS, lab: { ...LAB, active: false } });
+  assert.match(indie, /Lab toolsNot recorded/);
+  assert.doesNotMatch(indie, /0 of \d+ active/);
 });
 
 test('the profile zone reads completion and confidence from the advisor, and mounts the shared archetype card', () => {
