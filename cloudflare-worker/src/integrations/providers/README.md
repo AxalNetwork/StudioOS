@@ -76,6 +76,14 @@ call runs at boot.
   complexity counter as `rate_limited`. Every read is
   `cloudflare-worker/src/services/linear/reads.ts`. No member can connect it
   yet: the generic sign-in needs a `REGISTRY` entry, which a later part adds.
+- D855 §4 (#3733 part 2) — `cloudflare.ts` is a member's own Cloudflare,
+  read-only, through Cloudflare's REST API (pattern C), never an MCP server.
+  It registers `connect` (410 `sign_in_only`, 403 for a support session),
+  `disconnect` and `revokeGranted` (nothing to end: no grant is issued yet)
+  and a D848 `ConnectorAdapter` (pattern `api`) with seven read tools. Its
+  `classifyCloudflareError` keeps Cloudflare's five-minute block as
+  `rate_limited`. Every read is `cloudflare-worker/src/services/cloudflare/api.ts`.
+  No member can connect it yet.
 - D713 (#1778) — `mercury.ts` is a member's own Mercury, for founders and
   partners (`personal_roles`). It registers `connect` and nothing else: no
   sync, push, webhook, preview or action. Connect takes a Read Only token,

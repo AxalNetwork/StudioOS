@@ -66,3 +66,19 @@ export function previewApiKey(credentials: CredentialBlob | null): string | null
   if (k.length <= 4) return `••••${k}`;
   return `••••${k.slice(-4)}`;
 }
+
+/**
+ * D1490 — an event channel account's credentials (`event_channel_accounts.
+ * credentials_enc`), bound to that table, column and account uid. Never
+ * returned by a read; only the job and the connect route decrypt them.
+ */
+export async function encryptChannelCredentials(env: Env, uid: string, credentials: CredentialBlob): Promise<string> {
+  return encryptColumn(env, 'event_channel_accounts', 'credentials_enc', uid, JSON.stringify(credentials));
+}
+
+export async function decryptChannelCredentials(env: Env, uid: string, blob: string | null | undefined): Promise<CredentialBlob | null> {
+  const pt = await decryptColumn(env, 'event_channel_accounts', 'credentials_enc', uid, blob);
+  if (!pt) return null;
+  try { return JSON.parse(pt) as CredentialBlob; }
+  catch { return null; }
+}

@@ -63,6 +63,7 @@ import { archetypeAccess } from '../services/archetypeEntitlement';
 import { refuse } from '../util/refusal';
 import { scheduleCalendarCancellation } from './_eventCalendar';
 import { memberEventLink } from '../services/eventLinks';
+import { onEventCancelled, onEventEdited } from '../services/eventSyndication/hooks';
 
 const events = new Hono<{ Bindings: Env }>();
 
@@ -76,7 +77,8 @@ async function auth(c: any): Promise<User | Response> {
   }
 }
 
-function canManage(event: any, user: User): boolean {
+/** The host or an admin. D1490's per-event syndication routes (`event_syndication.ts`) gate on it too. */
+export function canManage(event: any, user: User): boolean {
   return user.role === 'admin' || Number(event.host_user_id) === Number(user.id);
 }
 
@@ -662,6 +664,8 @@ events.patch('/:id', async (c) => {
 
   // Raising capacity may free seats — drain the waitlist.
   const updated = await loadEvent(c.env, id);
+  // D1490: a posted listing whose sent content changed is updated, by host or admin. Never fails the edit.
+  await onEventEdited(c.env, updated);
   if ('capacity' in body || 'waitlist_enabled' in body) {
     const promoted = await promoteWaitlist(c.env, updated as EventSeatRow);
     for (const p of promoted) {
@@ -746,6 +750,7 @@ events.post('/:id/cancel', async (c) => {
   const paidCount = paidRows.reduce((total, row) => total + Number(row.count), 0);
   await logAdminAction(c.env, u.id, u.email, 'event_cancelled_by_host', { event_id: id, paid_tickets: paidCount });
   await scheduleCalendarCancellation(c, 'event', id);
+  await onEventCancelled(c.env, id); // D1490: posted listings are cancelled on their channel
   const seated = await c.env.DB.prepare(
     `SELECT DISTINCT user_id FROM event_registrations
        WHERE event_id = ? AND user_id IS NOT NULL AND status IN ('registered','confirmed','attended','waitlisted')`,

@@ -87,7 +87,7 @@ const STORAGE = {
   areas: [
     area('data_room', 64, 859_832_320), area('diligence_files', 31, null, 3), area('research_library', 22, 50_331_648),
     area('message_attachments', 27, 100_663_296), area('interview_recordings', 4, 32_505_856),
-    ...['data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports'].map((k) => area(k, 1, 1024)),
+    ...['data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports', 'articles'].map((k) => area(k, 1, 1024)),
   ],
 };
 

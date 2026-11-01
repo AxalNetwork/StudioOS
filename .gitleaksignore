@@ -199,3 +199,8 @@ f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_complia
 # never a deployed credential. The follow-up expands a short fixture seed at
 # runtime. Pin only the already-published finding, as in D334.
 122a14aa2bb671ea2df0794f79fa0db42e30677f:cloudflare-worker/test/sms_enrolment_3707.test.ts:generic-api-key:12
+# D1597 (#3870): a synthetic signing seed used only for this test's own JWTs
+# and in-memory database, never a deployed credential. The follow-up uses a
+# low-entropy runtime seed. Pin only the already-published finding, not its
+# whole file, commit, or the generic-api-key rule.
+46ae241fbd882aa6dc15a89fa67ff963eb6ea9ff:cloudflare-worker/test/advisor_visibility_d1597.test.ts:generic-api-key:22
