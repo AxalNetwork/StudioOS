@@ -26,5 +26,15 @@ The rules for adding to this folder:
   and nothing is requested.
 - **Nothing is logged** but codes and counts.
 
-PostHog parts 2–6 (#3731) add their stores and feeds beside this file and
-read PostHog through `reads.ts` alone.
+- `metrics.ts` — D1604 (#3731 part 2): the metrics foundation. A tracked
+  metric is a saved insight the founder picked and gave a role and a module;
+  its `uid` names the venture's KPI `posthog-<uid>` (`growKpis.ts`).
+  `landFact` writes one aggregate and its `connector_fed_items` row, and a
+  fact the founder deleted stays deleted. `proposeOnce` keeps one proposal
+  per kind and source, and a decided one is never proposed again. Accept runs
+  the kind's acceptor (`registerAcceptor`), which parts 3–6 add. `fromPosthog`
+  is a module's read. Nothing here calls PostHog or writes `project_metrics`
+  or `custom_kpi_values`.
+
+PostHog parts 3–6 (#3731) add their syncs and acceptors beside these files
+and read PostHog through `reads.ts` alone.

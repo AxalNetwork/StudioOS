@@ -441,7 +441,7 @@ import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 // D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
 import notionRoutes, { notionCycleRoutes } from './routes/notion';
-import posthogRoutes from './routes/posthog';
+import posthogRoutes, { posthogCycleRoutes } from './routes/posthog';
 // D1325 (#3486): the Fill with Eadwyn sheet's read.
 import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
@@ -1383,6 +1383,8 @@ app.route('/api/research', researchSectors);
 // D664 (#1477): the Grow cycle's overview, module reads and store writes.
 // D1086 (#2951): each section's Notion sync, ahead of the cycle routers so `/:section/notion` is never read as a module.
 app.route('/api/cycles', notionCycleRoutes);
+// D1604 (#3731): each module's From PostHog, ahead of the cycle routers for the same reason.
+app.route('/api/cycles', posthogCycleRoutes);
 app.route('/api/cycles/grow', cycleGrow);
 app.route('/api/research', research);
 // D642 — usage is keyed on the caller, across all their companies.
