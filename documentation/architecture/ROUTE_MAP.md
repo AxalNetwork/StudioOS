@@ -2068,6 +2068,14 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 | `GET /api/account/people/search?q=&company=<uid>\|&project=<id>` | signed in | `{ people: [{ uid, name, avatar_url, shared: [{ kind: 'company' \| 'connection', name }] }] }`, at most 10, by name, only people reachable from the caller, never the caller. `company` or `project` names the team being built: the caller must belong to it (403 `not_member`) and its members are left out. `avatar_url` is null (users record none). 400 `query_too_short` (under 2 letters) / `query_too_long`. Rate bucket `people_search`, 30 a minute, fail-closed. |
 | `GET /api/company/:uid` · `GET /api/projects/:id/members` | as before | `members[]` carries `email` on the caller's own row only; another member's row has no `email` key (the canvas: "Never show another member's email"). Invitation addresses to editors are unchanged (owner question T3 is open). Company Settings › Members prints no address on another member's row. |
 
+### The stage plan (D1522, #3774)
+
+`routes/deck_stage.ts`, mounted at `/api/decks` beside `deck_grid.ts`. Rules in `services/narrative/arcs.ts`, records read by `services/decks/stagePlan.ts` (also called by the one-click run). Client: `lib/api/deckStage.js` (`deckStageApi.stagePlan`), read through `deckV2Adapter.stagePlan` (a `SWAPPED` row).
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/decks/:id/stage-plan?stage=&investor_type=` | whoever may read the deck (`projectOwned`) | `{ deck_id, version, stage, stage_label, stage_source: asked \| audience \| venture \| default, investor_type, order: [{ card, title, why, weight, required, in_deck, proof: recorded \| missing \| unchecked }], warnings: [{ card, code: missing_card \| missing_proof \| unchecked_proof, message, action }], extra, sources, evidence, objections: { state, unanswered } }`. 400 for a stage or investor type not on the lists; 403; 404. No model, no charge, no write. |
+
 ### The Grid v2 (D1499, #3749)
 
 `routes/deck_grid.ts`, mounted at `/api/decks` beside `deck_check.ts`. Geometry and catalogue in `services/decks/structures.ts`, mirrored (geometry only) in `frontend/src/pages/raise/pitch/gridModel.js`. Client: `lib/api/deckGrid.js` (`deckGridApi.grid`), read through `deckV2Adapter.grid` (part 2, the one `SWAPPED` row of the seam). The editor's stage (`GridStage.jsx`), Present and the print page (`BlockGrid.jsx`) place every area with `gridModel.placeOf`, so they draw this route's boxes; ⋯ › Slide size writes `theme.aspect` with the next version save, so no route is added for it.
