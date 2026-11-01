@@ -87,9 +87,9 @@ test("D1191: the admin overview restricts capital while preserving other tools' 
     assert.equal(admin.mode, 'summary');
     assert.equal(admin.cards.length, 7);
     for (const card of admin.cards.filter((c:any)=>!['capital-relationships','data-room'].includes(c.slug))) assert.deepEqual(card,cardOf(owner,card.slug));
-    assert.deepEqual(admin.figures.map((f:any)=>f.key), ['readiness_score','runway_months']);
+    assert.deepEqual(admin.figures.map((f:any)=>f.key), ['readiness_score','runway_months','deck_views_8w','data_room_files']);
     assert.equal(owner.cards.length, 7);
-    assert.equal(owner.figures.length, 4);
+    assert.equal(owner.figures.length, 6);
     assert.ok(!JSON.stringify(admin).includes('Synthetic investor'));
   } finally { f.db.close(); }
 });

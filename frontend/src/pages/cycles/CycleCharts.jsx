@@ -15,6 +15,8 @@ import { lineSegments, maxOf, safeHref, share } from './cycleModel';
 
 const TONE = {
   v1: 'fill-axal-violet',
+  // D1610 W4: Stated evidence, between Measured (v1) and Pattern (v2).
+  v4: 'fill-violet-500',
   v2: 'fill-violet-400',
   v3: 'fill-violet-200 dark:fill-violet-900',
   grey: 'fill-gray-200 dark:fill-gray-700',
@@ -25,6 +27,7 @@ const TONE = {
 };
 const SWATCH = {
   v1: 'bg-axal-violet',
+  v4: 'bg-violet-500',
   v2: 'bg-violet-400',
   v3: 'bg-violet-200 dark:bg-violet-900',
   grey: 'bg-gray-200 dark:bg-gray-700',

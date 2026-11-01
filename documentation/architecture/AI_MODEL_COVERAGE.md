@@ -47,12 +47,12 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/baai/bge-m3` | Text Embeddings | ga | tokens_in 0.012 | Not recorded | all | O | · | · | W | W | W | W | · | · | · | G | W | · | W |
 | `@cf/baai/bge-reranker-base` | Text Classification | ga | tokens_in 0.003 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
 | `@cf/baai/bge-small-en-v1.5` | Text Embeddings | ga | tokens_in 0.020 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
-| `@cf/cloudflare/clef` | Text Generation | ga | tokens_in 0.240 | Not recorded | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
-| `@cf/cloudflare/clef-flash` | Text Generation | ga | tokens_in 0.038 | Not recorded | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
+| `@cf/cloudflare/clef` | Text Generation | ga | tokens_in 0.240 | 65536 | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
+| `@cf/cloudflare/clef-flash` | Text Generation | ga | tokens_in 0.038 | 24576 | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
 | `@cf/cloudflare/clef-omni` | Text Generation | ga | tokens_in 0.150 | 64000 | all | O | · | O | O | O | G | G | · | · | G | G | O | G | O |
 | `@cf/cloudflare/clairic` | Text Generation | beta | tokens_in 0.100 | 65536 | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/daily-co/phonellm-mini-alpha-2` | Text Generation | ga | tokens_in 0.060, tokens_out 0.240 | 262140 | all | O | G | G | G | G | G | G | · | G | G | O | O | · | O |
-| `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` | Text Generation | ga | tokens_in 0.497, tokens_out 4.881 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
+| `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` | Text Generation | ga | tokens_in 0.497, tokens_out 4.881 | 80000 | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepseek-ai/deepseek-v4-flash-0731` | Text Generation | ga | tokens_in 0.440, tokens_cached 0.014, tokens_out 1.320 | 1048576 | paid | O | O | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepseek-ai/deepseek-v4-pro-0813` | Text Generation | ga | tokens_in 1.320, tokens_cached 0.044, tokens_out 3.960 | 1048576 | paid | W | G | W | W | W | G | W | · | G | G | G | W | · | W |
 | `@cf/deepseek-ai/deepseek-v4.1-flash-1017` | Text Generation | ga | tokens_in 0.300, tokens_cached 0.006, tokens_out 1.200 | 1048576 | paid | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
@@ -77,7 +77,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/zai-org/glm-5.3-flash` | Text Generation | ga | tokens_in 0.150, tokens_cached 0.030, tokens_out 0.500 | 1048576 | paid | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
 | `@cf/openai/gpt-oss-120b` | Text Generation | ga | tokens_in 0.350, tokens_out 0.750 | 128000 | all | W | G | O | W | O | O | O | · | G | G | O | W | · | W |
 | `@cf/openai/gpt-oss-20b` | Text Generation | ga | tokens_in 0.200, tokens_out 0.300 | 128000 | all | O | G | O | O | O | G | G | · | G | G | O | O | · | O |
-| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | O | O | · | O |
+| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | 131000 | all | O | G | O | O | O | G | O | · | G | G | O | O | · | O |
 | `@hf/nousresearch/hermes-2-pro-mistral-7b` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/ai4bharat/indictrans2-en-indic-1B` | Translation | ga | tokens_in 0.342, tokens_out 0.342 | Not recorded | all | O | O | · | · | O | · | O | · | G | G | G | · | · | O |
 | `@cf/moonshotai/kimi-k2.5` | Text Generation | deprecated | tokens_in 0.600, tokens_cached 0.100, tokens_out 3.000 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -99,7 +99,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/meta/llama-3.2-1b-instruct` | Text Generation | ga | tokens_in 0.027, tokens_out 0.201 | 60000 | all | O | G | G | G | O | G | G | · | G | G | O | O | · | O |
 | `@cf/meta/llama-3.2-3b-instruct` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 80000 | all | O | G | G | G | O | G | O | · | G | O | O | O | · | O |
 | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Text Generation | ga | tokens_in 0.293, tokens_out 2.253 | 24000 | all | W | W | O | W | W | O | W | · | G | W | W | W | · | W |
-| `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | Not recorded | all | G | G | G | O | G | G | O | · | G | G | G | W | · | G |
+| `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | 131000 | all | G | G | G | O | G | G | O | · | G | G | G | W | · | G |
 | `@cf/meta/llama-guard-3-8b` | Text Generation | ga | tokens_in 0.484, tokens_out 0.030 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | W | · |
 | `@cf/llava-hf/llava-1.5-7b-hf` | Image-to-Text | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/leonardo/lucid-origin` | Text-to-Image | partner | tiles 0.006996, steps 0.000132 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
@@ -109,7 +109,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/mistral/mistral-7b-instruct-v0.1` | Text Generation | deprecated | tokens_in 0.110, tokens_out 0.190 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@hf/mistral/mistral-7b-instruct-v0.2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/mistral/mistral-7b-instruct-v0.2-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | Not recorded | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
+| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
 | `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | · | · | O | · | · | · | G | O | · | G |
 | `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | G | · | · | · | · | · | · | O | · | · | O |
@@ -120,7 +120,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/qwen/qwen3-30b-a3b-fp8` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 32000 | all | O | G | O | O | O | G | G | · | G | G | O | O | · | O |
 | `@cf/qwen/qwen3-embedding-0.6b` | Text Embeddings | ga | tokens_in 0.012 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
 | `@cf/qwen/qwen3.8-27b` | Text Generation | ga | tokens_in 0.450, tokens_out 3.200 | 262144 | all | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
-| `@cf/qwen/qwq-32b` | Text Generation | ga | tokens_in 0.660, tokens_out 1.000 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
+| `@cf/qwen/qwq-32b` | Text Generation | ga | tokens_in 0.660, tokens_out 1.000 | 24000 | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/microsoft/resnet-50` | Image Classification | ga | images 2.51 | Not recorded | all | · | · | · | O | · | · | O | · | · | · | · | O | G | · |
 | `@cf/pipecat-ai/smart-turn-v2` | Voice Activity Detection | ga | audio_minutes 0.00033795 | Not recorded | all | O | G | · | · | · | · | · | · | · | · | G | · | · | O |
 | `@cf/defog/sqlcoder-7b-2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -480,7 +480,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 - Research: **offered**, `railMatrix.json option draft:checkpoint-brief`; `railMatrix.json option draft:index-gaps`; `railMatrix.json option draft:session-brief`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **wired**, `railMatrix.json "Advisor · Home"`; `railMatrix.json "Founder · Studio"`; `railMatrix.json "Investor · Home"`; `railMatrix.json "Operating Partner · Home"`
+- Studio / Eadwyn: **wired**, `railMatrix.json "Advisor · Home"`; `railMatrix.json "Founder · Studio"`; `railMatrix.json "Investor · Home"`; `railMatrix.json "Operating Partner · Home"`; and 1 more
 - Admin consoles: **wired**, `railMatrix.json "Admin · Accounts · Trash"`; `railMatrix.json "Admin · Approvals · Advisor cohort access"`; `railMatrix.json "Admin · Approvals · Events"`; `railMatrix.json "Admin · Community · Events"`; and 6 more
 - Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Cohorts · Calendar"`; `railMatrix.json "Advisor · Cohorts · This week"`; `railMatrix.json "Advisor · Practice · Delivery"`; `railMatrix.json "Advisor · Practice · Engagements"`; and 4 more
 
@@ -903,7 +903,7 @@ chat: Prototype code, implementation drafts and technical review.
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **wired**, `routes/advisor.ts (tool_call)`; `services/advisor/rerank.ts (rerank)`
+- Studio / Eadwyn: **wired**, `services/advisor/rerank.ts (rerank)`
 - Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Platform · GitHub sync"`; `/api/ai/modules on "Super Admin · Platform · Integration keys"`; `/api/ai/modules on "Super Admin · Platform · Monitoring"`; `/api/ai/modules on "Super Admin · Platform"`; and 4 more
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 

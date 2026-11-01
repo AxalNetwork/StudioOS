@@ -5388,7 +5388,7 @@
   {
    "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "form:deck",
-   "optionLabel": "Fill from project",
+   "optionLabel": "Ask Eadwyn to draft from project",
    "kind": "write",
    "handler": "form",
    "routeTask": "rail_write",

@@ -46,6 +46,8 @@ const ROOT = resolve(process.cwd());
 // it then demands is the point.
 const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
+  ['cloudflare-worker/src/services/agents/skills', 'the Axal starter skill library (#3953, D1612): one SKILL.md per skill'],
+  ['cloudflare-worker/src/services/agents/skills/cases', 'one golden evaluation case per starter skill, for part D (#3954)'],
   ['frontend/src',                    'the SPA root — what each subtree is for'],
   ['frontend/src/pages',              'one file per route; the biggest folder in the repo'],
   ['frontend/src/components',         'shared presentational pieces'],

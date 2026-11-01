@@ -1,0 +1,30 @@
+{
+  "skill": "due-diligence-request-list",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "data_room.index": [
+        {
+          "file": "Certificate of incorporation.pdf",
+          "kind": "corporate"
+        }
+      ],
+      "cap_table.read": {
+        "holders": 4
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Certificate of incorporation.pdf"
+    ],
+    "must_say_not_recorded": [
+      "financials"
+    ],
+    "must_not_include": [
+      "shared with"
+    ]
+  }
+}
