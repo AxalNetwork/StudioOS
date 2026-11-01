@@ -5,7 +5,7 @@
 //   node --test frontend/test/model_coverage_check_3939.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkCoverage, stripComments } from '../../scripts/check-model-coverage.mjs';
+import { checkCoverage, indexOfWhole, stripComments } from '../../scripts/check-model-coverage.mjs';
 
 const CATALOGUE = [
   { id: '@cf/zai-org/glm-4.7-flash', kind: 'Text Generation', status: 'ga' },
@@ -89,6 +89,8 @@ test('deprecated: a retired id used in code, in a JSON override, or past the rou
   assert.deepEqual(rules(y), ['deprecated']);
   const z = clean(); z.sources[1].text += "\nconst LIVE = '@cf/meta/llama-3.1-8b-instruct';";
   assert.deepEqual(rules(z), ['deprecated'], 'the router allowance covers its price list only');
+  const w = clean(); w.sources.push({ path: 'scripts/lib/retired.mjs', text: "@cf/meta/llama-3.1-8b-instruct is the first thing in this file" });
+  assert.deepEqual(rules(w), ['deprecated'], 'an id at the very start of a file');
 });
 
 test('deprecated: a longer current id that starts with a retired one is not a match', () => {
@@ -123,4 +125,10 @@ test('stripComments keeps strings, a URL included, and drops both comment forms'
   assert.match(out, /https:\/\/x\.test\/a/);
   assert.doesNotMatch(out, /@cf\/old/);
   assert.match(out, /const v = "b";/);
+});
+
+test('indexOfWhole finds an id only where it ends, past an earlier longer match', () => {
+  assert.equal(indexOfWhole("'a/x-1-fp8' 'a/x-1'", 'a/x-1'), 13);
+  assert.equal(indexOfWhole("'a/x-1.5'", 'a/x-1'), -1);
+  assert.equal(indexOfWhole('a/x-1', 'a/x-1'), 0, 'at the end of the text');
 });

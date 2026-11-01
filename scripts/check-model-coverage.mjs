@@ -74,9 +74,13 @@ export function stripComments(src) {
   return out;
 }
 
-const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** An id matches only whole: a retired id must not match a current id that starts with it (the 8B and its fp8 build). */
-const idPattern = (id) => new RegExp(`${esc(id)}(?![\\w.-])`);
+/** Where `id` first appears whole, or -1: a retired id must not match a current id that starts with it (the 8B and its fp8 build). */
+export function indexOfWhole(text, id) {
+  for (let at = text.indexOf(id); at !== -1; at = text.indexOf(id, at + 1)) {
+    if (!/[\w.-]/.test(text[at + id.length] ?? '')) return at;
+  }
+  return -1;
+}
 const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 const asList = (v) => (v == null || v === '' ? [] : Array.isArray(v) ? v.filter((x) => x != null && x !== '') : [v]);
 
@@ -144,8 +148,8 @@ export function checkCoverage({ catalogue, models, jobs, kindModels, selectors =
     let body = path.endsWith('.json') ? text : stripComments(text);
     if (path === ROUTER) body = body.replace(ROUTER_PRICE_LIST, (m) => m.replace(/[^\n]/g, ' '));
     for (const id of deprecated) {
-      const m = idPattern(id).exec(body);
-      if (m) add('deprecated', `${path}:${lineOf(body, m.index)} names the deprecated ${id}`);
+      const at = indexOfWhole(body, id);
+      if (at !== -1) add('deprecated', `${path}:${lineOf(body, at)} names the deprecated ${id}`);
     }
   }
   return findings;
