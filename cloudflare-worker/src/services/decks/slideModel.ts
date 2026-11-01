@@ -30,6 +30,9 @@
  * which every reader shows as "Not recorded", never 0.
  */
 import { sanitizeBinding } from './sources';
+import { cellText, tableLines } from './tableCells';
+
+export { cellText, tableLines };
 import { diagramProblem, sanitizeDiagram } from './diagramModel';
 import { CUSTOM, STRUCTURE_IDS, areasProblem, sanitizeAreas } from './structures';
 
@@ -182,23 +185,6 @@ export function tableOf(v: any): { header: boolean; rows: Array<Array<Record<str
   if (!raw.length || !width) return null;
   const rows = raw.map((row: unknown[]) => Array.from({ length: width }, (_, i) => cellOf(row[i])));
   return { header: v?.header !== false, rows };
-}
-
-/** D1538: one cell as text: its words, its binding's source key, or ✓ / ✗; an empty cell is ''. */
-export function cellText(cell: any): string {
-  if (cell?.binding?.source_key) return String(cell.binding.source_key);
-  if (typeof cell?.check === 'boolean') return cell.check ? '✓' : '✗';
-  return typeof cell?.text === 'string' ? cell.text : '';
-}
-
-/**
- * D1538: a table block as lines, one per row, cells joined by " · ". The
- * exports write these, and the evidence check reads them, so a typed figure
- * stays beside its row label ("Customers · 42").
- */
-export function tableLines(b: any): string[] {
-  return (Array.isArray(b?.rows) ? b.rows : []).map((row: any[]) => (Array.isArray(row) ? row : []).map(cellText).join(' · ').trim())
-    .filter((l: string) => l.replace(/[\s·]/g, '') !== '');
 }
 
 /** One block's own fields, by kind; null when the kind is unknown. */

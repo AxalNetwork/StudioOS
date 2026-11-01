@@ -34,7 +34,7 @@ import type { Env } from '../types';
 import { agrees, fmtFigure, FIGURE_LABEL, FIGURE_UNIT, narrativeSectionWords, parseStatedFigures, VERSION_MARKER_KEY, type FigureKey } from './raiseCycle';
 import { EVIDENCE_RULES, type EvidenceSourceLabel } from './raiseEvidenceSources';
 import { FUND_SECTIONS, parseUseOfFundsValue } from '../util/useOfFunds';
-import { cellText } from './decks/slideModel';
+import { cellText } from './decks/tableCells';
 
 export const CLAIM_STATES = ['backed', 'founders_figure', 'mismatch', 'not_backed'] as const;
 export type ClaimState = (typeof CLAIM_STATES)[number];
