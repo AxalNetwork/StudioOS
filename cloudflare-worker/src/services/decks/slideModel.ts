@@ -232,12 +232,16 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
 }
 
 /** The deck's theme (PD8), or null for the default (the brand kit, no deck background). */
-export function sanitizeTheme(v: any, url: UrlGuard): { kind: string; background: Background | null; aspect?: '4:3' } | null {
+export function sanitizeTheme(v: any, url: UrlGuard): { kind: string; background: Background | null; aspect?: '4:3'; compliance_fls?: false; confidential?: false } | null {
   if (!v || typeof v !== 'object') return null;
   const kind = oneOf(v.kind, THEME_KINDS);
   if (!kind) return null;
   // D1499: 4:3 is kept; 16:9 is the default and is left out, so a deck saved before v2 hashes as it did.
-  return { kind, background: backgroundOf(v.background, url), ...(v.aspect === '4:3' ? { aspect: '4:3' as const } : {}) };
+  // D1546: the compliance flags are on by default, so only a flag turned off is kept (same reason).
+  return {
+    kind, background: backgroundOf(v.background, url), ...(v.aspect === '4:3' ? { aspect: '4:3' as const } : {}),
+    ...(v.compliance_fls === false ? { compliance_fls: false as const } : {}), ...(v.confidential === false ? { confidential: false as const } : {}),
+  };
 }
 
 /**

@@ -13,6 +13,7 @@ import { ClosedLink, FigureSources, NdaGate } from './raise/pitch/ShareViewerPar
 import { viewerNote } from './raise/pitch/shareModel';
 import { offersDealPack } from '../lib/shareDeckAudience';
 import { NotesPages, SourcesPage, StudioPrintCard, isStudioSlide } from './raise/pitch/PrintExtras';
+import { chromeOf } from './raise/pitch/complianceModel';
 import { SLIDE_SIZES, aspectOf } from './raise/pitch/gridModel';
 
 // Task #25 — public viewer for an investor share link, plus an authenticated
@@ -723,8 +724,8 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
               <SourcesPage appendix={deck.sources_appendix} />
             ) : studioDeck ? (
               (singleSlideIdx != null
-                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1).map((s) => <StudioPrintCard key={singleSlideIdx} slide={s} index={singleSlideIdx} aspect={deck.theme?.aspect} />)
-                : (deck.slides || []).map((s, i) => <StudioPrintCard key={i} slide={s} index={i} aspect={deck.theme?.aspect} />))
+                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1).map((s) => <StudioPrintCard key={singleSlideIdx} slide={s} index={singleSlideIdx} aspect={deck.theme?.aspect} chrome={chromeOf(deck, singleSlideIdx)} />)
+                : (deck.slides || []).map((s, i) => <StudioPrintCard key={i} slide={s} index={i} aspect={deck.theme?.aspect} chrome={chromeOf(deck, i)} />))
             ) : isAdvanced ? (
               singleSlideIdx != null ? (
                 <SingleSlideStage Template={Template} data={templateData} slideIdx={singleSlideIdx} />

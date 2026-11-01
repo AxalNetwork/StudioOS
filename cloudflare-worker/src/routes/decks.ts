@@ -5,6 +5,7 @@
  * (markdown body) + image fields, version history, restore, and
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
+import { deckCompliance } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
@@ -505,6 +506,9 @@ export function publicDeckOf(row: any): any {
     void notes;
     return card;
   });
+  // D1546: every reader of a deck (share, present, the print page the PDF and PowerPoint photograph)
+  // gets Confidential and each card's footnotes from the one rule (`compliance.ts`).
+  deck.compliance = deckCompliance(deck.slides, themeOfRow(row));
   return deck;
 }
 

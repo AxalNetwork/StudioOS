@@ -48,6 +48,7 @@
  * WHO. The deck routes' `projectOwned`: the venture's founders write, an admin
  * reads only (D895), and New deck is on the Raise + Grow plan as /generate was.
  */
+import { blockGuarantees } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -350,6 +351,8 @@ deckNew.post('/outline', async (c) => {
   let reason: string | null = null;
   if (res.ok) {
     rows = outlineFromModel(parseJsonLoose<any>(res.output), inputs.length);
+    // D1546: no proposed words may promise a return; a sentence that does is dropped before it is shown.
+    if (rows) rows = blockGuarantees(rows).value;
     if (!rows) reason = 'Eadwyn’s outline could not be read, so this is the standard outline for the length you chose.';
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page, so this is the standard outline for the length you chose. Nothing was charged.';
@@ -437,8 +440,10 @@ deckNew.post('/generate', async (c) => {
   let reason: string | null = null;
   if (res.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length, recordTexts(items));
-    wording = w.byIndex;
-    dropped = w.dropped;
+    // D1546: the guarantee-language block, before the words are proposed; each sentence dropped counts.
+    const g = blockGuarantees(w.byIndex);
+    wording = g.value;
+    dropped = w.dropped + g.dropped;
     by = wording.some((x) => x.headline || x.body) ? 'Eadwyn' : 'none';
     if (by === 'none') reason = 'Eadwyn’s words could not be read. The figures are from your records; the cards carry their titles.';
   } else if (res.refusal === 'assist_off') {
@@ -520,8 +525,9 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   let dropped = 0;
   if (res.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), 1, recordTexts(items));
-    words = w.byIndex[0];
-    dropped = w.dropped;
+    const g = blockGuarantees(w.byIndex[0]);
+    words = g.value;
+    dropped = w.dropped + g.dropped;
     if (!words.headline && !words.body) reason = 'Eadwyn’s words could not be read. The card keeps its figures and its title.';
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page, so the card was rebuilt from your records with its title. Nothing was charged.';
