@@ -33,7 +33,10 @@ browser is a different build.
   `ASPECTS`, structures `STRUCTURES`. A new theme adds baselines; it changes no
   spec.
 - **Redraw a baseline only on purpose:** run with `--update-snapshots` in the
-  pinned image and review every changed PNG in the PR.
+  pinned image and review every changed PNG in the PR. A bare host draws text
+  a shade differently and fails CI's exact comparison. From the repo root,
+  after `npm run build`:
+  `docker run --rm -e CI=1 -e PW_CHROMIUM_PATH=/ms-playwright/chromium-1194/chrome-linux/chrome -v "$PWD":/repo -w /repo/frontend mcr.microsoft.com/playwright:v1.56.1-noble npx --no-install playwright test -c tests/visual/playwright.config.mjs --update-snapshots`.
 - **Nothing leaves 127.0.0.1.** A screen that needs the network shows what it
   shows when the read fails, and that is what is drawn.
 - `test-results/` and `playwright-report/` are output and are not committed.

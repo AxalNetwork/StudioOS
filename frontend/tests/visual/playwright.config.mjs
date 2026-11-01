@@ -9,10 +9,10 @@
  * UTC, en-US, reduced motion, light colour scheme; service workers blocked;
  * every request off 127.0.0.1 aborted, and Google Fonts answered from
  * `fonts/` (`_editor.mjs`). CI runs this in the pinned Playwright container
- * (`mcr.microsoft.com/playwright:v1.64.1-noble`, ci.yml `visual`), the same
- * version as `@playwright/test` in package-lock.json. `PW_CHROMIUM_PATH`
- * points at a Chromium already on disk when the version's own browser is
- * not installed (local runs only).
+ * (`mcr.microsoft.com/playwright:v1.56.1-noble`, ci.yml `visual`), whose
+ * Chromium (build 1194) drew the baselines; `PW_CHROMIUM_PATH` points the
+ * lockfile's `@playwright/test` at it. Redraw a baseline only in that image:
+ * a bare host draws text a shade differently and fails the exact comparison.
  *
  *   npm run build                              (repo root: builds docs/)
  *   cd frontend && npx playwright test -c tests/visual/playwright.config.mjs
