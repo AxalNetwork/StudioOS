@@ -17,6 +17,7 @@ import { CATALOGUE, isOffered, type CatalogueModel, type CatalogueSwitches, type
 import { AI_MARKUP, billedUnitPrice, unitPrice } from './pricing';
 import { railOptionRows, railRows } from './railMatrix';
 import { MODEL_CONNECTIONS, connectionOnPage } from './moduleConnections';
+import { MODEL_LOCKS } from './modelUseCases';
 
 /** What each unit's price is per, as the page prints it. */
 export const UNIT_WORDS: Readonly<Record<PriceUnit, string>> = Object.freeze({
@@ -115,7 +116,8 @@ export function publicModels(env: CatalogueSwitches): PublicModel[] {
       pages.set(m.id, list);
     }
   }
-  return CATALOGUE.filter((m) => isOffered(m, env)).map((m) => {
+  // #3934 (§4): a hidden model is offered nowhere, so the Models tab does not list it either.
+  return CATALOGUE.filter((m) => isOffered(m, env) && MODEL_LOCKS[m.id] !== 'hidden').map((m) => {
     const billed: Record<string, number> = {};
     const words: Record<string, string> = {};
     for (const unit of Object.keys(m.neurons ?? {}) as PriceUnit[]) {
