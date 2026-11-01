@@ -4,7 +4,7 @@ import { BlockView } from './BlockGrid';
 import { ChartBlock } from './ChartTools';
 import { overlayStyle } from './imageModel';
 import { SOURCE_NOT_RECORDED, cardOf } from './presentExportModel';
-import { KIT_FAILED, NO_KIT } from './editorModel';
+import { KIT_FAILED, NO_KIT, chromeOf } from './editorModel';
 import { areaLabel, askAreaName } from './deckV2Model';
 import { GRID, aspectOf, baselineShare, frameOf, placeOf, ratioOf } from './gridModel';
 import { SourceChip } from './SourcesBoards';
@@ -100,9 +100,34 @@ function GridOverlay({ aspect }) {
   );
 }
 
+/**
+ * D1500 (pd3, pd3-d): the chrome set once in `theme.chrome` and drawn on every
+ * card: the logo corner (top left), Confidential (top right), the footer text
+ * (bottom left) and the page number (bottom right). It sits on the slide, so it
+ * keeps the brand theme in dark mode too, and it never takes a click.
+ */
+export function CardChrome({ chrome, pageLabel = null, colours, logo = null }) {
+  if (!chrome) return null;
+  const tone = { color: colours?.muted };
+  const cls = 'pointer-events-none absolute font-mono text-[9.5px] uppercase tracking-wide';
+  return (
+    <span aria-hidden="true" data-testid="pitch-card-chrome">
+      {chrome.logo_corner ? (
+        logo
+          ? <img src={logo} alt="" className="pointer-events-none absolute left-3 top-2 h-6 max-w-[96px] object-contain" data-testid="pitch-chrome-logo" />
+          : <span className={`${cls} left-3 top-2`} style={tone} data-testid="pitch-chrome-logo">Logo</span>
+      ) : null}
+      {chrome.confidential ? <span className={`${cls} right-3 top-2 font-bold`} style={tone} data-testid="pitch-chrome-confidential">Confidential</span> : null}
+      {chrome.footer_text ? <span className={`${cls} bottom-2 left-3 max-w-[70%] truncate normal-case`} style={tone} data-testid="pitch-chrome-footer">{chrome.footer_text}</span> : null}
+      {chrome.page_number && pageLabel ? <span className={`${cls} bottom-2 right-3`} style={tone} data-testid="pitch-chrome-page">{pageLabel}</span> : null}
+    </span>
+  );
+}
+
 export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
   selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
+  pageLabel = null,
 }) {
   const aspect = aspectOf(theme?.aspect);
   const areas = useMemo(() => areasOf(card, model), [card, model]);
@@ -320,6 +345,7 @@ export default function GridStage({
             })}
           </div>
         ) : <FieldedCard card={card} index={index} colours={colours} />}
+        <CardChrome chrome={chromeOf(theme)} pageLabel={pageLabel} colours={colours} logo={kit?.data?.kit?.logo_url || null} />
         {box || ghost ? (
           <div className={`pointer-events-none ${LAYER}`} aria-hidden="true" data-testid="pitch-editor-drag-layer">
             {box ? <span className="rounded-[6px] border-2 border-dashed border-violet-500 bg-violet-400/10" style={placeOf(box, aspect)} data-testid="pitch-editor-marquee" /> : null}
