@@ -2062,3 +2062,11 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 | `GET /api/decks/:id/grid` | whoever may read the deck (`projectOwned`) | `{ deck_id, version, aspect: '16:9' \| '4:3', slide, frame, cell, baseline: 8, grid: { cols: 12, rows: 6 }, structures: [17 × { id, label, use, areas, background?, recommended? }], cards: [{ index, structure, derived, areas: [{ id, c1, c2, r1, r2, order, inset, align, role?, box }] }] }`. A card saved before v2 reads `structure: 'custom', derived: true`, its areas derived from its blocks. Every `box` is `boxOfAt(area, aspect)` in slide pixels. 403 / 404. |
 
 Saves: `PUT`/`POST` of a version keep `card.structure` (one of the 17, or `custom`) and `card.areas` (≤ 12, whole cells, no overlap) and refuse a bad one with its sentence (`modelProblems`); `theme.aspect` keeps `4:3`, and 16:9 is the default left out.
+
+### Learning on the Calendar: a member's own learning plan (#3959, Worker half)
+
+- **Worker:** `routes/learning_plan.ts` at `/api/learning/plan` (mounted before `learning.ts`): `GET /?from=&to=` (at most 92 days; each item with its `occurrences`, `href`, `available`, `status` and `done_recorded_by`), `POST /`, `PATCH /:uid`, `DELETE /:uid`, `POST /:uid/done`. Service `services/learningPlan.ts`; migration 758 (`learning_plan_items`, `learning_plan_reminders`).
+- **Rules:** only a subject `canSeeLearning` allows is planned (else 404 `not_found`); a webinar keeps its own time (409 `webinar_time_fixed` on a move) and registers through D560's capacity check (409 `full`); an exam plan never starts an attempt; done is automatic when Learning records it; every statement binds the caller; a support session is refused.
+- **Calendar:** the `learning` kind in the source registry (`services/calendar.ts`, family "Learning"), page-only like `compliance_due`: plan occurrences and registered webinars, each linked to its Learning page. Program due dates are not included: no program records one.
+- **Reminders:** the 5-minute cron's `sendPlanReminders`, through `notify()` (category `calendar`).
+- **Client:** `lib/api/learningPlan.js` (`learningPlanApi`). **Pages wait on design:** "Add to my plan", `/learning/plan` and the Calendar's Learning actions wait on LRN1–LRN3 and CAL12 (#3723, `needs-design`).
