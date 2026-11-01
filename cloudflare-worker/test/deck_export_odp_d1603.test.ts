@@ -23,6 +23,7 @@ import { ODP_MIMETYPE, PAGE_CM, writeOdp, chartCaption, chartParas } from '../sr
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES } from '../src/services/decks/offlineHtml.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { dohAnswer } from './_doh_fake.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -79,6 +80,7 @@ function images() {
   const real = globalThis.fetch;
   globalThis.fetch = (async (input: any) => {
     const url = String(input?.url ?? input);
+    const dns = dohAnswer(url); if (dns) return dns; // D1506: the image host resolves to a public address
     if (url === 'https://img.example.test/a.png') return new Response(PNG, { status: 200 });
     return new Response('', { status: 404 });
   }) as any;

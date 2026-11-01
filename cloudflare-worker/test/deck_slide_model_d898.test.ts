@@ -64,7 +64,8 @@ const MODEL_CARD = {
       series: [{ label: 'MRR', binding: bind('revenue.mrr') }, { label: 'Typed', points: [{ x: 'Sep', y: 4 }, { x: 'Oct', y: 6 }] }] },
     { id: 'm1', kind: 'metric', grid: { c1: 7, c2: 9, r1: 3, r2: 4 }, label: 'Runway', value: '14 months', binding: bind('raise.runway') },
     { id: 'm2', kind: 'metric', grid: { c1: 10, c2: 12, r1: 3, r2: 4 }, label: 'Churn', value: null },
-    { id: 'i', kind: 'image', grid: { c1: 7, c2: 12, r1: 5, r2: 5 }, image_url: 'https://example.com/a.png', alt: 'Synthetic', tag: 'illustration' },
+    // D1506: one of our own stored images; a save copies an outside one first (untrusted_uploads_d1506.test.ts).
+    { id: 'i', kind: 'image', grid: { c1: 7, c2: 12, r1: 5, r2: 5 }, image_url: 'https://axal.vc/api/decks/images/0b6a2c1e-3f4d-4a5b-8c9d-0e1f2a3b4c5d/file', alt: 'Synthetic', tag: 'illustration' },
     { id: 'g', kind: 'graphic', grid: { c1: 10, c2: 10, r1: 2, r2: 2 }, graphic: 'arrow-up', ratio: '1x1' },
     { id: 'l', kind: 'link', grid: { c1: 7, c2: 12, r1: 6, r2: 6 }, url: 'https://example.com/data-room', label: 'Open the data room' },
   ],
@@ -249,7 +250,8 @@ test('6. the versions list carries Audience, Round and By; a version from before
 test('7. the twelve layouts fit the grid; video links are read without a fetch; the compare sees a chart\'s series', async () => {
   assert.equal(LAYOUTS.length, 12);
   assert.equal(bindingOf, sanitizeBinding, "a block's binding follows D896's one rule");
-  assert.equal(CHART_TYPES.length, 12);
+  // D1538 (#3787): the 12 library types plus market circles and projections, drawn from typed figures.
+  assert.equal(CHART_TYPES.length, 14);
   for (const l of LAYOUTS) {
     assert.equal(sanitizeBlocks(l.blocks, sanitizeImageUrl).length, l.blocks.length, `${l.id}: every preset block sits on the grid, none overlapping`);
   }
@@ -300,7 +302,8 @@ test('10. the editor reads the slide model from the Worker: the grid, the twelve
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual(r.body.grid, { cols: 12, rows: 6 });
   assert.deepEqual(r.body.layouts.map((l: any) => l.id), LAYOUTS.map((l) => l.id));
-  assert.equal(r.body.chart_types.length, 12);
+  assert.equal(r.body.chart_types.length, 12, 'the library (pd6) stays 12 tiles');
+  assert.deepEqual(r.body.typed_chart_types, ['market_circles', 'projection']);
   assert.ok(r.body.block_kinds.includes('video'));
   assert.ok([401, 403].includes((await call(f, null, 'GET', '/api/decks/model')).status), 'signed out reads nothing');
 });
