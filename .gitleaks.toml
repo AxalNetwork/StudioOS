@@ -121,6 +121,11 @@ regexes = [
   # Worker's JWT_SECRET. The commit that added it stays in this pull
   # request's scan range, so the literal is pinned here rather than rewritten.
   '''\bsynthetic-d1343\b''',
+  # D1439 Part D (#3916): the synthetic bearer token the social-cards test
+  # puts in each token-link path, to prove the token never reaches a tag.
+  # No link is issued with it. The commit that added it stays in the pull
+  # request's scan range, so the literal is pinned here rather than rewritten.
+  '''\btok_Synth3t1cBearerT0ken\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

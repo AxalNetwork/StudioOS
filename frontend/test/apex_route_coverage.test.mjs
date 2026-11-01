@@ -146,3 +146,20 @@ test('D1439: the record-card prefixes are [assets] run_worker_first globs in bot
   const exported = /SOCIAL_CARD_GLOBS = \[([^\]]+)\]/.exec(service)?.[1].match(/'[^']+'/g)?.map((s) => s.slice(1, -1));
   assert.deepEqual(exported, CARD_GLOBS);
 });
+
+test('#3916 (D1439 Part D): the token-link prefixes are [assets] run_worker_first globs in both lists; /verify/* is not', () => {
+  // Mutation checked: `/join/*` dropped from the top-level list → the per-list check fails; `/verify/*` added → the verify check fails.
+  const PRIVATE_GLOBS = ['/esign/*', '/deck/share/*', '/share/*', '/invite/*', '/join/*'];
+  const lists = [...wrangler.matchAll(/^run_worker_first = (\[.*\])$/gm)].map((m) => JSON.parse(m[1]));
+  assert.equal(lists.length, 2, 'the top-level and production [assets] blocks');
+  for (const list of lists) {
+    for (const g of PRIVATE_GLOBS) assert.ok(list.includes(g), `${g} runs the Worker first`);
+    assert.ok(!list.some((g) => g.startsWith('/verify')), 'certificate verification keeps the home card');
+  }
+  for (const table of TABLES) {
+    for (const p of patterns(table)) assert.ok(!PRIVATE_GLOBS.some((g) => p.endsWith(g)), `${p} would be a path-scoped route`);
+  }
+  const service = readFileSync(resolve(root, 'cloudflare-worker/src/services/socialCards.ts'), 'utf8');
+  const exported = /PRIVATE_LINK_GLOBS = \[([^\]]+)\]/.exec(service)?.[1].match(/'[^']+'/g)?.map((s) => s.slice(1, -1));
+  assert.deepEqual(exported, PRIVATE_GLOBS);
+});

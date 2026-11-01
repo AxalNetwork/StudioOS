@@ -103,13 +103,13 @@ const inApp = (h: string) => typeof h === 'string' && h.startsWith('/') && !h.st
 // The read's shape and who may read it
 // ---------------------------------------------------------------------------
 
-test('the overview: the cycle, its question, four figures and the seven cards in tab order, each in a known state', async () => {
+test('the overview: the cycle, its question, six figures (D1610) and the seven cards in tab order, each in a known state', async () => {
   const db = fixture();
   const r = await overview(db);
   assert.equal(r.status, 200);
   assert.equal(r.body.cycle, 'raise');
   assert.equal(r.body.question, 'What resources does this venture need?');
-  assert.deepEqual(r.body.figures.map((f: any) => f.key), ['readiness_score', 'committed', 'investors_in_conversation', 'runway_months']);
+  assert.deepEqual(r.body.figures.map((f: any) => f.key), ['readiness_score', 'committed', 'investors_in_conversation', 'runway_months', 'deck_views_8w', 'data_room_files']);
   assert.deepEqual(r.body.cards.map((c: any) => c.slug), MODULES.map((m) => m.slug));
   assert.deepEqual(r.body.cards.map((c: any) => c.name), ['Fundraising readiness', 'Investor narrative', 'Pitch deck', 'Data room', 'Cap table', 'Use of funds', 'Capital relationships']);
   for (const c of r.body.cards) {
@@ -749,4 +749,171 @@ test('D1174: the with-raise cash path enters only at a recorded close month, lab
   assert.equal(failed.series.find((r: any) => r.kind === 'line').plan, undefined);
   assert.match(JSON.stringify(failed), /Unreadable.*Try again/);
   db.close();
+});
+
+// ---------------------------------------------------------------------------
+// D1610 (#3943): six figures, next steps, the connected tools, the Stated
+// shade and the Cap table card's plan
+// ---------------------------------------------------------------------------
+
+const MIG502 = sqlOf('502_github_team_company.sql');
+/** GitHub's contributor rows (502's first table) and the Google Workspace files (588), over the fixture. */
+function withTools(db: any) {
+  const start = MIG502.indexOf('CREATE TABLE IF NOT EXISTS github_contributors');
+  db.exec(MIG502.slice(start, MIG502.indexOf(');', start) + 2));
+  db.exec(sqlOf('588_google_workspace_files.sql'));
+  return db;
+}
+/** The eight readiness items, and a computed score for each [key, score, evidence, missing] given. */
+function scored(db: any, rows: Array<[string, number, string, string | null]>) {
+  const keys = ['narrative', 'deck', 'data_room', 'cap_table', 'use_of_funds', 'traction', 'team', 'pmf'];
+  keys.forEach((k, i) => db.prepare('INSERT INTO readiness_items (id, project_id, item_key, label, position) VALUES (?, ?, ?, ?, ?)').run(100 + i, P, k, k, i));
+  for (const [k, score, evidence, missing] of rows) {
+    db.prepare(`INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`)
+      .run(100 + keys.indexOf(k), P, score, evidence, missing, k === 'team' ? 'manual' : 'computed');
+  }
+}
+
+test('D1610 W1: deck views are null with no deck, a real 0 with a deck nobody opened, then the 8-week sum and spark', async () => {
+  const db = fixture();
+  let f = fig((await overview(db)).body, 'deck_views_8w');
+  assert.deepEqual([f.value, f.state, f.reason, f.unit, f.label, f.source], [null, 'empty', 'No deck yet', 'count', 'Deck views', 'Pitch deck share links']);
+  db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides) VALUES (5, ${P}, 1, '[]'), (6, ${P_OTHER}, 1, '[]')`);
+  f = fig((await overview(db)).body, 'deck_views_8w');
+  assert.deepEqual([f.value, f.state, f.spark], [0, 'ok', [0, 0, 0, 0, 0, 0, 0, 0]], 'a deck nobody opened: the one place a 0 is right');
+  db.exec(`INSERT INTO deck_share_views (share_token_id, deck_id, created_at) VALUES (1, 5, datetime('now')), (1, 5, datetime('now')), (1, 5, datetime('now', '-14 days')),
+           (1, 5, datetime('now', '-70 days')), (1, 6, datetime('now'))`);
+  f = fig((await overview(db)).body, 'deck_views_8w');
+  assert.equal(f.value, 3, 'the last 8 weeks of this venture\'s deck only');
+  assert.equal(f.spark.length, 8);
+  assert.deepEqual([f.spark[7], f.spark[5]], [2, 1]);
+  assert.equal(f.spark.reduce((a: number, b: number) => a + b, 0), f.value);
+});
+
+test('D1610 W1: data-room files: the owner\'s count, staff read the summary count, an unreadable room is unreadable, never 0; no file name', async () => {
+  const db = fixture();
+  let f = fig((await overview(db)).body, 'data_room_files');
+  assert.deepEqual([f.value, f.state, f.reason], [null, 'empty', 'No files uploaded yet']);
+  db.exec(`INSERT INTO data_room_files (uid, project_id, name, r2_key, visibility) VALUES ('a', ${P}, 'Secret-COI.pdf', 'k1', 'nda'), ('b', ${P}, 'Model.xlsx', 'k2', 'open'), ('c', ${P_OTHER}, 'Theirs.pdf', 'k3', 'open')`);
+  const owner = await overview(db);
+  assert.deepEqual([fig(owner.body, 'data_room_files').value, fig(owner.body, 'data_room_files').state], [2, 'ok']);
+  const staff = await overview(db, ADMIN);
+  assert.equal(staff.body.read_only, true);
+  assert.deepEqual([fig(staff.body, 'data_room_files').value, fig(staff.body, 'data_room_files').state], [2, 'ok'], 'D1102: the summary\'s count');
+  for (const r of [owner, staff]) assert.doesNotMatch(JSON.stringify(r.body.figures), /Secret-COI|Model\.xlsx/);
+  db.exec('ALTER TABLE data_room_files RENAME TO data_room_files_gone');
+  for (const who of [FOUNDER, ADMIN]) {
+    const r = await overview(db, who);
+    assert.equal(r.status, 200);
+    const u = fig(r.body, 'data_room_files');
+    assert.deepEqual([u.value, u.state], [null, 'unreadable'], `${who}: unreadable, never 0`);
+  }
+});
+
+test('D1610 W1: staff get four figures and never Committed or Investors in conversation (owner pick B1)', async () => {
+  const db = fixture();
+  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, firm, stage, amount, commit_status) VALUES ('rp1', ${P}, 'Ivy Angel', 'Angel Co', 'committed', 250000, 'wired')`);
+  const r = await overview(db, ADMIN);
+  assert.deepEqual(r.body.figures.map((f: any) => f.key), ['readiness_score', 'runway_months', 'deck_views_8w', 'data_room_files']);
+  assert.doesNotMatch(JSON.stringify(r.body), /Ivy Angel|Angel Co|250000|investors_in_conversation|"key":"committed"/);
+});
+
+test('D1610 W2: next steps are ordered by gain, at most three, never Team, never a 0 gain, each linked with ?project=', async () => {
+  const db = fixture();
+  // Scored: deck 4, narrative 8, team 6 (a person's) → overall 60. Deck to 10 → 80 (+20); an
+  // unscored item at 10 → 70 (+10); narrative to 10 → 67 (+7). Team to 10 would be +13: never listed.
+  scored(db, [['deck', 4, 'measured', 'No deck yet'], ['narrative', 8, 'pattern', null], ['team', 6, 'anecdote', null]]);
+  const r = await overview(db);
+  const ns = r.body.next_steps;
+  assert.equal(ns.state, 'ok');
+  assert.deepEqual(ns.items.map((i: any) => [i.item_key, i.gain_points]), [['deck', 20], ['data_room', 10], ['cap_table', 10]]);
+  assert.deepEqual(ns.items[0], { item_key: 'deck', label: 'Pitch deck', text: 'No deck yet', module_slug: 'pitch-deck', href: `/raise/pitch-deck?project=${P}`, gain_points: 20 });
+  assert.equal(ns.items[1].text, 'Not scored yet');
+  assert.ok(ns.items.length <= 3);
+  for (const i of ns.items) {
+    assert.notEqual(i.item_key, 'team');
+    assert.ok(i.gain_points > 0, 'a known gain, never 0');
+    assert.match(i.href, new RegExp(`[?&]project=${P}$`));
+    assert.ok(inApp(i.href));
+  }
+  // The same items for staff, read only (the page drops the links).
+  assert.deepEqual((await overview(db, ADMIN)).body.next_steps, ns);
+});
+
+test('D1610 W2: an item at 10 is no step; traction links to the KPI page; Team stays out even when it is the only gap', async () => {
+  const db = fixture();
+  scored(db, [['narrative', 10, 'measured', null], ['deck', 10, 'measured', null], ['data_room', 10, 'measured', null], ['cap_table', 10, 'measured', null],
+    ['use_of_funds', 10, 'measured', null], ['pmf', 10, 'measured', null], ['traction', 5, 'stated', 'No revenue proof yet'], ['team', 2, 'anecdote', null]]);
+  const ns = (await overview(db)).body.next_steps;
+  assert.deepEqual(ns.items.map((i: any) => i.item_key), ['traction']);
+  assert.deepEqual([ns.items[0].href, ns.items[0].module_slug, ns.items[0].text], [`/build/kpi?project=${P}`, 'fundraising-readiness', 'No revenue proof yet']);
+});
+
+test('D1610 W2: nothing scored is empty with an unknown gain (null, never 0); a thrown read is unreadable and the overview still renders', async () => {
+  const db = fixture();
+  let ns = (await overview(db)).body.next_steps;
+  assert.equal(ns.state, 'empty');
+  assert.deepEqual(ns.items, [{ item_key: 'readiness', label: 'Fundraising readiness', text: 'No readiness item is scored yet', module_slug: 'fundraising-readiness', href: `/raise/fundraising-readiness?project=${P}&add=1`, gain_points: null }]);
+  db.exec('ALTER TABLE readiness_scores RENAME TO readiness_scores_gone');
+  const r = await overview(db);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.next_steps, { state: 'unreadable', items: [] });
+  assert.equal(r.body.cards.length, 7);
+});
+
+test('D1610 W3: the connected tools: not connected, connected with a count and its last read, an unknown read is null (never a date or 0), no login', async () => {
+  const db = withTools(fixture());
+  let tools = (await overview(db)).body.connectors;
+  assert.deepEqual(tools.map((t: any) => [t.key, t.state, t.as_of, t.fact]), [['mercury', 'not_connected', null, null], ['github', 'not_connected', null, null], ['google', 'not_connected', null, null]]);
+  // The founder's connections; another founder's active GitHub never counts for this venture; an inactive one is not a connection.
+  db.exec(`INSERT INTO integrations (id, uid, user_id, provider_key, status, auth_type) VALUES (1, 'i1', ${FOUNDER}, 'github', 'active', 'oauth2'), (2, 'i2', ${FOUNDER}, 'mercury', 'active', 'api_key'),
+           (3, 'i3', ${OTHER}, 'google_workspace', 'active', 'oauth2'), (4, 'i4', ${FOUNDER}, 'google_workspace', 'disconnected', 'oauth2')`);
+  db.exec(`INSERT INTO github_contributors (integration_id, project_id, repository, login, commits_90d, updated_at) VALUES
+           (1, ${P}, 'acme/api', 'secret-login-one', 12, '2026-10-29 08:00:00'), (1, ${P}, 'acme/web', 'secret-login-two', 3, '2026-10-30 09:15:00'), (1, ${P_OTHER}, 'beta/x', 'beta-login', 1, '2026-10-31 10:00:00')`);
+  db.exec(`INSERT INTO google_workspace_files (uid, integration_id, user_id, project_id, module, drive_file_id, mime_type, kind, name, last_synced_at) VALUES
+           ('g1', 3, ${OTHER}, ${P}, 'pitch_deck', 'd1', 'x', 'slides', 'Other deck', '2026-10-30 00:00:00')`);
+  tools = (await overview(db)).body.connectors;
+  const by = (k: string) => tools.find((t: any) => t.key === k);
+  assert.deepEqual(by('github'), { key: 'github', label: 'GitHub', fact: 'Contributors to 2 repositories', as_of: '2026-10-30 09:15:00', state: 'connected' });
+  assert.deepEqual(by('mercury'), { key: 'mercury', label: 'Mercury', fact: 'No runway read yet', as_of: null, state: 'connected' }, 'no read stored: null, not a date');
+  assert.deepEqual([by('google').state, by('google').as_of], ['not_connected', null], 'another founder\'s and an inactive connection');
+  db.exec(`INSERT INTO mercury_raise_facts (integration_id, project_id, kind, fact_key, amount_cents, burn_cents, as_of) VALUES (2, ${P}, 'runway', 'runway', 3300000, 200000, '2026-10-28T09:14:00Z')`);
+  const staff = await overview(db, ADMIN);
+  for (const r of [await overview(db), staff]) {
+    const m = r.body.connectors.find((t: any) => t.key === 'mercury');
+    assert.deepEqual([m.fact, m.as_of], ['16.5 months of runway · cash and net burn', '2026-10-28T09:14:00Z']);
+    assert.doesNotMatch(JSON.stringify(r.body.connectors), /secret-login|beta-login|acme\/|3300000|200000|Other deck/);
+    for (const t of r.body.connectors) assert.ok(t.as_of === null || typeof t.as_of === 'string', 'never 0');
+  }
+});
+
+test('D1610 W3: when no connection can be read the list as a whole is unreadable, and the overview still renders', async () => {
+  const db = withTools(fixture());
+  db.exec('ALTER TABLE integrations RENAME TO integrations_gone');
+  const r = await overview(db);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.connectors, { state: 'unreadable' });
+});
+
+test('D1610 W4: the readiness legend has four shades, and a Stated score is shaded apart from Pattern (owner pick D1)', async () => {
+  const db = fixture();
+  db.exec('ALTER TABLE readiness_scores RENAME TO rs_old');
+  db.exec(`CREATE TABLE readiness_scores (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, project_id INTEGER, score INTEGER, evidence TEXT, missing TEXT, source TEXT, scored_at TEXT)`);
+  scored(db, [['deck', 6, 'stated', null], ['narrative', 6, 'pattern', null], ['data_room', 6, 'measured', null], ['cap_table', 6, 'anecdote', null]]);
+  const c = card((await overview(db)).body, 'fundraising-readiness');
+  const bars = c.series.find((s: any) => s.kind === 'hbar');
+  assert.deepEqual(bars.legend, [{ label: 'Measured', tone: 'v1' }, { label: 'Stated', tone: 'v4' }, { label: 'Pattern', tone: 'v2' }, { label: 'Anecdote', tone: 'v3' }]);
+  const toneOf = (label: string) => bars.items.find((i: any) => i.label === label).tone;
+  assert.deepEqual(['deck', 'narrative', 'data_room', 'cap_table'].map(toneOf), ['v4', 'v2', 'v1', 'v3']);
+  assert.equal(new Set(bars.legend.map((l: any) => l.tone)).size, 4, 'four distinct shades');
+});
+
+test('D1610 W5: the Cap table card carries its plan: locked below Raise + Grow, open on it and for staff', async () => {
+  const db = fixture();
+  const plan = (b: any) => card(b, 'cap-table').plan;
+  assert.deepEqual(plan((await overview(db)).body), { locked: true, tier: 'studio', name: 'Raise + Grow', plan_key: 'founder:studio' });
+  for (const c of (await overview(db)).body.cards) if (c.slug !== 'cap-table') assert.equal(c.plan, undefined, c.slug);
+  db.exec(`UPDATE users SET subscription_tier = 'studio', subscription_status = 'active' WHERE id = ${FOUNDER}`);
+  assert.equal(plan((await overview(db)).body).locked, false);
+  assert.equal(plan((await overview(db, ADMIN)).body).locked, false);
 });

@@ -497,7 +497,7 @@ export function rowToDeck(row: any, withSlides = true): any {
  * round it was written for stay with the venture; the theme stays, because the
  * cards render on it.
  */
-function publicDeckOf(row: any): any {
+export function publicDeckOf(row: any): any {
   const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
   void audience; void round; void by; void content_hash;
   deck.slides = (deck.slides || []).map((s: any) => {

@@ -76,7 +76,7 @@ function Meter({ meter, children }) {
 /** A plain tap on the cycle's own action route opens it through `openAction`, as the desktop button does. */
 const plainTap = (e) => !e.defaultPrevented && (e.button ?? 0) === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry }) {
+export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'loading', search = '', projectId = null, api = cycleValidateApi, openAction, onChanged, onRetry, message = '' }) {
   const [editing, setEditing] = useState(false);
   const name = CYCLE_NAMES[cycle] || cycle;
   const overview = `${name} · Overview`;
@@ -87,6 +87,14 @@ export default function PhoneCycleRoot({ cycle, raw, status = raw ? 'ready' : 'l
         <div className="h-[40px] w-1/3 animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
         <div className="h-[68px] animate-pulse rounded bg-gray-100 dark:bg-gray-800" />
         <div className="h-[52px] animate-pulse rounded-[14px] bg-gray-100 dark:bg-gray-800" />
+      </div>
+    );
+  }
+  // D1466 (#3714, RO15): a read refused on purpose is the Worker's sentence, muted, never red.
+  if (status === 'refused') {
+    return (
+      <div data-testid="phone-root" data-cycle={cycle}>
+        <p role="status" className="m-0 text-[14px] font-semibold text-axal-ink dark:text-gray-100" data-testid="phone-root-refused">{message || `You cannot open this venture’s ${name}.`}</p>
       </div>
     );
   }

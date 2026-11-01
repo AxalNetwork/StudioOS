@@ -1,0 +1,37 @@
+{
+  "skill": "weekly-kpi-digest",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "kpis": [
+          {
+            "name": "Active sites",
+            "this_week": 120,
+            "last_week": 112
+          },
+          {
+            "name": "Churned sites",
+            "this_week": null,
+            "last_week": 2
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "120",
+      "112",
+      "+8"
+    ],
+    "must_say_not_recorded": [
+      "Churned sites"
+    ],
+    "must_not_include": [
+      "Churned sites: 0"
+    ]
+  }
+}

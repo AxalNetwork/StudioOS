@@ -26,7 +26,8 @@ import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue,
  * reads a stored raise receipt's posted date only (`receivedDates`), never a
  * Mercury connection, a last four, a counterparty or a bank figure.
  */
-import type { Env } from '../types';
+import type { Env, User } from '../types';
+import { PLAN_KEY, PLAN_NAME, userMeetsTier } from '../middleware/requireTier';
 import { FUND_SECTIONS, parseUseOfFundsValue } from '../util/useOfFunds';
 export { FUND_SECTIONS } from '../util/useOfFunds';
 import { safeCard, safeFigure, countState, PAGE_SIZE, type Card, type Figure } from './cycleCards';
@@ -113,7 +114,15 @@ export const READINESS_ITEMS = [
 export type ReadinessKey = (typeof READINESS_ITEMS)[number]['key'];
 export const READINESS_KEYS: readonly string[] = READINESS_ITEMS.map((i) => i.key);
 export const EVIDENCE = ['anecdote', 'pattern', 'stated', 'measured'] as const;
-const EVIDENCE_TONE: Record<string, string> = { measured: 'v1', stated: 'v2', pattern: 'v2', anecdote: 'v3' };
+/**
+ * D1610 W4 (owner pick D1): each of the four evidence values has its own
+ * shade, strongest first. Stated is a founder's typed claim: weaker than a
+ * measurement, stronger than a pattern.
+ */
+export const EVIDENCE_TONE: Record<(typeof EVIDENCE)[number], string> = { measured: 'v1', stated: 'v4', pattern: 'v2', anecdote: 'v3' };
+export const EVIDENCE_LEGEND = [
+  { label: 'Measured', tone: 'v1' }, { label: 'Stated', tone: 'v4' }, { label: 'Pattern', tone: 'v2' }, { label: 'Anecdote', tone: 'v3' },
+] as const;
 
 export type ScoreRow = { item_id: number; item_key: string; score: number | null; evidence: string | null; missing: string | null; source: string; scored_at: string };
 export type ItemRow = { id: number; item_key: string; label: string; position: number };
@@ -430,9 +439,9 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
       kind: 'hbar',
       items: items.map((i) => {
         const s = latest.get(Number(i.id));
-        return { label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s?.score != null && s.evidence ? EVIDENCE_TONE[s.evidence] ?? 'grey' : 'grey' };
+        return { label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s?.score != null && s.evidence ? (EVIDENCE_TONE as Record<string, string>)[s.evidence] ?? 'grey' : 'grey' };
       }),
-      legend: [{ label: 'Measured', tone: 'v1' }, { label: 'Pattern', tone: 'v2' }, { label: 'Anecdote', tone: 'v3' }],
+      legend: EVIDENCE_LEGEND.map((l) => ({ ...l })),
     }];
     if (history.length > 0) {
       series.push({
@@ -1810,13 +1819,212 @@ async function runwayFigure(ctx: Ctx): Promise<Figure> {
   });
 }
 
-export async function figures(ctx: Ctx): Promise<Figure[]> {
-  return Promise.all([readinessFigure(ctx), committedFigure(ctx), conversationFigure(ctx), runwayFigure(ctx)]);
+/**
+ * D1610 W1: deck share-link views over the last 8 weeks. No deck is `empty`
+ * with a null value; a deck nobody opened is a real 0, the one place a 0 is
+ * shown, with its flat 8-week spark.
+ */
+async function deckViewsFigure(ctx: Ctx): Promise<Figure> {
+  return safeFigure({ key: 'deck_views_8w', label: 'Deck views', unit: 'count', source: 'Pitch deck share links' }, async () => {
+    const deck = await ctx.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? LIMIT 1').bind(ctx.projectId).first();
+    if (!deck) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No deck yet' };
+    const weeks = await weeklyViews(ctx, 8);
+    return { value: weeks.reduce((a, b) => a + b, 0), delta_30d: null, spark: weeks, state: 'ok', as_of: ctx.today, reason: null };
+  });
 }
 
-/** D1191: keep the other tools' figures without reading pipeline amounts. */
-export async function nonCapitalFigures(ctx: Ctx): Promise<Figure[]> {
-  return Promise.all([readinessFigure(ctx), runwayFigure(ctx)]);
+/**
+ * How the data-room file count is read. The room's owner counts the files
+ * (D1102: the owner's room); anyone else reads the room's summary, which only
+ * counts. Neither returns a file name. A reader throws when it cannot read.
+ */
+export type RoomFileCount = (ctx: Ctx) => Promise<number>;
+export const ownerRoomFileCount: RoomFileCount = async (ctx) => {
+  const row = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+  const n = Number(row?.n);
+  if (!Number.isSafeInteger(n) || n < 0) throw new Error('Data room file count unavailable');
+  return n;
+};
+
+/** D1610 W1: files in the data room, a count only. */
+async function dataRoomFilesFigure(ctx: Ctx, count: RoomFileCount): Promise<Figure> {
+  return safeFigure({ key: 'data_room_files', label: 'Data room files', unit: 'count', source: 'Data room' }, async () => {
+    const n = await count(ctx);
+    if (n === 0) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No files uploaded yet' };
+    return { value: n, delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: null };
+  });
+}
+
+/** A member's six figures (D1610 W1): the four, then deck views and data-room files. */
+export async function figures(ctx: Ctx, roomFiles: RoomFileCount = ownerRoomFileCount): Promise<Figure[]> {
+  return Promise.all([readinessFigure(ctx), committedFigure(ctx), conversationFigure(ctx), runwayFigure(ctx), deckViewsFigure(ctx), dataRoomFilesFigure(ctx, roomFiles)]);
+}
+
+/**
+ * D1191: keep the other tools' figures without reading pipeline amounts.
+ * D1610 W1 (owner pick B1): four, never Committed or Investors in conversation.
+ */
+export async function nonCapitalFigures(ctx: Ctx, roomFiles: RoomFileCount): Promise<Figure[]> {
+  return Promise.all([readinessFigure(ctx), runwayFigure(ctx), deckViewsFigure(ctx), dataRoomFilesFigure(ctx, roomFiles)]);
+}
+
+/**
+ * D1610 W5 (RO13): the Cap table card's plan. Recording holders and running
+ * scenarios sit behind the Raise + Grow plan (`ensureTier(user, 'studio')` in
+ * `routes/captable.ts` and `addCapHolder`); reading the card does not. The card
+ * carries the lock so the overview draws it without a second read.
+ */
+export type CardPlan = { locked: boolean; tier: 'studio'; name: string; plan_key: string };
+export function capTablePlan(user: User): CardPlan {
+  return { locked: !userMeetsTier(user, 'studio'), tier: 'studio', name: PLAN_NAME.studio, plan_key: PLAN_KEY.studio };
+}
+
+// ---------------------------------------------------------------------------
+// D1610 W2: next steps, from the readiness scores
+// ---------------------------------------------------------------------------
+
+/** Where each readiness item is fixed, and the Raise module it belongs to. Team is never a step. */
+const STEP_TARGET: Record<Exclude<ReadinessKey, 'team'>, { module_slug: ModuleSlug; href: (ctx: Ctx) => string }> = {
+  narrative: { module_slug: 'investor-narrative', href: (ctx) => href(ctx, 'investor-narrative') },
+  deck: { module_slug: 'pitch-deck', href: (ctx) => href(ctx, 'pitch-deck') },
+  data_room: { module_slug: 'data-room', href: (ctx) => href(ctx, 'data-room') },
+  cap_table: { module_slug: 'cap-table', href: (ctx) => href(ctx, 'cap-table') },
+  use_of_funds: { module_slug: 'use-of-funds', href: (ctx) => href(ctx, 'use-of-funds') },
+  traction: { module_slug: 'fundraising-readiness', href: (ctx) => `${TOOL_HREF.metrics}?project=${ctx.projectId}` },
+  pmf: { module_slug: 'fundraising-readiness', href: (ctx) => href(ctx, 'fundraising-readiness') },
+};
+
+export type NextStep = { item_key: string; label: string; text: string; module_slug: string; href: string; gain_points: number | null };
+export type NextSteps = { state: 'ok' | 'empty' | 'unreadable'; items: NextStep[] };
+export const NEXT_STEPS_MAX = 3;
+
+/**
+ * The readiness items whose fix raises the overall score most. An item's gain
+ * is the overall score with that item at 10, minus the overall score now. An
+ * item already at 10 gains nothing and is no step. Ordered by gain, then the
+ * card's order; at most three. With no item scored, the one step is to score
+ * readiness, and its gain is not known: null, never 0.
+ */
+export async function nextSteps(ctx: Ctx): Promise<NextSteps> {
+  try {
+    const { items, scores } = await loadReadiness(ctx);
+    const latest = latestScores(scores);
+    const now = overallReadiness(latest.values());
+    if (now == null) {
+      return { state: 'empty', items: [{ item_key: 'readiness', label: 'Fundraising readiness', text: 'No readiness item is scored yet', module_slug: 'fundraising-readiness', href: `${href(ctx, 'fundraising-readiness')}&add=1`, gain_points: null }] };
+    }
+    const order = (k: string) => READINESS_KEYS.indexOf(k);
+    const steps: NextStep[] = [];
+    for (const i of items) {
+      if (i.item_key === 'team' || !(i.item_key in STEP_TARGET)) continue;
+      const s = latest.get(Number(i.id));
+      const score = s?.score != null && Number.isFinite(Number(s.score)) ? Number(s.score) : null;
+      if (score != null && score >= 10) continue;
+      const withTen = new Map(latest);
+      withTen.set(Number(i.id), { ...(s ?? { item_id: i.id, item_key: i.item_key, evidence: null, missing: null, source: 'computed', scored_at: ctx.today }), score: 10 });
+      const gain = (overallReadiness(withTen.values()) as number) - now;
+      if (!(gain > 0)) continue;
+      const target = STEP_TARGET[i.item_key as keyof typeof STEP_TARGET];
+      steps.push({
+        item_key: i.item_key, label: READINESS_ITEMS.find((r) => r.key === i.item_key)!.label,
+        text: s?.missing ? String(s.missing) : score == null ? 'Not scored yet' : `Scored ${score} of 10`,
+        module_slug: target.module_slug, href: target.href(ctx), gain_points: gain,
+      });
+    }
+    steps.sort((a, b) => (b.gain_points as number) - (a.gain_points as number) || order(a.item_key) - order(b.item_key));
+    return { state: 'ok', items: steps.slice(0, NEXT_STEPS_MAX) };
+  } catch (e) {
+    console.warn('[raiseCycle] next steps unreadable:', (e as Error)?.message);
+    return { state: 'unreadable', items: [] };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// D1610 W3: the connected tools Raise reads, and when each was last read
+// ---------------------------------------------------------------------------
+
+export type Connector = { key: 'mercury' | 'github' | 'google'; label: string; fact: string | null; as_of: string | null; state: 'connected' | 'not_connected' | 'unreadable' };
+
+/*
+ * An integration counts for the venture when its member is active and is the
+ * venture's founder or an accepted member, as `mercuryFacts` and
+ * `teamReadiness` read it. The statements below spell it out in full: bound
+ * SQL only, nothing interpolated.
+ */
+/** A stored timestamp as written, only when it is one; anything else is null, never a made-up date. */
+const stamp = (v: unknown): string | null => {
+  const t = String(v ?? '');
+  return /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?)?$/.test(t) ? t : null;
+};
+
+async function connectedTo(ctx: Ctx, provider: 'mercury' | 'github' | 'google_workspace'): Promise<boolean> {
+  const row = await ctx.env.DB.prepare(`SELECT 1 AS x FROM integrations i WHERE i.provider_key = ?2 AND i.status = 'active'
+          AND EXISTS (SELECT 1 FROM projects p JOIN users u ON u.id = i.user_id AND u.is_active = 1
+            WHERE p.id = ?1 AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+              OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted'))) LIMIT 1`)
+    .bind(ctx.projectId, provider).first<{ x: number }>();
+  return row != null;
+}
+
+async function connectorRow(key: Connector['key'], label: string, read: () => Promise<Omit<Connector, 'key' | 'label'>>): Promise<Connector> {
+  try { return { key, label, ...await read() }; }
+  catch (e) {
+    console.warn('[raiseCycle] connector unreadable:', key, (e as Error)?.message);
+    return { key, label, fact: null, as_of: null, state: 'unreadable' };
+  }
+}
+
+const notConnected = { fact: null, as_of: null, state: 'not_connected' } as const;
+
+/**
+ * Mercury, GitHub and Google Workspace: the tools Raise reads (D840, D1094,
+ * D1264). Each row fails on its own. A fact is a count, or the runway the
+ * figure row already shows: never a login, account, counterparty, file name
+ * or other amount. `as_of` is the source's last read, null when none is
+ * stored. When no row can be read, the list as a whole is `{ state: 'unreadable' }`.
+ */
+export async function connectors(ctx: Ctx): Promise<Connector[] | { state: 'unreadable' }> {
+  try {
+    const rows = await Promise.all([
+      connectorRow('mercury', 'Mercury', async () => {
+        if (!await connectedTo(ctx, 'mercury')) return notConnected;
+        const fact = await mercuryRunway(ctx.env, ctx.projectId);
+        const months = fact ? runwayMonths(fact.amount_cents, fact.burn_cents) : null;
+        return { state: 'connected', as_of: stamp(fact?.as_of),
+          fact: !fact ? 'No runway read yet' : months == null ? 'Cash read · no positive net burn' : `${months} months of runway · cash and net burn` };
+      }),
+      connectorRow('github', 'GitHub', async () => {
+        if (!await connectedTo(ctx, 'github')) return notConnected;
+        const row = await ctx.env.DB.prepare(`SELECT COUNT(DISTINCT g.repository) AS repos, MAX(g.updated_at) AS as_of
+          FROM github_contributors g JOIN integrations i ON i.id = g.integration_id
+          WHERE g.project_id = ?1 AND i.provider_key = 'github' AND i.status = 'active'
+          AND EXISTS (SELECT 1 FROM projects p JOIN users u ON u.id = i.user_id AND u.is_active = 1
+            WHERE p.id = ?1 AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+              OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted')))`)
+          .bind(ctx.projectId).first<{ repos: number; as_of: string | null }>();
+        const repos = Number(row?.repos ?? 0);
+        return { state: 'connected', as_of: stamp(row?.as_of), fact: repos ? `Contributors to ${plural(repos, 'repository', 'repositories')}` : 'No repository read yet' };
+      }),
+      connectorRow('google', 'Google Workspace', async () => {
+        if (!await connectedTo(ctx, 'google_workspace')) return notConnected;
+        const row = await ctx.env.DB.prepare(`SELECT COUNT(*) AS files, MAX(f.last_synced_at) AS as_of
+          FROM google_workspace_files f JOIN integrations i ON i.id = f.integration_id
+          WHERE f.project_id = ?1 AND f.status <> 'stopped' AND f.module IN ('pitch_deck', 'data_room', 'capital_relationships')
+            AND i.provider_key = 'google_workspace' AND i.status = 'active'
+          AND EXISTS (SELECT 1 FROM projects p JOIN users u ON u.id = i.user_id AND u.is_active = 1
+            WHERE p.id = ?1 AND ((p.founder_id IS NOT NULL AND u.founder_id = p.founder_id)
+              OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = u.id AND pm.status = 'accepted')))`)
+          .bind(ctx.projectId).first<{ files: number; as_of: string | null }>();
+        const files = Number(row?.files ?? 0);
+        return { state: 'connected', as_of: stamp(row?.as_of), fact: files ? `${plural(files, 'chosen file', 'chosen files')} for Raise` : 'No file chosen for Raise yet' };
+      }),
+    ]);
+    // No row could be read (the connections themselves are unreadable): the list as a whole is.
+    return rows.every((r) => r.state === 'unreadable') ? { state: 'unreadable' } : rows;
+  } catch (e) {
+    console.warn('[raiseCycle] connectors unreadable:', (e as Error)?.message);
+    return { state: 'unreadable' };
+  }
 }
 
 // ---------------------------------------------------------------------------

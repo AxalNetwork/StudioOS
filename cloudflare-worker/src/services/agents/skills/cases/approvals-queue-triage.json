@@ -1,0 +1,35 @@
+{
+  "skill": "approvals-queue-triage",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "project.summary": {
+        "approvals": [
+          {
+            "title": "Contractor invoice",
+            "due": "2026-11-05",
+            "waiting_days": 3
+          },
+          {
+            "title": "Brand refresh",
+            "due": null,
+            "waiting_days": 9
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Contractor invoice",
+      "No due date recorded"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "approved",
+      "rejected"
+    ]
+  }
+}

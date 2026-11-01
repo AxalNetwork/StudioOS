@@ -29,6 +29,7 @@ ${lines}`;
   let parsed: any = {};
   try {
     const resp: any = await systemRun(env, {
+      task: 'system_review',
       messages: [
         { role: 'system', content: 'Strict JSON only.' },
         { role: 'user', content: prompt },

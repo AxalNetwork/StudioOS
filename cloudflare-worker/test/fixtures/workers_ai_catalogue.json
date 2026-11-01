@@ -258,8 +258,10 @@
       "id": "@cf/cloudflare/clef",
       "name": "clef",
       "kind": "Text Generation",
-      "capabilities": [],
-      "context_window": null,
+      "capabilities": [
+        "Vision"
+      ],
+      "context_window": 65536,
       "status": "ga",
       "paid_only": false,
       "partner": false,
@@ -281,8 +283,10 @@
       "id": "@cf/cloudflare/clef-flash",
       "name": "clef-flash",
       "kind": "Text Generation",
-      "capabilities": [],
-      "context_window": null,
+      "capabilities": [
+        "Vision"
+      ],
+      "context_window": 24576,
       "status": "ga",
       "paid_only": false,
       "partner": false,
@@ -383,7 +387,7 @@
       "capabilities": [
         "Reasoning"
       ],
-      "context_window": null,
+      "context_window": 80000,
       "status": "ga",
       "paid_only": false,
       "partner": false,
@@ -1005,7 +1009,7 @@
       "capabilities": [
         "Function calling"
       ],
-      "context_window": null,
+      "context_window": 131000,
       "status": "ga",
       "paid_only": false,
       "partner": false,
@@ -1543,7 +1547,7 @@
         "Function calling",
         "Vision"
       ],
-      "context_window": null,
+      "context_window": 131000,
       "status": "ga",
       "paid_only": false,
       "partner": false,
@@ -1764,7 +1768,7 @@
       "capabilities": [
         "Function calling"
       ],
-      "context_window": null,
+      "context_window": 128000,
       "status": "ga",
       "paid_only": false,
       "partner": false,
@@ -2040,7 +2044,7 @@
         "LoRA",
         "Reasoning"
       ],
-      "context_window": null,
+      "context_window": 24000,
       "status": "ga",
       "paid_only": false,
       "partner": false,

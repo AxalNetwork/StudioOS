@@ -116,7 +116,7 @@ test('a full-width CTA, dark pairs; CycleRoute draws the root below 1024px from 
   assert.match(tag(first, 'phone-focus-cta'), /href="\/validate\/record\?project_id=3"/);
   assert.doesNotMatch(first, /data-testid="phone-meter"/, 'no meter on the first-conversation card, as drawn');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.ok(route.includes('<PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId}\n        openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetry={() => setReload((n) => n + 1)} />'),
+  assert.ok(route.includes('<PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId} message={overviewMessage}\n        openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetry={() => setReload((n) => n + 1)} />'),
     'a saved target re-reads the overview');
   assert.match(route, /setRawOverview\(data\); setOverview\(adaptOverview\(cycle, data\)\)/, 'the raw read, before adapting');
 });
