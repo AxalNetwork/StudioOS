@@ -42,6 +42,7 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
@@ -62,6 +63,7 @@ export const SURFACES = Object.freeze({
   grid: { issue: 3749, what: 'The 17 structures, divider drag and the 4:3 slide size' },
   saveCard: { issue: 3751, what: 'Autosave, one card at a time' },
   discardDraft: { issue: 3751, what: 'Discard the unsaved draft' },
+  draft: { issue: 3751, what: 'Restore unsaved changes' },
   batch: { issue: 3753, what: 'Live build progress, per area' },
   cancelBatch: { issue: 3753, what: 'Stop a build' },
   elementModels: { issue: 3754, what: 'A model per element in the AIRail' },
@@ -108,7 +110,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -141,8 +143,11 @@ export function shown(answer, format = String, later = LATER) {
 
 /** D1499 (#3749): the deck version's Grid — its aspect, the 17 structures and each card's areas, each with its box. */
 export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES.grid.issue);
-export const saveCard = off('saveCard');
-export const discardDraft = off('discardDraft');
+// D1501 (#3751): wired. A card's working copy (`If-Match: <rev>`, 0 for its first), the draft read for
+// "Restore unsaved changes from …", and Discard.
+export const saveCard = (deckId, uid, card, rev, opts) => through(() => deckDraftApi.saveCard(deckId, uid, card, rev, opts), SURFACES.saveCard.issue);
+export const discardDraft = (deckId) => through(() => deckDraftApi.discard(deckId), SURFACES.discardDraft.issue);
+export const draft = (deckId) => through(() => deckDraftApi.draft(deckId), SURFACES.draft.issue);
 export const batch = off('batch');
 export const cancelBatch = off('cancelBatch');
 /** D1503 (#3754): each grid element's models and the pick its next run uses (`GET /api/decks/:id/element-models`). */
