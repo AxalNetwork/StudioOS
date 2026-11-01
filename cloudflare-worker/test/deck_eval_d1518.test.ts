@@ -96,7 +96,7 @@ test('the investor rubric is recorded, not gated; editing tasks wait for a perso
   }
   assert.deepEqual([...COMPETITOR_ARMS], ['Gamma', 'Canva', 'Pitch', 'Genspark', 'Dokie'], 'the five bars');
   const bench = doc('DECK_BENCHMARK.md');
-  for (const tool of COMPETITOR_ARMS) assert.match(bench, new RegExp(`\\| ${tool} \\| ${OWNER_F_PENDING.replace(/[()]/g, '\\$&')} \\|`), tool);
+  for (const tool of COMPETITOR_ARMS) assert.ok(bench.includes(`| ${tool} | ${OWNER_F_PENDING} |`), tool);
 });
 
 test('a live run is refused without the owner\'s cap and a staging URL, and never against production', () => {
