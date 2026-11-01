@@ -34,6 +34,10 @@
  * `elementModels` (D1503, #3754) answers through `deckElementModelsApi.read`.
  * And `consistency` (D1555, #3802): the free rules ride the deck check's own
  * reply, so it answers through `deckCheckApi.read`.
+ * `presets` (D1549, #3796) answers through `deckModelPresetsApi.read`, and so
+ * does `orgLocks`, from the same reply's `locks` key: #3786 (B10) keyed that
+ * row but has no route on main, so C1 built the read and the row keeps B10's
+ * issue.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -48,6 +52,7 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 
 export { NOT_ON };
 
@@ -108,7 +113,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -167,8 +172,10 @@ export const saveAsTemplate = off('saveAsTemplate');
 /** D1538 (#3787): the figures typed for the deck, each Stated, with who typed it. */
 export const typedTables = (deckId) => through(() => deckTypedValuesApi.list(deckId), SURFACES.typedTables.issue);
 export const media = off('media');
-export const presets = off('presets');
-export const orgLocks = off('orgLocks');
+/** D1549 (#3796): the deck's preset in force, each group's model per preset, and HQ's locks (`GET /api/decks/:id/model-presets`). */
+export const presets = (deckId) => through(() => deckModelPresetsApi.read(deckId), SURFACES.presets.issue);
+/** D1549 (#3796, the row is #3786's): each element group HQ locked, with "Set by Axal VC HQ" — the same reply's `locks`. */
+export const orgLocks = (deckId) => through(() => deckModelPresetsApi.read(deckId).then((r) => r.locks), SURFACES.orgLocks.issue);
 export const critique = off('critique');
 /** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
 export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);

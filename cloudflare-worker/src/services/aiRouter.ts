@@ -235,6 +235,11 @@ export interface RunOptions {
   // primary: reporting success under a model the caller did not ask for is
   // the class of lie this router exists to avoid.
   model?: string;
+  // D1549 (#3796): `model` and nothing else. The run is refused when the
+  // router would choose another primary, and a failure falls back to no
+  // sibling. A deck element HQ locked runs pinned, so a model HQ locked out
+  // is never run, not even as a fallback.
+  pinned?: boolean;
   // The app path the run was asked from (`/validate/customer-research`), written to
   // `ai_usage_logs.surface` (migration 319, D404) so a page can show its own
   // spend. Optional, and absent for every internal caller: NULL is "not
@@ -1829,6 +1834,15 @@ export interface DrawReceipt { job: string; source: DrawSource; skipped: null | 
 /** #3936: how a speech job's model was chosen, for the receipt, as a draw job's is. */
 export interface SpeechReceipt { job: string; source: SpeechSource; skipped: null | { model: string; reason: SpeechSkip } }
 
+/** D1549: a pinned run's choice is its caller's model alone, with no fallback chain, or a refusal. */
+function pinnedChoice(choice: ModelChoice, opts: RunOptions): ModelChoice {
+  if (!opts.pinned || !choice.ok) return choice;
+  if (!opts.model || choice.primary !== opts.model) {
+    return { ok: false, refusal: 'model_not_offered', error: `${opts.model ?? 'No model'} is the only model this run may use, and it cannot run ${opts.task}`, record: true };
+  }
+  return { ...choice, chain: [] };
+}
+
 async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
   // ---- #3935 (D1478 task 1): a draw job's model ------------------------------
   if (opts.draw && opts.drawJob) {
@@ -1985,7 +1999,7 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
     try { if (await assistOff(env, opts.userId, opts.rail.page)) return { ok: false, refusal: 'assist_off', error: ASSIST_OFF_MESSAGE }; }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether AI assistance is on for this page could not be checked.' }; }
   }
-  const choice = await chooseModels(env, opts, route);
+  const choice = pinnedChoice(await chooseModels(env, opts, route), opts);
   if (!choice.ok) return { ok: false, refusal: choice.refusal, error: choice.error };
   const models = [choice.primary, ...choice.chain];
   for (const model of models) {
@@ -2061,7 +2075,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   }
 
   // ---- D764 PR 3: a rail run's models come from its page's row (`chooseModels`).
-  const choice = await chooseModels(env, opts, route);
+  const choice = pinnedChoice(await chooseModels(env, opts, route), opts);
   if (!choice.ok) {
     const usage: UsageMeta = {
       task: opts.task, model: route.model, latency_ms: 0,
