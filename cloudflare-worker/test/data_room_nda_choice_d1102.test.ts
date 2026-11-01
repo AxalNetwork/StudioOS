@@ -216,7 +216,7 @@ test('PUT /api/decks/:id: the NDA flag a save carries unchanged is the deck echo
   for (const shown of [true, false]) {
     const { db, call } = fixture(); try {
       const slides = demoDayDeck(db, shown);
-      const r = await call(FOUNDER, 'PUT', '/api/decks/10', { slides, title: 'Synthetic deck' });
+      const r = await call(FOUNDER, 'PUT', '/api/decks/10', { model_version: 2, slides, title: 'Synthetic deck' });
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.deepEqual(choiceOf(db), { c: null, r: 0 }, `an unchanged ${shown} stays unset`);
     } finally { db.close(); }
@@ -227,7 +227,7 @@ test('PUT /api/decks/:id: a changed NDA flag is the founder\'s choice, Yes or No
   for (const [saved, next] of [[true, false], [false, true]] as const) {
     const { db, call } = fixture(); try {
       const slides = demoDayDeck(db, saved);
-      const r = await call(FOUNDER, 'PUT', '/api/decks/10', { slides: withNda(slides, next), title: 'Synthetic deck' });
+      const r = await call(FOUNDER, 'PUT', '/api/decks/10', { model_version: 2, slides: withNda(slides, next), title: 'Synthetic deck' });
       assert.equal(r.status, 200, JSON.stringify(r.body));
       assert.deepEqual(choiceOf(db), { c: next ? 1 : 0, r: next ? 1 : 0 }, `${saved} changed to ${next}`);
     } finally { db.close(); }
@@ -235,7 +235,7 @@ test('PUT /api/decks/:id: a changed NDA flag is the founder\'s choice, Yes or No
   const { db, call } = fixture(); try {
     const slides = demoDayDeck(db, undefined, false);
     const next = slides.map((s) => ({ ...s, fields: s.fields.map((f: any) => (f.key === 'contact_deal_access_nda_required' ? { ...f, value: true } : f)) }));
-    assert.equal((await call(FOUNDER, 'PUT', '/api/decks/10', { slides: next, title: 'Synthetic deck' })).status, 200);
+    assert.equal((await call(FOUNDER, 'PUT', '/api/decks/10', { model_version: 2, slides: next, title: 'Synthetic deck' })).status, 200);
     assert.deepEqual(choiceOf(db), { c: 1, r: 1 }, 'the legacy slide field, changed, is a choice too');
   } finally { db.close(); }
 });

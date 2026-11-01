@@ -51,6 +51,8 @@ function fixture({ funded = true } = {}) {
     CREATE TABLE score_snapshots (id INTEGER PRIMARY KEY, project_id INTEGER, total_score REAL, created_at TEXT);
     CREATE TABLE landing_pages (id INTEGER PRIMARY KEY, project_id INTEGER);
     CREATE TABLE integrations (id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, status TEXT);`);
+  // D1503 (#3754): /generate reads the deck's element model picks (migration 717).
+  f.db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/717_deck_model_picks.sql'), 'utf8'));
   f.db.prepare('INSERT INTO projects (id, name, sector, stage, description, problem_statement, solution) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(PROJECT.id, PROJECT.name, PROJECT.sector, PROJECT.stage, PROJECT.description, PROJECT.problem_statement, PROJECT.solution);
   setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
