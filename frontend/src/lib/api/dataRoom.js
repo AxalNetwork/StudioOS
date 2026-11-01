@@ -38,6 +38,8 @@ const activityQuery = (q = {}) => {
   return s ? `?${s}` : '';
 };
 export const dataRoomApi = {
+  // D1602: owner opt-in; a typed document first returns 402 with its quote.
+  setDeckSource: (projectUid, fileUid, { enabled, confirm_quote } = {}) => request(`/data-room/${seg(projectUid)}/files/${seg(fileUid)}/deck-source`, { method: 'PUT', inlinePaywall: true, body: JSON.stringify({ enabled, ...(confirm_quote ? { confirm_quote } : {}) }) }),
   download: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}/download`, { method: 'POST' }),
   versions: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}/versions`),
   downloadVersion: (projectUid, uid, n) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}/versions/${seg(n)}/download`, { method: 'POST' }),

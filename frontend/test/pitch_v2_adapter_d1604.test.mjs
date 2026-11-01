@@ -30,7 +30,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
   assert.ok(methods.length >= 40);
   // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix; D1565 (#3812) the investor links. A swapped
   // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'stagePlan', 'remix', 'investorLinks', 'withdrawInvestorLink'], 'the rows whose route is on main');
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'stagePlan', 'remix', 'investorLinks', 'withdrawInvestorLink', 'setDeckSource'], 'the rows whose route is on main');
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   for (const name of ['investorLinks', 'withdrawInvestorLink']) {
     assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
@@ -116,7 +116,7 @@ test('the seam reaches no network, and no client method exists for a route that 
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
   // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1565's `deckInvestorLinks.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js']);
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/dataRoom.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js']);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckInvestorLinks\)/);
   assert.doesNotMatch(codeOnly(read(`${PITCH}/deckV2Model.js`)), /request\(|fetch\(|lib\/api|from 'react'/);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');

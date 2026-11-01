@@ -333,7 +333,7 @@ export function factsFor(spec: CardSpec, items: SourceItem[], exclude: Excluded 
   const keys = keysOf(spec, items, exclude);
   return keys.map((k) => {
     const it = items.find((x) => x.source_key === k);
-    return { label: it?.label ?? slotHome(k, 0)?.label ?? k, value: it && it.state === 'recorded' ? valueText(it) ?? 'Not recorded' : 'Not recorded' };
+    return { label: it?.label ?? slotHome(k, 0)?.label ?? k, value: it && it.state === 'recorded' ? (k.startsWith('dataroom.') ? 'Recorded; placed by code' : valueText(it) ?? 'Not recorded') : 'Not recorded' };
   });
 }
 

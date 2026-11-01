@@ -41,6 +41,8 @@ Builds the deck payload from the venture's real records and renders it.
 | `rubric.ts` | D1517 (#3769): the code rubric for a generated deck (`deckRubric`, out of 100, every deduction named: fit, one-word title lines, headings, chart types, layout variety, gaps) and `placeholders`, the one-click bar's count of Not recorded lines. The gate is 70 (`RUBRIC_GATE`) on the three sample ventures. Pure. |
 | `diagramModel.ts` | D898 §8.4 (#3658): the optional, versioned `diagram` on a `graphic` block (timeline, flow, cycle, matrix): editable labelled steps, read by `slideModel.ts`. |
 | `chartSeries.ts` | D898 group C (#2676): `CHART_SERIES`, the dated series a deck chart plots (Grow's monthly snapshots, Stripe and typed apart; Validate's interviews per week; D1601's `grow.wau.weekly` from PostHog, not recorded until #3731's feeds store it), each with its points, Source, grade and snapshot; `chartFits`, how many each of the twelve chart types can draw and why not. Read by `GET /api/decks/chart-series` and the refresh. Writes nothing; no model runs. |
+| `dataroomFormats.ts` | D1602: bounded CSV/XLSX/DOCX readers and schema/citation validation; no formula or URL execution. |
+| `dataroomExtract.ts` | D1602: owner-approved, quoted current-version extraction through the existing queue and metered AI router. |
 
 ## The rule
 
