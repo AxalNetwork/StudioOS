@@ -33,7 +33,7 @@ test('1. drift: every routed id is a priced ga/partner model doing its kind of w
   assert.deepEqual(driftProblems(), []);
   // Mutation-shaped: the catalogue without one routed id, or with one retired, or unpriced.
   const victim = routed.find((r) => r.where.some((w) => w.startsWith('element:')))!.id;
-  assert.match(driftProblems((id) => (id === victim ? null : modelById(id))).join('\n'), new RegExp(`${victim.replace(/[/.]/g, '\\$&')} .* is not in the catalogue`));
+  assert.match(driftProblems((id) => (id === victim ? null : modelById(id))).join('\n'), new RegExp(`${victim.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')} .* is not in the catalogue`));
   assert.match(driftProblems((id) => (id === victim ? { ...modelById(id)!, status: 'deprecated' } : modelById(id))).join('\n'), /is deprecated, not ga or partner/);
   assert.match(driftProblems((id) => (id === victim ? { ...modelById(id)!, prices: {} } : modelById(id))).join('\n'), /has no price/);
   // Every task's route is in it.
