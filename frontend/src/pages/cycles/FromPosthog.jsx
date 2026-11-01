@@ -104,7 +104,7 @@ export default function FromPosthog({ section, projectId, module, api = posthogA
   }
   if (state === 'not_linked') {
     return frame(
-      <div className="flex flex-col items-start gap-1" data-testid="posthog-not-linked">
+      <div className="flex flex-col items-start gap-1" data-testid="posthog-no-project">
         <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{NOT_LINKED}</p>
         <Link to="/account/connectors/posthog" className={LINK} data-testid="posthog-choose-project">Choose a project ›</Link>
       </div>,
