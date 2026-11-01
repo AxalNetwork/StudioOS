@@ -29,10 +29,7 @@ export default {
   },
   "@cf/daily-co/phonellm-mini-alpha-2": {
     "operation": "chat",
-    "kinds": [
-      "chat",
-      "speech"
-    ],
+    "kinds": ["voice_turn"],
     "purpose": "Short conversational replies for recorded-session and voice workflows"
   },
   "@cf/aisingapore/gemma-sea-lion-v4-27b-it": {
@@ -113,11 +110,7 @@ export default {
   },
   "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b": {
     "operation": "chat",
-    "kinds": [
-      "reason",
-      "plan",
-      "numbers"
-    ],
+    "kinds": ["reason"],
     "purpose": "Compare evidence, work through scenarios and explain planning assumptions"
   },
   "@cf/deepseek-ai/deepseek-v4-flash-0731": {

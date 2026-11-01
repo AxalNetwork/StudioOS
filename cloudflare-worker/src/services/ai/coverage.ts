@@ -23,6 +23,7 @@
 import matrix from './railMatrix.json';
 import { CATALOGUE, CATALOGUE_READ, PROVIDER_MODELS, isOffered, isPriced, partnerGated, type CatalogueModel } from './catalogue';
 import { MODEL_CONNECTIONS, moduleConnections, type ModuleOperation } from './moduleConnections';
+import { HIDDEN_MODELS } from './modelUseCases';
 import { AI_MARKUP, billedMicro, type RunUnits } from './pricing';
 import { ROUTE } from '../aiRouter';
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, STT_MODELS, isChoosable } from '../sttModels';
@@ -267,6 +268,8 @@ function buildCells(): Map<string, Map<ModuleKey, Cell>> {
     const op = MODEL_CONNECTIONS[m.id]?.operation;
     for (const { key } of COVERAGE_MODULES) {
       if (why) { byMod.set(key, { state: 'n/a', refs: [], reason: why }); continue; }
+      // D1478 (#3934): offered by the catalogue, but on no list (§1 rows 14 and 15).
+      if (HIDDEN_MODELS.includes(m.id)) { byMod.set(key, { state: 'n/a', refs: [], reason: 'hidden' }); continue; }
       const w = wired.get(m.id)?.get(key);
       const o = offered.get(m.id)?.get(key);
       if (w?.size) byMod.set(key, { state: 'wired', refs: [...w].sort() });
@@ -413,6 +416,7 @@ export function renderCoverage(): string {
     const ids = CATALOGUE.filter((m) => notOfferedReason(m) === why).map((m) => `\`${m.id}\``);
     if (ids.length) out.push(`- **${why}** (${ids.length}): ${ids.join(', ')}`);
   }
+  out.push(`- **hidden** (${HIDDEN_MODELS.length}): ${HIDDEN_MODELS.map((id) => `\`${id}\``).join(', ')} (offered by the catalogue, on no job's list: D1478, #3934)`);
   out.push('');
   out.push('An offered model is n/a where its operation does not fit:');
   out.push('');

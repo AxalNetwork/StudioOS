@@ -35,6 +35,7 @@ import { railCrumbs, railOptionRows, railOptionsOn, railRows, railSectionOf, res
 import { railFor, refuseAssistOff } from '../util/railContext';
 import moduleRoutes from './ai_modules';
 import { MODEL_CONNECTIONS, moduleConnections } from '../services/ai/moduleConnections';
+import { USE_CASE_KINDS, jobsOnPage, lockOf, selectorsFor, type UseCaseKind } from '../services/ai/modelUseCases';
 
 const ai = new Hono<{ Bindings: Env }>();
 ai.route('/modules', moduleRoutes);
@@ -522,6 +523,26 @@ ai.get('/rail', async (c) => {
   const options = railOptionsOn(row.pageKey).map((o) => ({
     key: o.optionKey, label: o.optionLabel, kind: o.kind, handler: o.handler, models: view(o), more: more(o), pick: pickFor(o.optionKey, o),
   }));
+  // D1478 (#3934): one selector per kind of work the page's jobs use, from
+  // the job table. `wired` says whether a press on this page runs the model
+  // today; a pick is stored under `kind:<kind>`.
+  const pageOptions = railOptionsOn(row.pageKey);
+  const automatic = new Set([row, ...pageOptions].flatMap((r) => r.models.map((m) => m.id)));
+  const card = (id: string) => {
+    const m = modelById(id);
+    return { id, name: MODEL_NAMES[id] ?? m?.name ?? null, price: unitPrices(id, multiplier), lock: lockOf(id), offered: !!m && isOffered(m, c.env) };
+  };
+  const selectors = selectorsFor(jobsOnPage(row.pageKey, pageOptions.map((o) => o.optionKey))).map((sel) => {
+    const offers = [...sel.models.map((m) => m.id), ...sel.more];
+    const stored = rows.find((r) => r.task === `kind:${sel.kind}`)?.model ?? null;
+    if (stored && !offers.includes(stored)) stale.add(`kind:${sel.kind}`);
+    return {
+      kind: sel.kind, label: sel.label, jobs: sel.jobs,
+      models: sel.models.map((m) => ({ ...card(m.id), role: m.role, wired: automatic.has(m.id) })),
+      more: sel.more.map(card),
+      pick: stored && offers.includes(stored) ? stored : null,
+    };
+  });
   for (const task of stale) {
     await c.env.DB.prepare(
       'DELETE FROM ai_rail_preferences WHERE user_id = ?1 AND section = ?2 AND task = ?3',
@@ -536,6 +557,7 @@ ai.get('/rail', async (c) => {
     models: view(active),
     more: more(active),
     options,
+    selectors,
     pick,
     mode: rows.find((r) => r.task === '')?.mode ?? null,
     billing: billingMode(c.env),
@@ -556,6 +578,22 @@ ai.put('/rail/pick', async (c) => {
   const got = await railBody(c);
   if (got instanceof Response) return got;
   const { row, body } = got;
+  // D1478 (#3934): `{ page, kind, model }` picks for one selector of the job table.
+  if (body.kind !== undefined) {
+    const kind = body.kind;
+    const sel = typeof kind === 'string' && Object.prototype.hasOwnProperty.call(USE_CASE_KINDS, kind)
+      ? selectorsFor(jobsOnPage(row.pageKey, railOptionsOn(row.pageKey).map((o) => o.optionKey))).find((s) => s.kind === (kind as UseCaseKind))
+      : undefined;
+    if (!sel) return refuse(c, 400, { code: 'unknown_kind', message: 'This page has no selector for that kind of work.' });
+    const offers = [...sel.models.map((m) => m.id), ...sel.more];
+    const pickModel = body.model;
+    if (pickModel !== null && !(typeof pickModel === 'string' && offers.includes(pickModel))) {
+      return refuse(c, 400, { code: 'model_not_offered', message: 'That model is not offered for this kind of work.', extra: { models: offers } });
+    }
+    const saved = await writeRailPreference(c.env, Number(user.id), railSectionOf(row), `kind:${sel.kind}`, { model: pickModel as string | null, mode: null }, pickModel === null);
+    if (!saved) return refuseCap(c);
+    return c.json({ ok: true, page: row.pageKey, kind: sel.kind, model: pickModel });
+  }
   const option = railOption(body.option);
   if (option === null) return refuseRailOption(c);
   // PR 3: a registered option's pick is checked against its own row.

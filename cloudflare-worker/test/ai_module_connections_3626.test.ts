@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import modules, { modulePageAllowed } from '../src/routes/ai_modules.ts';
 import { CATALOGUE, isOffered } from '../src/services/ai/catalogue.ts';
+import { HIDDEN_MODELS } from '../src/services/ai/modelUseCases.ts';
 import { MODEL_CONNECTIONS, moduleConnections } from '../src/services/ai/moduleConnections.ts';
 import { pcmBytes, pcmMinutes, questionsValid, specialistOutput } from '../src/services/ai/moduleShapes.ts';
 import { railRows, railOptionRows, resolveRailChain } from '../src/services/ai/railMatrix.ts';
@@ -305,7 +306,9 @@ test('standalone embeddings never write axal-search; each model bills its catalo
 
 test('every newly connected text model actually dispatches through its persona module', async () => {
   const results = [];
-  for (const [id] of Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'chat')) {
+  // D1478 (#3934): the two hidden models (glm-5.2, the 3.1 70B) are on no page, so nothing dispatches them.
+  const chat = Object.entries(MODEL_CONNECTIONS).filter(([id, c]) => c.operation === 'chat' && !HIDDEN_MODELS.includes(id));
+  for (const [id] of chat) {
     const f = fixture();
     try {
       const page = pageFor(id), image = CATALOGUE.find(m => m.id === id)!.capabilities.includes('Vision') && page.kind === 'vision';
@@ -314,7 +317,7 @@ test('every newly connected text model actually dispatches through its persona m
       results.push([id, r.ok, r.usage.model, f.calls[0]?.id]);
     } finally { f.db.close(); }
   }
-  assert.deepEqual(results, Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'chat').map(([id]) => [id, true, id, id]));
+  assert.deepEqual(results, chat.map(([id]) => [id, true, id, id]));
 });
 
 test('Moondream uses image-query shape; no reasoning trace is returned as the answer', async () => {
@@ -337,10 +340,15 @@ test('image specialists bound legitimate classifier output and refuse malformed 
   } finally { f.db.close(); }
 });
 
-test('a speech module can discuss supplied material without treating a chat model as transcription', async () => {
+test('a speech page no longer offers phonellm; it is a Voice turn model, on the pages whose jobs take a voice turn', async () => {
+  // D1478 (#3934, the plan's §4.2 fix 10): phonellm was an Alternative on every speech page.
+  const speech = rows.find(r => r.kind === 'speech')!;
+  assert.ok(!moduleConnections(speech, switches).some(m => m.id === '@cf/daily-co/phonellm-mini-alpha-2'), 'not on a Listen page');
+  assert.ok(!(speech.more ?? []).some(m => m.id === '@cf/daily-co/phonellm-mini-alpha-2'), 'not under All models on a Listen page');
+  assert.equal(pageFor('@cf/daily-co/phonellm-mini-alpha-2').pageKey, 'Founder · Studio', 'Studio voice mode (ST9)');
   const f = fixture();
   try {
-    const result = await post(f, { page: rows.find(r => r.kind === 'speech')!.pageKey, model: '@cf/daily-co/phonellm-mini-alpha-2', text: 'Draft a short follow-up question.' });
+    const result = await post(f, { page: 'Founder · Studio', model: '@cf/daily-co/phonellm-mini-alpha-2', text: 'Draft a short follow-up question.' });
     assert.deepEqual([result.body.ok, result.body.output, Object.keys(f.calls[0].input).sort()], [true, 'Result.', ['max_tokens', 'messages']]);
   } finally { f.db.close(); }
 });
