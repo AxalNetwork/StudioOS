@@ -24,6 +24,11 @@ when adding a kind.
   carries `source`. D1484 also wires D1208's interview calls, cohort dates and
   deal closings and the `manual` reader for "New event", all page only and for
   their owner alone (`PERSONAL_ONLY_KINDS`: no staff scope lists them).
+- `botCalls.ts`: D1486 §a (#3980), the meeting bot's runs (`meeting_bots`)
+  as the `bot_call` kind: the member's own runs only, with epoch ms turned
+  into ISO. `done` reads "Recorded", and "Transcript ready" appears only when
+  the run's session holds its final transcript. Page only. It never reads
+  the meeting link or the participants.
 - `raiseDates.ts`: #3982 (D1486 §c), Raise's dated stores, page only and all
   day: `round_close` (an active round's close, for the venture's founder and
   its accepted owners and co-founders) and `nda_expiry` (an active, unvoided

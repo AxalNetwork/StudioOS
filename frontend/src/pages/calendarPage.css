@@ -40,6 +40,7 @@
   --pal-violet: #6d28d9; --pal-blue: #1d4ed8; --pal-teal: #0f766e; --pal-green: #15803d; --pal-amber: #b45309;
   --pal-orange: #c2410c; --pal-red: #b91c1c; --pal-pink: #be185d; --pal-slate: #475569;
   --k-publish_send: #a21caf; --k-content_planned: #65a30d;
+  --k-bot_call: #7e22ce;
   --k-round_close: #a16207; --k-nda_expiry: #6d28d9;
   background: var(--cal-shell);
   color: var(--cal-ink);
@@ -75,6 +76,7 @@
   --pal-violet: #a78bfa; --pal-blue: #93c5fd; --pal-teal: #5eead4; --pal-green: #86efac; --pal-amber: #fcd34d;
   --pal-orange: #fdba74; --pal-red: #fca5a5; --pal-pink: #f9a8d4; --pal-slate: #cbd5e1;
   --k-publish_send: #f0abfc; --k-content_planned: #bef264;
+  --k-bot_call: #d8b4fe;
   --k-round_close: #fde047; --k-nda_expiry: #c4b5fd;
 }
 
@@ -138,6 +140,7 @@
 /* D1486 §b (#3981): Grow's sends and planned pieces. */
 .cal-dot[data-kind='publish_send'] { background: var(--k-publish_send); border-radius: 0 50% 0 50%; }
 .cal-dot[data-kind='content_planned'] { background: var(--k-content_planned); border-radius: 50% 0 50% 0; }
+.cal-dot[data-kind='bot_call'] { background: var(--k-bot_call); border-radius: 0 50% 50% 50%; }
 /* #3982 (D1486 §c): a round's close and an NDA's expiry, each its own hue and shape. */
 .cal-dot[data-kind='round_close'] { background: var(--k-round_close); border-radius: 0 50% 0 0; }
 .cal-dot[data-kind='nda_expiry'] { background: var(--k-nda_expiry); border-radius: 0 0 50% 0; }
@@ -182,6 +185,7 @@
 .cal-ev[data-kind='ic_meeting'] { box-shadow: inset 3px 0 0 var(--k-ic_meeting); }
 .cal-ev[data-kind='compliance_due'] { box-shadow: inset 3px 0 0 var(--k-compliance_due); }
 .cal-ev[data-kind='learning'] { box-shadow: inset 3px 0 0 var(--k-learning); }
+.cal-ev[data-kind='bot_call'] { box-shadow: inset 3px 0 0 var(--k-bot_call); }
 .cal-nr[data-state='overdue'] { color: var(--cal-err-ink); font-weight: 700; }
 .cal-nr[data-state='done'] { color: var(--cal-ok-ink); }
 .cal-ev[data-cancelled='true'] { opacity: .6; }

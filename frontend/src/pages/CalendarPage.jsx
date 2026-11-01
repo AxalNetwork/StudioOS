@@ -146,6 +146,8 @@ const KINDS = [
   // D1486 §b (#3981): Grow's dated stores, page only.
   { id: 'publish_send', label: 'Publish send', from: 'Publish' },
   { id: 'content_planned', label: 'Planned content', from: 'Grow › Distribution' },
+  // D1486 §a (#3980): the meeting bot's calls, page only; done reads Recorded.
+  { id: 'bot_call', label: 'Recorded call', from: 'Validate › Record a session' },
   // #3982 (D1486 §c): Raise's dated stores, page only.
   { id: 'round_close', label: 'Round close', from: 'Raise › Round' },
   { id: 'nda_expiry', label: 'NDA expiry', from: 'Raise › NDAs' },
@@ -973,6 +975,8 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
           </div>
         )}
         {!deadline && where.why && <p className="cal-ev-why">{where.why}</p>}
+        {/* D1486 §a: a bot run's state in the Worker's words ("Recorded", "Transcript ready" only when it exists). */}
+        {ev.kind === 'bot_call' && ev.bot?.words ? <p className="cal-ev-why" data-testid={`calendar-bot-${ev.id}`}>{ev.bot.words}</p> : null}
         {ev.notes && <p className="cal-ev-why">{ev.notes}</p>}
 
         {(mayRsvp || mayPush || mayCancel) && (
