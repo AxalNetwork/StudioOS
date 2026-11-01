@@ -46,6 +46,7 @@ import { cellText, tableLines } from './tableCells';
 export { cellText, tableLines };
 import { diagramProblem, sanitizeDiagram } from './diagramModel';
 import { CUSTOM, STRUCTURE_IDS, areasProblem, sanitizeAreas } from './structures';
+import { DECOR_KINDS, MAX_DECOR as LIBRARY_MAX_DECOR, cleanDecorItem } from './elements';
 
 export const GRID_COLS = 12;
 export const GRID_ROWS = 6;
@@ -53,7 +54,8 @@ export const MAX_BLOCKS = 24;
 export const NOTES_MAX = 4000;
 /** D1500: the document model this Worker reads and writes. A save in any other shape is refused, never stripped. */
 export const MODEL_VERSION = 2;
-export const MAX_DECOR = 16;
+/** D1500's cap, owned by the elements library (D1541) so the panel's "N of 16" and the model agree. */
+export const MAX_DECOR = LIBRARY_MAX_DECOR;
 export const CARD_BYTES_MAX = 256 * 1024;
 export const MAX_ACCENT_RUNS = 3;
 export const MAX_PARAS = 40;
@@ -278,13 +280,24 @@ function parasProblem(v: unknown, ground: string): string | null {
   return accents > MAX_ACCENT_RUNS ? `the text holds at most ${MAX_ACCENT_RUNS} accent runs.` : null;
 }
 
-/** D1500: a card's decor (at most 16 items), each `{ id, kind, grid? }`; what the items draw is the elements library's (#3779). */
-function decorOf(v: unknown): Array<{ id: string; kind: string; grid?: Grid }> | null {
+/**
+ * D1500: a card's decor (at most 16 items), each `{ id, kind, grid? }`.
+ * D1541 (#3779): an item of the elements library (`icon`, `shape`, `divider`,
+ * `texture`) that names a `ref` also keeps it, its tone and, for an icon, its
+ * licence (`elements.cleanDecorItem`, set server-side, so it travels with the
+ * block); a ref the library cannot draw drops the item. An item with no ref,
+ * and any other kind, is kept as before.
+ */
+type DecorItem = { id: string; kind: string; grid?: Grid; ref?: string; tone?: string; seed?: number; licence?: { set: string; version: string; spdx: string } };
+function decorOf(v: unknown): DecorItem[] | null {
   if (!Array.isArray(v)) return null;
   const out = v.slice(0, MAX_DECOR).flatMap((d: any, i: number) => {
     const kind = str(d?.kind, 40);
     if (!kind) return [];
-    const item: { id: string; kind: string; grid?: Grid } = { id: typeof d.id === 'string' && ID.test(d.id) ? d.id : `d${i + 1}`, kind };
+    // An item with no ref is D1500's placeholder, kept as it was; a ref the library cannot draw drops the item.
+    const lib = (DECOR_KINDS as readonly string[]).includes(kind) && d?.ref != null ? cleanDecorItem(d) : undefined;
+    if (lib === null) return [];
+    const item: DecorItem = { id: typeof d.id === 'string' && ID.test(d.id) ? d.id : `d${i + 1}`, kind, ...(lib ? { ref: lib.ref, tone: lib.tone, ...(lib.seed ? { seed: lib.seed } : {}), ...(lib.licence ? { licence: { ...lib.licence } } : {}) } : {}) };
     const grid = gridOf(d.grid);
     if (grid) item.grid = grid;
     return [item];
@@ -447,6 +460,10 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
     if (ap) out.push(`${card}: ${ap}`);
     // D1500: the caps a card is refused past, each with its sentence.
     if (s?.decor != null && (!Array.isArray(s.decor) || s.decor.length > MAX_DECOR)) out.push(`${card}: a card holds at most ${MAX_DECOR} decor items.`);
+    // D1541: a library item the elements library cannot draw.
+    for (const d of Array.isArray(s?.decor) ? s.decor : []) {
+      if ((DECOR_KINDS as readonly string[]).includes(String(d?.kind)) && d?.ref != null && !cleanDecorItem(d)) out.push(`${card}: ${String(d?.ref ?? 'a decor item').slice(0, 40)} is not in the elements library.`);
+    }
     if (cardBytes(s) > CARD_BYTES_MAX) out.push(`${card}: the card is larger than 256 KB. Remove an image or some text, then save.`);
     if (s?.section != null && (typeof s.section !== 'string' || s.section.length > SECTION_MAX)) out.push(`${card}: the section name is at most ${SECTION_MAX} characters.`);
     if (s?.blocks == null) return;

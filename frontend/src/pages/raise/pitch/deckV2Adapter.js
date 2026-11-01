@@ -48,6 +48,7 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckElementsApi } from '../../../lib/api/deckElements.js';
 
 export { NOT_ON };
 
@@ -108,7 +109,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'elementsLibrary']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -158,7 +159,15 @@ export const figures = off('figures');
 export const deckUsage = off('deckUsage');
 export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
-export const elementsLibrary = off('elementsLibrary');
+/**
+ * D1541 (#3779): the elements library and a page of icons for the pd28
+ * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
+ * generate, icons: { total, offset, items } }`.
+ */
+export const elementsLibrary = (opts = {}) => through(async () => {
+  const [lib, page] = await Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]);
+  return { ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } };
+}, SURFACES.elementsLibrary.issue);
 export const diagrams = off('diagrams');
 export const ventureElements = off('ventureElements');
 export const templates = off('templates');

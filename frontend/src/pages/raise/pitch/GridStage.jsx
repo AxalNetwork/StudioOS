@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Grid3x3 } from 'lucide-react';
+import { Grid3x3, Shapes } from 'lucide-react';
 import { BlockView } from './BlockGrid';
 import { ChartBlock } from './ChartTools';
 import { overlayStyle } from './imageModel';
@@ -10,6 +10,7 @@ import { GRID, aspectOf, baselineShare, frameOf, placeOf, ratioOf } from './grid
 import { SourceChip } from './SourcesBoards';
 import { ChangedNotice, FigureCard } from './FigureCard';
 import { faceOf, isFigure, itemsByKey, staleFigures } from './figuresModel';
+import { elementsLibrary } from './deckV2Adapter.js';
 import {
   KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, keyStep, liveFocus, marquee, moveTo, nudge, pick, selectable, spanOf,
 } from './gridSelection';
@@ -51,7 +52,36 @@ import {
  *
  * Nothing here writes: a move is the editor's `onMove`, a refresh its
  * `onRefresh`, each held until a version is saved like every other edit.
+ *
+ * D1541 (#3779, pd28): with one area selected, "Graphics" in the selection
+ * tools opens the elements library: Icons · Shapes · Dividers · Textures,
+ * "Search icons", "Open licence · recorded", and "Generate an icon" greyed
+ * "Coming later". A pick is the editor's `onDecor`, placed on the selected
+ * area's cells, so it sits on the 8 px baseline ("Snapped to the baseline");
+ * "[n] of 16 decor items on this card" counts them, and the 17th is refused.
+ * Decor is drawn under the areas from the Worker's sanitised SVG, as an image,
+ * so nothing in it can run.
  */
+export const DECOR_MAX = 16;
+const DECOR_KINDS = ['icon', 'shape', 'divider', 'texture'];
+const SEGMENT_KIND = { icons: 'icon', shapes: 'shape', dividers: 'divider', textures: 'texture' };
+const SEGMENT_LABEL = { icons: 'Icons', shapes: 'Shapes', dividers: 'Dividers', textures: 'Textures' };
+/** The Worker's SVG with the card's own tones in place of the theme variables, as an image source. */
+export function decorSrc(svg, colours = {}) {
+  if (typeof svg !== 'string' || !svg) return null;
+  const tone = { ink: colours.ink, accent: colours.accent || colours.ink, muted: colours.muted || colours.ink, surface: colours.bg || '#ffffff' };
+  const filled = svg.replace(/var\(--deck-(ink|accent|muted|surface)\)/g, (_, t) => tone[t] || '#111111');
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(filled)}`;
+}
+/** A card's library decor: the items `onDecor` placed and the Worker keeps. */
+export const libraryDecor = (card) => (Array.isArray(card?.decor) ? card.decor.filter((d) => DECOR_KINDS.includes(d?.kind) && d?.ref) : []);
+/** The next free decor id on the card. */
+export function decorId(card) {
+  const used = new Set((card?.decor || []).map((d) => d?.id));
+  let n = (card?.decor || []).length + 1;
+  while (used.has(`d${n}`)) n += 1;
+  return `d${n}`;
+}
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const MONO = 'font-mono text-[10.5px] text-axal-muted dark:text-gray-400';
@@ -127,7 +157,7 @@ export function CardChrome({ chrome, pageLabel = null, colours, logo = null }) {
 export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
   selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
-  pageLabel = null,
+  pageLabel = null, onDecor = null,
 }) {
   const aspect = aspectOf(theme?.aspect);
   const areas = useMemo(() => areasOf(card, model), [card, model]);
@@ -169,6 +199,32 @@ export default function GridStage({
     if (active && active !== node && box && typeof box.contains === 'function' && !box.contains(active)) return;
     node?.focus?.();
   }, [live]);
+
+  // D1541: the library, read when the panel opens or the card holds decor; each item's SVG by kind and ref.
+  const [library, setLibrary] = useState(null);
+  const [panel, setPanel] = useState(false);
+  const [snapped, setSnapped] = useState(false);
+  const decor = libraryDecor(card);
+  const decorKey = decor.map((d) => `${d.kind}:${d.ref}`).join('|');
+  useEffect(() => {
+    if (!panel && !decor.length) return undefined;
+    let alive = true;
+    const refs = decor.filter((d) => d.kind === 'icon').map((d) => d.ref);
+    elementsLibrary(refs.length && !panel ? { refs } : {}).then((a) => { if (alive) setLibrary(a); });
+    return () => { alive = false; };
+  }, [panel, decorKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPanel(false); setSnapped(false); }, [index]);
+  const svgFor = (d) => {
+    const v = library?.available ? library.value : null;
+    if (!v) return null;
+    const list = d.kind === 'icon' ? v.icons?.items : v[`${d.kind}s`];
+    return (list || []).find((x) => x.ref === d.ref)?.svg ?? null;
+  };
+  const placeDecor = (item) => {
+    if (!onDecor || !one || (card?.decor || []).length >= DECOR_MAX) return;
+    onDecor({ id: decorId(card), kind: item.kind, ref: item.ref, tone: 'ink', grid: { ...one.grid } });
+    setSnapped(true);
+  };
 
   const bg = card?.background?.color || theme?.background?.color || colours.bg;
   const bgImage = card?.background?.image_url || theme?.background?.image_url || null;
@@ -279,6 +335,12 @@ export default function GridStage({
         {one && !readOnly ? (
           <span className="flex min-w-0 flex-wrap items-center gap-2" data-testid="pitch-editor-htb">
             {askButton(1, 'pitch-editor-ask-area')}
+            {!readOnly && onDecor ? (
+              <button type="button" aria-pressed={panel} aria-expanded={panel} onClick={() => setPanel((p) => !p)}
+                className={`${CHIP} border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} data-testid="pitch-editor-graphics">
+                <Shapes size={13} aria-hidden="true" /> Graphics
+              </button>
+            ) : null}
             <span className={MONO}>{areaTitle(one, areas.indexOf(one), areas.length)}</span>
           </span>
         ) : one ? (
@@ -307,6 +369,17 @@ export default function GridStage({
         data-aspect={aspect} data-testid="pitch-editor-card">
         {veil ? <span className="absolute inset-0" style={{ background: veil }} aria-hidden="true" data-testid="pitch-editor-overlay" /> : null}
         {grid ? <GridOverlay aspect={aspect} /> : null}
+        {decor.length ? (
+          <div className={`pointer-events-none ${LAYER}`} aria-hidden="true" data-testid="pitch-editor-decor">
+            {decor.map((d) => {
+              const src = decorSrc(svgFor(d), colours);
+              const at = d.grid ? placeOf(d.grid, aspect) : { left: 0, top: 0, width: '100%', height: '100%' };
+              return src
+                ? <img key={d.id} alt="" src={src} className="absolute object-contain" style={at} data-testid={`pitch-editor-decor-${d.id}`} />
+                : <span key={d.id} className="absolute rounded-[6px] border border-dashed border-black/15 dark:border-white/20" style={at} data-testid={`pitch-editor-decor-${d.id}`} />;
+            })}
+          </div>
+        ) : null}
         {areas ? (
           <div ref={layer} className={LAYER}
             onPointerDown={(e) => { if (e.target === e.currentTarget) down(e); }} data-testid="pitch-editor-blocks">
@@ -360,6 +433,10 @@ export default function GridStage({
       </div>
 
       {refused ? <span className={MUTED} role="status" data-testid="pitch-editor-drop-refused">{refused}</span> : null}
+      {panel && one && onDecor && !readOnly ? (
+        <DecorPanel library={library} count={(card?.decor || []).length} snapped={snapped} onPick={placeDecor}
+          onSearch={(q) => elementsLibrary({ q }).then(setLibrary)} onClose={() => setPanel(false)} />
+      ) : null}
       {(() => {
         const at = (areas || []).find((x) => x.id === hover) || one;
         return at?.kind === 'block' && isFigure(at.block) ? <FigureCard block={at.block} items={items} charts={charts} /> : null;
@@ -374,5 +451,55 @@ export default function GridStage({
       ) : null}
       {areas ? <span className={MONO}>{KEYS_LINE}</span> : null}
     </div>
+  );
+}
+
+/** pd28: the elements library, 300 px, opened from the selection tools. */
+export function DecorPanel({ library, count, snapped, onPick, onSearch, onClose }) {
+  const [segment, setSegment] = useState('icons');
+  const [q, setQ] = useState('');
+  const v = library?.available ? library.value : null;
+  const full = count >= DECOR_MAX;
+  const list = !v ? [] : segment === 'icons' ? (v.icons?.items || []) : (v[segment] || []);
+  return (
+    <section className="flex w-full max-w-[300px] flex-col gap-2 rounded-[12px] border border-axal-hairline bg-white p-3 text-axal-ink shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+      aria-label="Elements library" data-testid="pitch-decor-panel">
+      <div className="flex items-center justify-between">
+        <b className="text-[13px]">Elements</b>
+        <button type="button" className="min-h-[32px] text-[12.5px] underline" onClick={onClose} data-testid="pitch-decor-close">Close</button>
+      </div>
+      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Elements">
+        {Object.keys(SEGMENT_KIND).map((k) => (
+          <button key={k} type="button" role="tab" aria-selected={segment === k} onClick={() => setSegment(k)}
+            className={`min-h-[32px] rounded-full px-2.5 text-[12px] font-bold ${segment === k ? 'bg-axal-lavender text-axal-violet dark:bg-violet-950/40 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`}
+            data-testid={`pitch-decor-seg-${k}`}>{SEGMENT_LABEL[k]}</button>
+        ))}
+      </div>
+      {segment === 'icons' ? (
+        <input type="search" value={q} placeholder="Search icons" aria-label="Search icons"
+          onChange={(e) => { setQ(e.target.value); onSearch(e.target.value); }}
+          className="min-h-[36px] rounded-[8px] border border-axal-hairline bg-white px-2 text-[12.5px] dark:border-gray-700 dark:bg-gray-950" data-testid="pitch-decor-search" />
+      ) : null}
+      {!library ? <span className={MUTED}>Reading the library…</span>
+        : !v ? <span className={MUTED} data-testid="pitch-decor-unread">{library.unreadable ? 'The library could not be read.' : 'Not switched on yet.'}</span>
+          : (
+            <div className="grid grid-cols-5 gap-1.5" data-testid="pitch-decor-grid">
+              {list.map((x) => (
+                <button key={`${x.kind}:${x.ref}`} type="button" title={x.label} aria-label={x.label} disabled={full} onClick={() => onPick(x)}
+                  className="flex aspect-square items-center justify-center rounded-[8px] border border-axal-hairline p-1.5 hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700"
+                  data-testid={`pitch-decor-item-${x.kind}-${x.ref}`}>
+                  <img alt="" src={decorSrc(x.svg, { ink: 'currentColor' }) || undefined} className="h-full w-full object-contain" />
+                </button>
+              ))}
+            </div>
+          )}
+      {v ? <span className={MONO} data-testid="pitch-decor-licence">{`Open licence · recorded · ${v.licence?.name || 'Icons'} ${v.licence?.spdx || ''}`.trim()}</span> : null}
+      <span className={MUTED} data-testid="pitch-decor-count">{full ? `This card holds ${DECOR_MAX} decor items, the most it can.` : `${count} of ${DECOR_MAX} decor items on this card`}</span>
+      {snapped ? <span className={`${MONO} w-fit rounded-full bg-axal-lavender px-2 py-0.5 text-axal-violet dark:bg-violet-950/40 dark:text-violet-300`} role="status" data-testid="pitch-decor-snapped">Snapped to the baseline</span> : null}
+      <button type="button" disabled aria-disabled="true" className="flex min-h-[36px] flex-col items-start rounded-[8px] border border-dashed border-axal-hairline px-2 py-1 text-left opacity-60 dark:border-gray-700" data-testid="pitch-decor-generate">
+        <b className="text-[12.5px]">Generate an icon · Coming later</b>
+        <span className={MUTED}>It will show what it holds before it runs. Its model is picked in the rail's Graphics group.</span>
+      </button>
+    </section>
   );
 }

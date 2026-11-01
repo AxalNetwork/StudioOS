@@ -7,6 +7,7 @@ reply against its schema, not only that the route exists.
 | File | What it is |
 |---|---|
 | `deckElementModels.schema.json` | `GET /api/decks/:id/element-models` (D1503, #3754): each routed element with its pick, the element groups and the free elements. |
+| `deckElements.schema.json` | `GET /api/decks/elements` (D1541, #3779): the icon set's licence record, the decor cap, the shapes, dividers and textures with their sanitised SVG, and Generate (Coming later). |
 | `deckGrid.schema.json` | `GET /api/decks/:id/grid` (D1499, #3749): the geometry, the 17 structures and each card's areas with their boxes. |
 | `deckInvestorLinks.schema.json` | `GET /api/decks/:id/investor-links` (D1565, #3812): the deck, its version and its per-investor links. |
 | `deckRemix.schema.json` | `POST /api/decks/:id/remix` (D1553, #3800): the card's structure, the card and its layout options. |

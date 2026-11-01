@@ -19,6 +19,8 @@ export const CONTRACTS = Object.freeze({
   stagePlan: { issue: 3774, route: 'GET /api/decks/:id/stage-plan', schema: 'deckStagePlan.schema.json' },
   remix: { issue: 3800, route: 'POST /api/decks/:id/remix', schema: 'deckRemix.schema.json' },
   investorLinks: { issue: 3812, route: 'GET /api/decks/:id/investor-links', schema: 'deckInvestorLinks.schema.json' },
+  // D1541 (#3779): the elements library.
+  elementsLibrary: { issue: 3779, route: 'GET /api/decks/elements', schema: 'deckElements.schema.json' },
   withdrawInvestorLink: { issue: 3812, route: 'POST /api/decks/:id/investor-links/:shareId/withdraw', schema: 'deckWithdrawInvestorLink.schema.json' },
 });
 

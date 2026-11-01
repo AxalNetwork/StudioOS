@@ -2167,6 +2167,9 @@ The slide model gains a `table` block (≤ 8 columns × 12 rows; each cell `{ te
 
 | Route | Who | What it answers |
 | --- | --- | --- |
+| `GET /api/decks/elements` | signed in | D1541 (#3779). `{ licence: { id, name, version, spdx, url, copyright, derived }, decor_max: 16, icons: { total }, shapes, dividers, textures: [{ kind, ref, label, svg }], generate: { available: false, reason: 'Coming later' } }`. Every `svg` sanitised; colours are theme tones. |
+| `GET /api/decks/elements/icons?q=&offset=&limit=` or `?refs=` | signed in | D1541. `{ total, offset, icons: [{ kind: 'icon', ref, label, svg }], licence: { set, version, spdx } }`; a page is at most 120, `refs` at most 16. |
+| `GET /api/decks/elements/licence` | signed in | D1541. The icon set's full licence text (ISC, with the Feather notice), as text/plain. |
 | `GET /api/decks/:id/element-models` | whoever may read the deck (`projectOwned`) | `{ deck_id, project_id, billing, plan_rank, elements: [{ element, group, job, kind, task, plan_min, expected_ms, per_run_microusd, suggested: [≤ 3], more, pick, resolved: { model, name, source, locked, notice } }], groups: [{ group, elements, lead, suggested, more, pick, resolved, free? }], free: [{ element, group, line: 'No model · free' }] }`. `suggested`, `more` and `pick` use #3741's shape. Stale deck, area and member picks are cleared by the read, and `notice` says "A model retired · Using …". |
 | `PUT /api/decks/:id/element-models` `{ scope: 'deck' \| 'member', key, model \| null }` | whoever may write the deck | Stores the deck's pick (scope id: the project) or the caller's own. `key` is a routed element or `group:<group>`, and `null` clears the pick. Refusals: 400 `invalid_scope`, `invalid_key` or `model_not_offered`; 403 `role_locked` when HQ locked the key, and 403 `plan_locked` (with `plan`) for a model the caller's plan does not include. |
 
