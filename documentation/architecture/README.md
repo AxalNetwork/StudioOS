@@ -10,6 +10,7 @@ disagrees with the code, the document is the thing to fix.
 | `SHELL_MIGRATION.md` | The four workspace shell migrations (Founder, Investor/LP, Advisor, Partner): IA rules, zone inventory, shipped vs open, verification commands. |
 | `PROFILE_ROUTING.md` | **Generated.** Which workspace sees each canvas, under which nav section, as what surface, and how it is reached. |
 | `AI_MODEL_COVERAGE.md` | **Generated** (D1478). Every Workers AI catalogue model against the 14 platform modules: wired, offered, gap or n/a, with the file and line or page that does it, the picks the run never reads, and Pitch deck v2's models priced per run. `cloudflare-worker/test/ai_model_coverage_d1478.test.ts` fails when it differs from `renderCoverage()`. |
+| `MODEL_TERMS.md` | D1504. Every model a run can reach: grandfathered or not, where it is routed from, and what its provider's terms allow (licence, commercial output, attribution, flow-down), "Not recorded" until reviewed. `cloudflare-worker/test/ai_model_terms_d1504.test.ts` holds it equal to `cloudflare-worker/src/services/ai/modelTerms.ts`. |
 | `PAGE_INVENTORY.md` | **Generated.** The same projection from the nav side: every destination each role sidebar can reach, and which canvas is behind it. |
 | `UNRESOLVED_ITEMS.md` | The routing decisions that cannot be made from the code, what each blocks, and what a wrong guess would cost. |
 | `ASSUMPTIONS_LOG.md` | Routing calls taken without an explicit instruction, what each was decided from, and what would make it wrong. |
