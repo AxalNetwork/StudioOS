@@ -27,7 +27,13 @@ export default function advisorExpertiseBoard(role, api) {
       services: () => api.listMyAdvisorServices(),
       proof: () => api.listMyAdvisorProof(),
       thinking: () => api.listMyAdvisorThinking(),
-      visibility: () => api.getMyAdvisorVisibility(30),
+      // D1597 answers 200 with `surfaces: null` when that store failed. That is
+      // a failed read, so it rejects here and the board draws its own
+      // unreadable state, never this section's "no booking link" empty line.
+      visibility: () => api.getMyAdvisorVisibility(30).then((d) => {
+        if (!Array.isArray(d?.surfaces)) throw new Error('Your booking links could not be read');
+        return d;
+      }),
     },
     sections: [
       {
@@ -116,9 +122,9 @@ export default function advisorExpertiseBoard(role, api) {
         cols: '1.8fr 1fr',
         columns: ['Booking link', 'Requests'],
         empty: 'You have no booking link yet.',
-        // A failed surfaces read is null and never an empty list of zeros.
-        summary: (d) => (Array.isArray(d?.surfaces) ? summary(count(d.surfaces.reduce((n, s) => n + (Number(s.requests) || 0), 0), 'request')) : 'Booking links could not be read'),
-        rows: (d) => top(Array.isArray(d?.surfaces) ? d.surfaces : []).map((s) => [s.name, s.requests]),
+        // A failed surfaces read rejects in `sources` above, so `surfaces` is a list here.
+        summary: (d) => summary(count(d.surfaces.reduce((n, s) => n + (Number(s.requests) || 0), 0), 'request')),
+        rows: (d) => top(d.surfaces).map((s) => [s.name, s.requests]),
         footnote: (d) => summary('Requests in the last month, per link.', d?.views_note),
       },
     ],

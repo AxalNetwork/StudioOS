@@ -66,7 +66,7 @@ export function VisibilityView({ data, onRetry }) {
                   {s.note ? <div className="mt-0.5 text-[11px] text-axal-faint">{s.note}</div> : null}
                 </div>
                 <div className="shrink-0 text-right text-[12px] font-semibold tabular-nums text-axal-muted dark:text-gray-300">
-                  {Number.isFinite(Number(s.requests)) ? `${s.requests} ${Number(s.requests) === 1 ? 'request' : 'requests'}` : <Unrecorded />}
+                  {s.requests != null && Number.isFinite(Number(s.requests)) ? `${s.requests} ${Number(s.requests) === 1 ? 'request' : 'requests'}` : <Unrecorded />}
                 </div>
               </li>
             ))}
