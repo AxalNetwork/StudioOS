@@ -240,6 +240,8 @@ export interface Env {
   // simply mix in with the onboarding traffic, but no functionality
   // breaks. Default: `advisor-ongoing` once wrangler.toml is deployed.
   CF_AI_GATEWAY_SLUG_ADVISOR?: string;
+  /** D1504 (#3755): the deck's AI Gateway; empty until the owner creates it. */
+  CF_AI_GATEWAY_SLUG_DECK?: string;
   // Task #4 (CG) — per-user daily advisor turn cap. Counts /api/advisor
   // turns (chat completions, not /explain) in KV bucket
   // `ai_spend:advisor:{user_id}:{yyyy-mm-dd}` and hard-blocks at this
