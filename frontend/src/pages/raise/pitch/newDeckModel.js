@@ -11,18 +11,14 @@ import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import { NOT_ON_STUDIOOS } from './sourcesModel';
 
 export const NEW_PATH = '/raise/pitch/new';
-export const STEPS = ['Audience', 'Sources', 'Outline', 'Build'];
-export const PROMPT_HINT = 'Tone, emphasis, what to lead with. Figures always come from your records.';
 export const NO_ROUND = 'No active round yet.';
 export const ROUND_LINK = { text: 'Plan it in Raise › Round planner ›', path: '/raise/calls' };
 export const PROPOSED_BY_EADWYN = 'Proposed by Eadwyn';
 export const PROPOSAL_LINE = 'Figures come from your records. Eadwyn wrote the wording.';
 export const TITLES_ONLY_LINE = 'Figures come from your records. The cards carry their titles.';
-export const PAID_LINE = 'Paid in AI tokens. Figures from your records cost nothing; the cost is Eadwyn writing the wording.';
 export const FAST_TITLE = 'Build a standard deck now';
 export { NOT_ON_STUDIOOS };
 
-const pad2 = (n) => String(n).padStart(2, '0');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** AI tokens as dollars: `$0.0060` under a dollar, `$1.25` above; null when there is no figure. */
@@ -43,14 +39,20 @@ export const numberIn = (text) => (typeof text === 'string' ? NUMBER_RE.exec(tex
 /** The prompt's own warning before anything is sent; the Worker's 422 is the rule. */
 export const promptWarning = (text) => (numberIn(text) ? 'Figures come from your records, never from the prompt. Take the figure out, or record it in its module.' : null);
 
+/** The plan gate's link (PD-9): the plans page, as the AIRail's "See plans ›". */
+export const SEE_PLANS = 'See plans ›';
+export const PLANS_PATH = '/pricing';
+
 /** A refused press, as the page draws it: the sentence, and the module to record the figure in. */
 export function refusalOf(e) {
   if (!e) return null;
   const data = e.data && typeof e.data === 'object' ? e.data : {};
   const code = e.code || data.error || null;
   const message = e.message || data.message || 'That did not work. Nothing was changed.';
+  // D1604 (PD-9 plan gate): a press the plan does not include links to the plans, never to a top-up.
   const link = code === 'figure_in_prompt' && typeof data.href === 'string' && data.href.startsWith('/')
-    ? { text: data.module ? `Open ${data.module} ›` : 'Open your sources ›', href: data.href } : null;
+    ? { text: data.module ? `Open ${data.module} ›` : 'Open your sources ›', href: data.href }
+    : code === 'tier_required' ? { text: SEE_PLANS, href: PLANS_PATH } : null;
   const topUp = e.status === 402 && code !== 'tier_required' ? { text: 'Add tokens', href: ADD_TOKENS_PATH } : null;
   return { code, message, link, topUp };
 }
@@ -133,59 +135,33 @@ export function outlineSentence(quote, regenerate) {
 
 export function buildSentence(quote, cards) {
   const price = quote?.ai ? `Eadwyn writes the wording, holding up to ${aiTokens(quote.hold_microusd)} in AI tokens and charging for what it uses.` : 'AI is off on this page, so the cards carry their titles, at no cost.';
-  return `StudioOS builds ${cards} card${cards === 1 ? '' : 's'} from your records. ${price} The deck is a proposal: nothing is a version until you keep cards and save.`;
+  const what = cards == null ? 'the deck' : `${cards} card${cards === 1 ? '' : 's'}`;
+  return `StudioOS builds ${what} from your records. ${price} The deck is a proposal: you review it, and nothing is saved until you accept it.`;
 }
 
-export const keepSentence = (card) => `Card ${card.n} · ${card.title} joins the cards you keep. Nothing is a version until you save.`;
-export const keepAllSentence = (count) => `All ${count} cards join the cards you keep. Nothing is a version until you save.`;
-export const saveSentence = (kept, total, audience) =>
-  `The ${kept} card${kept === 1 ? '' : 's'} you kept, of ${total}, become the new current version${audience ? ` for ${audience}` : ''}. The proposal is then removed; your earlier versions stay as they are.`;
 export const DISCARD_SENTENCE = 'The whole proposal is deleted, with any cards you kept from it. No deck version changes.';
 
-export function fastPathLine(quote, audienceLabel = 'a seed fund') {
+/**
+ * D1604 (#3716, §3.2 step 1) — the one-click's brief, from the context read
+ * (`GET /api/decks/new/context`): #3877's `inferred` when the read carries
+ * it, else the Worker's `fast_path`. `label` is the audience's own label
+ * from the same read and `cards` the standard outline's count for that
+ * length. Null until the read answers: the client never guesses a brief
+ * (never a literal audience or length of its own).
+ */
+export function fastBrief(ctx) {
+  const inf = ctx?.inferred;
+  const pick = inf?.audience && inf?.length ? inf : ctx?.fast_path;
+  if (!pick?.audience || !pick?.length) return null;
+  const label = (Array.isArray(ctx.audiences) ? ctx.audiences : []).find((a) => a?.id === pick.audience)?.label || null;
+  const outline = ctx?.standard?.[pick.length];
+  return { audience: pick.audience, length: pick.length, label, cards: Array.isArray(outline) && outline.length ? outline.length : null, why: (pick === inf && inf.why) || null };
+}
+
+/** The one-click's line under its title: the brief it will build, then the quote's price. Before the context read, no brief is named. */
+export function fastPathLine(quote, brief = null) {
   const price = quote?.ai ? ` About ${aiTokens(quote.hold_microusd)} in AI tokens.` : quote?.ai === false && quote.reason === 'assist_off' ? ' AI is off on this page: figures and titles only, at no cost.' : '';
-  return `Twelve cards from everything on record, for ${audienceLabel}. Review sources afterwards.${price}`;
-}
-
-// ─────────────────────────────────────────────────────────── the proposal
-
-/** A card of the proposal as PD6 B draws it: its words, and each figure from its own binding. */
-export function proposalCards(proposal, items = []) {
-  const slides = Array.isArray(proposal?.slides) ? proposal.slides : [];
-  const kept = new Set(Array.isArray(proposal?.kept) ? proposal.kept : []);
-  return slides.map((s, i) => {
-    const blocks = Array.isArray(s?.blocks) ? s.blocks : [];
-    const heading = blocks.find((b) => b?.kind === 'text' && b.style === 'heading');
-    const body = blocks.find((b) => b?.kind === 'text' && b.style === 'paragraph');
-    const figures = blocks.filter((b) => b?.kind === 'metric').map((b) => {
-      const key = b.binding?.source_key || null;
-      const it = items.find((x) => x.source_key === key);
-      const recorded = b.value != null && b.binding?.grade && b.binding.grade !== 'Not recorded';
-      return { key, label: b.label || it?.label || key, value: recorded ? String(b.value) : null, grade: recorded ? b.binding.grade : 'Not recorded', module: it?.module || null, href: it?.href || null };
-    });
-    return {
-      index: i, n: pad2(i + 1), title: String(s?.title || `Card ${i + 1}`),
-      headline: heading?.text || null, body: body?.text || null,
-      figures, missing: figures.filter((f) => f.value == null), kept: kept.has(i),
-    };
-  });
-}
-
-/** PD6 A: per card, what it was filled from, and whether Eadwyn worded it. */
-export function progressRows(progress = []) {
-  return progress.map((p) => ({
-    n: pad2(p.n), title: p.title,
-    status: p.slots ? `Filled from records · ${p.filled} of ${p.slots}` : 'No figures on this card',
-    words: p.worded ? 'Eadwyn wrote the words' : 'Title only',
-    missing: p.missing || [],
-  }));
-}
-
-/** PD6 A's totals: charged by the run, nothing held once it answered, and the estimate it was quoted. */
-export function costRows(cost, quote) {
-  return [
-    { label: 'Used so far', value: cost?.charged_microusd == null ? 'Not known yet' : aiTokens(cost.charged_microusd) },
-    { label: 'Held', value: aiTokens(0) },
-    { label: 'Estimated for the whole deck', value: quote?.ai ? aiTokens(quote.hold_microusd) : quote ? aiTokens(0) : 'Not quoted' },
-  ];
+  const what = brief?.cards ? `${brief.cards} cards` : 'A deck';
+  const who = brief?.label ? `, for the ${brief.label} audience` : '';
+  return `${what} from everything on record${who}. Review sources afterwards.${price}`;
 }

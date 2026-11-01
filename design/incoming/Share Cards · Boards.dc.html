@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e9e7ee}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:12px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Open Graph · 1200 × 630</span>
+<h1 style="margin:0;font-size:42px;font-weight:700;letter-spacing:-0.03em">Social share cards</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">One light image per URL. The text block starts at x 300 so the mark, the eyebrow and the title’s first words survive the centred square crop. Record links reuse their family image; the record’s own title and description travel as preview text.</p>
+<div style="display:flex;align-items:center;gap:12px"><button type="button" onClick="{{ toggle }}" aria-pressed="{{ ov }}" style="display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 14px;border-radius:9px;border:1px solid #ddd0fb;background:#f4f0fe;color:#6d28d9;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:700;cursor:pointer">{{ ovLabel }}</button><span style="font-size:13px;color:#6b6577">Toggles the safe-area and square-crop layer on every family board.</span></div>
+</header>
+<section style="display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.02em">Every family at 1200 × 630</h2>
+<div style="display:flex;gap:28px;align-items:flex-start">
+<sc-for list="{{ row }}" as="f" hint-placeholder-count="9"><div style="display:flex;flex-direction:column;gap:8px"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span><div style="width:1200px;height:630px;border-radius:14px;overflow:hidden;box-shadow:0 20px 50px rgba(24,24,27,.12)"><dc-import name="Share Cards Page" v="{{ f.v }}" hint-size="1200px,630px"></dc-import></div></div></sc-for>
+</div>
+</section>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ b.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;max-width:2560px">
+<sc-for list="{{ b.fr }}" as="f" hint-placeholder-count="2"><div style="display:flex;flex-direction:column;gap:8px"><sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577;max-width:600px">{{ f.cap }}</span></sc-if><div style="{{ f.outer }}"><div style="{{ f.inner }}"><dc-import name="Share Cards Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div></div></div></sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  state = { ov: true };
+  renderVals() {
+    const o = this.state.ov ? '.o' : '';
+    const CARDF = (id, cap, s) => { s = s || 0.5; return { v: 'card:' + id, cap, outer: `width:${1200 * s}px;height:${630 * s}px;overflow:hidden;border-radius:12px;box-shadow:0 14px 36px rgba(24,24,27,.12)`, inner: `width:1200px;height:630px;transform:scale(${s});transform-origin:0 0`, hs: '1200px,630px' }; };
+    const MAIN = (id, cap) => CARDF(id + o, cap || 'Family card · overlay layer ' + (this.state.ov ? 'on' : 'off'), 1);
+    const PV = (v, cap) => ({ v, cap, outer: 'border-radius:12px;overflow:hidden;box-shadow:0 14px 36px rgba(24,24,27,.10)', inner: '', hs: '600px,560px' });
+    const B = (id, t, fr, note) => ({ id, t, fr, note: note || '' });
+    return {
+      ov: this.state.ov, ovLabel: this.state.ov ? 'Overlays: on' : 'Overlays: off',
+      toggle: () => this.setState(s => ({ ov: !s.ov })),
+      row: [['home', 'SC1 · Home'], ['pr', 'SC2 · Pricing'], ['ar', 'SC3 · Articles'], ['ev', 'SC4 · Events'], ['pp', 'SC5 · Profiles'], ['so', 'SC6 · Spin-Out Lab'], ['tr', 'SC7 · Trust center'], ['lock', 'SC8 · Private link'], ['jb', 'SC10 · Jobs']].map(x => ({ v: 'card:' + x[0], cap: x[1] })),
+      boards: [
+        B('SC0', 'Today’s card (reference)', [CARDF('sc0', 'Ships now on every record, token and signed-in link', 1)], 'The card that ships today, for comparison with the new art.'),
+        B('SC1', 'Home and marketing', [MAIN('home'), CARDF('pf', 'For Founders'), CARDF('pi', 'For Investors & LPs'), CARDF('pa', 'For Advisors'), CARDF('po', 'For Operating Partners'), CARDF('ps', 'Product section card'), CARDF('hl', 'Long title · steps down to 44 px, three lines at most')], 'Type: wordmark 27/700 · eyebrow 20/500 uppercase · title 700, 1.06, −0.028em, 92/76/62/52/44 by length · description 29/400, two lines · domain 25/500. Padding 62 top, 72 sides, 58 bottom; the text block starts at x 300 for the square crop.'),
+        B('SC2', 'Pricing', [MAIN('pr'), CARDF('pri', '/pricing/investor')], 'Tier names only. Never a price.'),
+        B('SC3', 'Article and insight', [MAIN('ar'), CARDF('ar2', 'Writing from the Axal VC network'), CARDF('au', 'Authors section card'), PV('pv:li.ar', 'Record with its own cover · LinkedIn'), PV('pv:li.arn', 'Same article, no cover · the family image'), PV('pv:li.l70', 'Title cut at 70, description at 200')], 'A public insight uses this same family image (type article).'),
+        B('SC4', 'Event', [MAIN('ev'), PV('pv:sl.ev', 'Record example · Slack unfurl')], 'An https cover is used when the event has one; otherwise the family image. No host name, price, capacity, seats or join link. An unlisted event shared by link shows its own record card the same way (pending owner).'),
+        B('SC5', 'Public profile, venture and partner', [MAIN('pp'), PV('pv:x.pe', 'Person · /u/[handle]'), PV('pv:x.st', 'Startup · /startups/[handle] · family image, no logo in the public read'), PV('pv:x.pa', 'Partner · /partners/[slug] · directory-listed only')], 'Name and headline only for a person. Stage and one line for a startup; never traction or amounts.'),
+        B('SC6', 'Spin-Out Lab', [MAIN('so'), CARDF('sod', 'Spin-Out Lab Demo Day')], 'A static card. No deadline or who-can-apply chip unless it is part of the page’s fixed copy.'),
+        B('SC7', 'Trust center and legal', [MAIN('tr'), CARDF('tr1', 'Security'), CARDF('tr2', 'Data'), CARDF('tr3', 'Subprocessors'), CARDF('tr4', 'Documents'), CARDF('tr5', 'Disclosure'), CARDF('lg1', 'Terms of Service'), CARDF('lg2', 'Privacy Policy'), CARDF('lg3', 'Risk Disclosures & Disclaimers')], 'Lavender ground, a hairline frame and a small document glyph. Tab and legal variants change only the title.'),
+        B('SC8', 'Private link', [MAIN('lock')], 'For e-signature, shared deck, shared cap table, invite and join links. No record data. The preview text is the same for every token link (pending owner). Signed-in pages keep the home card.'),
+        B('SC9', 'Previews in context', [PV('plat:li'), PV('plat:x'), PV('plat:sl'), PV('plat:wa'), PV('plat:im')], 'One SC1 card, one SC3 record and one SC8 card in each platform. The site name line reads “Axal VC” where the platform prints it.'),
+        B('SC10', 'Job', [MAIN('jb'), PV('pv:li.jb', 'Record example · LinkedIn')], 'Never the pay band, even when the job page shows it.'),
+        B('SC11', 'Fallback states', [CARDF('ev', 'Missing event'), CARDF('ev', 'Private (draft or unpublished) event · byte for byte the same'), CARDF('home', 'Person whose profile is not public · the Axal default card'), CARDF('ev', 'Record with no image, or an image that is not https · the family image'), PV('pv:li.qa', 'Quotes and angle brackets, drawn as plain text'), PV('pv:li.l70', 'Title at 70 characters with “…”, description at 200')], 'A card never confirms that a record exists.'),
+        B('SC12', 'Dark reference', [CARDF('home.d', 'SC1 · dark'), CARDF('ar.d', 'SC3 · dark'), CARDF('ev.d', 'SC4 · dark'), CARDF('lock.d', 'SC8 · dark')], 'Reference only; dark cards do not ship (pending owner).')
+      ]
+    };
+  }
+}
+</script>
+</body></html>

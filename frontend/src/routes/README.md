@@ -82,3 +82,10 @@ of alphabetical order.
   fails on a collision and names both files; pick a name that says which
   page it is (`AdminSettingsPage`).
 - The catch-all `*` route stays last in `App.jsx`; the block sits above it.
+
+## The modules
+
+| Module | Area |
+| --- | --- |
+| `learning.jsx` | The Learning center (D562): every `/learning` route. |
+| `team.jsx` | Team (D1497, #3727): a company's Team, a project's Team in or out of a company, and Project settings › General. |

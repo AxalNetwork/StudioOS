@@ -6,6 +6,9 @@ import { defaultOpenGroups, hasTier, hasInvestorTier } from '../sidebarConfig';
 import { safeReadJSON } from '../lib/storage';
 import { hqRowFor } from '../lib/hqStrips.js';
 import CompanySwitcher from './CompanySwitcher';
+import { usePhoneWidth } from './phone/usePhoneWidth';
+import { useActiveCompany } from '../contexts/ActiveCompanyContext';
+import { BILLING_PATH, useScopeInView } from '../lib/settingsScope.js';
 import useLicenceNeeds from '../hooks/useLicenceNeeds';
 import { needsCount } from '../lib/licencePage';
 
@@ -31,6 +34,9 @@ import { needsCount } from '../lib/licencePage';
 
 export default function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
   const navLocation = useLocation();
+  // D1497 (#3727, TM1e–TM1i): the bottom block follows the scope in view.
+  const { company: activeCompany } = useActiveCompany();
+  const settingsScope = useScopeInView(activeCompany);
   // D800 (#2233): a row may name a count (`count: 'licence_needs'`, the
   // Licences row), drawn as a pill beside its label. Read only when a row asks
   // for it; an unread or zero count draws nothing, never "0".
@@ -302,6 +308,7 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
       })}
     </nav>
     <div className="flex-none border-t border-gray-200 dark:border-gray-700">
+      {settingsScope ? <SettingsScopeBlock scope={settingsScope} collapsed={collapsed} onNavigate={onNavigate} activeUid={activeCompany?.uid || null} /> : null}
       {/* D1140 (#3020, CMP19a): the last row is Companies and projects; Company Settings moved under it. */}
       <NavLink
         to="/account/portfolio"
@@ -322,6 +329,106 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
       </NavLink>
     </div>
     </div>
+  );
+}
+
+/**
+ * D1497 (#3727, TM1e–TM1i) — the sidebar's bottom block, by scope (the owner's
+ * rule, 2026-10-31): "Company settings" with Team · Company settings (General,
+ * Legal) · Projects in a company or a project inside one; "Project settings"
+ * with Team · Project settings (General) in a standalone project, which has no
+ * Legal entry because it is not a legal entity. Billing is not in the block: it
+ * is a link to Account › Billing under it, still marked "pending owner" as
+ * #3727's authority addendum leaves it. `lib/settingsScope.js` decides the
+ * entries; this draws them.
+ *
+ *   desktop  every entry and its children; a parent whose child is the same
+ *            page is a group label, not a second link to it; the block
+ *            scrolls on its own so a long project list never pushes the
+ *            footer off screen.
+ *   drawer   (below 1024px, where this same component is the phone drawer) one row
+ *            per top-level entry, its sub-label right-aligned ("General ·
+ *            Legal", "Projects [2]"), children hidden (TM1i).
+ *
+ * An entry with no address yet (the company's Legal page) is drawn off, with
+ * its reason, never as a link that 404s; so is a page that reads only the
+ * company active on this device (`activeOnly`) when another company is in view.
+ */
+const SCOPE_ROW = 'flex items-center gap-2 py-1.5 text-[13px] w-full transition-colors';
+const SCOPE_PAD = (depth) => (depth ? (depth > 1 ? 'pl-12 pr-5' : 'pl-9 pr-5') : 'px-5');
+const scopeRowClass = (isActive, depth) => `${SCOPE_ROW} ${SCOPE_PAD(depth)} ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 font-semibold' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`;
+const NOT_ACTIVE_HERE = 'Full company settings open for the company active on this device. Make it active from its page.';
+
+/** The entry as it can be drawn for this viewer: off with a reason when its page would not serve them. */
+function reachable(entry, scope, activeUid) {
+  if (entry.activeOnly && scope.company?.uid && scope.company.uid !== activeUid) return { ...entry, path: null, reason: NOT_ACTIVE_HERE };
+  return entry;
+}
+
+function ScopeRow({ entry, depth, onNavigate, aside = null, group = false }) {
+  const tail = aside ? <span className="ml-auto shrink-0 font-mono text-[11px] text-gray-400 dark:text-gray-500">{aside}</span> : null;
+  if (entry.path && !group) {
+    return (
+      <NavLink to={entry.path} end onClick={onNavigate} className={({ isActive }) => scopeRowClass(isActive, depth)} data-testid={`scope-row-${entry.key}`}>
+        <span className="truncate">{entry.label}</span>{tail}
+      </NavLink>
+    );
+  }
+  return (
+    <span className={`${SCOPE_ROW} ${SCOPE_PAD(depth)} ${entry.reason ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300'}`}
+      aria-disabled={entry.reason ? 'true' : undefined} title={entry.reason || undefined} data-testid={`scope-row-${entry.key}`}>
+      <span className="truncate">{entry.label}</span>{tail}
+    </span>
+  );
+}
+
+function ScopeEntry({ entry: raw, depth, onNavigate, scope, activeUid }) {
+  const entry = reachable(raw, scope, activeUid);
+  const children = entry.children || [];
+  // A parent whose own page is one of its children is drawn as their label, so one page never lights two rows.
+  const group = children.some((c) => c.path && c.path === raw.path);
+  return (
+    <>
+      <ScopeRow entry={entry} depth={depth} onNavigate={onNavigate} group={group} />
+      {children.map((c) => <ScopeEntry key={c.key} entry={c} depth={depth + 1} onNavigate={onNavigate} scope={scope} activeUid={activeUid} />)}
+    </>
+  );
+}
+
+const subOf = (e) => e.sub || (e.count != null ? `[${e.count}]` : null);
+
+export function SettingsScopeBlock({ scope, collapsed, onNavigate, drawer: forced, activeUid = null }) {
+  const phone = usePhoneWidth();
+  const drawer = forced ?? phone;
+  if (collapsed) {
+    const top = scope.entries.map((e) => reachable(e, scope, activeUid)).filter((e) => e.path).slice(0, 2);
+    return (
+      <div className="flex flex-col py-1" data-testid="settings-scope-block" data-scope={scope.kind}>
+        {top.map((e) => {
+          const name = e.key === 'team' ? `${scope.label} · Team` : e.label;
+          return (
+            <NavLink key={e.key} to={e.path} end onClick={onNavigate} title={name} aria-label={name}
+              className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1 py-2 text-[10px] w-full ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+              <span className="truncate w-full text-center" aria-hidden="true">{e.key === 'team' ? 'Team' : 'Set.'}</span>
+            </NavLink>
+          );
+        })}
+      </div>
+    );
+  }
+  return (
+    <nav aria-label={scope.label} className={`flex flex-col py-2 ${drawer ? '' : 'max-h-[38vh] overflow-y-auto'}`} data-testid="settings-scope-block" data-scope={scope.kind} data-form={drawer ? 'drawer' : 'desktop'}>
+      <span className="px-5 pb-1 font-mono text-[10.5px] font-semibold uppercase tracking-[.11em] text-gray-500 dark:text-gray-400" data-testid="settings-scope-label">{scope.label}</span>
+      {drawer
+        ? scope.entries.map((e) => <ScopeRow key={e.key} entry={reachable(e, scope, activeUid)} depth={0} onNavigate={onNavigate} aside={subOf(e)} />)
+        : scope.entries.map((e) => <ScopeEntry key={e.key} entry={e} depth={0} onNavigate={onNavigate} scope={scope} activeUid={activeUid} />)}
+      <span className="flex flex-wrap items-center gap-1.5 px-5 pt-2">
+        <NavLink to={BILLING_PATH} onClick={onNavigate} className="text-[12px] text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100" data-testid="settings-scope-billing">
+          Billing · in Account ↗
+        </NavLink>
+        <span className="rounded-full border border-dashed border-gray-300 px-1.5 text-[10px] font-semibold text-gray-500 dark:border-gray-600 dark:text-gray-400" data-testid="settings-scope-billing-pending">pending owner</span>
+      </span>
+    </nav>
   );
 }
 

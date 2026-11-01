@@ -386,3 +386,138 @@ test('AF23 and the wiring: Sources a bottom sheet, Preview full height, 44px tar
   const lightbox = readFileSync(new URL('../src/pages/cycles/FormLightbox.jsx', import.meta.url), 'utf8');
   assert.match(lightbox, /const result = await onSubmit\(sent\);\n\s*await afterSave\(result, sent\);/, 'record only after the form’s own Save');
 });
+
+// ── #3740 part 1: Ask on the Edit forms, the KPI form, and the mount guard ───
+
+const { EDIT_FILL_FORMS, fillRecordId } = await import('../src/lib/fillForms.js');
+const { editFor } = await import('../src/pages/cycles/forms.js');
+const { FILL_FIELDS } = await import('../src/lib/fillFields.js');
+
+/** The six Edit forms #3740 names: cycle, module, Edit key, the FILL form, and the field the test leaves blank. */
+const EDITS_3740 = [
+  ['validate', 'problem-discovery', 'edit-theme', 'theme', 'title'],
+  ['validate', 'ideal-customer-profile', 'edit-segment', 'segment', 'name'],
+  ['validate', 'experiments', 'edit-hypothesis', 'hypothesis', 'claim'],
+  ['build', 'solution-design', 'edit-feature', 'feature', 'title'],
+  ['build', 'prototype-mvp', 'edit-must-have', 'must-have', 'title'],
+  ['grow', 'revenue-and-traction', 'edit-kpi', 'kpi', 'value'],
+];
+
+test('#3740: each Edit form fills its FILL form, and a row id is sent as record only when it is a row', () => {
+  for (const [cycle, slug, key, form] of EDITS_3740) {
+    assert.equal(editFor(cycle, slug)?.key, key, `${cycle}/${slug} edits with ${key}`);
+    assert.equal(EDIT_FILL_FORMS[key], form);
+    assert.deepEqual(fillTarget(cycle, slug, key), { page: FILL_PAGES[`${cycle}/${slug}`], form }, key);
+  }
+  assert.equal(FILL_PAGES['grow/revenue-and-traction'], 'Founder · Grow · Revenue and traction');
+  assert.deepEqual(fillTarget('grow', 'revenue-and-traction', 'kpi')?.form, 'kpi', 'the KPI Add form has its sheet');
+  assert.equal(fillRecordId(41), 41);
+  assert.equal(fillRecordId('41'), 41);
+  for (const bad of ['mrr', 'custom-ab1', 0, -2, 1.5, null, undefined, '4x']) assert.equal(fillRecordId(bad), null, String(bad));
+});
+
+const editSheet = (page, form, field, extra = {}) => ({
+  page, form, project: 7, record: 41, can_fill: true, marks_state: 'ok',
+  sources: [{ key: 'eadwyn', kind: 'eadwyn', label: 'Eadwyn', state: 'ok', as_of: '2026-10-27T10:00:00Z' }],
+  fields: [view(field, { label: field, ...extra })], quote: { option: `form:${form}`, state: 'ok', runs: 1, average_microusd: 900 },
+});
+
+for (const [cycle, slug, key, form, field] of EDITS_3740.filter((e) => e[2] !== 'edit-kpi')) {
+  test(`#3740: ${key} draws Ask on a blank field, reads its row (record), and none on a filled field`, async () => {
+    const page = FILL_PAGES[`${cycle}/${slug}`];
+    const edit = editFor(cycle, slug);
+    const fill = { ...fillTarget(cycle, slug, key), project: 7, aiOff: false, record: fillRecordId(41) };
+    const routes = { '/api/fills/sheet': () => json(editSheet(page, form, field)), '/api/cycles/': () => json({}) };
+    const blank = await mount(h(FormLightbox, { form: edit, current: { [field]: '' }, cycle, slug, onClose() {}, onSubmit: async () => ({ ok: true }), fill }), { routes });
+    try {
+      assert.ok(blank.byTestId(`fill-trigger-${field}`), `${key}: the blank field's Ask`);
+      assert.ok(blank.byTestId('fill-form-trigger'), `${key}: the form's Ask`);
+      const read = blank.calls.find((c) => c.url.includes('/api/fills/sheet'));
+      assert.match(read.url, new RegExp(`form=${encodeURIComponent(form)}&project=7&record=41$`), `${key}: the sheet read names the row`);
+    } finally { await blank.unmount(); }
+    const filled = await mount(h(FormLightbox, { form: edit, current: { [field]: 'Already written' }, cycle, slug, onClose() {}, onSubmit: async () => ({ ok: true }), fill }), { routes });
+    try {
+      assert.equal(filled.byTestId(`fill-trigger-${field}`), undefined, `${key}: a filled field draws no Ask`);
+    } finally { await filled.unmount(); }
+  });
+}
+
+test('#3740: an Edit Save records against the edited row when the reply names none', async () => {
+  const recorded = [];
+  const fill = { ...fillTarget('validate', 'problem-discovery', 'edit-theme'), project: 7, aiOff: false, record: 41 };
+  const m = await mount(h(FormLightbox, { form: editFor('validate', 'problem-discovery'), current: { title: '' }, cycle: 'validate', slug: 'problem-discovery', onClose() {}, onSubmit: async () => ({ ok: true }), fill }), {
+    routes: { '/api/fills/sheet': () => json(SHEET), '/api/fills/record': (c) => { recorded.push(c.body); return json({ outcomes: [] }); } },
+  });
+  try {
+    await m.press('fill-form-trigger'); await m.press('fill-sheet-preview'); await m.press('fill-sheet-accept-all');
+    await m.submit();
+    assert.deepEqual(recorded.map((b) => [b.record, b.proposals]), [[41, ['u-title']]]);
+  } finally { await m.unmount(); }
+});
+
+test('#3740: the KPI form draws Ask with the neutral glyph, and its sheet lists only Stripe and Mercury', async () => {
+  const kpiForm = editFor('grow', 'revenue-and-traction');
+  const page = FILL_PAGES['grow/revenue-and-traction'];
+  const kpiFields = FILL_FIELDS.filter((f) => f.page === page && f.form === 'kpi');
+  assert.deepEqual(kpiFields.map((f) => [f.field, f.class, f.sources]), [['value', 'measured', ['connector:stripe', 'connector:mercury']]]);
+  const sheet = { ...editSheet(page, 'kpi', 'value', { class: 'measured', sources: ['connector:stripe', 'connector:mercury'], offered_to_eadwyn: false }),
+    sources: [{ key: 'connector:stripe', kind: 'connector', label: 'Stripe', state: 'ok' }, { key: 'connector:mercury', kind: 'connector', label: 'Mercury', state: 'ok' }], record: null };
+  const fill = { ...fillTarget('grow', 'revenue-and-traction', 'edit-kpi'), project: 7, aiOff: false, record: fillRecordId('mrr') };
+  assert.equal(fill.record, null, 'a KPI names no row');
+  const m = await mount(h(FormLightbox, { form: kpiForm, current: {}, cycle: 'grow', slug: 'revenue-and-traction', onClose() {}, onSubmit: async () => ({ ok: true }), fill }), {
+    routes: { '/api/fills/sheet': () => json(sheet), '/api/cycles/': () => json({ sources: [] }) },
+  });
+  try {
+    const trigger = m.byTestId('fill-form-trigger');
+    assert.ok(trigger, 'the KPI form draws Ask');
+    assert.equal(m.props(trigger)['aria-label'], 'Ask (from your sources)', 'the neutral glyph: no field is offered to Eadwyn');
+    assert.doesNotMatch(m.calls.find((c) => c.url.includes('/api/fills/sheet')).url, /record=/);
+  } finally { await m.unmount(); }
+});
+
+// The guard: every (page, form) FILL_FIELDS lists has an Add mount and an Edit mount that pass `fill`, or a named exemption.
+const src = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
+const FOUNDER = { theme: ['validate', 'problem-discovery'], segment: ['validate', 'ideal-customer-profile'], hypothesis: ['validate', 'experiments'],
+  feature: ['build', 'solution-design'], 'must-have': ['build', 'prototype-mvp'], kpi: ['grow', 'revenue-and-traction'] };
+const MOUNTS = {
+  'Investor · Deals · Commit | ic-memo': { add: 'exempt: an IC decision is opened by the decision flow, and its memo is written on the decision page', edit: ['pages/ICDecisionPage.jsx', /scope: SCOPED_FORMS\.icMemo, record:/] },
+  'Advisor · Expertise · Services | service': { add: ['pages/advisor/expertise/ServicesZone.jsx', /scope: SCOPED_FORMS\.service/], edit: 'exempt: Services has no Edit form today; the advisor sections are redrawn under #3700' },
+  'Operating Partner · Delivery · Reporting | status-report': { add: ['pages/partner/delivery/StatusReportsZone.jsx', /parent: reportId \? null/], edit: ['pages/partner/delivery/StatusReportsZone.jsx', /record: reportId/] },
+  'Admin · Approvals · Events | event': { add: 'exempt: /events/new is an owner call, under #3724', edit: ['pages/events/EventEditorPage.jsx', /record: isEdit \? Number\(id\) : null/] },
+  'Admin · Approvals · Events | agenda-item': { add: ['pages/events/EventManagePage.jsx', /parent: editing \? null : Number\(id\)/], edit: ['pages/events/EventManagePage.jsx', /record: editing \?\? null/] },
+  'Super Admin · Content · Publications | publication': { add: 'exempt: a publication is created from its source, then its summary is written on its detail page', edit: ['pages/admin/PublicationDetail.jsx', /scope: SCOPED_FORMS\.publication, record: pubId/] },
+  'Investor · Portfolio · Value-add | support': { add: 'exempt: the investor sections are redrawn under #3700, which carries their Ask', edit: 'exempt: as Add, #3700' },
+  'Operating Partner · Offers · Catalog | offering': { add: 'exempt: the operating-partner sections are redrawn under #3700, which carries their Ask', edit: 'exempt: as Add, #3700' },
+  'Operating Partner · Offers · Perk deals | perk': { add: 'exempt: the operating-partner sections are redrawn under #3700, which carries their Ask', edit: 'exempt: as Add, #3700' },
+};
+
+test('#3740 guard: every FILL_FIELDS form has an Add mount and an Edit mount that pass fill, or a named exemption', async () => {
+  const { FORMS } = await import('../src/pages/cycles/forms.js');
+  const cycleRoute = src('pages/cycles/CycleRoute.jsx');
+  // The three Edit mounts and the Add mount in CycleRoute pass `fill`.
+  assert.match(cycleRoute, /fill=\{fillFor\(formOpen\)\}/, 'the Add mount');
+  assert.match(cycleRoute, /fill=\{fillFor\(rowEdit\.spec\.form, rowEdit\.spec\.id\)\}/, 'the row Edit mount');
+  assert.match(cycleRoute, /fill=\{fillFor\(edit, edit\.idOf\(editing\)\)\}/, 'the Edit mount');
+  assert.match(cycleRoute, /fill=\{selected\.key === 'edit' \? fillFor\(formSpec\.form, formSpec\.id\) : null\}/, 'the record page\'s Edit');
+  const pairs = [...new Set(FILL_FIELDS.map((f) => `${f.page} | ${f.form}`))];
+  for (const pair of pairs) {
+    const [page, form] = pair.split(' | ');
+    if (page.startsWith('Founder · ')) {
+      const [cycle, slug] = FOUNDER[form] || [];
+      assert.ok(cycle, `${pair}: a founder form the guard does not know`);
+      const adds = (FORMS[cycle]?.[slug] || []).map((f) => f.key);
+      assert.ok(adds.some((k) => fillTarget(cycle, slug, k)?.form === form), `${pair}: no Add mount fills it`);
+      const editKey = editFor(cycle, slug)?.key;
+      assert.equal(fillTarget(cycle, slug, editKey)?.form, form, `${pair}: its Edit (${editKey}) does not fill it`);
+      continue;
+    }
+    const m = MOUNTS[pair];
+    assert.ok(m, `${pair}: a FILL_FIELDS form with no Add or Edit mount and no exemption`);
+    for (const side of ['add', 'edit']) {
+      const v = m[side];
+      if (typeof v === 'string') { assert.match(v, /^exempt: .{10,}/, `${pair} ${side}: an exemption names its reason`); continue; }
+      assert.match(src(v[0]), v[1], `${pair} ${side}: ${v[0]} lost its mount`);
+    }
+  }
+  assert.deepEqual(Object.keys(MOUNTS).filter((k) => !pairs.includes(k)), [], 'an exemption for a form FILL_FIELDS no longer lists');
+});

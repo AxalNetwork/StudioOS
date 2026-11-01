@@ -96,7 +96,8 @@ export async function ensureSchema(env: Env): Promise<void> {
        created_by INTEGER,
        created_at TEXT DEFAULT (datetime('now'))
      )`,
-    `CREATE INDEX IF NOT EXISTS idx_decks_project ON pitch_decks(project_id, version)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_decks_project ON pitch_decks(project_id, version)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_decks_one_current ON pitch_decks(project_id) WHERE is_current = 1`,
     `CREATE INDEX IF NOT EXISTS idx_decks_current ON pitch_decks(project_id, is_current)`,
     // Migration 498 (D767): a "Fill from project" proposal, never a version until kept.
     `CREATE TABLE IF NOT EXISTS pitch_deck_proposals (
@@ -565,26 +566,34 @@ async function withNames(env: Env, rows: any[]): Promise<any[]> {
   return rows.map((r) => ({ ...r, round_name: roundName.get(r.round_ref) ?? null, created_by_name: userName.get(Number(r.created_by)) ?? null }));
 }
 
-async function nextVersion(env: Env, projectId: number): Promise<number> {
-  const row = await env.DB.prepare(
-    'SELECT COALESCE(MAX(version), 0) AS v FROM pitch_decks WHERE project_id = ?'
-  ).bind(projectId).first<any>();
-  return (Number(row?.v) || 0) + 1;
-}
+/** #3748: the current row the caller read, not a client-supplied version. */
+type DeckVersionBase = { id: number; version: number };
 
-export async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null, meta: VersionMeta = {}): Promise<number> {
-  await env.DB.prepare(
-    'UPDATE pitch_decks SET is_current = 0 WHERE project_id = ? AND is_current = 1'
-  ).bind(projectId).run();
-  const v = await nextVersion(env, projectId);
+export async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null, meta: VersionMeta = {}, expectedBase?: DeckVersionBase | null): Promise<number> {
+  const base = expectedBase === undefined
+    ? await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE project_id = ? AND is_current = 1').bind(projectId).first<DeckVersionBase>()
+    : expectedBase;
   const stored = founderPitchSlides(slides);
   const theme = meta.theme ?? null;
-  const res = await env.DB.prepare(
-    `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, audience, round_ref, theme_json, content_hash)
-     VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
-  ).bind(projectId, v, JSON.stringify(stored), title, userId, meta.audience ?? null, meta.round_ref ?? null,
-    theme ? JSON.stringify(theme) : null, await contentHash(stored, theme)).run();
-  return Number((res as any)?.meta?.last_row_id || 0);
+  const hash = await contentHash(stored, theme);
+  // D1 batches are transactional. A stale UPDATE changes no row, so the
+  // following INSERT does nothing; MAX(version) is read inside the same batch.
+  const results = await env.DB.batch([
+    env.DB.prepare('UPDATE pitch_decks SET is_current = 0 WHERE project_id = ? AND is_current = 1 AND id = ? AND version = ?')
+      .bind(projectId, base?.id ?? null, base?.version ?? null),
+    env.DB.prepare(`INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, audience, round_ref, theme_json, content_hash)
+      SELECT ?, COALESCE(MAX(version), 0) + 1, ?, ?, 1, ?, ?, ?, ?, ?
+        FROM pitch_decks WHERE project_id = ?
+      HAVING changes() = 1 OR (? IS NULL AND COUNT(*) = 0)`)
+      .bind(projectId, JSON.stringify(stored), title, userId, meta.audience ?? null, meta.round_ref ?? null,
+        theme ? JSON.stringify(theme) : null, hash, projectId, base?.id ?? null),
+  ]);
+  if (Number(results[1]?.meta?.changes) !== 1) {
+    const current = await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE project_id = ? AND is_current = 1')
+      .bind(projectId).first<DeckVersionBase>();
+    throw Response.json({ error: 'deck_version_conflict', message: 'This deck was saved somewhere else. Reload to see the current version.', current }, { status: 409 });
+  }
+  return Number(results[1]?.meta?.last_row_id || 0);
 }
 
 // D897 (#2677): POST /generate moved to `routes/deck_new.ts`, where it builds a
@@ -1247,6 +1256,9 @@ decks.put('/:id', async (c) => {
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
 
+  const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta,
+    { id: Number(row.id), version: Number(row.version) });
+
   // Task #2 — Spin-Out Demo Day deck: when the founder edits the
   // Review-the-deal data-room URL or NDA flag inline on the slide,
   // write back to the project columns so the project remains the
@@ -1317,7 +1329,6 @@ decks.put('/:id', async (c) => {
     }
   }
 
-  const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta);
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_saved', 'Deck saved');
   return c.json(rowToDeck(await getDeckRow(c.env, Number(newId))));
 });

@@ -131,3 +131,18 @@ test('the apex wildcard and assets prefix remain off the route table', () => {
     assert.equal(patterns(table).includes('axal.vc/assets/*'), false);
   }
 });
+
+test('D1439: the record-card prefixes are [assets] run_worker_first globs in both lists, never route patterns', () => {
+  // Mutation checked: a glob dropped from the production list → the per-list check fails; an `axal.vc/events/*` route → the pattern check fails.
+  const CARD_GLOBS = ['/events/*', '/articles/*', '/jobs/*', '/u/*', '/startups/*', '/partners/*', '/authors/*', '/insights/public/*'];
+  const lists = [...wrangler.matchAll(/^run_worker_first = (\[.*\])$/gm)].map((m) => JSON.parse(m[1]));
+  assert.equal(lists.length, 2, 'the top-level and production [assets] blocks');
+  for (const list of lists) for (const g of CARD_GLOBS) assert.ok(list.includes(g), `${g} runs the Worker first`);
+  for (const table of TABLES) {
+    for (const p of patterns(table)) assert.ok(!CARD_GLOBS.some((g) => p.endsWith(g)), `${p} would be a path-scoped route`);
+  }
+  // The Worker answers them from the one list it exports, so the toml and the code cannot drift.
+  const service = readFileSync(resolve(root, 'cloudflare-worker/src/services/socialCards.ts'), 'utf8');
+  const exported = /SOCIAL_CARD_GLOBS = \[([^\]]+)\]/.exec(service)?.[1].match(/'[^']+'/g)?.map((s) => s.slice(1, -1));
+  assert.deepEqual(exported, CARD_GLOBS);
+});

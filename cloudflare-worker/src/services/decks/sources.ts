@@ -18,6 +18,16 @@
  * Source label and a default grade, until SCORING (#2428) lands its "Source to
  * default grade" mapping; then that function changes and every part follows.
  *
+ * CONNECTED TOOLS (D1601, #3880). PostHog, HubSpot and Linear each fill one
+ * adapter: `product` from the facts PostHog's feeds store, `pipeline` and
+ * `shipping` from live, read-only counts through the founder's own HubSpot
+ * and Linear. Each reads under one deadline (`CONNECTOR_DEADLINE_MS`); past
+ * it, its slots are unreadable and the others still answer. A tool that is
+ * not connected, or not switched on for the venture's company, is not
+ * recorded. HubSpot and Linear are the founder's, as Mercury is: `withheld`
+ * for any other reader. Counts only: no person, deal, issue title or email is
+ * read into an item.
+ *
  * SCORING ROWS are off unless the founder includes them (owner question 4,
  * drawn A): a band, never a number. Neither band is defined yet (#2428 owns the
  * scorecard band, #2433 the Product-market fit band), so both read
@@ -30,11 +40,17 @@ import { claimsOf, loadHypotheses, loadInterviews } from '../cycleValidate';
 import { getPainGroupsView, loadPainGroupModel } from '../painGroups';
 import { FUND_SECTIONS, parseAllocation } from '../raiseCycle';
 import { citableFigures } from '../mercury/raiseFeeds';
+import { PROJECTION_FOOTNOTE, PROJECTION_LABEL, RECORD_SOURCES } from './recordSources';
+import { projectEnabled } from '../../integrations/companyScope';
+import type { IntegrationRow } from '../../integrations/registry';
+import { posthogDeckFacts, posthogDeckLink, type PosthogDeckFact, type PosthogDeckFactKey } from '../posthog/deckFacts';
+import { linearReadsFor, type LinearReads } from '../linear/reads';
+import { hubspotPipelineCounts, type HubspotFetch } from './hubspotCounts';
 
 export type SourceLabel = 'Connector' | 'Document' | 'Recorded' | 'Signed' | 'Typed';
-export type Grade = 'Measured' | 'Reviewed' | 'Sourced' | 'Stated' | 'Not recorded';
-/** The four grades a recorded value can carry, strongest first. */
-export const GRADES = ['Measured', 'Reviewed', 'Sourced', 'Stated'] as const;
+export type Grade = 'Measured' | 'Reviewed' | 'Sourced' | 'Stated' | 'Projected' | 'Not recorded';
+/** The grades a recorded value can carry, strongest first. D1520: Projected is a forecast's, and only a forecast's. */
+export const GRADES = ['Measured', 'Reviewed', 'Sourced', 'Stated', 'Projected'] as const;
 
 /** Where a value came from, as the store tells it. */
 export type Origin =
@@ -49,7 +65,7 @@ export type Origin =
   | 'typed';            // the founder typed it, with no source
 
 /** #2434's "Sources a card binds to" table, in one function the parts share. */
-export function sourceAndGrade(origin: Origin): { source: SourceLabel; grade: Exclude<Grade, 'Not recorded'> } {
+export function sourceAndGrade(origin: Origin): { source: SourceLabel; grade: Exclude<Grade, 'Not recorded' | 'Projected'> } {
   switch (origin) {
     case 'connector': return { source: 'Connector', grade: 'Measured' };
     case 'platform_count': return { source: 'Recorded', grade: 'Measured' };
@@ -93,6 +109,8 @@ export type SourceItem = {
   state: SlotState;
   /** Scoring rows: shown only when the founder includes them. */
   optional?: boolean;
+  /** D1520: a forecast's label and footnote, on every recorded slot of a projection adapter. Never dropped. */
+  projection?: { label: string; footnote: string };
 };
 
 export type SourceCtx = {
@@ -102,18 +120,22 @@ export type SourceCtx = {
   today: string;
   /** The founder's own Mercury connection; null when the reader is not the founder, or has none. */
   mercury: { integrationId: number } | { withheld: true } | null;
+  /** D1601: the connected tools' fetch and deadline. Production leaves both out; a test passes its fake. */
+  connectors?: { fetcher?: HubspotFetch; deadlineMs?: number };
 };
 
 /**
  * `area`, `module` and `href` override the adapter's own, for a connector whose
  * slots are filled from several modules' "From Notion" or "From Google" (D1567).
  */
-type Slot = { key: string; label: string; unit: Unit; optional?: boolean; area?: Area; module?: string; href?: (pid: number) => string };
-type Read = { value: number | string | null; of?: number | null; as_of?: string | null; origin: Origin; record_ref?: string | null };
-type Adapter = {
+export type Slot = { key: string; label: string; unit: Unit; optional?: boolean; area?: Area; module?: string; href?: (pid: number) => string };
+export type Read = { value: number | string | null; of?: number | null; as_of?: string | null; origin: Origin; record_ref?: string | null };
+export type Adapter = {
   id: string;
   area: Area;
   module: string;
+  /** D1520: a forecast. Every slot it fills is graded Projected and carries the Projection label, whatever origin it reports. */
+  projection?: boolean;
   href: (pid: number) => string;
   slots: Slot[];
   /** Reads every slot it owns; a slot it leaves out is not recorded. */
@@ -395,6 +417,130 @@ const updates: Adapter = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────── Connected tools (D1601)
+
+/** How long one connected tool's adapter may read before its slots are unreadable. */
+export const CONNECTOR_DEADLINE_MS = 3000;
+
+/** Runs `read` with a signal that aborts at the deadline; past it, the read throws. */
+export async function withDeadline<T>(ms: number, read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const ctl = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { timer = setTimeout(() => { ctl.abort(); reject(new Error('deadline')); }, ms); });
+  try { return await Promise.race([read(ctl.signal), late]); } finally { clearTimeout(timer); }
+}
+
+const deadlineOf = (ctx: SourceCtx) => ctx.connectors?.deadlineMs ?? CONNECTOR_DEADLINE_MS;
+
+/**
+ * The founder reads their own HubSpot and Linear (D840, as Mercury). The
+ * routes decide that once, in `mercuryFor`: a withheld Mercury is a reader
+ * who is not the founder, or is in a support session or another company.
+ */
+const founderReads = (ctx: SourceCtx) => !(ctx.mercury && 'withheld' in ctx.mercury);
+const withheldAll = (slots: Slot[]) => Object.fromEntries(slots.map((s) => [s.key, 'withheld' as const]));
+
+/** The founder's own active connection to `provider`, switched on for the venture's company; null otherwise. */
+async function founderConnection(env: Env, projectId: number, provider: 'hubspot' | 'linear'): Promise<IntegrationRow | null> {
+  const row = await first<IntegrationRow>(env,
+    `SELECT i.* FROM integrations i JOIN users u ON u.id = i.user_id JOIN projects p ON p.founder_id = u.founder_id
+      WHERE p.id = ? AND i.provider_key = ? AND i.status = 'active' ORDER BY i.id DESC LIMIT 1`, projectId, provider);
+  return row && await projectEnabled(env, Number(row.id), projectId) ? row : null;
+}
+
+const POSTHOG_MODULE = 'Connectors › PostHog';
+const PRODUCT_SLOTS: Array<Slot & { fact: PosthogDeckFactKey }> = [
+  { key: 'grow.activation_rate', label: 'Activation rate', unit: 'percent', fact: 'activation_rate' },
+  { key: 'grow.retention_w4', label: 'Retention, week 4', unit: 'percent', fact: 'retention_w4' },
+  { key: 'grow.wau', label: 'Weekly active users', unit: 'count', fact: 'wau' },
+];
+
+/** The stored PostHog facts as slots; a fact with no value is left out, so its slot is not recorded. */
+export function productReads(facts: readonly PosthogDeckFact[]): Record<string, Read> {
+  const out: Record<string, Read> = {};
+  for (const s of PRODUCT_SLOTS) {
+    const f = facts.find((x) => x.key === s.fact);
+    if (f && num(f.value) != null) out[s.key] = { value: num(f.value), as_of: day(f.as_of), origin: 'connector', record_ref: `posthog:${f.ref}` };
+  }
+  return out;
+}
+
+const product: Adapter = {
+  id: 'product', area: 'grow', module: POSTHOG_MODULE, href: () => '/account/connectors/posthog',
+  slots: PRODUCT_SLOTS,
+  async read(ctx) {
+    return withDeadline(deadlineOf(ctx), async () => {
+      const link = await posthogDeckLink(ctx.env, ctx.projectId);
+      return link ? productReads(await posthogDeckFacts(ctx.env, link)) : {};
+    });
+  },
+};
+
+const PIPELINE_SLOTS: Slot[] = [
+  { key: 'grow.open_deals', label: 'Open deals', unit: 'count' },
+  { key: 'grow.pipeline_value', label: 'Pipeline value', unit: 'usd' },
+  { key: 'grow.crm_customers', label: 'Customers in CRM', unit: 'count' },
+];
+
+const pipeline: Adapter = {
+  id: 'pipeline', area: 'grow', module: 'Connectors › HubSpot', href: () => '/account/connectors/hubspot',
+  slots: PIPELINE_SLOTS,
+  async read(ctx) {
+    if (!founderReads(ctx)) return withheldAll(PIPELINE_SLOTS);
+    return withDeadline(deadlineOf(ctx), async (signal) => {
+      const row = await founderConnection(ctx.env, ctx.projectId, 'hubspot');
+      if (!row) return {};
+      const c = await hubspotPipelineCounts(ctx.env, row, { fetcher: ctx.connectors?.fetcher, signal });
+      const one = (value: number, what: string): Read => ({ value, as_of: ctx.today, origin: 'connector', record_ref: `hubspot:${row.id}:${what}` });
+      return { 'grow.open_deals': one(c.open_deals, 'open_deals'), 'grow.pipeline_value': one(c.pipeline_value, 'pipeline_value'), 'grow.crm_customers': one(c.customers, 'customers') };
+    });
+  },
+};
+
+/** The most pages of completed issues one read counts; past them the count is a floor (`:capped`). */
+export const SHIPPING_PAGES = 10;
+const SHIPPING_SLOTS: Slot[] = [
+  { key: 'build.shipped_90d', label: 'Issues shipped in 90 days', unit: 'count' },
+  { key: 'build.cycle_velocity', label: 'Issues shipped per week, 4-week mean', unit: 'count' },
+];
+
+/** Completed issues counted page by page: shipped in 90 days, the 4-week weekly mean, and whether the count stopped at its cap. */
+export async function shippingCounts(reads: Pick<LinearReads, 'listCompleted'>, today: string): Promise<{ shipped: number; velocity: number; capped: boolean }> {
+  const since90 = daysBefore(today, 90);
+  const since28 = daysBefore(today, 28);
+  const done = new Map<string, string>();
+  let cursor: string | null = null;
+  let capped = true;
+  for (let page = 0; page < SHIPPING_PAGES; page += 1) {
+    const got = await reads.listCompleted({ days: 90, cursor });
+    for (const i of got.issues) { const d = day(i.completed_at); if (d) done.set(i.id, d); }
+    if (got.done) { capped = false; break; }
+    if (!got.next) break;
+    cursor = got.next;
+  }
+  const days = [...done.values()];
+  const recent = days.filter((d) => d >= since28).length;
+  return { shipped: days.filter((d) => d >= since90).length, velocity: Math.round((recent / 4) * 10) / 10, capped };
+}
+
+const shipping: Adapter = {
+  id: 'shipping', area: 'build', module: 'Connectors › Linear', href: () => '/account/connectors/linear',
+  slots: SHIPPING_SLOTS,
+  async read(ctx) {
+    if (!founderReads(ctx)) return withheldAll(SHIPPING_SLOTS);
+    return withDeadline(deadlineOf(ctx), async () => {
+      const row = await founderConnection(ctx.env, ctx.projectId, 'linear');
+      if (!row) return {};
+      const c = await shippingCounts(await linearReadsFor(ctx.env, row, { fetcher: ctx.connectors?.fetcher as any }), ctx.today);
+      const ref = (what: string) => `linear:${row.id}:${what}${c.capped ? ':capped' : ''}`;
+      return {
+        'build.shipped_90d': { value: c.shipped, as_of: ctx.today, origin: 'connector', record_ref: ref('shipped_90d') },
+        'build.cycle_velocity': { value: c.velocity, as_of: ctx.today, origin: 'connector', record_ref: ref('cycle_velocity') },
+      };
+    });
+  },
+};
+
 // ─────────────────────────────────────────────────────────────── Team
 
 const team: Adapter = {
@@ -514,10 +660,12 @@ const scoring: Adapter = {
 
 export const DECK_SOURCES: Adapter[] = [
   interviews, painThemes, claims, demand, competitors,
-  mustHaves, roadmap, github,
+  mustHaves, roadmap, github, shipping,
   round, capTable, useOfFunds, narrative,
-  revenue, mercury, updates,
+  revenue, mercury, updates, product, pipeline,
   team, notionSource, googleSource, scoring,
+  // D1520 (#3772): market size, the competition table, round terms, use of funds by section, the projection, the narrative's words.
+  ...RECORD_SOURCES,
 ];
 
 /** A short, stable hash of what a binding saw: same value, same date, same record. */
@@ -537,7 +685,7 @@ export type Coverage = {
 
 /** Counts only record-filled slots; a withheld slot is not a slot for this reader. */
 export function coverageOf(items: SourceItem[]): Coverage {
-  const by_grade = { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0 };
+  const by_grade = { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0, Projected: 0 };
   let not_recorded = 0;
   let unreadable = 0;
   for (const it of items) {
@@ -566,11 +714,15 @@ export async function readSources(ctx: SourceCtx, opts: { includeScoring?: boole
         items.push({ ...base, value: null, as_of: null, grade: 'Not recorded', source: null, record_ref: null, snapshot_hash: null, state });
         continue;
       }
-      const { source, grade } = sourceAndGrade(r.origin);
+      const mapped = sourceAndGrade(r.origin);
+      const source = mapped.source;
+      // D1520: a projection is Projected whatever its origin says; it can never pass for Measured.
+      const grade: Grade = a.projection ? 'Projected' : mapped.grade;
       const record_ref = r.record_ref ?? null;
       const as_of = r.as_of ?? null;
       items.push({
         ...base, value: r.value, ...(r.of != null ? { of: r.of } : {}), as_of, grade, source, record_ref,
+        ...(a.projection ? { projection: { label: PROJECTION_LABEL, footnote: PROJECTION_FOOTNOTE } } : {}),
         snapshot_hash: await snapshotHash(s.key, record_ref, [r.value, r.of ?? null], as_of), state: 'recorded',
       });
     }
