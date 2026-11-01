@@ -198,10 +198,10 @@ export function SourcesSheet({ onClose, children }) {
   return <Frame title="Sources and coverage" testId="pitch-sheet-sources" onClose={onClose} width={560}>{children}</Frame>;
 }
 
-export function CheckSheet({ deck, projectId, readOnly, dirty, onReplaced, onClose }) {
+export function CheckSheet({ deck, projectId, readOnly, dirty, onReplaced, onGoToCard, onClose }) {
   return (
     <Frame title="Check claims" testId="pitch-sheet-check" onClose={onClose} width={560}>
-      <CheckPanel key={deck.id} deck={deck} projectId={projectId} readOnly={readOnly} dirty={dirty} onReplaced={onReplaced} />
+      <CheckPanel key={deck.id} deck={deck} projectId={projectId} readOnly={readOnly} dirty={dirty} onReplaced={onReplaced} onGoToCard={onGoToCard} />
     </Frame>
   );
 }
