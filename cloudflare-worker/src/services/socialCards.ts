@@ -81,8 +81,8 @@ const SECTION_PATH: Record<CardKind, string | null> = {
 
 /**
  * The family card each kind shows when the record has no picture of its own.
- * The first key the registry knows wins: D1604 (#3913) adds `event`, `authors`
- * and `profile`; until it merges, the section's card stands in.
+ * The first key the registry knows wins: #3913 (#3705) adds `event`, `authors`
+ * and `profile`; a missing one falls through to the section's card.
  */
 const FAMILY_KEYS: Record<CardKind, readonly string[]> = {
   event: ['event', 'content'],
