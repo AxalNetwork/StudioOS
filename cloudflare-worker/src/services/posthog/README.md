@@ -36,5 +36,12 @@ The rules for adding to this folder:
   is a module's read. Nothing here calls PostHog or writes `project_metrics`
   or `custom_kpi_values`.
 
-PostHog parts 3–6 (#3731) add their syncs and acceptors beside these files
+- `validate.ts` — D1605 (#3731 part 3): Validate's sync (tracked metrics,
+  the web overview beside the waitlist, experiment results, survey counts),
+  survey marks (`posthog_survey_marks`: what a question means is the
+  founder's), and the acceptors for `experiment_evidence` (the founder's
+  hypothesis and direction, through `addExperiment` and `addEvidence`) and
+  `survey_signal` (through `writeDemandSignal`). It registers itself on import.
+
+PostHog parts 4–6 (#3731) add their syncs and acceptors beside these files
 and read PostHog through `reads.ts` alone.

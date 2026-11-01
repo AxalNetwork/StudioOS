@@ -26,7 +26,7 @@ import {
  * dismisses; the rest of the team reads. Built from #2409's PH1–PH10 brief:
  * no "Connector · PostHog" canvas has been drawn.
  */
-export default function FromPosthog({ section, projectId, module, api = posthogApi, onSync = null, phone = false, children = null, renderProposal = null }) {
+export default function FromPosthog({ section, projectId, module, api = posthogApi, onSync = null, phone = false, children = null, renderProposal = null, actions = null }) {
   const [read, setRead] = useState({ status: 'loading', data: null });
   const [round, setRound] = useState(0);
   const [note, setNote] = useState(null);
@@ -59,6 +59,11 @@ export default function FromPosthog({ section, projectId, module, api = posthogA
     try { await (how === 'accept' ? api.accept(section, projectId, p.id) : api.dismiss(section, projectId, p.id)); again(); } catch (e) { setNote(refusalOf(e)); }
     setBusy(null);
   };
+  const acceptWith = async (p, extra) => {
+    setBusy(p.id); setNote(null);
+    try { await api.accept(section, projectId, p.id, extra); again(); } catch (e) { setNote(refusalOf(e)); }
+    setBusy(null);
+  };
   const sync = async () => {
     setSyncing(true); setNote(null);
     try { await onSync(); again(); } catch (e) { setNote(refusalOf(e)); }
@@ -75,6 +80,7 @@ export default function FromPosthog({ section, projectId, module, api = posthogA
         {state === 'ready' && mine && (open || !phone) && (
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className={GHOST} onClick={() => setTracking(true)} data-testid="posthog-track">Track a metric</button>
+            {actions}
             {onSync && <button type="button" className={PRIMARY} onClick={sync} disabled={syncing} data-testid="posthog-sync">{syncing ? 'Syncing…' : 'Sync from PostHog'}</button>}
           </div>
         )}
@@ -155,8 +161,11 @@ export default function FromPosthog({ section, projectId, module, api = posthogA
         <div className="flex flex-col gap-2" data-testid="posthog-proposals">
           {proposals.map((p) => (
             <div key={p.id} className="flex flex-col gap-1 rounded-lg border border-axal-lavender-edge bg-axal-lavender px-3 py-2 dark:border-violet-900 dark:bg-violet-950/30" data-testid="posthog-proposal">
-              {renderProposal ? renderProposal(p) : <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{String(p.payload?.title || 'From PostHog')}</p>}
-              {mine && (
+              {renderProposal
+                // D1605: a part that needs the founder's answers draws its own Accept and passes them.
+                ? renderProposal(p, { mine, busy: busy === p.id, accept: (extra) => acceptWith(p, extra), dismiss: () => decide(p, 'dismiss') })
+                : <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{String(p.payload?.title || 'From PostHog')}</p>}
+              {mine && !renderProposal && (
                 <div className="flex flex-wrap gap-2 max-sm:flex-col">
                   <button type="button" className={PRIMARY} disabled={busy === p.id} onClick={() => decide(p, 'accept')} data-testid="posthog-accept">Accept</button>
                   <button type="button" className={GHOST} disabled={busy === p.id} onClick={() => decide(p, 'dismiss')} data-testid="posthog-dismiss">Dismiss</button>
