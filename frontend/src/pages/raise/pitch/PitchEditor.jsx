@@ -25,7 +25,7 @@ import BlockTools, { SpeakerNotes } from './BlockTools';
 import ShareDialog from './ShareDialog';
 import ExportDialog from './ExportDialog';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
-import { EDITOR_WAITING, aiOffState, placeTextEdit, saveChip } from './deckV2Model';
+import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
 import AreaLightbox from './AreaLightbox';
@@ -41,6 +41,7 @@ import {
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
   addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, isDarkTheme,
   moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
+  replaceCard, withNewUid, pageNumberOf,
 } from './editorModel';
 
 /**
@@ -306,7 +307,8 @@ export function sourcesCard(model, lines) {
 }
 
 /** A copy of a card with its own block ids kept (ids are per card). */
-const copyCard = (c) => JSON.parse(JSON.stringify(c));
+// D1500: a duplicate is a new card, with its own uid.
+const copyCard = (c) => withNewUid(JSON.parse(JSON.stringify(c)));
 
 function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef }) {
   const [aiOn] = useAssistMode('raise');
@@ -358,6 +360,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const selectBlock = (id) => setPickState({ selection: id == null ? [] : [String(id)], focus: id == null ? null : String(id) });
 
   const setCard = (i, c) => setCards((cs) => cs.map((x, j) => (j === i ? c : x)));
+  // D1500: a result goes back onto the card it was made for, by its uid,
+  // wherever that card sits now; a card with no uid falls back to the selection.
+  const placeCard = (c) => setCards((cs) => replaceCard(cs, c, sel) ?? cs);
 
   // D1604: a card edit accepted from the header Ask. Checked against the cards
   // on screen first; `commit()` then places it, synchronously, against the
@@ -372,7 +377,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     placeRef.current = readOnly ? null : (edit) => {
       const place = (cs) => {
         if (edit.kind === 'text') return placeTextEdit(cs, edit);
-        const at = cs[edit.card];
+        const at = cs[editIndex(cs, edit)];
         if (!at) return { error: `Card ${edit.card + 1} is no longer in this deck. Discard this proposal.` };
         const grid = firstFree(at, edit.size.cols, edit.size.rows, model);
         if (!grid) return { error: `No free ${edit.size.cols} × ${edit.size.rows} range on card ${edit.card + 1}. Remove a block, then accept.` };
@@ -384,12 +389,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         commit: () => {
           const r = place(cardsNow.current);
           if (r.error) return { error: r.error };
-          const was = cardsNow.current[edit.card];
-          const put = (from, to) => (cs) => cs.map((x, j) => (j === edit.card && x === from ? to : x));
+          // D1500: the card the edit was made for, by uid, wherever it sits now.
+          const where = editIndex(cardsNow.current, edit);
+          const was = cardsNow.current[where];
+          const put = (from, to) => (cs) => cs.map((x) => (x === from ? to : x));
           // The next check (Accept all's next edit) sees this one at once.
           cardsNow.current = put(was, r.card)(cardsNow.current);
           setCards(put(was, r.card));
-          setSel(edit.card); setPickState(NO_PICK);
+          setSel(where); setPickState(NO_PICK);
           return {
             // Back to the card as it was, unless something changed it since.
             undo: () => { cardsNow.current = put(r.card, was)(cardsNow.current); setCards(put(r.card, was)); },
@@ -491,7 +498,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {phone ? (
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
           onNotes={(v) => setCard(sel, { ...card, notes: v })} notesMax={model.notes_max}
-          deckId={base.deck.id} items={items} aiOn={aiOn} off={off} onTokens={onTokens} model={model} onPlace={(c) => setCard(sel, c)} onProposals={onProposals} />
+          deckId={base.deck.id} items={items} aiOn={aiOn} off={off} onTokens={onTokens} model={model} onPlace={placeCard} onProposals={onProposals} />
       ) : (
         <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
@@ -499,14 +506,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
               onCardAction={cardAction} orientation={narrow ? 'row' : 'column'}
               onAdd={() => {
                 const layout = model.layouts.find((l) => l.id === 'statement') || model.layouts[0];
-                const fresh = applyLayout({ title: 'New card' }, layout).card;
+                const fresh = withNewUid(applyLayout({ title: 'New card' }, layout).card);
                 setCards((cs) => [...cs, fresh]); setSel(cards.length); setPickState(NO_PICK);
               }} />
             {refresh.status === 'error' ? <ReadFailed text="Which figures have changed could not be read." onRetry={refresh.retry} testId="pitch-editor-refresh-error" /> : null}
           </div>
           <div className="flex min-w-0 flex-col gap-3">
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
-              <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts}
+              <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts} pageLabel={pageNumberOf(cards, sel)}
                 readOnly={readOnly} selection={selection} focus={focus}
                 onSelection={setPickState}
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
@@ -516,7 +523,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             {card && !readOnly && chosen.length ? (
               <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
                 onRemove={(id) => setPickState((p) => ({ selection: p.selection.filter((x) => x !== id), focus: p.focus }))}
-                onPlace={(c) => setCard(sel, c)} onProposals={onProposals} />
+                onPlace={placeCard} onProposals={onProposals} />
             ) : null}
             {card && !readOnly && (one || !areas) ? (
               <BlockTools card={card} cardIndex={sel} area={one} model={model} charts={charts} images={images} items={items}
@@ -527,8 +534,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 onAddBlock={(range, kind) => setDialog({ kind: 'add-block', range: range || null, initial: kind })}
                 onImage={(use, replace) => setDialog({ kind: 'image', use, replace: replace || null })}
                 onDesign={() => setSheet('structure')}
-                onPlace={(c) => setCard(sel, c)}
-                onAddCard={(c) => { setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); }} />
+                onPlace={placeCard}
+                onAddCard={(c) => { setCards((cs) => [...cs, withNewUid(c)]); setSel(cards.length); setPickState(NO_PICK); }} />
             ) : null}
             {card && (one || !areas) ? (
               <SpeakerNotes card={card} index={sel} readOnly={readOnly} notesMax={model.notes_max} onNotes={(v) => setCard(sel, { ...card, notes: v })} />
@@ -561,7 +568,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           <SourcesPanel items={items} status={sources.status} onRetry={sources.retry} stale={staleMap} />
           {/* D1267 (#3290, VR7): the claims this slide states, and the optional Sources on Axal card. */}
           <SlideEvidence projectId={project?.id} version={base.deck.version} slide={sel + 1} readOnly={readOnly}
-            onAddSources={(lines) => { const c = sourcesCard(model, lines); setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); setSheet(null); }} />
+            onAddSources={(lines) => { const c = withNewUid(sourcesCard(model, lines)); setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); setSheet(null); }} />
         </SourcesSheet>
       ) : null}
       {sheet === 'remix' && card && base.deck?.id ? (
@@ -629,8 +636,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           }} />
       ) : null}
       {dialog?.kind === 'areas' && card ? (
-        <AreaLightbox deckId={base.deck.id} cardIndex={sel} card={card} areas={dialog.areas} model={model} items={items} aiOn={aiOn}
-          onTokens={onTokens} onPlace={(c) => setCard(sel, c)} onProposals={onProposals} onClose={() => setDialog(null)}
+        <AreaLightbox deckId={base.deck.id} cardIndex={sel} card={card} cards={cards} areas={dialog.areas} model={model} items={items} aiOn={aiOn}
+          onTokens={onTokens} onPlace={placeCard} onProposals={onProposals} onClose={() => setDialog(null)}
           onDialog={(plan, area) => {
             if (plan.open === 'structure') { setDialog(null); setSheet('structure'); return; }
             // "Add it here": the area's own range; a block that holds it gives way when Add places the new one.
@@ -924,7 +931,7 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
         </div>
       ) : null}
       {asking && area && target?.kind === 'areas' ? (
-        <AreaLightbox deckId={deckId} cardIndex={sel} card={card} areas={[area]} model={model} items={items} aiOn={aiOn}
+        <AreaLightbox deckId={deckId} cardIndex={sel} card={card} cards={cards} areas={[area]} model={model} items={items} aiOn={aiOn}
           onTokens={onTokens} onPlace={onPlace} onProposals={onProposals} onClose={() => setAsking(false)}
           instruction={words ? (
             <InstructionBox sheet deckId={deckId} cardIndex={sel} card={card} areas={[area]} items={items} aiOn={aiOn} onTokens={onTokens}

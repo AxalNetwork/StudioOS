@@ -83,7 +83,7 @@ async function fixture() {
 const snapshot = (f: Fixture) => JSON.stringify(['pitch_decks', 'pitch_deck_proposals', 'pitch_deck_share_tokens', 'landing_pages', 'brand_sites', 'waitlist_signups']
   .map((name) => f.db.prepare('SELECT * FROM ' + name).all())); // fixed local fixture table names
 const writes = (f: Fixture): Array<[string, string, any?]> => [
-  ['PUT', '/api/decks/10', { slides: SLIDES, title: 'Synthetic edit' }],
+  ['PUT', '/api/decks/10', { model_version: 2, slides: SLIDES, title: 'Synthetic edit' }],
   ['POST', '/api/decks/10/restore'], ['POST', '/api/decks/10/share', { ttl_hours: 24 }], ['DELETE', '/api/decks/10/shares/' + f.shareId],
   ['POST', '/api/decks/10/autofill', {}],
   ['PUT', '/api/brand/landing/by-project/1', { name: 'Synthetic edit' }],
@@ -137,7 +137,7 @@ for (const who of [1, 6, 13]) test('admin reads only decks; accepted cofounder '
   const f = await fixture();
   try {
     for (const [method, path] of reads) assert.equal((await request(f, who, method, path)).status, 200, path);
-    assert.equal((await request(f, who, 'PUT', '/api/decks/10', { slides: SLIDES })).status, who === 1 ? 403 : 200);
+    assert.equal((await request(f, who, 'PUT', '/api/decks/10', { model_version: 2, slides: SLIDES })).status, who === 1 ? 403 : 200);
     assert.equal((await request(f, who, 'PUT', '/api/brand/landing/by-project/1', { name: 'Synthetic member edit' })).status, 200);
     if (who !== 1) {
       const details = JSON.parse(f.db.prepare("SELECT details FROM activity_logs WHERE action = 'project_content_write_authorized' ORDER BY id DESC LIMIT 1").get().details);
@@ -188,7 +188,7 @@ test('an investor membership and role casing do not create management access', a
     f.db.exec("INSERT INTO project_members(project_id,user_id,role,status) VALUES(1,3,'cofounder','accepted')");
     for (const role of ['investor', 'INVESTOR']) {
       f.db.prepare('UPDATE users SET role = ? WHERE id = 3').run(role);
-      assert.equal((await request(f, 3, 'PUT', '/api/decks/10', { slides: SLIDES })).status, 403);
+      assert.equal((await request(f, 3, 'PUT', '/api/decks/10', { model_version: 2, slides: SLIDES })).status, 403);
       assert.equal((await request(f, 3, 'PUT', '/api/brand/landing/by-project/1', { name: 'Synthetic denied' })).status, 403);
     }
   } finally { f.db.close(); }
@@ -264,7 +264,7 @@ for (const who of [1, 2, 6, 13, 11, 12]) test('waitlist contact access is limite
 test('a refused payload records authorization context rather than a completed change', async () => {
   const f = await fixture(); const before = snapshot(f);
   try {
-    assert.equal((await request(f, 6, 'PUT', '/api/decks/10', { slides: [] })).status, 400);
+    assert.equal((await request(f, 6, 'PUT', '/api/decks/10', { model_version: 2, slides: [] })).status, 400);
     assert.equal(snapshot(f), before);
     const rows = f.db.prepare("SELECT action, details FROM activity_logs WHERE action = 'project_content_write_authorized'").all();
     assert.equal(rows.length, 1);

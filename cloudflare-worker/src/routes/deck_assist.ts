@@ -47,6 +47,7 @@ import { proposeRail } from '../services/railProposals';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned } from './decks';
+import { cardRefOf } from '../services/decks/cardUids';
 import { mercuryFor } from './deck_sources';
 
 const deckAssist = new Hono<{ Bindings: Env }>();
@@ -55,7 +56,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const isChart = (a: Action): a is ChartAction => (CHART_ACTIONS as readonly string[]).includes(a);
 
 type Press = {
-  action: Action; option: string; deckId: number; card: number; projectId: number; text: string;
+  action: Action; option: string; deckId: number; card: number; card_uid: string | null; projectId: number; text: string;
   tone?: string; language?: string; instruction?: string; labels?: string[]; items: SourceItem[]; heading: string;
 };
 
@@ -63,9 +64,11 @@ type Press = {
 async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused: Response }> {
   const body = await c.req.json().catch(() => ({} as any));
   const deckId = Number(c.req.param('id'));
-  const card = Number(c.req.param('card'));
+  const cardParam = String(c.req.param('card') ?? '');
   if (!Number.isSafeInteger(deckId) || deckId <= 0) return { refused: c.json({ error: 'deck id required' }, 400) };
-  if (!Number.isSafeInteger(card) || card < 0 || card > 59) return { refused: c.json({ error: 'card must be a card of the deck, from 0' }, 400) };
+  // D1500: `:card` is the card's uid, or (an older editor) its place from 0.
+  const byPlace = /^(0|[1-9][0-9]?)$/.test(cardParam);
+  if (!byPlace && !/^[A-Za-z0-9_-]{1,40}$/.test(cardParam)) return { refused: c.json({ error: 'card must be a card of the deck' }, 400) };
   const action = String(body?.action || '') as Action;
   if (!(ACTIONS as readonly string[]).includes(action)) return { refused: c.json({ error: `action must be one of ${ACTIONS.join(', ')}` }, 400) };
 
@@ -76,6 +79,13 @@ async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused
   try { project = await projectOwned(c, user, projectId, { write: true }); } catch (e: any) {
     return { refused: e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403) };
   }
+  let savedCards: unknown[] = [];
+  try { const parsed = JSON.parse(row.slides || '[]'); if (Array.isArray(parsed)) savedCards = parsed; } catch { savedCards = []; }
+  // A uid the saved version does not hold yet (a card added since) keeps the place the editor sends.
+  const ref = cardRefOf(savedCards, byPlace ? { card: Number(cardParam) } : { card_uid: cardParam, card: body?.card_index ?? null });
+  if ('error' in ref || ref.index === null) return { refused: c.json({ error: 'card must be a card of the deck. Save the deck, then ask again.' }, 400) };
+  const card = ref.index;
+  const cardUid = ref.uid;
   const { items } = await readSources({ env: c.env, projectId, today: today(), mercury: await mercuryFor(c, user, project) });
 
   // A figure bound to a record is the record's: the block as the editor holds it, or as the version stored it.
@@ -96,7 +106,7 @@ async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused
 
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
   const heading = typeof body?.heading === 'string' ? body.heading.trim().slice(0, 120) : '';
-  const press: Press = { action, option: ASSIST_OPTIONS[action], deckId, card, projectId, text, items, heading };
+  const press: Press = { action, option: ASSIST_OPTIONS[action], deckId, card, card_uid: cardUid, projectId, text, items, heading };
   if (!isChart(action) && action !== 'headline') {
     if (!text) return { refused: c.json({ error: 'text required: select the words to change' }, 400) };
     if (text.length > TEXT_MAX) return { refused: c.json({ error: `the text is at most ${TEXT_MAX} characters` }, 400) };
@@ -185,7 +195,7 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
   if (isChart(p.action)) {
     const made = chartBlock(p.action, parseJsonLoose<any>(res.output), p.items);
     if (!made) return refuse(c, 422, { code: 'no_figures_chosen', message: 'Eadwyn named no recorded figure to show, so nothing was placed. It was charged for the run.', extra: { cost } });
-    payload = { deck_id: p.deckId, card: p.card, action: p.action, block: made.block, title: made.title };
+    payload = { deck_id: p.deckId, card: p.card, card_uid: p.card_uid, action: p.action, block: made.block, title: made.title };
     answer = { block: made.block, title: made.title };
   } else {
     // D1546: the guarantee-language block before anything is proposed; words that only promised a return propose nothing.
@@ -193,7 +203,7 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
     if (promised && !after.trim()) return refuse(c, 422, { code: 'guarantee_language', message: 'Eadwyn’s words promised a return, which a deck may not, so nothing was proposed. It was charged for the run.', extra: { cost } });
     const problem = wordingProblem(p.action as TextAction, p.text, after);
     if (problem) return refuse(c, 422, { code: 'figure_in_output', message: `${problem} It was charged for the run.`, extra: { cost } });
-    payload = { deck_id: p.deckId, card: p.card, action: p.action, before: p.text, after };
+    payload = { deck_id: p.deckId, card: p.card, card_uid: p.card_uid, action: p.action, before: p.text, after };
     answer = { before: p.text, after };
   }
   let proposal = null;

@@ -108,7 +108,10 @@ test('an admin sees nothing of the narrative before a reason; the reason opens i
     const form = page.byId('narrative-reason');
     await act(async () => page.props(input).onChange({ target: { value: 'ok' } }));
     await act(async () => page.props(form).onSubmit({ preventDefault() {} }));
-    assert.ok(page.testIds().includes('narrative-reason-failed'), 'a short reason is refused before it is sent');
+    // D1463: a too-short reason is a muted hint and a disabled Open, never sent.
+    assert.match(page.text(), /Write a reason of at least 3 characters\./);
+    assert.equal(page.props(page.byId('narrative-reason-hint'))['data-tone'], 'hint');
+    assert.equal(page.props(page.byId('narrative-reason-open')).disabled, true);
     assert.ok(!page.requests.some(([m]) => m === 'POST'));
     await act(async () => page.props(page.byId('narrative-reason-input')).onChange({ target: { value: 'Quarterly portfolio review' } }));
     await act(async () => page.props(page.byId('narrative-reason')).onSubmit({ preventDefault() {} }));
@@ -117,6 +120,7 @@ test('an admin sees nothing of the narrative before a reason; the reason opens i
       [['/cycles/raise/narrative/reads?project=1', { reason: 'Quarterly portfolio review' }]]);
     assert.ok(page.testIds().includes('the-narrative'));
     assert.ok(page.testIds().includes('narrative-read-only'));
+    assert.ok(page.testIds().includes('narrative-access'), 'D1463: the amber access banner heads the narrative');
     assert.match(page.text(), /Read only\. Notes are visible to the founder\./);
     assert.match(page.text(), /Opened by an admin for “Quarterly portfolio review”\. The founder sees this reason\./);
   } finally { await page.close(); }
