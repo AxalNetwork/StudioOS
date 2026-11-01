@@ -9,6 +9,12 @@ hosted MCP server.
   projects, saved insights and their results, trends, funnel, retention and
   lifecycle queries of their own kind only, the web overview, experiments,
   surveys and their answers, and feature flags.
+- `deckFacts.ts` — D1601 (#3880): what a pitch deck reads from a venture's
+  PostHog: its linked project (`posthogDeckLink`, the connection active and
+  switched on for the venture's company) and the facts #3731's feeds store
+  for it. No feed stores one yet, so `posthogDeckFacts` is empty and
+  `posthogWauWeekly` null, and the deck says "not recorded". It never calls
+  PostHog.
 
 The rules for adding to this folder:
 
