@@ -1,5 +1,5 @@
 import { contractErrors } from '../src/contracts/validate.ts';
-const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckTypedValues.schema.json', import.meta.url), 'utf8'));
+const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckTypedTables.schema.json', import.meta.url), 'utf8'));
 /**
  * D1538 (#3787, deck v2 B11) — typed figures, the table block, the
  * market_circles and projection charts, and the one-click rules.
