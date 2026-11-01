@@ -75,7 +75,7 @@ export const CARD_CATALOGUE: CardSpec[] = [
   { card: 'traction', title: 'Traction', purpose: 'Revenue and customers from your records', sources: ['grow.mrr', 'grow.paying_customers', 'grow.mercury_growth', 'grow.arr'] },
   { card: 'validation', title: 'Validation', purpose: 'Interviews, letters of intent and validated claims', sources: ['validate.interviews', 'validate.strong_fit', 'validate.lois', 'validate.claims_validated'] },
   { card: 'product', title: 'Product', purpose: 'Must-haves done and what shipped', sources: ['build.must_haves', 'build.releases_90d', 'build.commits_90d'] },
-  { card: 'market', title: 'Market', purpose: 'Who else is here and the demand you have seen', sources: ['validate.competitors', 'validate.demand'] },
+  { card: 'market', title: 'Market', purpose: 'Who else is here and the demand you have seen', sources: ['validate.competitors', 'validate.demand', 'validate.notion_research'] },
   { card: 'unit_economics', title: 'Unit economics', purpose: 'Runway, burn and churn as recorded', sources: ['grow.runway', 'grow.net_burn', 'grow.churn', 'grow.mercury_revenue'] },
   { card: 'team', title: 'Team', purpose: 'The founders and what they bring', sources: ['team.founders', 'team.archetypes', 'team.skills'] },
   { card: 'round', title: 'The round', purpose: 'Instrument, amount and close', sources: ['raise.round_target', 'raise.round_terms', 'raise.round_close'] },
