@@ -1,0 +1,18 @@
+# `contracts/`
+
+D1511 (#3762, deck v2 A18). The reply shape of every deck v2 adapter method
+whose route is on `main`, as JSON Schema. `test:drift` checks each route's
+reply against its schema, not only that the route exists.
+
+| File | What it is |
+|---|---|
+| `deckGrid.schema.json` | `GET /api/decks/:id/grid` (D1499, #3749): the geometry, the 17 structures and each card's areas with their boxes. |
+| `index.ts` | `CONTRACTS`: each adapter method with a route, its issue, its route and its schema file. The tests read the schemas; the Worker never loads one. |
+| `validate.ts` | `contractErrors`, the subset of JSON Schema the contracts use. A keyword it does not check is an error, never skipped. |
+
+## Rule for adding here
+
+When a `deckV2Adapter.js` method's body becomes `through(() => client.method(…))`,
+the same PR adds `<surface>.schema.json` for the reply that method passes on
+and one `CONTRACTS` entry. `cloudflare-worker/test/deck_contracts_d1511.test.ts`
+fails until both exist, and fails when the route's reply leaves its schema.

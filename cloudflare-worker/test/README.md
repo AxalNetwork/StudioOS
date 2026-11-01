@@ -50,6 +50,9 @@ columns `writableSession` checks.
 `_guard_stub.mjs` (D763) answers Llama Guard's calls on a stubbed `env.AI` and passes
 every other call through: the guard fails closed inside `run()`, so a stub that does not
 answer it refuses every member run. It answers free, so a test keeps its own run's figures.
+`_fake_ai.mjs` (D1511) is the fake Workers AI binding the deck v2 suites run on: recorded
+outputs, never a model, and each failure a real binding gives injected on demand (a 429,
+error 3040, a timeout, a guard block, bad JSON, over-capacity text, a non-image answer).
 `schema_readiness.test.ts` runs the real bootstraps against two recording D1 stubs
 and asserts each database gets its own DDL — the half `scripts/check-schema-readiness.mjs`
 cannot see, since reading the source tells you a `WeakMap` is there but not that it
