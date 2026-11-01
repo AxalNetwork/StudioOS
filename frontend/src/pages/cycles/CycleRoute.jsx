@@ -241,7 +241,7 @@ const CYCLE_DEFS = {
       // D913: its Objections heard, with no Answer it for an admin.
       'investor-narrative': (data, ctx) => (
         <>
-          <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
+          <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} projectId={ctx.projectId} />
           {mercuryPart('investor-narrative', data, ctx)}
           <RaisePosthog slug="investor-narrative" projectId={ctx.projectId} />
           <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
@@ -1073,6 +1073,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     <WorkerRail
       workspace={name}
       role="founder"
+      readOnlyFor={narrativeAdmin ? 'founder-record' : null}
       stance="Evidence-led view"
       fills
       note={ASSIST_SURFACES.workspace.desks[name]?.fills}
@@ -1283,7 +1284,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   }
   // D914: nothing of the narrative is drawn for an admin before their reason; then it is read only.
   if (narrativeAdmin && projectStatus !== 'none' && !actionPage) {
-    body = <NarrativeAdminGate projectId={projectId} onOpened={() => setReload((n) => n + 1)}>{body}</NarrativeAdminGate>;
+    body = <NarrativeAdminGate projectId={projectId} onOpened={() => setReload((n) => n + 1)} back={{ to: `/raise${q}`, label: 'Back to Raise' }}>{body}</NarrativeAdminGate>;
   }
 
   // D698 — where the rail is: the cycle, and on a module route the module, so

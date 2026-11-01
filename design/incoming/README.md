@@ -145,6 +145,25 @@ Not built here, each filed: the channel pill, the fact actions' keys,
 composer in the Sheet (IV-D3); the participants timeline (REC3); Ask as a
 bottom sheet on the record (IV-M5, after #3706). Two files arrived and none
 left this folder.
+## Landed 2026-11-01 — Read with a reason (#3713)
+
+The owner's artifacts `8PfdzapnNsUCxYSB3Yhh3X` (the page, `Read With A Reason Page.dc.html`)
+and `3eydkF7Mvqy6cpg94Ypp2b` (the board grid, `Read With A Reason · Boards.dc.html`) were
+decoded by `scripts/read-canvas.mjs`. The grid imports the page by name and frames:
+- **RR00 to RR03**, the gate: grant mode on the Investor narrative, the field while typing, and the rail on a founder's record;
+- **RR04 to RR06**, while the access lasts: the amber banner, End access now, and the grant running out;
+- **RR07 to RR09**, what the founder sees: "Who read this narrative" on Home and Story, the notification, and the other three logs;
+- **RR10 to RR14**, the same gate on the per-open records (Cap table, Data room, Capital relationships), the inline form in the New version dialog, and the Pitch deck with no gate;
+- **RR15 to RR22**, the states, the phone at 390, the tablet at 768, and dark.
+
+**One edit, named.** The Axal mark (the export's `uploads/axal-logo-200x200.png`)
+points at `/axal-mark.png`. No other value was edited.
+
+**Grade: UPGRADE (D1463).** The gate and the banner are built (`frontend/src/ui/ReasonGate.jsx`)
+and used by the Investor narrative and the Cap table; the rail's founder-record mode is in
+`frontend/src/ui/WorkerRail.jsx`. End access now and the venture header wait on the Worker
+part (#3713 part 2); the Data room and Capital relationships pages wait on part 3.
+Two files arrived and none left this folder.
 
 ## Landed 2026-11-01 — Work and company compliance (#3968)
 

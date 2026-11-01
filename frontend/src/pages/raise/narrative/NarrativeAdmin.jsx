@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { narrativeApi } from '../../../lib/api/narrative';
 import { reportError } from '../../../lib/log';
 import { Lightbox, Unreadable } from '../../../ui';
+import ReasonGate, { AccessBanner, RecordSkeleton } from '../../../ui/ReasonGate';
+import { endedLine, grantSpan } from '../../../ui/reasonGate';
 import {
   BOUNDARY, HOME_PATH, NOTES_META, NOTES_TITLE, NOTE_ANSWER_PLACEHOLDER, NOTE_MAX, NOTE_PLACEHOLDER, NO_NOTES, NO_READS,
-  OTHER_VENTURE, READS_TITLE, READ_ONLY, REASON_HELP, REASON_MAX, REASON_PLACEHOLDER, REASON_TITLE, TITLE,
-  noteRow, notePosts, isNarrativeAdmin, openedLine, readRow, reasonProblem,
+  OTHER_VENTURE, READS_LINE, READS_TITLE, READ_ONLY, REASON_HOURS, REASON_MAX, REASON_MIN, TITLE,
+  noteRow, notePosts, isNarrativeAdmin, openedLine, readRow,
 } from './narrativeModel';
 
 /**
@@ -37,66 +39,49 @@ const GHOST = 'inline-flex w-fit items-center rounded-[9px] border border-axal-h
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const ALERT = 'm-0 text-[12.5px] font-semibold text-axal-destructive dark:text-red-400';
 
-/** The reasons read: `{ status, reads, mine, viewer }`. */
+/** The reasons read: `{ status, reads, mine, viewer, venture }` (`venture` once G2 sends it). */
 function useReads(projectId, tick) {
-  const [state, setState] = useState({ status: 'loading', reads: [], mine: null, viewer: null });
+  const [state, setState] = useState({ status: 'loading', reads: [], mine: null, viewer: null, venture: null });
   useEffect(() => {
     if (!projectId) return undefined;
     let alive = true;
     setState((s) => ({ ...s, status: 'loading' }));
     narrativeApi.narrativeReads(projectId)
-      .then((r) => { if (alive) setState({ status: 'ready', reads: Array.isArray(r?.reads) ? r.reads : [], mine: r?.mine || null, viewer: r?.viewer || null }); })
-      .catch((e) => { if (alive) { reportError('NarrativeAdmin:reads', e); setState({ status: 'error', reads: [], mine: null, viewer: null }); } });
+      .then((r) => { if (alive) setState({ status: 'ready', reads: Array.isArray(r?.reads) ? r.reads : [], mine: r?.mine || null, viewer: r?.viewer || null, venture: r?.venture || null }); })
+      .catch((e) => { if (alive) { reportError('NarrativeAdmin:reads', e); setState({ status: 'error', reads: [], mine: null, viewer: null, venture: null }); } });
     return () => { alive = false; };
   }, [projectId, tick]);
   return state;
 }
 
-/** NAR13's banner: read only, and the reason the founder sees. */
+/**
+ * NAR13's lines under the access banner (D1463, RR04): who opened it, for
+ * what, and that the founder sees it; then that notes are the one write.
+ */
 export function ReadOnlyBanner({ read, viewer }) {
   const line = openedLine(read, viewer);
   return (
-    <div className={`${CARD} flex items-start gap-2.5 px-4 py-3`} role="status" data-testid="narrative-read-only">
-      <span aria-hidden="true" className="mt-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-axal-lavender text-[11px] font-extrabold text-axal-violet dark:bg-violet-950/50 dark:text-violet-300">i</span>
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className={`text-[13px] font-bold ${INK}`}>{READ_ONLY}</span>
-        {line ? <span className={`text-[12px] ${MUTED}`} data-testid="narrative-read-reason">{line}</span> : null}
-      </div>
+    <div className="flex flex-col gap-1 px-0.5" role="status" data-testid="narrative-read-only">
+      {line ? <span className={`text-[12.5px] ${MUTED}`} data-testid="narrative-read-reason">{line}</span> : null}
+      <span className={`text-[12.5px] ${MUTED}`}>{READ_ONLY}</span>
     </div>
   );
 }
 
-/** Before an admin reads the narrative, the reason the founder will see. */
-export function NarrativeReasonForm({ projectId, onOpened, submitLabel = 'Open read only' }) {
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(null);
-  const problem = reasonProblem(text);
-  const submit = async (e) => {
-    e.preventDefault();
-    if (problem || busy) { setFailed(problem); return; }
-    setBusy(true); setFailed(null);
-    try {
-      await narrativeApi.narrativeGiveReason(projectId, text.trim());
-      onOpened();
-    } catch (err) {
-      reportError('NarrativeAdmin:reason', err);
-      setFailed(err?.message || 'The reason could not be saved. Try again.');
-    } finally { setBusy(false); }
-  };
+/**
+ * Before an admin reads the narrative, the reason the founder will see:
+ * D1463's one gate (`ui/ReasonGate.jsx`), in grant mode, with the Worker's
+ * 3–200 characters. `inline` is #3712's New version dialog (RR13).
+ */
+export function NarrativeReasonForm({ projectId, onOpened, submitLabel = 'Open read only', inline = false, venture = null, viewer = null, back = null, notice = null, onCancel = null }) {
   return (
-    <form onSubmit={submit} className={`${CARD} flex max-w-[620px] flex-col gap-3 p-5`} data-testid="narrative-reason">
-      <span className={EYEBROW}>{TITLE} · read only</span>
-      <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{REASON_TITLE}</h2>
-      <p className={`m-0 text-[12.5px] leading-relaxed ${MUTED}`}>{REASON_HELP}</p>
-      <label className="flex flex-col gap-1">
-        <span className={`text-[12px] font-semibold ${INK}`}>Reason</span>
-        <input className={FIELD} value={text} maxLength={REASON_MAX} placeholder={REASON_PLACEHOLDER}
-          onChange={(e) => setText(e.target.value)} data-testid="narrative-reason-input" />
-      </label>
-      {failed ? <p role="alert" className={ALERT} data-testid="narrative-reason-failed">{failed}</p> : null}
-      <button type="submit" className={BTN} disabled={busy} data-testid="narrative-reason-open">{busy ? 'Opening…' : submitLabel}</button>
-    </form>
+    <ReasonGate
+      record={TITLE} what="this narrative" venture={venture} viewer={viewer}
+      rule={{ kind: 'grant', hours: REASON_HOURS }} min={REASON_MIN} max={REASON_MAX}
+      onSubmit={async (reason) => { await narrativeApi.narrativeGiveReason(projectId, reason); onOpened(); }}
+      submitLabel={submitLabel} inline={inline} back={back} notice={notice} onCancel={onCancel}
+      preview={inline ? null : <RecordSkeleton />} testId="narrative-reason"
+    />
   );
 }
 
@@ -107,25 +92,39 @@ export function narrativeFormAccess(projectId, user) {
   return {
     readOnly: `${READ_ONLY} Only the venture’s founders create or change versions.`,
     renderReadRecovery: (error, retry) => error?.data?.code === 'read_reason_required'
-      ? <NarrativeReasonForm projectId={projectId} onOpened={retry} submitLabel="Continue" /> : null,
+      ? <NarrativeReasonForm projectId={projectId} onOpened={retry} submitLabel="Continue" inline /> : null,
   };
 }
 
 /**
  * The narrative, for an admin: the reason first, then `children` under the
- * read-only banner. `onOpened` re-reads the page once a reason is given.
+ * access banner. `onOpened` re-reads the page once a reason is given.
+ *
+ * D1463: the banner counts down to the grant's `expires_at` each minute; at
+ * zero the reads are read again, so the gate returns with RR06's line. The
+ * venture header reads `venture` from the reads (G2, #3713 part 2) when the
+ * Worker sends it, and draws no founder line until then.
  */
-export function NarrativeAdminGate({ projectId, onOpened, children }) {
+export function NarrativeAdminGate({ projectId, onOpened, back = null, children }) {
   const [tick, setTick] = useState(0);
+  const [lapsed, setLapsed] = useState(null);
   const reads = useReads(projectId, tick);
-  const opened = useCallback(() => { setTick((n) => n + 1); onOpened?.(); }, [onOpened]);
+  const opened = useCallback(() => { setLapsed(null); setTick((n) => n + 1); onOpened?.(); }, [onOpened]);
+  const mine = reads.mine;
+  const expire = useCallback(() => { setLapsed(mine?.expires_at || null); setTick((n) => n + 1); }, [mine?.expires_at]);
   if (!projectId) return children;
-  if (reads.status === 'loading' && !reads.mine) return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="narrative-reason-loading" />;
+  if (reads.status === 'loading' && !mine) return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="narrative-reason-loading" />;
   if (reads.status === 'error') return <Unreadable what="The read log" claim="The narrative stays closed until it can be checked." onRetry={() => setTick((n) => n + 1)} />;
-  if (!reads.mine) return <NarrativeReasonForm projectId={projectId} onOpened={opened} />;
+  if (!mine) {
+    return (
+      <NarrativeReasonForm projectId={projectId} onOpened={opened} venture={reads.venture} viewer={reads.viewer} back={back}
+        notice={lapsed ? endedLine(REASON_HOURS, lapsed) : null} />
+    );
+  }
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="narrative-admin">
-      <ReadOnlyBanner read={reads.mine} viewer={reads.viewer} />
+    <div className="flex min-w-0 flex-col gap-3" data-testid="narrative-admin">
+      <AccessBanner reason={mine.reason} viewer={reads.viewer} endsAt={mine.expires_at} onExpire={expire} testId="narrative-access" />
+      <ReadOnlyBanner read={mine} viewer={reads.viewer} />
       {children}
     </div>
   );
@@ -136,7 +135,10 @@ export function NarrativeReads({ projectId }) {
   const reads = useReads(projectId, 0);
   return (
     <section className={CARD} data-testid="narrative-reads">
-      <h2 className={`m-0 border-b border-axal-hairline px-4 py-3 text-[13.5px] font-extrabold dark:border-gray-800 ${INK}`}>{READS_TITLE}</h2>
+      <div className="flex flex-col gap-0.5 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+        <h2 className={`m-0 text-[13.5px] font-extrabold ${INK}`}>{READS_TITLE}</h2>
+        <p className={`m-0 text-[12px] ${MUTED}`}>{READS_LINE}</p>
+      </div>
       {reads.status === 'error'
         ? <div className="px-4 py-3"><Unreadable what="Who read this narrative" claim="This is not a claim that nobody did." /></div>
         : reads.status === 'loading'
@@ -145,10 +147,13 @@ export function NarrativeReads({ projectId }) {
             ? <p className={`m-0 px-4 py-3 text-[12.5px] ${MUTED}`} data-testid="narrative-reads-none">{NO_READS}</p>
             : (
               <ul className="m-0 list-none p-0">
-                {reads.reads.map(readRow).map((r) => (
-                  <li key={r.id} className="flex flex-col gap-0.5 border-b border-axal-ground px-4 py-2.5 last:border-b-0 dark:border-gray-800" data-testid="narrative-read-row">
-                    <span className={EYEBROW}>{r.who} · {r.when}</span>
-                    <span className={`text-[13px] ${INK}`}>{r.reason}</span>
+                {reads.reads.map((raw) => ({ ...readRow(raw), span: grantSpan(raw) })).map((r) => (
+                  <li key={r.id} className="flex items-start justify-between gap-3 border-b border-axal-ground px-4 py-2.5 last:border-b-0 dark:border-gray-800" data-testid="narrative-read-row">
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className={EYEBROW}>{r.who} · {r.when}</span>
+                      <span className={`text-[13px] ${INK}`}>{r.reason}</span>
+                    </span>
+                    {r.span ? <span className={`flex-none text-[12px] font-semibold ${MUTED}`} data-testid="narrative-read-span">{r.span}</span> : null}
                   </li>
                 ))}
               </ul>
