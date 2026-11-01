@@ -1,0 +1,39 @@
+{
+  "skill": "board-meeting-brief",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "kpis": [
+          {
+            "name": "Paying customers",
+            "value": 37
+          }
+        ]
+      },
+      "mercury.balances": {
+        "cash_usd": 500000
+      },
+      "compliance.calendar": [
+        {
+          "name": "Delaware franchise tax",
+          "due": "2027-03-01"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "37",
+      "Delaware franchise tax"
+    ],
+    "must_say_not_recorded": [
+      "runway"
+    ],
+    "must_not_include": [
+      "months of runway"
+    ]
+  }
+}
