@@ -8,6 +8,7 @@
  * cannot create accounts or impersonate the deck owner.
  */
 import { Hono } from 'hono';
+import { cardUidAt } from '../services/decks/cardUids';
 import type { Env } from '../types';
 import { verifySignedToken, shareLinkLive, viewerHashOf } from './decks';
 import { createJWT, setAuthCookies, generateCsrfToken, requireAuth } from '../auth';
@@ -49,6 +50,7 @@ async function ensureDeckShareConversionSchema(env: Env): Promise<void> {
        project_id INTEGER,
        user_id INTEGER,
        slide_reactions TEXT,
+       slide_reactions_by_uid TEXT,
        overall_note TEXT,
        problem_fit TEXT,
        willingness_to_pay TEXT,
@@ -546,6 +548,24 @@ deckShareActions.post('/share/:token/feedback', async (c) => {
   } catch (e) {
     console.error('[deck_share] feedback insert failed', (e as Error).message);
     return c.json({ error: 'persist_failed' }, 500);
+  }
+  // D1500: the same reactions keyed by each card's uid (migration 714), so a
+  // reaction follows its card. Best effort: the reactions by place are kept.
+  if (feedbackId && body?.slide_reactions && typeof body.slide_reactions === 'object') {
+    try {
+      const row = await c.env.DB.prepare('SELECT slides FROM pitch_decks WHERE id = ?').bind(tok.deckId).first<{ slides: string | null }>();
+      const cards = JSON.parse(row?.slides || '[]');
+      const byUid: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(body.slide_reactions as Record<string, unknown>)) {
+        const uid = /^(0|[1-9][0-9]{0,2})$/.test(k) ? cardUidAt(cards, Number(k)) : null;
+        if (uid && typeof v === 'string') byUid[uid] = v.slice(0, 40);
+      }
+      if (Object.keys(byUid).length) {
+        await c.env.DB.prepare('UPDATE deck_share_feedback SET slide_reactions_by_uid = ? WHERE id = ?').bind(JSON.stringify(byUid), feedbackId).run();
+      }
+    } catch (e) {
+      console.warn('[deck_share] reactions by card uid not recorded', (e as Error)?.message);
+    }
   }
 
   // Also mirror into discovery_interviews so the founder's discovery
