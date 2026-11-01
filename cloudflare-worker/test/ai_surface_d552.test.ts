@@ -204,6 +204,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_derive.ts': ['AI_SURFACE.raisePitch'], // D1583: the memo from a deck
   'routes/deck_images.ts': ['AI_SURFACE.raisePitch'], // D903: the card and background images
   'routes/article_assist.ts': ['AI_SURFACE.articles', 'AI_SURFACE.articles'], // D1409: Eadwyn's writing options on an article, and its images
+  'routes/event_syndication_assist.ts': ['AI_SURFACE.eventSyndication'], // D1493: Eadwyn's proposed copy for a syndication channel
   'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'services/decks/quoteRetrieval.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1556 (#3803): the quote embedding and its rerank

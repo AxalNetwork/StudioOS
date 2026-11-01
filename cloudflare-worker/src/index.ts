@@ -253,8 +253,10 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckElementModels from './routes/deck_element_models';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
+import deckTypedValues from './routes/deck_typed_values';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckDerive from './routes/deck_derive';
@@ -419,6 +421,7 @@ import eventsPublicRoutes from './routes/events_public';
 import adminEventsRoutes from './routes/admin_events';
 import adminEventSyndicationRoutes from './routes/admin_event_syndication';
 import eventSyndicationRoutes from './routes/event_syndication';
+import eventSyndicationAssistRoutes from './routes/event_syndication_assist';
 // Task #68 — Public Job Board (Worker on D1): founder /api/jobs, public feed +
 // apply on /api/public/jobs*, admin review queue on /api/admin/jobs.
 import jobsRoutes from './routes/jobs';
@@ -1382,10 +1385,14 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
+app.route('/api/decks', deckElementModels);
 // D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
 app.route('/api/decks', deckStage);
 // D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
 app.route('/api/decks', deckRemix);
+// D1538 (#3787): the figures a founder types for a deck, Stated (`/:id/typed-values`).
+app.route('/api/decks', deckTypedValues);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
@@ -1498,6 +1505,8 @@ app.route('/api/studio', studioLayout);
 // Task #39 — Event engine authed routes (§8.1).
 // D1490 — one event's syndication (`/:id/syndication…`), before events.ts.
 app.route('/api/events', eventSyndicationRoutes);
+// D1493 (#3906) — Ask proposes a channel's copy (`/:id/syndication/assist…`), before events.ts.
+app.route('/api/events', eventSyndicationAssistRoutes);
 app.route('/api/events', eventsRoutes);
 // Task #68 — Job Board founder routes (post/manage roles, read applicants).
 app.route('/api/jobs', jobsRoutes);

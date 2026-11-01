@@ -25,10 +25,12 @@
  * Speaker notes are each card's notes when they were asked for, and empty
  * otherwise. Nothing here logs a title, a figure or a URL.
  */
+import { CONFIDENTIAL, type DeckCompliance } from './compliance';
 import type { RenderableSlide } from './render';
 import type { DeckBrand } from './branding';
 import { buildNotesSlideXml, buildSlideXml, buildZip, notesPackageParts, tf, xmlEsc, type ZipEntry } from './pptx';
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES, chartLabel, type ImageKind } from './offlineHtml';
+import { tableLines } from './slideModel';
 
 /** The print card (D1112) the block geometry is measured on. */
 export const CARD_W = 1920;
@@ -120,6 +122,11 @@ export function blockParagraphs(b: any): string[] | null {
     }
     case 'chart': return chartParagraphs(b);
     case 'graphic': return [run(`Graphic · ${b.graphic || 'none chosen'}`, { size: pt(24), color: MUTED })];
+    // D1538: a typed table, one row per line; the header row in bold.
+    case 'table': {
+      const lines = tableLines(b);
+      return lines.length ? lines.map((l, i) => run(l, { size: pt(24), bold: i === 0 && b.header !== false })) : null;
+    }
     case 'video': return [run(`▶ ${b.title || (b.provider === 'vimeo' ? 'Vimeo video' : 'YouTube video')}`, { size: pt(30), bold: true }), run(String(b.url || ''), { size: pt(22), color: MUTED })];
     case 'audio':
     case 'link': return [run(b.label || (b.kind === 'audio' ? 'Audio clip' : 'Open'), { size: pt(30), bold: true }), run(String(b.url || ''), { size: pt(22), color: MUTED })];
@@ -137,6 +144,8 @@ export type EditableInput = {
   /** Every image URL the blocks name, fetched once (`fetchImages`). */
   images: Map<string, PlacedImage>;
   chartShot?: ChartShot | null;
+  /** D1546: Confidential and each card's footnotes (`compliance.ts`). */
+  compliance?: DeckCompliance;
 };
 export type EditableReport = {
   bytes: Uint8Array;
@@ -190,6 +199,10 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
     shapes.push(textBox(id++, 'Footer', { x: PAD, y: CARD_H - 44, w: 1200, h: 36 }, [run(input.brand.footer_text, { size: 10, color: '94A3B8' })]));
   }
   shapes.push(textBox(id++, 'PageNo', { x: CARD_W - PAD - 200, y: CARD_H - 44, w: 200, h: 36 }, [`<a:pPr algn="r"/>${run(`${idx + 1} / ${total}`, { size: 10, color: '94A3B8' })}`]));
+  // D1546: a projection's footnote and proposed round terms above the footer; Confidential beside the page number.
+  const lines = input.compliance?.footnotes[idx] ?? [];
+  if (lines.length) shapes.push(textBox(id++, 'Footnote', { x: PAD, y: CARD_H - 52 - 30 * lines.length, w: CARD_W - 2 * PAD, h: 30 * lines.length }, lines.map((l) => run(l, { size: 9, italic: true, color: '64748B' }))));
+  if (input.compliance?.confidential) shapes.push(textBox(id++, 'Confidential', { x: CARD_W - PAD - 520, y: CARD_H - 44, w: 300, h: 36 }, [`<a:pPr algn="r"/>${run(CONFIDENTIAL, { size: 10, color: '94A3B8' })}`]));
   const colour = COLOUR.test(String(slide?.background?.color || '')) ? String(slide.background.color).slice(1).toUpperCase() : null;
   const bg = colour ? `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${colour}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>` : '';
   const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

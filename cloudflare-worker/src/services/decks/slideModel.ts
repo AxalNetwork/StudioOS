@@ -10,7 +10,10 @@
  *               `{ id, kind, grid: { c1, c2, r1, r2 }, binding?, … }`: the
  *               range is inclusive, columns 1–12 and rows 1–6, and no two
  *               blocks on a card share a cell. A `graphic` block may carry
- *               a typed `diagram` (D898 §8.4, `diagramModel.ts`).
+ *               a typed `diagram` (D898 §8.4, `diagramModel.ts`). A `table`
+ *               block (D1538, #3787) holds up to 8 columns × 12 rows of
+ *               cells, each `{ text }`, `{ binding }` or `{ check }`; the
+ *               `market_circles` and `projection` chart types are D1538's.
  *
  * A deck version also carries a theme (PD8): the venture's brand kit or one of
  * two neutral themes, with a deck background.
@@ -22,11 +25,25 @@
  *   - `modelProblems` names what is wrong with a save, so the editor's own
  *     write is refused with a sentence rather than silently trimmed.
  *
+ * D1500 (#3750) — model version 2 adds, on every card:
+ *   uid         the card's own id, kept across saves and reorders, so a result
+ *               made for a card lands on that card (`assignCardUids`).
+ *   hidden, section, decor   a card left out of Present, its section name, and
+ *               at most 16 decor items.
+ * on a text block, `paras`: rich-text runs (bold, italic, underline, an
+ * accent colour that passes contrast, an https link), with `text` kept as the
+ * plain copy; and on the theme: `chrome` (page number, footer text, logo
+ * corner, confidential), `voice`, `art_direction`, `lang` and `dir`.
+ * A card is at most 256 KB and 12 areas.
+ *
  * A binding is D896's: `{ source_key, record_ref, as_of, grade, snapshot_hash }`
  * (`services/decks/sources.ts`). A metric tile with no value is `value: null`,
  * which every reader shows as "Not recorded", never 0.
  */
 import { sanitizeBinding } from './sources';
+import { cellText, tableLines } from './tableCells';
+
+export { cellText, tableLines };
 import { diagramProblem, sanitizeDiagram } from './diagramModel';
 import { CUSTOM, STRUCTURE_IDS, areasProblem, sanitizeAreas } from './structures';
 
@@ -34,14 +51,36 @@ export const GRID_COLS = 12;
 export const GRID_ROWS = 6;
 export const MAX_BLOCKS = 24;
 export const NOTES_MAX = 4000;
+/** D1500: the document model this Worker reads and writes. A save in any other shape is refused, never stripped. */
+export const MODEL_VERSION = 2;
+export const MAX_DECOR = 16;
+export const CARD_BYTES_MAX = 256 * 1024;
+export const MAX_ACCENT_RUNS = 3;
+export const MAX_PARAS = 40;
+export const MAX_RUNS = 40;
+export const SECTION_MAX = 60;
+export const FOOTER_MAX = 120;
+/** WCAG AA for body text: an accent run must read against the card. */
+export const ACCENT_CONTRAST = 4.5;
 
 export type Grid = { c1: number; c2: number; r1: number; r2: number };
 
-export const BLOCK_KINDS = ['text', 'chart', 'graphic', 'image', 'video', 'audio', 'link', 'metric'] as const;
+export const BLOCK_KINDS = ['text', 'chart', 'graphic', 'image', 'video', 'audio', 'link', 'metric', 'table'] as const;
 export type BlockKind = typeof BLOCK_KINDS[number];
 
 /** The chart library (PD9b), in the canvas's order. */
-export const CHART_TYPES = ['line', 'columns', 'stacked', 'percent_bar', 'ranked_bars', 'funnel', 'cohort_heatmap', 'timeline', 'metric_tiles', 'comparison_table', 'waterfall', 'nested_bars'] as const;
+export const CHART_TYPES = ['line', 'columns', 'stacked', 'percent_bar', 'ranked_bars', 'funnel', 'cohort_heatmap', 'timeline', 'metric_tiles', 'comparison_table', 'waterfall', 'nested_bars', 'market_circles', 'projection'] as const;
+/**
+ * D1538 (#3787): the chart types drawn from typed figures rather than a dated
+ * series. The bound-series library (pd6, 12 tiles) leaves them out; the
+ * one-click rules (`visuals.chartTypeFor`) and a typed chart use them.
+ */
+export const TYPED_CHART_TYPES = ['market_circles', 'projection'] as const;
+export const LIBRARY_CHART_TYPES = CHART_TYPES.filter((t) => !(TYPED_CHART_TYPES as readonly string[]).includes(t));
+/** D1538 (#3787): a typed table holds at most 8 columns by 12 rows; each cell is text, a binding or a check. */
+export const TABLE_COLS = 8;
+export const TABLE_ROWS = 12;
+const CELL_MAX = 120;
 export const CHART_RANGES = ['3m', '6m', '12m', 'all'] as const;
 export const TEXT_STYLES = ['heading', 'paragraph', 'list'] as const;
 export const IMAGE_TAGS = ['illustration', 'photo', 'screenshot', 'logo'] as const;
@@ -147,10 +186,127 @@ function pointsOf(v: unknown): Array<{ x: string; y: number }> | null {
   return out.length ? out : null;
 }
 
+/**
+ * D1538: one table cell. Text the founder typed (Stated), a D896 binding (the
+ * record's own grade), or a check mark; anything else is an empty cell, which
+ * readers draw blank and never as 0.
+ */
+function cellOf(v: any): Record<string, unknown> {
+  if (v && typeof v === 'object') {
+    const bd = bindingOf(v.binding);
+    if (bd) return { binding: bd };
+    if (typeof v.check === 'boolean') return { check: v.check };
+    if (typeof v.text === 'string') return { text: v.text.trim().slice(0, CELL_MAX) };
+  }
+  return { text: '' };
+}
+
+/** D1538: a table's rows, cut to 12 × 8 and squared to the widest row; null when it has no cell at all. */
+export function tableOf(v: any): { header: boolean; rows: Array<Array<Record<string, unknown>>> } | null {
+  const raw = Array.isArray(v?.rows) ? v.rows.slice(0, TABLE_ROWS).filter(Array.isArray) : [];
+  const width = Math.min(TABLE_COLS, raw.reduce((w: number, row: unknown[]) => Math.max(w, row.length), 0));
+  if (!raw.length || !width) return null;
+  const rows = raw.map((row: unknown[]) => Array.from({ length: width }, (_, i) => cellOf(row[i])));
+  return { header: v?.header !== false, rows };
+}
+
+/** Relative luminance of a #rrggbb colour (WCAG 2). */
+function luminance(hex: string): number {
+  const [r, g, bl] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+}
+
+/** The contrast ratio of two #rrggbb colours, 1 to 21. */
+export function contrastRatio(a: string, z: string): number {
+  const [hi, lo] = [luminance(a), luminance(z)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** What a card's text sits on: its own background colour, else white. */
+export const groundOf = (card: any): string => (typeof card?.background?.color === 'string' && COLOUR.test(card.background.color) ? card.background.color.toLowerCase() : '#ffffff');
+
+type Run = { text: string; b?: true; i?: true; u?: true; accent?: string; href?: string };
+
+/**
+ * D1500: a text block's rich text, sanitized. Each paragraph is `{ runs }`;
+ * a run keeps bold, italic, underline, an accent colour and an https link. A
+ * link that is not https on a public host is dropped (the words stay); an
+ * accent that fails contrast on the card, or past the third, is dropped.
+ * Returns the paragraphs and their plain copy, or null when there are none.
+ */
+export function parasOf(v: unknown, url: UrlGuard, ground = '#ffffff'): { paras: Array<{ runs: Run[] }>; text: string } | null {
+  if (!Array.isArray(v)) return null;
+  let accents = 0;
+  const paras = v.slice(0, MAX_PARAS).map((p: any) => {
+    const runs: Run[] = [];
+    for (const r of (Array.isArray(p?.runs) ? p.runs : []).slice(0, MAX_RUNS)) {
+      if (typeof r?.text !== 'string' || !r.text) continue;
+      const run: Run = { text: r.text.slice(0, 4000) };
+      if (r.b === true) run.b = true;
+      if (r.i === true) run.i = true;
+      if (r.u === true) run.u = true;
+      if (typeof r.accent === 'string' && COLOUR.test(r.accent) && accents < MAX_ACCENT_RUNS && contrastRatio(r.accent, ground) >= ACCENT_CONTRAST) {
+        run.accent = r.accent.toLowerCase();
+        accents += 1;
+      }
+      const href = typeof r.href === 'string' ? url(r.href) : null;
+      if (href) run.href = href;
+      runs.push(run);
+    }
+    return { runs };
+  });
+  if (!paras.some((p) => p.runs.length)) return null;
+  const text = paras.map((p) => p.runs.map((r) => r.text).join('')).join('\n').slice(0, 4000);
+  return { paras, text };
+}
+
+/** What is wrong with a block's rich text, as a sentence, or null. Links that are not https are dropped, not refused. */
+function parasProblem(v: unknown, ground: string): string | null {
+  if (v == null) return null;
+  if (!Array.isArray(v)) return 'the rich text must be a list of paragraphs.';
+  if (v.length > MAX_PARAS) return `the text holds at most ${MAX_PARAS} paragraphs.`;
+  let accents = 0;
+  for (const p of v as any[]) {
+    for (const r of Array.isArray(p?.runs) ? p.runs : []) {
+      if (r?.accent == null) continue;
+      if (typeof r.accent !== 'string' || !COLOUR.test(r.accent)) return 'an accent must be a colour like #1a2b3c.';
+      if (contrastRatio(r.accent, ground) < ACCENT_CONTRAST) return `the accent ${r.accent} does not read against the card (contrast under ${ACCENT_CONTRAST}:1).`;
+      accents += 1;
+    }
+  }
+  return accents > MAX_ACCENT_RUNS ? `the text holds at most ${MAX_ACCENT_RUNS} accent runs.` : null;
+}
+
+/** D1500: a card's decor (at most 16 items), each `{ id, kind, grid? }`; what the items draw is the elements library's (#3779). */
+function decorOf(v: unknown): Array<{ id: string; kind: string; grid?: Grid }> | null {
+  if (!Array.isArray(v)) return null;
+  const out = v.slice(0, MAX_DECOR).flatMap((d: any, i: number) => {
+    const kind = str(d?.kind, 40);
+    if (!kind) return [];
+    const item: { id: string; kind: string; grid?: Grid } = { id: typeof d.id === 'string' && ID.test(d.id) ? d.id : `d${i + 1}`, kind };
+    const grid = gridOf(d.grid);
+    if (grid) item.grid = grid;
+    return [item];
+  });
+  return out.length ? out : null;
+}
+
+// D1500: the card uid helpers live in `cardUids.ts`, a module with no imports, so a store that names a card does not pull in this model's readers.
+export { assignCardUids, cardIndexOf, cardUidAt, cardRefOf } from './cardUids';
+
+/** D1500: the bytes a card takes stored. */
+export const cardBytes = (card: unknown): number => new TextEncoder().encode(JSON.stringify(card ?? null)).length;
+
 /** One block's own fields, by kind; null when the kind is unknown. */
-function blockBody(kind: BlockKind, v: any, url: UrlGuard): Record<string, unknown> | null {
+function blockBody(kind: BlockKind, v: any, url: UrlGuard, ground = '#ffffff'): Record<string, unknown> | null {
   switch (kind) {
-    case 'text': return { style: oneOf(v.style, TEXT_STYLES) ?? 'paragraph', text: str(v.text, 4000) };
+    case 'text': {
+      const style = oneOf(v.style, TEXT_STYLES) ?? 'paragraph';
+      // D1500: rich text keeps its runs; `text` stays the plain copy every older reader shows.
+      const rich = parasOf(v.paras, url, ground);
+      return rich ? { style, text: rich.text, paras: rich.paras } : { style, text: str(v.text, 4000) };
+    }
     case 'chart': {
       const series = (Array.isArray(v.series) ? v.series : []).slice(0, 6).map((s: any) => {
         const out: Record<string, unknown> = { label: str(s?.label, 80) };
@@ -194,20 +350,22 @@ function blockBody(kind: BlockKind, v: any, url: UrlGuard): Record<string, unkno
       return u ? { url: u, label: str(v.label, 120) } : null;
     }
     case 'metric': return { label: str(v.label, 60), value: typeof v.value === 'string' && v.value.trim() ? v.value.trim().slice(0, 80) : null };
+    case 'table': return tableOf(v);
   }
 }
 
 /** The blocks of one slide that are valid, in order; a block that overlaps an earlier one is dropped. */
-export function sanitizeBlocks(input: unknown, url: UrlGuard): any[] {
+export function sanitizeBlocks(input: unknown, url: UrlGuard, ground = '#ffffff'): any[] {
   const out: any[] = [];
   for (const [i, v] of (Array.isArray(input) ? input : []).slice(0, MAX_BLOCKS).entries()) {
     const kind = oneOf(v?.kind, BLOCK_KINDS);
     const grid = gridOf(v?.grid);
     if (!kind || !grid || out.some((o) => overlaps(o.grid, grid))) continue;
-    const body = blockBody(kind, v, url);
+    const body = blockBody(kind, v, url, ground);
     if (!body) continue;
     const block: Record<string, unknown> = { id: typeof v.id === 'string' && ID.test(v.id) ? v.id : `b${i + 1}`, kind, grid, ...body };
-    const bd = kind === 'chart' ? null : bindingOf(v.binding);
+    // A chart binds per series and a table per cell; neither carries a block binding.
+    const bd = kind === 'chart' || kind === 'table' ? null : bindingOf(v.binding);
     if (bd) block.binding = bd;
     out.push(block);
   }
@@ -222,7 +380,14 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   if (typeof s?.notes === 'string' && s.notes.trim()) out.notes = s.notes.slice(0, NOTES_MAX);
   const bg = backgroundOf(s?.background, url);
   if (bg) out.background = bg;
-  if (Array.isArray(s?.blocks)) out.blocks = sanitizeBlocks(s.blocks, url);
+  if (Array.isArray(s?.blocks)) out.blocks = sanitizeBlocks(s.blocks, url, groundOf({ background: bg }));
+  // D1500: the card's uid (assigned over the whole deck by `assignCardUids`), whether it is hidden, its section and decor.
+  if (typeof s?.uid === 'string' && ID.test(s.uid)) out.uid = s.uid;
+  if (s?.hidden === true) out.hidden = true;
+  const section = str(s?.section, SECTION_MAX);
+  if (section) out.section = section;
+  const decor = decorOf(s?.decor);
+  if (decor) out.decor = decor;
   const bd = bindingOf(s?.binding);
   if (bd) out.binding = bd;
   // D1499: a card's structure and areas, kept only when sound; a card without them derives its areas (`structures.areasOf`).
@@ -232,13 +397,38 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   return out;
 }
 
+export const DIRS = ['ltr', 'rtl'] as const;
+const LANG = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
+
+/** D1500: the chrome drawn on every card (pd3): page number, footer text, logo corner, confidential. Null when none is on. */
+export function chromeOf(v: any): { page_number: boolean; footer_text: string | null; logo_corner: boolean; confidential: boolean } | null {
+  if (!v || typeof v !== 'object') return null;
+  const footer = str(v.footer_text, FOOTER_MAX) || null;
+  const out = { page_number: v.page_number === true, footer_text: footer, logo_corner: v.logo_corner === true, confidential: v.confidential === true };
+  return out.page_number || out.footer_text || out.logo_corner || out.confidential ? out : null;
+}
+
 /** The deck's theme (PD8), or null for the default (the brand kit, no deck background). */
-export function sanitizeTheme(v: any, url: UrlGuard): { kind: string; background: Background | null; aspect?: '4:3' } | null {
+export function sanitizeTheme(v: any, url: UrlGuard): Record<string, unknown> & { kind: string; background: Background | null; aspect?: '4:3'; compliance_fls?: false; confidential?: false } | null {
   if (!v || typeof v !== 'object') return null;
   const kind = oneOf(v.kind, THEME_KINDS);
   if (!kind) return null;
   // D1499: 4:3 is kept; 16:9 is the default and is left out, so a deck saved before v2 hashes as it did.
-  return { kind, background: backgroundOf(v.background, url), ...(v.aspect === '4:3' ? { aspect: '4:3' as const } : {}) };
+  const out: Record<string, unknown> & { kind: string; background: Background | null; aspect?: '4:3'; compliance_fls?: false; confidential?: false } = { kind, background: backgroundOf(v.background, url), ...(v.aspect === '4:3' ? { aspect: '4:3' as const } : {}) };
+  // D1546: compliance is on by default; retain only flags explicitly turned off.
+  if (v.compliance_fls === false) out.compliance_fls = false;
+  if (v.confidential === false) out.confidential = false;
+  // D1500: each kept only when set, so a theme saved before v2 hashes as it did.
+  const chrome = chromeOf(v.chrome);
+  if (chrome) out.chrome = chrome;
+  const voice = str(v.voice, 200);
+  if (voice) out.voice = voice;
+  const art = str(v.art_direction, 500);
+  if (art) out.art_direction = art;
+  if (typeof v.lang === 'string' && LANG.test(v.lang)) out.lang = v.lang;
+  const dir = oneOf(v.dir, DIRS);
+  if (dir) out.dir = dir;
+  return out;
 }
 
 /**
@@ -255,6 +445,10 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
     if (s?.structure != null && !(s.structure === CUSTOM || STRUCTURE_IDS.includes(s.structure))) out.push(`${card}: the structure is not one of the seventeen.`);
     const ap = s?.areas != null ? areasProblem(s.areas) : null;
     if (ap) out.push(`${card}: ${ap}`);
+    // D1500: the caps a card is refused past, each with its sentence.
+    if (s?.decor != null && (!Array.isArray(s.decor) || s.decor.length > MAX_DECOR)) out.push(`${card}: a card holds at most ${MAX_DECOR} decor items.`);
+    if (cardBytes(s) > CARD_BYTES_MAX) out.push(`${card}: the card is larger than 256 KB. Remove an image or some text, then save.`);
+    if (s?.section != null && (typeof s.section !== 'string' || s.section.length > SECTION_MAX)) out.push(`${card}: the section name is at most ${SECTION_MAX} characters.`);
     if (s?.blocks == null) return;
     if (!Array.isArray(s.blocks)) { out.push(`${card}: blocks must be a list.`); return; }
     if (s.blocks.length > MAX_BLOCKS) out.push(`${card}: a card holds at most ${MAX_BLOCKS} blocks.`);
@@ -267,10 +461,19 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
       if (!grid) { out.push(`${where}: the range must sit on the ${GRID_COLS} × ${GRID_ROWS} grid.`); return; }
       if (placed.some((p) => overlaps(p, grid))) out.push(`${where}: it overlaps another block.`);
       placed.push(grid);
-      if (!blockBody(kind, v, url)) out.push(kind === 'video' ? `${where}: the video must be a YouTube or Vimeo link.` : `${where}: the link must be https on a public host.`);
+      if (!blockBody(kind, v, url, groundOf(s))) {
+        out.push(kind === 'video' ? `${where}: the video must be a YouTube or Vimeo link.`
+          : kind === 'table' ? `${where}: a table needs at least one row and one cell.`
+            : `${where}: the link must be https on a public host.`);
+      }
+      if (kind === 'table' && Array.isArray(v?.rows) && (v.rows.length > TABLE_ROWS || v.rows.some((row: unknown) => Array.isArray(row) && row.length > TABLE_COLS))) {
+        out.push(`${where}: a table holds at most ${TABLE_COLS} columns and ${TABLE_ROWS} rows.`);
+      }
       if (v?.binding != null && !bindingOf(v.binding)) out.push(`${where}: the binding is not a source.`);
       const dp = kind === 'graphic' ? diagramProblem(v?.diagram) : null;
       if (dp) out.push(`${where}: ${dp}`);
+      const pp = kind === 'text' ? parasProblem(v?.paras, groundOf(s)) : null;
+      if (pp) out.push(`${where}: ${pp}`);
     });
   });
   return out;

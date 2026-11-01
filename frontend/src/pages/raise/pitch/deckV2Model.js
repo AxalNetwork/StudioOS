@@ -211,7 +211,9 @@ export function cardEdit(row, deckId) {
   const p = row.payload && typeof row.payload === 'object' ? row.payload : null;
   if (!p || String(p.deck_id) !== String(deckId) || !Number.isInteger(p.card) || p.card < 0) return null;
   const action = String(p.action || '');
-  const base = { uid: row.uid, option: row.rail_option || null, card: p.card, action, what: ACTION_WORDS[action] || 'Edit', at: row.created_at || null };
+  // D1500: the card's own uid, so the edit lands on that card even if it moved since.
+  const cardUid = typeof p.card_uid === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(p.card_uid) ? p.card_uid : null;
+  const base = { uid: row.uid, option: row.rail_option || null, card: p.card, card_uid: cardUid, action, what: ACTION_WORDS[action] || 'Edit', at: row.created_at || null };
   if (CHART_ACTIONS.has(action)) {
     if (!p.block || typeof p.block !== 'object') return null;
     return { ...base, kind: 'block', block: p.block, title: p.title || null, size: CHART_SIZE[action] };
@@ -237,8 +239,20 @@ export function waitingCount({ deck, edits }) {
  * Where a text edit lands: the card's text block whose text is still the
  * proposal's `before`. When the card changed since, nothing is guessed.
  */
+/**
+ * D1500: where the card an edit was made for sits now. By its uid when the
+ * edit names one: a card moved since is found, and a card removed since is -1,
+ * never the card that took its place. An edit made before uids reads by place.
+ */
+export function editIndex(cards, edit) {
+  const list = Array.isArray(cards) ? cards : [];
+  if (edit?.card_uid) return list.findIndex((c) => c?.uid === edit.card_uid);
+  return Number.isInteger(edit?.card) && edit.card < list.length ? edit.card : -1;
+}
+
 export function placeTextEdit(cards, edit) {
-  const card = Array.isArray(cards) ? cards[edit.card] : null;
+  const at = editIndex(cards, edit);
+  const card = at >= 0 ? cards[at] : null;
   if (!card) return { error: `Card ${edit.card + 1} is no longer in this deck. Discard this proposal.` };
   const blocks = Array.isArray(card.blocks) ? card.blocks : [];
   const hit = blocks.find((b) => b.kind === 'text' && String(b.text ?? '') === edit.before);

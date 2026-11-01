@@ -25,12 +25,14 @@
  * Every text node goes through `xmlEsc`. Nothing here logs a title, a figure or
  * a URL.
  */
+import { CONFIDENTIAL, type DeckCompliance } from './compliance';
 import type { RenderableSlide } from './render';
 import type { DeckBrand } from './branding';
 import { buildZip, xmlEsc, type ZipEntry } from './pptx';
 import { boxOf, SLIDE } from './designSystem';
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES, chartLabel, type ImageKind } from './offlineHtml';
 import type { ChartShot, PlacedImage } from './pptxEditable';
+import { tableLines } from './slideModel';
 
 export const ODP_MIMETYPE = 'application/vnd.oasis.opendocument.presentation';
 /** The page, at 16:9. */
@@ -107,6 +109,11 @@ export function blockParas(b: any): Para[] | null {
       return [para('M', String(b.label || 'Metric').toUpperCase()), v ? para('V', v) : para('N', NOT_RECORDED)];
     }
     case 'graphic': return [para('M', `Graphic · ${b.graphic || 'none chosen'}`)];
+    // D1538: a typed table, one row per line; the header row as a label.
+    case 'table': {
+      const lines = tableLines(b);
+      return lines.length ? lines.map((l, i) => para(i === 0 && b.header !== false ? 'M' : 'B', l)) : null;
+    }
     case 'video': return [para('B', `▶ ${b.title || (b.provider === 'vimeo' ? 'Vimeo video' : 'YouTube video')}`), para('S', String(b.url || ''))];
     case 'audio':
     case 'link': return [para('B', b.label || (b.kind === 'audio' ? 'Audio clip' : 'Open')), para('S', String(b.url || ''))];
@@ -146,6 +153,8 @@ export type OdpInput = {
   brand: DeckBrand;
   notes: boolean;
   chartShot?: ChartShot | null;
+  /** D1546: Confidential and each card's footnotes (`compliance.ts`). */
+  compliance?: DeckCompliance;
 };
 export type OdpReport = { bytes: Uint8Array; charts: { pictured: number; as_text: number }; images: { placed: number; not_placed: number } };
 
@@ -212,6 +221,10 @@ export async function writeOdp(input: OdpInput): Promise<OdpReport> {
     }
     if (watermarkHref) shapes.push(imageFrame(id('Watermark'), { x: SLIDE.width - 112 - 160, y: FOOT_Y - 8, w: 160, h: 48 }, watermarkHref, ''));
     if (input.brand.show_footer) shapes.push(textFrame(id('Footer'), { x: 112, y: FOOT_Y, w: 1200, h: 40 }, [para('S', input.brand.footer_text)]));
+    // D1546: a projection's footnote and proposed round terms above the footer; Confidential beside the page number.
+    const lines = input.compliance?.footnotes[i] ?? [];
+    if (lines.length) shapes.push(textFrame(id('Footnote'), { x: 112, y: FOOT_Y - 24 - 32 * lines.length, w: 1500, h: 32 * lines.length }, lines.map((l) => para('S', l))));
+    if (input.compliance?.confidential) shapes.push(textFrame(id('Confidential'), { x: SLIDE.width - 112 - 400, y: FOOT_Y, w: 400, h: 32 }, [para('S', CONFIDENTIAL)]));
     shapes.push(textFrame(id('Page number'), { x: SLIDE.width - 112 - 400, y: FOOT_Y + 32, w: 400, h: 32 }, [para('S', `${i + 1} / ${total}`)]));
     const bg = String(stored?.background?.color || '');
     const style = COLOUR.test(bg) ? `dp${i + 2}` : 'dp1';

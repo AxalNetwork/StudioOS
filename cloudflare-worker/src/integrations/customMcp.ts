@@ -638,8 +638,25 @@ export async function sendThroughCustom(env: Env, row: IntegrationRow, msg: { to
 }
 
 /**
- * Call an approved read tool, for Eadwyn or a flow that the member set going;
- * never on its own. Refused before any request when the tool is not approved;
+ * D1496 part 5 (#3844): what a connection can offer a team agent now. Read
+ * only: no request, no write. `connected` is the row's status; `tools` are
+ * the approved read tools pinned to a schema, less any the last health check
+ * found drifted and less the mail send tool (a write, D1343), which never
+ * qualifies.
+ */
+export function grantableTools(row: Pick<IntegrationRow, 'status' | 'config_json'>): { connected: boolean; tools: string[] } {
+  const cfg = configOf(row);
+  if (!cfg) return { connected: false, tools: [] };
+  const drifted = new Set((cfg.drift ?? []).map((d) => d.tool));
+  const tools = Object.entries(cfg.approved)
+    .filter(([name, pin]) => typeof pin === 'string' && pin.length > 0 && name !== cfg.mail_send?.tool && !drifted.has(name))
+    .map(([name]) => name);
+  return { connected: row.status === 'active', tools };
+}
+
+/**
+ * Call an approved read tool, for Eadwyn, a flow that the member set going, or
+ * (D1496 part 5) a team agent's read its sponsor named; never on its own. Refused before any request when the tool is not approved;
  * the client refuses it too when its schema changed or it is annotated as
  * writing. The result is data.
  */
