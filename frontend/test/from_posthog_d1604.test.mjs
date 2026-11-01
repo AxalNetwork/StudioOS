@@ -158,7 +158,7 @@ test('the states: a teammate reads only; no link, disconnected, unreadable with 
     assert.equal(ui.all('posthog-accept').length, 0, 'only the owner decides');
   } finally { await ui.close(); }
   ui = await mounted({ api: fakeApi({ read: async () => ({ ...READ, link: { linked: false } }) }) });
-  try { assert.ok(ui.say('posthog-not-linked').includes(NOT_LINKED)); } finally { await ui.close(); }
+  try { assert.ok(ui.say('posthog-no-project').includes(NOT_LINKED)); } finally { await ui.close(); }
   ui = await mounted({ api: fakeApi({ read: async () => ({ ...READ, link: { linked: true, active: false, mine: true } }) }) });
   try { assert.equal(ui.say('posthog-disconnected'), DISCONNECTED); } finally { await ui.close(); }
   ui = await mounted({ api: fakeApi({ read: async () => { throw new Error('x'); } }) });
