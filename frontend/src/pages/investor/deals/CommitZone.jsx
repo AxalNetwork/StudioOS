@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { SHARE_BUTTON } from '../proofOfFundsModel';
 import { api } from '../../../lib/api';
 import { exportView } from '../../../lib/csvExport';
 import { useAuth } from '../../../hooks/useAuthSync';
@@ -110,6 +111,26 @@ function OpenDeal({ id, onOpen }) {
     >
       Open deal room
     </button>
+  );
+}
+
+/**
+ * D1424 (#3700, PH3): "Show Axal you can fund this ›" on a decision row that
+ * names its deal. It is a link to the deal room's Commitment tab, where the
+ * Mercury proof door (D752, `ProofDoor`) and its sheet already live: nothing
+ * is shared from here. A row with no `deal_id` draws no link, and a row the
+ * committee passed on draws none either.
+ */
+export function ShowProofLink({ dealId }) {
+  if (!dealId) return null;
+  return (
+    <Link
+      to={`/deals/${dealId}/commitment`}
+      className="text-[10.5px] font-semibold text-indigo-700 underline underline-offset-2 hover:text-indigo-600 dark:text-indigo-300"
+      data-testid="commit-show-proof"
+    >
+      {SHARE_BUTTON} ›
+    </Link>
   );
 }
 
@@ -650,7 +671,12 @@ export default function InvestorCommitZone() {
                   {
                     text: r.title || r.uid,
                     sub: r.project_name || undefined,
-                    node: r.deal_id ? <OpenDeal id={r.deal_id} onOpen={navigate} /> : undefined,
+                    node: r.deal_id ? (
+                      <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <OpenDeal id={r.deal_id} onOpen={navigate} />
+                        {r.decision !== 'pass' ? <ShowProofLink dealId={r.deal_id} /> : null}
+                      </span>
+                    ) : undefined,
                   },
                   { text: '', pill: r.status, pillTone: STAGE_TONE[r.status] || 'neutral' },
                   r.votes_cast

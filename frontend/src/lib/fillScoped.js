@@ -21,6 +21,10 @@ export const SCOPED_FORMS = Object.freeze({
   event: Object.freeze({ page: 'Admin · Approvals · Events', form: 'event', table: 'events' }),
   agendaItem: Object.freeze({ page: 'Admin · Approvals · Events', form: 'agenda-item', table: 'event_agenda_items' }),
   publication: Object.freeze({ page: 'Super Admin · Content · Publications', form: 'publication', table: 'admin_publications' }),
+  // D1595 (#3868), mounted by D1424 (#3700): Log support, New service, New perk. One composition field each.
+  support: Object.freeze({ page: 'Investor · Portfolio · Value-add', form: 'support', table: 'portfolio_support_entries' }),
+  offering: Object.freeze({ page: 'Operating Partner · Offers · Catalog', form: 'offering', table: 'service_offerings' }),
+  perk: Object.freeze({ page: 'Operating Partner · Offers · Perk deals', form: 'perk', table: 'perks' }),
 });
 
 export const SUPPORT_OFF = 'Ask is off in a support session.';
@@ -43,6 +47,10 @@ export const NOT_FILLED_HERE = Object.freeze({
   service: Object.freeze(['Price · Eadwyn never fills what you charge.']),
   event: Object.freeze(['Times, capacity and price · they are yours to set.']),
   publication: Object.freeze(['Author · Eadwyn never fills who wrote a publication.']),
+  // D1595 §2: each form's other columns are the member's own call, a measure, terms or money.
+  support: Object.freeze(['Outcome and hours · a result and a measure are yours to record.']),
+  offering: Object.freeze(['Price · Eadwyn never fills what you charge.']),
+  perk: Object.freeze(['Value, credits, cap and conditions · they are yours to set.']),
 });
 
 /** The values a scoped form's Save should still treat as Eadwyn's: placed and not typed over. */

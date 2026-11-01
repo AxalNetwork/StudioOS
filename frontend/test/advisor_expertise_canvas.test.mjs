@@ -161,7 +161,12 @@ test('every Expertise zone carries the canvas’s own heading and line', () => {
     const row = body.match(new RegExp(`\\n\\s*${slug}: \\{ h1: '([^']*)', sub: '([^']*)' \\}`));
     assert.ok(row, `${slug} has no row in EXPERTISE_ZONE_HEAD`);
     assert.equal(row[1], h1, `${slug}'s heading is not the canvas's`);
-    assert.equal(row[2], sub, `${slug}'s line is not the canvas's`);
+    // D1424 (#3700): Visibility's canvas line promises impressions and views,
+    // which nothing records (owner answer H). The line says what is recorded.
+    if (slug === 'visibility') {
+      assert.equal(sub, 'Impressions, views, requests and engagements per surface.', 'the canvas line changed; re-read it');
+      assert.equal(row[2], 'Requests per booking link and opens of your writing. Profile views are not recorded.');
+    } else assert.equal(row[2], sub, `${slug}'s line is not the canvas's`);
     // The canvas's h1 is deliberately NOT the nav pill's label. A row that
     // matched the pill would mean the table had been filled in from the router.
     assert.notEqual(h1.toLowerCase(), slug, `${slug}'s canvas h1 is just the slug — re-read the export`);

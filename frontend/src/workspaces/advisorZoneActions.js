@@ -33,6 +33,14 @@ import { makeZoneActions } from './zoneActionBuilder';
  * every profile field is editable in place, a service is added from the form
  * below, consent is requested from each proof's own row — so the note points
  * down rather than apologising.
+ *
+ * D1424 (#3700, owner B) turned Services' "New service" from that note into a
+ * handler: the header's emerald primary scrolls to the Add form below and
+ * focuses its Title (`ServicesZone`'s `focusAddForm`), and Ask works in that
+ * form (D1329). `primary: true` marks the one row each zone's header fills:
+ * New service, New piece, Block a date range and Download 1099 summary.
+ * Opportunities, Engagements, Delivery, the five Cohorts zones, Profile, Proof
+ * and Visibility have no live first step, so no primary.
  */
 
 export const ADVISOR_ZONE_ACTIONS = {
@@ -42,7 +50,7 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'expertise/services': [
-    { label: 'New service', unbuilt: 'the form below adds one' },
+    { label: 'New service', kind: 'handler', handler: 'focusAddForm', primary: true },
     { label: 'Price history', unbuilt: 'only the current price is stored; there is no history to open' },
     { label: 'Export', kind: 'export' },
   ],
@@ -52,7 +60,7 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'expertise/thinking': [
-    { label: 'New piece', to: '/articles/draft' },
+    { label: 'New piece', to: '/articles/draft', primary: true },
     { label: 'Drafting history', unbuilt: 'only the current draft is stored; there is no revision history' },
     { label: 'Export', kind: 'export' },
   ],
@@ -139,7 +147,7 @@ export const ADVISOR_ZONE_ACTIONS = {
   // spreadsheet. It stays client-side either way: the file is built from rows
   // already on screen, so there is no endpoint and nothing leaves the browser.
   'practice/sessions': [
-    { label: 'Block a date range', kind: 'handler', handler: 'blockRange' },
+    { label: 'Block a date range', kind: 'handler', handler: 'blockRange', primary: true },
     { label: 'Export to calendar', kind: 'handler', handler: 'exportCalendar' },
   ],
   // D4's two ops. NEITHER is `kind: 'export'`: the builder's export kind emits
@@ -150,7 +158,7 @@ export const ADVISOR_ZONE_ACTIONS = {
   // derived from what happens to be on screen.
   'practice/earnings': [
     { label: 'Export CSV', kind: 'handler', handler: 'exportCsv' },
-    { label: 'Download 1099 summary', kind: 'handler', handler: 'taxSummary' },
+    { label: 'Download 1099 summary', kind: 'handler', handler: 'taxSummary', primary: true },
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
@@ -234,4 +242,4 @@ export const ADVISOR_ZONE_ACTIONS = {
   ],
 };
 
-export const advisorZoneActions = makeZoneActions(ADVISOR_ZONE_ACTIONS);
+export const advisorZoneActions = makeZoneActions(ADVISOR_ZONE_ACTIONS, 'advisor');

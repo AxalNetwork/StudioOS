@@ -5,7 +5,8 @@
 // fourteen kinds and a handler, and its `source` string is in its file, which is
 // one of its board's files. And every control on those boards that runs a model
 // — a `ZoneDraft` band, a file input, or a call to a model endpoint — is listed
-// for its board. Boards keep their rails except the owner-requested Advisor Home removal.
+// for its board. Boards keep their rails except the owner-requested Studio removals
+// (Advisor Home first, then every Studio: #3698 answer G, D1419).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -148,16 +149,16 @@ test('D773: a draft band is a draft, a file input an upload, a voice answer a tr
   }
 });
 
-test('D773: boards keep their rails except the owner-requested Advisor Home removal', () => {
+test('D773: boards keep their rails except the owner-requested Studio removals', () => {
   // The bucket routes give each zone and root WorkspaceShell's rail slot.
   for (const f of ['workspaces/advisor/AdvisorBucketRoutes.jsx', 'workspaces/partner/PartnerBucketRoutes.jsx', 'workspaces/NetworkWorkspace.jsx', 'workspaces/ResearchWorkspace.jsx']) {
     assert.match(src(f), /<WorkspaceShell[\s\S]*?\brail=\{[\s\S]*?<WorkerRail\b/, f);
   }
   assert.match(src('workspaces/WorkspaceShell.jsx'), /<RailFrame\b/);
-  // Partner Home keeps its rail; the owner removed Advisor Home's side rail.
-  assert.doesNotMatch(src('pages/advisor/AdvisorStudioHome.jsx'), /<RailFrame\b|<WorkerRail\b/);
-  for (const f of ['pages/partner/PartnerHomeP2.jsx']) {
-    const s = src(f);
-    assert.match(s, /<RailFrame\s+rail=\{\(\s*<WorkerRail\b/, f);
+  // The owner removed Advisor Home's side rail, then every Studio's (#3698 answer G, D1419):
+  // Partner Home's P2 RailFrame is gone, and its operating brief stays as a module.
+  for (const f of ['pages/advisor/AdvisorStudioHome.jsx', 'pages/partner/PartnerHomeP2.jsx', 'pages/partner/PartnerStudioHome.jsx']) {
+    assert.doesNotMatch(src(f), /<RailFrame\b|<WorkerRail\b/, f);
   }
+  assert.match(src('pages/partner/PartnerHomeP2.jsx'), /railOption="draft:operating-brief"/);
 });
