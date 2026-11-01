@@ -192,9 +192,13 @@ test('D1478 (#3721): a stored FLUX.2 Klein 4B pick is what the quote prices and 
   const KLEIN = '@cf/black-forest-labs/flux-2-klein-4b';
   const pick = (f: F) => f.db.prepare('INSERT INTO ai_rail_preferences(uid, user_id, section, task, model) VALUES (?, 2, ?, ?, ?)')
     .run(crypto.randomUUID(), 'founder · raise · pitch deck', 'deck:image', KLEIN);
+  // #3935 (C (b)): a partner model runs on a paid plan only, so this member pays one.
+  const paid = (f: F) => f.db.prepare(`INSERT INTO member_subscription_amounts(subscription_id, user_id, plan_family, amount_cents, currency, interval, interval_count, status)
+    VALUES ('sub_test_3935', 2, 'founder', 4900, 'usd', 'month', 1, 'active')`).run();
   const on = await fixture();
   try {
     on.env.AI_PARTNER_MODELS = 'on';
+    paid(on);
     pick(on);
     const q = await call(on, 2, '/api/decks/7/images/quote', { json: { ...BODY, count: 1 } });
     assert.equal(q.status, 200, JSON.stringify(q.body));
@@ -215,6 +219,20 @@ test('D1478 (#3721): a stored FLUX.2 Klein 4B pick is what the quote prices and 
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(off.calls.map((x) => x.model), [IMAGE_MODEL]);
   } finally { off.close(); }
+  // #3935 (A (c)): on the free plan the same pick is refused in the plan's words, never swapped for Schnell.
+  const free = await fixture();
+  try {
+    free.env.AI_PARTNER_MODELS = 'on';
+    pick(free);
+    const q = await call(free, 2, '/api/decks/7/images/quote', { json: { ...BODY, count: 1 } });
+    assert.equal(q.body.reason ?? q.body.error, 'plan_locked', JSON.stringify(q.body));
+    const r = await call(free, 2, '/api/decks/7/images', { json: { ...BODY, count: 1 } });
+    assert.equal(r.status, 403, JSON.stringify(r.body));
+    assert.equal(r.body.error, 'plan_locked');
+    assert.match(r.body.message, /Paid plans/);
+    assert.deepEqual(free.calls, [], 'no model ran');
+    assert.equal(free.holds(), 0, 'nothing was held');
+  } finally { free.close(); }
 });
 
 // ─────────────────────────────────────────────────────────── the run
