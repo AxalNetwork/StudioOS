@@ -216,7 +216,9 @@ test('the rail names modules, never tables', () => {
   const page = codeOnly(read('frontend/src/pages/CalendarPage.jsx'));
   const block = page.match(/const KINDS = \[([\s\S]*?)\n\];/)?.[1] || '';
   const froms = [...block.matchAll(/from: '([^']+)'/g)].map((m) => m[1]);
-  assert.equal(froms.length, 10);
+  // Every kind names its module (#3959 added Learning as the eleventh).
+  assert.ok(froms.length >= 10);
+  assert.equal(froms.length, (block.match(/\bid: '/g) || []).length, 'a kind without its module words');
   for (const f of froms) assert.doesNotMatch(f, /_|^[a-z]+s$/, `${f} reads like a table`);
   assert.doesNotMatch(block, /src: '/);
 });

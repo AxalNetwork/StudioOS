@@ -203,7 +203,7 @@ test('New service is a page op, and Pricing history is still prose', () => {
   const ops = actions.slice(at, actions.indexOf('],', at));
   const canvasOps = JSON.parse(`[${PO1.match(/ops:\[([^\]]+)\]/)[1].replace(/'/g, '"')}]`);
   assert.deepEqual(canvasOps, ['New service', 'Pricing history', 'Export']);
-  assert.match(ops, /\{ label: 'New service', kind: 'handler', handler: 'newService' \}/,
+  assert.match(ops, /\{ label: 'New service', kind: 'handler', handler: 'newService', primary: true \}/,
     'New service is no longer performed by the page');
   // AND MIGRATION 227 DID NOT MAKE `Pricing history` BUILDABLE. It added a
   // MODEL, not a series: one price is stored and an edit overwrites it.

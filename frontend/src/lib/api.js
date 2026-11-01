@@ -111,6 +111,7 @@ export * from './api/kycPeople.js';
 export * from './api/labOperations.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
+export * from './api/learningPlan.js';
 export * from './api/licenceAccount.js';
 export * from './api/licenceFeeInvoices.js';
 export * from './api/licencePrograms.js';
@@ -1115,7 +1116,6 @@ export const api = {
   getTemplateContent: (key) => request(`/legal/templates/${key}`),
   listDocuments: (projectId) => request(`/legal/documents${projectId ? `?project_id=${projectId}` : ''}`),
   getDocument: (id) => request(`/legal/documents/${id}`),
-  incorporateProject: (projectId) => request(`/legal/incorporate?project_id=${projectId}`, { method: 'POST' }),
   // Task #30 — Jurisdiction wizard
   legalJurisdictions: () => request('/legal/jurisdictions'),
   // Task #10 — live company-name availability check (Confirm step).

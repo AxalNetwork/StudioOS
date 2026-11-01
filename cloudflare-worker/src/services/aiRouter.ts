@@ -107,6 +107,8 @@ export type TaskClass =
   | 'course_cover'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
+  // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
+  | 'studio_layout'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -757,6 +759,15 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // page explanation. A mid model with the same priced alternates; no cache: a
   // draft quotes figures read at the press.
   mail_draft: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  // D1420 (#3864): Eadwyn proposes a Studio layout as add, remove, resize and
+  // move ops. Its own class, so the pricing read and Usage name it apart; a mid
+  // model with the same priced alternates. No cache: the layout is read at the press.
+  studio_layout: {
     provider: 'workers-ai',
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],

@@ -55,9 +55,10 @@ const page = (env: any, user: number, companyId?: number | null, kinds = ['compl
 
 test('the registry reads compliance as one more source, and no feed or file kind includes it', () => {
   assert.ok(KNOWN_KINDS.includes('compliance_due'), 'compliance_due is registered in READERS');
-  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due']);
+  // #3959: Learning is page-only too, until its feed and provider copy are designed.
+  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due', 'learning']);
   assert.ok(!FEED_KINDS.includes('compliance_due'));
-  assert.deepEqual([...FEED_KINDS, 'compliance_due'].sort(), [...KNOWN_KINDS].sort());
+  assert.deepEqual([...FEED_KINDS, 'compliance_due', 'learning'].sort(), [...KNOWN_KINDS].sort());
 });
 
 test('the page read: the founder\'s own deadlines, open and done, each with its state and facts; nobody else\'s', async () => {

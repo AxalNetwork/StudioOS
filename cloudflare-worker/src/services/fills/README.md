@@ -32,3 +32,17 @@ form's too); a new table joins `../../routes/fills.ts`' `ROW_READS`,
 undoable column joins `UNDO_WRITES` as one literal statement. No table or
 column name is ever spliced into SQL. D1328 (#3489) adds the founder's forms in
 parts of at most 30 fields, each form's entries in their own block.
+
+**#3740 part 2a.** Three founder Add forms join, one composition field each:
+Build › Product roadmap's item (`roadmap_okrs.objective`), Raise › Capital
+relationships' investor (`raise_prospects.notes`) and Grow › Team expansion's
+role (`job_postings.title`), with their Edits (`edit-item`, `edit-investor`,
+`edit-role`). None offers "add several rows" (no `ROW_REQUIRED`). Not listed,
+by the never-fill rule or for want of a composition field: a demand signal
+(a person, an amount, a date), a founder (identity, equity, vesting), a filing,
+a narrative version, a partner (terms), a market (scores) and feedback's words
+(what a customer said). Market intelligence's `why` and feedback's new theme
+wait for a later part: the competitor's row is keyed by name and the
+feedback's by uid, which `ROW_READS` and `fillRecordId` do not take. An
+obligation's title waits for its Edit form to draw one.
+

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { WorkerRail } from '../../ui';
-import ZoneNav from '../../workspaces/ZoneNav';
-import { bucketForPath } from '../../workspaces/shellConfig';
+import ZoneHeader from '../../workspaces/ZoneHeader';
+import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../lib/fillScoped.js';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioValueAdd.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -93,6 +95,16 @@ export default function InvestorPortfolioValueAdd() {
   }, []);
   const byCompanyView = useCallback(() => { setFilter('company'); }, []);
 
+  // D1595 (#3868) / D1424 (#3700): Ask on Log support's "What happened". The
+  // Add form's parent is the chosen company's project id; nothing is read
+  // until one is chosen. Outcome and hours are never filled.
+  const parentId = form?.project_uid ? Number(companies.find((x) => x.project_uid === form.project_uid)?.project_id) || null : null;
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.support, parent: parentId, enabled: !!parentId,
+    values: { summary: form?.summary || '' },
+    onValues: (v) => setForm((current) => (current ? { ...current, ...v, error: '' } : current)),
+  });
+
   const submit = async (event) => {
     event.preventDefault();
     if (!form?.project_uid || !form.summary.trim()) {
@@ -101,7 +113,7 @@ export default function InvestorPortfolioValueAdd() {
     }
     setBusy('log');
     try {
-      await api.portfolioSupportLog({
+      const created = await api.portfolioSupportLog({
         project_uid: form.project_uid,
         kind: form.kind,
         state: form.state,
@@ -112,6 +124,7 @@ export default function InvestorPortfolioValueAdd() {
         ...(form.outcome.trim() ? { outcome: form.outcome.trim() } : {}),
       });
       setForm(null);
+      await fill.afterSave(created?.item?.id);
       await load();
     } catch (error) {
       setForm((current) => ({ ...current, error: error?.message || 'That entry could not be recorded.' }));
@@ -133,8 +146,9 @@ export default function InvestorPortfolioValueAdd() {
     ? 'Not recorded'
     : `${totals.hours_recorded} h`;
 
-  return <div className="i4-shell ip3-shell"><main className="i4-portfolio ip3-value-add" data-testid="investor-portfolio-value-add"><header className="i4-heading"><div><h1>Value-add desk</h1><p>Support ledger — introductions, hours and outcomes per company.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Reload the support ledger"><RefreshCw size={15} /></button></header>
-    <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
+  return <ZonePrimaryScope><div className="i4-shell ip3-shell"><main className="i4-portfolio ip3-value-add" data-testid="investor-portfolio-value-add">
+    <ZoneHeader bucketPath="/portfolio" title="Value-add desk" intro="Support ledger — introductions, hours and outcomes per company."
+      refresh={<button type="button" className="i4-icon-button" onClick={load} aria-label="Reload the support ledger"><RefreshCw size={15} /></button>} />
     <ZoneToolbar
       role="investor"
       className="mb-3"
@@ -156,7 +170,7 @@ export default function InvestorPortfolioValueAdd() {
         <Stat label="Outstanding" value={unreadable ? 'Unavailable' : totals.promised} note={unreadable ? 'Ledger unreadable' : 'Promised and not yet delivered'} />
         <Stat label="No support at all" value={unreadable ? 'Unavailable' : untouched.length} note={unreadable ? 'Ledger unreadable' : untouched.length ? untouched.map((x) => x.name).join(', ') : 'Every company in the book has an entry'} />
       </section>
-      {form && <LogForm form={form} setForm={setForm} companies={companies} onSubmit={submit} busy={busy === 'log'} onCancel={logSupport} />}
+      {form && <LogForm form={form} setForm={setForm} companies={companies} onSubmit={submit} busy={busy === 'log'} onCancel={logSupport} fill={fill} />}
       {byCompany
         ? <PerCompany companies={companies} unreadable={unreadable} />
         : <section className="i4-card i4-positions ip3-ledger"><div className="i4-section-head"><div><h2>Support ledger</h2><p>{filter === 'outstanding' ? 'Promised entries, still open' : filter === 'delivered' ? 'Delivered entries' : `${visible.length} of ${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'}`}</p></div><span>Promised entries stay visible until delivered or withdrawn</span></div><Ledger rows={visible} filter={filter} unreadable={unreadable} onMove={move} busy={busy} /><p className="i4-seam-note"><span>Evidence boundary</span> Every row here was written by a person recording their own work. Introductions requested through the quota, dealroom membership and calendar activity are access, not support, and none of them is read into this ledger.</p></section>}
@@ -175,7 +189,7 @@ export default function InvestorPortfolioValueAdd() {
       />
       <footer className="i4-boundary">Investor workspace · the ledger is restricted to this investor’s accessible portfolio.</footer>
     </>}
-  </main><ValueAddRail totals={totals} entries={entries} unreadable={unreadable} /></div>;
+  </main><ValueAddRail totals={totals} entries={entries} unreadable={unreadable} /></div></ZonePrimaryScope>;
 }
 
 /**
@@ -224,7 +238,7 @@ function PerCompany({ companies, unreadable }) {
 }
 
 /** The `Log support` op. Writes one entry against a company already in the book. */
-function LogForm({ form, setForm, companies, onSubmit, busy, onCancel }) {
+function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = null }) {
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value, error: '' }));
   return (
     <form className="i4-card ip3-form" onSubmit={onSubmit} data-testid="ip3-log-support">
@@ -237,7 +251,11 @@ function LogForm({ form, setForm, companies, onSubmit, busy, onCancel }) {
             a measured zero in the ledger for every entry nobody timed. */}
         <label>Hours<input type="number" min="0" step="0.5" value={form.hours} onChange={set('hours')} placeholder="Leave blank if untimed" /></label>
       </div>
-      <label className="ip3-wide">What happened<textarea rows={2} value={form.summary} onChange={set('summary')} placeholder="Introduced them to a buyer at …" required /></label>
+      <FillFormBar fill={fill} />
+      <div className="ip3-wide">
+        <FillLabel fill={fill} name="summary" label="What happened" value={form.summary}><label htmlFor="ip3-summary">What happened</label></FillLabel>
+        <textarea id="ip3-summary" rows={2} value={form.summary} onChange={set('summary')} placeholder="Introduced them to a buyer at …" required />
+      </div>
       <label className="ip3-wide">Outcome <em>(optional)</em><textarea rows={2} value={form.outcome} onChange={set('outcome')} placeholder="Leave blank until something comes of it" /></label>
       {form.error && <p className="ip3-form-error">{form.error}</p>}
       <div className="ip3-actions"><button type="submit" disabled={busy}>{busy ? 'Recording…' : 'Record entry'}</button></div>

@@ -327,7 +327,7 @@ test('both writes run, and Extend could not have before', () => {
   const ops = entriesIn(actions, "'offers/perk-deals': [");
   assert.deepEqual(ops.map((e) => e.match(/label: '([^']+)'/)[1]), canvasOps,
     'the ops row is no longer the artboard’s three labels in its order');
-  assert.match(ops[0], /\{ label: 'New perk', kind: 'handler', handler: 'newPerk' \}/,
+  assert.match(ops[0], /\{ label: 'New perk', kind: 'handler', handler: 'newPerk', primary: true \}/,
     'New perk is no longer performed by the page');
   assert.match(ops[1], /\{ label: 'Extend', kind: 'handler', handler: 'extend' \}/,
     'Extend is no longer performed by the page');
