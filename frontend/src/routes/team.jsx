@@ -3,6 +3,9 @@ import { Route } from 'react-router-dom';
 
 const TeamAgentsPage = lazy(() => import('../pages/team/TeamAgentsPage'));
 const ProjectSettingsPage = lazy(() => import('../pages/team/ProjectSettingsPage'));
+// D1614 (#3968): a project's Work, and a company's compliance tasks.
+const WorkPage = lazy(() => import('../pages/work/WorkPage'));
+const CompliancePage = lazy(() => import('../pages/work/CompliancePage'));
 
 /**
  * Team (D1497, #3727): the people and AI agents working on a company or a
@@ -31,6 +34,9 @@ export default function teamRoutes({ guard, labRoles }) {
       <Route path="/account/companies/:uid/settings/projects/:id/team" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <TeamAgentsPage form="company_project" />)} />
       <Route path="/projects/:id/settings/team" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <TeamAgentsPage form="project" />)} />
       <Route path="/projects/:id/settings" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <ProjectSettingsPage />)} />
+      {/* D1614 (#3968): only projects have Work; a company has compliance tasks. */}
+      <Route path="/projects/:id/work" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <WorkPage />)} />
+      <Route path="/account/companies/:uid/settings/compliance" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CompliancePage />)} />
     </>
   );
 }
