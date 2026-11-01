@@ -30,6 +30,7 @@ import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
+import { applyExportImageCopies, checkedExportImageCopies, copyExternalImages, copyRefusalMessage, type ExportImageCopies } from '../services/decks/imageCopy';
 import { refuse } from '../util/refusal';
 import { DECK_PAGE_LOAD_MS, MAX_DECK_PDF_BYTES, MAX_SLIDE_PNG_BYTES, renderUrl, type RenderFailure } from '../services/browserRun';
 import { railFor } from '../util/railContext';
@@ -267,15 +268,18 @@ async function deckPrintHmacKey(env: Env): Promise<CryptoKey> {
 export type PrintOptions = { notes: boolean; sources: boolean };
 const NO_PRINT_OPTIONS: PrintOptions = { notes: false, sources: false };
 
-export async function signDeckPrintToken(env: Env, deckId: number, ttlSec = 180, opts: PrintOptions = NO_PRINT_OPTIONS): Promise<string> {
+export async function signDeckPrintToken(env: Env, deckId: number, ttlSec = 180, opts: PrintOptions = NO_PRINT_OPTIONS, imageCopies: ExportImageCopies = {}): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + ttlSec;
   const flags = `${opts.notes ? 'n' : ''}${opts.sources ? 's' : ''}`;
-  const payload = `deck-print|${deckId}|${exp}${flags ? `|${flags}` : ''}`;
+  const checked = checkedExportImageCopies(imageCopies);
+  if (!checked) throw new Error('invalid export image references');
+  const suffix = Object.keys(checked).length ? `|${flags}|${JSON.stringify(checked)}` : flags ? `|${flags}` : '';
+  const payload = `deck-print|${deckId}|${exp}${suffix}`;
   const key = await deckPrintHmacKey(env);
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
   return `${b64url(new TextEncoder().encode(payload))}.${b64url(sig)}`;
 }
-export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ deckId: number } & PrintOptions) | null> {
+export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ deckId: number; imageCopies?: ExportImageCopies } & PrintOptions) | null> {
   try {
     const [pB64, sB64] = (token || '').split('.');
     if (!pB64 || !sB64) return null;
@@ -285,12 +289,15 @@ export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ 
     const ok = await crypto.subtle.verify('HMAC', key, sigBytes, payloadBytes);
     if (!ok) return null;
     const payload = new TextDecoder().decode(payloadBytes);
-    const [tag, idStr, expStr, flags = ''] = payload.split('|');
+    const [tag, idStr, expStr, flags = '', copiesText, ...extra] = payload.split('|');
+    if (extra.length) return null;
+    const imageCopies = copiesText === undefined ? undefined : checkedExportImageCopies(JSON.parse(copiesText));
+    if (imageCopies === null) return null;
     if (tag !== 'deck-print' || !idStr || !expStr) return null;
     if (Math.floor(Date.now() / 1000) > Number(expStr)) return null;
     const deckId = parseInt(idStr, 10);
     if (!Number.isFinite(deckId) || deckId <= 0) return null;
-    return { deckId, notes: flags.includes('n'), sources: flags.includes('s') };
+    return { deckId, notes: flags.includes('n'), sources: flags.includes('s'), ...(imageCopies ? { imageCopies } : {}) };
   } catch { return null; }
 }
 
@@ -738,8 +745,13 @@ decks.get('/print-export/:token', async (c) => {
   const v = await verifyDeckPrintToken(c.env, token);
   if (!v) return c.json({ error: 'invalid_or_expired_token' }, 403);
   await ensureSchema(c.env);
-  const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(v.deckId).first<any>();
+  let row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(v.deckId).first<any>();
   if (!row) return c.json({ error: 'not_found' }, 404);
+  if (v.imageCopies) {
+    let slides: any[] = [];
+    try { slides = JSON.parse(row.slides || '[]'); } catch { /* unreadable stored slides render empty */ }
+    row = { ...row, slides: JSON.stringify(await applyExportImageCopies(c.env, Number(row.project_id), Array.isArray(slides) ? slides : [], v.imageCopies, c.req.url)) };
+  }
   const methodId = extractDeckMethodId(row);
   let projectName: string | null = null;
   try {
@@ -1286,6 +1298,11 @@ decks.put('/:id', async (c) => {
     }
   }
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
+  // D1506: an outside image is copied into the venture's storage and the slide names the copy;
+  // one that cannot be copied refuses the save, naming it.
+  const copy = await copyExternalImages(c.env, { projectId: Number(row.project_id), deckId: Number(row.id), user: { id: Number(user.id), role: user.role }, requestUrl: c.req.url, slides });
+  if (!copy.ok) return refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } });
+  slides.splice(0, slides.length, ...copy.slides);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
 
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta,
@@ -2032,6 +2049,22 @@ decks.post('/:id/autofill', async (c) => {
  * shape: one per slide, plus the Sources appendix as a last page when asked
  * for. The PDF/PowerPoint export and D904's Google Slides export share it.
  */
+/**
+ * D1506: a stored version's outside images, copied before it is exported, so the
+ * export browser loads only our own origin. The export uses an in-memory row naming
+ * the copies; historical versions remain immutable. One that cannot be copied stays
+ * as it was: the export says it is missing, and the export browser cannot load it.
+ */
+export async function copyStoredDeckImages(c: any, user: { id: number; role?: string | null }, row: any): Promise<{ row: any; imageCopies?: ExportImageCopies } | { refused: Response }> {
+  let slides: any[] = [];
+  try { slides = JSON.parse(row.slides || '[]'); } catch { return { row }; }
+  const copy = await copyExternalImages(c.env, { projectId: Number(row.project_id), deckId: Number(row.id), user: { id: Number(user.id), role: user.role }, requestUrl: c.req.url, slides, mode: 'export' });
+  if (!copy.ok) return { refused: refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } }) };
+  if (!copy.copied) return { row };
+  const text = JSON.stringify(copy.slides);
+  return { row: { ...row, slides: text }, imageCopies: copy.imageCopies };
+}
+
 export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; renderable: RenderableDeck } {
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
@@ -2124,6 +2157,9 @@ decks.post('/:id/export', async (c) => {
   if (!['pdf', 'pptx'].includes(format)) {
     return c.json({ error: 'format must be pdf | pptx' }, 400);
   }
+  const copied = await copyStoredDeckImages(c, user, row);
+  if ('refused' in copied) return copied.refused;
+  row = copied.row;
   // D1112 (#2992): PD17's two options apply to every format, not only HTML.
   const opts: PrintOptions = { notes: body?.notes === true, sources: body?.sources === true };
   const { renderable } = exportDeckOf(row, opts);
@@ -2150,7 +2186,7 @@ decks.post('/:id/export', async (c) => {
         fallback: 'client_render',
       }, 503);
     }
-    const token = await signDeckPrintToken(c.env, id, 180, opts);
+    const token = await signDeckPrintToken(c.env, id, 180, opts, copied.imageCopies);
     const r = await renderUrl(c.env, 'pdf', {
       url: `${publicBase}/deck/print-export/${token}?print_mode=pdf`,
       viewport: SLIDE_VIEWPORT,
@@ -2201,7 +2237,7 @@ decks.post('/:id/export', async (c) => {
   // comfortably covers the longest deck (60-slide cap). #3655: a few at a
   // time under one deadline; the first slide that cannot be pictured stops
   // the export, and nothing is handed out or recorded.
-  const token = await signDeckPrintToken(c.env, id, 300, opts);
+  const token = await signDeckPrintToken(c.env, id, 300, opts, copied.imageCopies);
   // With sources, the last index is the appendix page the print page draws after the cards.
   const slideCount = renderable.slides.length;
   const deadline = Date.now() + PPTX_RENDER_BUDGET_MS;
