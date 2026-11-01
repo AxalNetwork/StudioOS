@@ -57,6 +57,11 @@ export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Objec
   // #3982 (D1486 §c): Raise's dated stores.
   round_close: { family: 'raise', module: 'Raise › Round', label: 'Round close', page_only: true, pushable: false },
   nda_expiry: { family: 'raise', module: 'Raise › NDAs', label: 'NDA expiry', page_only: true, pushable: false },
+  // #3983 (D1486 §d): the dated task stores.
+  workflow_task: { family: 'tasks', module: 'Workflows › Tasks', label: 'Workflow task', page_only: true, pushable: false },
+  mvp_task: { family: 'tasks', module: 'Build › Board', label: 'Build task', page_only: true, pushable: false },
+  contact_task: { family: 'tasks', module: 'Contacts › Follow-ups', label: 'Contact follow-up', page_only: true, pushable: false },
+  engagement_milestone: { family: 'tasks', module: 'Engagements › Milestones', label: 'Engagement milestone', page_only: true, pushable: false },
 });
 
 export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];

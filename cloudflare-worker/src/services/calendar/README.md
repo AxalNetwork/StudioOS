@@ -28,6 +28,11 @@ when adding a kind.
   day: `round_close` (an active round's close, for the venture's founder and
   its accepted owners and co-founders) and `nda_expiry` (an active, unvoided
   NDA's expiry, for its two parties only, by the other party's name).
+- `taskDates.ts`: #3983 (D1486 §d), the dated task stores, family `tasks`,
+  page only and all day, each for its owner alone: `workflow_task` (assignee),
+  `mvp_task` (assignee, venture not deleted), `contact_task` (the venture's
+  founder) and `engagement_milestone` (the delivering partner). Done and
+  cancelled rows are hidden.
 - `prefs.ts`: D1484 part 2 (#3978, migration 708), a member's own source
   settings. `calendar_source_prefs` holds whether a source is shown and its
   colour, a palette token and never hex. `calendar_settings` holds

@@ -41,6 +41,11 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   // #3982 (D1486 §c): a round's close and an NDA's expiry are deadlines.
   round_close: 'deadlines',
   nda_expiry: 'deadlines',
+  // #3983 (D1486 §d): a task's due date is a deadline.
+  workflow_task: 'deadlines',
+  mvp_task: 'deadlines',
+  contact_task: 'deadlines',
+  engagement_milestone: 'deadlines',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -68,6 +73,9 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   your_send: 'You confirmed this send',
   venture_round: 'Your venture’s round',
   nda_party: 'A party to this NDA',
+  assigned_to_you: 'Assigned to you',
+  venture_follow_up: 'Your venture’s follow-up',
+  delivering: 'You deliver this',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -87,6 +95,10 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   content_planned: 'venture_team',
   round_close: 'venture_round',
   nda_expiry: 'nda_party',
+  workflow_task: 'assigned_to_you',
+  mvp_task: 'assigned_to_you',
+  contact_task: 'venture_follow_up',
+  engagement_milestone: 'delivering',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
@@ -126,6 +138,10 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'publish_send': return typeof ev.url === 'string' && ev.url.startsWith('/grow') ? ev.url : '/grow';
     case 'content_planned': return '/grow/distribution';
     case 'round_close': return '/raise/capital-relationships';
+    // #3983: a workflow task has no page of its own; the others open their board.
+    case 'mvp_task': return '/build/board';
+    case 'contact_task': return '/contacts';
+    case 'engagement_milestone': return '/delivery/health';
     default: return null;
   }
 }
