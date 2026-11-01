@@ -27,7 +27,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/mercury_raise_feeds_d840.test.ts
  */
-import test from 'node:test';
+import test, { beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import '../src/routes/cycle_raise.ts';
 import { MERCURY_READ_TOOLS } from '../src/services/mercury/mcp.ts';
@@ -39,6 +39,10 @@ import { FAKE_PDF, fakeTx } from './_mercury_mcp_fake.mjs';
 import {
   TODAY, tx, LINES, CASHFLOW, fixture, call, sync, mod, accept, dismiss, proposal, withFake,
 } from './_mercury_raise_fixture.ts';
+
+// Route calculations use the same October clock as this suite's fixed Mercury data.
+beforeEach(() => mock.timers.enable({ apis: ['Date'], now: Date.parse(`${TODAY}T12:00:00Z`) }));
+afterEach(() => mock.timers.reset());
 
 // ───────────────────────────────────────────── 1. the rules
 
