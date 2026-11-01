@@ -26,8 +26,7 @@ import { readFileSync } from 'node:fs';
 import {
   OUT, VOICE_BANNED, buildMatrix, loadRegisteredOptions, optionPageKey, readPricing, render, rowProblems,
 } from '../../scripts/build-rail-matrix.mjs';
-import { CANVAS_RAIL_KINDS, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, RAIL_KINDS, ROUTE } from '../src/services/aiRouter.ts';
-import { USE_CASE_KINDS } from '../src/services/ai/modelUseCases.ts';
+import { PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, RAIL_KINDS, ROUTE } from '../src/services/aiRouter.ts';
 import { MODEL_NAMES, TASK_LABELS } from '../src/services/aiCatalog.ts';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -165,10 +164,10 @@ test('the generator refuses a canvas or override that breaks a rule, and writes 
 });
 
 test('each rail_<kind> task is a ROUTE key that names only its kind\'s models, priced and named', () => {
-  assert.equal(CANVAS_RAIL_KINDS.length, 14);
-  assert.deepEqual([...CANVAS_RAIL_KINDS].sort(), Object.keys(CANVAS.suggested).sort(), 'one task per canvas kind');
+  assert.equal(RAIL_KINDS.length, 14);
+  assert.deepEqual([...RAIL_KINDS].sort(), Object.keys(CANVAS.suggested).sort(), 'one task per canvas kind');
   for (const r of ROWS) assert.ok(r.routeTask in ROUTE, `${r.routeTask} is not a ROUTE key`);
-  for (const kind of CANVAS_RAIL_KINDS) {
+  for (const kind of RAIL_KINDS) {
     const entry = (ROUTE as Record<string, any>)[`rail_${kind}`];
     const row = ROWS.find((r) => r.kind === kind)!;
     const ids = row.models.map((m) => m.id);
@@ -193,7 +192,7 @@ test('the rail_<kind> prices are what Cloudflare bills: each published neuron ra
   // (GLM-4.7 Flash: 5,500 neurons = $0.0605 per 1M input tokens, shown as $0.060).
   const md = read('design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md');
   const usdOf = (neurons: number) => (neurons * 11) / 1_000_000;
-  for (const kind of CANVAS_RAIL_KINDS) {
+  for (const kind of RAIL_KINDS) {
     const entry = (ROUTE as Record<string, any>)[`rail_${kind}`];
     for (const id of [entry.model, ...(entry.alternates ?? [])]) {
       const p = PRICE_USD_PER_1M_TOKENS[id];
@@ -204,21 +203,6 @@ test('the rail_<kind> prices are what Cloudflare bills: each published neuron ra
       assert.ok(Math.abs(p.in - usdOf(neurons[0])) < 1e-9, `${id}: input rate ${p.in} is not ${usdOf(neurons[0])}`);
       if (id !== '@cf/baai/bge-base-en-v1.5') assert.ok(Math.abs(p.out - usdOf(neurons.at(-1)!)) < 1e-9, `${id}: output rate ${p.out} is not ${usdOf(neurons.at(-1)!)}`);
     }
-  }
-});
-
-test('D1478 (#3934): each job-only rail_<kind> task routes only to models its use-case kind lists, named and labelled', () => {
-  const extra = RAIL_KINDS.filter((k) => !(CANVAS_RAIL_KINDS as readonly string[]).includes(k));
-  assert.deepEqual([...extra].sort(), ['agent', 'decide', 'draw', 'edit_image', 'sentiment', 'translate', 'voice_turn']);
-  for (const kind of extra) {
-    const entry = (ROUTE as Record<string, any>)[`rail_${kind}`];
-    const list = USE_CASE_KINDS[kind as keyof typeof USE_CASE_KINDS]?.list;
-    assert.ok(list, `${kind} is a use-case kind`);
-    for (const id of [entry.model, ...(entry.alternates ?? []), ...(entry.fallbackChain ?? [])]) {
-      assert.ok(list.includes(id), `rail_${kind}: ${id} is not in its use-case kind's list`);
-      assert.ok(MODEL_NAMES[id] ?? modelById(id)?.name, `rail_${kind}: ${id} has no name`);
-    }
-    assert.ok(TASK_LABELS[`rail_${kind}` as keyof typeof TASK_LABELS], `rail_${kind} has a label`);
   }
 });
 

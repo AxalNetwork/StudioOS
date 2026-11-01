@@ -110,13 +110,7 @@ export type TaskClass =
 export const RAIL_KINDS = [
   'chat', 'synth', 'speech', 'research', 'reason', 'vision', 'code',
   'numbers', 'write', 'match', 'plan', 'legal', 'multi', 'search',
-  // D1478 (#3934): the job table's kinds that the canvas rows do not name.
-  // Their tasks answer only through `modelUseCases.ts` selectors until each
-  // kind's own task (#3935–#3938) routes its presses here.
-  'draw', 'edit_image', 'voice_turn', 'agent', 'decide', 'sentiment', 'translate',
 ] as const;
-/** The kinds the canvas (`railMatrix.json`) rows carry: the first fourteen. */
-export const CANVAS_RAIL_KINDS = RAIL_KINDS.slice(0, 14);
 export type RailKind = (typeof RAIL_KINDS)[number];
 export type RailTask = `rail_${RailKind}`;
 
@@ -669,9 +663,6 @@ const VISION_SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
 // D1478 (#3721): every draw model, FLUX.1 Schnell first (the routes' default).
 const DRAW_MODELS = ['@cf/black-forest-labs/flux-1-schnell',
   ...Object.keys(MODEL_CONNECTIONS).filter((id) => MODEL_CONNECTIONS[id].operation === 'draw' && id !== '@cf/black-forest-labs/flux-1-schnell')];
-// D1478 (#3934): the FLUX.2 models that take a reference image. Image models are priced
-// by tile and step (`pricing.ts`), not in the token tables, as DRAW_MODELS are.
-const EDIT_IMAGE_MODELS = ['@cf/black-forest-labs/flux-2-klein-4b', '@cf/black-forest-labs/flux-2-klein-9b', '@cf/black-forest-labs/flux-2-dev'];
 
 export const ROUTE: Record<TaskClass, RouteEntry> = {
   ...MODULE_ROUTES,
@@ -943,17 +934,6 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   rail_legal:    { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813'] },
   rail_multi:    { provider: 'workers-ai', model: '@cf/mistralai/mistral-small-3.1-24b-instruct', alternates: ['@cf/mistralai/mistral-small-3.1-24b-instruct'] },
   rail_search:   { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', alternates: ['@cf/moonshotai/kimi-k2.6'] },
-  // D1478 (#3934): each new kind's primary is its free model (the gate-off
-  // fallback of every Draw, Edit and Speak job); `alternates` are its kind
-  // list in `modelUseCases.ts`, so a pick from a selector is accepted. No
-  // press routes to these until its task lands with the owner's spend approval.
-  rail_draw:       { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
-  rail_edit_image: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-2-klein-4b', alternates: EDIT_IMAGE_MODELS },
-  rail_voice_turn: { provider: 'workers-ai', model: '@cf/daily-co/phonellm-mini-alpha-2', fallbackChain: ['@cf/zai-org/glm-4.7-flash'], alternates: ['@cf/daily-co/phonellm-mini-alpha-2', '@cf/zai-org/glm-4.7-flash'] },
-  rail_agent:      { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: ['@cf/qwen/qwen3-30b-a3b-fp8', '@cf/openai/gpt-oss-120b'], alternates: ['@cf/zai-org/glm-4.7-flash', '@cf/qwen/qwen3-30b-a3b-fp8', '@cf/openai/gpt-oss-120b', '@cf/nvidia/nemotron-3-120b-a12b'] },
-  rail_decide:     { provider: 'workers-ai', model: '@cf/cloudflare/clef-flash', fallbackChain: ['@cf/cloudflare/clef'], alternates: ['@cf/cloudflare/clef-flash', '@cf/cloudflare/clef'] },
-  rail_sentiment:  { provider: 'workers-ai', model: '@cf/huggingface/distilbert-sst-2-int8', alternates: ['@cf/huggingface/distilbert-sst-2-int8', '@cf/cloudflare/clef-flash', '@cf/cloudflare/clef'] },
-  rail_translate:  { provider: 'workers-ai', model: '@cf/meta/m2m100-1.2b', alternates: ['@cf/meta/m2m100-1.2b', '@cf/ai4bharat/indictrans2-en-indic-1B'] },
 };
 
 // D761: the latency budget is per attempt and per class (`shapes.TIMEOUT_MS`),

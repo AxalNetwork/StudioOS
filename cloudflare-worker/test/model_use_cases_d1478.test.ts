@@ -27,7 +27,7 @@ import ai from '../src/routes/ai.ts';
 import { CATALOGUE } from '../src/services/ai/catalogue.ts';
 import { railOptionRows, railOptionsOn, railRows } from '../src/services/ai/railMatrix.ts';
 import { MODEL_CONNECTIONS } from '../src/services/ai/moduleConnections.ts';
-import { CANVAS_RAIL_KINDS, RAIL_KINDS } from '../src/services/aiRouter.ts';
+import { RAIL_KINDS, ROUTE } from '../src/services/aiRouter.ts';
 import {
   ELEMENT_GROUP_JOBS, HIDDEN_MODELS, MODEL_JOBS, MODEL_LOCK, NOT_OFFERED, OPTION_JOBS, PAGE_JOBS, RAIL_KIND_USE, USE_CASE_KINDS,
   jobById, jobForOption, jobsOnPage, kindList, lockOf, selectorsFor, suggestionsFor,
@@ -102,9 +102,14 @@ test('every option that runs a model maps to a job, and every mapping names a re
   assert.equal(jobForOption('Operating Partner · Pipeline · Retainers', 'draft:renewal-risk')?.id, 'GR16');
 });
 
-test('the seven new rail kinds read the table; the fourteen canvas kinds stay first', () => {
-  assert.deepEqual([...RAIL_KINDS.slice(0, 14)], [...CANVAS_RAIL_KINDS]);
+test('every rail kind reads a use-case kind, and no job-only kind is routed before its own task', () => {
   for (const kind of RAIL_KINDS) assert.ok(RAIL_KIND_USE[kind], `${kind} maps to a use-case kind`);
+  // Draw, Edit image, Voice turn, Agent, Decide, Sentiment and Translate are selectors only:
+  // each gets its rail_<kind> route with the task (#3935–#3938) that wires a press to it.
+  for (const kind of ['draw', 'edit_image', 'voice_turn', 'agent', 'decide', 'sentiment', 'translate']) {
+    assert.ok(!(RAIL_KINDS as readonly string[]).includes(kind), kind);
+    assert.ok(!(`rail_${kind}` in ROUTE), `rail_${kind}`);
+  }
   for (const id of Object.keys(MODEL_LOCK)) assert.ok(Object.values(USE_CASE_KINDS).some((k) => k.list.includes(id)), `${id} is locked but listed nowhere`);
   // Answer A (c): the top models wait for the top paid plan.
   assert.equal(lockOf(cf('deepseek-ai/deepseek-v4-pro-0813'))?.lock, 'top_paid');

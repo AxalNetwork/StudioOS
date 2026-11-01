@@ -84,13 +84,6 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   rail_legal: 'Read terms and filings',
   rail_multi: 'Read sources in any language',
   rail_search: 'Answer from your documents',
-  rail_draw: 'Draw an image',
-  rail_edit_image: 'Edit an image',
-  rail_voice_turn: 'Reply in a voice turn',
-  rail_agent: 'An agent turn with tools',
-  rail_decide: 'Decide between options',
-  rail_sentiment: 'Read the sentiment',
-  rail_translate: 'Translate',
 };
 
 /**
