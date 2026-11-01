@@ -463,6 +463,8 @@ import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
 import agentEngineRoutes from './routes/agent_engine';
 import teamAgentsRoutes from './routes/team_agents';
+// D1612 (#3951): the agent skill library, beside team agents.
+import teamSkillsRoutes from './routes/team_skills';
 import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
@@ -1698,6 +1700,8 @@ app.route('/api', companyRoutes);
 // Before team_agents, whose `*` middleware would otherwise answer for these paths; each handler checks its own flag.
 app.route('/api/teams', agentEngineRoutes);
 app.route('/api/teams', teamAgentsRoutes);
+// D1612 (#3951): `/skills…` and `/agents/:uid/skills`, behind the same TEAM_AGENTS_ENABLED switch.
+app.route('/api/teams', teamSkillsRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);

@@ -100,7 +100,7 @@ async function personOf(env: Env, userId: number | null): Promise<{ uid: string;
   return u ? { uid: u.uid, name: u.name } : null;
 }
 
-function toolsOf(json: string): { integration_uid: string; tool: string }[] {
+export function toolsOf(json: string): { integration_uid: string; tool: string }[] {
   try {
     const v = JSON.parse(json);
     return Array.isArray(v) ? v.filter((t) => t && typeof t.integration_uid === 'string' && typeof t.tool === 'string')

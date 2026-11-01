@@ -41,6 +41,7 @@ import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './a
 import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleConnections';
 import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
+import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,6 +104,8 @@ export type TaskClass =
   // D1409 (#3695): an article's images, on the same model as the deck's, so
   // usage logs name articles and not decks.
   | 'article_image'
+  | 'event_cover'
+  | 'course_cover'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
   // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
@@ -259,6 +262,10 @@ export interface RunOptions {
   // its Default or fallback by the legal hold, the partner switch and the
   // member's plan lock. A draw run without one keeps its route's model.
   drawJob?: string;
+  // #3936 (D1478 task 2): the use-case job a speech run serves (`ai/speechJobs.ts`):
+  // a Listen (file) or Speak run takes its Default, its fallback, or for Speak
+  // MeloTTS, by the partner switch and the plan lock. Without one the route's model runs.
+  speechJob?: string;
   // D765 (#2090): the rail context of a MEMBER's run. `run()` copies it into
   // `railPage`, `railOption` and `recordRef`, and refuses `assist_off` when the
   // member turned AI assistance off on that page. Every member call passes it
@@ -937,6 +944,9 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
   // D1409 (#3695): an article's images, on the same model as the deck's.
   article_image: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
+  // #3935: the event cover (EV2) and the course cover (LE8); the job picks the model (`drawChoice`).
+  event_cover:  { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
+  course_cover: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
   // D1478 §3937 fix 5 (MI1): a snippet paraphrase is a short rewrite, so the 8B fp8 answers it and the 70B is its fallback.
   paraphrase:   { provider: 'workers-ai', model: SMALL_LLAMA, fallbackChain: [MID_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
@@ -1790,7 +1800,7 @@ export function budgetRefusalMessage(refusal: string, detail?: { limit_microusd?
 
 /** The models one run may reach, or why it may reach none. `record`: the refusal writes a usage row. */
 type ModelChoice =
-  | { ok: true; primary: string; chain: string[]; draw?: DrawReceipt }
+  | { ok: true; primary: string; chain: string[]; draw?: DrawReceipt; speech?: SpeechReceipt }
   | { ok: false; refusal: RefusalReason; error: string; record: boolean };
 
 /**
@@ -1801,6 +1811,8 @@ type ModelChoice =
  */
 /** #3935: how a draw job's model was chosen, for the receipt: the Default, the fallback (and why the Default did not run), or the member's choice. */
 export interface DrawReceipt { job: string; source: DrawSource; skipped: null | { model: string; reason: DrawSkip } }
+/** #3936: how a speech job's model was chosen, for the receipt, as a draw job's is. */
+export interface SpeechReceipt { job: string; source: SpeechSource; skipped: null | { model: string; reason: SpeechSkip } }
 
 async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
   // ---- #3935 (D1478 task 1): a draw job's model ------------------------------
@@ -1816,6 +1828,23 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
     if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
     // An image is never redrawn on another model: no chain.
     return { ok: true, primary: c.model, chain: [], draw: { job: c.job, source: c.source, skipped: c.skipped } };
+  }
+
+  // ---- #3936 (D1478 task 2): a speech job's model ---------------------------
+  // A voice, or a file transcription, that names its job. A live stream keeps
+  // its own path (`liveTranscription.ts`); turn-taking runs as a specialist.
+  if (opts.speechJob && (opts.speak || (route.isAudio && !opts.specialist))) {
+    let pick: string | null = null;
+    const optionRow = opts.rail?.option ? resolveRailOption(opts.rail.page, opts.rail.option) : null;
+    let tier: PlanTier;
+    try {
+      if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
+      tier = await memberPlanTier(env, opts.userId);
+    } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
+    const c = speechChoice(opts.speechJob, { switches: env as catalogue.CatalogueSwitches, tier, caller: opts.model ?? null, pick });
+    if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
+    // One voice, one transcription: never re-run on another model mid-press.
+    return { ok: true, primary: c.model, chain: [], speech: { job: c.job, source: c.source, skipped: c.skipped } };
   }
 
   // ---- D764 PR 3: a rail run's models come from its page's row ------------
@@ -1918,7 +1947,7 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
 }
 
 export type RunQuote =
-  | { ok: true; hold_microusd: number; model: string; draw?: DrawReceipt }
+  | { ok: true; hold_microusd: number; model: string; draw?: DrawReceipt; speech?: SpeechReceipt }
   | { ok: false; refusal: RefusalReason; error: string };
 
 /**
@@ -1948,7 +1977,7 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
     const refusal = modelRefusal(env, model);
     if (refusal) return { ok: false, refusal, error: `${model} ${refusal === 'model_unpriced' ? 'has no price' : 'is not offered'}` };
   }
-  const draw = choice.draw ? { draw: choice.draw } : {};
+  const draw = { ...(choice.draw ? { draw: choice.draw } : {}), ...(choice.speech ? { speech: choice.speech } : {}) };
   if (opts.userId <= 0) return { ok: true, hold_microusd: 0, model: choice.primary, ...draw };
   try {
     const multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
