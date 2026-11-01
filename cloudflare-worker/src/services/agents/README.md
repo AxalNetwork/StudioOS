@@ -15,3 +15,12 @@ module key must be a slug a cycle already has; a new rule book section is one
 entry in `rulebook.ts`'s `SECTIONS`; the floor only grows. Part 2 adds the run
 (`agentRun.ts`), part 3 the queue. `team_agents_d1496.test.ts` covers both
 files.
+
+## `skills/` (#3953, D1612)
+
+The Axal starter skill library: twelve HQ skills, one SKILL.md file each, in
+#3951's format (frontmatter `name`, `description`, `roles`, `tools`, `output`,
+`taxonomy`, `version`, then numbered steps), and one golden evaluation case
+per skill in `skills/cases/<slug>.json` for part D (#3954). Content only:
+A1 (#3951) seeds them into `agent_skills` and `agent_skill_versions`.
+`test/agent_skill_library_d1612.test.ts` holds every file to the catalogue.
