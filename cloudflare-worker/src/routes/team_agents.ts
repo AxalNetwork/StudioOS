@@ -41,8 +41,8 @@ import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf, type Ru
 import { checkRules, diffRules } from '../services/agents/rulebook';
 
 type C = Context<{ Bindings: Env }>;
-type Scope = { kind: 'company'; id: number; uid: string; name: string } | { kind: 'project'; id: number; name: string; founder_id: number | null; company_id: number | null };
-type AgentRow = {
+export type Scope = { kind: 'company'; id: number; uid: string; name: string } | { kind: 'project'; id: number; name: string; founder_id: number | null; company_id: number | null };
+export type AgentRow = {
   id: number; uid: string; scope_kind: 'company' | 'project'; company_id: number | null; project_id: number | null;
   role_key: string; first_name: string | null; last_name: string | null; model_id: string; tool_grants_json: string;
   sponsor_user_id: number; monthly_cap_microusd: number; status: 'active' | 'paused' | 'removed'; paused_reason: string | null;
@@ -68,7 +68,7 @@ const notFound = (c: C) => say(c, 404, 'not_found', 'There is no such team.');
 
 // ── Scope and gates ─────────────────────────────────────────────────────────
 
-async function loadScope(env: Env, kind: string, id: string): Promise<Scope | null> {
+export async function loadScope(env: Env, kind: string, id: string): Promise<Scope | null> {
   if (kind === 'company') {
     const row = await env.DB.prepare('SELECT id, uid, company_name, archived_at FROM company_profiles WHERE uid = ?')
       .bind(id).first<{ id: number; uid: string; company_name: string; archived_at: string | null }>();
@@ -82,7 +82,7 @@ async function loadScope(env: Env, kind: string, id: string): Promise<Scope | nu
   return null;
 }
 
-async function scopeOfAgent(env: Env, a: AgentRow): Promise<Scope | null> {
+export async function scopeOfAgent(env: Env, a: AgentRow): Promise<Scope | null> {
   if (a.scope_kind === 'company') {
     const row = await env.DB.prepare('SELECT uid FROM company_profiles WHERE id = ?').bind(a.company_id).first<{ uid: string }>();
     return row ? loadScope(env, 'company', row.uid) : null;
@@ -90,7 +90,7 @@ async function scopeOfAgent(env: Env, a: AgentRow): Promise<Scope | null> {
   return loadScope(env, 'project', String(a.project_id));
 }
 
-async function canRead(env: Env, s: Scope, user: User): Promise<boolean> {
+export async function canRead(env: Env, s: Scope, user: User): Promise<boolean> {
   if (s.kind === 'company') {
     if (isAdmin(user)) return true;
     const link = await env.DB.prepare('SELECT 1 AS ok FROM user_company_links WHERE company_id = ? AND user_id = ?')
@@ -100,7 +100,7 @@ async function canRead(env: Env, s: Scope, user: User): Promise<boolean> {
   return canAccessProject(env, user, s);
 }
 
-async function canManage(env: Env, s: Scope, user: User): Promise<boolean> {
+export async function canManage(env: Env, s: Scope, user: User): Promise<boolean> {
   if (s.kind === 'company') return canEdit(env, { id: s.id }, user);
   return isProjectManager(user, s);
 }
@@ -170,7 +170,7 @@ async function personOf(env: Env, userId: number | null): Promise<{ uid: string;
   return u ? { uid: u.uid, name: u.name } : null;
 }
 
-function toolsOf(json: string): { integration_uid: string; tool: string }[] {
+export function toolsOf(json: string): { integration_uid: string; tool: string }[] {
   try {
     const v = JSON.parse(json);
     return Array.isArray(v) ? v.filter((t) => t && typeof t.integration_uid === 'string' && typeof t.tool === 'string')
@@ -201,7 +201,7 @@ async function agentDto(env: Env, a: AgentRow) {
   };
 }
 
-async function agentByUid(env: Env, uid: string): Promise<AgentRow | null> {
+export async function agentByUid(env: Env, uid: string): Promise<AgentRow | null> {
   if (!/^[a-f0-9]{32}$/.test(uid)) return null;
   return env.DB.prepare('SELECT * FROM team_agents WHERE uid = ?').bind(uid).first<AgentRow>();
 }

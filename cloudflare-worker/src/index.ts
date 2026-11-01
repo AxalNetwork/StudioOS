@@ -452,6 +452,8 @@ import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
 import teamAgentsRoutes from './routes/team_agents';
+// D1612 (#3951): the agent skill library, beside team agents.
+import teamSkillsRoutes from './routes/team_skills';
 import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
@@ -1672,6 +1674,8 @@ app.route('/api', companyDocuments);
 app.route('/api', companyRoutes);
 // D1496 (#3840): team agents, their rule books and their audit; 404 `team_agents_off` until TEAM_AGENTS_ENABLED is "true".
 app.route('/api/teams', teamAgentsRoutes);
+// D1612 (#3951): `/skills…` and `/agents/:uid/skills`, behind the same TEAM_AGENTS_ENABLED switch.
+app.route('/api/teams', teamSkillsRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);
