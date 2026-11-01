@@ -28,6 +28,7 @@ import { ownedRow } from './records/owned';
 import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { ensureTier } from '../middleware/requireTier';
+import { watermarkFor } from './decks/variants';
 import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { shareIncludeFromBody } from './decks/shareInclude';
 import { createProspect, RAISE_STAGES } from '../routes/contacts';
@@ -414,6 +415,11 @@ export async function createDeckLink(env: Env, a: { projectId: number; user: Use
     viewLimit: limit, ndaRequired, include,
   });
   if (link.id == null) throw new WriterError(500, 'The link was made but its id was not reported');
+  // D1565 (#3812): every link names its recipient in a watermark: the prospect and their fund, or the name typed.
+  const firm = investor.prospectId == null ? null
+    : await env.DB.prepare('SELECT name, firm FROM raise_prospects WHERE id = ?').bind(investor.prospectId).first<{ name: string | null; firm: string | null }>();
+  await env.DB.prepare('UPDATE pitch_deck_share_tokens SET watermark_text = ? WHERE id = ?')
+    .bind(watermarkFor(firm?.name ?? investor.label, firm?.firm ?? null), link.id).run();
   return {
     id: link.id, share_path: `/share/deck/${link.token}`, expires_at: link.expiresAt,
     allow_download: allowDownload, allow_forwarding: allowForwarding,

@@ -49,7 +49,8 @@ export const IMAGE_TAGS = ['illustration', 'photo', 'screenshot', 'logo'] as con
 export const IMAGE_FITS = ['cover', 'contain'] as const;
 export const OVERLAYS = ['none', 'light', 'strong'] as const;
 export const VIDEO_RATIOS = ['16:9', '9:16'] as const;
-export const THEME_KINDS = ['brand', 'neutral_light', 'neutral_dark'] as const;
+/** D1517 (#3769): Sand, Ocean and Forest join the three of D898 (pd7). */
+export const THEME_KINDS = ['brand', 'neutral_light', 'neutral_dark', 'sand', 'ocean', 'forest'] as const;
 
 /** The audiences a version is written for (PD3). */
 export const AUDIENCES = ['angel', 'pre_seed_fund', 'seed_fund', 'series_a_fund', 'strategic', 'grant', 'other'] as const;

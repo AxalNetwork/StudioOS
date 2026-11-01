@@ -146,6 +146,24 @@ composer in the Sheet (IV-D3); the participants timeline (REC3); Ask as a
 bottom sheet on the record (IV-M5, after #3706). Two files arrived and none
 left this folder.
 
+## Landed 2026-11-01 — Work and company compliance (#3968)
+
+The owner's artifacts `6snU4LwGECSELCgYtneiB3` (the page, `Work Compliance Page.dc.html`)
+and `XJd9TTJgzjdasWvuJv6ArV` (the board grid, `Work Compliance · Boards.dc.html`)
+were decoded by `scripts/read-canvas.mjs`. They draw **WK0 to WK8** (a project's
+Work: entry points, board, backlog, burn-up, item sheet, run detail, activity
+feed, workload, states) and **CO1 to CO5** (a company's compliance tasks: the
+company card, the agenda, the task sheet with "Create work in a project…", the
+Calendar, states). They follow the consolidated prompts, not S1's Prompt 1 v3
+(tasks as GitHub Issues), which waits for its own canvas (the owner, 2026-11-01).
+
+**One edit, named.** The Axal mark (the export's `uploads/axal-logo-200x200.png`)
+points at `/axal-mark.png`. No other value was edited.
+
+**Grade: UPGRADE (D1614).** `frontend/src/pages/work/` draws the board, backlog,
+burn-up, item and run sheets and the compliance agenda and task sheet, behind
+`frontend/src/pages/work/workAdapter.js`, which is off until #3969–#3972 and #3976.
+Two files arrived and none left this folder.
 ## Landed 2026-11-01 — The Ask panel (#3706)
 
 The owner's artifacts `6228BkjTtjxMY7C5mmMZRu` (the page, `Ask Panel Page.dc.html`)
