@@ -2137,6 +2137,15 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 
 Saves: `PUT`/`POST` of a version keep `card.structure` (one of the 17, or `custom`) and `card.areas` (≤ 12, whole cells, no overlap) and refuse a bad one with its sentence (`modelProblems`); `theme.aspect` keeps `4:3`, and 16:9 is the default left out.
 
+
+### Deck quality floor (D1517, #3769)
+
+No new route. What changes on existing routes:
+- `GET /api/decks/model` serves six themes in `themes`: `brand`, `neutral_light`, `neutral_dark`, `sand`, `ocean` and `forest`.
+- A version's save accepts any of the six as `theme.kind`, and its refusal names the list.
+- `POST /api/decks/new/quote` and the two build runs send each card's `headline_max_chars` and `body_max_chars` in their message.
+- A built card's fit problems are fixed or dropped, never moved to the notes. `cards_unsound` 500 comes only from the slide model's own checks.
+- The images plan (`deck_images.ts`, `imagePlan`) proposes art for any empty image area and names it in `areas`.
 ### Deck v2 A13: untrusted input framing and upload hardening (D1506, #3757)
 
 - **No page changes.** The canvas draws no screen for this (pd2, pd19 and pd20 send the text it frames).
