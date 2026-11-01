@@ -58,6 +58,8 @@
  *   GET    /telegram/webhook        the interview bot's health (D756): getMe and getWebhookInfo, as codes;
  *                                   503 not_configured with the missing secret NAMES when it is unset
  *   POST   /telegram/webhook        setWebhook with secret_token and the business update types
+ *   GET    /whatsapp/axal-sends     D855 §5 q4: this month's sends from Axal's own number against
+ *                                   the 1,000 free service messages, counts only
  *
  * A WEBHOOK PERSISTS, THEN ACKNOWLEDGES (D684 §11). Verify what a header can
  * prove before reading the body (Telegram's secret) → read the body under its
@@ -133,6 +135,7 @@ import {
 } from '../services/channels/connections';
 import { createLinkCode, pendingLinkView } from '../services/channels/linkCodes';
 import { beginOutbound, finishOutbound, applyDeliveryStatus, type OutboundRow } from '../services/channels/outbound';
+import { isAxalNumberKey, readAxalSends } from '../services/channels/axalSends';
 import {
   admitConsentedThread, applyDelete, applyEdit, assignThread, forgetConnection, inInterview, intervieweeLabel, listThreads, noteVoiceTry,
   queueVoiceTranscriptions, readThread, releaseVoiceNote, replyWindowOpen, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote,
@@ -1057,9 +1060,20 @@ async function handleManageChat(env: Env, claim: number, ev: InboundManageChat):
 /** Wrong or repeated `LINK` codes a sender may send per hour, counted on a hash of the sender. */
 const WA_LINK_TRIES_PER_SENDER_HOUR = 5;
 
+/**
+ * D855 §5 q4 (#3733): every send from Axal's number carries a key the monthly
+ * count reads (`axalSends.ts`); one that would not be counted is not sent.
+ */
+function axalKeyCounted(clientKey: string): boolean {
+  if (isAxalNumberKey(clientKey)) return true;
+  console.error('[channels] axal number send refused code=uncounted_key');
+  return false;
+}
+
 /** One reply from Axal's number, once per client key, through the outbound ledger. A failure never fails the webhook. */
 /** The capture's consent question: reply buttons from Axal's number, once per client key. */
 async function axalAsk(env: Env, userId: number, clientKey: string, to: string, body: string, buttons: { id: string; title: string }[]): Promise<void> {
+  if (!axalKeyCounted(clientKey)) return;
   const { row, existing } = await beginOutbound(env, 'whatsapp', userId, null, clientKey);
   if (existing) return;
   const r = await whatsapp.sendAxalInteractive(env, to, { body, buttons }).catch(() => ({ ok: false, code: 'send_unknown' } as SendResult));
@@ -1068,6 +1082,7 @@ async function axalAsk(env: Env, userId: number, clientKey: string, to: string, 
 }
 
 async function axalReply(env: Env, userId: number, clientKey: string, to: string, text: string): Promise<void> {
+  if (!axalKeyCounted(clientKey)) return;
   const { row, existing } = await beginOutbound(env, 'whatsapp', userId, null, clientKey);
   if (existing) return;
   const r = await whatsapp.sendAxalText(env, to, text).catch(() => ({ ok: false, code: 'send_unknown' } as SendResult));
@@ -1652,6 +1667,16 @@ channelsAdmin.get('/telegram/webhook', async (c) => {
   }
   const health = await telegram.readTelegramHealth(c.env, webhookUrl(c.env));
   return c.json({ configured: true, ...health, checked_at: new Date().toISOString() });
+});
+
+/**
+ * D855 §5 question 4 (#3733 part 3): this month's sends from Axal's own
+ * WhatsApp number against Meta's 1,000 free service messages. Counts only,
+ * read from the outbound ledger; it stops no send.
+ */
+channelsAdmin.get('/whatsapp/axal-sends', async (c) => {
+  await requireSuperAdmin(c);
+  return c.json({ ...(await readAxalSends(c.env)), checked_at: new Date().toISOString() });
 });
 
 channelsAdmin.post('/telegram/webhook', async (c) => {

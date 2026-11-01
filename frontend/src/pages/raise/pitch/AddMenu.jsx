@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart3, Image as ImageIcon, LayoutGrid, Palette, Plug, Plus, Type } from 'lucide-react';
 import { deckAssistApi } from '../../../lib/api/deckAssist';
-import { publicPricingApi } from '../../../lib/api/publicPricing';
 import { railProposalsApi } from '../../../lib/api/railProposals';
 import { railPressHeaders } from '../../../lib/railPage';
 import { reportError } from '../../../lib/log';
@@ -9,7 +8,7 @@ import useAssistMode from '../../../hooks/useAssistMode';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { aiTokens, refusalOf } from './newDeckModel';
 import { addBlock, firstFree } from './editorModel';
-import { ADD_ITEMS, AI_OFF_LINE, CHART_TOOLS, FREE_LINE, chartProposal, railModelRows } from './deckAssistModel';
+import { ADD_ITEMS, AI_OFF_LINE, CHART_TOOLS, FREE_LINE, chartProposal } from './deckAssistModel';
 import { COST, EYE, GHOST, INK, LAV, MUTED, PRIMARY, PressDialog, RefusalLine, TokensDialog } from './AssistParts';
 import ConnectorLightbox from './ConnectorLightbox';
 
@@ -28,8 +27,9 @@ const ICONS = { text: Type, chart: BarChart3, image: ImageIcon, background: Pale
  *   Layout               the Design panel (PD8)
  *   From a connector     PD9d's lightbox (`ConnectorLightbox`)
  *
- * The rail row (PD28) lists this page's models with their catalogue prices.
- * Mounted by `PitchEditor.jsx`.
+ * No model is listed or picked here (D1604, plan §1.2): the model each run
+ * uses is set in the AIRail, the one place models live. Mounted by
+ * `BlockTools.jsx` for an empty range.
  */
 export default function AddMenu({ deckId, cardIndex, card, model, items, onBlock, onDesign, onImage, onPlace, onAddCard }) {
   const [on] = useAssistMode('raise');
@@ -44,14 +44,13 @@ export default function AddMenu({ deckId, cardIndex, card, model, items, onBlock
   const [proposal, setProposal] = useState(null);
   const [placeError, setPlaceError] = useState(null);
   const [costs, setCosts] = useState({});
-  const [catalogue, setCatalogue] = useState(null);
 
   useRailOption(busy ? ({ chart: 'deck:chart', table: 'deck:table', timeline: 'deck:timeline' })[press?.action] : null, press?.label);
 
   const heading = String(card?.title || '').trim();
   const body = (action) => ({ action, ...(heading ? { heading } : {}) });
 
-  // The costs and the models are read when the chart tools open, not before.
+  // The costs are read when the chart tools open, not before.
   useEffect(() => {
     if (!charts) return undefined;
     let live = true;
@@ -63,7 +62,6 @@ export default function AddMenu({ deckId, cardIndex, card, model, items, onBlock
         );
       }
     }
-    publicPricingApi.aiModels().then((r) => { if (live) setCatalogue(r?.models || []); }, () => { if (live) setCatalogue([]); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charts, on, deckId, cardIndex]);
@@ -147,7 +145,7 @@ export default function AddMenu({ deckId, cardIndex, card, model, items, onBlock
             ))}
             <button type="button" className={GHOST} onClick={() => { setCharts(false); setProposal(null); }}>Close</button>
           </div>
-          <span className={MUTED}>Eadwyn chooses which recorded figures to show. Each series is bound to its source, so its values come from your records. {FREE_LINE}</span>
+          <span className={MUTED}>Eadwyn chooses which recorded figures to show. Each series is bound to its source, so its values come from your records. {FREE_LINE} The model it uses is set in the AIRail.</span>
           {proposal ? (
             <div className="flex flex-col gap-2 rounded-[8px] bg-white/70 p-2.5 dark:bg-violet-950/60" data-testid="pitch-add-proposal">
               <span className={EYE}>Proposed by Eadwyn{proposal.cost ? ` · ${proposal.cost}` : ''}</span>
@@ -160,7 +158,6 @@ export default function AddMenu({ deckId, cardIndex, card, model, items, onBlock
               <RefusalLine refusal={placeError} testId="pitch-add-place-error" />
             </div>
           ) : null}
-          <RailModels catalogue={catalogue} />
         </div>
       ) : null}
 
@@ -174,26 +171,6 @@ export default function AddMenu({ deckId, cardIndex, card, model, items, onBlock
         <ConnectorLightbox deckId={deckId} cardIndex={cardIndex} items={items} onClose={() => setConnector(false)}
           onAdd={(c) => { setConnector(false); onAddCard(c); }} />
       ) : null}
-    </div>
-  );
-}
-
-/** PD28: the models on this page's rail, priced from the catalogue. */
-function RailModels({ catalogue }) {
-  if (!catalogue) return <span className={MUTED}>Reading the models…</span>;
-  return (
-    <div className="flex flex-col gap-1" data-testid="pitch-add-models">
-      <span className={EYE}>Models on this page</span>
-      <ul className="m-0 flex list-none flex-col gap-1 p-0">
-        {railModelRows(catalogue).map((m) => (
-          <li key={m.id} className="flex flex-wrap items-baseline gap-x-2 text-[12px]" data-testid={`pitch-add-model-${m.name.replace(/[^A-Za-z0-9]+/g, '-').toLowerCase()}`}>
-            <b className={INK}>{m.name}</b>
-            <span className={MUTED}>{m.role}</span>
-            {m.price ? <span className={COST}>{m.price}</span> : null}
-            {m.unrouted ? <span className={MUTED}>{m.unrouted}</span> : null}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

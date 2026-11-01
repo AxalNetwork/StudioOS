@@ -21,6 +21,7 @@ import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
 import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
 import { logCycleWriteStatement, type BuildModuleSlug as ActivityBuildSlug } from '../services/cycleActivity';
+import { posthogKpiTexts } from '../services/posthog/build';
 import { createdId, featureCreateStatements, feedbackLink, mustHaveCreateStatements, roadmapCreateStatements } from '../services/buildCreates';
 import { hasRecords } from '../services/records/index';
 import { ownedRow } from '../services/records/owned';
@@ -383,9 +384,12 @@ async function roadmap(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead
   const series: ChartSpec[] = items.length ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later', 'Done'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
   if (trend.length) series.push({ kind: 'vbars', values: trend.map(([, ids]) => ids.size), labels: trend.map(([month], at) => ({ at, label: month })) });
   const thisMonth = new Date().toISOString().slice(0, 7);
+  // D1606: a PostHog KPI reads its value and source, or why it has none, never its key.
+  const posthog = items.some(i => typeof i.kpi_key === 'string' && i.kpi_key.startsWith('posthog-')) ? await posthogKpiTexts(env, p.id) : new Map<string, string>();
+  const kpiWords = (k: unknown) => (typeof k === 'string' && k.startsWith('posthog-') ? posthog.get(k) ?? 'PostHog metric · Not recorded: no longer tracked' : k);
   // Moves reads the feedback theme an item answers and the KPI it moves.
   const itemRows = items.map(i => record(i.id,
-    { item: i.objective, column: i.kanban_status, moves: [i.feedback_theme, i.kpi_key].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
+    { item: i.objective, column: i.kanban_status, moves: [i.feedback_theme, kpiWords(i.kpi_key)].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
     { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
     { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
       kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null }));

@@ -92,6 +92,8 @@ const OWNER_AREAS = {
   data_room: ok(3, 600), diligence_files: ok(1, 800), research_library: ok(1, 600),
   interview_recordings: ok(2, 900), data_room_versions: ok(1, 50), session_audio: ok(2, 220), deck_reviews: ok(2, 2100),
   validate_evidence: ok(1, 210), build_proofs: ok(2, 450), grow_minutes: ok(1, 240), brand_files: ok(2, 60), csv_imports: ok(1, 45),
+  // D1411: no article of theirs, so no list is made and none is counted.
+  articles: ok(0, 0),
 };
 
 test('D1169: every member store counts, company files count to the company owner, and signed copies never count', async () => {
@@ -103,7 +105,7 @@ test('D1169: every member store counts, company files count to the company owner
     const { kind: _k, key: _key, ...got } = area(body, key);
     assert.deepEqual(got, want, key);
   }
-  assert.equal(body.areas.length, 12);
+  assert.equal(body.areas.length, 13, 'D1411 adds articles');
   assert.deepEqual(body.areas.slice(0, 4).map((a: any) => a.key), ['data_room', 'diligence_files', 'research_library', 'interview_recordings']);
   assert.equal(body.total_bytes, 6275); assert.equal(body.measured_bytes, 6275);
   assert.equal(body.files, 19); assert.equal(body.unknown_size_files, 0);
@@ -126,7 +128,7 @@ test('D1169: kinds group the areas in the canvas order and sum exactly', async (
   for (const [key, [files, bytes]] of Object.entries(want)) assert.deepEqual(kind(body, key), { key, ...ok(files, bytes) }, key);
   const kindOf: Record<string, string> = { data_room: 'data_room', data_room_versions: 'data_room', research_library: 'documents', validate_evidence: 'documents',
     build_proofs: 'documents', grow_minutes: 'documents', diligence_files: 'documents', interview_recordings: 'recordings', session_audio: 'recordings',
-    deck_reviews: 'decks_exports', brand_files: 'brand', csv_imports: 'other' };
+    deck_reviews: 'decks_exports', brand_files: 'brand', csv_imports: 'other', articles: 'other' };
   for (const a of body.areas) assert.equal(a.kind, kindOf[a.key], a.key);
 });
 
@@ -283,8 +285,10 @@ test('D1169: the read touches only member stores; fund, legal, identity, 83(b) a
     'company_profiles', 'compliance_events', 'data_imports', 'data_room_file_versions', 'data_room_files', 'dd_attachments', 'deck_reviews',
     'demand_signals', 'discovery_interviews', 'entity_obligations', 'formation_steps', 'interview_session_chunks', 'interview_sessions',
     'member_files', 'obligation_occurrences', 'projects', 'research_documents', 'user_company_links', 'users',
-  ]);
-  for (const never of ['legal_notice_files', 'legal_document_files', 'documents', 'kyc', 'fund', 'publications', 'articles']) assert.ok(!tables.has(never), never);
+    // D1411 (#3894): a member's own articles, to list their objects in R2.
+    'articles',
+  ].sort());
+  for (const never of ['legal_notice_files', 'legal_document_files', 'documents', 'kyc', 'fund', 'publications']) assert.ok(!tables.has(never), never);
   // Four D1169 queries (each data room area's groups and largest) and D1170's two per-owner statements.
   assert.equal((src.match(/source_kind <> 'signed'/g) ?? []).length, 6, 'every data room query leaves signed copies out');
 });

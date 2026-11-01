@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Founder · Raise › Pitch deck studio</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Pitch deck studio v2</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">The studio home, New deck and the editor on The Grid. One row of controls: ⋯, Present, Share, Save version and one Ask. Tools appear when a card or area is selected, one Ask per selection. Models are chosen in the AIRail only. No chat anywhere.</p>
+</header>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="10">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.noteOn }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:900px;font-size:13.5px;line-height:1.5;color:#4a4553">{{ b.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.capOn }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Pitch Deck Studio v2 Page" v="{{ f.v }}" hint-size="1440px,900px"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const WIDE = new Set(['pd20', 'pd9k', 'pd9k-d', 'aird1']);
+    const fr0 = (v, w, cap) => ({ v, cap: cap || '', capOn: !!cap, wst: 'width:' + w + 'px;border-radius:' + (w === 390 ? 28 : 14) + 'px;overflow:hidden;border:1px solid ' + (/-d$/.test(v) ? '#374151' : '#dedbe5') + ';box-shadow:0 20px 50px rgba(24,24,27,.10)' });
+    const fr = (v, w, cap) => { const o = fr0(v, w, cap); if (WIDE.has(v)) o.wst = o.wst.replace(/width:\d+px/, 'width:max-content').replace('border-radius:28px', 'border-radius:14px'); return o; };
+    const B = (id, t, frames, note) => ({ id, t, frames, note: note || '', noteOn: !!note });
+    const boards = [
+      B('Page', 'Raise › Pitch deck studio in the full shell', [fr('pd0', 1440)]),
+      B('PD-1', 'Studio home', [fr('pd1', 1440, 'Decks, templates and the Data ready meter'), fr('pd29', 1440, 'Templates gallery')]),
+      B('PD-2', 'New deck', [fr('pd2', 1280, 'Audience and round, sources, outline · one page'), fr('pd23', 1180, 'Outline by stage · reorder'), fr('pd2b', 1000, 'Build · live progress'), fr('pd2c', 1000, 'The return banner')]),
+      B('PD-3', 'The editor', [fr('pd3', 1440, 'Thumbnails · slide on The Grid · one row of controls'), fr('pd3b', 1100, 'The Grid · columns, rows, margins'), fr('pd26', 1180, 'Align and distribute'), fr('pd27', 1000, 'Images · aspect locked'), fr('pd28', 1180, 'Icons, shapes, dividers, textures'), fr('pd33', 1200, 'Comments on a card')], 'Tools appear only when a card or area is selected. The header keeps ⋯, Present, Share, Save version and one Ask.'),
+      B('PD-4', 'Select an area, then Ask', [fr('pd11', 1180, 'Click an area · one Ask'), fr('pd13', 1240, 'Per-area toolbar and the ⋯ menu'), fr('pd12', 1000, 'Body fits its area'), fr('pd4', 1040, 'Generate into 2 areas'), fr('pd14', 1000, 'Generate into 3 areas · one quote'), fr('pd15', 1000, 'Results · proposed'), fr('pd19', 1440, 'Instruction anchored to the selection'), fr('pd20', 390, 'Instruction · phone')], 'Each element shows its source and its cost before Generate. The model is the one set in the AIRail. Insert snaps it into the area.'),
+      B('PD-5', 'Smart layouts', [fr('pd10', 1240, 'Structure and reflow'), fr('pd5', 1100, 'Remix this slide · 4 layouts, no AI charge')]),
+      B('PD-6', 'Data-bound elements', [fr('pd6', 1180, 'A linked chart'), fr('pd24', 1000, 'Linked metric tiles'), fr('pd25', 1200, 'Check claims')], 'A chart or tile keeps its source chip and grade, and offers Refresh from records when the record changed.'),
+      B('PD-7', 'Themes and brand kit', [fr('pd7', 1180, 'Theme'), fr('pd31', 1180, 'Brand kit and locks'), fr('pd30', 1180, 'Start from a .pptx template'), fr('pd32', 1000, 'Presence · co-editing')]),
+      B('PD-8', 'Present and share', [fr('pd8', 1280, 'Present'), fr('pd38', 1280, 'Rehearse · pitch length'), fr('pd36', 1280, 'Record a pitch'), fr('pd39', 1180, 'Rehearsal report'), fr('pd34', 1000, 'Share with cards not Done'), fr('pd35', 1340, 'Share'), fr('pd37', 1180, 'Viewer analytics'), fr('pd8b', 1100, 'Export · PDF, PPTX, HTML')]),
+      B('PD-9', 'States', [fr('pd9a', 1180, 'Empty'), fr('pd9b', 1180, 'Loading'), fr('pd9c', 900, 'Sources could not be read'), fr('pd9d', 1180, 'Out of AI tokens'), fr('pd9n', 860, 'Areas finish one by one'), fr('pd9j', 760, 'Missing data'), fr('pd9e', 1180, 'AI paused'), fr('pd9f', 1180, 'Plan gate'), fr('pd9h', 1180, 'Advisor or partner without a grant'), fr('pd9g', 1440, 'Read-only HQ access'), fr('pd9k', 390, 'Phone · view and light edits'), fr('pd9k-d', 390, 'Phone · dark'), fr('pd9l', 768, 'Tablet'), fr('pd1-d', 1440, 'Dark · home'), fr('pd3-d', 1440, 'Dark · editor')], 'Rare states (offline, edit conflicts, refused instructions, gated quotes, a failed element) are left to the build.'),
+      B('Ask', 'Ask and the AIRail', [fr('pd40', 1180, 'Ask states and names'), fr('aird1', 280, 'The rail'), fr('aird2', 1060, 'All models · Images'), fr('aird3', 420, 'Usage'), fr('aird5', 1180, 'A group an admin locked')], 'The rail holds model choices, usage and the AI switch only. Every action sits in the page or on the selection.')
+    ];
+    return { boards };
+  }
+}
+</script>
+</body></html>

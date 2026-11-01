@@ -322,6 +322,8 @@ export const STORAGE_AREAS = [
   ['grow_minutes', 'Grow minutes'],
   ['brand_files', 'Your photo and logos'],
   ['csv_imports', 'Imports'],
+  // D1411 (#3894): article uploads, covers and generated images, counted to the article's author.
+  ['articles', 'Articles'],
 ];
 
 /**

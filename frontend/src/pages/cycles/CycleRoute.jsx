@@ -45,6 +45,8 @@ import FromLovable from './FromLovable';
 import ValidateFromGoogle from './ValidateFromGoogle';
 import { DurableFromGoogle, RevenueFromGoogle } from './GrowFromGoogle';
 import FromNotion from './FromNotion';
+import { ValidateDemandPosthog, ValidateExperimentsPosthog } from './ValidatePosthog';
+import RaisePosthog from './RaisePosthog';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
 import ContentCalendar from './ContentCalendar';
@@ -61,7 +63,7 @@ import { acceptSuggestions } from './validatePhone';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions';
 import FormLightbox from './FormLightbox';
 import { FillModule } from './FillRowsPanel';
-import { fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
+import { fillRecordId, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
@@ -151,7 +153,13 @@ const CYCLE_DEFS = {
       ),
       // D1087 (#2952): research pages from Notion, as sources (title and link).
       'market-intelligence': (_data, ctx) => <FromNotion section="validate" projectId={ctx.projectId} module="market_intelligence" />,
-      'demand-signals': (data, ctx) => <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />,
+      'demand-signals': (data, ctx) => (
+        <>
+          <ValidateFromGoogle part={data?.parts?.from_google} module="demand_signals" projectId={ctx.projectId} reload={ctx.reload} />
+          {/* D1605 (#3731): the founder's PostHog, beside the waitlist and never added to it. */}
+          <ValidateDemandPosthog projectId={ctx.projectId} />
+        </>
+      ),
       'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
         onExport={() => api.exportValidatePainMap(ctx.projectId)}
         // #1692's `attach` on the theme record, so the theme's activity logs it.
@@ -169,6 +177,9 @@ const CYCLE_DEFS = {
             // Only until #1656 registers New hypothesis as the table's Add (decision 20).
             onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />
           <ValidateFromGoogle part={data?.parts?.from_google} module="experiments" projectId={ctx.projectId} reload={ctx.reload} />
+          {/* D1605 (#3731): PostHog experiments and surveys; the hypothesis and direction are the founder's. */}
+          <ValidateExperimentsPosthog projectId={ctx.projectId}
+            loadHypotheses={() => api.getValidationBoard(ctx.projectId).then((board) => (board?.hypotheses || []).filter((h) => !h.retired_at))} />
         </>
       ),
       // D693 decision 13 (#1704): the verdict zone's Export summary, under the Decisions table.
@@ -217,6 +228,8 @@ const CYCLE_DEFS = {
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => (
         <>
           {mercuryPart(m.slug, data, ctx)}
+          {/* D1607 (#3731): Pitch deck's PostHog metrics; Readiness and Narrative draw theirs below. */}
+          <RaisePosthog slug={m.slug} projectId={ctx.projectId} />
           <EvidencePart slug={m.slug} projectId={ctx.projectId} />
         </>
       )])),
@@ -226,6 +239,7 @@ const CYCLE_DEFS = {
         <>
           <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
           {mercuryPart('investor-narrative', data, ctx)}
+          <RaisePosthog slug="investor-narrative" projectId={ctx.projectId} />
           <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
         </>
       ),
@@ -234,6 +248,7 @@ const CYCLE_DEFS = {
         <>
           <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
           {mercuryPart('fundraising-readiness', data, ctx)}
+          <RaisePosthog slug="fundraising-readiness" projectId={ctx.projectId} />
           <EvidencePart slug="fundraising-readiness" projectId={ctx.projectId} />
         </>
       ),
@@ -598,7 +613,7 @@ function GrowMount({ projectId, onClose, onDone, asPage }) {
 }
 
 /** D696: a scoped record read and its declared actions; the route owns every mount. */
-export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, edit, navigate, back }) {
+export function useCycleRecord({ fillFor = () => null, enabled, cycle, projectId, slug, id, reload, edit, navigate, back }) {
   const location = useLocation();
   const key = `${cycle}/${projectId}/${slug}/${id}`;
   const currentKey = useRef(key); currentKey.current = key;
@@ -686,6 +701,7 @@ export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, ed
     },
     form: formSpec ? <FormLightbox key={`${key}/${selected.key}`} form={formSpec.form} current={formSpec.current}
       cycle={cycle} slug={slug}
+      fill={selected.key === 'edit' ? fillFor(formSpec.form, formSpec.id) : null}
       loadOptions={selected.key === 'edit' && edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, formSpec.id) : null}
       onSubmit={values => perform(selected, values)} onClose={closeForm} /> : null,
     confirm: confirmation ? <Lightbox size="fit" width={420} label={confirmation.title} title={confirmation.title}
@@ -857,7 +873,18 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     : record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
   // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
   const capRelTab = record && cycle === 'raise' && isCapRelTab(slug, recordId) ? recordId : null;
-  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def,
+  // D1328 (#3489): Fill with Eadwyn on a founder form FILL_FIELDS lists (AF3, AF7), and a
+  // waiting row's Edit (AF16), which opens its Add form with the row's values.
+  // #3740 part 1: an Edit form passes its row id, so the sheet reads the saved row (`record`).
+  const fillRow = location.state?.fillRow && typeof location.state.fillRow.uid === 'string' ? location.state.fillRow : null;
+  const fillFor = (entry, rowId = null) => {
+    const t = !narrativeAdmin && projectId ? fillTarget(cycle, slug, entry?.key) : null;
+    if (!t) return null;
+    const record = fillRecordId(rowId);
+    return { ...t, project: projectId, aiOff: !fillsOn, ...(record ? { record } : {}),
+      edited: rowId == null && fillRow && fillRow.form === entry.key ? fillRow : null };
+  };
+  const recordState = useCycleRecord({ fillFor, enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def,
     cycle, projectId, slug, id: recordId, reload, edit, navigate, back: `/${cycle}/${slug}${q}` });
   useScrollToHash(record ? recordState.status !== 'ready' : moduleStatus !== 'ready');
   // The page re-reads once the lightbox is gone, however it went: ×, Escape and
@@ -968,13 +995,6 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const saved = () => { dirty.current = true; };
   const uofAssistant = cycle === 'raise' && slug === USE_OF_FUNDS && user?.role === 'founder'
     ? props => <UseOfFundsMilestoneWording key={projectId} projectId={projectId} {...props} /> : undefined;
-  // D1328 (#3489): Fill with Eadwyn on a founder form FILL_FIELDS lists (AF3, AF7), and a
-  // waiting row's Edit (AF16), which opens its Add form with the row's values.
-  const fillRow = location.state?.fillRow && typeof location.state.fillRow.uid === 'string' ? location.state.fillRow : null;
-  const fillFor = (entry) => {
-    const t = !narrativeAdmin && projectId ? fillTarget(cycle, slug, entry?.key) : null;
-    return t ? { ...t, project: projectId, aiOff: !fillsOn, edited: fillRow && fillRow.form === entry.key ? fillRow : null } : null;
-  };
   const moduleFill = !narrativeAdmin && projectId && slug ? moduleFillTarget(cycle, slug, forms) : null;
   // #3712: Add/Edit dialogs sit outside the page gate, including phone sheets.
   // The authenticated role decides read-only access; shell preview never grants writes.
@@ -999,6 +1019,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       rowEdit?.spec ? (
         <FormLightbox key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} {...narrativeAccess} cycle={cycle} slug={slug}
           renderAssistant={uofAssistant}
+          fill={fillFor(rowEdit.spec.form, rowEdit.spec.id)}
           loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
           onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
           onSaved={saved}
@@ -1010,6 +1031,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     ) : editing && edit.idOf(editing) != null ? (
       <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} {...narrativeAccess} cycle={cycle} slug={slug}
         renderAssistant={uofAssistant}
+        fill={fillFor(edit, edit.idOf(editing))}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
         onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
         onSaved={saved}

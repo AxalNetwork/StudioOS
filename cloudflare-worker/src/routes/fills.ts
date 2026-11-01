@@ -62,7 +62,7 @@ const SENTENCES: Record<string, string> = {
   edited: 'The field has changed since it was filled, so it is yours now. Nothing was undone.',
   no_prior: 'The field was blank before, and it cannot be left blank, so there is nothing to put back.',
   // D1329 (#3490): a record that is not a venture's.
-  no_profile: 'Fill opens once you hold a venture or a profile.',
+  no_profile: 'Ask opens once you hold a venture or a profile.', // #3740: matches EXPLORER_OFF (lib/fillScoped.js)
   record_not_available: 'You cannot read this record.',
   record_not_writable: 'You cannot change this record.',
 };
