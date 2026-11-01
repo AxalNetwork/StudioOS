@@ -823,8 +823,15 @@ host's or an admin's. Each module answers `form-options` with its chips.
 `cycle_raise.ts`, mounted at `/api/cycles/raise`, is the Worker half of the
 Raise cycle in `Cycle Overview.dc.html` (cycle Raise, O3) and
 `Cycle Modules · Boards.dc.html` (MR1–MR7). `GET /overview?project=` returns
-four figures (readiness score out of 100, committed against the target,
-investors in conversation, months of runway) and seven cards.
+six figures (readiness score out of 100, committed against the target,
+investors in conversation, months of runway, and since D1610 deck views over
+8 weeks and data-room files) and seven cards. D1610 (#3943) adds `next_steps`
+(up to three readiness items by score gain, never Team, `gain_points` null when
+unknown), `connectors` (Mercury, GitHub and Google Workspace: state, a count
+fact and the last read, `as_of` null when none is stored) and the Cap table
+card's `plan` (locked below Raise + Grow). Staff (D1191) get four figures, never
+Committed or Investors in conversation, plus the same `next_steps` and
+`connectors`. The readiness legend has four shades, Stated its own (`v4`).
 `GET /modules/:slug?project=` returns one card and its records table. The
 slugs are `fundraising-readiness`, `investor-narrative`, `pitch-deck`,
 `data-room`, `cap-table`, `use-of-funds` and `capital-relationships`. The

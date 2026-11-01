@@ -319,6 +319,8 @@ and seven cards for `../routes/cycle_grow.ts`. `revenueMovements.ts` splits the
 revenue ledger into new, expansion and churned by month (only when customers can
 be told apart; churn needs two billings) and rewrites `revenue_movements`.
 
+D1610: `raiseCycle.ts` also computes the overview's six figures (four for staff), `nextSteps` (readiness items by score gain, never Team), `connectors` (Mercury, GitHub and Google Workspace: a count and the last read, never a login or file name), the four evidence shades and the Cap table card's `capTablePlan`.
+
 D1150: `raiseCycle.ts` also owns the stored-receipt projection `receivedCommitment`: investor/commitment owner/company checked, only receipt id/time returned, no bank fields or provider read. It stays beside D752’s `receivedDates` boundary.
 
 D663: `raiseCycle.ts` computes the Raise figures, seven cards and records, plus D686's independently readable, project-scoped Calls history, for
