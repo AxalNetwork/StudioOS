@@ -432,7 +432,7 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
   - deletion that removes the R2 audio and writes an audit row.
 - `sttFormats.ts` has, for each speech-to-text model, its request and response shapes and its live events, plus the speaker labels.
 - `sttModels.ts` lists the models the rail offers, priced from `aiRouter`'s own tables.
-- `liveTranscription.ts` is the WebSocket relay to Workers AI. It holds the D640 budget in four-minute blocks and settles them on the minutes streamed.
+- `liveTranscription.ts` is the WebSocket relay to Workers AI. It holds the D640 budget in four-minute blocks and settles them on the minutes streamed. Since #3936 (D1478 task 2, part 2) it takes `run()`'s steps: the VA2 live job decides the model (`liveChoice`), each block also holds the guard's share, the stream's final text goes through the output guard (`guardFinalText`), and one `ai_usage_logs` row records the stream with its guard rows.
 - `sessionSetup.ts` (D685, #1583) holds the setup call's rules:
   - which call providers each channel admits, and the meeting-link host check (video only, HTTPS, the provider's own host);
   - `callLabel`, derived on every read and never stored;

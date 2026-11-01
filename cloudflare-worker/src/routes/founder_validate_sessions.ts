@@ -66,7 +66,8 @@ import {
   DEFAULT_CALL_AUDIO_RETENTION_DAYS, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, retentionFor, setRetention, validRetention,
 } from '../services/callAudioRetention';
 import { WHISPER_TURBO } from '../services/sttFormats';
-import { holdBlock, openLiveRelay } from '../services/liveTranscription';
+import { holdBlock, liveChoice, openLiveRelay } from '../services/liveTranscription';
+import { memberPlanTier } from '../services/ai/drawJobs';
 import { railFor } from '../util/railContext';
 import {
   SETUP_CHANNELS, activeSessionOf, callRefusal, interviewCard, languageFor, listPoints, markInterviewHeld,
@@ -953,6 +954,19 @@ sessions.get('/sessions/:id/live', async (c) => {
   });
   if (blocked) return json(blocked, 409);
   if (s.session.status !== 'recording') return json({ detail: 'not_recording', status: s.session.status }, 409);
+  // #3936 (D1478 task 2, part 2): the live job's (VA2) rules, as run() applies a speech job's: offered, live, and the plan's lock.
+  let tier: Awaited<ReturnType<typeof memberPlanTier>>;
+  try { tier = await memberPlanTier(c.env, s.user.id); }
+  catch { return json({ ok: false, refusal: 'misconfigured', message: 'Unreadable: your plan could not be read. Nothing was run.' }, 503); }
+  const choice = liveChoice(s.session.live_model, c.env as any, tier);
+  if (!choice.ok) {
+    const refusal = choice.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered';
+    await recordReceipt(c.env, s.session.id, {
+      kind: 'live', model: s.session.live_model, requested_model: s.session.live_model, fallback_used: false,
+      audio_minutes: 0, cost_microusd: 0, outcome: 'refused', refusal,
+    });
+    return json({ ok: false, refusal, message: choice.message }, choice.code === 'plan_locked' ? 402 : 409);
+  }
   const first = await holdBlock(c.env, s.user.id, s.session.live_model);
   if (!first.ok) {
     await recordReceipt(c.env, s.session.id, {
