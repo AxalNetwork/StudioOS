@@ -305,6 +305,9 @@ export const FORMATS = [
   // D904 (#2683): a new, editable presentation in the member's own Drive.
   { id: 'google_slides', label: 'Google Slides', line: 'Created in your Drive, editable', available: true },
   { id: 'html', label: 'HTML', line: 'One file, offline', available: true },
+  // D1604 (#3716, pd8b) on D1603's route (#3882): an editable OpenDocument
+  // Presentation for LibreOffice Impress and the other open suites.
+  { id: 'odp', label: 'Slides-suite file (.odp)', line: 'Editable in LibreOffice and other open suites', available: true },
 ];
 
 const LABEL = Object.fromEntries(FORMATS.map((f) => [f.id, f.label]));
@@ -324,6 +327,7 @@ export const OPTIONS_WHERE = {
   pptx: 'In PowerPoint, each card\'s notes are its speaker notes, and the Sources appendix is the last slide.',
   html: 'In the HTML file, the notes sit under each card, and the Sources appendix is the last card.',
   google_slides: 'In Google Slides, each card\'s notes are its speaker notes, and the Sources appendix is the last slide.',
+  odp: 'In the .odp file, each card\'s notes are its speaker notes, and the Sources appendix is the last slide.',
 };
 
 /** What the write changes, said before it happens. */
@@ -376,7 +380,7 @@ export const needsConnect = (body) => ['google_not_connected', 'workspace_not_al
 export const NOT_RECORDED_CREATED = 'The presentation was created in your Drive, but the export could not be recorded here. Nothing was shared.';
 
 export const NOTHING_SHARED = 'Try again in a moment. Nothing was shared.';
-const PRODUCED = { pdf: 'The PDF could not be produced.', pptx: 'The PowerPoint file could not be produced.', html: 'The HTML file could not be produced.', google_slides: 'The presentation could not be created.' };
+const PRODUCED = { pdf: 'The PDF could not be produced.', pptx: 'The PowerPoint file could not be produced.', html: 'The HTML file could not be produced.', google_slides: 'The presentation could not be created.', odp: 'The .odp file could not be produced.' };
 
 /** The sentence a failed export shows (PD25); the Worker's own sentence when it could not record the export. */
 export function exportFailure(format, status, body) {
@@ -404,7 +408,7 @@ export function exportDiagnostic(body) {
 }
 
 export function exportFileName(title, version, format) {
-  const ext = format === 'pptx' ? 'pptx' : format === 'html' ? 'html' : 'pdf';
+  const ext = ['pptx', 'html', 'odp'].includes(format) ? format : 'pdf';
   const base = (str(title) || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
   return `${base}${version == null ? '' : `-v${version}`}.${ext}`;
 }

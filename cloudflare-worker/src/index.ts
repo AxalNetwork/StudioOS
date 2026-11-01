@@ -36,6 +36,7 @@ import authRecover from './routes/auth_recover';
 // /api/auth (magic link + TOTP); never the only path in. See
 // routes/auth_google.ts for the linking precedence and step-up rules.
 import authGoogle from './routes/auth_google';
+import { SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
 import authPasskey from './routes/auth_passkey';
 import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
@@ -2021,6 +2022,14 @@ export default {
         }
         return assetRes;
       }
+    }
+    // D1439 (#3914): a shared record link previews as itself. Before Hono, so
+    // the SPA shell never takes the Worker's nonce CSP or `no-referrer`; the
+    // shell's own headers come from `SHELL_HEADERS`. Only the prefixes in
+    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists).
+    if (env.ASSETS && SOCIAL_CARD_GLOBS.some((g) => pathname.startsWith(g.slice(0, -1)))) {
+      const card = await serveSocialCard(request, env);
+      if (card) return card;
     }
     // Static asset fallback and public page rendering need neither JWT secrets
     // nor role-schema repairs. With an apex-wide route, running those D1

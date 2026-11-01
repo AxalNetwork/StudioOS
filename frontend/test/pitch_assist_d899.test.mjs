@@ -4,11 +4,14 @@
  *   · the model: the tools and their rail options, the cost line, what a press
  *     sends, why a bound figure takes no tool, the connector groups and the
  *     card they make, the rail row's models priced from the catalogue;
- *   · PD7, mounted: the bar on a selected text block shows each tool's cost,
- *     a press opens its cost first, Run sends the press's rail option, the
- *     proposal is the before struck and the after, Accept places it and Save
- *     writes it; a metric tile takes no tool; AI off greys the bar; a 402
- *     opens the tokens dialog;
+ *   · PD7, mounted, since D1604 through "Generate into N areas"
+ *     (`AreaLightbox.jsx`; D899's bar is retired): a text area's Ask shows
+ *     its hold and the AIRail's model first, Generate sends the change's rail
+ *     option (Rewrite; a Title leads with Headline), and Change tone and
+ *     Translate are typed in the instruction box under their own options
+ *     (D1604, plan §0); the proposal is the before
+ *     struck and the after, Accept places it and Save writes it; a metric
+ *     tile takes no tool; AI off greys the Ask; a 402 offers Add tokens;
  *   · the Add menu: Text opens Add a block, Image and Background open D903's
  *     image lightbox, Layout opens Design, Chart proposes a block whose series
  *     are bindings;
@@ -35,13 +38,14 @@ import { deckImagesApi } from '../src/lib/api/deckImages.js';
 import { deckSourcesApi } from '../src/lib/api/deckSources.js';
 import { publicPricingApi } from '../src/lib/api/publicPricing.js';
 import { railProposalsApi } from '../src/lib/api/railProposals.js';
+import { railPrefsApi } from '../src/lib/api/railPrefs.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { __resetAssistModeForTest, seedAssistModes } from '../src/hooks/useAssistMode.js';
 import PitchEditor from '../src/pages/raise/pitch/PitchEditor.jsx';
 import { FIRST_RUN_KEY } from '../src/pages/raise/pitch/editorModel.js';
 import {
-  AI_OFF_LINE, CHART_TOOLS, FIGURE_LINE, RAIL_MODELS, TEXT_TOOLS,
-  blockRefusal, chartProposal, connectorCard, connectorGroups, connectorOf, costLine, railModelRows, syncLine, textBody, textProposal,
+  AI_OFF_LINE, CHART_TOOLS, FIGURE_LINE, TEXT_TOOLS,
+  blockRefusal, chartProposal, connectorCard, connectorGroups, connectorOf, costLine, syncLine, textBody, textProposal,
 } from '../src/pages/raise/pitch/deckAssistModel.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 
@@ -136,21 +140,11 @@ test('connectors group what they feed, and the card they make binds every tile',
   assert.equal(connectorCard([ITEMS[0]], '').title, 'From your records');
 });
 
-test('the rail row lists the four models, priced from the catalogue; FLUX.2 Klein 9B says why it is not routed', () => {
-  assert.deepEqual(RAIL_MODELS.map((m) => m.name), ['Llama 3.3 70B Fast', 'FLUX.2 Klein 9B', 'FLUX.1 Schnell', 'Gemma 4 26B']);
-  const rows = railModelRows(CATALOGUE.models);
-  assert.equal(rows[0].price, '$2.70 per 1M output tokens');
-  assert.equal(rows[2].price, '$0.000063 per tile');
-  assert.equal(rows[1].offered, false);
-  assert.equal(rows[1].price, 'Not offered on your plan', 'a partner model behind AI_PARTNER_MODELS is not in the member catalogue');
-  assert.match(rows[1].unrouted, /Not routed on this page yet/);
-});
-
 /* ------------------------------------------------------------------ *
  * Mounted
  * ------------------------------------------------------------------ */
 
-const ORIGINAL = { api: { ...api }, editor: { ...deckEditorApi }, sources: { ...deckSourcesApi }, assist: { ...deckAssistApi }, proposals: { ...railProposalsApi }, pricing: { ...publicPricingApi } };
+const ORIGINAL = { api: { ...api }, editor: { ...deckEditorApi }, sources: { ...deckSourcesApi }, assist: { ...deckAssistApi }, proposals: { ...railProposalsApi }, pricing: { ...publicPricingApi }, prefs: { ...railPrefsApi }, images: { ...deckImagesApi } };
 
 async function mount(answers = {}, { aiOff = false } = {}) {
   const calls = [];
@@ -171,9 +165,10 @@ async function mount(answers = {}, { aiOff = false } = {}) {
     'pricing.aiModels': async () => CATALOGUE,
     'images.list': async () => ({ images: [] }),
     'images.quote': async () => ({ ai: true, model_label: 'FLUX.1 Schnell', per_image_microusd: 1880, count: 2, total_microusd: 3760, balance: { ok: true } }),
+    'prefs.page': async (_page, option) => ({ ok: true, models: [{ id: 'synthetic/text', name: 'Synthetic Text', price: '$0.0004' }], pick: 'synthetic/text', option }),
     ...answers,
   };
-  const homes = { editor: deckEditorApi, sources: deckSourcesApi, assist: deckAssistApi, proposals: railProposalsApi, pricing: publicPricingApi, images: deckImagesApi };
+  const homes = { editor: deckEditorApi, sources: deckSourcesApi, assist: deckAssistApi, proposals: railProposalsApi, pricing: publicPricingApi, images: deckImagesApi, prefs: railPrefsApi };
   for (const [name, fn] of Object.entries(reads)) {
     const [home, key] = name.includes('.') ? name.split('.') : [null, name];
     (home ? homes[home] : api)[key] = stub(name, fn);
@@ -204,38 +199,53 @@ async function mount(answers = {}, { aiOff = false } = {}) {
       await act(async () => rootEl.unmount()); restore(); __resetAssistModeForTest();
       Object.assign(api, ORIGINAL.api); Object.assign(deckEditorApi, ORIGINAL.editor); Object.assign(deckSourcesApi, ORIGINAL.sources);
       Object.assign(deckAssistApi, ORIGINAL.assist); Object.assign(railProposalsApi, ORIGINAL.proposals); Object.assign(publicPricingApi, ORIGINAL.pricing);
+      Object.assign(railPrefsApi, ORIGINAL.prefs); Object.assign(deckImagesApi, ORIGINAL.images);
     },
   };
 }
 
-test('PD7: a text block\'s bar shows each cost, a press shows its cost first, and Accept places the words that Save writes', async () => {
+test('Ask on a text area: "Generate into 1 area" shows its hold and the AIRail\'s model first; Accept places the words that Save writes', async () => {
   let saved = null;
   const m = await mount({
     'assist.run': async (id, card, body) => ({ proposal: { uid: 'p1' }, action: body.action, option: 'deck:rewrite', before: body.text, after: 'Synthetic founders keep coming back', cost: { charged_microusd: 900, usage_log_id: 5 } }),
     deckUpdate: async (id, body) => { saved = body; return { ...DECK, id: 32, version: 4, slides: body.slides }; },
+    'proposals.list': async () => ({ proposals: [] }),
   });
   try {
-    assert.ok(!m.by('pitch-assist-bar'), 'no bar until a block is selected');
+    // D1604: the header Ask reads what waits once per deck option; a run and a decision each make it read again.
+    const asks = () => m.named('proposals.list').length;
+    const perRead = asks();
+    assert.ok(perRead > 0, 'the header read what waits');
     await m.press(m.by('pitch-editor-block-b1'));
-    assert.ok(m.by('pitch-assist-bar'));
-    assert.match(m.text(m.by('pitch-assist-rewrite-cost')), /up to \$0\.0012/, 'each tool shows its cost on the bar');
-    assert.match(m.text(m.by('pitch-assist-shorten-cost')), /up to \$0\.0010/);
-    assert.equal(m.named('assist.run').length, 0, 'reading costs runs nothing');
-    await m.press(m.by('pitch-assist-rewrite'));
-    assert.match(m.text(m.by('pitch-assist-dialog-cost')), /Up to \$0\.0012 in AI tokens, charged to you when it runs\./, 'the cost before it runs');
-    assert.equal(m.named('assist.run').length, 0, 'opening the dialog runs nothing');
-    await m.press(m.by('pitch-assist-dialog-run'));
+    assert.ok(!m.by('pitch-areas'), 'selected, the lightbox waits for the area\'s Ask');
+    await m.press(m.by('pitch-editor-ask-area'));
+    assert.match(m.text(m.by('pitch-areas')), /Generate into 1 area/);
+    assert.match(m.text(m.by('pitch-areas-row-b1-element')), /Title/, 'a heading starts as Title');
+    assert.equal(m.pr(m.by('pitch-areas-row-b1-change-headline'))['aria-checked'], true, 'a Title leads with its headline: the card has a recorded figure');
+    assert.equal(m.text(m.by('pitch-areas-hold')), 'Holds up to $0.0005 · you pay what it uses');
+    await m.press(m.by('pitch-areas-row-b1-change-rewrite'));
+    assert.equal(m.pr(m.by('pitch-areas-row-b1-change-rewrite'))['aria-checked'], true);
+    assert.equal(m.text(m.by('pitch-areas-hold')), 'Holds up to $0.0012 · you pay what it uses', 'the cost before it runs');
+    assert.equal(m.text(m.by('pitch-areas-row-b1-model')), 'Synthetic Text · $0.0004 per variant · set in the AIRail', 'the model is the AIRail\'s, read-only');
+    assert.deepEqual(m.named('prefs.page').map((c) => c.slice(1)), [['Founder · Raise · Pitch deck', 'deck:rewrite']]);
+    assert.equal(m.named('assist.run').length, 0, 'reading the cost runs nothing');
+    await m.press(m.by('pitch-areas-generate'));
+    assert.equal(asks(), 2 * perRead, 'a run left a proposal: the header reads again');
     const [, deckId, card, body, headers] = m.named('assist.run')[0];
     assert.equal(deckId, 31); assert.equal(card, 0);
     assert.deepEqual(body, { action: 'rewrite', block: { id: 'b1', kind: 'text' }, text: 'Synthetic customers love it' });
-    assert.equal(decodeURIComponent(headers['X-Rail-Option']), 'deck:rewrite', 'the press names its own option');
-    assert.match(m.text(m.by('pitch-assist-proposal-before')), /Synthetic customers love it/);
-    assert.match(m.text(m.by('pitch-assist-proposal-after')), /Synthetic founders keep coming back/);
+    assert.equal(decodeURIComponent(headers['X-Rail-Option']), 'deck:rewrite', 'the run names its own option');
+    assert.match(m.text(m.by('pitch-area-result-b1-before')), /Synthetic customers love it/);
+    assert.match(m.text(m.by('pitch-area-result-b1-after')), /Synthetic founders keep coming back/);
+    assert.match(m.text(m.by('pitch-area-result-b1-pill')), /Proposed · Synthetic Text · \$0\.0009/);
+    assert.match(m.text(m.by('pitch-area-results-charged')), /Charged \$0\.0009 for 1 run\. What a run did not use was released\./);
     assert.match(m.text(m.by('pitch-editor-save-state')), /Saved/, 'a proposal is not a change');
-    await m.press(m.by('pitch-assist-proposal-accept'));
+    await m.press(m.by('pitch-area-result-b1-accept'));
     assert.deepEqual(m.named('proposals.decide').map((c) => c.slice(1)), [['p1', 'accept']]);
+    assert.equal(asks(), 3 * perRead, 'decided: the header reads again');
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic founders keep coming back/, 'Accept places it on the card');
     assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/);
+    await m.press(m.by('pitch-areas-close'));
     await m.press(m.by('pitch-editor-save'));
     await m.press(m.by('pitch-editor-save-run'));
     assert.equal(saved.slides[0].blocks[0].text, 'Synthetic founders keep coming back', 'Save writes the version');
@@ -243,52 +253,50 @@ test('PD7: a text block\'s bar shows each cost, a press shows its cost first, an
   } finally { await m.unmount(); }
 });
 
-test('PD7: Change tone, Translate and Ask send their choice; Discard places nothing', async () => {
+test('Change tone and Translate are typed in the instruction box, under their own options; Discard places nothing', async () => {
   const m = await mount({
     'assist.run': async (id, card, body) => ({ proposal: { uid: `p-${body.action}` }, before: body.text, after: 'Synthetic other words', cost: { charged_microusd: 100 } }),
   });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
-    await m.type(m.by('pitch-assist-tone-choice'), 'formal');
-    await m.press(m.by('pitch-assist-tone'));
-    await m.press(m.by('pitch-assist-dialog-run'));
+    await m.press(m.by('pitch-editor-ask-area'));
+    assert.ok(!m.by('pitch-areas-row-b1-change-tone') && !m.by('pitch-areas-row-b1-change-translate'), 'the lightbox offers neither');
+    await m.press(m.by('pitch-areas-close'));
+    await m.type(m.by('pitch-instruction-field'), 'more formal');
+    await m.press(m.by('pitch-instruction-send'));
+    await m.press(m.by('pitch-instruction-run'));
     assert.equal(m.named('assist.run').at(-1)[3].tone, 'formal');
     assert.equal(decodeURIComponent(m.named('assist.run').at(-1)[4]['X-Rail-Option']), 'deck:tone');
-    await m.press(m.by('pitch-assist-proposal-discard'));
+    await m.press(m.by('pitch-instruction-proposal-discard'));
     assert.deepEqual(m.named('proposals.decide').at(-1).slice(1), ['p-tone', 'discard']);
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers love it/, 'Discard places nothing');
-    await m.type(m.by('pitch-assist-language-choice'), 'German');
-    await m.press(m.by('pitch-assist-translate'));
-    await m.press(m.by('pitch-assist-dialog-run'));
+    await m.type(m.by('pitch-instruction-field'), 'translate into German');
+    await m.press(m.by('pitch-instruction-send'));
+    await m.press(m.by('pitch-instruction-run'));
     assert.equal(m.named('assist.run').at(-1)[3].language, 'German');
-    await m.press(m.by('pitch-assist-proposal-discard'));
-    assert.equal(m.pr(m.by('pitch-assist-ask')).disabled, true, 'Ask needs an instruction');
-    await m.type(m.by('pitch-assist-instruction'), 'Synthetic: say it warmer');
-    await m.press(m.by('pitch-assist-ask'));
-    await m.press(m.by('pitch-assist-dialog-run'));
-    assert.equal(m.named('assist.run').at(-1)[3].instruction, 'Synthetic: say it warmer');
-    assert.equal(decodeURIComponent(m.named('assist.run').at(-1)[4]['X-Rail-Option']), 'deck:rewrite');
+    assert.equal(decodeURIComponent(m.named('assist.run').at(-1)[4]['X-Rail-Option']), 'deck:translate');
   } finally { await m.unmount(); }
 });
 
-test('PD7: a bound figure takes no tool, a refused run shows its sentence, and a 402 opens the tokens dialog', async () => {
+test('a bound figure takes no tool; a refused run shows its sentence; out of tokens offers Add tokens', async () => {
   let fail = Object.assign(new Error('Eadwyn’s wording named a figure your text did not, so it was not placed. Figures come from your records. It was charged for the run.'), { status: 422, code: 'figure_in_output' });
   const m = await mount({ 'assist.run': async () => { throw fail; } });
   try {
     await m.press(m.by('pitch-editor-block-b2'));
-    assert.equal(m.pr(m.by('pitch-assist-rewrite')).disabled, true, 'no tool on a metric tile');
-    assert.match(m.text(m.by('pitch-assist-why')), /Figures come from your records\. Update Grow › Revenue to change this one\./);
+    await m.press(m.by('pitch-editor-ask-area'));
+    assert.ok(!m.by('pitch-areas'), 'no lightbox on a metric tile');
+    assert.match(m.text(m.by('pitch-editor-ask-line')), /Figures come from your records\. Update Grow › Revenue to change this one\./);
     assert.equal(m.named('assist.quote').length, 0, 'a bound figure is not even quoted');
     await m.press(m.by('pitch-editor-block-b1'));
-    await m.press(m.by('pitch-assist-rewrite'));
-    await m.press(m.by('pitch-assist-dialog-run'));
-    assert.match(m.text(m.by('pitch-assist-dialog-refusal')), /named a figure your text did not/);
-    assert.ok(!m.by('pitch-assist-proposal'), 'nothing to accept');
+    await m.press(m.by('pitch-editor-ask-area'));
+    await m.press(m.by('pitch-areas-generate'));
+    assert.match(m.text(m.by('pitch-area-result-b1-refused')), /named a figure your text did not/);
+    assert.ok(!m.by('pitch-area-result-b1-accept'), 'nothing to accept');
+    await m.press(m.by('pitch-areas-close'));
     fail = Object.assign(new Error('You are out of AI tokens.'), { status: 402, code: 'budget' });
-    await m.press(m.by('pitch-assist-dialog-run'));
-    assert.ok(m.by('pitch-assist-tokens'), 'PD25\'s tokens dialog');
-    assert.match(m.text(m.by('pitch-assist-tokens')), /Your records still fill every figure/);
-    assert.ok(!m.by('pitch-assist-dialog'), 'the press dialog gives way to it');
+    await m.press(m.by('pitch-editor-ask-area'));
+    await m.press(m.by('pitch-areas-generate'));
+    assert.match(m.text(m.by('pitch-area-result-b1-refused')), /You are out of AI tokens\. Add tokens/, 'the sentence and Add tokens');
   } finally { await m.unmount(); }
 });
 
@@ -296,9 +304,13 @@ test('AI off: the bar is greyed with the sentence, and the records still fill', 
   const m = await mount({}, { aiOff: true });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
-    assert.ok(m.text(m.by('pitch-assist-off')).includes(AI_OFF_LINE));
-    for (const t of TEXT_TOOLS) assert.equal(m.pr(m.by(`pitch-assist-${t.action}`)).disabled, true, t.action);
+    // D1604: the area's Ask is off, titled why, and opens nothing.
+    assert.equal(m.pr(m.by('pitch-editor-ask-area'))['aria-disabled'], true);
+    assert.equal(m.pr(m.by('pitch-editor-ask-area')).title, 'AI is paused for your studio.');
+    await m.press(m.by('pitch-editor-ask-area'));
+    assert.ok(!m.by('pitch-assist-bar'), 'nothing opens');
     assert.equal(m.named('assist.quote').length, 0, 'nothing is quoted while it is off');
+    await m.press(m.by('pitch-editor-area-free:1-2'));
     await m.press(m.by('pitch-add-menu-open'));
     await m.press(m.by('pitch-add-chart'));
     assert.match(m.text(m.by('pitch-add-off')), /AI assistance is off on this page/);
@@ -307,9 +319,10 @@ test('AI off: the bar is greyed with the sentence, and the records still fill', 
 });
 
 // D903 (#2682): Image and Background open the image lightbox, as a content image and as a card background.
-test('the Add menu: Text opens Add a block, Image and Background open the image lightbox, Layout opens Design', async () => {
+test('the Add menu, on a selected empty range: Text opens Add a block, Image and Background open the image lightbox, Layout opens Structure', async () => {
   const m = await mount();
   try {
+    await m.press(m.by('pitch-editor-area-free:1-2'));
     await m.press(m.by('pitch-add-menu-open'));
     assert.deepEqual(['text', 'chart', 'image', 'background', 'connector', 'layout'].map((id) => Boolean(m.by(`pitch-add-${id}`))), [true, true, true, true, true, true]);
     await m.press(m.by('pitch-add-image'));
@@ -318,36 +331,41 @@ test('the Add menu: Text opens Add a block, Image and Background open the image 
   } finally { await m.unmount(); }
   const n = await mount();
   try {
+    await n.press(n.by('pitch-editor-area-free:1-2'));
     await n.press(n.by('pitch-add-menu-open'));
     await n.press(n.by('pitch-add-text'));
     assert.equal(n.pr(n.by('pitch-editor-kind-text'))['aria-checked'], true);
   } finally { await n.unmount(); }
   const o = await mount();
   try {
+    await o.press(o.by('pitch-editor-area-free:1-2'));
     await o.press(o.by('pitch-add-menu-open'));
     await o.press(o.by('pitch-add-background'));
     assert.equal(o.pr(o.by('pitch-image-use-card'))['aria-checked'], true, 'PD12b: set to Card background');
   } finally { await o.unmount(); }
   const p = await mount();
   try {
-    assert.equal(p.pr(p.by('pitch-editor-tab-design'))['aria-selected'], false);
+    assert.ok(!p.by('pitch-sheet-structure'));
+    await p.press(p.by('pitch-editor-area-free:1-2'));
     await p.press(p.by('pitch-add-menu-open'));
     await p.press(p.by('pitch-add-layout'));
-    assert.equal(p.pr(p.by('pitch-editor-tab-design'))['aria-selected'], true);
+    assert.ok(p.by('pitch-sheet-structure'), 'D1604: Layout opens ⋯ › Structure');
   } finally { await p.unmount(); }
 });
 
-test('the Add menu\'s Chart: costs and the rail row first, then a block whose series are bindings', async () => {
+test('the Add menu\'s Chart: costs first, no model list (the AIRail holds models), then a block whose series are bindings', async () => {
   const series = [{ label: 'MRR', binding: BINDING }];
   const m = await mount({
     'assist.run': async (id, card, body) => ({ proposal: { uid: 'c1' }, action: body.action, block: { kind: 'chart', chart_type: 'columns', series, range: 'all', previous: false, labels: true }, title: 'Synthetic growth', cost: { charged_microusd: 700 } }),
   });
   try {
+    await m.press(m.by('pitch-editor-area-free:1-2'));
     await m.press(m.by('pitch-add-menu-open'));
     await m.press(m.by('pitch-add-chart'));
     assert.match(m.text(m.by('pitch-add-chart-cost')), /up to \$0\.0008/);
-    assert.match(m.text(m.by('pitch-add-models')), /Llama 3\.3 70B Fast.*\$2\.70 per 1M output tokens.*FLUX\.2 Klein 9B.*Not routed on this page yet.*FLUX\.1 Schnell.*Gemma 4 26B/);
-    assert.match(m.text(m.by('pitch-add-charts')), /Figures from your records are free/);
+    assert.ok(!m.by('pitch-add-models'), 'no model list in the editor: models live in the AIRail');
+    assert.ok(!m.named('pricing.aiModels').length, 'the model catalogue is not read here');
+    assert.match(m.text(m.by('pitch-add-charts')), /Figures from your records are free\. The model it uses is set in the AIRail\./);
     await m.press(m.by('pitch-add-chart'));
     assert.match(m.text(m.by('pitch-add-dialog-cost')), /Up to \$0\.0008/);
     await m.press(m.by('pitch-add-dialog-run'));
@@ -366,6 +384,7 @@ test('PD9d: connectors with their last sync, figures by connector, a headline fr
     'assist.run': async (id, card, body) => ({ proposal: { uid: 'h1' }, action: body.action, before: '', after: 'Synthetic momentum, shipped weekly', cost: { charged_microusd: 400 } }),
   });
   try {
+    await m.press(m.by('pitch-editor-area-free:1-2'));
     await m.press(m.by('pitch-add-menu-open'));
     await m.press(m.by('pitch-add-connector'));
     assert.ok(m.by('pitch-connector'));
@@ -397,12 +416,15 @@ test('PD9d: connectors with their last sync, figures by connector, a headline fr
 });
 
 test('no tool writes a number: the components never build a value from a model\'s answer', () => {
-  for (const f of ['CardAssistBar.jsx', 'AddMenu.jsx', 'ConnectorLightbox.jsx']) {
+  for (const f of ['AreaLightbox.jsx', 'InstructionBox.jsx', 'AddMenu.jsx', 'ConnectorLightbox.jsx']) {
     const src = read(`frontend/src/pages/raise/pitch/${f}`);
     assert.ok(src.includes('deckAssistApi.run('), `${f} runs through the Worker`);
     assert.ok(src.includes('deckAssistApi.quote('), `${f} shows the cost first`);
     assert.ok(!/value:\s*r\./.test(src) && !/binding:\s*r\./.test(src), `${f} takes no value or binding from a run`);
   }
-  const editor = read('frontend/src/pages/raise/pitch/PitchEditor.jsx');
-  for (const f of ['AddMenu', 'CardAssistBar']) assert.ok(editor.includes(`import ${f} from './${f}';`), `PitchEditor mounts ${f}`);
+  // D1604: the bar is retired; the editor's block tools mount the Add menu on an empty range only.
+  const tools = read('frontend/src/pages/raise/pitch/BlockTools.jsx');
+  assert.ok(tools.includes("import AddMenu from './AddMenu';"), 'BlockTools mounts AddMenu');
+  assert.ok(!tools.includes('CardAssistBar'), 'CardAssistBar is retired');
+  assert.ok(read('frontend/src/pages/raise/pitch/PitchEditor.jsx').includes("import BlockTools, { SpeakerNotes } from './BlockTools';"));
 });

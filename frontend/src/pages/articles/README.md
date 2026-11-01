@@ -10,6 +10,7 @@ the autosave, the submit and the D1292 publish chain.
 | File | What it is |
 | --- | --- |
 | `articleCanvas.js` | The canvas's rules, pure: library tabs and stats, the eight writing actions and their inputs, the cost lines, placing a proposal, the format bar's Markdown edits, the image ask, the search preview. Tested by `frontend/test/article_authoring_d1408.test.mjs`. |
+| `articleBlocks.js` | D1410: the divider, callout and link card as the editor's preview and the admin drawer draw them — a remark plugin for `react-markdown` that draws the same HTML as the Worker's `renderMarkdown`. `articleCanvas.js`'s `ARTICLE_BLOCKS` lists them for the Insert… menu. Tested by `frontend/test/article_render_blocks_d1410.test.mjs`. |
 | `ArticleLibrary.jsx` | AR1: tabs by status, search, tag and sort, two stat cards, the table. |
 | `ArticleWritingPanel.jsx` | AR3: Eadwyn's writing panel (D1409's options), beside the article until the shared Ask panel (#3706) exists. |
 | `ArticleImageSheet.jsx` | AR4: "Generate an image" (D1409 part 2), for the cover or the body. |

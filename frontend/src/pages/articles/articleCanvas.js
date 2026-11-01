@@ -6,6 +6,8 @@
  * `frontend/test/article_authoring_d1408.test.mjs`. No request, no React.
  */
 
+import { CALLOUT_KINDS } from './articleBlocks.js';
+
 /* ---------- AR1 · the library ---------- */
 
 /**
@@ -233,6 +235,18 @@ export const SLASH_BLOCKS = Object.freeze([
   { kind: 'bulleted', label: 'Bulleted list' },
   { kind: 'numbered', label: 'Numbered list' },
   { kind: 'code', label: 'Code' },
+]);
+
+/**
+ * D1410 (#3893) — the blocks the reader renders beyond the ones above, each
+ * with the Markdown the Insert… menu places. The Worker renders them
+ * (`renderMarkdown`) and the preview draws them (`articleBlocks.js`). S21
+ * adds them to the menu (#3694).
+ */
+export const ARTICLE_BLOCKS = Object.freeze([
+  { kind: 'divider', label: 'Divider', markdown: '\n---\n' },
+  ...CALLOUT_KINDS.map((k) => ({ kind: `callout_${k}`, label: `Callout · ${k[0].toUpperCase()}${k.slice(1)}`, markdown: `> [!${k}]\n> ` })),
+  { kind: 'card', label: 'Link card', markdown: '[card: Title — description](https://)' },
 ]);
 
 /* ---------- AR4 · the image sheet ---------- */

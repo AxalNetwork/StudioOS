@@ -11,6 +11,7 @@ import ToastMessage from '../components/ToastMessage';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import ReactMarkdown from 'react-markdown';
+import { remarkArticleBlocks } from './articles/articleBlocks.js';
 import { wordsAndMinutes } from '../lib/articleMarkdown';
 import { appOrigin } from '../lib/branchHost';
 import { isSuperAdminUser, readHqView, shellRoleFor } from '../lib/shellRole';
@@ -38,6 +39,8 @@ import { ghost as actionGhost, primary as actionPrimary } from '../ui/ActionShee
 // the D1292 publish chain.
 
 const MAX_COVER_MB = 5;
+// D1410 — the preview draws the divider, callout and link card as the reader does.
+const ARTICLE_REMARK = [remarkArticleBlocks];
 
 /** D1292 — the shortest reason a Super Admin may give to decide their own article (the Worker's `OVERRIDE_REASON_MIN`). */
 export const OVERRIDE_REASON_MIN = 8;
@@ -1160,7 +1163,7 @@ export default function ArticleAuthorPage() {
                   {coverImg && <img src={coverImg} alt="" className="w-full rounded-lg mb-6 max-h-[360px] object-cover" />}
                   <h1 className="text-3xl font-bold">{editing.title}</h1>
                   {editing.subtitle && <p className="text-lg text-slate-600 dark:text-slate-400 mt-2">{editing.subtitle}</p>}
-                  <div className="mt-6 prose dark:prose-invert max-w-none"><ReactMarkdown>{editing.body_markdown || ''}</ReactMarkdown></div>
+                  <div className="mt-6 prose dark:prose-invert max-w-none"><ReactMarkdown remarkPlugins={ARTICLE_REMARK}>{editing.body_markdown || ''}</ReactMarkdown></div>
                 </article>
               ) : (
                 <div className="space-y-4" data-testid="article-editor">
