@@ -192,7 +192,7 @@ test('the figure guard: digits in every script, and number words in the card\'s 
 
 // ─────────────────────────────────────────────────────────── image bytes
 
-const SECRET = 'GPS-48.85N-SECRET';
+const MARK = 'gps-48.85n-exif-mark';
 const enc = (s: string) => new TextEncoder().encode(s);
 const cat = (...parts: (Uint8Array | number[])[]) => { const a = parts.map((p) => (p instanceof Uint8Array ? p : new Uint8Array(p))); const o = new Uint8Array(a.reduce((n, p) => n + p.length, 0)); let i = 0; for (const p of a) { o.set(p, i); i += p.length; } return o; };
 const has = (bytes: Uint8Array, s: string) => Buffer.from(bytes).includes(Buffer.from(s));
@@ -201,11 +201,11 @@ const seg16 = (marker: number, body: Uint8Array) => cat([0xff, marker, ((body.le
 function jpeg(width: number, height: number): Uint8Array {
   return cat([0xff, 0xd8],
     seg16(0xe0, cat(enc('JFIF\0'), [1, 1, 0, 0, 1, 0, 1, 0, 0])),
-    seg16(0xe1, cat(enc('Exif\0\0'), enc(SECRET))),
-    seg16(0xe1, cat(enc('http://ns.adobe.com/xap/1.0/\0'), enc(`<x:xmpmeta>${SECRET}</x:xmpmeta>`))),
+    seg16(0xe1, cat(enc('Exif\0\0'), enc(MARK))),
+    seg16(0xe1, cat(enc('http://ns.adobe.com/xap/1.0/\0'), enc(`<x:xmpmeta>${MARK}</x:xmpmeta>`))),
     seg16(0xe2, cat(enc('ICC_PROFILE\0'), [1, 1, 0, 0])),
-    seg16(0xed, cat(enc('Photoshop 3.0\0'), enc(SECRET))),
-    seg16(0xfe, enc(SECRET)),
+    seg16(0xed, cat(enc('Photoshop 3.0\0'), enc(MARK))),
+    seg16(0xfe, enc(MARK)),
     seg16(0xc0, new Uint8Array([8, (height >> 8) & 0xff, height & 0xff, (width >> 8) & 0xff, width & 0xff, 1, 1, 0x11, 0])),
     seg16(0xda, new Uint8Array([1, 1, 0, 0, 0x3f, 0])), [0x12, 0x34, 0xff, 0xd9]);
 }
@@ -214,7 +214,7 @@ const pngChunk = (type: string, data: Uint8Array) => cat(be32(data.length), enc(
 function png(width: number, height: number): Uint8Array {
   return cat([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
     pngChunk('IHDR', cat(be32(width), be32(height), [8, 6, 0, 0, 0])),
-    pngChunk('tEXt', enc(`Author\0${SECRET}`)), pngChunk('iTXt', enc(`XML:com.adobe.xmp\0\0\0\0\0${SECRET}`)),
+    pngChunk('tEXt', enc(`Author\0${MARK}`)), pngChunk('iTXt', enc(`XML:com.adobe.xmp\0\0\0\0\0${MARK}`)),
     pngChunk('IDAT', new Uint8Array([0x78, 0x9c, 0x63, 0, 0, 0, 1, 0, 1])), pngChunk('IEND', new Uint8Array()));
 }
 const le32 = (n: number) => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >>> 24) & 0xff];
@@ -224,28 +224,28 @@ function webp(width: number, height: number): Uint8Array {
   const body = cat(enc('WEBP'),
     riffChunk('VP8X', cat([0x0c, 0, 0, 0], le24(width - 1), le24(height - 1))),
     riffChunk('VP8 ', new Uint8Array([0, 0, 0, 0x9d, 0x01, 0x2a, width & 0xff, width >> 8, height & 0xff, height >> 8])),
-    riffChunk('EXIF', enc(SECRET)), riffChunk('XMP ', enc(`<x>${SECRET}</x>`)));
+    riffChunk('EXIF', enc(MARK)), riffChunk('XMP ', enc(`<x>${MARK}</x>`)));
   return cat(enc('RIFF'), le32(body.length), body);
 }
 
 test('metadata is stripped byte by byte, and the picture\'s own bytes and size survive', () => {
   // Mutation checked: keeping APP1 leaves the GPS text in; keeping tEXt in PNG; keeping EXIF in WebP.
   const j = jpeg(3, 2);
-  assert.ok(has(j, SECRET));
+  assert.ok(has(j, MARK));
   const js = stripMetadata(j, 'image/jpeg');
-  assert.ok(!has(js, SECRET), 'JPEG: EXIF, XMP, IPTC and the comment are gone');
+  assert.ok(!has(js, MARK), 'JPEG: EXIF, XMP, IPTC and the comment are gone');
   assert.ok(has(js, 'JFIF') && has(js, 'ICC_PROFILE'), 'JFIF and the colour profile stay');
   assert.deepEqual(imageSize(js, 'image/jpeg'), { width: 3, height: 2 });
   assert.deepEqual([...js.subarray(-4)], [0x12, 0x34, 0xff, 0xd9], 'the scan is untouched');
 
   const p = png(4, 5);
   const ps = stripMetadata(p, 'image/png');
-  assert.ok(!has(ps, SECRET) && has(ps, 'IDAT') && has(ps, 'IEND'));
+  assert.ok(!has(ps, MARK) && has(ps, 'IDAT') && has(ps, 'IEND'));
   assert.deepEqual(imageSize(ps, 'image/png'), { width: 4, height: 5 });
 
   const w = webp(6, 7);
   const ws = stripMetadata(w, 'image/webp');
-  assert.ok(!has(ws, SECRET) && !has(ws, 'EXIF') && !has(ws, 'XMP '));
+  assert.ok(!has(ws, MARK) && !has(ws, 'EXIF') && !has(ws, 'XMP '));
   assert.equal(ws[20] & 0x0c, 0, 'the VP8X EXIF and XMP flags are cleared');
   assert.equal(new DataView(ws.buffer, ws.byteOffset).getUint32(4, true), ws.length - 8, 'the RIFF size is the new length');
   assert.deepEqual(imageSize(ws, 'image/webp'), { width: 6, height: 7 });
@@ -302,7 +302,7 @@ test('an upload is stored stripped, measured from its header, hashed, and once p
     assert.deepEqual([row.width, row.height], [30, 20]);
     assert.match(row.sha256, /^[0-9a-f]{64}$/);
     const stored = f.r2.get(row.r2_key)!;
-    assert.ok(!has(stored, SECRET), 'the stored copy carries no metadata');
+    assert.ok(!has(stored, MARK), 'the stored copy carries no metadata');
     assert.equal(row.sha256, await sha256Hex(stored));
     const again = await post(f, '/api/decks/7/images/upload', fileForm(jpeg(30, 20), 'image/jpeg'));
     assert.equal(again.status, 200);
@@ -332,7 +332,7 @@ test('an external image is copied in through the safe fetcher; private hosts and
   try {
     const ok = await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/logo.png', use: 'content' });
     assert.equal(ok.status, 201, JSON.stringify(ok.body));
-    assert.ok(!has(f.r2.get(f.rows()[0].r2_key)!, SECRET));
+    assert.ok(!has(f.r2.get(f.rows()[0].r2_key)!, MARK));
     for (const url of ['http://cdn.example.com/logo.png', 'https://10.0.0.5/x.png', 'https://localhost/x.png', ['https:/', '/u', ':', 'p', '@cdn.example.com/x.png'].join('')]) {
       const r = await post(f, '/api/decks/7/images/import', { url });
       assert.equal(r.status, 422, url);

@@ -209,3 +209,9 @@ f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_complia
 # key. It is no credential. The next commit rewords the comment, so no later
 # commit carries it. Pin only the published finding, as D334's entry does.
 74a99469d1cf0398d9052b74175b5925bb026e30:scripts/check-model-coverage.mjs:generic-api-key:78
+# D1506 (#3757): the image-metadata test's first commit named its synthetic
+# EXIF marker string `SECRET`; gitleaks' generic-api-key rule read it as a key.
+# It is a fixture string written into a fake JPEG, never a credential. The next
+# commit renames it, so no later commit carries it. Pin only the published
+# finding, as D334's entry does.
+7ca0659e7a6d0260d3f9fec882ffcc3f6c173413:cloudflare-worker/test/untrusted_framing_d1506.test.ts:generic-api-key:195
