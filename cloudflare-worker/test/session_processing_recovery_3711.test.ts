@@ -124,3 +124,14 @@ test('D1456 an upload with no arrived parts records uploading when the sweeper f
   assert.equal(row.processing_stage,'failed');
   assert.equal(row.processing_failed_stage,'uploading');
 });
+
+
+test('D1456 a repeated failure preserves its recorded step until a successful retry clears it',async()=>{
+  const w=world();
+  w.db.prepare("UPDATE interview_sessions SET processing_stage='placing',processing_failed_stage=NULL WHERE id=?").run(w.id);
+  await failProcessing(w.env,(await loadSession(w.env,w.id))!,'Synthetic first failure');
+  await failProcessing(w.env,(await loadSession(w.env,w.id))!,'Synthetic repeated failure');
+  const row=(await loadSession(w.env,w.id))!;
+  assert.equal(row.processing_stage,'failed');
+  assert.equal(row.processing_failed_stage,'placing');
+});

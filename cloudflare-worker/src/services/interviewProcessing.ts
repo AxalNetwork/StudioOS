@@ -455,7 +455,7 @@ export const NO_CONSENT_SENTENCE = 'The interviewee’s consent to be recorded i
 export async function failProcessing(env: Env, session: SessionRow, sentence: string) {
   const stage = ['uploading', 'transcribing', 'summarising', 'placing'].includes(session.processing_stage ?? '') ? session.processing_stage : null;
   await env.DB.prepare(
-    `UPDATE interview_sessions SET processing_stage = 'failed', processing_failed_stage = ?,
+    `UPDATE interview_sessions SET processing_stage = 'failed', processing_failed_stage = COALESCE(?, processing_failed_stage),
        processing_done = NULL, processing_total = NULL, processing_error = ?,
        processing_updated_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
   ).bind(stage, sentence, session.id).run();
