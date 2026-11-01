@@ -167,7 +167,7 @@ globalThis.fetch=async(input,init={})=>{
   return new Response('fixture',{headers:{'content-type':p.endsWith('.css')?'text/css':js}});
  }
  const entry=process.env.STALE_SHELL==='1'?'previous':'current';
- return new Response('<html><div id="root"></div><script type="module" src="/assets/index-'+entry+'.js"></script><link href="/assets/style.css"></html>',{headers:{...headers,'content-type':'text/html'}});
+ return new Response('<html><meta property="og:title" content="Insights — Axal VC"><div id="root"></div><script type="module" src="/assets/index-'+entry+'.js"></script><link href="/assets/style.css"></html>',{headers:{...headers,'content-type':'text/html'}});
 };`;
 
 function smoke(fault = '', stale = false, malformed = false, absent = false, nested = false, artifact = false) {
