@@ -10,6 +10,7 @@ and is not kept in sync.
 | `migrations/` | **Forward-only, numbered, and the thing that actually runs.** |
 | `historical/` | Legacy one-off schema scripts, kept for archaeology only. Nothing builds from them. |
 | `migrations/713_pitch_decks_unique_version.sql` | #3748: preserve and renumber duplicate deck versions, choose one current row per project, and enforce unique versions/current rows. |
+| `migrations/716_deck_area_batches.sql` | D1502 (#3753): a deck generation run (`deck_area_batches`, one active per deck, `idem_key` unique) and its steps (`deck_area_batch_steps`), under one quote and one parent hold. |
 
 | `migrations/760_interview_processing_failed_stage.sql` | D1456 (#4014): nullable, constrained failed processing step; existing migration ledger prevents replay. |
 
