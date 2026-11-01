@@ -72,6 +72,10 @@ export const AI_SURFACE = {
   articles: '/articles/draft',
   /** Events · Syndication — Eadwyn's proposed copy for a channel (`POST /api/events/:id/syndication/assist`), D1493. */
   eventSyndication: '/my/events',
+  /** #3935: Events · the editor — the drawn cover (EV2) and its checks (`POST /api/events/:id/cover/draw`). */
+  eventCover: '/events/edit',
+  /** #3935: Learning · Studio — a course's drawn cover (LE8) and its checks (`POST /api/admin/learning/courses/:uid/cover/draw`). */
+  courseCover: '/learning/studio',
   /** HQ · Publications — the drafted headline summary (`/api/admin/publications/draft`). */
   adminPublications: '/admin/publications',
   /** Grow · Share an update — Eadwyn's draft of the highlights and lowlights (D654, `/api/portfolio-updates/share/draft-lines`). */
