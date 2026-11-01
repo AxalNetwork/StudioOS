@@ -38,6 +38,7 @@ import { countDailyView } from '../services/articleMetrics';
 import { renderMarkdown, slugify, snapshotRevision, wordsAndMinutes, isValidArticleImageName } from '../services/newsRender';
 import { SECTORS, isValidSector } from '../data/sectors';
 import { sniffMime } from '../services/aiImages';
+import { refuse } from '../util/refusal';
 
 const articles = new Hono<{ Bindings: Env }>();
 
@@ -143,6 +144,10 @@ function authorArticleShape(row: any) {
     published_at: row.published_at,
     rejected_at: row.rejected_at,
     rejection_reason: row.rejection_reason,
+    // D1406 (#3892) — when an approved article goes out (D484), and who set
+    // that time, by display name: never an email, null when not recorded.
+    publish_at: row.publish_at ?? null,
+    publish_at_set_by: row.publish_at_set_by_name ?? null,
     word_count: row.word_count,
     read_minutes: row.read_minutes,
     views: row.views ?? 0,
@@ -150,6 +155,24 @@ function authorArticleShape(row: any) {
     updated_at: row.updated_at,
   };
 }
+
+/**
+ * D1406 — the author reads' row: the article and, beside it, the display name
+ * of whoever set its publish time. Every caller of `authorArticleShape` reads
+ * through this, or through `/mine`'s list, which joins the same way.
+ */
+async function authorRow(env: Env, id: number): Promise<any | null> {
+  return env.DB.prepare(
+    `SELECT a.*, ps.name AS publish_at_set_by_name
+       FROM articles a LEFT JOIN users ps ON ps.id = a.publish_at_set_by
+      WHERE a.id = ? LIMIT 1`,
+  ).bind(id).first();
+}
+
+/** D1406 — an autosave revision is written once the newest one is older than this. */
+export const AUTOSAVE_REVISION_MINUTES = 15;
+/** D1406 — the author's revision list returns at most this many, newest first. */
+export const AUTHOR_REVISIONS_MAX = 50;
 
 async function cacheLookup(c: any): Promise<Response | null> {
   try {
@@ -393,8 +416,10 @@ articles.get('/mine', async (c) => {
   const limit = clampLimit(url.searchParams.get('limit'), 50, 100);
   const offset = parseOffset(url.searchParams.get('offset'));
   const res = await c.env.DB.prepare(
-    `SELECT * FROM articles WHERE author_user_id = ?
-     ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+    `SELECT a.*, ps.name AS publish_at_set_by_name
+       FROM articles a LEFT JOIN users ps ON ps.id = a.publish_at_set_by
+      WHERE a.author_user_id = ?
+     ORDER BY a.updated_at DESC LIMIT ? OFFSET ?`,
   ).bind(user.id, limit, offset).all<any>();
   return c.json({ items: (res.results || []).map(authorArticleShape) });
 });
@@ -404,9 +429,7 @@ articles.get('/draft/:id', async (c) => {
   await ensureNewsSchema(c.env);
   const id = Number(c.req.param('id'));
   if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'invalid' }, 400);
-  const row: any = await c.env.DB.prepare(
-    `SELECT * FROM articles WHERE id = ? LIMIT 1`,
-  ).bind(id).first();
+  const row: any = await authorRow(c.env, id);
   if (!row) return c.json({ error: 'not_found' }, 404);
   if (row.author_user_id !== user.id && user.role !== 'admin') return c.json({ error: 'forbidden' }, 403);
   const cmts = await c.env.DB.prepare(
@@ -491,7 +514,7 @@ articles.post('/draft', async (c) => {
   ).bind(slug, title, subtitle, md, sector, JSON.stringify(tags), user.id, wm.words, wm.minutes, excerpt, seoTitle, canonicalUrl).run();
   const id = Number(ins?.meta?.last_row_id);
   await snapshotRevision(c.env, id, user.id, 'manual');
-  const row: any = await c.env.DB.prepare(`SELECT * FROM articles WHERE id = ?`).bind(id).first();
+  const row: any = await authorRow(c.env, id);
   return c.json({ article: authorArticleShape(row) }, 201);
 });
 
@@ -502,6 +525,50 @@ export async function loadOwned(env: Env, id: number, userId: number, role: stri
   if (row.author_user_id !== userId && role !== 'admin') return null;
   return row;
 }
+
+/**
+ * D1406 (#3892) — the author's revision reads. The author or an admin
+ * (`loadOwned`), else 404; a support session is refused 403, as Eadwyn on an
+ * article is (`article_assist.ts`), before anything is read. `saved_by_name`
+ * is the saver's display name, never an email, and null when that account
+ * is gone.
+ */
+async function revisionGate(c: any): Promise<{ id: number } | { refused: Response }> {
+  const user = await requireAuth(c);
+  await ensureNewsSchema(c.env);
+  if ((await selectJwt(c))?.payload?.impersonated_by) {
+    return { refused: refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot read a member’s article history.' }) };
+  }
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) return { refused: c.json({ error: 'not_found_or_forbidden' }, 404) };
+  if (!(await loadOwned(c.env, id, Number(user.id), String(user.role)))) return { refused: c.json({ error: 'not_found_or_forbidden' }, 404) };
+  return { id };
+}
+
+articles.get('/:id/revisions', async (c) => {
+  const gate = await revisionGate(c);
+  if ('refused' in gate) return gate.refused;
+  const res = await c.env.DB.prepare(
+    `SELECT r.rev, r.title, r.status_at_save, r.reason, s.name AS saved_by_name, r.created_at
+       FROM article_revisions r LEFT JOIN users s ON s.id = r.saved_by
+      WHERE r.article_id = ? ORDER BY r.rev DESC LIMIT ?`,
+  ).bind(gate.id, AUTHOR_REVISIONS_MAX).all<any>();
+  return c.json({ revisions: res.results || [] });
+});
+
+articles.get('/:id/revisions/:rev', async (c) => {
+  const gate = await revisionGate(c);
+  if ('refused' in gate) return gate.refused;
+  const rev = Number(c.req.param('rev'));
+  if (!Number.isSafeInteger(rev) || rev <= 0) return c.json({ error: 'revision_not_found', detail: 'That revision is not stored for this article.' }, 404);
+  const row = await c.env.DB.prepare(
+    `SELECT r.rev, r.title, r.subtitle, r.body_markdown, r.status_at_save, r.reason, s.name AS saved_by_name, r.created_at
+       FROM article_revisions r LEFT JOIN users s ON s.id = r.saved_by
+      WHERE r.article_id = ? AND r.rev = ? LIMIT 1`,
+  ).bind(gate.id, rev).first<any>();
+  if (!row) return c.json({ error: 'revision_not_found', detail: 'That revision is not stored for this article.' }, 404);
+  return c.json({ revision: row });
+});
 
 articles.put('/:id', async (c) => {
   const user = await requireAuth(c);
@@ -552,7 +619,7 @@ articles.put('/:id', async (c) => {
   const locked = row.status === 'submitted' || row.status === 'approved';
   if (locked) {
     for (const k of Object.keys(patch)) if ((patch[k] ?? null) === (row[k] ?? null)) delete patch[k];
-    if (Object.keys(patch).length === 0) return c.json({ article: authorArticleShape(row), returned_to_queue: null });
+    if (Object.keys(patch).length === 0) return c.json({ article: authorArticleShape(await authorRow(c.env, id)), returned_to_queue: null });
   }
   if (patch.body_markdown !== undefined) {
     const wm = wordsAndMinutes(patch.body_markdown);
@@ -574,8 +641,19 @@ articles.put('/:id', async (c) => {
   if (!res?.meta?.changes) {
     return c.json({ error: 'status_changed', detail: 'This article moved on while you were editing. Reload it; nothing was saved.' }, 409);
   }
-  const updated: any = await c.env.DB.prepare(`SELECT * FROM articles WHERE id = ?`).bind(id).first();
+  const updated: any = await authorRow(c.env, id);
   let returned: { from: string; publish_at_cleared: boolean } | null = null;
+  // D1406 — an autosave revision: the body changed and the newest revision
+  // is more than 15 minutes old (or there is none), so a history keeps the
+  // text as it was written without a row per keystroke. Not when this PUT
+  // returns an approved text to Submitted: that writes its own revision below.
+  const bodyChanged = patch.body_markdown !== undefined && patch.body_markdown !== (row.body_markdown ?? '');
+  if (bodyChanged && !(locked && row.status === 'approved')) {
+    const recent = await c.env.DB.prepare(
+      "SELECT 1 AS ok FROM article_revisions WHERE article_id = ? AND created_at > datetime('now', ?) LIMIT 1",
+    ).bind(id, `-${AUTOSAVE_REVISION_MINUTES} minutes`).first().catch(() => null);
+    if (!recent) await snapshotRevision(c.env, id, user.id, 'autosave');
+  }
   if (locked) {
     returned = { from: row.status, publish_at_cleared: !!row.publish_at };
     // One audit row for the transition: ids and statuses, never the text.
@@ -650,7 +728,7 @@ articles.post('/:id/submit', async (c) => {
   await snapshotRevision(c.env, id, user.id, 'submit');
   await notifyArticle(c.env, 'author_submitted', { articleId: id, slug: row.slug, title: row.title, authorUserId: user.id });
   await notifyArticle(c.env, 'admin_submitted', { articleId: id, slug: row.slug, title: row.title, authorUserId: user.id });
-  const updated: any = await c.env.DB.prepare(`SELECT * FROM articles WHERE id = ?`).bind(id).first();
+  const updated: any = await authorRow(c.env, id);
   return c.json({ article: authorArticleShape(updated) });
 });
 

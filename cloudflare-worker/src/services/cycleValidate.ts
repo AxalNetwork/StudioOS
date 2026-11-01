@@ -770,7 +770,7 @@ type TrackedCompetitor = { id: string; name: string; kind: string; latest_signal
  * D690 decision 8: a name the venture stopped tracking (`competitor_tracking`,
  * migration 460) leaves the list and the card's count; its rows stay.
  */
-async function loadTracked(ctx: Ctx): Promise<TrackedCompetitor[]> {
+export async function loadTracked(ctx: Ctx): Promise<TrackedCompetitor[]> {
   const cands = await ctx.env.DB.prepare(
     `SELECT c.id, c.name, c.category, c.created_at
        FROM competitor_candidates c JOIN competitor_analyses a ON a.id = c.analysis_id
