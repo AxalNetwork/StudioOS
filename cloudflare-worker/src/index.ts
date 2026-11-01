@@ -266,6 +266,7 @@ import deckInvestorLinks from './routes/deck_investor_links';
 import deckStageNorms from './routes/deck_stage_norms';
 // D1556 (#3803): a venture's consented interview quotes, ranked for a deck.
 import deckQuotes from './routes/deck_quotes';
+import { deckReports, hqDeckReports } from './routes/deck_reports';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1406,6 +1407,9 @@ app.route('/api/decks', deckInvestorLinks);
 app.route('/api/decks', deckStageNorms);
 // D1556 (#3803): `/quotes/search` and `/quotes/index`, before `decks` so `/:id` routes cannot answer them.
 app.route('/api/decks', deckQuotes);
+// D1540 (#3791): a founder's report of a bad result (`/proposals/:uid/report`), and HQ's queue of them.
+app.route('/api/decks', deckReports);
+app.route('/api/admin/deck-reports', hqDeckReports);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are
