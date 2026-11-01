@@ -8,7 +8,7 @@
  * cannot create accounts or impersonate the deck owner.
  */
 import { Hono } from 'hono';
-import { cardUidAt } from '../services/decks/slideModel';
+import { cardUidAt } from '../services/decks/cardUids';
 import type { Env } from '../types';
 import { verifySignedToken, shareLinkLive, viewerHashOf } from './decks';
 import { createJWT, setAuthCookies, generateCsrfToken, requireAuth } from '../auth';
@@ -50,6 +50,7 @@ async function ensureDeckShareConversionSchema(env: Env): Promise<void> {
        project_id INTEGER,
        user_id INTEGER,
        slide_reactions TEXT,
+       slide_reactions_by_uid TEXT,
        overall_note TEXT,
        problem_fit TEXT,
        willingness_to_pay TEXT,

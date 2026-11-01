@@ -7,7 +7,7 @@
  * them (`services/raiseCycle.ts`).
  */
 import type { Env } from '../types';
-import { cardUidAt } from './decks/slideModel';
+import { cardUidAt } from './decks/cardUids';
 
 /** Highest slide index the heartbeat accepts (the store's CHECK). */
 export const MAX_SLIDE_INDEX = 199;

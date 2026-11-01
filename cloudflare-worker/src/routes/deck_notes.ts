@@ -26,7 +26,7 @@ import type { Env, User } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
 import { logCycleWriteStatement } from '../services/cycleActivity';
-import { cardRefOf } from '../services/decks/slideModel';
+import { cardRefOf } from '../services/decks/cardUids';
 
 const deckNotes = new Hono<{ Bindings: Env }>();
 

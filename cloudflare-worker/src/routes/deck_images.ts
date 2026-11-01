@@ -53,7 +53,7 @@ import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
-import { cardRefOf } from '../services/decks/slideModel';
+import { cardRefOf } from '../services/decks/cardUids';
 import { imageCapability, imagePlan } from '../services/decks/visuals';
 import { fetchLandingPageForProject } from '../services/decks/branding';
 

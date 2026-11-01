@@ -46,7 +46,7 @@ import { proposeRail } from '../services/railProposals';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned } from './decks';
-import { cardRefOf } from '../services/decks/slideModel';
+import { cardRefOf } from '../services/decks/cardUids';
 import { mercuryFor } from './deck_sources';
 
 const deckAssist = new Hono<{ Bindings: Env }>();
