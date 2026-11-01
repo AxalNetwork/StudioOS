@@ -5,6 +5,8 @@ import RailFrame from '../ui/RailFrame';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { bucketForPath, zoneForPath } from './shellConfig';
 import { boardFor } from './boards/index.js';
+import { ZonePrimary, ZonePrimaryScope, ZonePrimaryTarget } from './ZoneActions';
+import ProfileHeaderAsk from './ProfileHeaderAsk';
 
 /**
  * The chrome every workspace subpage sits in — one component, four shells.
@@ -73,6 +75,16 @@ import { boardFor } from './boards/index.js';
  * h1 of its header card, as its canvas does. Such a page passes `titleAs="p"`
  * and the same line renders as a paragraph. Every other caller leaves it
  * unset and keeps the h1.
+ *
+ * THE PRIMARY AND ASK (D1424, #3700). Beside the title sit, in order: the
+ * zone's one filled primary, then Ask, then `actions` and the scope chip.
+ * The primary usually comes from the body: the zone's `ZoneActions` row
+ * finds the row its table marks `primary` and portals it into this header's
+ * slot (`ZonePrimaryScope`), so the body that owns the handler keeps it. A
+ * caller that knows its primary at this level passes `primary` (one action
+ * item, a link or a handler). `ask` defaults to `ProfileHeaderAsk`, gated to
+ * the three member licences on a railed route, and shut until #3706's panel
+ * serves them; pass `ask={null}` to draw none.
  */
 export default function WorkspaceShell({
   role = 'founder',
@@ -82,6 +94,8 @@ export default function WorkspaceShell({
   scopeHref,
   intro,
   actions,
+  primary = null,
+  ask,
   rail = null,
   activeSlug,
   children,
@@ -141,6 +155,7 @@ export default function WorkspaceShell({
     // to be written here; it is the same frame every other host now uses,
     // so it lives once, in ui/RailFrame.jsx and the `.fwr-frame` rules of
     // ui/workerRail.css.
+    <ZonePrimaryScope>
     <RailFrame rail={rail}>
       {/*
         THE SHELL OWNS ITS OWN PADDING, and this is the whole of the "one
@@ -211,7 +226,10 @@ export default function WorkspaceShell({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {primary ? <ZonePrimary item={primary} /> : null}
+            <ZonePrimaryTarget />
+            {ask === undefined ? <ProfileHeaderAsk role={role} /> : ask}
             {actions}
             {scopeLabel && (
               scopeHref ? (
@@ -252,6 +270,7 @@ export default function WorkspaceShell({
         when it is taller than the window.
       */}
     </RailFrame>
+    </ZonePrimaryScope>
   );
 }
 

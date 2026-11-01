@@ -511,7 +511,7 @@ async function aiLogo(env: Env, userId: number, prompt: string, rail: RailContex
     // D766 (#2094) PR 3: the member's press through the router (D761's image
     // shape, 60-second class), held, guarded and charged, with its page.
     const r = await aiRouterRun(env, {
-      task: 'brand_logo', userId, text: fullPrompt.slice(0, 2048), draw: {},
+      task: 'brand_logo', drawJob: 'GR3', userId, text: fullPrompt.slice(0, 2048), draw: {},
       surface: AI_SURFACE.buildBrand,
       rail,
     });

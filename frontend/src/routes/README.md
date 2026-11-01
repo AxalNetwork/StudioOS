@@ -88,4 +88,5 @@ of alphabetical order.
 | Module | Area |
 | --- | --- |
 | `learning.jsx` | The Learning center (D562): every `/learning` route. |
+| `portfolio.jsx` | Portfolio's canonical addresses (D1413, #3696): `/c/<company>[/p/<project>]` and `/p/<project>`, resolved and opened under Account › Portfolio. |
 | `team.jsx` | Team (D1497, #3727): a company's Team, a project's Team in or out of a company, and Project settings › General. |

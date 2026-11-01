@@ -12,6 +12,8 @@ is automatic. The routes are `routes/team_agents.ts`, mounted at `/api/teams`.
 | `teams.ts` | The reads the routes and the run share: an agent's scope, the read and manage gates, the rule book in force, the month's spend (`{ available: false }`, never 0, when unknown) and the audit row. |
 | `agentRun.ts` | Part 2 (#3842): the only way an agent runs, as its sponsor, within its rule book and its monthly cap; its output is a proposal with `agent_id`. Also its quote. |
 | `queue.ts` | Part 3 (#3843): the approvals queue. A scope's agents' proposals, read by the agent's scope (never by `user_id`), decided once by the scope's manager or the agent's sponsor through `decideRailAs`, with `decided_by_user_id` and a `proposal_decided` event. A cost or a count it cannot read is `{ available: false }`, never 0. |
+| `goals.ts` | D1529 (#3845, E1 of #3742): a scope's goals. A project goal rolls up only to its own company's goal and links only its own OKR. Also `sumCosts`, which never sums an unknown as 0. |
+| `tasks.ts` | D1529: a scope's tasks, for a person, an agent within its rule book, or no one; dependencies within one scope and without a cycle; ready derived; cost `{ available: false }` until E3. |
 
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
@@ -28,3 +30,5 @@ The Axal starter skill library: twelve HQ skills, one SKILL.md file each, in
 per skill in `skills/cases/<slug>.json` for part D (#3954). Content only:
 A1 (#3951) seeds them into `agent_skills` and `agent_skill_versions`.
 `test/agent_skill_library_d1612.test.ts` holds every file to the catalogue.
+grows. An agent runs only through `agentRun.ts`. Part 3 adds the queue; #3742's E2 runs tasks.
+`team_agents_d1496.test.ts` covers the registry and the run, and `scope_goals_tasks_d1529.test.ts` covers goals and tasks.

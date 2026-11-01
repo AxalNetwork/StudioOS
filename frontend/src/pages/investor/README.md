@@ -36,6 +36,16 @@ the generic route wrapper once a canvas has graduated.
   S2). Its stat rows and their states live in `investorStudioParts.jsx`,
   apart from the home so a Node test can render them. A source whose read
   failed draws one `Unreadable` line with a retry in place of its rows (D321).
+- `InvestorThesisBand.jsx` (D1424, #3700, owner E) is the thesis band on
+  Investor Home: `investor_profiles.thesis_text` from
+  `GET /api/investor-profile/me`, with "Edit in Settings ›" to the My thesis
+  card (`/account/security-privacy`), "No thesis set" when empty and
+  "Your thesis could not be read · Try again" on a failed read.
+- The seven Portfolio and Fund zone pages draw their header through
+  `frontend/src/workspaces/ZoneHeader.jsx` inside a `ZonePrimaryScope` (D1424), so the zone's
+  indigo primary (Chase all overdue, Log support, Add LP, New call) sits in the
+  header beside the gated Ask. Value-add's Log support form carries D1595's Ask
+  on "What happened".
 - `InvestorFundLanding.jsx` owns `/funds` for the investor role (GP/admin
   keep the detailed `FundOpsWorkspace`); gated on the institutional tier via
   `fundUnlocked`.

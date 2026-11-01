@@ -37,10 +37,13 @@ const AUTH = read('../../cloudflare-worker/src/routes/auth.ts');
 
 /* ───────────────────────── /studio entry point ────────────────────────── */
 
-test('the founder Studio leads its zones with Do these next', () => {
-  const firstZone = code(BODY).match(/<Zone\s+title="([^"]+)"/);
-  assert.ok(firstZone, 'the Studio draws its zones');
-  assert.equal(firstZone[1], 'Do these next');
+test('the founder Studio leads with what to do next: Continue links the checklist\'s first open item', () => {
+  // D1419 (#3698): "Do these next" left the page; its intent is the header's
+  // Continue, which reads actionsOf's first open item (owner question B, A).
+  const body = code(BODY);
+  assert.match(body, /const actions = actionsOf\(reads\);/);
+  assert.match(body, /actions\.state === READY && actions\.items\[0\]\?\.href && \(\s*<Link to=\{actions\.items\[0\]\.href\}[^>]*>Continue where you left off<\/Link>/);
+  assert.doesNotMatch(body, /Do these next/);
 });
 
 test('the founder Studio does not link at the Operations console or a dead Command Center tab', () => {

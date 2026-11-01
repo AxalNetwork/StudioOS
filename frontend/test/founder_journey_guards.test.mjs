@@ -82,10 +82,10 @@ test('the exploring holding screen offers the founder lane its real next step', 
   assert.ok(src.includes('exploring-lane-cta'), 'lane CTA testid missing');
 });
 
-test('/studio (founder Studio, D564) leads its zones with Do these next', () => {
+test('/studio (founder Studio, D564, D1419) leads with Continue where you left off', () => {
+  // D1419 (#3698): "Do these next" left the page; Continue reads its first open item.
   const src = fe('src/pages/founder/FounderStudioBody.jsx');
-  const firstZone = src.match(/<Zone\s+title="([^"]+)"/);
-  assert.ok(firstZone, 'expected the founder Studio to draw its zones');
-  assert.equal(firstZone[1], 'Do these next', 'the founder Studio no longer leads with what to do next');
+  assert.match(src, /<Link to=\{actions\.items\[0\]\.href\}[^>]*data-testid="link-founder-continue">Continue where you left off<\/Link>/,
+    'the founder Studio no longer leads with what to do next');
   assert.ok(!fe('src/pages/Dashboard.jsx').includes('VentureNextStep'), 'the retired strip is mounted again');
 });

@@ -337,8 +337,14 @@ const PROFILES = {
     // `research/markets`: `Re-run stale` (D593), prose about sector counts
     // while the page could record no reading; the directory's readings card
     // has the record form again, and the op opens it on the stale reading.
-    // Was 0, then 5, then 7, then 8, then 9, then 10, then 12, then 13, then 14.
-    handlers: 15,
+    // Was 0, then 5, then 7, then 8, then 9, then 10, then 12, then 13, then 14,
+    // then 15. SIXTEEN NOW: D1424 (#3700, PH14s) adds Status reports' `New
+    // report`, the zone's primary, which opens the page's own Composer.
+    handlers: 16,
+    // D1424 (#3700): labels the profiles canvas adds that no `Pages · …` artboard
+    // draws. Each is listed by zone, so the canvas-order check still pins the
+    // rest of the row exactly and this list cannot grow by accident.
+    offCanvas: { 'delivery/status-reports': ['New report'] },
     // NOTHING IS EXCLUDED ON THIS PROFILE ANY MORE. The entry that stood here
     // read: "`network/organizations`: `NetworkPage` catches a slug it has no tab
     // for and suppresses every body … there is nothing for a row to sit over.
@@ -430,8 +436,10 @@ const PROFILES = {
     // reading "consent is recorded per introduction, not as a log" on the
     // premise that only this side's consent was returned. Both are, and the
     // zone opens the partner panel's own log over its rows. Was 0, then 4,
-    // then 5, then 7, then 9.
-    handlers: 10,
+    // then 5, then 7, then 9. ELEVEN NOW: D1424 (#3700) turned Services' `New
+    // service` from a note pointing at the form into the handler that focuses
+    // it (`focusAddForm`), the zone's emerald primary.
+    handlers: 11,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -865,6 +873,13 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const table = tableLabels(SRC);
     const canvas = canvasOps(profile);
     assert.equal(Object.keys(table).length, profile.zones);
+    for (const [zone, extra] of Object.entries(profile.offCanvas || {})) {
+      for (const label of extra) {
+        assert.ok(table[zone]?.includes(label), `${zone}: ${label} is listed off-canvas but not declared`);
+        assert.ok(!canvas[zone]?.includes(label), `${zone}: ${label} is on the artboard now; drop it from offCanvas`);
+      }
+      table[zone] = table[zone].filter((l) => !extra.includes(l));
+    }
     for (const [zone, labels] of Object.entries(table)) {
       assert.ok(canvas[zone], `${zone} has no artboard — where did its labels come from?`);
       // Order matters: the canvas puts the destructive or configuring action
@@ -1393,9 +1408,9 @@ test('a gap note describes the screen, never a capability the API already has', 
   const table = read('frontend/src/workspaces/investorZoneActions.js');
 
   // Wired, so each is asserted as a handler rather than as a well-worded gap.
-  assert.match(table, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp' \}/,
+  assert.match(table, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp', primary: true \}/,
     'Add LP is neither a handler nor a stated gap — it is unaccounted for');
-  assert.match(table, /\{ label: 'New call', kind: 'handler', handler: 'newCall' \}/,
+  assert.match(table, /\{ label: 'New call', kind: 'handler', handler: 'newCall', primary: true \}/,
     'New call is neither a handler nor a stated gap — it is unaccounted for');
   const page = read('frontend/src/pages/investor/InvestorFundCalls.jsx');
   assert.match(page, /handlers: \{ newCall \}/, 'the Calls page does not supply the New call handler');
@@ -1636,3 +1651,33 @@ test('a canvas read in the wrong shape is refused, not counted', () => {
   assert.deepEqual(found['/validate/interviews'], ['Log an interview', 'Export transcripts']);
   assert.deepEqual(found['/validate/verdict'], ['Export summary', 'Send to Problem slide']);
 });
+
+// D1424 (#3700): a primary is one of the zone's own ops, on its artboard (or
+// named in `offCanvas`), and its link — if it is one — is a route this licence
+// may open, by the same guard read the link test above makes.
+for (const [name, profile] of Object.entries(PROFILES)) {
+  test(`${name}: every primary is an op of its own zone's artboard, and a link primary opens for this licence`, () => {
+    const SRC = read(profile.table);
+    const canvas = canvasOps(profile);
+    const table = tableEntries(SRC);
+    const primaries = table.entries.filter((e) => /primary: true/.test(e.rest));
+    assert.equal(primaries.length, { founder: 0, investor: 6, advisor: 4, partner: 4 }[name], `${name}: the reader saw ${primaries.length} primaries`);
+    for (const e of primaries) {
+      const zone = e.zone;
+      // `canvas:` is the artboard's word where the rendered label differs.
+      const label = e.canvas || e.label;
+      assert.ok(label, `a primary in ${zone} has no label`);
+      const onCanvas = canvas[zone]?.includes(label) || (profile.offCanvas?.[zone] || []).includes(label);
+      assert.ok(onCanvas, `${name} ${zone}: primary "${label}" is on no artboard`);
+      const to = (/to: '([^']+)'/.exec(e.rest) || [])[1];
+      if (!to) continue;
+      const path = to.split('?')[0];
+      const i = APP.indexOf(`path="${path}"`);
+      assert.ok(i > 0, `${path} is not a route App.jsx mounts`);
+      const decl = APP.slice(i, i + 400);
+      if (/authOnly\(/.test(decl.slice(0, decl.indexOf('/>') + 2))) continue;
+      const roles = decl.match(/guard\((?:labRoles\()?\[([^\]]*)\]/);
+      assert.ok(roles && new RegExp(`'${name}'`).test(roles[1]), `${name} ${zone}: primary "${label}" links ${path}, which a ${name} cannot open`);
+    }
+  });
+}

@@ -6,16 +6,19 @@
  * and the button that opens the Eadwyn menu (`EadwynMenu`, S5m). Under it the
  * chat, handed in as `children` by `FounderStudioHome`, which builds its one
  * `StudioInterview` element for either width. The chat draws the tab:
- * Conversations (the thread, the list below it, the composer pinned), Tasks or
- * My tickets. No zone, tile or header of D564's page is drawn here.
+ * Conversations (the thread, the list below it, then the composer), Tasks or
+ * My tickets. D1419 (#3698, owner answer A): the founder's strip, profile
+ * card and modules follow the chat, handed in as `after`; this file draws
+ * none of them itself.
  *
  * TESTABLE ON ITS OWN. This file imports none of `PersonalAdvisor`,
  * `StudioInterview`, `FounderStudioHome` or `AdvisorProgressWidget`, which a
  * Node test cannot import.
  *
- * THE BAR STAYS. It is sticky at the top of the shell's scroll (`<main>`), above
- * the chat's own sticky composer (z-20 over z-10), so it stays put while the
- * thread, Tasks or My tickets scroll under it.
+ * THE BAR STAYS. It is sticky at the top of the shell's scroll (`<main>`) at
+ * z-20, so it stays put while the thread, Tasks, My tickets and the modules
+ * scroll under it. The composer is not pinned (D1419): the modules below the
+ * chat would scroll under a pinned one.
  *
  * THE GUTTER. The shell pads `/studio` (`p-4 md:p-6`); the page cancels it with
  * matching negative margins, as D699's More page does, and the bar and body use
@@ -162,7 +165,7 @@ export function StudioConversations({ read = readMine }) {
   );
 }
 
-export default function StudioPhone({ tab = 'conversation', ticketOpen = false, advisorAvailable = null, children }) {
+export default function StudioPhone({ tab = 'conversation', ticketOpen = false, advisorAvailable = null, children, after = null }) {
   const [menu, setMenu] = useState(false);
   const opener = useRef(null);
   const closeMenu = useCallback(() => setMenu(false), []);
@@ -195,6 +198,7 @@ export default function StudioPhone({ tab = 'conversation', ticketOpen = false, 
         <p role="status" className="px-[22px] py-4 text-[13px] text-[#615c6e] dark:text-gray-400" data-testid="studio-phone-no-advisor">{NO_ADVISOR}</p>
       )}
       {children}
+      {after}
       <EadwynMenu open={menu} onClose={closeMenu} active={ticketOpen ? STUDIO_TICKET_PATH : TAB_ROUTE[tab] || TAB_ROUTE.conversation} opener={opener} />
     </div>
   );

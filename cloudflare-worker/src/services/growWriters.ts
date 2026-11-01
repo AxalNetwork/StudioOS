@@ -314,6 +314,17 @@ export async function removeContentItem(env: Env, pid: number, user: User, uid: 
   return { uid, deleted: true };
 }
 
+/** The calendar's table, for a record reference: only its writers spell the name (content_calendar.test.ts). */
+export const CONTENT_CALENDAR_TABLE = 'content_calendar_items';
+
+/** D1567: how many planned pieces came from one source, and when the latest changed (the deck's Notion count). */
+export async function contentCountFrom(env: Env, pid: number, source: string): Promise<{ n: number; at: string | null }> {
+  const r = await env.DB.prepare(
+    'SELECT COUNT(*) AS n, MAX(updated_at) AS at FROM content_calendar_items WHERE project_id = ? AND source = ?',
+  ).bind(pid, source).first<{ n: number; at: string | null }>();
+  return { n: Number(r?.n) || 0, at: r?.at ?? null };
+}
+
 /** The calendar as Distribution reads it, soonest first; an unplanned piece last. */
 export async function contentCalendar(env: Env, pid: number): Promise<Row[]> {
   const q = await env.DB.prepare(
