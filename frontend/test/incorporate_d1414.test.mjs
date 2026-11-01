@@ -29,7 +29,6 @@ import { api } from '../src/lib/api.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
-const ok = (value) => ({ available: true, value });
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
 
 const JURISDICTIONS = { jurisdictions: [
