@@ -137,7 +137,7 @@ const narrativeHandler = (url) => {
 };
 
 test('D1465 (G1): End access now ends the admin\'s own read, and the gate returns; a refusal keeps the read open', async () => {
-  // Mutation checked: onEnd dropped from the banner → no end button; the re-read dropped → the narrative stays drawn.
+  // Mutation checked: onEnd dropped from the banner → no end button; the re-read dropped → the narrative stays drawn; the notice dropped → no RR05 line.
   let mine = { ...REASON };
   let refuse = true;
   const page = await mounted(
@@ -166,6 +166,8 @@ test('D1465 (G1): End access now ends the admin\'s own read, and the gate return
       ['/cycles/raise/narrative/reads/mine?project=1', '/cycles/raise/narrative/reads/mine?project=1']);
     assert.ok(!page.testIds().includes('the-narrative'), 'nothing of the narrative is drawn once the read ends');
     assert.ok(page.testIds().includes('narrative-reason'), 'the gate returns: a new reason to read again');
+    assert.equal(page.text().match(/Your read ended\. The founder sees it ended early\./g)?.length, 1, 'RR05: the line above the gate');
+    assert.ok(page.testIds().includes('narrative-reason-notice'));
   } finally { await page.close(); }
 });
 
