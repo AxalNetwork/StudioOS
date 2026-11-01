@@ -187,3 +187,33 @@ test('H20: a model that cannot be reached keeps the aggregate fallback in the bl
   assert.notEqual(w.f.db.prepare('SELECT summary_text FROM admin_publications').get().summary_text, '');
   assert.equal(w.f.db.prepare('SELECT COUNT(*) AS n FROM ai_rail_proposals').get().n, 0);
 });
+
+// ── #3846 (E2): an agent's proposal names its task and run key ──────────────
+test('#3846: run_key is unique (a second proposal for the same run answers the first), and a member\'s proposal is unchanged', async () => {
+  // Mutations checked: migration 727's run_key index dropped → two rows under one key; the UNIQUE catch removed → it throws.
+  const { stripForeignKeys } = await import('./_baseline.mjs');
+  const f = aiBudgetFixture();
+  try {
+    f.db.exec(MIGRATION);
+    f.db.exec(stripForeignKeys(readFileSync(new URL('../sql/migrations/712_team_agents.sql', import.meta.url), 'utf8')));
+    f.db.exec(stripForeignKeys(readFileSync(new URL('../sql/migrations/727_scope_goals_and_tasks.sql', import.meta.url), 'utf8')));
+    const env = { DB: f.DB } as any;
+    const base = { userId: MEMBER, page: 'Founder · Raise · Use of funds', option: 'draft:raise/use-of-funds-runway', kind: 'draft' as const };
+    const first = await proposeRail(env, { ...base, payload: { text: 'one' }, agentId: 4, taskId: 7, runKey: 'agent:run-0001-abcd' });
+    const second = await proposeRail(env, { ...base, payload: { text: 'two' }, agentId: 4, taskId: 7, runKey: 'agent:run-0001-abcd' });
+    assert.equal(second.uid, first.uid, 'the same run answers its first proposal');
+    assert.deepEqual(second.payload, { text: 'one' });
+    const rows = f.db.prepare('SELECT agent_id, task_id, run_key FROM ai_rail_proposals').all().map((r: any) => ({ ...r }));
+    assert.deepEqual(rows, [{ agent_id: 4, task_id: 7, run_key: 'agent:run-0001-abcd' }]);
+    // The index itself refuses a duplicate key, whatever writes it.
+    assert.throws(() => f.db.prepare("INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, kind, payload_json, run_key) VALUES ('dup', 2, 'x', 'y', 'draft', '{}', 'agent:run-0001-abcd')").run(), /UNIQUE/);
+    // A member's own proposal: no agent, no task, no key, and any number of them.
+    await proposeRail(env, { ...base, payload: { text: 'm1' } });
+    await proposeRail(env, { ...base, payload: { text: 'm2' } });
+    const members = f.db.prepare('SELECT agent_id, task_id, run_key FROM ai_rail_proposals WHERE agent_id IS NULL').all().map((r: any) => ({ ...r }));
+    assert.deepEqual(members, [{ agent_id: null, task_id: null, run_key: null }, { agent_id: null, task_id: null, run_key: null }]);
+    // A task or a key belongs to an agent's proposal only, and a key has the run's shape.
+    assert.equal(proposeRefusal({ ...base, payload: { text: 'x' }, runKey: 'agent:run-0002-abcd' }), "a task or a run key is an agent's");
+    assert.equal(proposeRefusal({ ...base, payload: { text: 'x' }, agentId: 4, runKey: 'not a key' }), 'not a run key');
+  } finally { f.db.close(); }
+});

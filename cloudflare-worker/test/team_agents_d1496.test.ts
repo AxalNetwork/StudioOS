@@ -29,6 +29,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import teamAgents from '../src/routes/team_agents.ts';
 import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, optionsIn, roleOf } from '../src/services/agents/catalogue.ts';
 import { checkRules, diffRules } from '../src/services/agents/rulebook.ts';
+import { agentRun } from '../src/services/agents/agentRun.ts';
 import { MODULES as VALIDATE } from '../src/services/cycleValidate.ts';
 import { MODULES as RAISE } from '../src/services/raiseCycle.ts';
 import { GROW_MODULES as GROW } from '../src/services/growCycle.ts';
@@ -51,6 +52,8 @@ function world() {
   );
   addColumnsFrom(db, sql('migrations/597_company_archive_and_events.sql'), 'company_profiles');
   db.exec(MIGRATION);
+  // #3846: migration 727's task_id and run_key, which an agent's proposal names.
+  db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')");
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', null, 'free');
   user.run(EDITOR, 'u-editor', 'editor@example.test', 'Eve Editor', 'founder', 100, 'growth');
@@ -528,4 +531,88 @@ test('holdOperation: an agent run is agent.<role> on the ai surface; anything el
   assert.equal(holdOperation({ task: 'rail_numbers' }), 'ai.rail_numbers');
   assert.equal(holdOperation({ task: 'rail_numbers', agentId: 4, agentRole: 'Bad Role!' }), 'ai.rail_numbers');
   assert.equal(holdOperation({ task: 'rail_numbers', agentId: 0, agentRole: 'cfo' }), 'ai.rail_numbers');
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// #3846 (#3742 E2): run identity. A step retried any number of times takes one
+// hold, makes at most one proposal and is charged once.
+// ═════════════════════════════════════════════════════════════════════════════
+
+test('#3846: a retried step answers its first proposal; a retry whose hold settled with no proposal ends step_lost with one charge', async () => {
+  // Mutations checked: the run_key pre-check removed → the paused agent's retry is refused agent_paused; the idempotency key dropped from
+  // the run → a second hold and a second charge; step_lost answered as a fresh run → calls rise to 2.
+  const w = runWorld();
+  try {
+    const uid = await addCfo(w);
+    const agent = () => agentRow(w, uid);
+    const calls = () => w.calls.filter((m) => m !== '@cf/meta/llama-guard-3-8b').length;
+    const holds = () => (w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n;
+    const charged = () => (w.db.prepare('SELECT SUM(charged_microusd) AS c FROM ai_usage_logs WHERE agent_id = ?').get(agent().id) as any).c;
+    const step = { module: 'use-of-funds', option: 'draft:raise/use-of-funds-runway', prompt: 'How long is our cash horizon?' };
+
+    // A step that lands: the retry answers the same proposal, and nothing runs again.
+    const first = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-aaaa-0001' });
+    assert.equal(first.ok, true, JSON.stringify(first));
+    const again = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-aaaa-0001' });
+    assert.ok(again.ok && first.ok);
+    assert.equal(again.proposal.uid, first.proposal.uid);
+    assert.deepEqual([again.replayed, again.runKey], [true, 'agent:run-aaaa-0001']);
+    assert.deepEqual(again.charged, first.charged);
+    assert.deepEqual([calls(), holds()], [1, 1]);
+    // A step that already landed answers its proposal before any check, even once the agent is paused.
+    await call(w, EDITOR, 'PATCH', `/agents/${uid}`, { status: 'paused' });
+    const whilePaused = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-aaaa-0001' });
+    assert.ok(whilePaused.ok && whilePaused.replayed && whilePaused.proposal.uid === first.proposal.uid, JSON.stringify(whilePaused));
+    await call(w, EDITOR, 'PATCH', `/agents/${uid}`, { status: 'active' });
+    const hold = w.db.prepare('SELECT execution_id, idempotency_key, operation, surface FROM ai_budget_reservations').get() as any;
+    assert.deepEqual({ ...hold }, { execution_id: 'run-aaaa-0001', idempotency_key: 'agent:run-aaaa-0001:run', operation: 'agent.cfo', surface: 'ai' });
+
+    // A step whose proposal is lost after the model ran and was charged.
+    const chargedBefore = charged();
+    const prepare = w.env.DB.prepare.bind(w.env.DB);
+    let failOnce = true;
+    w.env.DB.prepare = (q: string) => {
+      if (failOnce && /^\s*INSERT INTO ai_rail_proposals/.test(q)) { failOnce = false; throw new Error('D1 down'); }
+      return prepare(q);
+    };
+    const lostFirst = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-bbbb-0002' });
+    assert.deepEqual([lostFirst.ok, !lostFirst.ok && lostFirst.code], [false, 'proposal_not_saved']);
+    assert.equal(calls(), 2);
+    const chargedAfterRun = charged();
+    assert.ok(chargedAfterRun > chargedBefore, 'the run that lost its proposal was charged once');
+    const retry = await agentRun(w.env, { agent: agent(), ...step, runUid: 'run-bbbb-0002' });
+    assert.equal(retry.ok, false);
+    assert.equal(!retry.ok && retry.code, 'step_lost');
+    assert.equal((retry as any).status, 409);
+    assert.equal((retry as any).holdStatus, 'settled');
+    assert.equal((retry as any).runKey, 'agent:run-bbbb-0002');
+    assert.deepEqual([calls(), holds(), charged()], [2, 2, chargedAfterRun], 'the retry ran nothing, held nothing and charged nothing more');
+    assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM ai_rail_proposals WHERE run_key = 'agent:run-bbbb-0002'").get() as any).n, 0);
+    assert.ok(eventsOf(w, uid).some((e) => e.kind === 'refused' && JSON.parse(e.detail_json).code === 'step_lost'));
+
+    // Without a run uid, every call is its own run (the route's press).
+    const a1 = await agentRun(w.env, { agent: agent(), ...step });
+    const a2 = await agentRun(w.env, { agent: agent(), ...step });
+    assert.ok(a1.ok && a2.ok && a1.proposal.uid !== a2.proposal.uid);
+    assert.equal(calls(), 4);
+    assert.equal((await agentRun(w.env, { agent: agent(), ...step, runUid: 'bad uid!' }) as any).code, 'invalid_run');
+  } finally { w.db.close(); }
+});
+
+test('#3846: a task must be this agent\'s; its id is written on the proposal', async () => {
+  // Mutation checked: taskRefusal returning null → the unassigned task is accepted.
+  const w = runWorld();
+  try {
+    const uid = await addCfo(w);
+    const a = agentRow(w, uid);
+    w.db.prepare("INSERT INTO scope_tasks (id, uid, scope_kind, company_id, title, assignee_kind, assignee_agent_id, module) VALUES (21, 't21', 'company', 1, 'Runway', 'agent', ?, 'use-of-funds')").run(a.id);
+    w.db.prepare("INSERT INTO scope_tasks (id, uid, scope_kind, company_id, title) VALUES (22, 't22', 'company', 1, 'Nobody')").run();
+    const step = { module: 'use-of-funds', option: 'draft:raise/use-of-funds-runway', prompt: 'Runway?' };
+    const mine = await agentRun(w.env, { agent: a, ...step, taskId: 21, runUid: 'run-cccc-0003' });
+    assert.equal(mine.ok, true, JSON.stringify(mine));
+    const row = w.db.prepare("SELECT task_id, run_key FROM ai_rail_proposals WHERE run_key = 'agent:run-cccc-0003'").get() as any;
+    assert.deepEqual({ ...row }, { task_id: 21, run_key: 'agent:run-cccc-0003' });
+    const theirs = await agentRun(w.env, { agent: a, ...step, taskId: 22 });
+    assert.deepEqual([theirs.ok, (theirs as any).status, (theirs as any).code], [false, 422, 'task_not_assigned']);
+  } finally { w.db.close(); }
 });
