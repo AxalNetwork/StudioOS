@@ -38,7 +38,7 @@ export async function supportReadHistory(env: Env, projectId: number, action: st
   let rows;
   // A read that throws is unreadable; the database's own message is never passed on.
   try { rows = await readRows(env, projectId, action, page); } catch { throw new SupportHistoryError(); }
-  if (rows.success === false || !Array.isArray(rows.results)) throw new SupportHistoryError();
+  if ((rows as { success?: boolean }).success === false || !Array.isArray(rows.results)) throw new SupportHistoryError();
   const reads: SupportRead[] = rows.results.slice(0, SUPPORT_PAGE_SIZE).map((row) => {
     let reason: string | null = null;
     try {
