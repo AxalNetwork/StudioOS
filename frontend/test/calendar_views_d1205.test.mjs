@@ -50,8 +50,8 @@ test('every kind the page reads is in exactly one family; Deadlines holds the Co
   assert.equal(familyOf('event_ticket'), 'events');
   assert.equal(familyOf('calendly_event'), 'other');
   // D1484 (#3977): the cohort dates and deal closings are deadlines too; #3982: so are a round's close and an NDA's expiry.
-  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing', 'round_close', 'nda_expiry']);
-  assert.equal(PAGE_KINDS.length, 17, 'the page kind table parsed'); // #3959: Learning is the fifteenth; #3982 adds two.
+  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone']);
+  assert.equal(PAGE_KINDS.length, 21, 'the page kind table parsed'); // #3959: Learning is the fifteenth; #3982 adds two; #3983 four.
 });
 
 test('a failed source counts a dash, never 0; a read list counts; no list counts nothing', () => {

@@ -28,6 +28,11 @@ when adding a kind.
   day: `round_close` (an active round's close, for the venture's founder and
   its accepted owners and co-founders) and `nda_expiry` (an active, unvoided
   NDA's expiry, for its two parties only, by the other party's name).
+- `taskDates.ts`: #3983 (D1486 §d), the dated task stores, family `tasks`,
+  page only and all day, each for its owner alone: `workflow_task` (assignee),
+  `mvp_task` (assignee, venture not deleted), `contact_task` (the venture's
+  founder) and `engagement_milestone` (the delivering partner). Done and
+  cancelled rows are hidden.
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
   projections keep their separate, smaller event shape.
 - `itemRead.ts`: one item for the drawer (the page read's own reader and

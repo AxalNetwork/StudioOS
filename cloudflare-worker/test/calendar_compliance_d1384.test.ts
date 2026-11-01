@@ -57,7 +57,7 @@ test('the registry reads compliance as one more source, and no feed or file kind
   assert.ok(KNOWN_KINDS.includes('compliance_due'), 'compliance_due is registered in READERS');
   // D1484 (#3977): D1208's three readers and the manual reader joined it, all page only; #3959: so is Learning;
   // #3982 (D1486 §c): so are a round's close and an NDA's expiry.
-  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due', 'interview_call', 'cohort_date', 'deal_closing', 'manual', 'learning', 'round_close', 'nda_expiry']);
+  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due', 'interview_call', 'cohort_date', 'deal_closing', 'manual', 'learning', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone']);
   assert.ok(!FEED_KINDS.includes('compliance_due'));
   assert.deepEqual([...FEED_KINDS, ...PAGE_ONLY_KINDS].sort(), [...KNOWN_KINDS].sort());
 });

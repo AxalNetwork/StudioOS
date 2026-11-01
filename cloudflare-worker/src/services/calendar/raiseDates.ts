@@ -26,8 +26,8 @@ function results(value: { results?: Row[] }): Row[] {
   return value.results;
 }
 
-/** One all-day item on its recorded day; the end is exclusive. */
-function dayItem(kind: RaiseDateKind, id: number, uid: string, title: string, value: unknown): CalendarEvent & { all_day: true } {
+/** One all-day item on its recorded day; the end is exclusive. #3983's task readers share it. */
+export function dayItem(kind: CalendarEvent['kind'], id: number, uid: string, title: string, value: unknown): CalendarEvent & { all_day: true } {
   const day = String(value ?? '').slice(0, 10);
   const ms = Date.parse(`${day}T00:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(ms) || new Date(ms).toISOString().slice(0, 10) !== day) {
