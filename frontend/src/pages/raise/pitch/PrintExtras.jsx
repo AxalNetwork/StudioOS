@@ -1,5 +1,6 @@
 import React from 'react';
 import { BlockGrid } from './BlockGrid';
+import { SLIDE_SIZES, aspectOf } from './gridModel';
 import { EMPTY_CARD, NO_NOTES, cardOf } from './presentExportModel';
 
 /**
@@ -32,12 +33,13 @@ export const SOURCES_NOT_SENT = 'The Sources appendix did not come with this ver
 /** Does this slide belong to the studio (D897's fields, D898's blocks) rather than a template? */
 export const isStudioSlide = (s) => (Array.isArray(s?.blocks) && s.blocks.length > 0) || (Array.isArray(s?.fields) && s.fields.length > 0);
 
-export function StudioPrintCard({ slide, index }) {
+export function StudioPrintCard({ slide, index, aspect = '16:9' }) {
   const card = cardOf(slide, index);
   if (card.blocks.length) {
+    // D1499: the page is the slide itself, 1920 × 1080 or 1440 × 1080, so `boxOf`'s boxes print at their own pixels.
     return (
-      <div data-slide-frame="" style={PAGE} data-testid={`print-card-${index}`} data-layout="grid">
-        <BlockGrid blocks={card.blocks} colours={COLOURS} live size="print" testId={`print-blocks-${index}`} />
+      <div data-slide-frame="" style={{ ...PAGE, width: SLIDE_SIZES[aspectOf(aspect)].width }} data-testid={`print-card-${index}`} data-layout="grid">
+        <BlockGrid blocks={card.blocks} colours={COLOURS} live size="print" aspect={aspect} testId={`print-blocks-${index}`} />
       </div>
     );
   }

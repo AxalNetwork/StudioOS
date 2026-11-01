@@ -281,7 +281,8 @@ export function saveChip({ dirty, readOnly, when, version = null }) {
 export const MORE_MENU = Object.freeze([
   { id: 'deck', label: 'This deck', items: [
     { id: 'stage', label: 'Stage', adapter: 'stagePlan' },
-    { id: 'size', label: 'Slide size 16:9 · 4:3', adapter: 'grid' },
+    // D1499 (#3749): the theme's aspect, written like a theme and held until a version is saved.
+    { id: 'size', label: 'Slide size 16:9 · 4:3', write: true },
     { id: 'theme', label: 'Theme', write: true },
     { id: 'brand', label: 'Brand kit' },
     { id: 'reorder', label: 'Reorder for stage', adapter: 'deckActions' },

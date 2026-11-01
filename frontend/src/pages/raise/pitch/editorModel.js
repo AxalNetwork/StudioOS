@@ -268,7 +268,11 @@ export function changesOf(base, next, model = null) {
 }
 
 function withVersion(out, base, next) {
-  if (!same(base.theme ?? null, next.theme ?? null)) out.push(`The theme becomes ${THEME_LABELS[next.theme?.kind || 'brand']}.`);
+  // D1499: the slide size is the theme's `aspect`, said on its own line; 16:9 is the default and is left out.
+  const sizeOf = (t) => (t?.aspect === '4:3' ? '4:3' : '16:9');
+  const look = (t) => { if (!t) return null; const { aspect: _a, ...rest } = t; return rest.kind === 'brand' && !rest.background && Object.keys(rest).length <= 2 ? null : rest; };
+  if (!same(look(base.theme), look(next.theme))) out.push(`The theme becomes ${THEME_LABELS[next.theme?.kind || 'brand']}.`);
+  if (sizeOf(base.theme) !== sizeOf(next.theme)) out.push(`The slide size becomes ${sizeOf(next.theme) === '4:3' ? 'Standard 4:3 (1440 × 1080)' : 'Widescreen 16:9 (1920 × 1080)'}.`);
   if ((base.audience ?? null) !== (next.audience ?? null)) out.push(`The audience becomes ${AUDIENCE_LABELS[next.audience] || NOT_RECORDED}.`);
   return out;
 }
