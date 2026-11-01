@@ -12,6 +12,7 @@
  * Every AI step has a deterministic fallback so the feature always returns a
  * usable result even when the model chain refuses or times out.
  */
+import { untrustedBlock, withUntrustedRule } from './ai/untrusted';
 import type { Env } from '../types';
 import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
@@ -405,14 +406,21 @@ export async function collectCandidateCrawl(
   }
 }
 
+export const POSITIONING_SYSTEM = withUntrustedRule('You extract a company\'s positioning/messaging from its website text. Respond ONLY as JSON: {"positioning": string (1-2 sentences, concrete)}.');
+
+/** D1506 (#3757): a fetched page is framed data; it never instructs the run. */
+export function positioningMessage(name: string, text: string): string {
+  return `Company: ${name}\n\nWebsite text:\n${untrustedBlock('web_page', text.slice(0, 6000))}`;
+}
+
 async function distillPositioning(env: Env, userId: number, rail: RailContext, name: string, text: string): Promise<string> {
   if (!text.trim()) return '';
   const res = await runJson<{ positioning: string }>(
     env,
     userId,
     rail,
-    'You extract a company\'s positioning/messaging from its website text. Respond ONLY as JSON: {"positioning": string (1-2 sentences, concrete)}.',
-    `Company: ${name}\n\nWebsite text:\n${text.slice(0, 6000)}`,
+    POSITIONING_SYSTEM,
+    positioningMessage(name, text),
     220,
   );
   return res?.positioning?.slice(0, 400) || '';

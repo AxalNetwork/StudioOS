@@ -29,6 +29,7 @@
  * `interview_pain_severities` stores it since #1472 (D659): accept writes the
  * level itself.
  */
+import { untrustedBlock } from './ai/untrusted';
 import type { Env } from '../types';
 import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
@@ -750,8 +751,8 @@ export async function askTranscript(
 
 /** Delimiters vary per message; embedded delimiters remain part of the transcript data. */
 export function transcriptData(segments: readonly Segment[]): string {
-  const delimiter = `TRANSCRIPT_${crypto.randomUUID()}`;
-  return `BEGIN_${delimiter}\n${transcriptLines(segments)}\nEND_${delimiter}`;
+  // D1506: the shared frame, kind `transcript` (`BEGIN_TRANSCRIPT_<nonce>`, as before).
+  return untrustedBlock('transcript', transcriptLines(segments));
 }
 export function transcriptLimit(segments: readonly Segment[], calls: number): string | null {
   const bytes = segments.reduce((n, s) => n + new TextEncoder().encode(s.text).length + new TextEncoder().encode(s.speaker || '').length, 0);

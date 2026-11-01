@@ -436,7 +436,7 @@ deckNew.post('/generate', async (c) => {
   let by: 'Eadwyn' | 'none' = 'none';
   let reason: string | null = null;
   if (res.ok) {
-    const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length);
+    const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length, [name, ...items.map((i) => `${i.label} ${i.value ?? ''}`)]);
     wording = w.byIndex;
     dropped = w.dropped;
     by = wording.some((x) => x.headline || x.body) ? 'Eadwyn' : 'none';
@@ -519,7 +519,7 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   let reason: string | null = null;
   let dropped = 0;
   if (res.ok) {
-    const w = wordingFromModel(parseJsonLoose<any>(res.output), 1);
+    const w = wordingFromModel(parseJsonLoose<any>(res.output), 1, [name, ...items.map((i) => `${i.label} ${i.value ?? ''}`)]);
     words = w.byIndex[0];
     dropped = w.dropped;
     if (!words.headline && !words.body) reason = 'Eadwyn’s words could not be read. The card keeps its figures and its title.';
