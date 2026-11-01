@@ -793,6 +793,13 @@ legal.get('/incorporation/quote', async (c) => {
   });
 });
 
+/** D1415 Part 3: the uid of the company an order is linked to (`incorporations.company_id`), or null. */
+async function orderCompanyUid(env: Env, orderId: number): Promise<string | null> {
+  const r = await env.DB.prepare('SELECT cp.uid FROM incorporations i JOIN company_profiles cp ON cp.id = i.company_id WHERE i.id = ?')
+    .bind(orderId).first<{ uid: string }>();
+  return r?.uid ?? null;
+}
+
 legal.get('/incorporate/status', async (c) => {
   const user = await requireAuth(c);
   await ensureIncorporationsSchema(c.env);
@@ -813,6 +820,9 @@ legal.get('/incorporate/status', async (c) => {
     // D601 — what HQ recorded: the packet document and the state filing date.
     packet_document_id: row.packet_document_id ?? null,
     filed_on: row.filed_on ?? null,
+    // D1415 Part 3 (#3855): the company the filing linked or created, from the order itself, never from the
+    // project's company now (a venture moved later keeps showing the order's company). Null until linked.
+    company_uid: await orderCompanyUid(c.env, Number(row.id)),
   });
 });
 
@@ -824,11 +834,11 @@ legal.get('/incorporate/orders', async (c) => {
   const user = await requireAuth(c);
   await ensureIncorporationsSchema(c.env);
   const rows = await c.env.DB.prepare(
-    `SELECT id, project_id, status, jurisdiction_id, company_name, amount_cents, currency, paid_at, created_at,
-            packet_document_id, packet_ready_at, filed_on
-     FROM incorporations
-     WHERE user_id = ? AND status != 'pending_payment'
-     ORDER BY created_at DESC
+    `SELECT i.id, i.project_id, i.status, i.jurisdiction_id, i.company_name, i.amount_cents, i.currency, i.paid_at, i.created_at,
+            i.packet_document_id, i.packet_ready_at, i.filed_on, cp.uid AS company_uid
+     FROM incorporations i LEFT JOIN company_profiles cp ON cp.id = i.company_id
+     WHERE i.user_id = ? AND i.status != 'pending_payment'
+     ORDER BY i.created_at DESC
      LIMIT 20`,
   ).bind(user.id).all<Record<string, unknown>>();
   return c.json({ orders: rows.results ?? [] });

@@ -107,7 +107,7 @@ test('a sync in one sentence: counts only', () => {
 
 test('the wiring: Google\'s two Build lines draw, between GitHub\'s and Notion\'s; one client; no pop-up, no hex', () => {
   assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion']);
-  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['github', 'google', 'notion']);
+  assert.deepEqual(builtParts('product-roadmap').map(([k]) => k), ['github', 'google', 'notion', 'posthog']);
   assert.ok(BUILD_PARTS['solution-design'].some(([k, r]) => k === 'google' && typeof r === 'function'));
   const src = read('frontend/src/pages/cycles/BuildFromGoogle.jsx');
   assert.doesNotMatch(src, /\b(alert|confirm|prompt)\(|window\.open/);

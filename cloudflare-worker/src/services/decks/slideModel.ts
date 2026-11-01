@@ -28,6 +28,7 @@
  */
 import { sanitizeBinding } from './sources';
 import { diagramProblem, sanitizeDiagram } from './diagramModel';
+import { CUSTOM, STRUCTURE_IDS, areasProblem, sanitizeAreas } from './structures';
 
 export const GRID_COLS = 12;
 export const GRID_ROWS = 6;
@@ -223,15 +224,20 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   if (Array.isArray(s?.blocks)) out.blocks = sanitizeBlocks(s.blocks, url);
   const bd = bindingOf(s?.binding);
   if (bd) out.binding = bd;
+  // D1499: a card's structure and areas, kept only when sound; a card without them derives its areas (`structures.areasOf`).
+  if (typeof s?.structure === 'string' && (s.structure === CUSTOM || STRUCTURE_IDS.includes(s.structure))) out.structure = s.structure;
+  const areas = s?.areas != null ? sanitizeAreas(s.areas) : null;
+  if (areas) out.areas = areas;
   return out;
 }
 
 /** The deck's theme (PD8), or null for the default (the brand kit, no deck background). */
-export function sanitizeTheme(v: any, url: UrlGuard): { kind: string; background: Background | null } | null {
+export function sanitizeTheme(v: any, url: UrlGuard): { kind: string; background: Background | null; aspect?: '4:3' } | null {
   if (!v || typeof v !== 'object') return null;
   const kind = oneOf(v.kind, THEME_KINDS);
   if (!kind) return null;
-  return { kind, background: backgroundOf(v.background, url) };
+  // D1499: 4:3 is kept; 16:9 is the default and is left out, so a deck saved before v2 hashes as it did.
+  return { kind, background: backgroundOf(v.background, url), ...(v.aspect === '4:3' ? { aspect: '4:3' as const } : {}) };
 }
 
 /**
@@ -245,6 +251,9 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
     const card = `Card ${i + 1}`;
     if (s?.layout != null && !oneOf(s.layout, LAYOUT_IDS)) out.push(`${card}: the layout is not one of the twelve.`);
     if (typeof s?.notes === 'string' && s.notes.length > NOTES_MAX) out.push(`${card}: the notes are longer than ${NOTES_MAX} characters.`);
+    if (s?.structure != null && !(s.structure === CUSTOM || STRUCTURE_IDS.includes(s.structure))) out.push(`${card}: the structure is not one of the seventeen.`);
+    const ap = s?.areas != null ? areasProblem(s.areas) : null;
+    if (ap) out.push(`${card}: ${ap}`);
     if (s?.blocks == null) return;
     if (!Array.isArray(s.blocks)) { out.push(`${card}: blocks must be a list.`); return; }
     if (s.blocks.length > MAX_BLOCKS) out.push(`${card}: a card holds at most ${MAX_BLOCKS} blocks.`);

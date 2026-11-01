@@ -280,8 +280,9 @@ export async function setInterviewStage(
  */
 export const DEMAND_KINDS = ['loi', 'pre_sale', 'waitlist', 'need_to_have', 'would_pay'] as const;
 export const DEMAND_STATUSES = ['confirmed', 'counted', 'to_confirm'] as const;
-/** D1092: `google_forms` is a Form response the founder's mapping qualified; it arrives `to_confirm`. */
-export const DEMAND_SOURCES = ['manual', 'interview', 'session', 'google_forms'] as const;
+/** D1092: `google_forms` is a Form response the founder's mapping qualified; it arrives `to_confirm`.
+ *  D1605: `posthog` is an answer to a survey question the founder marked, accepted from a proposal; it arrives `to_confirm`. */
+export const DEMAND_SOURCES = ['manual', 'interview', 'session', 'google_forms', 'posthog'] as const;
 
 export type DemandSignalInput = {
   projectId: number;
@@ -1448,7 +1449,11 @@ export async function addEvidence(
     ok = store != null && await ownedRow(env, store, ref, input.projectId);
     other = { module: 'demand-signals', id: ref };
   } else if (kind === 'metric') {
-    ok = (KPI_KEYS as readonly string[]).includes(ref) && (await latestKpis(env, input.projectId)).has(ref as KpiKey);
+    // D1605: a tracked PostHog metric is evidence once PostHog has given it a value.
+    ok = ref.startsWith('posthog-')
+      ? !!await env.DB.prepare("SELECT 1 FROM posthog_tracked_metrics m JOIN posthog_metric_facts f ON f.project_id = m.project_id AND f.kind = 'metric' AND f.fact_key = 'metric:' || m.uid AND f.value IS NOT NULL WHERE m.uid = ? AND m.project_id = ?")
+        .bind(ref.slice('posthog-'.length), input.projectId).first()
+      : (KPI_KEYS as readonly string[]).includes(ref) && (await latestKpis(env, input.projectId)).has(ref as KpiKey);
   } else {
     ok = ID.test(ref) && !!await env.DB.prepare('SELECT 1 FROM hypothesis_experiments WHERE id = ? AND project_id = ?')
       .bind(Number(ref), input.projectId).first();

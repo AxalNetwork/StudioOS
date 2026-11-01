@@ -49,7 +49,9 @@ export type JobType =
   // the top-up balance below their threshold (services/aiAutoReload.ts).
   | 'ai_auto_reload'
   // D1131 — bounded event-calendar cleanup and provider retry.
-  | 'event_calendar_cleanup';
+  | 'event_calendar_cleanup'
+  // D1490 — one action on one event listing (services/eventSyndication/jobs.ts).
+  | 'event_syndication';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

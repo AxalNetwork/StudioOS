@@ -178,7 +178,8 @@ test('a definition round-trips and its keys come from the route', async () => {
   // The picker's options are the route's own list, so a form cannot offer a key the
   // write refuses — the convention #194's targets editor set.
   assert.ok(before.body.keys.includes('net_burn'));
-  assert.deepEqual(before.body.sources, ['manual', 'stripe', 'derived']);
+  // D1609: a metric can be defined as read from PostHog.
+  assert.deepEqual(before.body.sources, ['manual', 'stripe', 'derived', 'posthog']);
 
   const put = await call(e, 'PUT', `/metrics/${PROJECT}/definitions`, owner, {
     metric_key: 'net_burn', definition: 'Operating cash out minus cash in.', source_kind: 'manual',

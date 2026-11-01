@@ -304,7 +304,7 @@ const STORAGE = {
   total_bytes: 1_288_490_189, files: 148, unknown_size_files: 0,
   areas: [area('data_room', 64, 859_832_320), area('diligence_files', 31, 100), area('research_library', 22, 50_331_648),
     area('message_attachments', 27, 100_663_296), area('interview_recordings', 4, 32_505_856),
-    ...['data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports'].map((k) => area(k, 0, 0)),],
+    ...['data_room_versions', 'session_audio', 'deck_reviews', 'validate_evidence', 'build_proofs', 'grow_minutes', 'brand_files', 'csv_imports', 'articles'].map((k) => area(k, 0, 0)),],
 };
 const NOW = new Date(Date.UTC(2026, 9, 8, 18, 48));
 const usageProps = { budget: ready(BUDGET), product: ready(PRODUCT), spend: ready(SPEND), rates: ready(RATES), storage: ready(STORAGE), now: NOW };
