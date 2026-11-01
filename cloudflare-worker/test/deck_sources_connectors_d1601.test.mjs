@@ -23,7 +23,6 @@ import { DECK_SOURCES, SHIPPING_PAGES, productReads, readSources, shippingCounts
 import { CHART_SERIES, readSeries } from '../src/services/decks/chartSeries.ts';
 import { CUSTOMERS, OPEN_DEALS, READ_PROPERTIES } from '../src/services/decks/hubspotCounts.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
-import { MCP_PROVIDERS } from '../src/integrations/mcpProviders.ts';
 import { LINEAR_MCP_URL, LINEAR_READ_TOOLS, openLinearReads } from '../src/services/linear/reads.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -93,7 +92,6 @@ function hubspotFake({ open = 7, customers = 3, amounts = [1000, 2500.5, null, 4
 
 // ── Linear, faked ────────────────────────────────────────────────────────
 
-const LINEAR = MCP_PROVIDERS.linear;
 const linearTools = () => LINEAR_READ_TOOLS.map((name) => ({ name, inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } }));
 const uuid = (n) => `1a2b3c4d-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
