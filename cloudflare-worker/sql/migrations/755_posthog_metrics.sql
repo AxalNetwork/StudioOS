@@ -1,4 +1,4 @@
--- 755 — PostHog part 2: the metrics foundation (D1604, #3731, #2409).
+-- 755 — PostHog part 2: the metrics foundation (D1609, #3731, #2409).
 --
 -- Three new tables, no change to an existing one. Each goes with its
 -- connection (`integration_id` cascades): disconnecting PostHog takes its

@@ -1,5 +1,5 @@
 /**
- * D1604 (#3731, #2409 part 2) — PostHog's metrics foundation: tracked
+ * D1609 (#3731, #2409 part 2) — PostHog's metrics foundation: tracked
  * metrics, the `posthog-<uid>` KPI family, facts that stay deleted,
  * proposals, the module read, and `posthog` as a connected source.
  *
@@ -9,7 +9,7 @@
  * venture and figure is made up.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
- *     --test cloudflare-worker/test/posthog_metrics_d1604.test.ts
+ *     --test cloudflare-worker/test/posthog_metrics_d1609.test.ts
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

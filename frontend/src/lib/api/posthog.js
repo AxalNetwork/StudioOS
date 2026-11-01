@@ -1,8 +1,8 @@
 // D1385 (#3731, #2409 part 1) — "Your PostHog projects": the one PostHog
 // project each venture reads. Worker: routes/posthog.ts.
 //   /connectors/:uid/posthog-projects   the ventures, their links and the member's projects; link or unlink one
-//   /connectors/:uid/posthog-insights   D1604: the linked project's saved insights, for "Track a metric"
-//   /cycles/:section/posthog…           D1604: a module's From PostHog, its tracked metrics, facts and proposals
+//   /connectors/:uid/posthog-insights   D1609: the linked project's saved insights, for "Track a metric"
+//   /cycles/:section/posthog…           D1609: a module's From PostHog, its tracked metrics, facts and proposals
 // Read only: nothing here writes to PostHog.
 import { request } from '../api.js';
 

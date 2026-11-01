@@ -9,6 +9,12 @@ hosted MCP server.
   projects, saved insights and their results, trends, funnel, retention and
   lifecycle queries of their own kind only, the web overview, experiments,
   surveys and their answers, and feature flags.
+- `deckFacts.ts` — D1601 (#3880): what a pitch deck reads from a venture's
+  PostHog: its linked project (`posthogDeckLink`, the connection active and
+  switched on for the venture's company) and the facts #3731's feeds store
+  for it. No feed stores one yet, so `posthogDeckFacts` is empty and
+  `posthogWauWeekly` null, and the deck says "not recorded". It never calls
+  PostHog.
 
 The rules for adding to this folder:
 
@@ -26,7 +32,7 @@ The rules for adding to this folder:
   and nothing is requested.
 - **Nothing is logged** but codes and counts.
 
-- `metrics.ts` — D1604 (#3731 part 2): the metrics foundation. A tracked
+- `metrics.ts` — D1609 (#3731 part 2): the metrics foundation. A tracked
   metric is a saved insight the founder picked and gave a role and a module;
   its `uid` names the venture's KPI `posthog-<uid>` (`growKpis.ts`).
   `landFact` writes one aggregate and its `connector_fed_items` row, and a

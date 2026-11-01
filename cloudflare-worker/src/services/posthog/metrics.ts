@@ -1,5 +1,5 @@
 /**
- * D1604 (#3731, #2409 part 2) — PostHog's metrics foundation: what a founder
+ * D1609 (#3731, #2409 part 2) — PostHog's metrics foundation: what a founder
  * tracks, what a sync lands, what waits for Accept, and how each module reads
  * it. Parts 3–6 sync into these stores; nothing here calls PostHog.
  *

@@ -151,7 +151,7 @@ test('wiring: the page draws the section for PostHog only; the client is one lin
   assert.match(api, /^export \* from '\.\/api\/posthog\.js';$/m);
   const client = readFileSync(new URL('../src/lib/api/posthog.js', import.meta.url), 'utf8');
   assert.match(client, /\/connectors\/\$\{enc\(uid\)\}\/posthog-projects/);
-  // D1604: the client's writes are Axal VC's own records (links, tracked metrics, facts, proposals); none reaches PostHog.
+  // D1609: the client's writes are Axal VC's own records (links, tracked metrics, facts, proposals); none reaches PostHog.
   const paths = [...client.matchAll(/request\(`([^`]+)`/g)].map((m) => m[1]);
   assert.ok(paths.length > 0);
   for (const p of paths) assert.match(p, /^\/(connectors|cycles)\//, p);

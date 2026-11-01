@@ -1,11 +1,11 @@
-// D1604 (#3731, #2409 part 2) — a module's "From PostHog" part: tracked
+// D1609 (#3731, #2409 part 2) — a module's "From PostHog" part: tracked
 // metrics as figures or a dash with its reason (never 0), Track a metric
 // behind an in-page dialog, Stop tracking and Delete asked first, proposals
 // with Accept and Dismiss for the owner only, and the states. No test reaches
 // the network: the API is injected. Every value is invented.
 //
 // Run with:
-//   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/from_posthog_d1604.test.mjs
+//   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/from_posthog_d1609.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

@@ -25,6 +25,7 @@ disagrees with the code, the document is the thing to fix.
 | `LEGAL_ENTITIES.md` | The entity set and what each is for. |
 | `SIGNALS.md` | The signals subsystem. |
 | `SOCIAL_PREVIEWS.md` | OG images and how they are generated. |
+| `SOCIAL_CARDS_MAP.md` | D1440: which card each route group shares as, who can open it, whether it is meant to be shared, where its title and image come from, and the retirement calls. |
 | `ANALYTICS_FUNNEL.md` | The funnel events and what they mean. |
 
 **`CLAUDE.md` at the repo root outranks everything here.** Where this folder
