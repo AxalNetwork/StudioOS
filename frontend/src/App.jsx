@@ -3604,6 +3604,7 @@ function AppInner() {
       <Route path="/calendar/item/:kind/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* D1212 (#3178): the connected calendars (CAL9) and Google's panel (CAL10), over the calendar. */}
       <Route path="/calendar/connected" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
+      <Route path="/calendar/sources" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       <Route path="/calendar/connected/google" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* Task #40 (E2) — Event host/attendee surface. */}
       {/* D1030 (#2387): each tab its own address; an Explorer reads Upcoming, Discover and Past (MEV2). */}

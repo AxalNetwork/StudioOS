@@ -139,5 +139,8 @@ test('Beehiiv, X, TikTok and Facebook never write the content calendar: only its
   const walk = (d: string) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.ts$/.test(n)) files.push(p); } };
   walk(root);
   const naming = files.filter((f) => readFileSync(f, 'utf8').includes('content_calendar_items')).map((f) => f.slice(root.length)).sort();
-  assert.deepEqual(naming, ['services/growWriters.ts', 'services/notion/grow.ts']);
+  // D1486 §b (#3981): the calendar's page-only reader names the table too, and only reads it.
+  assert.deepEqual(naming, ['services/calendar/growReaders.ts', 'services/growWriters.ts', 'services/notion/grow.ts']);
+  const reader = readFileSync(join(root, 'services/calendar/growReaders.ts'), 'utf8');
+  assert.doesNotMatch(reader, /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+content_calendar_items\b/i, 'the calendar reader never writes the content calendar');
 });

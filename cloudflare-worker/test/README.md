@@ -50,6 +50,9 @@ columns `writableSession` checks.
 `_guard_stub.mjs` (D763) answers Llama Guard's calls on a stubbed `env.AI` and passes
 every other call through: the guard fails closed inside `run()`, so a stub that does not
 answer it refuses every member run. It answers free, so a test keeps its own run's figures.
+`_fake_ai.mjs` (D1511) is the fake Workers AI binding the deck v2 suites run on: recorded
+outputs, never a model, and each failure a real binding gives injected on demand (a 429,
+error 3040, a timeout, a guard block, bad JSON, over-capacity text, a non-image answer).
 `schema_readiness.test.ts` runs the real bootstraps against two recording D1 stubs
 and asserts each database gets its own DDL — the half `scripts/check-schema-readiness.mjs`
 cannot see, since reading the source tells you a `WeakMap` is there but not that it
@@ -183,5 +186,6 @@ D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen memb
 | `stripe_mode_d1433.test.ts` | D1433 (#3703): mode-stamped catalogue, checkout readiness before provider calls, webhook receipts/retries/concurrency and signature timestamp boundaries; mocked Stripe only. |
 | `project_deck_hard_delete_3747.test.ts` | #3747: migrated SQLite deck/share/note/image cleanup, venture isolation, 500-object R2 pages, rollback, durable retries and per-sweep schema discovery; synthetic records only. |
 | `deck_atomic_save_3748.test.ts` | #3748: migration 713 preserves duplicate deck payloads and enforces unique version/current rows. |
+| `work_board_3969.test.ts` | D1614 W1 (#3969): authenticated project-only boards, task fields, moves, close reasons, dependency races, actor events, unavailable reads, migration 762 over legacy rows, the engine's own mount and the readiness hook, over real SQLite. |
 
 D1456 (#4014): the existing record, recovery, bot-control and migration-runner suites cover channel/fact actions, recorded failed steps, creator-only safe bot details and migration 760 replay through the ledger. The engine fixture applies migration 760 from its SQL source.
