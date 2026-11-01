@@ -101,8 +101,9 @@ test('the waiting count is unavailable until D1442, and an unread count is never
     assert.doesNotMatch(html, /waiting/, `waiting=${waiting} draws a chip`);
     assert.match(html, /aria-label="Ask Eadwyn"/);
   }
-  // The adapter adds no client parameter: D1442 adds `page` with its route.
-  assert.doesNotMatch(read('frontend/src/lib/api/railProposals.js'), /[?&]page=/);
+  // D1442 (#3991) added `page` to the client with its route; this header's own
+  // adapter still reaches no API until its flag flips (S1's viewer-gate note on #3706).
+  assert.match(codeOnly(read('frontend/src/lib/api/railProposals.js')), /\{ page: String\(page\) \}/);
   assert.doesNotMatch(codeOnly(read('frontend/src/workspaces/profileAskAdapter.js')), /\bapi\b|request\(|fetch\(/);
 });
 

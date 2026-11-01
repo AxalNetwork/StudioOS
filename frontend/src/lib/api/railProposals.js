@@ -2,6 +2,8 @@
 // option's run, and their press on each (D720 §9: "Eadwyn drafts; you send").
 // Worker: routes/ai_rail_proposals.ts, migration 506's `ai_rail_proposals`. Caller only.
 //   GET  /api/ai/rail/proposals?option=<key>[&record=<type:id>][&status=<status>]
+//   GET  /api/ai/rail/proposals?page=<rail page>[&run=<usage_log_id>]   D1442: the Ask
+//                                              panel's "N waiting"; an option or a page, never neither
 //                                              → { proposals: [{ uid, rail_option, record_ref, kind,
 //                                                  payload, model, usage_log_id, status, … }] }
 //   POST /api/ai/rail/proposals/:uid/decide    { decision: 'accept'|'edit'|'discard', payload? }
@@ -29,9 +31,12 @@ function neverFillRefusal(field) {
 }
 
 export const railProposalsApi = {
-  list: ({ option, record, status } = {}) => {
-    const q = new URLSearchParams({ option: String(option || '') });
+  list: ({ option, page, record, status, run } = {}) => {
+    // D1442: a page instead of an option; with neither, the Worker answers 400 option_or_page_required.
+    const q = new URLSearchParams(page && !option ? { page: String(page) } : { option: String(option || '') });
+    if (page && option) q.set('page', page);
     if (record) q.set('record', record);
+    if (run != null) q.set('run', String(run));
     if (status) q.set('status', status);
     return request(`/ai/rail/proposals?${q}`);
   },

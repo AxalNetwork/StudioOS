@@ -27,9 +27,11 @@ import './askPanel.css';
  * WHAT IT DRAWS, top to bottom (AK2 to AK15): the head, the page's suggested
  * chips, the conversation with proposal cards, and the composer with the cost
  * line before Send and "Nothing is written until you accept." Every read and
- * write goes through `askPanelAdapter.js`; the two the Worker does not answer
- * yet (the pre-run quote and the "N waiting" count, D1442) are off there.
+ * write goes through `askPanelAdapter.js`, the pre-run quote included
+ * (D1442, asked for once typing pauses).
  */
+/** D1442: the quote waits this long after the last keystroke, so typing is not priced letter by letter. */
+export const QUOTE_PAUSE_MS = 400;
 const CHIP_ROUTES = Object.fromEntries([...FOUNDER_ASK_CHIPS, ...ADVISOR_ASK_CHIPS].map((c) => [c.key, c.route]));
 
 export default function AskPanel({ page, label, crumb, options = [], aiOn = true, layout = 'dock', onClose }) {
@@ -76,13 +78,17 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  // D1442's quote: off until the Worker answers, so the line says the hold is
-  // not shown rather than inventing one.
+  // D1442's quote, once typing pauses (it reads the switched-on connectors, as
+  // the run will). Off, refused or unreadable, the line says the hold is not
+  // shown rather than inventing one.
   useEffect(() => {
     let live = true;
-    askPanelAdapter.quote(convUid, text).then((q) => { if (live) setHold(q.available ? q.data?.hold_microusd ?? null : null); });
-    return () => { live = false; };
-  }, [convUid, text]);
+    setHold(null);
+    const t = setTimeout(() => {
+      askPanelAdapter.quote(convUid, text, page).then((q) => { if (live) setHold(q.available ? q.data?.hold_microusd ?? null : null); });
+    }, QUOTE_PAUSE_MS);
+    return () => { live = false; clearTimeout(t); };
+  }, [convUid, text, page]);
 
   const send = useCallback(async (question) => {
     const q = String(question ?? text).trim();
