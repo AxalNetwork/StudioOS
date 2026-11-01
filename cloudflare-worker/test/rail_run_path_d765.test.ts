@@ -222,6 +222,16 @@ test('every member call of run() passes rail context; system callers are an expl
   for (const [key, why] of Object.entries(SYSTEM)) assert.ok(why.length > 40, `${key} needs its reason`);
 });
 
+test('D1496 part 2 (#3842): the team agent run path calls run() once, with rail context and the agent named', () => {
+  // Mutation checked: `rail` dropped from agentRun.ts's options → the listing reports it and this case fails.
+  const agent = runCalls().filter((c) => c.where.startsWith('services/agents/agentRun.ts:'));
+  assert.equal(agent.length, 1, 'one run() call');
+  const src = readFileSync(join(SRC, 'services/agents/agentRun.ts'), 'utf8');
+  assert.match(agent[0].options, /^run\(env, \{ \.\.\.c\.opts, rail: c\.rail, surface: c\.surface \}\)$/);
+  assert.match(src, /const rail: RailContext = \{ page: row\.pageKey, option: row\.optionKey, record: input\.record \?\? null \}/);
+  assert.match(src, /agentId: a\.id,\s*agentRole: a\.role_key/);
+});
+
 test('every route that runs a member\'s press answers assist_off with 403, in the switch\'s words', () => {
   const routes = ['routes/ai.ts', 'routes/eadwyn.ts', 'routes/advisor.ts', 'routes/founder_validate.ts', 'routes/research.ts'];
   for (const r of routes) assert.match(readFileSync(join(SRC, r), 'utf8'), /refuseAssistOff\(c\)/, r);

@@ -16,14 +16,18 @@
  *   liveFocus      the focus after the card changed under it
  *   askTarget      what the selection's Ask opens: the area lightbox
  *
- * Areas are the input, so when #3749 brings the 17 structures and divider drag
- * (`deckV2Adapter.grid`), only `areasOf` changes. Locks arrive with #3819;
- * until then a block is locked only when it says so (`locked: true`).
+ * Areas are the input. D1499 (#3749) changed only `areasOf`: a card with a
+ * structure (`card.structure`, or its own `card.areas`) offers that
+ * structure's areas as its free ranges; a card without one keeps the
+ * row-by-row free ranges below. The divider drag is A4's (#3765). Locks
+ * arrive with #3819; until then a block is locked only when it says so
+ * (`locked: true`).
  */
 
 import { areaLabel } from './deckV2Model.js';
 import { KIND_LABELS, placementProblem } from './editorModel.js';
 import { blockRefusal } from './deckAssistModel.js';
+import { SLIDE_SIZES, aspectOf, nearestCell, structureOf } from './gridModel.js';
 
 export const GRID = Object.freeze({ cols: 12, rows: 6 });
 
@@ -37,14 +41,40 @@ export const HIDDEN_WHY = 'This area is hidden.';
 const dims = (model) => ({ cols: model?.grid?.cols ?? GRID.cols, rows: model?.grid?.rows ?? GRID.rows });
 const validGrid = (g) => g && [g.c1, g.c2, g.r1, g.r2].every(Number.isInteger) && g.c2 >= g.c1 && g.r2 >= g.r1;
 
+const touches = (a, b) => a.c1 <= b.c2 && b.c1 <= a.c2 && a.r1 <= b.r2 && b.r1 <= a.r2;
+
 /** A free area's id: its top-left cell, stable while the blocks around it stay. */
 export const freeId = (g) => `free:${g.c1}-${g.r1}`;
 
+/** A structure area as a grid range, or null when it is not whole cells on the grid. */
+const rangeOf = (a, cols, rows) => {
+  const g = { c1: a?.c1, c2: a?.c2, r1: a?.r1, r2: a?.r2 };
+  return validGrid(g) && g.c1 >= 1 && g.r1 >= 1 && g.c2 <= cols && g.r2 <= rows ? g : null;
+};
+
 /**
- * The card's areas, blocks first (in their order), then the free ranges: each
- * uncovered cell, read row by row, starts a range as wide as the free run to
- * its right and as tall as that whole run stays free. Null for a card with no
- * blocks list (a card from before D898 draws its fields and has no Grid yet).
+ * The structure areas a card offers (D1499): its own `areas` when it has
+ * them, else its structure's from the catalogue (`gridModel.STRUCTURES`), in
+ * their reading order. Null for a card with neither, or with `custom` and no
+ * areas, which keeps the row-by-row free ranges.
+ */
+export function structureAreas(card, model = null) {
+  const { cols, rows } = dims(model);
+  const own = Array.isArray(card?.areas) && card.areas.length ? card.areas : null;
+  const list = own || structureOf(card?.structure)?.areas || null;
+  if (!list) return null;
+  return [...list].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((a) => rangeOf(a, cols, rows)).filter(Boolean);
+}
+
+/**
+ * The card's areas, blocks first (in their order), then the free ranges.
+ *
+ * With a structure (`structureAreas`), the free ranges are the structure's
+ * areas that no block touches, in the structure's order: "the structures
+ * replace only the area source" (plan §4.1). Without one, each uncovered
+ * cell, read row by row, starts a range as wide as the free run to its right
+ * and as tall as that whole run stays free. Null for a card with no blocks
+ * list (a card from before D898 draws its fields and has no Grid yet).
  */
 export function areasOf(card, model = null) {
   if (!Array.isArray(card?.blocks)) return null;
@@ -57,6 +87,15 @@ export function areasOf(card, model = null) {
     for (let r = Math.max(1, b.grid.r1); r <= Math.min(rows, b.grid.r2); r += 1) {
       for (let c = Math.max(1, b.grid.c1); c <= Math.min(cols, b.grid.c2); c += 1) taken[r][c] = true;
     }
+  }
+  const structured = structureAreas(card, model);
+  if (structured) {
+    const blocks = areas.map((a) => a.grid);
+    for (const grid of structured) {
+      if (blocks.some((g) => touches(g, grid))) continue;
+      areas.push({ id: freeId(grid), kind: 'free', grid });
+    }
+    return areas;
   }
   for (let r = 1; r <= rows; r += 1) {
     for (let c = 1; c <= cols; c += 1) {
@@ -110,8 +149,6 @@ export function pick(selection, areas, id, { shift = false } = {}) {
   return sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id];
 }
 
-const touches = (a, b) => a.c1 <= b.c2 && b.c1 <= a.c2 && a.r1 <= b.r2 && b.r1 <= a.r2;
-
 /** The cell range two cells span, in either order. */
 export function spanOf(from, to) {
   return { c1: Math.min(from.c, to.c), c2: Math.max(from.c, to.c), r1: Math.min(from.r, to.r), r2: Math.max(from.r, to.r) };
@@ -129,25 +166,19 @@ export function marquee(areas, rect) {
 }
 
 /**
- * The cell under a point. `box` is the blocks layer's own box (`{ left, top,
- * width, height }`), the one GridStage draws the blocks, the marquee, the
- * ghost and the "Show the Grid" overlay in: `p-[3%]` and `gap-2`. A CSS
- * percentage padding is taken from the box's width on all four sides, so the
- * top and bottom inset is `inset × width` too, never `inset × height`; `gap`
- * is the gutter between tracks, in px. A point in a gutter belongs to the
- * nearer track.
+ * The cell under a point. `box` is the card face's own box (`{ left, top,
+ * width, height }`), the 16:9 or 4:3 slide GridStage places every area on
+ * with `gridModel.placeOf`. The point is read back onto the slide in slide
+ * pixels and looked up with `gridModel.nearestCell`, the inverse of `boxOf`:
+ * a point in a gutter belongs to the nearer track, one in a margin to the
+ * edge track. D1499: never a CSS padding or gap.
  */
-export function cellAt(x, y, box, model = null, { inset = 0.03, gap = 0 } = {}) {
+export function cellAt(x, y, box, model = null, { aspect = '16:9' } = {}) {
   if (!box || !(box.width > 0) || !(box.height > 0)) return null;
   const { cols, rows } = dims(model);
-  const pad = inset * box.width;
-  const g = Number.isFinite(gap) && gap > 0 ? gap : 0;
-  const track = (at, size, n) => {
-    const pitch = (size - 2 * pad - (n - 1) * g) / n + g;
-    if (!(pitch > 0)) return 1;
-    return Math.min(n, Math.max(1, Math.floor((at - pad + g / 2) / pitch) + 1));
-  };
-  return { c: track(x - box.left, box.width, cols), r: track(y - box.top, box.height, rows) };
+  const s = SLIDE_SIZES[aspectOf(aspect)];
+  const at = nearestCell(((x - box.left) / box.width) * s.width, ((y - box.top) / box.height) * s.height, aspect);
+  return { c: Math.min(cols, at.c), r: Math.min(rows, at.r) };
 }
 
 /**

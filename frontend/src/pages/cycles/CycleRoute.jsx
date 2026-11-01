@@ -48,6 +48,7 @@ import { DurableFromGoogle, RevenueFromGoogle } from './GrowFromGoogle';
 import FromNotion from './FromNotion';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from './ValidatePosthog';
 import RaisePosthog from './RaisePosthog';
+import { ImprovementPosthog, RevenuePosthog } from './GrowPosthog';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
 import ContentCalendar from './ContentCalendar';
@@ -385,7 +386,11 @@ const CYCLE_DEFS = {
         <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
       </>),
       // D1090 (#2955): a feedback database in Notion, as product feedback.
-      'product-improvement': (_data, ctx) => <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />,
+      'product-improvement': (_data, ctx) => (<>
+        <FromNotion section="grow" projectId={ctx.projectId} module="product_improvement" />
+        {/* D1608 (#3731): survey scores and feedback from the founder's PostHog. */}
+        <ImprovementPosthog projectId={ctx.projectId} />
+      </>),
       'partner-network': (data, ctx) => (<>
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />
         {fromMercury('partner-network', data, ctx)}
@@ -395,6 +400,8 @@ const CYCLE_DEFS = {
       'revenue-and-traction': (data, ctx) => (<>
         {fromMercury('revenue-and-traction', data, ctx)}
         <RevenueFromGoogle projectId={ctx.projectId} />
+        {/* D1608 (#3731): PostHog's metrics and product retention, apart from revenue retention. */}
+        <RevenuePosthog projectId={ctx.projectId} />
       </>),
       'team-expansion': (data, ctx) => fromMercury('team-expansion', data, ctx),
     }),

@@ -18,8 +18,7 @@ import { FAMILIES, NOT_YET, VIEWS, WAITS, chipCount, familyOf, viewOf, windowFor
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
-// D1484 (#3977): a kind no longer names its store, so the table is read without `src`.
-const PAGE_KINDS = [...read('frontend/src/pages/CalendarPage.jsx').matchAll(/\{ id: '([a-z_]+)', label: '[^']+' \}/g)].map((m) => m[1]);
+const PAGE_KINDS = [...read('frontend/src/pages/CalendarPage.jsx').matchAll(/\{ id: '([a-z_]+)', label: '[^']+', from: '/g)].map((m) => m[1]);
 
 /* ------------------------------------------------------------------ *
  * The model

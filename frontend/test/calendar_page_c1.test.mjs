@@ -82,8 +82,8 @@ const canvasKinds = [...KINDS_BLOCK.matchAll(/\{\s*id:'(\w+)',\s*label:'([^']+)'
 
 /** The page's kind table, likewise. */
 const pageKinds = [...(codeOnly(pageRaw).match(/const KINDS = \[([\s\S]*?)\n\];/)?.[1] || '')
-  .matchAll(/\{ id: '(\w+)', label: '([^']+)' \}/g)]
-  .map((m) => ({ id: m[1], label: m[2] }));
+  .matchAll(/\{ id: '(\w+)', label: '([^']+)', from: '([^']+)' \}/g)]
+  .map((m) => ({ id: m[1], label: m[2], from: m[3] }));
 
 test('the canvas and the page were both parsed, so a silent zero-match cannot pass', () => {
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
@@ -115,8 +115,10 @@ test('the five kinds the canvas draws keep its labels, hues and dot shapes', () 
     const mine = pageKinds.find((p) => p.id === k.id);
     assert.ok(mine, `the canvas draws ${k.id} and the page does not`);
     assert.equal(mine.label, k.label, `${k.id} is labelled differently from the canvas`);
-    // D1484 (#3977): the canvas names each kind's store; the page names none (the Worker's module words instead).
-    assert.ok(!('src' in mine), `${k.id} still names a store`);
+    // D1613 (#3723): the canvas's `src` is the D1 table; the page names the
+    // module in plain words instead, and never the table.
+    assert.notEqual(mine.from, k.src, `${k.id} shows its table name`);
+    assert.doesNotMatch(mine.from, /_/, `${k.id} shows a table-like name`);
     // Hue and shape live in the stylesheet, one rule per kind, both themes.
     assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.hue)};`), `${k.id} lost its light hue`);
     assert.match(css, new RegExp(`--k-${escapeRe(k.id)}: ${escapeRe(k.dHue)};`), `${k.id} lost its dark hue`);
@@ -197,12 +199,12 @@ test('D1033: the two My events kinds are derived in the same idiom, apart from e
       takenHues.add(h);
     }
   }
-  assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label]), [
-    ['event_ticket', 'Event ticket'],
-    ['event_hosted', 'Hosting'],
+  assert.deepEqual(pageKinds.filter((k) => k.id.startsWith('event_')).map((k) => [k.id, k.label, k.from]), [
+    ['event_ticket', 'Event ticket', 'My events › Tickets'],
+    ['event_hosted', 'Hosting', 'My events › Hosting'],
   ]);
-  assert.deepEqual(pageKinds.filter((k) => k.id === 'investor_meeting').map((k) => [k.id, k.label]), [
-    ['investor_meeting', 'Investor meeting'],
+  assert.deepEqual(pageKinds.filter((k) => k.id === 'investor_meeting').map((k) => [k.id, k.label, k.from]), [
+    ['investor_meeting', 'Investor meeting', 'Raise › Capital relationships'],
   ]);
 });
 
@@ -319,11 +321,14 @@ test('the rail carries the three promises and the source legend', () => {
   assert.match(pageRaw, /Ongoing, per provider\./);
   assert.match(pageRaw, /One-time, per event\. A copy is written once; later changes here do not follow it\./);
   assert.match(pageRaw, /Read-only feed for any client\. No account connection, no write access\./);
-  // D1484 (#3977): the legend lists every kind with the module it comes from,
-  // in the Worker's words (the read's `sources[].module`), and the page names no table.
-  assert.match(page, /<span className="cal-mono">\{moduleOf\[k\.id\] \|\| ''\}<\/span>/, 'the legend no longer names each kind\'s source');
+  // The legend lists every kind with the module it comes from, in plain words (D1613):
+  // the Worker's words from the read first (D1484, #3977), then the page's own.
+  assert.match(page, /<span className="cal-mono">\{moduleOf\[k\.id\] \|\| k\.from\}<\/span>/, 'the legend no longer names each kind\'s source');
   assert.match(page, /sources\.filter\(\(s\) => s\?\.kind && s\.module\)\.map\(\(s\) => \[s\.kind, s\.module\]\)/, 'the module comes from the read');
-  assert.doesNotMatch(page, /\bsrc: '/, 'a kind names its store again');
+  for (const k of pageKinds) {
+    assert.ok(page.includes(`from: '${k.from}'`), `${k.id} lost its source`);
+    assert.doesNotMatch(k.from, /^[a-z]+(?:_[a-z]+)+$/, `${k.id}'s legend shows a table name`);
+  }
   const tables = new Set([...service.matchAll(/FROM (\w+)/g)].map((m) => m[1]));
   for (const t of ['ic_meetings', 'founder_checkins', 'advisor_bookings', 'event_registrations', 'raise_prospect_events', 'compliance_events', 'calendar_events']) tables.add(t);
   for (const t of tables) if (t.includes('_')) assert.ok(!page.includes(`'${t}'`), `the page names the table ${t}`);
