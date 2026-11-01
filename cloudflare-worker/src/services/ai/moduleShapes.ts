@@ -14,6 +14,8 @@ const plain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 
 const short = (x: unknown, n: number): x is string => typeof x === 'string' && x.trim().length > 0 && x.length <= n;
 const identifier = (x: string) => /^[A-Za-z0-9_.-]{1,32}$/.test(x) && !['__proto__', 'constructor', 'prototype'].includes(x);
 
+export const CHOICE_OPTIONS_MAX = 16;
+
 export function questionsValid(value: unknown): value is Record<string, DecisionQuestion> {
   if (!plain(value) || Object.keys(value).length < 1 || Object.keys(value).length > 8) return false;
   return Object.entries(value).every(([id, q]) => {
@@ -21,7 +23,8 @@ export function questionsValid(value: unknown): value is Record<string, Decision
     if (Object.keys(q).some(k => !['type', 'instructions', 'criteria'].includes(k))) return false;
     if (q.type === 'noul') return q.criteria === undefined;
     if (q.type === 'score') return Array.isArray(q.criteria) && q.criteria.length >= 2 && q.criteria.length <= 8 && q.criteria.every(x => short(x, 100));
-    return q.type === 'choice' && plain(q.criteria) && Object.keys(q.criteria).length >= 2 && Object.keys(q.criteria).length <= 8
+    // D1478 §3937: up to 16 options (the persona router names 12). Cloudflare's page states no option limit; this one is ours.
+    return q.type === 'choice' && plain(q.criteria) && Object.keys(q.criteria).length >= 2 && Object.keys(q.criteria).length <= CHOICE_OPTIONS_MAX
       && Object.entries(q.criteria).every(([k, v]) => identifier(k) && short(v, 100));
   });
 }
@@ -74,13 +77,28 @@ function finiteTree(value: unknown, depth = 0): boolean {
     : plain(value) && Object.entries(value).length <= 64 && Object.values(value).every(x => finiteTree(x, depth + 1)));
 }
 
+/** One answer, checked against its question: the option chosen is one the question offered, every probability is in [0, 1]. */
+function answerValid(a: unknown, q: DecisionQuestion): boolean {
+  if (q.type === 'noul') return probability(a) || (plain(a) && probability(a.noul));
+  if (!plain(a)) return false;
+  const probs = a.probabilities;
+  if (probs !== undefined && !(plain(probs) && Object.values(probs).every(probability))) return false;
+  if (a.confidence !== undefined && !probability(a.confidence)) return false;
+  if (q.type === 'choice') return typeof a.choice === 'string' && plain(q.criteria) && Object.prototype.hasOwnProperty.call(q.criteria, a.choice);
+  return typeof a.score === 'number' && Number.isFinite(a.score) && a.score >= 0 && Array.isArray(q.criteria) && a.score <= q.criteria.length - 1;
+}
+
 export function specialistOutput(raw: unknown, s: SpecialistInput, text: string): { output: string; units: Units } | null {
   const r = raw as Record<string, any> | null;
   let answer: unknown;
   let units: Units;
   if (s.operation === 'decision') {
     if (!plain(r?.answers) || !finiteTree(r.answers) || Object.keys(r.answers).sort().join('|') !== Object.keys(s.questions).sort().join('|')) return null;
-    if (Object.entries(s.questions).some(([key, q]) => q.type === 'noul' && !probability(r.answers[key]))) return null;
+    // D1478 §3937: Clef answers in the System One shape (developers.cloudflare.com/workers-ai/models/clef/, read
+    // 2026-11-01): a yes/no answer is `{ type: 'noul', noul: p }`, a choice `{ type: 'choice', choice, confidence,
+    // probabilities }`, a score `{ type: 'score', score, confidence, probabilities }`. A bare probability for a yes/no
+    // answer is still read (the shape this parser was first written for).
+    if (Object.entries(s.questions).some(([key, q]) => !answerValid(r.answers[key], q))) return null;
     answer = r.answers;
     const input = r.usage?.input_tokens ?? r.usage?.prompt_tokens;
     if (input != null && (typeof input !== 'number' || !Number.isSafeInteger(input) || input < 0)) return null;

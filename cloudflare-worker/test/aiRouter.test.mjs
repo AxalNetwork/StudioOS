@@ -90,13 +90,13 @@ function baseEnv({ ai, kv, db, budgets = {}, guard = true }) {
 
 // --------------------------------------------------------------------------
 // Scenario 1 — primary 5xx triggers smaller-model fallback.
-// `tool_call` primary = qwen2.5-coder; fallback = llama-3.3-70b.
+// `tool_call` primary = glm-4.7-flash (D1478 §3937 fix 1); fallback = llama-3.3-70b.
 // We make the qwen call throw and assert llama-3.3-70b is invoked next.
 // --------------------------------------------------------------------------
 test('primary 5xx triggers smaller-model fallback (one hop)', async () => {
   const { run, ROUTE, __resetForTest } = await loadRouter();
   __resetForTest();
-  assert.equal(ROUTE.tool_call.model, '@cf/qwen/qwen2.5-coder-32b-instruct');
+  assert.equal(ROUTE.tool_call.model, '@cf/zai-org/glm-4.7-flash');
   // The small sibling is `-fp8`, not the bare 8b: Cloudflare marked
   // `@cf/meta/llama-3.1-8b-instruct` Deprecated 5/30/2026, and it terminated
   // every chain in this table. `ai_router_prices.test.mjs` bans the deprecated
@@ -124,7 +124,7 @@ test('primary 5xx triggers smaller-model fallback (one hop)', async () => {
   assert.equal(result.usage.fallback_used, true);
   assert.equal(result.usage.model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
   assert.equal(ai.calls.length, 2);
-  assert.equal(ai.calls[0].model, '@cf/qwen/qwen2.5-coder-32b-instruct');
+  assert.equal(ai.calls[0].model, '@cf/zai-org/glm-4.7-flash');
   assert.equal(ai.calls[1].model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
   assert.equal(result.output, 'fallback answer');
   assert.equal(runRows(db).length, 1);
