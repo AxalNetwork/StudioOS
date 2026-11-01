@@ -2104,6 +2104,18 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 
 Saves: `PUT`/`POST` of a version keep `card.structure` (one of the 17, or `custom`) and `card.areas` (≤ 12, whole cells, no overlap) and refuse a bad one with its sentence (`modelProblems`); `theme.aspect` keeps `4:3`, and 16:9 is the default left out.
 
+### Typed figures, the table block and the typed charts (D1538, #3787)
+
+`routes/deck_typed_values.ts`, mounted at `/api/decks` beside `deck_grid.ts`; store `deck_typed_values` (migration 734). Client: `lib/api/deckTypedValues.js` (`deckTypedValuesApi`), read through `deckV2Adapter.typedTables` (a `SWAPPED` row of the seam).
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/decks/:id/typed-values` | whoever may read the deck (`projectOwned`) | `{ deck_id, values: [{ key, label, value, unit, grade: 'Stated', typed_by: { id, name } \| null, typed_at }] }`, the venture's figures, the same for every version. A key nobody typed is absent, never 0. 403 / 404. |
+| `PUT /api/decks/:id/typed-values/:key` | write access to the venture; never a support session (403 `support_session_refused`) | `{ label, value, unit }` (`count`, `usd`, `percent`, `months` or `text`) → `{ value }`. 400 `invalid_key`, `label_required`, `invalid_unit`, `invalid_value`, `value_required`; 409 `too_many_values` past 200. |
+| `DELETE /api/decks/:id/typed-values/:key` | as `PUT` | `{ deleted: true }`; 404 `not_found` when nothing is typed under the key. |
+
+The slide model gains a `table` block (≤ 8 columns × 12 rows; each cell `{ text }`, `{ binding }` or `{ check }`) and the `market_circles` and `projection` chart types. `GET /api/decks/model` keeps `chart_types` at the library's 12 tiles and adds `typed_chart_types`. Every Worker export (HTML, PPTX, .odp) writes a table's rows; the editor, Present and print draw it and the two charts through `BlockGrid.jsx`. The evidence check reads each table row and each typed figure as a stated claim (`raiseClaims.cardText`, `typed:<key>`).
+
 ### Learning on the Calendar: a member's own learning plan (#3959, Worker half)
 
 - **Worker:** `routes/learning_plan.ts` at `/api/learning/plan` (mounted before `learning.ts`): `GET /?from=&to=` (at most 92 days; each item with its `occurrences`, `href`, `available`, `status` and `done_recorded_by`), `POST /`, `PATCH /:uid`, `DELETE /:uid`, `POST /:uid/done`. Service `services/learningPlan.ts`; migration 758 (`learning_plan_items`, `learning_plan_reminders`).

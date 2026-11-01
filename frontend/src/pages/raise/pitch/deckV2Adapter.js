@@ -23,8 +23,9 @@
  * file no longer lists it.
  *
  * Swapped here (`SWAPPED`): `grid`, whose route `GET /api/decks/:id/grid`
- * merged as D1499 part 1 (#3749). It keeps its row, so the plan's table still
- * reads whole, and answers through `deckGridApi.grid`.
+ * merged as D1499 part 1 (#3749), and `typedTables`, whose route
+ * `GET /api/decks/:id/typed-values` is D1538 (#3787). Each keeps its row, so
+ * the plan's table still reads whole, and answers through its client.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -33,6 +34,7 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
+import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 
 export { NOT_ON };
 
@@ -93,7 +95,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid']);
+export const SWAPPED = Object.freeze(['grid', 'typedTables']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -148,7 +150,8 @@ export const ventureElements = off('ventureElements');
 export const templates = off('templates');
 export const myTemplates = off('myTemplates');
 export const saveAsTemplate = off('saveAsTemplate');
-export const typedTables = off('typedTables');
+/** D1538 (#3787): the figures typed for the deck, each Stated, with who typed it. */
+export const typedTables = (deckId) => through(() => deckTypedValuesApi.list(deckId), SURFACES.typedTables.issue);
 export const media = off('media');
 export const presets = off('presets');
 export const orgLocks = off('orgLocks');

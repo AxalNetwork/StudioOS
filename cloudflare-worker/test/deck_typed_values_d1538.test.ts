@@ -211,12 +211,13 @@ test('a typed number is counted by the evidence check: a table row and a typed f
   const db = world();
   db.prepare('INSERT INTO deck_typed_values (project_id, deck_id, key, label, value_num, value_text, unit, typed_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .run(P, 2, 'customers', 'paying customers', 42, null, 'count', FOUNDER);
-  const slides = [{ title: 'Traction', blocks: [{ id: 't', kind: 'table', grid: { c1: 1, c2: 12, r1: 2, r2: 4 }, rows: [[{ text: 'Metric' }, { text: 'Value' }], [{ text: 'MRR' }, { text: '$12,000' }]] }] }];
-  assert.deepEqual(cardText(slides[0]).slice(-2), ['MRR: $12,000', '$12,000 MRR']);
+  const slides = [{ title: 'Traction', blocks: [{ id: 't', kind: 'table', grid: { c1: 1, c2: 12, r1: 2, r2: 4 }, rows: [[{ text: 'Metric' }, { text: 'Value' }], [{ text: 'MRR' }, { text: '$12,000' }], [{ text: 'Paying customers' }, { text: '38' }]] }] }];
+  assert.deepEqual(cardText(slides[0]).slice(-4), ['MRR: $12,000', '$12,000 MRR', 'Paying customers: 38', '38 Paying customers']);
   const s = await deck({ DB: d1Over(db) } as any, P, [], new Map(), { id: 2, version: 2, slides: JSON.stringify(slides) });
   assert.equal(s.state, 'recorded');
   const got = s.claims.map((c) => [c.field_key, c.claim_kind, c.stated_value]);
-  assert.deepEqual(got, [['slide:1#mrr', 'mrr', '12000'], ['typed:customers#paying_customers', 'paying_customers', '42']]);
+  // "Paying customers · 38" is read only because the row is turned into "38 Paying customers": loose cells would not state it.
+  assert.deepEqual(got, [['slide:1#mrr', 'mrr', '12000'], ['slide:1#paying_customers', 'paying_customers', '38'], ['typed:customers#paying_customers', 'paying_customers', '42']]);
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────
