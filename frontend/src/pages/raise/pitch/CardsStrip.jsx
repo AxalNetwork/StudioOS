@@ -108,7 +108,8 @@ export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move
       aria-label="Cards" data-orientation={orientation} data-testid="pitch-editor-cards">
       <ol ref={list} className={`m-0 flex min-w-0 list-none gap-1.5 p-0 ${row ? 'flex-1 flex-row overflow-x-auto' : 'flex-col'}`} data-testid="pitch-editor-cards-list">
         {cards.slice(0, limit).map((c, i) => (
-          <li key={i} className={`relative ${row ? 'w-[120px] shrink-0' : ''}`}
+          // D1500: keyed on the card's uid, so React keeps each card's own row through a reorder.
+          <li key={c?.uid ?? `card-${i}`} className={`relative ${row ? 'w-[120px] shrink-0' : ''}`}
             ref={(n) => { if (n) slots.current.set(i, n); else slots.current.delete(i); }}
             draggable={!readOnly}
             onDragStart={() => setDrag(i)}

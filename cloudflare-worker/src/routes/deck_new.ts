@@ -9,7 +9,10 @@
  *   POST /api/decks/outline        { project_id, audience, round_ref?, length, prompt?, start? }
  *        → { proposal, outline: { rows, proposed_by, reason? }, cost }
  *   POST /api/decks/generate       { project_id, proposal_id?, audience?, round_ref?, length?, prompt?, outline?, exclude? }
- *        → { proposal, progress, wording, cost }
+ *        → { proposal, progress, wording, element_models, cost }
+ *        D1503 (#3754): the words run on Body's element model (`resolveElementModel`),
+ *        named in `element_models`; with no pick above the row default the run
+ *        keeps its rail option's own resolution, as before.
  *   POST /api/decks/proposals/:id/keep-slides   { indexes?: number[], all?: true, save?: true }
  *        → { proposal } | { deck }
  *   POST /api/decks/proposals/:id/regenerate-card { index, base_hash? }   (D897 §9, #3659)
@@ -48,6 +51,7 @@
  * WHO. The deck routes' `projectOwned`: the venture's founders write, an admin
  * reads only (D895), and New deck is on the Raise + Grow plan as /generate was.
  */
+import { blockGuarantees } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -75,6 +79,8 @@ import {
 import { mercuryFor } from './deck_sources';
 import { inferBrief, type InferredBrief } from '../services/decks/inferBrief';
 import { freshnessFor, type Freshness } from '../services/decks/freshness';
+import { elementModelFor, runModelOf } from './deck_element_models';
+import type { Resolved } from '../services/decks/elementModels';
 
 const deckNew = new Hono<{ Bindings: Env }>();
 
@@ -138,9 +144,28 @@ async function sourcesFor(c: any, user: User, project: any, projectId: number): 
   return items;
 }
 
+/**
+ * D1503 (#3754, dk-auto amendment 10): the element the build's words run as.
+ * The build writes each card's headline and sentence in one run, so it runs
+ * on Body's model (`resolveElementModel`), and the answer names it.
+ */
+export const BUILD_ELEMENT = 'body';
+
+/** The build's element model, or the 503 that stops the press when the picks cannot be read. */
+async function buildModelOf(c: any, user: User, projectId: number): Promise<Resolved | Response> {
+  try { return await elementModelFor(c.env, user, projectId, BUILD_ELEMENT); } catch {
+    console.warn('[deck_new] element model picks unreadable', { project_id: projectId });
+    return refuse(c, 503, { code: 'picks_unreadable', message: 'Your model picks for this deck could not be read. Nothing was run.' });
+  }
+}
+
+const elementModelsView = (r: Resolved) => ({ [BUILD_ELEMENT]: { model: r.model, source: r.source, notice: r.notice } });
+
 /** The run each press makes, as one options object, so the quote and the run read the same input. */
-function runOptions(c: any, user: User, projectId: number, step: 'outline' | 'build', message: string, rows = 0): RunOptions {
+function runOptions(c: any, user: User, projectId: number, step: 'outline' | 'build', message: string, rows = 0, element?: Resolved): RunOptions {
+  const model = step === 'build' && element ? runModelOf(element) : undefined;
   return {
+    ...(model ? { model } : {}),
     task: 'rail_write',
     userId: Number(user.id) || 0,
     surface: AI_SURFACE.raisePitch,
@@ -262,8 +287,10 @@ deckNew.post('/new/quote', async (c) => {
     // D897 §9: a card's regeneration is one row's build run, so its price is that run's.
     const rows = step === 'card' ? picked.rows.slice(Number.isInteger(body?.index) ? body.index : 0, (Number.isInteger(body?.index) ? body.index : 0) + 1) : picked.rows;
     if (!rows.length) return c.json({ error: 'index must be a card position in the outline' }, 400);
+    const element = await buildModelOf(c, user, projectId);
+    if (element instanceof Response) return element;
     // D1517: the quote reads the same message the run sends, budgets included.
-    opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded), visuals: await visualsFor(c.env, projectId) }), rows.length);
+    opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded), visuals: await visualsFor(c.env, projectId) }), rows.length, element);
   }
   const q = await quoteRun(c.env, opts);
   if (q.ok) return c.json({ step, ai: true, hold_microusd: q.hold_microusd, model: q.model });
@@ -351,6 +378,8 @@ deckNew.post('/outline', async (c) => {
   let reason: string | null = null;
   if (res.ok) {
     rows = outlineFromModel(parseJsonLoose<any>(res.output), inputs.length);
+    // D1546: no proposed words may promise a return; a sentence that does is dropped before it is shown.
+    if (rows) rows = blockGuarantees(rows).value;
     if (!rows) reason = 'Eadwyn’s outline could not be read, so this is the standard outline for the length you chose.';
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page, so this is the standard outline for the length you chose. Nothing was charged.';
@@ -430,8 +459,10 @@ deckNew.post('/generate', async (c) => {
   const items = await sourcesFor(c, user, got.project, projectId);
   const name = await ventureName(c.env, projectId);
   const userId = Number(user.id) || 0;
+  const element = await buildModelOf(c, user, projectId);
+  if (element instanceof Response) return element;
   const visuals = await visualsFor(c.env, projectId);
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length);
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length, element);
   const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let wording: Wording[] = rows.map(() => ({ headline: null, body: null }));
   let dropped = 0;
@@ -439,8 +470,10 @@ deckNew.post('/generate', async (c) => {
   let reason: string | null = null;
   if (res.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length, recordTexts(items));
-    wording = w.byIndex;
-    dropped = w.dropped;
+    // D1546: the guarantee-language block, before the words are proposed; each sentence dropped counts.
+    const g = blockGuarantees(w.byIndex);
+    wording = g.value;
+    dropped = w.dropped + g.dropped;
     by = wording.some((x) => x.headline || x.body) ? 'Eadwyn' : 'none';
     if (by === 'none') reason = 'Eadwyn’s words could not be read. The figures are from your records; the cards carry their titles.';
   } else if (res.refusal === 'assist_off') {
@@ -477,6 +510,7 @@ deckNew.post('/generate', async (c) => {
     plan: planOf(rows, items, exclude),
     progress: cardProgress(rows, items, wording, exclude),
     wording: { by, dropped, ...(reason ? { reason } : {}) },
+    element_models: elementModelsView(element),
     cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
   }, 201);
 });
@@ -515,16 +549,19 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   const items = await sourcesFor(c, user, got.project, projectId);
   const name = await ventureName(c.env, projectId);
   const inputs = { audience: (o?.audience ?? FAST_PATH_AUDIENCE) as Audience, prompt: String(o?.prompt ?? '') };
+  const element = await buildModelOf(c, user, projectId);
+  if (element instanceof Response) return element;
   const visuals = await visualsFor(c.env, projectId);
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude, visuals }), 1);
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude, visuals }), 1, element);
   const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let words: Wording = { headline: null, body: null };
   let reason: string | null = null;
   let dropped = 0;
   if (res.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), 1, recordTexts(items));
-    words = w.byIndex[0];
-    dropped = w.dropped;
+    const g = blockGuarantees(w.byIndex[0]);
+    words = g.value;
+    dropped = w.dropped + g.dropped;
     if (!words.headline && !words.body) reason = 'Eadwyn’s words could not be read. The card keeps its figures and its title.';
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page, so the card was rebuilt from your records with its title. Nothing was charged.';

@@ -5,7 +5,7 @@ import { reportError } from '../../../lib/log';
 import { ACCEPT, ACCEPT_ALL, CHARGED_LINE, DISCARD } from './deckV2Model';
 import { RESULTS_LINE, chargedLine, placeResult } from './areaLightboxModel';
 import { aiTokens, refusalOf } from './newDeckModel';
-import { NOT_RECORDED } from './editorModel';
+import { NOT_RECORDED, cardUid } from './editorModel';
 import { EYE, GHOST, INK, LAV, MUTED, PRIMARY, RefusalLine } from './AssistParts';
 import { SourceChip } from './SourcesBoards';
 import { chipOf } from './sourcesModel';
@@ -41,14 +41,18 @@ const CHECKS = {
  * deck's sources `items`); a value, a grade or a source that is not recorded
  * says so, never a zero.
  */
-export default function AreaResults({ results, card, model, items = [], onPlace, onProposals, testId = 'pitch-area-results' }) {
+export default function AreaResults({ results, card, cards = null, model, items = [], onPlace, onProposals, testId = 'pitch-area-results' }) {
   const [state, setState] = useState({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // D1500: the card these results were made for, by uid, read from the deck as
+  // it is now. A reorder or a new selection mid-run never sends them elsewhere.
+  const forUid = useRef(cardUid(card));
+  const live = forUid.current && Array.isArray(cards) ? (cards.find((c) => cardUid(c) === forUid.current) ?? null) : card;
   // The card as this batch last left it: Accept all's next placement sees the one before.
-  const working = useRef(card);
+  const working = useRef(live);
   const placedLast = useRef(null);
-  if (card !== placedLast.current) working.current = card;
+  if (live !== placedLast.current) working.current = live;
 
   const open = (results || []).filter((r) => r.status === 'proposed' && !state[r.key]);
 

@@ -70,6 +70,8 @@ export const AI_SURFACE = {
   onboardingPersona: '/onboarding/persona',
   /** Articles · the editor — Eadwyn's writing options (`POST /api/articles/:id/assist`), D1409. */
   articles: '/articles/draft',
+  /** Events · Syndication — Eadwyn's proposed copy for a channel (`POST /api/events/:id/syndication/assist`), D1493. */
+  eventSyndication: '/my/events',
   /** #3935: Events · the editor — the drawn cover (EV2) and its checks (`POST /api/events/:id/cover/draw`). */
   eventCover: '/events/edit',
   /** #3935: Learning · Studio — a course's drawn cover (LE8) and its checks (`POST /api/admin/learning/courses/:uid/cover/draw`). */

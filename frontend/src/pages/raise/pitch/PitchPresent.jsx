@@ -4,6 +4,8 @@ import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { usePhoneWidth } from '../../../ui';
 import { BlockGrid } from './BlockGrid';
+import CardCompliance from './CardCompliance';
+import { chromeOf } from './complianceModel';
 import { aspectOf, ratioOf } from './gridModel';
 import { asList, currentVersion, versionLabel } from './pitchStudioModel';
 import {
@@ -165,7 +167,7 @@ export default function PitchPresent() {
       </div>
       {view === 'presenter' ? (
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 pb-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Card card={card} sources={sources} aspect={aspect} />
+          <Card card={card} sources={sources} aspect={aspect} chrome={chromeOf(deck, i)} />
           <div className="flex min-w-0 flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">NEXT</span>
@@ -179,7 +181,7 @@ export default function PitchPresent() {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 pb-4">
-          <div className="w-full" style={{ maxWidth: `min(100%, calc((100vh - 120px) * ${aspect === '4:3' ? '4 / 3' : '16 / 9'}))` }}><Card card={card} sources={sources} aspect={aspect} /></div>
+          <div className="w-full" style={{ maxWidth: `min(100%, calc((100vh - 120px) * ${aspect === '4:3' ? '4 / 3' : '16 / 9'}))` }}><Card card={card} sources={sources} aspect={aspect} chrome={chromeOf(deck, i)} /></div>
           {dots}
         </div>
       )}
@@ -187,18 +189,19 @@ export default function PitchPresent() {
   );
 }
 
-function Card({ card, sources, small = false, aspect = '16:9' }) {
+function Card({ card, sources, small = false, aspect = '16:9', chrome = null }) {
   const head = small ? 'text-[15px]' : 'text-[clamp(20px,3vw,40px)]';
   const body = small ? 'text-[12px]' : 'text-[clamp(13px,1.4vw,19px)]';
   if (card.blocks?.length) {
     return (
       <div className="relative w-full overflow-hidden rounded-[12px] bg-[#fbfaf7] text-[#0f2a3d]" style={{ fontFamily: 'Outfit, sans-serif', aspectRatio: ratioOf(aspect) }} data-testid="pitch-present-card" data-layout="grid">
         <BlockGrid blocks={card.blocks} colours={FACE_COLOURS} live sources={sources} aspect={aspect} testId="pitch-present-blocks" />
+        {small ? null : <CardCompliance chrome={chrome} testId="pitch-present-compliance" />}
       </div>
     );
   }
   return (
-    <div className={FACE} style={{ fontFamily: 'Outfit, sans-serif' }} data-testid="pitch-present-card">
+    <div className={`relative ${FACE}`} style={{ fontFamily: 'Outfit, sans-serif' }} data-testid="pitch-present-card">
       <span className="text-[11px] font-bold uppercase tracking-[.08em] text-axal-violet">{card.n} · {card.title}{card.appendix ? ' · Appendix' : ''}</span>
       {card.sub ? <span className={`${head} font-bold leading-tight`}>{card.sub}</span> : null}
       {card.lines.map((l, k) => <p key={k} className={`m-0 whitespace-pre-line leading-[1.5] ${body}`}>{l}</p>)}
@@ -217,6 +220,7 @@ function Card({ card, sources, small = false, aspect = '16:9' }) {
       {card.image ? <img src={card.image} alt={card.title} className="max-h-[50%] self-start rounded-[8px] object-contain" /> : null}
       {card.empty ? <span className={`${body} text-slate-500`}>{EMPTY_CARD}</span> : null}
       {sources && !card.figures.length && !card.empty ? <span className="mt-auto text-[10.5px] text-slate-500">{SOURCE_NOT_RECORDED}</span> : null}
+      {small ? null : <CardCompliance chrome={chrome} testId="pitch-present-compliance" />}
     </div>
   );
 }
