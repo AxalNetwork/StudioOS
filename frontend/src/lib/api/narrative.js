@@ -9,6 +9,7 @@ import { request } from '../api.js';
 // routes/cycle_raise.ts (`services/narrative/adminRead.ts`).
 //   narrativeReads(pid)          GET  /cycles/raise/narrative/reads → { reads: [{ id, reason, by: { name, kind }, created_at, expires_at }], mine, viewer }
 //   narrativeGiveReason(pid, r)  POST /cycles/raise/narrative/reads { reason } → { read }   (an admin only)
+//   narrativeEndRead(pid)        DELETE /cycles/raise/narrative/reads/mine → { read }   (an admin ends their own live read, D1465)
 //   narrativeNotes(pid)          GET  /cycles/raise/narrative/notes → { notes: [{ id, version, body, author: { name, kind }, created_at }], viewer }
 //   narrativePostNote(pid, b)    POST /cycles/raise/narrative/notes { body, version? } → { note }
 // An admin's narrative reads answer 403 `read_reason_required` until a reason is given.
@@ -59,6 +60,7 @@ export const narrativeApi = {
   clearAnswer: (projectId, key) => request(`/cycles/raise/narrative/objections/${enc(key)}/answer?${q(projectId)}`, { method: 'DELETE' }),
   narrativeReads: (projectId) => request(`/cycles/raise/narrative/reads?${q(projectId)}`),
   narrativeGiveReason: (projectId, reason) => request(`/cycles/raise/narrative/reads?${q(projectId)}`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  narrativeEndRead: (projectId) => request(`/cycles/raise/narrative/reads/mine?${q(projectId)}`, { method: 'DELETE' }),
   narrativeNotes: (projectId) => request(`/cycles/raise/narrative/notes?${q(projectId)}`),
   narrativePostNote: (projectId, body, version = null) => request(`/cycles/raise/narrative/notes?${q(projectId)}`, {
     method: 'POST', body: JSON.stringify(version == null ? { body } : { body, version }),

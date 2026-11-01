@@ -37,8 +37,11 @@
  *   POST  /narrative/objections/:objection/draft  { version, section, words? }
  *         one metered run under `draft:narrative-objection` → { version, section, objection, text, removed }; writes nothing
  *   D914 (#2698): an admin reads the narrative read only (`services/narrative/adminRead.ts`).
- *   GET   /narrative/reads           → { reads: [{ id, reason, by: { name, kind }, created_at, expires_at }], mine, viewer }
+ *   GET   /narrative/reads           → { reads: [{ id, reason, by: { name, kind }, created_at, expires_at, ended_at }], mine, viewer,
+ *                                       venture: { id, name, logo_url, founder_name } }   (D1465 G2: the venture before the reason)
  *   POST  /narrative/reads           { reason } an admin's reason for opening it; the founder sees it
+ *   DELETE /narrative/reads/mine     D1465 G1 (#4020, migration 761): an admin ends their live read early → { read };
+ *                                    403 `admins_only`, 404 `no_open_read`, 503 `read_log_unreadable`. A literal path, before `/narrative/:version`.
  *   GET   /narrative/notes           → { notes: [{ id, version, body, author: { name, kind }, created_at }], viewer }
  *   POST  /narrative/notes           { body, version? } an admin's note, or the founder's answer
  *   An admin's narrative write answers 403 `admin_read_only`; their narrative
@@ -138,7 +141,7 @@ import {
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
 import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
-import { InputError, giveReason, isAdmin, kindOf, listNotes, listReasons, narrativeAdminGate, postNote, type Mode } from '../services/narrative/adminRead';
+import { InputError, NoOpenRead, REASON_UNREADABLE, endRead, giveReason, isAdmin, kindOf, listNotes, listReasons, narrativeAdminGate, postNote, ventureOf, type Mode } from '../services/narrative/adminRead';
 import { raisePhone } from '../services/cycleFocus';
 import {
   POSITIONING_OPTION, POSITIONING_PAGE, POSITIONING_SYSTEM, nothingToRead, positioningMaterial, positioningPrompt, readFrom, screenAnswer,
@@ -777,8 +780,22 @@ cycleRaise.get('/narrative/reads', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
   try {
-    return c.json({ ...(await listReasons(c.env, s.projectId, s.user)), viewer: await kindOf(c.env, s.user) });
+    return c.json({ ...(await listReasons(c.env, s.projectId, s.user)), viewer: await kindOf(c.env, s.user), venture: await ventureOf(c.env, s.projectId) });
   } catch (e) { return unreadable(c, e); }
+});
+
+// D1465 G1 (#4020): an admin ends their own live read before its 8 hours run out.
+cycleRaise.delete('/narrative/reads/mine', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  if (!isAdmin(s.user)) return c.json({ detail: 'Only an admin ends a narrative read.', code: 'admins_only' }, 403);
+  try {
+    return c.json({ read: await endRead(c.env, s.projectId, s.user) });
+  } catch (e) {
+    if (e instanceof NoOpenRead) return c.json({ detail: 'You have no open read of this narrative to end.', code: 'no_open_read' }, 404);
+    console.error('[cycle_raise] narrative read end failed:', (e as Error)?.name);
+    return c.json({ detail: REASON_UNREADABLE, code: 'read_log_unreadable' }, 503);
+  }
 });
 
 cycleRaise.post('/narrative/reads', async (c) => {
