@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { WorkerRail } from '../../ui';
-import ZoneNav from '../../workspaces/ZoneNav';
-import { bucketForPath } from '../../workspaces/shellConfig';
+import ZoneHeader from '../../workspaces/ZoneHeader';
+import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
 import { api } from '../../lib/api';
 import './investorFundLanding.css';
 import './investorFundLPs.css';
@@ -144,8 +144,9 @@ export default function InvestorFundLPs() {
   const largest = recordedCommitments.length ? Math.max(...recordedCommitments) : null;
   const kycOutstanding = rows.filter((row) => ['pending', 'in_review', 'unverified'].includes(String(row.kyc_status || row.kyc || '').toLowerCase())).length;
 
-  return <div className="i6-fund ip1-fund-shell"><main className="i6-main ip1-fund-main" data-testid="investor-fund-lps"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>LPs</b></div><h1>LP registry</h1><p>Registry, KYC state, documents and comms log.</p></div><button className="i6-refresh" type="button" onClick={refresh} disabled={state.loading} aria-label="Refresh LP register"><RefreshCw size={14} className={state.loading ? 'i6-spin' : ''} /></button></header>
-    <ZoneNav bucket={bucketForPath('investor', '/funds')} role="investor" activeSlug="lps" className="my-3" />
+  return <ZonePrimaryScope><div className="i6-fund ip1-fund-shell"><main className="i6-main ip1-fund-main" data-testid="investor-fund-lps">
+    <ZoneHeader family="i6" bucketPath="/funds" activeSlug="lps" crumb="LPs" title="LP registry" intro="Registry, KYC state, documents and comms log."
+      refresh={<button className="i6-refresh" type="button" onClick={refresh} disabled={state.loading} aria-label="Refresh LP register"><RefreshCw size={14} className={state.loading ? 'i6-spin' : ''} /></button>} />
     <FundPicker funds={managed.funds} fund={managed.fund} onSelect={managed.select} />
     {/* The canvas's one row: `All LPs / Behind / KYC pending / By type` on the
         left, the ops on the right. Not one predicate moved — `visible` above
@@ -191,7 +192,7 @@ export default function InvestorFundLPs() {
     unavailable={[
         ['Missing fund and KYC fields', 'They stay unavailable. No letter, call or record is generated to fill one in.'],
       ]}
-  /></div>;
+  /></div></ZonePrimaryScope>;
 }
 /** D553: an LP's type, editable by the GP. None recorded reads "Not recorded". */
 export function LpTypeCell({ lp, onChange }) {

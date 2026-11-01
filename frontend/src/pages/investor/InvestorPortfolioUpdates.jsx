@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { WorkerRail } from '../../ui';
-import ZoneNav from '../../workspaces/ZoneNav';
-import { bucketForPath } from '../../workspaces/shellConfig';
+import ZoneHeader from '../../workspaces/ZoneHeader';
+import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
 import { AlertCircle, Inbox, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import './investorPortfolioCanvas.css';
@@ -171,8 +171,9 @@ export default function InvestorPortfolioUpdates() {
   const runwayAlerts = healthUnavailable ? 'Unavailable' : rows.filter((row) => Number(row.health?.runway_months) < 6).length;
   const partial = Object.values(state.unavailable).some(Boolean);
 
-  return <div className="i4-shell ip2-shell"><main className="i4-portfolio ip2-updates" data-testid="investor-portfolio-updates"><header className="i4-heading"><div><h1>Updates &amp; KPI collection</h1><p>Inbox, cadence compliance and source-preserved founder updates from the investor-accessible portfolio.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh portfolio updates"><RefreshCw size={15} /></button></header>
-    <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
+  return <ZonePrimaryScope><div className="i4-shell ip2-shell"><main className="i4-portfolio ip2-updates" data-testid="investor-portfolio-updates">
+    <ZoneHeader bucketPath="/portfolio" title="Updates & KPI collection" intro="Inbox, cadence compliance and source-preserved founder updates from the investor-accessible portfolio."
+      refresh={<button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh portfolio updates"><RefreshCw size={15} /></button>} />
     {/* D1061 (#2931): RPT9, what each company the investor signed into owes them and what it sent. */}
     <PortfolioReports />
     <ZoneToolbar
@@ -207,7 +208,7 @@ export default function InvestorPortfolioUpdates() {
       />
       <section className="i4-card ip2-unavailable"><div className="i4-section-head"><div><h2>Two rule sets, and only one of them exists</h2><p>What companies are asked for is stored; how a sentence becomes a number is not</p></div></div><strong>The collection rules are stored, and the Rules view above shows them.</strong><p>The KPI set companies are held to — the wording, the unit, the cadence and whether each is required — is stored firm-wide, and this page has been reading it on every load since it was written. What is not stored is an extraction rule: nothing records how “a team of ~12” becomes a headcount, so there is no parse-review state, no ambiguity flag and no proposal queue for this page to show. Those stay absent, and the strip above labels them rather than reporting a zero. Whether an extraction step should exist at all (a model proposing figures for you to accept, a check that lists the fields a founder left blank or not numeric, or nothing) is the owner’s decision, asked on #1023, and this page does not guess it.</p><p>Editing is a third thing again. No write path for the KPI set is exposed anywhere in the API, so the ops row leaves Edit rules unoffered rather than opening an editor that could not save.</p></section>
       <footer className="i4-boundary">Investor workspace · updates shown are restricted to this investor’s accessible portfolio.</footer></>}
-  </main><UpdatesRail rows={rows} unavailable={state.unavailable} /></div>;
+  </main><UpdatesRail rows={rows} unavailable={state.unavailable} /></div></ZonePrimaryScope>;
 }
 
 function UpdateTable({ rows, updatesUnavailable, complianceUnavailable, lastChaseByProject, onChase, chasing }) {

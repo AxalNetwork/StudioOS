@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { fmtCents, fmtMultiple, fmtRate, useFundAnalytics } from '../../lib/fundAnalytics';
 import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
+import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorFundLanding.css';
 import { titleCase as caseLabel } from '../../lib/absence';
@@ -211,6 +212,8 @@ export default function InvestorFundLanding({ fundUnlocked, embedded = false }) 
             <h1>Run my fund</h1>
             <p>The GP back office. Every movement is traceable to the fund schedule and LP record that produced it.</p>
           </div>
+          {/* D1424 (#3700): the root has no primary; Ask stays gated (ProfileHeaderAsk). */}
+          <ZoneHeaderTools role="investor" />
           {/* Four real links. This row was `<a href="#lps">` and three more —
               in-page anchors that scrolled and never opened /funds/lps,
               /funds/calls, /funds/ledger or /funds/reporting, which were

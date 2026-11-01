@@ -52,6 +52,11 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'delivery/status-reports': [
+    // D1424 (#3700, PH14s): the zone's one live first step. It focuses the
+    // page's own Composer, where Ask fills Done and Next from the engagement
+    // record at no charge (D1329). Not on the Pages canvas's `ops:`; added by
+    // the profiles canvas and owner answer B.
+    { label: 'New report', kind: 'handler', handler: 'newReport', primary: true },
     { label: 'Draft all', unbuilt: 'no cadence is stored, so there is no set of reports to draft' },
     { label: 'Cadence rules', unbuilt: 'report cadence is not a stored record' },
     { label: 'Export', kind: 'export' },
@@ -74,7 +79,7 @@ export const PARTNER_ZONE_ACTIONS = {
   // price and overwrites it on edit, so there is no earlier figure to show and
   // no table that ever held one.
   'offers/catalog': [
-    { label: 'New service', kind: 'handler', handler: 'newService' },
+    { label: 'New service', kind: 'handler', handler: 'newService', primary: true },
     { label: 'Pricing history', unbuilt: 'only the current price is stored and an edit overwrites it, so there is no earlier figure to open' },
     { label: 'Export', kind: 'export' },
   ],
@@ -86,7 +91,7 @@ export const PARTNER_ZONE_ACTIONS = {
   // all. Migration 228 put one there, so extending is a real edit to a real
   // column and the header op opens the set it applies to.
   'offers/perk-deals': [
-    { label: 'New perk', kind: 'handler', handler: 'newPerk' },
+    { label: 'New perk', kind: 'handler', handler: 'newPerk', primary: true },
     { label: 'Extend', kind: 'handler', handler: 'extend' },
     { label: 'Export', kind: 'export' },
   ],
@@ -106,7 +111,7 @@ export const PARTNER_ZONE_ACTIONS = {
   // `is_published` is computed for the firm's own reading, and there is no
   // public route that renders it, so there is nothing to preview.
   'offers/proof': [
-    { label: 'Ask for consent', kind: 'handler', handler: 'askConsent' },
+    { label: 'Ask for consent', kind: 'handler', handler: 'askConsent', primary: true },
     { label: 'Preview public page', unbuilt: 'no public proof page is published yet, so there is nothing to preview' },
     { label: 'Export', kind: 'export' },
   ],
@@ -319,4 +324,4 @@ export const PARTNER_ZONE_ACTIONS = {
   ],
 };
 
-export const partnerZoneActions = makeZoneActions(PARTNER_ZONE_ACTIONS);
+export const partnerZoneActions = makeZoneActions(PARTNER_ZONE_ACTIONS, 'partner');

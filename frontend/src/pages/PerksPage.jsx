@@ -13,6 +13,8 @@ import { TIER_PLANS } from '../components/PaywallModal';
 import { openCheckout, planKeyOfTier } from '../components/checkout/checkoutEntry';
 import './perksDesk.css';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
+import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../lib/fillScoped.js';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../workspaces/canvasKit';
 import { useRailPage } from '../ui/railCrumbs';
@@ -1075,7 +1077,7 @@ function ListingPerformance({ rows, onChanged }) {
   );
 }
 
-function PartnerConsole({ zoneActions, zoneFilters, role }) {
+function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
   // D779: the band's key on this profile's board (D772's lookup), where the inventory names one.
   const railPage = useRailPage()?.page ?? null;
   const [items, setItems] = useState(null);
@@ -1088,6 +1090,17 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
   });
   const [absent, setAbsent] = useState({});
   const [submitted, setSubmitted] = useState('');
+  // D1595 (#3868) / D1424 (#3700): Ask on the card's one line only, for the
+  // partner's own new listing (`owner:<id>`). Value, credits, cap, price and
+  // the detail (its conditions are terms) are never filled. The create route
+  // answers with the perk's uid, not its id, so the record step is skipped
+  // and the placed line saves as the partner's own text.
+  const ownerId = Number(user?.id) || null;
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.perk, parent: ownerId, enabled: role === 'partner' && !!ownerId,
+    values: { blurb: form.blurb },
+    onValues: (v) => setForm((f) => ({ ...f, ...v })),
+  });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [extending, setExtending] = useState(false);
@@ -1141,6 +1154,7 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
         grant_scope: form.grant_scope || null,
       });
       setSubmitted(form.offer);
+      await fill.afterSave(null);
       setForm((f) => ({
         ...f, offer: '', blurb: '', detail: '', value: '', credits: '', price_cents: '',
         duration: '', ends_at: '', grant_scope: '',
@@ -1335,9 +1349,13 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
               </select>
             </PerkField>
           </div>
-          <PerkField label="One line founders see on the card">
-            <input className={INPUT} maxLength={500} value={form.blurb} onChange={set('blurb')} />
-          </PerkField>
+          <FillFormBar fill={fill} />
+          <div className="block">
+            <FillLabel fill={fill} name="blurb" label="One line founders see on the card" value={form.blurb}>
+              <label htmlFor="perk-blurb" className="text-[11.5px] font-semibold text-gray-700 dark:text-gray-300">One line founders see on the card</label>
+            </FillLabel>
+            <span className="mt-1 block"><input id="perk-blurb" className={INPUT} maxLength={500} value={form.blurb} onChange={set('blurb')} /></span>
+          </div>
           <PerkField label="The detail" hint="What it covers, what it excludes, and any conditions. Founders read this before claiming.">
             <textarea className={INPUT} rows={3} value={form.detail} onChange={set('detail')} />
           </PerkField>
@@ -1526,7 +1544,7 @@ export default function PerksPage({ user, embedded = false, zoneActions, zoneFil
   // declares `filters: ['All','Live','Expiring','Expired']` and `ops: ['New
   // perk','Extend','Export']` — one control row, no tabs.
   if (embedded) {
-    return <PartnerConsole zoneActions={zoneActions} zoneFilters={zoneFilters} role={shellRole} />;
+    return <PartnerConsole zoneActions={zoneActions} zoneFilters={zoneFilters} role={shellRole} user={user} />;
   }
   return <PerksMarket user={user} />;
 }

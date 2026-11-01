@@ -211,3 +211,85 @@ test('the two hypothesis dialogs send exactly what their routes accept', () => {
     assert.ok(dlg.includes(`'${d}'`), `the link form must offer ${d} — the route accepts both`);
   }
 });
+
+// ── D1424 (#3700): one filled primary per zone, from a live action only ─────
+
+test('D1424: the builder keeps `primary` only on a link or a supplied handler, stamped with the licence', async () => {
+  const { primaryOf } = await import('../src/workspaces/zoneActionBuilder.js');
+  const table = {
+    'z/live': [
+      { label: 'Ghost op', kind: 'handler', handler: 'ghost' },
+      { label: 'Go', kind: 'handler', handler: 'go', primary: true },
+    ],
+    'z/link': [{ label: 'Write', to: '/articles/draft', primary: true }],
+    'z/gap': [{ label: 'Draft all', unbuilt: 'no cadence is stored', primary: true }],
+    'z/export': [{ label: 'Export', kind: 'export', primary: true }],
+    'z/unsupplied': [{ label: 'Go', kind: 'handler', handler: 'missing', primary: true }],
+  };
+  const build = makeZoneActions(table, 'advisor');
+  const live = build('z/live', { handlers: { ghost: () => {}, go: () => {} } });
+  assert.equal(live[1].primary, true);
+  assert.equal(live[1].accent, 'advisor', 'the primary carries its licence');
+  assert.equal(live[0].primary, undefined, 'an unmarked row is a ghost');
+  assert.equal(primaryOf(live), live[1]);
+  const link = build('z/link');
+  assert.equal(primaryOf(link)?.to, '/articles/draft');
+  // A button is a promise: an unbuilt op or an export can never be the primary.
+  const gap = build('z/gap');
+  assert.equal(gap[0].primary, undefined, 'an unbuilt op is marked primary');
+  assert.equal(gap[0].disabled, true, 'and still drawn as the disabled ghost it is');
+  assert.equal(primaryOf(gap), null);
+  assert.equal(primaryOf(build('z/export', { view: { rows: [{ a: 1 }] } })), null, 'an export is never the primary');
+  assert.equal(primaryOf(build('z/unsupplied')), null, 'a handler the page did not supply is no primary');
+  // Even an item that claims primary is not one unless it can run.
+  assert.equal(primaryOf([{ label: 'x', primary: true, disabled: true }]), null);
+});
+
+test('D1424: ZoneActions fills exactly one primary in its accent, and every other item stays GHOST', async () => {
+  const React = (await import('react')).default;
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { MemoryRouter } = await import('react-router-dom');
+  const ZoneActions = (await import('../src/workspaces/ZoneActions.jsx')).default;
+  const h = React.createElement;
+  const render = (items) => renderToStaticMarkup(h(MemoryRouter, null, h(ZoneActions, { items })));
+  const html = render([
+    { label: 'Export', onClick: () => {}, testid: 'a-export' },
+    { label: 'Record wire', onClick: () => {}, primary: true, accent: 'investor', testid: 'a-wire' },
+    { label: 'Second', onClick: () => {}, primary: true, accent: 'investor', testid: 'a-second' },
+    { label: 'Gap', disabled: true, title: 'nothing performs it', primary: true, accent: 'investor', testid: 'a-gap' },
+  ]);
+  assert.equal((html.match(/data-primary="true"/g) || []).length, 1, 'two primaries were filled');
+  assert.match(html, /data-testid="a-wire" data-primary="true"[^>]*class="[^"]*bg-indigo-600/);
+  assert.ok(html.indexOf('a-wire') < html.indexOf('a-export'), 'the primary leads the row');
+  for (const id of ['a-export', 'a-second', 'a-gap']) {
+    assert.match(html, new RegExp(`data-testid="${id}"[^>]*class="[^"]*border-gray-200 bg-white`), `${id} lost the ghost treatment`);
+  }
+  assert.match(html, /data-testid="a-gap"[^>]*disabled=""/, 'an unbuilt op marked primary is still a disabled ghost');
+});
+
+test('D1424: at most one primary per zone in every licence table, and only on a live kind', async () => {
+  const tables = {
+    founder: (await import('../src/workspaces/founderZoneActions.js')).FOUNDER_ZONE_ACTIONS,
+    investor: (await import('../src/workspaces/investorZoneActions.js')).INVESTOR_ZONE_ACTIONS,
+    advisor: (await import('../src/workspaces/advisorZoneActions.js')).ADVISOR_ZONE_ACTIONS,
+    partner: (await import('../src/workspaces/partnerZoneActions.js')).PARTNER_ZONE_ACTIONS,
+  };
+  for (const [role, table] of Object.entries(tables)) {
+    for (const [zone, rows] of Object.entries(table)) {
+      const marked = rows.filter((r) => r.primary === true);
+      assert.ok(marked.length <= 1, `${role} ${zone} marks ${marked.length} primaries`);
+      for (const r of marked) {
+        assert.ok(r.kind === 'handler' || typeof r.to === 'string', `${role} ${zone}: "${r.label}" is primary but cannot run`);
+        assert.ok(!r.unbuilt, `${role} ${zone}: "${r.label}" is primary and unbuilt`);
+      }
+    }
+  }
+  assert.equal(Object.values(tables.founder).flat().filter((r) => r.primary).length, 0,
+    'the founder header has its own violet primary (CycleHeader); this table marks none');
+});
+
+test('D1424: the one-ghost docblock is reversed in words, not just in code', () => {
+  const doc = read('frontend/src/workspaces/ZoneActions.jsx');
+  assert.match(doc, /ONE FILLED PRIMARY PER ZONE, FROM A LIVE ACTION ONLY \(D1424/);
+  assert.doesNotMatch(doc, /Hence one variant here\./, 'the old rule still reads as current');
+});

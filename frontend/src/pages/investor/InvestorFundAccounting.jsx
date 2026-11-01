@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { AlertCircle, Calculator } from 'lucide-react';
 import { WorkerRail } from '../../ui';
-import ZoneNav from '../../workspaces/ZoneNav';
-import { bucketForPath } from '../../workspaces/shellConfig';
+import ZoneHeader from '../../workspaces/ZoneHeader';
+import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
 import { useFundAnalytics, fmtCents, capitalMetric } from '../../lib/fundAnalytics';
 import './investorFundLanding.css';
 import './investorFundAccounting.css';
@@ -58,8 +58,8 @@ export default function InvestorFundAccounting() {
     ['Dry powder', values.dryPowder, values.dryPowder != null ? 'Recorded receipts less deployed' : fund?.capital_reason || 'Requires collected and deployed records', capitalState],
     ['Distributions to LPs', values.distributed, hasSource ? 'Recorded fund distributions' : 'Fund analytics unavailable'],
   ];
-  return <div className="i6-fund if3-shell"><main className="i6-main if3-main" data-testid="investor-fund-accounting"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Accounting</b></div><h1><Calculator size={19} /> Fund accounting</h1><p>NAV, fees, expenses, journal and audit trail.</p></div></header>
-    <ZoneNav bucket={bucketForPath('investor', '/funds')} role="investor" activeSlug="ledger" className="my-3" />
+  return <ZonePrimaryScope><div className="i6-fund if3-shell"><main className="i6-main if3-main" data-testid="investor-fund-accounting">
+    <ZoneHeader family="i6" bucketPath="/funds" activeSlug="ledger" crumb="Accounting" title={<><Calculator size={19} /> Fund accounting</>} intro="NAV, fees, expenses, journal and audit trail." />
     <ZoneToolbar role="investor" className="mb-3" filters={investorZoneFilters('funds/ledger', { value: VIEW })} actions={investorZoneActions('funds/ledger')} />
     {error && <div className="i6-load-error if3-unavailable"><AlertCircle size={14} /> <span>Unreadable: capital account data could not be read.</span></div>}
     {!loading && !error && !hasSource && <div className="i6-load-error if3-unavailable" data-testid="status-fund-accounting-unavailable"><AlertCircle size={14} /> <span>Not recorded: no capital account data is available.</span></div>}
@@ -82,7 +82,7 @@ export default function InvestorFundAccounting() {
     unavailable={[
         ['Reconciliation and close', 'This page records; it does not post, close or export.'],
       ]}
-  /></div>;
+  /></div></ZonePrimaryScope>;
 }
 
 function Stat({ label, value, note, state = 'Not recorded' }) { return <article className="if3-stat"><span>{label}</span><b>{value == null ? state : money(value)}</b><small>{note}</small></article>; }

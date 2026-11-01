@@ -27,6 +27,7 @@
  * and named in `adjustments`, so the founder is told, not surprised.
  */
 import { BLOCK_KINDS, GRID_COLS, GRID_ROWS, LAYOUTS, LAYOUT_IDS, THEME_KINDS, type Grid } from './slideModel';
+import { aspectOf, boxOfAt, type Aspect } from './structures';
 
 export const DESIGN_SYSTEM_VERSION = 1;
 
@@ -86,9 +87,12 @@ export const DENSITY_MAX: Record<TypeRole, number> = {
   display: 90, heading: 70, subheading: 90, paragraph: 280, list: 320, metric: 10, metric_label: 40, caption: 140,
 };
 
-/** How many characters a range holds at a type role, and its lines: the budget a text must fit. */
-export function textCapacity(g: Grid, role: TypeRole): { chars: number; lines: number; perLine: number } {
-  const { w, h } = boxOf(g);
+/**
+ * How many characters a range holds at a type role, and its lines: the budget a text must fit.
+ * D1554 (#3801): at the deck's aspect. 4:3 keeps the rows and narrows the columns, so a line holds less.
+ */
+export function textCapacity(g: Grid, role: TypeRole, aspect: Aspect = '16:9'): { chars: number; lines: number; perLine: number } {
+  const { w, h } = boxOfAt(g, aspect);
   const t = TYPE_SCALE[role];
   const lines = Math.max(1, Math.floor(h / (t.size * t.leading)));
   const perLine = Math.max(1, Math.floor(w / (t.size * GLYPH_EM)));
@@ -328,13 +332,21 @@ export function chooseLayout(role: string, evidence: Partial<Evidence> & { quote
 
 export type FitProblem = { card: number; block: string; kind: 'overflow' | 'too_many_series' | 'too_many_points' | 'too_many_items' | 'value_too_long' | 'too_small'; over: number; message: string };
 
+/** The characters a metric tile's figure holds at an aspect. */
+export function metricValueChars(g: Grid, aspect: Aspect = '16:9'): number {
+  return Math.min(METRIC_VALUE_CHARS, Math.floor(boxOfAt(g, aspect).w / (TYPE_SCALE.metric.size * GLYPH_EM)));
+}
+
 /**
- * What would overflow or turn illegible at 16:9, per block, or []. Text is
- * measured against its own range at its own style (so it holds for edited
- * ranges too); a chart against the readable limits; a metric's value against
- * its tile.
+ * What would overflow or turn illegible at the aspect (16:9 unless named), per
+ * block, or []. Text is measured against its own range at its own style (so
+ * it holds for edited ranges too); a chart against the readable limits; a
+ * metric's value against its tile. D1554 (#3801): only text and a metric's
+ * value depend on the aspect; the other limits count rows, columns or points.
  */
-export function fitProblems(slides: unknown): FitProblem[] {
+export function fitProblems(slides: unknown, aspectIn: unknown = '16:9'): FitProblem[] {
+  const aspect = aspectOf(aspectIn);
+  const at = aspect === '16:9' ? '' : ` at ${aspect}`;
   const out: FitProblem[] = [];
   (Array.isArray(slides) ? slides : []).forEach((s: any, i: number) => {
     const card = i + 1;
@@ -344,14 +356,13 @@ export function fitProblems(slides: unknown): FitProblem[] {
       const id = String(b.id ?? '?');
       if (b.kind === 'text') {
         const role = typeRoleOf(b.style, s.layout ?? null);
-        const cap = textCapacity(g, role);
+        const cap = textCapacity(g, role, aspect);
         const len = String(b.text ?? '').length;
-        if (len > cap.chars) out.push({ card, block: id, kind: 'overflow', over: len - cap.chars, message: `Card ${card}: the text is ${len - cap.chars} characters longer than its space holds at ${TYPE_SCALE[role].size}px.` });
+        if (len > cap.chars) out.push({ card, block: id, kind: 'overflow', over: len - cap.chars, message: `Card ${card}: the text is ${len - cap.chars} characters longer than its space holds at ${TYPE_SCALE[role].size}px${at}.` });
       } else if (b.kind === 'metric') {
-        const { w } = boxOf(g);
-        const max = Math.min(METRIC_VALUE_CHARS, Math.floor(w / (TYPE_SCALE.metric.size * GLYPH_EM)));
+        const max = metricValueChars(g, aspect);
         const len = String(b.value ?? '').length;
-        if (len > max) out.push({ card, block: id, kind: 'value_too_long', over: len - max, message: `Card ${card}: the figure is too long for its tile; widen the tile.` });
+        if (len > max) out.push({ card, block: id, kind: 'value_too_long', over: len - max, message: `Card ${card}: the figure is too long for its tile${at}; widen the tile.` });
         // A tile draws its label, its figure and its source line: two rows is the least that holds them.
         if (g.r2 - g.r1 + 1 < METRIC_MIN_ROWS) out.push({ card, block: id, kind: 'too_small', over: METRIC_MIN_ROWS - (g.r2 - g.r1 + 1), message: `Card ${card}: a figure tile needs at least ${METRIC_MIN_ROWS} rows for its label, figure and source.` });
       } else if (b.kind === 'chart') {
