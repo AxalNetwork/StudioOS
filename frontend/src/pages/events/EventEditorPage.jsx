@@ -15,6 +15,7 @@ import { eventsApi } from '../../lib/eventsApi';
 import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import { EVENT_TYPE_IDS } from '../../lib/eventTypes';
+import { syndicateNote } from '../hq/eventSyndication/syndicationModel';
 import Lightbox from '../../ui/Lightbox';
 import { publishAction } from './eventOrganiserModel';
 import HostHeader, { NewEventHeader } from './HostHeader';
@@ -326,6 +327,11 @@ export default function EventEditorPage() {
                   ? 'Reachable by direct link or invitation only.'
                   : 'Private — invitation only, never listed.'}
             </p>
+          </div>
+          {/* D1491 (#3725, SY2a/SY2u): what other channels do with this event. */}
+          <div className="border-t border-gray-100 pt-3 dark:border-gray-800" data-testid="event-syndicate-note">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Syndicate to</h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{syndicateNote(form.visibility)}</p>
           </div>
         </section>
 

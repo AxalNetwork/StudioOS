@@ -46,36 +46,6 @@ export const FIGURE_LINE = (module) => `Figures come from your records. Update $
 export const ACCEPT_LINE = 'Accept places it on the card. Nothing is a version until you save.';
 export const FREE_LINE = 'Figures from your records are free.';
 
-/**
- * PD28: the models on this page's rail row, in its order. Prices come from
- * the catalogue (`GET /api/public/ai/models`). FLUX.2 Klein 9B is listed and
- * not routed: no card tool in this part makes an image, and it is a partner
- * model behind `AI_PARTNER_MODELS` (D899).
- */
-export const RAIL_MODELS = [
-  { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', name: 'Llama 3.3 70B Fast', role: 'Writes the wording' },
-  { id: '@cf/black-forest-labs/flux-2-klein-9b', name: 'FLUX.2 Klein 9B', role: 'Images', unrouted: 'Not routed on this page yet: no card tool makes an image in this release.' },
-  { id: '@cf/black-forest-labs/flux-1-schnell', name: 'FLUX.1 Schnell', role: 'Quick images' },
-  { id: '@cf/google/gemma-4-26b-a4b-it', name: 'Gemma 4 26B', role: 'Reads your slides' },
-];
-
-const UNIT_ORDER = ['tokens_out', 'tokens_in', 'tiles', 'steps', 'first_megapixels', 'images'];
-
-/** One rail row model with its catalogue price, or "Not offered" when the catalogue does not list it. */
-export function railModelRows(catalogue = []) {
-  const byId = new Map((Array.isArray(catalogue) ? catalogue : []).map((m) => [m.id, m]));
-  return RAIL_MODELS.map((m) => {
-    const cat = byId.get(m.id);
-    const billed = cat?.billed && typeof cat.billed === 'object' ? cat.billed : null;
-    const unit = billed ? UNIT_ORDER.find((u) => billed[u] != null) || Object.keys(billed)[0] : null;
-    const usd = unit != null ? Number(billed[unit]) : NaN;
-    const price = Number.isFinite(usd)
-      ? `$${usd < 0.01 ? Number(usd.toPrecision(2)) : usd.toFixed(usd < 1 ? 4 : 2)} ${cat.unit_words?.[unit] || unit.replace(/_/g, ' ')}`
-      : null;
-    return { ...m, offered: Boolean(cat), price: price || (cat ? null : 'Not offered on your plan') };
-  });
-}
-
 /** The cost a press shows before it runs: from its quote, or why it cannot run. */
 export function costLine(quote) {
   if (!quote) return 'Reading the cost…';

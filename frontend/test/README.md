@@ -47,6 +47,11 @@ also exercises a `project_id` deep link.
   module; `fixtures/routes_lazy_conflict/`, two sources declaring one lazy
   name for different pages), never real pages.
 
+D1604's editor suites (`pitch_v2_chrome_d1604.test.mjs`,
+`pitch_v2_selection_d1604.test.mjs`) mount the Pitch deck editor through
+`_pitch_editor_mount.mjs`: synthetic reads for every client the editor calls,
+restored on close.
+
 D696's record contracts live in `record_page_d696.test.mjs` (real rendering,
 parent callbacks, safe links and declared actions) and `persona_pdf_d696.test.mjs`
 (allowlisted content, dated download and one-page measured bounds).

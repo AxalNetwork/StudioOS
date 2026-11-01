@@ -164,6 +164,31 @@ test('each part calls only the routes it should, and nothing writes the article 
   assert.match(read('pages/articles/ArticleLibrary.jsx'), /\{followers != null && \(/);
 });
 
+test('AR6e: a failed read is said, never drawn as empty', () => {
+  const page = read('pages/ArticleAuthorPage.jsx');
+  assert.match(page, /reportError\('ArticleAuthor:list', e\);[\s\S]{0,120}setListError\(true\);/);
+  assert.match(page, /loadError=\{listError\}/);
+  const lib = read('pages/articles/ArticleLibrary.jsx');
+  assert.match(lib, /\{loadError && items\.length === 0 \? \(/);
+  assert.match(lib, /Your articles could not be read\./);
+  const panel = read('pages/articles/ArticleWritingPanel.jsx');
+  assert.match(panel, /Promise\.allSettled\(OPTIONS\.map/);
+  assert.match(panel, /setWaitingUnread\(results\.some\(\(r\) => r\.status === 'rejected'\)\)/);
+});
+
+test('AR5: an admin publishes now or schedules only another member\'s approved article (D1292, D484)', () => {
+  const sheet = read('pages/articles/ArticlePublishSheet.jsx');
+  assert.match(sheet, /const adminCanSchedule = chain === 'direct' && article\?\.status === 'approved';/);
+  assert.match(sheet, /const adminCanPublish = \(chain === 'direct' \|\| chain === 'override'\) && article\?\.status !== 'published';/);
+  const page = read('pages/ArticleAuthorPage.jsx');
+  assert.match(page, /if \(!article \|\| chain !== 'direct'\) return false;\s*setScheduling\(true\);/);
+  assert.match(page, /await adminApi\.schedule\(article\.id, iso\);/);
+});
+
+test('AR6g: on a phone the writing panel is a bottom sheet', () => {
+  assert.match(read('pages/articles/ArticleWritingPanel.jsx'), /<aside className="fixed inset-x-0 bottom-0 [^"]*lg:static/);
+});
+
 test('the canvases are kept where the integration reads them', () => {
   for (const f of ['Article Authoring Page.dc.html', 'Article Authoring · Boards.dc.html']) {
     assert.ok(readFileSync(new URL(`../../design/incoming/${f}`, import.meta.url), 'utf8').length > 1000, f);

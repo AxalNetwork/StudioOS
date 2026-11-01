@@ -93,3 +93,18 @@ export async function generateSlug(env: Env, kind: SlugKind, name: string, scope
   }
   return null;
 }
+
+/**
+ * D1591 (#3858) — the live check's suggestion for a taken slug: the first of
+ * `<base>-2` … `<base>-20` that has a valid shape and is free in this scope,
+ * or null. `base` is already a valid slug; for a slug the member typed it
+ * gives the same next address `generateSlug` would, without slugifying again.
+ */
+export async function nextFreeSlug(env: Env, kind: SlugKind, base: string, scopeCompanyId: number | null = null): Promise<string | null> {
+  for (let n = 2; n <= 20; n += 1) {
+    const candidate = checkSlug(`${base}-${n}`);
+    if (!candidate.ok) continue;
+    if ((await slugHolder(env, kind, candidate.slug, scopeCompanyId)) == null) return candidate.slug;
+  }
+  return null;
+}

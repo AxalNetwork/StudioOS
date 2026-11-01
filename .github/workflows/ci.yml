@@ -81,9 +81,9 @@ jobs:
   gate:
     name: test:drift (full suite)
     runs-on: ubuntu-latest
-    # PR #3910's run 41246940069 reached the final static guards after all
-    # test suites passed, then hit the 60-minute job limit. Allow the complete
-    # gate to finish on slower runners; a real hang still has a finite limit.
+    # #3911: the complete suites passed, but the final guards reached the
+    # 60-minute runner limit. Leave room for the full gate on slower runners;
+    # a real hang still stops at this bounded limit.
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

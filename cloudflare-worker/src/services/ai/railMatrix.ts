@@ -24,7 +24,8 @@ export type RailOptionRow = RailRow & { optionKey: string; optionLabel: string; 
 
 const ROWS: readonly RailRow[] = matrix.rows.map(withModuleModels);
 const BY_KEY = new Map(ROWS.map((r) => [r.pageKey.toLowerCase(), r]));
-const OPTIONS: readonly RailOptionRow[] = matrix.options.map(withModuleModels);
+// D1596 (#3869): a no-model option (`noModel`) is listed as it is: no module model is added to it.
+const OPTIONS: readonly RailOptionRow[] = (matrix.options as Array<RailOptionRow & { noModel?: boolean }>).map((o) => (o.noModel ? { ...o, more: [] } : withModuleModels(o)));
 const OPTIONS_BY_PAGE = new Map<string, RailOptionRow[]>();
 for (const o of OPTIONS) {
   const k = o.pageKey.toLowerCase();

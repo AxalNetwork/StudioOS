@@ -1,4 +1,7 @@
 /**
+ * D1415 Part 3 (#3855): `markFiled` also links or creates the order's company,
+ * in the same batch (`incorporationCompany.ts`).
+ *
  * D601 (#998; the owner's answer 1A) — an Axal admin moves a paid formation
  * order on by hand, in two recorded steps:
  *
@@ -18,6 +21,7 @@ import type { Env } from '../types';
 import { ensureIncorporationsSchema } from './incorporations';
 import { isCalendarDate } from './section83b';
 import { LAB_PARTICIPANT_IDS } from './labParticipants';
+import { filingCompanyStatements, type CompanyOutcome } from './incorporationCompany';
 
 export const PACKET_FROM = ['paid', 'packet_processing'] as const;
 
@@ -35,8 +39,11 @@ const SET_FILED =
   + "WHERE id = ? AND status = 'packet_ready'";
 
 export type FilingResult =
-  | { ok: true; id: number; status: 'packet_ready' | 'filed' }
+  | { ok: true; id: number; status: 'packet_ready' | 'filed'; company?: CompanyOutcome }
   | { ok: false; status: 400 | 404 | 409; error: string };
+
+// D1415 Part 3 (#3855): what the filing copies onto the company.
+const ORDER_FACTS = 'SELECT id, project_id, company_name, jurisdiction_id, registered_agent_name, registered_agent_address FROM incorporations WHERE id = ?';
 
 type OrderRow = { id: number; project_id: number; status: string; paid_at: string | null };
 
@@ -72,9 +79,13 @@ export async function markFiled(
   if (filedOn > today) return { ok: false, status: 400, error: 'filed_on_future' };
   const paidDay = o.paid_at ? String(o.paid_at).slice(0, 10) : null;
   if (paidDay && filedOn < paidDay) return { ok: false, status: 400, error: 'filed_on_before_payment' };
-  const r = await env.DB.prepare(SET_FILED).bind(filedOn, adminId, id).run();
-  if (!(Number(r.meta?.changes ?? 0) > 0)) return { ok: false, status: 409, error: 'packet_not_ready' };
-  return { ok: true, id, status: 'filed' };
+  // D1415 Part 3 (#3855): one batch, SET_FILED first, then the company statements, each guarded by
+  // "filed and not yet linked" (`incorporationCompany.ts`). A repeat changes nothing; a failure leaves the order as it was.
+  const facts = await env.DB.prepare(ORDER_FACTS).bind(id).first<any>();
+  const { statements, outcome } = await filingCompanyStatements(env, facts, filedOn, adminId);
+  const results = await env.DB.batch([env.DB.prepare(SET_FILED).bind(filedOn, adminId, id), ...statements]);
+  if (!(Number(results[0]?.meta?.changes ?? 0) > 0)) return { ok: false, status: 409, error: 'packet_not_ready' };
+  return { ok: true, id, status: 'filed', company: outcome };
 }
 
 const PAID_ORDERS =

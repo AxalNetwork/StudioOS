@@ -4,13 +4,14 @@
  *   · the model: what a save changes, layouts that carry a card's content and
  *     name what they drop, placement on the 12 × 6 grid, the standard sizes,
  *     stale cards, "Saved · …", a missing figure reading Not recorded;
- *   · the page, mounted on stubbed reads: the rail with its stale dot, the card
- *     on its blocks, notes, the save dialog listing what changes and the
- *     version it writes, a refused save showing the Worker's sentence;
+ *   · the page, mounted on stubbed reads: the Cards strip with its stale dot,
+ *     the card on its blocks, notes, the save dialog listing what changes and
+ *     the version it writes, a refused save showing the Worker's sentence;
  *   · each failed read says so and blanks nothing else;
- *   · an admin reads and writes nothing; the first-run callouts show once;
- *   · Add a block: a video link checked with the Worker, and a refused one;
- *   · a layout opens a dialog naming what leaves the card;
+ *   · an admin reads and writes nothing; D1604: no first-run callouts;
+ *   · Add a block, from a selected empty range: a video link checked with the
+ *     Worker, and a refused one;
+ *   · a layout, from ⋯ › Structure, opens a dialog naming what leaves the card;
  *   · the page calls only mounted reads and draws no canvas sample.
  *
  * Every venture, card and figure is synthetic.
@@ -200,11 +201,14 @@ test('the editor draws the rail with its stale dot, the card on its blocks, and 
     assert.ok(m.by('pitch-editor-stale-1'), 'card 2 has a figure its store moved past');
     assert.ok(!m.by('pitch-editor-stale-0'));
     assert.match(m.text(m.by('pitch-editor-card')), /Synthetic pain/, 'a card from before D898 draws its fields');
-    assert.match(m.text(m.by('pitch-editor-bar')), /Synthetic Labs · v3.*Seed fund/);
-    assert.equal(m.pr(m.by('pitch-editor-save')).disabled, true, 'nothing to save yet');
+    assert.equal(m.text(m.by('pitch-heading')), 'Synthetic Labs · v3', 'D1604: the h1 in the header');
+    assert.ok(!m.by('pitch-editor-save'), 'D1604: Save version shows only while there is something to save');
+    assert.match(m.text(m.by('pitch-editor-save-state')), /✓ Saved/);
     await m.press(m.by('pitch-editor-rail-1'));
     assert.match(m.text(m.by('pitch-editor-card')), /Synthetic heading/);
     assert.match(m.text(m.by('pitch-editor-block-b2')), new RegExp(`Churn ${NOT_RECORDED}`), 'a tile with no figure reads Not recorded');
+    assert.ok(!m.by('pitch-editor-notes'), 'D1604: nothing selected, no speaker notes (plan §2.3)');
+    await m.press(m.by('pitch-editor-block-b1'));
     await m.type(m.by('pitch-editor-notes'), 'Synthetic revised note');
     assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/);
     await m.press(m.by('pitch-editor-save'));
@@ -256,7 +260,14 @@ test('an admin reads the deck and writes nothing', async () => {
     assert.ok(!m.by('pitch-editor-add-block'), 'no Add a block');
     assert.ok(!m.by('pitch-editor-add-card'));
     assert.match(m.text(m.by('pitch-editor-save-state')), /Read only · v3/);
-    assert.match(m.text(m.by('pitch-editor-bar')), /Leave a note/);
+    assert.ok(!m.by('deck-toolbar-share'), 'a reader has no Share');
+    assert.ok(m.by('deck-toolbar-present'), 'a reader keeps Present');
+    await m.press(m.by('deck-more-open'));
+    assert.match(m.text(m.by('deck-more-notes')), /Leave a note/);
+    assert.equal(m.pr(m.by('deck-more-theme'))['aria-disabled'], true, 'a write is greyed for a reader');
+    await m.press(m.by('pitch-editor-rail-1'));
+    await m.press(m.by('pitch-editor-block-b1'));
+    assert.ok(!m.by('pitch-block-tools'), 'no block tools for a reader');
     assert.equal(m.pr(m.by('pitch-editor-notes')).readOnly, true);
   } finally { await m.unmount(); }
 });
@@ -264,22 +275,20 @@ test('an admin reads the deck and writes nothing', async () => {
 test('verified HQ Super Admin gets the integrated editor controls', async () => {
   const m = await mount({}, { ...ADMIN, is_super_admin: 1 });
   try {
-    assert.ok(m.by('pitch-editor-save'));
+    assert.ok(m.by('deck-toolbar-share'));
+    await m.press(m.by('pitch-editor-rail-1'));
+    await m.press(m.by('pitch-editor-area-free:4-5'));
     assert.ok(m.by('pitch-editor-add-block'));
     assert.equal(m.pr(m.by('pitch-editor-notes')).readOnly, false);
   } finally { await m.unmount(); }
 });
 
-test('the first-run callouts show once', async () => {
+test('D1604: the first-run callouts are gone; the stage says how to start instead', async () => {
   const m = await mount({}, FOUNDER, { seen: false });
   try {
-    const box = m.by('pitch-editor-callouts');
-    assert.ok(box);
-    for (const k of CALLOUTS) assert.match(m.text(box), new RegExp(k.t));
-    const gotIt = (function find(n) { return n && (m.pr(n).onClick && /Got it/.test(m.text(n)) ? n : (n.childNodes || []).map(find).find(Boolean)); })(box);
-    await m.press(gotIt);
     assert.ok(!m.by('pitch-editor-callouts'));
-    assert.equal(localStorage.getItem(FIRST_RUN_KEY), '1');
+    for (const k of CALLOUTS) assert.doesNotMatch(m.text(), new RegExp(k.t));
+    assert.match(m.text(m.by('pitch-editor-hint')), /before the Grid|Select an area and press Ask/);
   } finally { await m.unmount(); }
 });
 
@@ -291,6 +300,8 @@ test('Add a block: a video link is checked with the Worker before it is placed; 
   });
   try {
     await m.press(m.by('pitch-editor-rail-1'));
+    assert.ok(!m.by('pitch-editor-add-block'), 'D1604: no Add block until an area is selected');
+    await m.press(m.by('pitch-editor-area-free:4-5'));
     await m.press(m.by('pitch-editor-add-block'));
     await m.press(m.by('pitch-editor-kind-video'));
     assert.equal(m.pr(m.by('pitch-editor-add-run')).disabled, true, 'nothing to add before the check');
@@ -300,12 +311,12 @@ test('Add a block: a video link is checked with the Worker before it is placed; 
     await m.type(m.by('pitch-editor-video-url'), 'https://youtu.be/AbCdEfGhIjK');
     await m.press(m.by('pitch-editor-video-check'));
     assert.match(m.text(m.by('pitch-editor-video-ok')), /Synthetic demo · YouTube/);
-    assert.match(m.text(m.by('pitch-editor-add-says')), /Adds a 4 × 2 video link at column \d+, row \d+/);
+    assert.match(m.text(m.by('pitch-editor-add-says')), /Adds a 9 × 2 video link at column 4, row 5/, 'the selected range is the size and place');
     await m.press(m.by('pitch-editor-add-run'));
     assert.ok(!m.by('pitch-editor-add-dialog'));
     assert.match(m.text(m.by('pitch-editor-card')), /Synthetic demo/);
     await m.press(m.by('pitch-editor-save'));
-    assert.match(m.text(m.by('pitch-editor-save-changes')), /adds a 4 × 2 video link/);
+    assert.match(m.text(m.by('pitch-editor-save-changes')), /adds a 9 × 2 video link/);
   } finally { await m.unmount(); }
 });
 
@@ -313,7 +324,8 @@ test('a layout opens a dialog naming what leaves the card, and nothing changes u
   const m = await mount({});
   try {
     await m.press(m.by('pitch-editor-rail-1'));
-    await m.press(m.by('pitch-editor-tab-design'));
+    await m.press(m.by('deck-more-open'));
+    await m.press(m.by('deck-more-structure'));
     await m.press(m.by('pitch-editor-layout-chart_text'));
     const dialog = m.by('pitch-editor-layout-dialog');
     assert.match(m.text(dialog), /no place for: 3 × 2 metric tile/);
@@ -445,6 +457,7 @@ test('PD9b: the library lists the twelve types with their fits, offers only reco
     deckUpdate: async (id, body) => { saved = body; return { ...deck, id: 32, version: 4, slides: body.slides }; },
   });
   try {
+    await m.press(m.by('pitch-editor-area-free:1-1'));
     await m.press(m.by('pitch-editor-chart-library'));
     assert.ok(m.by('pitch-chart-library'));
     assert.match(m.text(m.by('pitch-library-fit-cohort_heatmap')), /Needs churn by month joined/);
@@ -461,7 +474,7 @@ test('PD9b: the library lists the twelve types with their fits, offers only reco
     await m.press(m.by('pitch-editor-save'));
     await m.press(m.by('pitch-editor-save-run'));
     const block = saved.slides[0].blocks[0];
-    assert.deepEqual([block.kind, block.chart_type, block.range, block.grid], ['chart', 'line', '12m', { c1: 1, c2: 8, r1: 1, r2: 4 }]);
+    assert.deepEqual([block.kind, block.chart_type, block.range, block.grid], ['chart', 'line', '12m', { c1: 1, c2: 12, r1: 1, r2: 6 }], 'D1604: it fills the selected empty range');
     assert.equal(block.series[0].binding.snapshot_hash, 'b'.repeat(24));
     assert.deepEqual(Object.keys(block.series[0]).sort(), ['binding', 'label'], 'a bound series carries no typed points');
   } finally { await m.unmount(); }

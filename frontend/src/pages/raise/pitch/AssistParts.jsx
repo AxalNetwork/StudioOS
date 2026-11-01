@@ -24,6 +24,7 @@ export function RefusalLine({ refusal, testId }) {
   return (
     <span role="alert" className="flex flex-col gap-1 text-[12.5px] font-semibold text-axal-destructive dark:text-red-400" data-testid={testId}>
       {refusal.message}
+      {refusal.link ? <a className="font-bold text-axal-violet underline dark:text-violet-300" href={refusal.link.href} data-testid={`${testId}-link`}>{refusal.link.text}</a> : null}
       {refusal.topUp ? <a className="font-bold text-axal-violet underline dark:text-violet-300" href={refusal.topUp.href}>{refusal.topUp.text}</a> : null}
     </span>
   );

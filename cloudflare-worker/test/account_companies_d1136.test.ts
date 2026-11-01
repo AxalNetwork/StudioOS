@@ -23,6 +23,11 @@ function fixture() {
   db.exec('CREATE UNIQUE INDEX uq_project_members_pair ON project_members (project_id, user_id)');
   db.exec(migration('236_company_invitations.sql', 'company_invitations'));
   db.exec(migration('466_company_visits.sql', 'user_company_visits'));
+  // D1412 (#3857): the cards' legal line, location and status read 597's archived_at and 685's legal columns,
+  // locations and incorporations.company_id.
+  db.exec(tableFromBaseline(baseline, 'incorporations'));
+  db.exec(readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8'));
   // Both cycle reads need only a store's project_id.
   for (const s of STORES) db.exec(`CREATE TABLE ${s} (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER)`);
   // A required column the row does not name gets a neutral value, so each row says only what the test is about.
@@ -241,4 +246,82 @@ test('answering a venture invitation: the account or address it names, never a b
   assert.equal(db.prepare('SELECT status FROM project_member_invitations WHERE id = 2').get()!.status, 'declined');
   assert.equal((await post(db, '/api/projects/invitations/2/decline', { as: IVY })).status, 410);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM project_members WHERE user_id = ?').get(IVY)!.n, 0);
+});
+
+// ── D1412 (#3857): the Portfolio card's legal line, location and status ─────
+// Sam belongs to Beta (11) and Gamma (12); Sam's venture p3 sits in Beta.
+
+const card = (body: any, uid: string) => body.companies.find((x: any) => x.uid === uid);
+
+test('the legal block: the four fields, nulls inside an available block, and a failed read costs only its block', async () => {
+  // Mutation checked: each company's legal record read inside the map (N+1) — the statement count below.
+  const { db } = fixture();
+  db.prepare("UPDATE company_profiles SET legal_name = 'Beta Holdings Inc.', legal_form = 'c_corp', jurisdiction = 'US-DE', incorporation_date = '2026-02-03', registration_number = 'PRIVATE-REG-1' WHERE id = 11").run();
+  const r = await get(db, '/api/account/companies', { as: SAM });
+  assert.equal(r.status, 200);
+  assert.deepEqual(v(card(r.body, 'co11').legal), { legal_name: 'Beta Holdings Inc.', legal_form: 'c_corp', jurisdiction: 'US-DE', incorporation_date: '2026-02-03' });
+  assert.deepEqual(v(card(r.body, 'co12').legal), { legal_name: null, legal_form: null, jurisdiction: null, incorporation_date: null }, 'not recorded is null, never ""');
+  assert.equal(card(r.body, 'co11').archived_at, null);
+  for (const re of [/FROM company_profiles\s+WHERE id IN/, /FROM company_locations/, /FROM incorporations i/]) {
+    assert.equal(r.queries.filter((q) => re.test(q)).length, 1, `one statement for every company: ${re}`);
+  }
+  assert.doesNotMatch(JSON.stringify(r.body), /tax_id|registration_number|PRIVATE-REG|amount_cents|stripe_/, 'no tax ID, registration number, amount or Stripe field');
+
+  const failed = await get(db, '/api/account/companies', { as: SAM, failOn: [/FROM company_profiles\s+WHERE id IN/] });
+  assert.equal(failed.status, 200);
+  down(card(failed.body, 'co11').legal);
+  assert.equal(v(card(failed.body, 'co11').member_count) >= 1, true, 'the counts still answer');
+});
+
+test('the primary location: headquarters before registered, a closed one skipped, none is null with 0, a failed read is unavailable', async () => {
+  // Mutations checked: registered ranked above headquarters; location_count 0 when the read failed.
+  const { db } = fixture();
+  const loc = db.prepare("INSERT INTO company_locations (uid, company_id, kind, label, city, country, closed_on, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
+  loc.run('l-reg', 11, 'registered', 'Registered', 'Dover', 'US', null);
+  loc.run('l-hq', 11, 'headquarters', 'Berlin HQ', 'Berlin', 'DE', null);
+  loc.run('l-old', 11, 'headquarters', 'Old HQ', 'Paris', 'FR', '2026-01-01');
+  loc.run('l-office', 11, 'office', 'London office', 'London', 'GB', null);
+  const r = await get(db, '/api/account/companies', { as: SAM });
+  assert.deepEqual(v(card(r.body, 'co11').primary_location), { label: 'Berlin HQ', kind: 'headquarters', city: 'Berlin', country: 'DE' });
+  assert.equal(v(card(r.body, 'co11').location_count), 3, 'the open ones');
+  assert.equal(v(card(r.body, 'co12').primary_location), null);
+  assert.equal(v(card(r.body, 'co12').location_count), 0);
+  db.prepare("UPDATE company_locations SET closed_on = '2026-06-01' WHERE uid = 'l-hq'").run();
+  assert.equal(v(card((await get(db, '/api/account/companies', { as: SAM })).body, 'co11').primary_location).kind, 'registered', 'a closed headquarters is skipped');
+  const failed = await get(db, '/api/account/companies', { as: SAM, failOn: [/FROM company_locations/] });
+  down(card(failed.body, 'co11').primary_location);
+  down(card(failed.body, 'co11').location_count);
+});
+
+test('the status: in formation from a paid order, active once filed, archived wins, and unavailable when the orders cannot be read', async () => {
+  // Mutations checked: pending_payment counted; the company taken from p.company_id only.
+  const { db } = fixture();
+  const order = db.prepare("INSERT INTO incorporations (id, user_id, project_id, jurisdiction_id, company_name, amount_cents, status, paid_at, company_id) VALUES (?, ?, ?, 'us_de_ccorp', 'Beta, Inc.', 50000, ?, ?, ?)");
+  order.run(71, SAM, 3, 'pending_payment', null, null);
+  let r = await get(db, '/api/account/companies', { as: SAM });
+  assert.equal(v(card(r.body, 'co11').status), 'active', 'an unpaid order is not formation');
+  assert.equal(v(card(r.body, 'co11').formation), null);
+  order.run(72, SAM, 3, 'paid', '2026-09-01 10:00:00', null);
+  r = await get(db, '/api/account/companies', { as: SAM });
+  assert.equal(v(card(r.body, 'co11').status), 'in_formation');
+  assert.deepEqual(v(card(r.body, 'co11').formation), { order_id: 72, order_status: 'paid', jurisdiction_id: 'us_de_ccorp' });
+  assert.equal(v(card(r.body, 'co12').status), 'active');
+  db.prepare("UPDATE incorporations SET status = 'filed' WHERE id = 72").run();
+  assert.equal(v(card((await get(db, '/api/account/companies', { as: SAM })).body, 'co11').status), 'active', 'a filed order is active');
+
+  // An order linked to its company counts there even after its venture moves to another one.
+  order.run(73, SAM, 3, 'packet_ready', '2026-09-02 10:00:00', 11);
+  db.prepare('UPDATE projects SET company_id = 12 WHERE id = 3').run();
+  r = await get(db, '/api/account/companies', { as: SAM });
+  assert.deepEqual(v(card(r.body, 'co11').formation).order_id, 73);
+  assert.equal(v(card(r.body, 'co12').status), 'active', 'the order is not the new company\'s');
+
+  db.prepare("UPDATE company_profiles SET archived_at = '2026-10-01' WHERE id = 11").run();
+  r = await get(db, '/api/account/companies', { as: SAM });
+  assert.equal(v(card(r.body, 'co11').status), 'archived', 'archived wins over in formation');
+  assert.equal(card(r.body, 'co11').archived_at, '2026-10-01');
+  const failed = await get(db, '/api/account/companies', { as: SAM, failOn: [/FROM incorporations i/] });
+  assert.equal(v(card(failed.body, 'co11').status), 'archived', 'archived needs no orders');
+  down(card(failed.body, 'co12').status);
+  down(card(failed.body, 'co12').formation);
 });
