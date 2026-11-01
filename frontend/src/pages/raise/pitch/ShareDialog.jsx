@@ -3,6 +3,7 @@ import { cyclesWrite } from '../../../lib/api/cycles';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
 import InvestorLinksTable from './InvestorLinksTable.jsx';
+import PublishPanel from './PublishPanel.jsx';
 import {
   DEFAULT_SHARE, EXPIRIES, INCLUDE_ROWS, NDA_SWITCH, NEVER_SHARED, NO_LIMIT, SHARE_CTA, SHARE_TITLE, SHOWN_ONCE, TYPED,
   frozenLine, shareBody, shareFailure, shareProblem, shareUrl, whatShareDoes,
@@ -12,7 +13,8 @@ import {
  * D902 (#2681) — the share dialog (PD18), from Share in the editor and from
  * "New link" on Share & analytics. It writes through the one link writer,
  * `POST /api/cycles/raise/deck-links`, and says what it writes before it
- * writes it. The link is shown once, with Copy.
+ * writes it. The link is shown once, with Copy. D1564 (#3811): under it,
+ * the one publish control (`PublishPanel.jsx`).
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -110,6 +112,8 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
             </div>
           ) : <p className={`m-0 ${MUTED}`}>The link was made, but its address was not returned. Withdraw it from Share &amp; analytics and make another.</p>}
           <p className={`m-0 ${MUTED}`}>{SHOWN_ONCE}</p>
+          {/* D1564 (#3811): publishing this link as a web page lives here only, never in the header. */}
+          <PublishPanel deck={deck} made={made} />
         </div>
       ) : (
         <div className="flex flex-col gap-3.5">

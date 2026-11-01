@@ -86,6 +86,7 @@ export * from './api/deckGrants.js';
 export * from './api/deckGrid.js';
 export * from './api/deckImages.js';
 export * from './api/deckInvestorLinks.js';
+export * from './api/deckPublish.js';
 export * from './api/deckRemix.js';
 export * from './api/deckSources.js';
 export * from './api/deckStage.js';
@@ -366,6 +367,8 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/esign/')
     || currentPath.startsWith('/deck/share/')
     || currentPath.startsWith('/share/deck/')
+    // D1564 (#3811): a published deck framed on a site its founder listed.
+    || currentPath.startsWith('/embed/')
     || currentPath.startsWith('/share/captable/')
     || currentPath.startsWith('/insights')
     // ROUTE literals, not API paths — this whole predicate reads

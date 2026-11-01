@@ -9,7 +9,9 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { downloadRasterDeckPdf } from '../lib/deckRasterPdf';
 import ShareDeckCTA from '../components/ShareDeckCTA';
 import { ReviewDealSlotContext } from '../decks/templates/reviewDealSlot';
-import { ClosedLink, FigureSources, NdaGate } from './raise/pitch/ShareViewerParts';
+import { ClosedLink, EmailGate, FigureSources, NdaGate } from './raise/pitch/ShareViewerParts';
+import DeckCardView from './raise/pitch/DeckCardView';
+import { CARD_VIEW, PHONE_WIDTH, SLIDE_VIEW } from './raise/pitch/cardViewModel';
 import { viewerNote } from './raise/pitch/shareModel';
 import { offersDealPack } from '../lib/shareDeckAudience';
 import { NotesPages, SourcesPage, StudioPrintCard, isStudioSlide } from './raise/pitch/PrintExtras';
@@ -329,6 +331,11 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
   // useToast context; we render a lightweight banner that includes
   // a "Use browser print as fallback" action.
   const [exportError, setExportError] = useState(null);
+  // D1564 (#3811; owner decision A = B): the read-only card view beside the
+  // 16:9 slides, for a share link only. It opens first on a phone-wide
+  // screen, or when the link asks with `?view=cards`.
+  const [cardView, setCardView] = useState(() => shareMode && (searchParams.get('view') === 'cards'
+    || (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(`(max-width: ${PHONE_WIDTH + 250}px)`).matches)));
   const overlayTimerRef = useRef(null);
   const viewIdRef = useRef(null);
   const startedAtRef = useRef(null);
@@ -674,6 +681,10 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
   if (shareMode && closed) return <ClosedLink error={closed} />;
   if (!deck) return <div className="p-8 text-gray-500">Loading…</div>;
   // D902 — the link asks for the NDA: no card was sent, only what the NDA names.
+  // D1564 — a link published as a page asks for the reader's email first: no card was sent.
+  if (shareMode && deck.gate === 'email') {
+    return <EmailGate token={token} gate={deck} onPassed={() => { setDeck(null); setReadTick((t) => t + 1); }} />;
+  }
   if (shareMode && deck.gate === 'nda') {
     return <NdaGate token={token} gate={deck} onAccepted={() => { setDeck(null); setReadTick((t) => t + 1); }} />;
   }
@@ -822,6 +833,11 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
         ) : null}
       </div>
       <div className="flex items-center gap-2">
+        {shareMode ? (
+          <button type="button" onClick={() => setCardView((v) => !v)} aria-pressed={cardView}
+            className="inline-flex min-h-[44px] items-center bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 rounded-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            data-testid="share-view-toggle">{cardView ? SLIDE_VIEW : CARD_VIEW}</button>
+        ) : null}
         {exporting && exportProgress && (
           <div className="text-xs text-gray-600 tabular-nums hidden sm:block">
             Rendering slide {exportProgress.current} of {exportProgress.total}…
@@ -851,6 +867,17 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
       </div>
     </div>
   );
+
+  // D1564 — the card view: the same version's cards, one under another, with no badge and no gap.
+  if (shareMode && cardView && !isFullscreen) {
+    return (
+      <div className="bg-gray-100 min-h-screen dark:bg-slate-950" data-testid="share-card-view">
+        {Header}
+        <DeckCardView deck={deck} watermark={deck.watermark || null} />
+        {cta && <div className="deck-print-cta">{cta}</div>}
+      </div>
+    );
+  }
 
   // Advanced — render the actual template scaled to fit.
   if (isAdvanced) {

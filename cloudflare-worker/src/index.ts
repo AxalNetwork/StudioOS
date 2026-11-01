@@ -262,6 +262,7 @@ import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
+import deckPublish, { serveDeckEmbed, serveDeckShareCard } from './routes/deck_publish';
 // D1589 (#3836): a venture's stage norms, the benchmarks a deck critic may cite.
 import deckStageNorms from './routes/deck_stage_norms';
 // D1556 (#3803): a venture's consented interview quotes, ranked for a deck.
@@ -1402,6 +1403,8 @@ app.route('/api/decks', deckAssist);
 app.route('/api/decks', deckImages);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
 app.route('/api/decks', deckInvestorLinks);
+// D1564 (#3811): `/:id/investor-links/:shareId/publish` and the email gate `/share/:token/email`, before `decks`.
+app.route('/api/decks', deckPublish);
 // D1589 (#3836): `/stage-norms`, before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckStageNorms);
 // D1556 (#3803): `/quotes/search` and `/quotes/index`, before `decks` so `/:id` routes cannot answer them.
@@ -2077,7 +2080,14 @@ export default {
     // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists), and the
     // token share links in `PRIVATE_LINK_GLOBS` (#3916), which get the static
     // "Sign in to view" card with no D1 call.
+    // D1564 (#3811): `/embed/:token`, a published deck framed only by the
+    // origins its founder listed (`frame-ancestors`, no `X-Frame-Options`); the
+    // SPA's `_headers` deny stays for every other path.
+    if (pathname.startsWith('/embed/')) return serveDeckEmbed(request, env);
     if (env.ASSETS && [...SOCIAL_CARD_GLOBS, ...PRIVATE_LINK_GLOBS].some((g) => pathname.startsWith(g.slice(0, -1)))) {
+      // D1564: a published link's own card, only while public views are on (owner decision T); null keeps Part D's static card.
+      const own = await serveDeckShareCard(request, env);
+      if (own) return own;
       const card = await serveSocialCard(request, env);
       if (card) return card;
     }
