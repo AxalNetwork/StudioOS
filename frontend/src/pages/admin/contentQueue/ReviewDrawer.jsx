@@ -10,6 +10,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { remarkArticleBlocks } from '../../articles/articleBlocks.js';
 import { Sheet, actionGhost, actionPrimary } from '../../../ui';
 import { adminArticles as api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
@@ -57,7 +58,7 @@ function ArticleTab({ article }) {
       {article.subtitle && <p className="m-0 text-[14px] text-slate-600 dark:text-slate-300">{article.subtitle}</p>}
       {md
         ? <pre className="m-0 max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded border border-slate-200 bg-slate-50 p-3 font-mono text-[12px] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200" data-testid="cq-article-markdown">{article.body_markdown || ''}</pre>
-        : <div className="prose max-h-[60vh] max-w-none overflow-y-auto text-[14px] dark:prose-invert" data-testid="cq-article-rendered"><ReactMarkdown>{article.body_markdown || ''}</ReactMarkdown></div>}
+        : <div className="prose max-h-[60vh] max-w-none overflow-y-auto text-[14px] dark:prose-invert" data-testid="cq-article-rendered"><ReactMarkdown remarkPlugins={[remarkArticleBlocks]}>{article.body_markdown || ''}</ReactMarkdown></div>}
     </div>
   );
 }
