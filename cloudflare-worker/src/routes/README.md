@@ -519,3 +519,7 @@ D1421 (#3699): `studio_layout.ts` is mounted at `/api/studio`: `GET /modules` (t
 
 D901/D904/D1603: `deck_exports.ts` is mounted at `/api/decks` before `decks.ts`. It holds the HTML export (`POST /:id/export/html`), the Google Slides export (`POST /:id/export/google-slides`), the slides-suite export (`POST /:id/export/odp`, an OpenDocument Presentation from `../services/decks/odp.ts`, #3882), the export ledger read (`GET /:id/exports`), and the middleware that records the PDF and PowerPoint files `decks.ts` answers. Every format writes one `deck_exports` row (migration 537, widened by 754) before its file is handed out.
 D1594 (#3863): `studio_layout.ts`'s layout reads carry `revision` (migration 750) and name every saved module that left in `dropped` (`not_offered` with its last known title from `RETIRED_TITLES`, or null; `plan` with its title and plan), so a locked module never blocks Done; `PUT /layout` requires `expected_revision` and answers 409 `stale_layout` to a stale copy, writing nothing. See `documentation/architecture/decisions/D1594.md`.
+
+| File | Purpose |
+| --- | --- |
+| `work_board.ts` | D1614 W1 (#3969), prepared project-only board, item and move routes. The test mounts this router under the engine's gates; the production mount awaits migration allocation and shared-file coordination on the issue. |
