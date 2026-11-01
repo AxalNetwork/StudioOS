@@ -2083,6 +2083,23 @@ Worker routes in `routes/team_agents.ts`, mounted at `/api/teams`, backed by `se
 | `POST /api/teams/agents/:uid/run` | the sponsor + paid Founder plan | Part 2. Takes `{ module, option, record?, prompt }`; `{ proposal, charged: { available, value_microusd } }`. Charged to the sponsor, logged with `agent_id`. 403 `not_sponsor` / `agent_paused` / `module_not_allowed` / `option_not_allowed` / `sponsor_lost_access` (pauses it `sponsor_left`) / `plan_required`; 402 `agent_cap_reached` (pauses it `cap`); 422 `option_not_text`; 503 `agent_spend_unreadable`; every AI run refusal in its own words. |
 
 `Agent` is `{ uid, role_key, role_name, first_name, last_name, model_id, tools, sponsor: { uid, name }, status, paused_reason, monthly_cap_microusd, month_spend, last_activity_at, scope_kind, project: { id, name } | null }`. `month_spend` is `{ available: true, value_microusd }` for this month's runs, or `{ available: false }` when the read fails or a run's charge is unrecorded: the page says "Not recorded", never 0. `last_activity_at` is the newest event, or `null`.
+### Team agents: the skill library (D1612, #3951, part A of #3945)
+
+Worker routes in `routes/team_skills.ts`, mounted at `/api/teams` beside `team_agents.ts`, backed by `services/agents/skills.ts` and migration 759 (`agent_skills`, `agent_skill_versions`, `agent_skill_tags`, `agent_skill_roles`, `agent_skill_links`). Behind the same `TEAM_AGENTS_ENABLED` switch. Read: an HQ skill for every member, a company skill for its members (`user_company_links`) and HQ's admins; a draft only for its writers. Write: an HQ skill by a Super Admin, a company skill by its editors (`canEdit`). An agent's skills: its scope's managers (`canManage`). The client is part C (#3952).
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/teams/skills?company=&role=&category=&q=&sort=popular\|new\|az` | signed in; `company` must be the caller's | `{ roles: [{ key, label, skills, agents }], hq: [Skill], company: { uid, name, skills, can_write } \| null, can_write_hq }`. 400 `role_unknown`, `category_unknown`, `sort_invalid`; 404. |
+| `GET /api/teams/skills/:uid` | read | `{ skill: Skill & { skill_md }, versions: [{ version, published_at, by }], agents: [{ company, agents, projects: [{ id, name, agents }] }] }`, only the agents the caller can read. |
+| `POST /api/teams/skills` | write | `{ scope, company?, name, purpose, steps, tools, output_kind, tags, roles }` or `{ scope, company?, skill_md }`; 201 `{ skill }`, a draft. 400 with the field's code; 403 `not_editor`; 409 `slug_taken`. |
+| `PATCH /api/teams/skills/:uid` | write | The draft's fields, read, merged and checked; or `{ status: 'retired' }`. |
+| `POST /api/teams/skills/:uid/publish` | write | `{ skill }` with the new version and its `skill_md`. 409 `retired`, `publish_conflict`. |
+| `POST /api/teams/skills/:uid/assign` | the agents' managers | `{ agents: [uid] }`; `{ added, already, used_by }`, all or nothing: 409 `skill_not_attachable` with `refusals: [{ agent_uid, reason }]`. |
+| `GET /api/teams/agents/:uid/skills` | read | `{ agent, skills: [{ uid, version, latest_version, update_available, … }], radar: [{ slug, label, value: Block }], can_manage }`. |
+| `PUT /api/teams/agents/:uid/skills` | manage | `{ skills: [uid \| { uid, version }] }` replaces the agent's skills; 409 `skill_not_attachable` with `refusals: [{ skill_uid, reason }]`. |
+
+`Skill` is `{ uid, scope, slug, status, version, author, name, purpose, steps, tools, output_kind, output_label, roles: [{ key, label }], tags: [{ slug, label, category, level }], used_by, updated_at, can_write, draft? }`; a reader sees the published version, a writer also its `draft`. A radar axis no skill tags is `{ available: false, reason: 'Not recorded' }`, never 0.
+
 ### Team people gaps: project resend, invite by account, account search, members' emails (#3841, part 4 of #3727)
 
 No migration and no decision of its own: it fills TM2's gaps on the existing tables (migration 119's `project_members` and `project_member_invitations`, migration 236's `company_invitations`, `user_company_links`, `cofounder_connections`). The people clients moved from `api.js` to `lib/api/teams.js` (`teamsApi`, D527), with every method name kept; the invitee's `acceptCompanyInvitation` and `acceptProjectInvitation` stay in `api.js`. A person reachable from the caller shares a company with them or an active co-founder match (`services/peopleReach.ts`).
