@@ -165,8 +165,10 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' });
     res.end(readFileSync(file));
   } catch (e) {
+    // The trace goes to the runner's log, never into the reply.
+    console.error('[visual] request failed', e);
     res.writeHead(500, { 'content-type': 'text/plain' });
-    res.end(String((e as Error)?.message || e));
+    res.end('The visual test server could not answer this request.');
   }
 });
 server.listen(PORT, '127.0.0.1', () => console.log(`[visual] serving docs/ and the Worker on ${ORIGIN}; ${matrix.length} matrix ventures, one-click deck ${oneClick.deckId} (${oneClick.cards} cards)`));
