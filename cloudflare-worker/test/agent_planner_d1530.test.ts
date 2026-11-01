@@ -169,13 +169,17 @@ test('draftPlan: with no CEO agent the manager’s own Eadwyn runs it; the plan 
     const r = await plan(w, g, PLAN);
     assert.ok(r.ok, JSON.stringify(r));
     assert.equal(r.proposal.by, 'eadwyn');
-    const row = w.db.prepare('SELECT rail_option, record_ref, status, payload_json FROM ai_rail_proposals WHERE uid = ?').get(r.proposal.uid) as any;
+    const row = w.db.prepare('SELECT rail_option, record_ref, status, payload_json, decided_at FROM ai_rail_proposals WHERE uid = ?').get(r.proposal.uid) as any;
     assert.deepEqual([row.rail_option, row.record_ref, row.status], [PLAN_OPTION, `goal:${g}`, 'proposed']);
     assert.equal(JSON.parse(row.payload_json).plan.items.length, 3);
     assert.equal(JSON.parse(row.payload_json).plan.dropped.length, 3, 'the drops are noted in the proposal');
+    assert.equal(row.decided_at, null, 'a valid draft is not decided');
     const bad = await plan(w, g, JSON.stringify([{ title: 'A', module: 'studio', suggested_assignee: { person: true }, depends_on: [0] }]));
     assert.deepEqual([bad.ok, (bad as any).status, (bad as any).code], [false, 422, 'plan_invalid']);
     assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM ai_rail_proposals WHERE status = 'proposed'").get() as any).n, 1, 'the invalid plan proposes nothing');
+    const discarded = w.db.prepare("SELECT payload_json, decided_at FROM ai_rail_proposals WHERE status = 'discarded'").get() as any;
+    assert.ok(discarded?.decided_at, 'the invalid plan records its discard time');
+    assert.equal(JSON.parse(discarded.payload_json).goal, g, 'the discarded payload still identifies its goal');
     assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM scope_tasks').get() as any).n, 0, 'a draft creates no task');
   } finally { w.db.close(); }
 });

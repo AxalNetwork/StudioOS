@@ -208,9 +208,10 @@ export async function planQuote(env: Env, s: Scope, goal: GoalRow, user: User, d
 }
 
 async function setPayload(env: Env, uid: string, payload: Record<string, unknown>, status?: 'discarded') {
-  await env.DB.prepare(
-    `UPDATE ai_rail_proposals SET payload_json = ?, ${status ? "status = 'discarded', decided_at = CURRENT_TIMESTAMP," : ''} updated_at = CURRENT_TIMESTAMP WHERE uid = ?`,
-  ).bind(JSON.stringify(payload), uid).run();
+  const statement = status
+    ? env.DB.prepare("UPDATE ai_rail_proposals SET payload_json = ?, status = 'discarded', decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ?")
+    : env.DB.prepare('UPDATE ai_rail_proposals SET payload_json = ?, updated_at = CURRENT_TIMESTAMP WHERE uid = ?');
+  await statement.bind(JSON.stringify(payload), uid).run();
 }
 
 /**
