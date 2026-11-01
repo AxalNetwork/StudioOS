@@ -168,7 +168,11 @@ test('every zone with a store has an overview blurb, and no zone without one doe
   const unbacked = unbackedSlugs();
 
   assert.ok(backed.length >= 8, `parse failed — only ${backed.length} backed zones found`);
-  assert.ok(unbacked.length >= 1, 'parse failed — no COPY zones found');
+  // D1424 (#3700): Expertise › Visibility, the last no-store card, now reads
+  // D1597's visibility route, so the map is empty. The parse is still checked:
+  // the block must be found, and an empty map is the only zero it may be.
+  assert.match(copyCode, /export const ADVISOR_EXPERTISE_COPY = \{\};/, 'parse failed — the Expertise no-store map is gone or non-empty');
+  assert.deepEqual(unbacked, []);
 
   assert.deepEqual(
     [...blurbs].sort(),

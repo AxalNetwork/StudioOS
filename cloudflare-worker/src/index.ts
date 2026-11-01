@@ -311,6 +311,7 @@ import adminCreditRules from './routes/admin_credit_rules';
 import adminTicketReviews from './routes/admin_ticket_reviews';
 import communityTasksRoutes from './routes/community_tasks';
 import learningRoutes from './routes/learning';
+import learningPlanRoutes from './routes/learning_plan';
 import adminLearningRoutes from './routes/admin_learning';
 import learningAssessmentRoutes from './routes/learning_assessment';
 import adminLearningAssessmentRoutes from './routes/admin_learning_assessment';
@@ -1579,6 +1580,8 @@ app.all('/api/messages/*', messagesRetired);
 app.route('/api/perks', perksRoutes);
 // D545 — the approved community tasks the chat's Tasks panel lists.
 app.route('/api/community-tasks', communityTasksRoutes);
+// #3959 — a member's own learning plan. Before learningRoutes, so `plan` is never a course slug.
+app.route('/api/learning/plan', learningPlanRoutes);
 // D557 (#1158) — the Learning center, member side.
 app.route('/api/learning', learningRoutes);
 // D559 (#1160) — exercises and exams, graded on the server.
@@ -3133,6 +3136,14 @@ export default {
             }
           } catch (e) {
             console.error('[cron] event reminder sweep failed', e);
+          }
+          // #3959: learning plan reminders, one per item and occurrence (insert-ledger-first), through notify().
+          try {
+            const { sendPlanReminders } = await import('./services/learningPlan');
+            const sent = await sendPlanReminders(env, now.getTime());
+            if (sent > 0) console.info(`[cron] learning plan reminders sent=${sent}`);
+          } catch (e) {
+            console.error('[cron] learning plan reminder sweep failed', e);
           }
         }
         // Task #14's watchlist follow-up reminder sweep stood here (and its

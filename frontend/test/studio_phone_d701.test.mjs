@@ -201,7 +201,7 @@ const textOf = (markup) => markup.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'
 const hrefs = (markup) => [...markup.matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, '&'));
 const PHONE_FRAME = ADVISOR.slice(ADVISOR.indexOf('if (phone) {'), ADVISOR.indexOf('const containerClass ='));
 
-test('12. below 1024px the founder\'s /studio is the phone page: the bar, its own no-advisor line, and no zone', () => {
+test('12. below 1024px the founder\'s /studio is the phone page: the bar, its own no-advisor line, then the modules after the chat', () => {
   const page = (props) => withWindow({ matchMedia: mediaAt(900) }, () => inRouter(h(StudioPhone, props, h('div', null, 'STUB CHAT'))));
   const conv = page({});
   assert.match(conv, /Eadwyn AI/);
@@ -219,10 +219,14 @@ test('12. below 1024px the founder\'s /studio is the phone page: the bar, its ow
   assert.doesNotMatch(none, /remain below/);
   assert.doesNotMatch(conv, new RegExp(NO_ADVISOR), 'said only when the advisor is missing');
 
-  // The home: StudioPhone in place of FounderStudioBody below 1024px, one chat element for either.
+  // The home: below 1024px StudioPhone draws the chat, then FounderStudioBody's
+  // strip, profile card and modules (D1419, #3698 owner answer A, superseding
+  // D701's no-zone page), one chat element for either width.
   assert.match(HOME, /const phone = usePhoneWidth\(\);/);
-  assert.match(HOME, /if \(phone\) \{\n\s+return <StudioPhone tab=\{tab\} ticketOpen=\{Boolean\(ticket\)\} advisorAvailable=\{advisorAvailable\}>\{chat\}<\/StudioPhone>;\n\s+\}/);
-  assert.match(HOME, /<FounderStudioBody user=\{user\}[^\n]*\n\s+\{chat\}\n\s+<\/FounderStudioBody>/);
+  assert.match(HOME, /if \(phone\) \{\n\s+return <StudioPhone tab=\{tab\} ticketOpen=\{Boolean\(ticket\)\} advisorAvailable=\{advisorAvailable\} after=\{body\(true\)\}>\{chat\}<\/StudioPhone>;\n\s+\}/);
+  assert.match(HOME, /<FounderStudioBody user=\{user\}[^\n]*phone=\{inPhone\}>\n\s+\{inPhone \? null : chat\}\n\s+<\/FounderStudioBody>/);
+  const after = page({ after: h('div', null, 'STUB MODULES') });
+  assert.ok(after.indexOf('STUB CHAT') < after.indexOf('STUB MODULES'), 'Eadwyn first, then the modules');
   assert.match(HOME, /\n\s+phone=\{phone\}\n\s+venture=\{venture\}\n\s+belowThread=\{phone \? <StudioConversations \/> : null\}\n/);
   const phoneFile = codeOnly(read('frontend/src/pages/founder/StudioPhone.jsx'));
   assert.doesNotMatch(phoneFile, /founder-studio-summary|zone-founder-/, 'a zone on the phone page');
@@ -399,8 +403,9 @@ test('15. the composer: "Currently:", the option chips, Skip and the canvas\'s p
   assert.ok(!code.includes('explain ...'), 'the three dots are gone');
   assert.match(PHONE_FRAME, /<CurrentQuestion\n\s+q=\{question\}/);
   assert.match(PHONE_FRAME, /<Composer\n[\s\S]*?onSkip=\{skip\}[\s\S]*?options=\{question\?\.options\}\n\s+onPickOption=\{\(opt\) => submit\(opt\)\}/);
-  // bottom-0: the shell's <main> pads by the tab bar, and a sticky row is held inside that padding (2026-10-21).
-  assert.match(PHONE_FRAME, /className="sticky bottom-0 [^"]*" data-testid="eadwyn-phone-composer"/, 'pinned above the tab bar');
+  // D1419 (#3698, owner answer A): not pinned, so the founder's modules below the chat never scroll under it.
+  assert.match(PHONE_FRAME, /className="mt-auto [^"]*" data-testid="eadwyn-phone-composer"/);
+  assert.doesNotMatch(PHONE_FRAME.match(/className="([^"]*)" data-testid="eadwyn-phone-composer"/)[1], /\bsticky\b/, 'the composer is pinned again');
   assert.doesNotMatch(PHONE_FRAME, /<Header\b|<PanelTabs\b/, 'the phone frame has no header and no panel tabs');
   assert.match(PHONE_FRAME, /\{belowThread\}/);
   assert.match(PHONE_FRAME, /<Transcript\n[\s\S]*?\n\s+phone\n\s+\/>/);
