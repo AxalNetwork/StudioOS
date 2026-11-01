@@ -548,7 +548,7 @@ chat: Research synthesis, evidence comparison and detailed planning.
 - Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Markets"`; and 50 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 8 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 9 more
 - Admin consoles: **wired**, `railMatrix.json "Admin · Approvals · LP applications"`; `railMatrix.json "Admin · Approvals · Spin-Out applications"`; `railMatrix.json "Admin · Approvals · Spin-Out moderation"`; `railMatrix.json "Admin · Approvals"`
 - Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Investor · Deals · Commit"`; `railMatrix.json "Investor · Deals · Screening"`; `railMatrix.json "Investor · Deals"`
 
@@ -565,7 +565,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 1 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 2 more
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 19 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 17 more
 

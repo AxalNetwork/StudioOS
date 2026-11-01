@@ -427,3 +427,14 @@ export const FOUNDER_QUIET_PAGES = {
   'Founder · Research · Markets': 'Recording a reading and its Draft run no model.',
   'Founder · Research · Geographies': 'Read only.',
 };
+
+// D1420 (#3864): Ask-panel chips that run a model on POST /api/ai/rail/run but
+// are not rail actions (the AIRail holds only model choice and consumption,
+// the owner, 2026-10-31), so they stay out of the rail-option list and its
+// wiring tests. `scripts/build-rail-matrix.mjs` lists each one with its kind's
+// models, so `GET /api/ai/rail?page=` offers it with its own pick. S1 draws
+// the chip in the Ask panel (#3706).
+export const FOUNDER_ASK_CHIPS = [
+  // D1420 (#3864): Eadwyn proposes layout changes as cards in the Ask panel; nothing changes until Accept.
+  { page: 'Founder · Studio', route: '/studio', key: 'studio:layout', label: 'Arrange my Studio for this stage', kind: 'plan', handler: 'form' },
+];
