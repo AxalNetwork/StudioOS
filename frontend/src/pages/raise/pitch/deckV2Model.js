@@ -280,7 +280,9 @@ export function saveChip({ dirty, readOnly, when, version = null }) {
  */
 export const MORE_MENU = Object.freeze([
   { id: 'deck', label: 'This deck', items: [
-    { id: 'stage', label: 'Stage', adapter: 'stagePlan' },
+    // D1522 (#3774): the stage plan's route is on main, but its sheet is pd23's, built with the reorder action (#3808),
+    // so the item stays greyed on that adapter until the editor can open it.
+    { id: 'stage', label: 'Stage', adapter: 'deckActions' },
     // D1499 (#3749): the theme's aspect, written like a theme and held until a version is saved.
     { id: 'size', label: 'Slide size 16:9 · 4:3', write: true },
     { id: 'theme', label: 'Theme', write: true },
