@@ -23,10 +23,12 @@
  * file no longer lists it.
  *
  * Swapped here (`SWAPPED`): `grid`, whose route `GET /api/decks/:id/grid`
- * merged as D1499 part 1 (#3749). It keeps its row, so the plan's table still
- * reads whole, and answers through `deckGridApi.grid`. And `consistency`
- * (D1555, #3802): the free rules ride the deck check's own reply, so it
- * answers through `deckCheckApi.read`.
+ * merged as D1499 part 1 (#3749), and `remix`, whose route
+ * `POST /api/decks/:id/remix` is D1553 (#3800). Each keeps its row, so the
+ * plan's table still reads whole, and answers through its client
+ * (`deckGridApi.grid`, `deckRemixApi.remix`). And `consistency` (D1555,
+ * #3802): the free rules ride the deck check's own reply, so it answers
+ * through `deckCheckApi.read`.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -35,6 +37,7 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
+import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 
 export { NOT_ON };
@@ -96,7 +99,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'remix', 'consistency']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -156,7 +159,8 @@ export const media = off('media');
 export const presets = off('presets');
 export const orgLocks = off('orgLocks');
 export const critique = off('critique');
-export const remix = off('remix');
+/** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
+export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);
 /**
  * D1555 (#3802): the free consistency rules, in the deck check's own reply (no route of their own).
  * `{ state, findings: [{ key, rule, message, cards }] }`, or null for a reader who is not the founder.
