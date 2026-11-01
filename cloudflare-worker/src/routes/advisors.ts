@@ -43,6 +43,7 @@ import {
   guidanceCounts, oldestOpenHours, collisions, withinDays,
   type GuidanceRow, type CalendarItem,
 } from './_advisor_cohort_helpers';
+import { advisorVisibility } from '../services/advisorVisibility';
 
 const advisors = new Hono<{ Bindings: Env }>();
 
@@ -4501,6 +4502,19 @@ advisors.get('/me/booking-links', async (c) => {
         ORDER BY is_active DESC, id ASC LIMIT 100`
     ).bind(m.id).all<BookingLinkRow>();
     return c.json({ items: (rows.results || []).map(bookingLinkDto) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// D1597 (#3870): Advisor › Expertise › Visibility. Booking requests per link
+// and opens of the advisor's writing, each from the store that records it;
+// views and engagements are null with their sentences, and a failed read is
+// null with `unreadable`, never a zero (services/advisorVisibility.ts).
+advisors.get('/me/visibility', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (role(user) !== 'advisor') return c.json({ detail: 'Advisor required' }, 403);
+    const m = await requireMyAdvisor(c, user);
+    return c.json(await advisorVisibility(c.env, { advisorId: m.id, userId: user.id }, c.req.query('days')));
   } catch (e) { return mapError(c, e); }
 });
 

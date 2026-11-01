@@ -79,11 +79,13 @@ export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
 export * from './api/deckCheck.js';
 export * from './api/deckEditor.js';
+export * from './api/deckGrid.js';
 export * from './api/deckImages.js';
 export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
+export * from './api/eventSyndication.js';
 export * from './api/fills.js';
 export * from './api/fundAdmin.js';
 export * from './api/fundBooklets.js';
@@ -4471,6 +4473,8 @@ export const api = {
   updateMyAdvisorSessionType: (id, data) =>
     request(`/advisors/me/session-types/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   listMyAdvisorBookingLinks: () => request('/advisors/me/booking-links'),
+  // D1597 (#3870): Advisor › Expertise › Visibility — requests per booking link, opens of your writing; views and engagements are not recorded.
+  getMyAdvisorVisibility: (days) => request(`/advisors/me/visibility${days ? `?days=${encodeURIComponent(days)}` : ''}`),
   // 409 on a slug another advisor already holds — the slug resolves from the
   // URL alone, so it is unique across the table rather than per advisor.
   createMyAdvisorBookingLink: (data) =>
@@ -5737,6 +5741,11 @@ export const articles = {
     request(`/articles/${id}/cover`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
   uploadImage: (id, dataUri) =>
     request(`/articles/${id}/image`, { method: 'POST', body: JSON.stringify({ data_uri: dataUri }) }),
+  // D1406 — the author's (or an admin's) revision history: newest first, at most 50,
+  // → { revisions: [{ rev, title, status_at_save, reason, saved_by_name, created_at }] };
+  // and one revision with its text → { revision }. A support session is refused 403.
+  revisions: (id) => request(`/articles/${id}/revisions`),
+  revision: (id, rev) => request(`/articles/${id}/revisions/${rev}`),
 };
 
 export const adminArticles = {

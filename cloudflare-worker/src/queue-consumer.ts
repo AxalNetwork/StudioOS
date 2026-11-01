@@ -113,6 +113,11 @@ export async function dlqConsumer(
         message.attempts ?? 0,
         `CF DLQ message; timestamp=${message.timestamp}`,
       ).run();
+      // D1490 — a listing whose job ran out of retries reads `failed`, keeping its last reason.
+      if (body.job_type === 'event_syndication') {
+        const { markSyndicationDead } = await import('./services/eventSyndication/jobs');
+        await markSyndicationDead(env, body.payload ?? {}).catch(() => console.warn('[dlq-consumer] syndication_mark_failed'));
+      }
       message.ack();
     } catch (e: any) {
       console.error('[dlq-consumer] mirror failed:', e?.message || e);

@@ -111,6 +111,56 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-31 — Pitch deck studio v2 (#3716)
+
+The owner's two exports for #3716's v2 prompt arrived unpacked (the page's and
+the grid's bundles, read as data only) and were rebuilt into their bundled form
+and decoded by `scripts/read-canvas.mjs`:
+- `Pitch Deck Studio v2 Page.dc.html` is the page, one component drawn per
+  frame through its `v` prop (73 values, a `-d` suffix is dark);
+- `Pitch Deck Studio v2 · Boards.dc.html` is the board grid "Pitch deck studio
+  v2": Page, PD-1 to PD-9 and Ask (11 sections, 58 frames). It imports the page
+  by name.
+
+**Two edits, named.** In the page, the Eadwyn mark points at `/eadwyn-ai.png`
+and the Axal VC mark (the export's `uploads/axal-logo-200x200.png`) at
+`/axal-mark.png`; the bundles carried neither image. The grid's `dc-import`
+name was already `Pitch Deck Studio v2 Page`, so it needed no edit. No other
+value was edited.
+
+**Grade: UPGRADE (D1604).** The studio, New deck and the editor are live, and
+the v2 surfaces are built onto them in the order of S1's plan on #3716; the
+templates gallery (`/raise/pitch/templates`, pd29) is NEW. Surfaces whose
+routes are not on main draw their unavailable state through
+`frontend/src/pages/raise/pitch/deckV2Adapter.js`, keyed to the issue that
+brings each route. The v1 pair from D894 (below) stays: the v1 surfaces with
+no v2 board are kept. Two files arrived and none left, so the folder counts
+above do not move (they count `design/canvases/`).
+
+## Landed 2026-10-31 — Team: people and AI agents (#3727)
+
+The owner's two artifacts (`U6FNNm7jdTGHb2kmaFswGr`, `7Qm97kr6oKKX5ws6TMP86g`)
+came from the prompt on #3727:
+- `Team Page.dc.html` is the page, one component drawn per board through its
+  `v` prop, in the copy the grid's bundle carries (decoded by
+  `scripts/read-canvas.mjs`, its body is the same);
+- `Team · Boards.dc.html` is the board grid, TMA and TM1a to TM9f (33 boards,
+  55 frames, with TM1e–TM1i on authority by scope and TM6c on Working here);
+  it imports the page by name.
+
+**Three edits, named.** In the page, the Axal VC mark points at
+`/axal-mark.png` and the Eadwyn mark at `/eadwyn-ai.png`. In the grid, the
+`dc-import` name is `Team Page` (Claude Design called the page
+`Team Agents Page`), so the grid resolves its sibling. No other value was
+edited.
+
+**Grade: UPGRADE for people, NEW for agents (D1497).** The Team page is built
+at four routes (`frontend/src/routes/team.jsx`) with people, invitations and
+Move under or out of a company wired; agents, rule books, approvals and agent
+settings draw their unavailable state through `frontend/src/pages/team/agentsAdapter.js`
+until #3840–#3844 land. Both files stay here: the bar is the bodies, and the
+agent bodies are outstanding. No file moved, so no count changed.
+
 ## Landed 2026-10-27 — Validate › Record a session › the ring visualiser (D1330)
 
 The owner's artifact `3xHppg2QRN4HD78fR2VmW1` ("Recording View Canvas"):
@@ -123,6 +173,20 @@ visualiser points at `ring-viz.js` instead of its asset id. No other value was e
 the grid does not draw; they are not landed here.
 
 **Grade: UPGRADE.** D1330 ports `ring-viz.js`'s maths into `frontend/src/lib/ringViz.js`.
+## Landed 2026-11-01 — Social share cards (#3705)
+
+The owner's artifacts on #3705:
+- `Share Cards Page.dc.html` (`NuqvJUKoNJbwYfqwZG44WY`) is the card renderer, every family at 1200×630 (SC0 to SC12);
+- `Share Cards · Boards.dc.html` (`XJKVGprpDKwwSVNiNbZehv`) is the board grid; it imports the page by name.
+
+Decoded by `scripts/read-canvas.mjs`. **No value was edited.**
+
+**Grade: REDESIGN.** The Open Graph pipeline already exists (`ogRegistry.js`, `scripts/generate-og-images.mjs`,
+the prerender and the CI gate); its card was the dark SC0. #3705 replaces the generator's template with the
+canvas's light families, adds the trust and legal document cards (SC7), the pricing tier chips (SC2), and
+draws the record families (`event`, `profile`, `private`) ahead of the Worker card injector (D1439) and the
+private-link card. SC9's crops and SC11's fallbacks belong to D1439's tests; SC12 (dark) does not ship.
+
 ## Landed 2026-10-31 — Event syndication (#3725)
 
 The owner's artifacts on #3725:

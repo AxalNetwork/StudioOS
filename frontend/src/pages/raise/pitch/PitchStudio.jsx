@@ -1,34 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { cyclesApi } from '../../../lib/api/cycles';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { Lightbox, Pill, WorkerRail, usePhoneWidth } from '../../../ui';
+import { Lightbox, WorkerRail } from '../../../ui';
 import PitchPage from './PitchPage';
-import ExportDialog from './ExportDialog';
 import PitchNotes from './PitchNotes';
 import PitchReview from './PitchReview';
-import VersionCompare from './VersionCompare';
-import { comparePair } from './compareModel';
-import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import {
-  EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
-  asList, coverOf, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, mmss,
-  readerStats, slideSeconds, ventureQuery, versionLabel, versionRows, viewsState, weeklyViews,
-  NEW_DATA_FAILED, NOTHING_BOUND, NOTHING_NEW, REFRESH_THE_DECK, VERSION_SORTS, audienceOptions, newInData,
+  EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
+  asList, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, mmss,
+  readerStats, ventureQuery, versionLabel, viewsState,
 } from './pitchStudioModel';
-import { deckSourcesApi } from '../../../lib/api/deckSources';
-import { deckCheckApi } from '../../../lib/api/deckCheck';
-import { NOT_CHECKED, checkPills, checksByDeck, checksCell } from './checkModel';
-import { presentHref } from './presentExportModel';
-import { useRailOption } from '../../../ui/railCrumbs';
-import { newDeckApi } from '../../../lib/api/newDeck';
-import { railPressHeaders } from '../../../lib/railPage';
-import { FAST_TITLE, NEW_PATH, buildSentence, fastPathLine, refusalOf } from './newDeckModel';
 import ShareDialog from './ShareDialog';
-import { BrandingCard, FillFromProject, SpinoutReadiness } from './StudioActions';
+import StudioHome from './StudioHome';
+import { NEW_PATH } from './newDeckModel';
+import { deckRail } from './deckRailGroups';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel } from './shareModel';
 
@@ -36,7 +25,11 @@ import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel }
  * D894 (#2434) — the Pitch deck studio's shell and the two tabs whose reads are
  * on `main`, built to the "Pitch Deck Studio" canvas (PD2, PD19, PD23–PD26).
  *
- *   /raise/pitch            Decks (PD2): the current deck, its versions, and
+ *   /raise/pitch            Decks: D1604 (#3716, pd1) made it the studio's
+ *                           home, `StudioHome.jsx` (the deck card with
+ *                           Versions… in its ⋯, Start from, Data ready and
+ *                           Investor links). Before that, PD2: the current
+ *                           deck, its versions, and
  *                           views by week, most read slide and NDA signed.
  *   /raise/pitch/review     Review (PD14): the current version's review, each
  *                           point pointing to a card, and the reviews per
@@ -71,7 +64,6 @@ const EYE = 'font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axa
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
 const PILL = 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10.5px] font-bold';
-const PILL_VIO = `${PILL} border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300`;
 const PILL_MU = `${PILL} border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400`;
 const PILL_OK = `${PILL} border-emerald-200 bg-emerald-50 text-axal-positive dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300`;
 const SKEL = 'animate-pulse rounded-[9px] bg-axal-hairline dark:bg-gray-800';
@@ -172,18 +164,22 @@ export default function PitchStudio({ tab = 'decks' }) {
   // address: a tab never drops it and lands on another one.
   const q = ventureQuery(projectId || reads.requested);
 
+  // D1604 (§5): the rail is the element groups' models and the deck's usage.
+  const currentId = currentVersion(asList(reads.versions.data, 'versions', 'decks'))?.id ?? null;
+  const railGroups = useMemo(() => deckRail(currentId), [currentId]);
   const rail = (
     <WorkerRail
       workspace="Raise"
       // The founder's tool, whoever reads it: a reader is told by the banner.
       role="founder"
+      groups={railGroups}
       note="The studio reads your deck's versions and the views on your investor links. Every figure on a card comes from your records and shows its source."
       data-testid="pitch-studio-rail"
     />
   );
 
   return (
-    <PitchPage rail={rail} crumb={{ query: q }} testId="pitch-studio">
+    <PitchPage rail={rail} crumb={{ query: q }} ask={{ projectId, readOnly, versions: reads.versions, onChanged: reads.reload }} testId="pitch-studio">
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid={`pitch-studio-${tab}`}>
         <StudioHeader tab={tab} q={q} readOnly={readOnly} showNew={tab === 'decks' && !readOnly && Boolean(projectId)} />
         {tab === 'review' ? (
@@ -203,7 +199,7 @@ export default function PitchStudio({ tab = 'decks' }) {
         ) : tab === 'notes' ? (
           <PitchNotes reads={reads} />
         ) : (
-          <StudioDecks reads={reads} readOnly={readOnly} q={q} />
+          <StudioHome reads={reads} readOnly={readOnly} q={q} />
         )}
       </div>
     </PitchPage>
@@ -259,371 +255,9 @@ function Skeleton({ h = 'h-24', testId }) {
   return <div className={`${SKEL} ${h} w-full`} aria-hidden="true" data-testid={testId} />;
 }
 
-// ---------------------------------------------------------------------------
-// Decks (PD2)
-// ---------------------------------------------------------------------------
-
-export function StudioDecks({ reads, readOnly, q }) {
-  const phone = usePhoneWidth();
-  const versions = asList(reads.versions.data, 'versions', 'decks');
-  const current = currentVersion(versions);
-  const busy = reads.projects.status === 'loading' || reads.versions.status === 'loading' || reads.versions.status === 'idle';
-  // D898 group D (PD15): the version chosen to compare with the current one.
-  const [compare, setCompare] = useState(null);
-  const pair = compare ? comparePair(versions, compare) : null;
-  // D900 (#2679): each version's last check, for PD2's pills and the Checks column.
-  const checks = useDeckChecks(reads.versions.status === 'ok' ? reads.project?.id : null, versions.length);
-
-  let left;
-  if (busy) left = <><Skeleton h="h-44" testId="pitch-studio-loading" /><Skeleton h="h-40" /></>;
-  else if (reads.versions.status === 'error') left = <ReadFailed text="Your deck's versions could not be read." onRetry={reads.reload} testId="pitch-studio-versions-error" />;
-  else if (!current) {
-    left = (
-      <div className={`${CARD} flex flex-col items-center gap-3 px-5 py-7 text-center`} data-testid="pitch-studio-empty">
-        <span className={`text-[15px] font-extrabold ${INK}`}>{EMPTY_DECK}</span>
-        {!readOnly ? <Link to={`${NEW_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-empty-new">New deck</Link> : null}
-      </div>
-    );
-  } else {
-    left = (
-      <>
-        <CurrentDeck project={reads.project} current={current} versions={versions} deck={reads.deck} q={q} phone={phone} readOnly={readOnly} checks={checks} />
-        <Versions versions={versions} phone={phone} onCompare={setCompare} checks={checks} />
-        {pair && !phone ? (
-          <VersionCompare key={`${pair.older.id}-${pair.newer.id}`} older={pair.older} newer={pair.newer} versions={versions} readOnly={readOnly}
-            onClose={() => setCompare(null)} onRestored={() => { setCompare(null); reads.reload(); }} />
-        ) : null}
-      </>
-    );
-  }
-
-  return (
-    // A proportional aside, not a fixed track: the rail already takes its own
-    // column beside the frame, and a fixed 300px here would read as a second one.
-    <div className="grid gap-3.5 2xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-      <div className="flex min-w-0 flex-col gap-3.5">
-        {!readOnly && !busy && reads.versions.status === 'ok' && reads.project?.id ? <FastPath projectId={reads.project.id} q={q} /> : null}
-        {left}
-      </div>
-      <aside className="grid items-start gap-3.5 md:grid-cols-2 2xl:grid-cols-1" aria-label="Readers">
-        {current?.id && reads.versions.status === 'ok' ? <NewInData current={current} q={q} /> : null}
-        {/* D898 group E: the builder's Spin-Out readiness and Branding, now the studio's. */}
-        {reads.deck.status === 'ok' ? <SpinoutReadiness projectId={reads.project?.id ?? null} deck={reads.deck.data} /> : null}
-        <ReadersAside reads={reads} hasDeck={Boolean(current)} />
-        {reads.project?.id && reads.versions.status === 'ok' ? <BrandingCard projectId={reads.project.id} readOnly={readOnly} /> : null}
-      </aside>
-    </div>
-  );
-}
-
-/**
- * D897 (#2677), PD2: "Build a standard deck now" — twelve cards from everything
- * on record, for a seed fund, skipping source curation. Its estimate is the
- * quote (`POST /api/decks/new/quote`); the build is a proposal, reviewed card
- * by card at /raise/pitch/new.
- */
-function FastPath({ projectId, q }) {
-  const navigate = useNavigate();
-  const [quote, setQuote] = useState(null);
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [refusal, setRefusal] = useState(null);
-  useRailOption(busy ? 'deck:build' : null, 'Build deck');
-  useEffect(() => {
-    let live = true;
-    newDeckApi.quote({ project_id: projectId, step: 'build', audience: 'seed_fund', length: 'standard' })
-      .then((qt) => { if (live) setQuote(qt); }, (e) => { if (live) setQuote(null); reportError('pitch-studio:fast-quote', e); });
-    return () => { live = false; };
-  }, [projectId]);
-  const build = async () => {
-    setBusy(true); setRefusal(null);
-    try {
-      const r = await newDeckApi.build({ project_id: projectId, audience: 'seed_fund', length: 'standard' }, railPressHeaders('deck:build'));
-      navigate(`${NEW_PATH}${q}${q ? '&' : '?'}proposal=${encodeURIComponent(r.proposal.id)}`);
-    } catch (e) { setRefusal(refusalOf(e)); setOpen(false); reportError('pitch-studio:fast-build', e); } finally { setBusy(false); }
-  };
-  return (
-    <section className={`${CARD} flex flex-wrap items-center justify-between gap-3 px-4 py-3.5`} data-testid="pitch-studio-fast">
-      <div className="flex min-w-0 flex-col gap-1">
-        <span className={`text-[14px] font-extrabold ${INK}`}>{FAST_TITLE}</span>
-        <span className={MUTED}>{fastPathLine(quote)}</span>
-        {refusal ? (
-          <span role="alert" className="text-[12px] font-semibold text-axal-violet dark:text-violet-300">
-            {refusal.message} {refusal.topUp ? <a href={refusal.topUp.href} className="underline">{refusal.topUp.text}</a> : null}
-          </span>
-        ) : null}
-      </div>
-      <button type="button" className={PRIMARY} onClick={() => setOpen(true)} data-testid="pitch-studio-fast-build">Build</button>
-      {open ? (
-        <Lightbox label={FAST_TITLE} title={FAST_TITLE} width={520} onClose={() => !busy && setOpen(false)} testId="pitch-studio-fast-dialog"
-          footer={(
-            <div className="flex justify-end gap-2">
-              <button type="button" className={GHOST} onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
-              <button type="button" className={PRIMARY} onClick={build} disabled={busy}>{busy ? 'Building…' : 'Build deck'}</button>
-            </div>
-          )}>
-          <p className={`m-0 ${MUTED}`}>{buildSentence(quote, 12)}</p>
-        </Lightbox>
-      ) : null}
-    </section>
-  );
-}
-
-/**
- * D900 (#2679): `GET /api/decks/checks` — each version's last check. `null`
- * while it reads, `'error'` when it failed (the cells then say Not read, never
- * Not checked), else a Map by deck id.
- */
-function useDeckChecks(projectId, count) {
-  const [state, setState] = useState(null);
-  useEffect(() => {
-    if (projectId == null) { setState(null); return undefined; }
-    let live = true;
-    setState(null);
-    deckCheckApi.versions(projectId).then(
-      (r) => { if (live) setState(checksByDeck(r) ?? 'error'); },
-      (e) => { if (live) setState('error'); reportError('pitch-studio:checks', e); },
-    );
-    return () => { live = false; };
-  }, [projectId, count]);
-  return state;
-}
-
-/** PD2's check pills for the current version: its counts, Not checked, or the read's failure. */
-function CheckPills({ checks, current, q }) {
-  if (checks == null) return null;
-  if (checks === 'error') return <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-checks-error">The check could not be read.</span>;
-  const mine = checks.get(Number(current.id));
-  const pills = mine?.checked ? checkPills(mine.counts) : [];
-  return (
-    <div className="flex flex-wrap items-center gap-1.5" data-testid="pitch-studio-checks">
-      {!mine?.checked ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{NOT_CHECKED}</span> : null}
-      {mine?.checked && !pills.length ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">Checked · no figures</span> : null}
-      {pills.map((p) => <Pill key={p.key} tone={p.tone}>{p.label}</Pill>)}
-      <Link to={`${EDIT_PATH}${q}`} className="text-[11.5px] font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid="pitch-studio-checks-open">Open the check ›</Link>
-    </div>
-  );
-}
-
-function CurrentDeck({ project, current, versions, deck, q, phone, readOnly, checks }) {
-  const [exporting, setExporting] = useState(false);
-  const sources = useDeckSources(project?.id);
-  const cover = deck.status === 'ok' ? coverOf(deck.data) : null;
-  const title = `${String(project?.name || '').trim() || 'Your venture'} · ${versionLabel(current)}`;
-  return (
-    <section className={`${CARD} grid gap-4 p-4 ${phone ? '' : 'sm:grid-cols-[260px_1fr]'}`} data-testid="pitch-studio-current">
-      <div className="flex aspect-video flex-col justify-end gap-1 rounded-[8px] border border-axal-hairline bg-axal-ground p-3.5 dark:border-gray-700 dark:bg-gray-800" data-testid="pitch-studio-cover">
-        {deck.status === 'loading' ? <Skeleton h="h-full" /> : deck.status === 'error' ? (
-          <span className={MUTED}>The cover could not be read.</span>
-        ) : cover ? (
-          <>
-            <span className="text-[9px] font-bold uppercase tracking-[.14em] text-axal-violet dark:text-violet-300">{String(project?.name || '').trim()}</span>
-            <span className={`text-[15px] font-bold leading-snug ${INK}`}>{cover.headline}</span>
-            {cover.sub ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{cover.sub}</span> : null}
-          </>
-        ) : null}
-      </div>
-      <div className="flex min-w-0 flex-col gap-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`text-[15px] font-extrabold ${INK}`}>{title}</span>
-          {current.is_current ? <span className={PILL_VIO}>Current</span> : null}
-        </div>
-        <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">
-          {versionLabel(current)} · saved {dayLabel(current.created_at)}{cover?.slides ? ` · ${cover.slides} slide${cover.slides === 1 ? '' : 's'}` : ''}
-        </span>
-        {/* D896 (#2675): PD2's coverage meter, from the sources read; loading and error draw no counts. */}
-        {sources.status !== 'idle' ? (
-          <div data-testid="pitch-studio-coverage">
-            <CoverageMeter coverage={sources.data?.coverage} status={sources.status} size="M" onRetry={sources.retry} />
-          </div>
-        ) : null}
-        <CheckPills checks={checks} current={current} q={q} />
-        <div className="mt-auto flex flex-wrap gap-2">
-          <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-open">Open</Link>
-          {/* D901 (#2680): present reads, so a read-only viewer presents too (PD21); export writes the ledger. */}
-          <Link to={presentHref(project?.id, current.id)} className={GHOST} data-testid="pitch-studio-present">Present</Link>
-          {!readOnly ? <button type="button" className={GHOST} onClick={() => setExporting(true)} data-testid="pitch-studio-export">Export</button> : null}
-          {/* D898 group E: Fill from project, once the builder's; its proposal is reviewed at New deck. */}
-          {!readOnly && deck.status === 'ok' && deck.data?.id ? <FillFromProject deck={deck.data} q={q} /> : null}
-        </div>
-      </div>
-      {exporting ? <ExportDialog versions={versions} current={current} onClose={() => setExporting(false)} /> : null}
-    </section>
-  );
-}
-
-/**
- * D1112 (#2992), PD2: "New in your data since vN" — the figures this version
- * holds whose store has moved on, from D896's refresh read (it writes
- * nothing). "Refresh the deck" opens the editor, which marks those cards.
- */
-function NewInData({ current, q }) {
-  const [state, setState] = useState({ status: 'loading', data: null });
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    let live = true;
-    setState({ status: 'loading', data: null });
-    deckSourcesApi.refresh(current.id).then(
-      (d) => { if (live) setState({ status: 'ok', data: d }); },
-      (e) => { if (live) setState({ status: 'error', data: null }); reportError('pitch-studio:new-in-data', e); },
-    );
-    return () => { live = false; };
-  }, [current.id, tick]);
-  const label = versionLabel(current);
-  const view = state.status === 'ok' ? newInData(state.data) : null;
-  return (
-    <section className={`${CARD} flex flex-col gap-2 p-4`} data-testid="pitch-studio-new-data">
-      <span className={EYE}>New in your data since {label}</span>
-      {state.status === 'loading' ? <Skeleton h="h-14" /> : null}
-      {state.status === 'error' ? (
-        <div role="alert" className="flex flex-col gap-2">
-          <span className={MUTED}>{NEW_DATA_FAILED}</span>
-          <button type="button" className={`${GHOST} self-start`} onClick={() => setTick((t) => t + 1)}><RefreshCw size={14} aria-hidden="true" /> Try again</button>
-        </div>
-      ) : null}
-      {view && !view.checked ? <span className={MUTED} data-testid="pitch-studio-new-data-unbound">{NOTHING_BOUND}</span> : null}
-      {view && view.checked && !view.items.length ? <span className={MUTED} data-testid="pitch-studio-new-data-none">{NOTHING_NEW(label)}</span> : null}
-      {view && view.items.length ? (
-        <ul className="m-0 flex list-none flex-col p-0">
-          {view.items.map((it) => (
-            <li key={it.key} className="flex items-center justify-between gap-3 border-t border-axal-hairline py-1.5 text-[12.5px] first:border-t-0 dark:border-gray-700" data-testid={`pitch-studio-new-data-${it.key}`}>
-              <span className={INK}>{it.t}</span>
-              <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400">{it.v}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {view && view.unknown ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{view.unknown} figure{view.unknown === 1 ? '' : 's'} could not be read for you, so {view.unknown === 1 ? 'it is' : 'they are'} not compared.</span> : null}
-      {view && view.items.length ? <Link to={`${EDIT_PATH}${q}`} className="text-[12.5px] font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid="pitch-studio-refresh-deck">{REFRESH_THE_DECK}</Link> : null}
-    </section>
-  );
-}
-
-const SELECT = 'min-h-[30px] rounded-[8px] border border-axal-hairline bg-white px-2 font-mono text-[11px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
-
-function Versions({ versions, phone, onCompare, checks }) {
-  const checkCell = (id) => (checks == null ? '…' : checks === 'error' ? 'Not read' : checksCell(checks.get(Number(id))));
-  const [audience, setAudience] = useState('all');
-  const [sort, setSort] = useState('newest');
-  const options = useMemo(() => audienceOptions(versions), [versions]);
-  const rows = useMemo(() => versionRows(versions, { sort, audience }), [versions, sort, audience]);
-  return (
-    <section className={`${CARD} overflow-hidden`} data-testid="pitch-studio-versions">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-        <span className={`text-[14px] font-extrabold ${INK}`}>Versions</span>
-        <span className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1 font-mono text-[11px] text-axal-muted dark:text-gray-400">Audience
-            <select className={SELECT} value={audience} onChange={(e) => setAudience(e.target.value)} data-testid="pitch-studio-versions-audience">
-              {options.map((o) => <option key={o.id} value={o.id}>{o.t}</option>)}
-            </select>
-          </label>
-          <label className="flex items-center gap-1 font-mono text-[11px] text-axal-muted dark:text-gray-400">Sort
-            <select className={SELECT} value={sort} onChange={(e) => setSort(e.target.value)} data-testid="pitch-studio-versions-sort">
-              {VERSION_SORTS.map((o) => <option key={o.id} value={o.id}>{o.t}</option>)}
-            </select>
-          </label>
-        </span>
-      </div>
-      {!rows.length ? <p className={`m-0 border-t border-axal-hairline px-4 py-3 dark:border-gray-700 ${MUTED}`} data-testid="pitch-studio-versions-filtered">No version is written for this audience.</p> : null}
-      {phone ? (
-        <ul className="m-0 list-none border-t border-axal-hairline p-0 dark:border-gray-700">
-          {rows.map((r) => (
-            <li key={r.id} className="flex min-h-[44px] items-center justify-between gap-3 border-b border-axal-hairline px-4 text-[12.5px] last:border-b-0 dark:border-gray-700">
-              <span className={INK}><b>{r.label}</b> · {r.title} <span className="text-axal-muted dark:text-gray-400">· {r.audience}</span></span>
-              <span className="font-mono text-axal-muted dark:text-gray-400">{r.saved} · {r.links} link{r.links === '1' ? '' : 's'} · {checkCell(r.id)}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <table className="w-full border-collapse text-left text-[12.5px]">
-          <thead>
-            <tr className="bg-axal-ground font-mono text-[9.5px] font-semibold uppercase tracking-[.07em] text-axal-muted dark:bg-gray-800 dark:text-gray-400">
-              <th className="px-4 py-2 font-semibold">Version</th>
-              <th className="px-4 py-2 font-semibold">Title</th>
-              <th className="px-4 py-2 font-semibold">Audience</th>
-              <th className="px-4 py-2 font-semibold">Round</th>
-              <th className="px-4 py-2 font-semibold">Saved</th>
-              <th className="px-4 py-2 font-semibold">By</th>
-              <th className="px-4 py-2 font-semibold">Shared links</th>
-              <th className="px-4 py-2 font-semibold">Checks</th>
-              <th className="px-4 py-2 font-semibold"><span className="sr-only">Compare</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-axal-hairline dark:border-gray-700" data-testid={`pitch-studio-version-${r.id}`}>
-                <td className={`px-4 py-2.5 font-bold ${INK}`}>{r.label}{r.current ? <span className={`${PILL_VIO} ml-2`}>Current</span> : null}</td>
-                <td className={`px-4 py-2.5 ${INK}`}>{r.title}</td>
-                <td className={`px-4 py-2.5 ${INK}`}>{r.audience}</td>
-                <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{r.round}</td>
-                <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{r.saved}</td>
-                <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{r.by}</td>
-                <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-version-links-${r.id}`}>{r.links}</td>
-                <td className="px-4 py-2.5 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-version-checks-${r.id}`}>{checkCell(r.id)}</td>
-                <td className="px-4 py-2.5 text-right">
-                  {!r.current && onCompare ? (
-                    <button type="button" className="text-[12px] font-bold text-axal-violet hover:underline dark:text-violet-300" onClick={() => onCompare(r.id)} data-testid={`pitch-studio-compare-${r.id}`}>Compare</button>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
-  );
-}
-
-function ReadersAside({ reads, hasDeck }) {
-  const card = reads.module.data?.card;
-  if (reads.module.status === 'loading' || reads.module.status === 'idle') return <><Skeleton h="h-28" /><Skeleton h="h-20" /></>;
-  const state = viewsState(card, reads.module.status);
-  if (state === 'failed') return <ReadFailed text="Views on your links could not be read." onRetry={reads.reload} testId="pitch-studio-views-error" />;
-  if (!hasDeck || state === 'no-deck') return null;
-  if (state === 'unopened') {
-    return <div className={`${CARD} p-5 text-center text-[13px] text-axal-muted dark:text-gray-400`} data-testid="pitch-studio-no-views">{NO_VIEWS}</div>;
-  }
-  // Views exist. Eight zero weeks is a real count, and the rest still shows.
-  const weeks = weeklyViews(card);
-  const peak = Math.max(...weeks.values, 1);
-  const slides = slideSeconds(card);
-  const top = slides.length ? [...slides].sort((a, b) => b.seconds - a.seconds || a.index - b.index)[0] : null;
-  const stats = reads.engagement.status === 'ok' ? readerStats(reads.engagement.data) : null;
-  return (
-    <>
-      <section className={`${CARD} flex flex-col gap-2.5 p-4`} data-testid="pitch-studio-weekly">
-        <span className={EYE}>Views by week</span>
-        <div className="flex h-16 items-end gap-1.5" role="img" aria-label={`Views per week, oldest first: ${weeks.values.join(', ')}`}>
-          {weeks.values.map((n, i) => (
-            <span key={i} title={String(n)} className="flex-1 rounded-t-[3px] bg-axal-violet dark:bg-violet-400" style={{ height: `${Math.max(n ? 6 : 1, Math.round((n / peak) * 64))}px`, opacity: n ? 1 : 0.25 }} />
-          ))}
-        </div>
-        <span className={MUTED}><span className="font-mono">{weeks.total}</span> view{weeks.total === 1 ? '' : 's'} in the last {weeks.weeks} weeks, every version</span>
-      </section>
-      <section className={`${CARD} flex flex-col gap-1 p-4`} data-testid="pitch-studio-most-read">
-        <span className={EYE}>Most read slide</span>
-        {top ? (
-          <>
-            <span className={`text-[14px] font-bold ${INK}`}>Slide {top.index}</span>
-            <span className={MUTED}><span className="font-mono">{mmss(top.seconds)}</span> in all, across every link</span>
-          </>
-        ) : <span className={MUTED}>Seconds per slide {NOT_RECORDED.toLowerCase()} yet.</span>}
-      </section>
-      <section className={`${CARD} flex flex-col gap-1 p-4`} data-testid="pitch-studio-nda">
-        <span className={EYE}>NDA signed</span>
-        {reads.engagement.status === 'error' ? <span className={MUTED}>Could not be read.</span> : !stats ? <Skeleton h="h-8" /> : stats.ndaSigned == null ? (
-          <span className={MUTED}>{NOT_RECORDED}</span>
-        ) : (
-          <>
-            {/* Signatures, counted as the Worker counts them: never a share of browsers. */}
-            <span className={`font-mono text-[20px] font-semibold ${INK}`}>{stats.ndaSigned}</span>
-            <span className={MUTED}>signatures on links to the current version</span>
-          </>
-        )}
-      </section>
-    </>
-  );
-}
+// Decks (pd1): `StudioHome.jsx`. Kept under its old name for the callers that import it.
+export const StudioDecks = StudioHome;
+export { Versions, useDeckChecks } from './DeckVersions';
 
 // ---------------------------------------------------------------------------
 // Share & analytics (PD19)
