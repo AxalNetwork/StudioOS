@@ -35,6 +35,8 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   manual: 'events',
   // #3959: the member's own learning plan.
   learning: 'learning',
+  // D1486 §a (#3980): the meeting bot's calls.
+  bot_call: 'meetings',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -58,6 +60,7 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   investor_in_room: 'In your deal room',
   yours: 'Your event',
   learning_plan: 'Your learning plan',
+  bot_sender: 'You sent the bot',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -73,6 +76,7 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   deal_closing: 'investor_in_room',
   manual: 'yours',
   learning: 'learning_plan',
+  bot_call: 'bot_sender',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
@@ -106,6 +110,7 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'investor_meeting': return '/raise/capital-relationships';
     case 'deal_closing': return ev.deal_id ? `/deals/${ev.deal_id}` : null;
     case 'interview_call': return ev.project_id ? `/validate/customer-research?project=${ev.project_id}` : null;
+    case 'bot_call': return ev.project_id ? `/validate/customer-research?project=${ev.project_id}` : null;
     // #3959: the Learning page the plan item names (its course, lesson, video, webinar, exercise or exam).
     case 'learning': return typeof ev.url === 'string' && ev.url.startsWith('/learning') ? ev.url : '/learning';
     default: return null;

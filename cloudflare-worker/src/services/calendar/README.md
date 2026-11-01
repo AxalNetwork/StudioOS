@@ -24,6 +24,11 @@ when adding a kind.
   carries `source`. D1484 also wires D1208's interview calls, cohort dates and
   deal closings and the `manual` reader for "New event", all page only and for
   their owner alone (`PERSONAL_ONLY_KINDS`: no staff scope lists them).
+- `botCalls.ts`: D1486 §a (#3980), the meeting bot's runs (`meeting_bots`)
+  as the `bot_call` kind: the member's own runs only, with epoch ms turned
+  into ISO. `done` reads "Recorded", and "Transcript ready" appears only when
+  the run's session holds its final transcript. Page only. It never reads
+  the meeting link or the participants.
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
   projections keep their separate, smaller event shape.
 - `itemRead.ts`: one item for the drawer (the page read's own reader and

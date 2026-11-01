@@ -140,6 +140,8 @@ const KINDS = [
   { id: 'manual', label: 'Your event', from: 'Calendar' },
   // #3959: the Learning source, page only.
   { id: 'learning', label: 'Learning', from: 'Learning › Your plan' },
+  // D1486 §a (#3980): the meeting bot's calls, page only; done reads Recorded.
+  { id: 'bot_call', label: 'Recorded call', from: 'Validate › Record a session' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 
@@ -951,6 +953,8 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
           </div>
         )}
         {!deadline && where.why && <p className="cal-ev-why">{where.why}</p>}
+        {/* D1486 §a: a bot run's state in the Worker's words ("Recorded", "Transcript ready" only when it exists). */}
+        {ev.kind === 'bot_call' && ev.bot?.words ? <p className="cal-ev-why" data-testid={`calendar-bot-${ev.id}`}>{ev.bot.words}</p> : null}
         {ev.notes && <p className="cal-ev-why">{ev.notes}</p>}
 
         {(mayRsvp || mayPush || mayCancel) && (
