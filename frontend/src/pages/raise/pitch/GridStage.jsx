@@ -68,7 +68,7 @@ function FieldedCard({ card, index, colours }) {
       <span className="font-mono text-[11px] font-bold" style={{ color: colours.accent }}>{c.n} · {c.title}</span>
       {c.sub ? <span className="text-[20px] font-extrabold leading-tight">{c.sub}</span> : null}
       {c.lines.map((l, i) => <span key={i} className="text-[13px]">{l}</span>)}
-      {c.bullets.length ? <ul className="m-0 list-disc pl-5 text-[13px]">{c.bullets.map((b, i) => <li key={i}>{b}</li>)}</ul> : null}
+      {c.bullets.length ? <ul className="m-0 list-disc ps-5 text-[13px]">{c.bullets.map((b, i) => <li key={i}>{b}</li>)}</ul> : null}
       {c.figures.length ? (
         <div className="grid grid-cols-3 gap-2">
           {c.figures.map((f, i) => <span key={i} className="flex flex-col"><b className="text-[16px]">{f.v}</b><span className="text-[11px]" style={{ color: colours.muted }}>{f.k}</span></span>)}

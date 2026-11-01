@@ -8,8 +8,8 @@ import CardCompliance from './CardCompliance';
 import { chromeOf } from './complianceModel';
 import { aspectOf, ratioOf } from './gridModel';
 import { asList, currentVersion, versionLabel } from './pitchStudioModel';
-import {
 import { langAttrs } from './deckLanguage';
+import {
   AUDIENCE, EMPTY_CARD, ESC_TO_EXIT, NO_CARDS, NO_VERSION, PRESENTER, READ_FAILED, SHOW_SOURCES, SOURCE_NOT_RECORDED,
   cardsOf, clock, countLabel, dotsOf, exitHref, moveTo, notesOf, stepFor, swipeLine, swipeStep,
 } from './presentExportModel';
@@ -227,3 +227,6 @@ function Card({ card, sources, small = false, aspect = '16:9', chrome = null, th
     </div>
   );
 }
+
+/** D1571 (#3818): the card face, exported for the language snapshots. */
+export { Card as PresentCard };
