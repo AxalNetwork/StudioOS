@@ -2,6 +2,8 @@
 
 D1409: `articleAuthoring.js` is the article editor's Eadwyn client (`/api/articles/:id/assist…`, `/images…`): a quote and a run per option, each leaving a proposal; the image quote, generate and discard; and the cover from one of the article's images. Only `coverFromImage` writes the article (its cover).
 
+D1503: `deckElementModels.js` is the client for a model per grid element (`GET`/`PUT /api/decks/:id/element-models`). `read` returns each element's suggested models, its `more` list and its pick. `pick` stores a pick for the deck or for the caller. It keeps no copy of the routes; the Worker answers every model and default.
+
 D1256: `ventureScores.js` is the venture scorecard's client (`/api/venture-scores`): the reads, the deal list's strip, reviews, corrections, weighting and sharing. It sends no computed field.
 
 D1239: `dealViews.js` reads personal thesis fit and saves, edits or removes private/firm view settings. The server rechecks deal and accepted-seat access.
@@ -447,6 +449,8 @@ The operator sends a bounded batch size and optional rescan flag; discovery curs
 
 D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
 
+D1484 part 2 (#3978): `calendarSources.js` holds the member's calendar source settings: `GET /calendar/sources`, `PUT /calendar/sources/:key` (`{ shown?, colour? }`; a colour is a palette token, or `null` for its family's) and `PUT /calendar/settings` (`{ copy_target }`).
+
 D1212 (#3178): `calendarConnections.js` holds the whole-calendar subscription (`GET`, `POST`, `DELETE /calendar/subscription`, D1209) and the disconnect with its choice (`DELETE /calendar/google` and `/calendar/microsoft`, `?remove_copies=1`). The link comes back once, from the POST, and the page never prints it.
 
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
@@ -461,3 +465,4 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `dealInsights.js` | D1151: per-deal Team, Market and Traction read clients. |
 | `mail.js` | Email (#3547): the member's own mailboxes (Outlook, Gmail behind its switch, IMAP/SMTP) and the confirmed send (D1340); Eadwyn's drafts — the context pack, live update blocks, the estimate, drafts and revisions (D1341). |
 | `relationships.js` | D1356: who on my teams knows a person — sharing per team, who-knows, and introduction requests. |
+| `deckTypedValues.js` | D1538: the figures a founder types for a deck, Stated — list, set and remove under `/api/decks/:id/typed-values`. |

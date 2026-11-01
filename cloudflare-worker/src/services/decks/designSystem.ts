@@ -467,7 +467,7 @@ export function chooseLayout(role: string, evidence: Partial<Evidence> & { quote
 
 // ───────────────────────────────────────────────────────────── fit
 
-export type FitProblem = { card: number; block: string; kind: 'overflow' | 'single_word_line' | 'too_many_series' | 'too_many_points' | 'too_many_items' | 'value_too_long' | 'too_small'; over: number; message: string };
+export type FitProblem = { card: number; block: string; kind: 'overflow' | 'single_word_line' | 'too_many_series' | 'too_many_points' | 'too_many_items' | 'too_many_rows' | 'value_too_long' | 'too_small'; over: number; message: string };
 
 /** The characters a metric tile's figure holds at an aspect. */
 export function metricValueChars(g: Grid, aspect: Aspect = '16:9'): number {
@@ -509,6 +509,11 @@ export function fitProblems(slides: unknown, aspectIn: unknown = '16:9'): FitPro
         if (series.length > CHART_MAX_SERIES) out.push({ card, block: id, kind: 'too_many_series', over: series.length - CHART_MAX_SERIES, message: `Card ${card}: a chart reads at most ${CHART_MAX_SERIES} series.` });
         const pts = Math.max(0, ...series.map((x: any) => (Array.isArray(x?.points) ? x.points.length : 0)));
         if (pts > CHART_MAX_POINTS) out.push({ card, block: id, kind: 'too_many_points', over: pts - CHART_MAX_POINTS, message: `Card ${card}: a chart reads at most ${CHART_MAX_POINTS} points; pick a shorter range.` });
+      } else if (b.kind === 'table') {
+        // D1538: a grid row holds two table rows at the table's type size; more spills out of the block.
+        const rows = Array.isArray(b.rows) ? b.rows.length : 0;
+        const max = (g.r2 - g.r1 + 1) * TABLE_ROWS_PER_GRID_ROW;
+        if (rows > max) out.push({ card, block: id, kind: 'too_many_rows', over: rows - max, message: `Card ${card}: the table has ${rows - max} more rows than its space holds${at}; make it taller.` });
       } else if (b.kind === 'graphic' && b.diagram) {
         const n = Array.isArray(b.diagram.items) ? b.diagram.items.length : 0;
         const max = Math.max(2, Math.floor((g.c2 - g.c1 + 1) / 2));
@@ -518,6 +523,9 @@ export function fitProblems(slides: unknown, aspectIn: unknown = '16:9'): FitPro
   });
   return out;
 }
+
+/** D1538: how many table rows one grid row holds. */
+export const TABLE_ROWS_PER_GRID_ROW = 2;
 
 /** The layout ids this module knows, so a test can hold it to slideModel's list. */
 export const KNOWN_LAYOUTS = Object.keys(LAYOUT_BUDGETS);

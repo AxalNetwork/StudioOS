@@ -66,6 +66,16 @@ it after creating the call. Each scheduled row can cancel/re-enable that send.
 Call cancellation stops the bot's alarm first. A queued run is the stored choice;
 no browser timer or local-only preference dispatches a call.
 
+D1455 (#3710, REC1, REC2, REC5): `sessionLifecycle.js` (pure) merges the bot
+state and the processing state into one stepper (`lifecycle`, `stepLine`), says
+a failure in plain words with its causes and the right Try again
+(`failureView`), and writes money in two decimals (`money`).
+`SessionLifecycle.jsx` draws the stepper and the one failure panel on
+`/validate/session/:id`; `MeetingBotPanel.jsx` hands the page its bot read
+(`onRead`) and leaves the failure to that panel (`hideFailure`).
+`sessionPlayer.js` gained `seek(ms)` and `setRate` for D1454's tap-to-play and
+1×, 1.5×, 2×.
+
 The participants read is separate from status: creator-only, latest encrypted
 roster, display names and offsets without platform IDs. Missing is Not recorded;
 failed reads are Unreadable. B6 still owns final speaker mapping/transcription;

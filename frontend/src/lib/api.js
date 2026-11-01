@@ -41,6 +41,7 @@ export * from './api/billingInvoices.js';
 export * from './api/buildPlan.js';
 export * from './api/calendarConnections.js';
 export * from './api/calendarItems.js';
+export * from './api/calendarSources.js';
 export * from './api/capTableAccess.js';
 export * from './api/capTableHolder.js';
 export * from './api/capTableRecord.js';
@@ -80,6 +81,7 @@ export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
 export * from './api/deckCheck.js';
 export * from './api/deckEditor.js';
+export * from './api/deckElementModels.js';
 export * from './api/deckGrants.js';
 export * from './api/deckGrid.js';
 export * from './api/deckImages.js';
@@ -87,6 +89,7 @@ export * from './api/deckInvestorLinks.js';
 export * from './api/deckRemix.js';
 export * from './api/deckSources.js';
 export * from './api/deckStage.js';
+export * from './api/deckTypedValues.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
@@ -2878,7 +2881,8 @@ export const api = {
   deckGenerate: (projectId) => request('/decks/generate', { method: 'POST', body: JSON.stringify({ project_id: projectId }) }),
   deckListVersions: (projectId) => request(`/decks/by-project/${projectId}`),
   deckGet: (id) => request(`/decks/${id}`),
-  deckUpdate: (id, payload) => request(`/decks/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  // D1500: every save names the document model it is in (editorModel's DECK_MODEL_VERSION); the Worker refuses another with 409 upgrade_required.
+  deckUpdate: (id, payload) => request(`/decks/${id}`, { method: 'PUT', body: JSON.stringify({ model_version: 2, ...payload }) }),
   deckRestore: (id) => request(`/decks/${id}/restore`, { method: 'POST', body: JSON.stringify({}) }),
   deckShare: (id, payload) => request(`/decks/${id}/share`, { method: 'POST', body: JSON.stringify(payload || {}) }),
   deckShareRead: (token) => request(`/decks/share/${encodeURIComponent(token)}`),

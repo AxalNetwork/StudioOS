@@ -37,7 +37,8 @@ import {
 } from '../services/calendar/syncState';
 import { removeProviderCopies } from '../services/calendar/sync';
 import { describeItems } from '../services/calendar/items';
-import { SOURCES } from '../services/calendar/registry';
+import { SOURCES, SOURCE_KINDS } from '../services/calendar/registry';
+import { hiddenKinds, isColour, isCopyTarget, isSourceKey, providerConnected, sourcesRead, writeCopyTarget, writeSourcePref } from '../services/calendar/prefs';
 import { adoptMeetCopy, makeMeetLink, readItem } from '../services/calendar/itemRead';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
@@ -227,9 +228,15 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   // draws (`describeItems`). The feed, the sync and the push never see either.
   // D1384: the active company, for the one source that scopes by it (`compliance_due`).
   const companyId = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
-  const { events, sources } = await fetchUserEventsWithSources(
-    c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds, { withCancelled: true, companyId },
-  );
+  // D1484 part 2: without `kinds`, the sources the member hid are not read and
+  // are named in `hidden`. An explicit `kinds` reads what it names, hidden or not.
+  const hidden = kinds ? [] : await hiddenKinds(c.env, user.id);
+  const shownKinds = hidden.length ? SOURCE_KINDS.filter((k) => !hidden.includes(k)) : kinds;
+  const { events, sources } = shownKinds && !shownKinds.length
+    ? { events: [], sources: [] }
+    : await fetchUserEventsWithSources(
+      c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), shownKinds, { withCancelled: true, companyId },
+    );
   const items = await describeItems(c.env, user, await attachPushRecords(c.env, user.id, events));
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
@@ -241,7 +248,45 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     google_connected: !!tok,
     // D1484: each source's family, module and label from the registry, so the legend names what it read.
     sources: sources.map((s) => { const src = SOURCES[s.kind]; return src ? { ...s, family: src.family, module: src.module, label: src.label } : s; }),
+    hidden,
   });
+}));
+
+// D1484 part 2 (#3978, migration 708): the member's own source settings (CAL4).
+// Every read and write is `WHERE user_id = ?` bound; nothing here widens to staff.
+calendar.get('/sources', safe('sources', 'Could not read your calendar sources', async (c) => {
+  const user = await requireAuth(c);
+  return c.json(await sourcesRead(c.env, user.id));
+}));
+
+calendar.put('/sources/:key', safe('source_pref', 'Could not save this calendar source', async (c) => {
+  const user = await requireAuth(c);
+  const key = c.req.param('key');
+  if (!isSourceKey(key)) return refuse(c, 400, { code: 'unknown_source', message: 'This calendar has no such source.' });
+  const body: any = await c.req.json().catch(() => null);
+  const patch: { shown?: boolean; colour?: any } = {};
+  if (body && typeof body === 'object' && 'shown' in body) {
+    if (typeof body.shown !== 'boolean') return refuse(c, 400, { code: 'empty_body', message: 'Send shown as true or false, or a colour.' });
+    patch.shown = body.shown;
+  }
+  if (body && typeof body === 'object' && 'colour' in body) {
+    if (body.colour !== null && !isColour(body.colour)) return refuse(c, 400, { code: 'invalid_colour', message: 'Pick one of the calendar colours.' });
+    patch.colour = body.colour;
+  }
+  if (!('shown' in patch) && !('colour' in patch)) return refuse(c, 400, { code: 'empty_body', message: 'Send shown as true or false, or a colour.' });
+  return c.json({ source: await writeSourcePref(c.env, user.id, key, patch) });
+}));
+
+calendar.put('/settings', safe('settings', 'Could not save your calendar settings', async (c) => {
+  const user = await requireAuth(c);
+  const body: any = await c.req.json().catch(() => null);
+  const target = body?.copy_target;
+  if (!isCopyTarget(target)) return refuse(c, 400, { code: 'invalid_copy_target', message: 'Copy new sessions to all, google, microsoft or none.' });
+  if ((target === 'google' || target === 'microsoft') && !(await providerConnected(c.env, user.id, target))) {
+    return refuse(c, 409, { code: 'provider_not_connected', message: `Connect ${target === 'google' ? 'Google Calendar' : 'Outlook'} first.` });
+  }
+  await writeCopyTarget(c.env, user.id, target);
+  return c.json({ copy_target: target });
 }));
 
 // D1211 (#3177) — one item for the drawer at /calendar/item/:kind/:id (CAL4,

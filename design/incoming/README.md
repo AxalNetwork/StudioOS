@@ -111,6 +111,60 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-01 — One interview, and its session (#3710)
+
+The owner's artifacts `CoQEhHr637iFdxgpe2WKx9` (the page, `Interview Record Page.dc.html`)
+and `MyWazkYQH52jTsYgMPdL1E` (the board grid, `Interview Record · Boards.dc.html`) were
+decoded by `scripts/read-canvas.mjs`. The grid imports the page and frames it
+as twenty-one groups:
+- **Page**, the record at 1440 with the Ask panel closed;
+- **IV-D1 to IV-D5**, the desktop header (one action row: primary, Ask with
+  "[3] waiting", Email, Edit details, ⋯), the fact cards with their one action,
+  the Email composer in the right Sheet, 1280, 1024 and dark, and the Ask
+  panel open;
+- **IV-M1 to IV-M7**, the phone: the header, the four sections, the transcript
+  with search, tap-to-play and the sticky player, the findings in thumb reach,
+  Ask as a bottom sheet, the record's states, and the tablet at 768 in two
+  columns;
+- **IV-S1, IV-S2**, the AI states and who is reading;
+- **REC1 to REC6**, the session page: the one lifecycle stepper, one failure
+  panel, the participants timeline, the transcript's states, cost as money,
+  and the session's states (phone and dark among them).
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`. No other value was
+edited.
+
+**Grade: UPGRADE (D1454 for the record, D1455 for the session page; D1456 is
+the Worker part).** Built: one record header for every cycle
+(`frontend/src/pages/cycles/RecordHeader.jsx`), the fact action, the phone
+record's sections, player and tablet columns, the session page's stepper,
+failure panel and money (`frontend/src/pages/founder/SessionLifecycle.jsx`).
+Not built here, each filed: the channel pill, the fact actions' keys,
+"Review findings (n)" and the failed step (#3710 W1 to W3, D1456); the Email
+composer in the Sheet (IV-D3); the participants timeline (REC3); Ask as a
+bottom sheet on the record (IV-M5, after #3706). Two files arrived and none
+left this folder.
+## Landed 2026-11-01 — Read with a reason (#3713)
+
+The owner's artifacts `8PfdzapnNsUCxYSB3Yhh3X` (the page, `Read With A Reason Page.dc.html`)
+and `3eydkF7Mvqy6cpg94Ypp2b` (the board grid, `Read With A Reason · Boards.dc.html`) were
+decoded by `scripts/read-canvas.mjs`. The grid imports the page by name and frames:
+- **RR00 to RR03**, the gate: grant mode on the Investor narrative, the field while typing, and the rail on a founder's record;
+- **RR04 to RR06**, while the access lasts: the amber banner, End access now, and the grant running out;
+- **RR07 to RR09**, what the founder sees: "Who read this narrative" on Home and Story, the notification, and the other three logs;
+- **RR10 to RR14**, the same gate on the per-open records (Cap table, Data room, Capital relationships), the inline form in the New version dialog, and the Pitch deck with no gate;
+- **RR15 to RR22**, the states, the phone at 390, the tablet at 768, and dark.
+
+**One edit, named.** The Axal mark (the export's `uploads/axal-logo-200x200.png`)
+points at `/axal-mark.png`. No other value was edited.
+
+**Grade: UPGRADE (D1463).** The gate and the banner are built (`frontend/src/ui/ReasonGate.jsx`)
+and used by the Investor narrative and the Cap table; the rail's founder-record mode is in
+`frontend/src/ui/WorkerRail.jsx`. End access now and the venture header wait on the Worker
+part (#3713 part 2); the Data room and Capital relationships pages wait on part 3.
+Two files arrived and none left this folder.
+
 ## Landed 2026-11-01 — Work and company compliance (#3968)
 
 The owner's artifacts `6snU4LwGECSELCgYtneiB3` (the page, `Work Compliance Page.dc.html`)

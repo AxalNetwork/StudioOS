@@ -31,6 +31,7 @@ worker ahead of its schema.
 | `middleware/` | Tier gates, rate limits, tenancy. |
 | `integrations/` | Third-party providers (Carta, Stripe, calendars, …). |
 | `models/` | Row types. |
+| `contracts/` | D1511 (#3762): the JSON Schema of every deck v2 adapter method's reply, checked against its route by `test:drift`. |
 | `templates/` | Legal document and email templates. |
 | `durable-objects/` | Realtime coordination. |
 | `mcp/` | D666: StudioOS as a remote MCP server for AI assistants, its OAuth provider and its tools. Controlled by `MCP_SERVER_ENABLED` and `OAUTH_KV` (D681). |

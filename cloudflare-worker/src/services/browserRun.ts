@@ -188,7 +188,7 @@ export function exportAllowPatterns(url: string): string[] {
 export async function renderUrl(env: Env, action: 'pdf' | 'screenshot', options: Record<string, unknown>, opts: RenderUrlOptions): Promise<RenderResult> {
   const binding = env.BROWSER;
   // D1506: a page opened by URL loads only the allow-listed origins.
-  if (typeof options.url === 'string' && !options.allowRequestPattern) options = { ...options, allowRequestPattern: exportAllowPatterns(options.url) };
+  if (typeof options.url === 'string') options = { ...options, allowRequestPattern: exportAllowPatterns(options.url) };
   if (!binding || typeof binding.quickAction !== 'function') return { ok: false, code: 'browser_unbound', attempts: 0 };
   const attempts = Math.max(1, opts.attempts ?? DECK_RENDER_ATTEMPTS);
   const backoff = opts.backoffMs ?? DECK_RENDER_BACKOFF_MS;

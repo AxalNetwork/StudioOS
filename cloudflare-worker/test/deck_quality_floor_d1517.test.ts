@@ -119,7 +119,7 @@ test('4. the chart a figure\'s shape earns: one fixture per rule, each a type th
     [{ kind: 'time', points: 3 }, 'columns'],
     [{ kind: 'parts', points: 4 }, 'percent_bar'],
     [{ kind: 'categories', points: 5 }, 'ranked_bars'],
-    [{ kind: 'market', points: 3 }, 'nested_bars'],
+    [{ kind: 'market', points: 3 }, 'market_circles'], // D1538 (#3787) drew the circles D1517 waited for.
     [{ kind: 'single', points: 1 }, 'metric_tiles'],
     [{ kind: 'funnel', points: 4 }, 'funnel'],
   ];

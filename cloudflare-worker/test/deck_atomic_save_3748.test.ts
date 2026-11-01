@@ -106,7 +106,7 @@ async function world() {
   async function save(id: number, title: string, slides: any[] = [{ title }]) {
     const response = await withThrownResponses(() => app.request(`/api/decks/${id}`, {
       method: 'PUT', headers: { authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ title, slides }),
+      body: JSON.stringify({ title, slides, model_version: 2 }),
     }, env));
     return { status: response.status, body: await response.json() as any };
   }

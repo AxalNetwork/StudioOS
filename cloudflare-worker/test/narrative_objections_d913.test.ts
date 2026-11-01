@@ -66,6 +66,7 @@ function readFixture() {
   db.exec(sqlOf('463_raise_record_stores.sql'));
   db.exec(sqlOf('544_narrative_sections.sql'));
   db.exec(sqlOf('545_narrative_notes.sql'));
+  db.exec(sqlOf('761_narrative_read_end.sql')); // D1465: activeReason reads ended_at
   db.exec(sqlOf('624_narrative_objection_answers.sql'));
   raiseEvidenceTables(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');

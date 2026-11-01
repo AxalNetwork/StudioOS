@@ -64,13 +64,17 @@ const MODEL_CARD = {
       series: [{ label: 'MRR', binding: bind('revenue.mrr') }, { label: 'Typed', points: [{ x: 'Sep', y: 4 }, { x: 'Oct', y: 6 }] }] },
     { id: 'm1', kind: 'metric', grid: { c1: 7, c2: 9, r1: 3, r2: 4 }, label: 'Runway', value: '14 months', binding: bind('raise.runway') },
     { id: 'm2', kind: 'metric', grid: { c1: 10, c2: 12, r1: 3, r2: 4 }, label: 'Churn', value: null },
-    { id: 'i', kind: 'image', grid: { c1: 7, c2: 12, r1: 5, r2: 5 }, image_url: 'https://example.com/a.png', alt: 'Synthetic', tag: 'illustration' },
+    // D1506: one of our own stored images; a save copies an outside one first (untrusted_uploads_d1506.test.ts).
+    { id: 'i', kind: 'image', grid: { c1: 7, c2: 12, r1: 5, r2: 5 }, image_url: 'https://axal.vc/api/decks/images/0b6a2c1e-3f4d-4a5b-8c9d-0e1f2a3b4c5d/file', alt: 'Synthetic', tag: 'illustration' },
     { id: 'g', kind: 'graphic', grid: { c1: 10, c2: 10, r1: 2, r2: 2 }, graphic: 'arrow-up', ratio: '1x1' },
     { id: 'l', kind: 'link', grid: { c1: 7, c2: 12, r1: 6, r2: 6 }, url: 'https://example.com/data-room', label: 'Open the data room' },
   ],
 };
 
+// D1500: the editor saves in model version 2; a save without it is refused (409), not stripped.
+const v2 = (method: string, path: string, body: unknown) => (method === 'PUT' && /^\/api\/decks\/\d+$/.test(path) && body && typeof body === 'object' && !('model_version' in (body as any)) ? { ...(body as any), model_version: 2 } : body);
 async function call(f: any, who: number | null, method: string, path: string, body?: unknown) {
+  body = v2(method, path, body);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (who) headers.Authorization = 'Bearer ' + await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
@@ -114,7 +118,8 @@ test('1. an old fielded deck still opens, and reads its new columns as Not recor
   const f = await fixture();
   const r = await call(f, OWNER, 'GET', '/api/decks/10');
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.deepEqual(r.body.slides, OLD_SLIDES, 'every old card reads back as it was written');
+  // D1500: and each gets a uid from its place, the same on every read.
+  assert.deepEqual(r.body.slides, OLD_SLIDES.map((s: any, i: number) => ({ ...s, uid: `c${i + 1}` })), 'every old card reads back as it was written');
   assert.equal(r.body.audience, null);
   assert.equal(r.body.round, null);
   assert.equal(r.body.theme, null);
@@ -245,7 +250,8 @@ test('6. the versions list carries Audience, Round and By; a version from before
 test('7. the twelve layouts fit the grid; video links are read without a fetch; the compare sees a chart\'s series', async () => {
   assert.equal(LAYOUTS.length, 12);
   assert.equal(bindingOf, sanitizeBinding, "a block's binding follows D896's one rule");
-  assert.equal(CHART_TYPES.length, 12);
+  // D1538 (#3787): the 12 library types plus market circles and projections, drawn from typed figures.
+  assert.equal(CHART_TYPES.length, 14);
   for (const l of LAYOUTS) {
     assert.equal(sanitizeBlocks(l.blocks, sanitizeImageUrl).length, l.blocks.length, `${l.id}: every preset block sits on the grid, none overlapping`);
   }
@@ -296,7 +302,8 @@ test('10. the editor reads the slide model from the Worker: the grid, the twelve
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual(r.body.grid, { cols: 12, rows: 6 });
   assert.deepEqual(r.body.layouts.map((l: any) => l.id), LAYOUTS.map((l) => l.id));
-  assert.equal(r.body.chart_types.length, 12);
+  assert.equal(r.body.chart_types.length, 12, 'the library (pd6) stays 12 tiles');
+  assert.deepEqual(r.body.typed_chart_types, ['market_circles', 'projection']);
   assert.ok(r.body.block_kinds.includes('video'));
   assert.ok([401, 403].includes((await call(f, null, 'GET', '/api/decks/model')).status), 'signed out reads nothing');
 });
@@ -416,11 +423,14 @@ test('200 large versions list as metadata under 50 MB; opening one reads only it
       created_at: (f.db.prepare('SELECT created_at FROM pitch_decks WHERE id=200').get() as any).created_at,
       audience: 'seed_fund', round: { uid: 'round-seed', name: 'Synthetic seed' }, theme: null,
       content_hash: (200).toString(16).padStart(64, '0'), by: { id: OWNER, name: `Synthetic ${OWNER}` }, shared_links: 0,
+      // D1500: every read names the model it is in.
+      model_version: 2,
     });
     const opened = await call(f, OWNER, 'GET', '/api/decks/73');
     assert.equal(opened.status, 200);
     assert.equal(opened.body.version, 73);
-    assert.deepEqual(opened.body.slides, JSON.parse(slides.replace('Synthetic large card', 'Synthetic large card 73')));
+    // D1500: a card saved without a uid reads `c<n>` from its place.
+    assert.deepEqual(opened.body.slides, JSON.parse(slides.replace('Synthetic large card', 'Synthetic large card 73')).map((s: any, i: number) => ({ ...s, uid: `c${i + 1}` })));
     assert.deepEqual(opened.body.theme, { kind: 'neutral_dark', background: { color: null, image_url: 'https://example.test/bg.png' } });
   } finally { f.db.close(); }
 });
