@@ -98,6 +98,8 @@
  * Tunables (env):
  *   SMOKE_HOSTS      space/comma-separated base URLs (default prod pair)
  *   SMOKE_SLUG       slug used for the /articles/:slug deep link
+ *   SMOKE_EVENT_SLUG slug for the /events/:slug card shell (D1439; default: no record)
+ *   SMOKE_JOB_SLUG   slug for the /jobs/:slug card shell (D1439; default: no record)
  *   SMOKE_RETRIES    attempts per request before failing (default 3)
  *   SMOKE_RETRY_MS   delay between attempts in ms (default 5000)
  *   SMOKE_TIMEOUT_MS per-request timeout in ms (default 15000)
@@ -231,7 +233,14 @@ function routesForHost(base) {
     { path: '/studio/archetype', shell: true },
     { path: '/login', shell: true },
     { path: '/articles', shell: true },
-    { path: `/articles/${encodeURIComponent(SLUG)}`, shell: true },
+    { path: `/articles/${encodeURIComponent(SLUG)}`, shell: true, card: true },
+    // D1439 (#3914): record paths run the Worker first and come back as the
+    // shell with the record's card, or the section's for a miss. These slugs
+    // are no record on purpose: a miss must still be the shell, with the
+    // static headers and a section card rather than the home card. Set
+    // SMOKE_EVENT_SLUG / SMOKE_JOB_SLUG to a live record to see its own card.
+    { path: `/events/${encodeURIComponent(process.env.SMOKE_EVENT_SLUG || 'live-smoke-not-a-real-event')}`, shell: true, card: true },
+    { path: `/jobs/${encodeURIComponent(process.env.SMOKE_JOB_SLUG || 'live-smoke-not-a-real-job')}`, shell: true, card: true },
     // Signed-in app paths, added 2026-08-29. Until then every route in this
     // list happened to be one of the four apex segments that WERE routed, so
     // the check reported all-PASS through a period when 37 of the 41 segments
@@ -457,6 +466,17 @@ async function fetchOnce(url) {
   }
 }
 
+// D1439: a record path's og:title is its record's or its section's, never the
+// home card the bare shell carries. Only the title is read; nothing is printed
+// from a live record beyond this verdict.
+const HOME_OG_TITLE = 'From idea to funded company — Axal VC StudioOS';
+function assertRecordCard(body) {
+  const m = /<meta property="og:title" content="([^"]*)"/.exec(body);
+  if (!m) return ['no og:title in the card shell'];
+  if (m[1] === HOME_OG_TITLE) return ['og:title is the home card: the D1439 card injector did not run'];
+  return [];
+}
+
 // Returns null on success, or a human-readable failure reason string. On
 // success, any hashed `/assets/*.{js,css}` the document references are added to
 // `assetSink` so the caller can verify they actually resolve on this host.
@@ -478,6 +498,7 @@ async function checkRoute(base, route, assetSink, entrySink) {
         problems.push(...assertShell(body));
         problems.push(...assertSecurityHeaders(headers));
         if (route.path === GOOGLE_WINDOW_ROUTE) problems.push(...assertOpenerPolicy(headers));
+        if (route.card) problems.push(...assertRecordCard(body));
       } else if (!/<html|<!doctype/i.test(body)) {
         problems.push('body is not an HTML document');
       }
