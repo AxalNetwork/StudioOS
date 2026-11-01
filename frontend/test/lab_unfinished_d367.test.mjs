@@ -55,9 +55,9 @@ test('formation packet: no screen promises a packet, an email or a filing that n
   // D601: the line comes from `packetLine`, which falls back to PACKET_NOT_BUILT.
   assert.match(success, /return PACKET_NOT_BUILT;/);
   assert.match(success, /\{packetLine\(status\)\}/);
-  const inc = read('frontend/src/pages/IncorporatePage.jsx');
+  // D1414 (#3696): Incorporate lives in pages/incorporate/; its paid order is the status timeline.
+  const inc = ['IncorporateFlow.jsx', 'IncorporationTimeline.jsx', 'IncorporateDone.jsx'].map((f) => read(`frontend/src/pages/incorporate/${f}`)).join('\n');
   assert.doesNotMatch(inc, /filing started|preparing your founder document set now/);
-  assert.match(inc, /formation ordered/);
   assert.match(inc, /\$\{PACKET_NOT_BUILT\} Your receipt is in Billing\./);
 });
 

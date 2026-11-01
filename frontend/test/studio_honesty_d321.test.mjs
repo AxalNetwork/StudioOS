@@ -18,6 +18,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { Row, StatGroup, number, quickStats } from '../src/pages/investor/investorStudioParts.jsx';
+import { investorTiles } from '../src/pages/studio/tiles/investorTiles.jsx';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -66,9 +67,12 @@ test('number keeps an absent figure absent: null, undefined and empty are not 0'
 });
 
 test('the investor home uses the shared number helper, not a local copy', () => {
-  const code = codeOnly(read('../src/pages/investor/InvestorStudioHome.jsx'));
-  assert.match(code, /import \{[^}]*\bnumber\b[^}]*\} from '\.\/investorStudioParts'/);
-  assert.doesNotMatch(code, /const number =/);
+  // D1419: the cards are modules; their bodies live in the investor tile builder.
+  const tiles = codeOnly(read('../src/pages/studio/tiles/investorTiles.jsx'));
+  assert.match(tiles, /import \{[^}]*\bnumber\b[^}]*\} from '\.\.\/\.\.\/investor\/investorStudioParts'/);
+  for (const rel of ['../src/pages/investor/InvestorStudioHome.jsx', '../src/pages/studio/tiles/investorTiles.jsx']) {
+    assert.doesNotMatch(codeOnly(read(rel)), /const number =/, rel);
+  }
 });
 
 test('an unreadable stat group draws one Unreadable line and none of its rows', () => {
@@ -96,19 +100,35 @@ test('neither home forces an absent figure to zero', () => {
     '../src/pages/founder/founderStudioModel.js',
     '../src/pages/investor/InvestorStudioHome.jsx',
     '../src/pages/investor/investorStudioParts.jsx',
+    '../src/pages/studio/tiles/investorTiles.jsx',
+    '../src/pages/studio/tiles/founderTiles.jsx',
   ]) {
     const code = codeOnly(read(rel));
     assert.doesNotMatch(code, /(\|\||\?\?)\s*0\b/, `${rel} falls back to 0`);
   }
 });
 
-test('the investor home routes every failed read to Unreadable with a retry', () => {
-  const code = codeOnly(read('../src/pages/investor/InvestorStudioHome.jsx'));
-  assert.doesNotMatch(code, /<Status error>/, 'a failed read is not a plain status line');
-  assert.match(code, /lifecycle === null \? <Unreadable what="The deal lifecycle"[^>]*onRetry=\{retryLifecycle\}/);
-  assert.match(code, /dashboardUnavailable \? <Unreadable what="Scored opportunities"[^>]*onRetry=\{refreshContext\}/);
-  assert.match(code, /failures\.portfolio \? <Unreadable [^>]*onRetry=\{retrySources\}/);
-  assert.match(code, /failures\.events \? <Unreadable [^>]*onRetry=\{retrySources\}/);
+test('the investor home routes every failed read to its module\'s could-not-be-read state, with its own retry', () => {
+  // D1419: each card is a module; a failed read is the tile's "<Title> could not be read · Try again".
+  const retryLifecycle = () => 'lifecycle';
+  const refreshContext = () => 'dashboard';
+  const retrySources = () => 'sources';
+  const quick = quickStats({ dashboard: null, dashboardUnavailable: 'boom', lifecycle: null, dealCount: 0 });
+  const t = investorTiles({
+    user: {}, dashboard: null, dashboardUnavailable: 'boom', lifecycle: null, records: {}, failures: { portfolio: 'x', events: 'y' },
+    quick, refreshContext, retryLifecycle, retrySources,
+  });
+  assert.deepEqual([t.deal_lifecycle.state, t.deal_lifecycle.onRetry], ['unreadable', retryLifecycle]);
+  assert.deepEqual([t.scored_opportunities.state, t.scored_opportunities.onRetry], ['unreadable', refreshContext]);
+  assert.deepEqual([t.portfolio_glance.state, t.portfolio_glance.onRetry], ['unreadable', retrySources]);
+  assert.deepEqual([t.upcoming_events.state, t.upcoming_events.onRetry], ['unreadable', retrySources]);
+  // Loading is loading, never empty and never a zero.
+  const loading = investorTiles({ user: {}, dashboard: null, lifecycle: undefined, records: {}, failures: {}, quick: quickStats({ lifecycle: undefined, dealCount: 0 }) });
+  for (const k of ['deal_lifecycle', 'scored_opportunities', 'portfolio_glance', 'upcoming_events']) assert.equal(loading[k].state, 'loading', k);
+  // An administrator's preview withholds all six (SM11).
+  const preview = investorTiles({ previewing: true });
+  assert.ok(Object.values(preview).every((x) => x.state === 'withheld'));
+  const code = codeOnly(read('../src/pages/studio/tiles/investorTiles.jsx'));
   assert.match(code, /<StatGroup group=\{quick\.dealFlow\}[^>]*onRetry=\{refreshContext\}/);
   assert.match(code, /<StatGroup group=\{quick\.lifecycle\}[^>]*onRetry=\{retryLifecycle\}/);
 });

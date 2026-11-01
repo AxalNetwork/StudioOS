@@ -202,7 +202,9 @@ test('the ops row and the AI band are the artboard’s, and the surface is allow
   const ops = [...PD4.slice(PD4.indexOf('ops:['), PD4.indexOf('adds:[')).matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(ops, ['Draft all', 'Cadence rules', 'Export']);
   const opRow = between(actions, "'delivery/status-reports': [", '],');
-  assert.deepEqual([...opRow.matchAll(/label: '([^']+)'/g)].map((m) => m[1]), ops,
+  // D1424 (#3700, PH14s) leads the row with the zone's primary, New report,
+  // which the profiles canvas adds; the artboard's three follow unchanged.
+  assert.deepEqual([...opRow.matchAll(/label: '([^']+)'/g)].map((m) => m[1]), ['New report', ...ops],
     'the ops row drifted from the artboard');
 
   assert.ok(PD4.includes("aiLabel:'Draft · weekly reports'"));
