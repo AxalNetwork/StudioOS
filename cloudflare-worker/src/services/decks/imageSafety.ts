@@ -13,7 +13,7 @@
  *     reads at most `MAX_EXTERNAL_BYTES`.
  *
  * Uploads and outside images are stripped. A generated image is never passed
- * here: its own marking (`templates/legal/ai_image_marking_spec_v1.md`) must
+ * here: its own marking (the AI-image marking spec for counsel, #3763) must
  * survive.
  */
 import { imageInfo } from '../ai/shapes';

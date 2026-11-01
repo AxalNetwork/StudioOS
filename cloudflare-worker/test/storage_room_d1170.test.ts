@@ -228,6 +228,8 @@ const SITES: Array<[string, string, string]> = [
   // D903: a deck image is the member's file. Room is checked before either write; the bytes are not in the usage total yet.
   ['routes/deck_images.ts', "deckImages.post('/:id/images', async", 'await c.env.FILES!.put(key, r.image.bytes'],
   ['routes/deck_images.ts', "deckImages.post('/:id/images/upload'", 'await c.env.FILES.put(key, bytes'],
+  // D1506: an outside image a deck names, copied into the venture's storage at save or export; room is checked first.
+  ['services/decks/imageCopy.ts', 'export async function copyExternalImages', 'await env.FILES.put(key, img.bytes'],
   ['routes/founder_validate_sessions.ts', 'async function openOn', 'const insert = env.DB.prepare('],
   ['services/interviewIntake.ts', 'export async function openSession', 'const [inserted] = await env.DB.batch(['],
 ];
