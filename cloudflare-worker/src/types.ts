@@ -352,6 +352,8 @@ export interface Env {
   CUSTOM_MCP_ENABLED?: string;
   /** D1496 (#3840): `true` turns on team agents (`/api/teams`); anything else answers 404 `team_agents_off`. */
   TEAM_AGENTS_ENABLED?: string;
+  /** D1529 (#3845, #3742 E1): anything but `off` (with TEAM_AGENTS_ENABLED) turns on goals and tasks; `off` answers 404 `agent_engine_off`. */
+  AGENT_ENGINE?: string;
   KEK_R2?: string;
   // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
   // Kept distinct from KEK_PII so a key rotation on PII columns never

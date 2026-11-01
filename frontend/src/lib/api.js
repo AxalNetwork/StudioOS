@@ -29,6 +29,7 @@ export * from './api/adminPrograms.js';
 export * from './api/adminPromos.js';
 export * from './api/adminStorage.js';
 export * from './api/adminSubAccounts.js';
+export * from './api/agentEngine.js';
 export * from './api/aiBudget.js';
 export * from './api/approvalBoards.js';
 export * from './api/articleAuthoring.js';
