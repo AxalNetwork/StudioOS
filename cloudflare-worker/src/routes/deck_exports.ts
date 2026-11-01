@@ -37,7 +37,7 @@ import { logCycleWriteStatement } from '../services/cycleActivity';
 import { getDeckBrand } from '../services/decks/branding';
 import { boundedDownload } from '../services/channels/providerHttp';
 import { imageDataUri, imageUrlsOf, sniffImage, writeOfflineDeck, type ImageKind } from '../services/decks/offlineHtml';
-import { exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken } from './decks';
+import { copyStoredDeckImages, exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken } from './decks';
 import { context as workspaceContext, member } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { createPresentation, driveName } from '../services/google/driveCreate';
@@ -140,10 +140,14 @@ const fileName = (row: DeckRow, ext: string) =>
 
 deckExports.post('/:id/export/html', async (c) => {
   const user = await requireAuth(c);
-  const row = await deckRow(c.env, Number(c.req.param('id')));
-  if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
+  const found = await deckRow(c.env, Number(c.req.param('id')));
+  if (!found) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c, user, Number(found.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
+  // D1506: outside images are copied in before any export reads them.
+  const copied = await copyStoredDeckImages(c, user, found);
+  if ('refused' in copied) return copied.refused;
+  const row: DeckRow = copied.row;
   const body = await c.req.json().catch(() => ({} as any));
 
   let slides: any[] = [];
@@ -216,10 +220,14 @@ async function chartShotFor(c: any, row: DeckRow, opts: { notes: boolean; source
  */
 deckExports.post('/:id/export/odp', async (c) => {
   const user = await requireAuth(c);
-  const row = await deckRow(c.env, Number(c.req.param('id')));
-  if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
+  const found = await deckRow(c.env, Number(c.req.param('id')));
+  if (!found) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c, user, Number(found.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
+  // D1506: outside images are copied in before any export reads them.
+  const copied = await copyStoredDeckImages(c, user, found);
+  if ('refused' in copied) return copied.refused;
+  const row: DeckRow = copied.row;
   const body = await c.req.json().catch(() => ({} as any));
   const opts = { notes: body?.notes === true, sources: body?.sources === true };
   const { slides: all, renderable } = exportDeckOf(row, opts);
@@ -274,10 +282,14 @@ deckExports.post('/:id/export/google-slides', async (c) => {
     if (e instanceof WorkspaceError) return c.json({ error: e.code }, e.status as any);
     throw e;
   }
-  const row = await deckRow(c.env, Number(c.req.param('id')));
-  if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
+  const found = await deckRow(c.env, Number(c.req.param('id')));
+  if (!found) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c, user, Number(found.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
+  // D1506: outside images are copied in before any export reads them.
+  const copied = await copyStoredDeckImages(c, user, found);
+  if ('refused' in copied) return copied.refused;
+  const row: DeckRow = copied.row;
   try { await workspaceContext(c, user, row.project_id); } catch (e) {
     const w = e instanceof WorkspaceError ? e : new WorkspaceError('workspace_unreadable');
     return c.json({ error: w.code }, w.status as any);

@@ -29,6 +29,7 @@ import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
+import { copyExternalImages, copyRefusalMessage } from '../services/decks/imageCopy';
 import { refuse } from '../util/refusal';
 import { DECK_PAGE_LOAD_MS, MAX_DECK_PDF_BYTES, MAX_SLIDE_PNG_BYTES, renderUrl, type RenderFailure } from '../services/browserRun';
 import { railFor } from '../util/railContext';
@@ -1254,6 +1255,11 @@ decks.put('/:id', async (c) => {
     }
   }
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
+  // D1506: an outside image is copied into the venture's storage and the slide names the copy;
+  // one that cannot be copied refuses the save, naming it.
+  const copy = await copyExternalImages(c.env, { projectId: Number(row.project_id), deckId: Number(row.id), user: { id: Number(user.id), role: user.role }, requestUrl: c.req.url, slides });
+  if (!copy.ok) return refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } });
+  slides.splice(0, slides.length, ...copy.slides);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
 
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta,
@@ -2000,6 +2006,23 @@ decks.post('/:id/autofill', async (c) => {
  * shape: one per slide, plus the Sources appendix as a last page when asked
  * for. The PDF/PowerPoint export and D904's Google Slides export share it.
  */
+/**
+ * D1506: a stored version's outside images, copied before it is exported, so the
+ * export browser loads only our own origin. The version is rewritten in place to
+ * name the copies (the same picture, now ours). One that cannot be copied stays
+ * as it was: the export says it is missing, and the export browser cannot load it.
+ */
+export async function copyStoredDeckImages(c: any, user: { id: number; role?: string | null }, row: any): Promise<{ row: any } | { refused: Response }> {
+  let slides: any[] = [];
+  try { slides = JSON.parse(row.slides || '[]'); } catch { return { row }; }
+  const copy = await copyExternalImages(c.env, { projectId: Number(row.project_id), deckId: Number(row.id), user: { id: Number(user.id), role: user.role }, requestUrl: c.req.url, slides, mode: 'export' });
+  if (!copy.ok) return { refused: refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } }) };
+  if (!copy.copied) return { row };
+  const text = JSON.stringify(copy.slides);
+  await c.env.DB.prepare('UPDATE pitch_decks SET slides = ? WHERE id = ?').bind(text, Number(row.id)).run();
+  return { row: { ...row, slides: text } };
+}
+
 export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; renderable: RenderableDeck } {
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
@@ -2092,6 +2115,9 @@ decks.post('/:id/export', async (c) => {
   if (!['pdf', 'pptx'].includes(format)) {
     return c.json({ error: 'format must be pdf | pptx' }, 400);
   }
+  const copied = await copyStoredDeckImages(c, user, row);
+  if ('refused' in copied) return copied.refused;
+  row = copied.row;
   // D1112 (#2992): PD17's two options apply to every format, not only HTML.
   const opts: PrintOptions = { notes: body?.notes === true, sources: body?.sources === true };
   const { renderable } = exportDeckOf(row, opts);
