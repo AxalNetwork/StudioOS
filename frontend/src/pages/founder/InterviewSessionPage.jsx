@@ -14,6 +14,9 @@ import SessionSummary, { DigestView, EngineLine } from './SessionSummary';
 import { engineState, isThread } from './sessionDigestModel.js';
 import { ChannelSessionPanel } from './InterviewChannels';
 import { clock } from './interviewReviewModel.js';
+import { failureView, lifecycle, money } from './sessionLifecycle.js';
+import { SessionFailure, SessionStepper } from './SessionLifecycle.jsx';
+import { botView } from './meetingBotSession.js';
 import { chatConsentOf, consentLine } from './chatConsent.js';
 import { useRailOption } from '../../ui/railCrumbs';
 import { useSessionPlayer } from './sessionPlayer.js';
@@ -44,7 +47,6 @@ import { useSessionPlayer } from './sessionPlayer.js';
 
 const POLL_MS = 3000;
 export const SPEAKER_CHOICES = (name) => ['Me', (name || '').trim() || 'Interviewee', 'Speaker ?'];
-const usd = (micro) => `$${(Number(micro || 0) / 1e6).toFixed(4)}`;
 
 /** The start step: consent first, and the Worker's own words when it refuses. */
 export function StartPanel({ session, error, liveHref = null, busy, onStart, onConsent }) {
@@ -81,10 +83,14 @@ export function StartPanel({ session, error, liveHref = null, busy, onStart, onC
  * interview record, D697), each passage starts with its time as `[hh:mm:ss]`;
  * this page's own review does not pass it, so it draws no time.
  */
-export function TranscriptReview({ segments, intervieweeName, onAssign, time = false }) {
+export function TranscriptReview({ segments, intervieweeName, onAssign, time = false, onPlay = null, marks = [], empty = null }) {
   const finals = segments.filter((s) => s.source === 'final');
   const rows = finals.length ? finals : segments;
-  if (!rows.length) return <p className="text-[13px] text-axal-faint" data-testid="transcript-empty">Not recorded</p>;
+  // D1455 (#3710, REC4): with nothing to show, one line says why (`empty`); a bare "Not recorded" only where no reason is known.
+  if (!rows.length) return <p className="text-[13px] text-axal-faint" data-testid="transcript-empty">{empty || 'Not recorded'}</p>;
+  // D1454 (#3710, IV-M3): a mark (GET /sessions/:id) is drawn on the passage whose time holds it.
+  const markOf = (s) => (Array.isArray(marks) ? marks : []).filter((m) => Number.isFinite(Number(m?.offset_ms)) && Number.isFinite(Number(s.start_ms))
+    && Number(m.offset_ms) >= Number(s.start_ms) && (s.end_ms == null || Number(m.offset_ms) < Number(s.end_ms)));
   return (
     <ol className="space-y-3" data-testid="transcript">
       {rows.map((s) => (
@@ -100,12 +106,23 @@ export function TranscriptReview({ segments, intervieweeName, onAssign, time = f
             {time && clock(s.start_ms) && (
               <span className="mr-1.5 font-mono text-[11.5px] tabular-nums text-axal-faint dark:text-gray-400" data-testid={`seg-time-${s.id}`}>{clock(s.start_ms)}</span>
             )}
+            {markOf(s).map((m) => <span key={m.id} className="mr-1.5 text-[11.5px] font-bold text-violet-700 dark:text-violet-300" data-testid={`seg-mark-${m.id}`}>⚑ Marked{m.label ? ` · ${m.label}` : ''}</span>)}
             {s.text}
           </p>
+          {onPlay && clock(s.start_ms) && (
+            <button type="button" onClick={() => onPlay(s)} aria-label={`Play from ${clock(s.start_ms)}`} data-testid={`seg-play-${s.id}`}
+              className="mt-1 inline-flex min-h-[32px] items-center gap-1 rounded-md px-2 text-[11.5px] font-bold text-violet-700 hover:bg-violet-50 max-lg:min-h-[44px] dark:text-violet-300 dark:hover:bg-violet-950/30">▶ Play from here</button>
+          )}
         </li>
       ))}
     </ol>
   );
+}
+
+/** D1455 (#3710, REC5): money in two decimals, the full value on hover; a value not read stays "Not recorded", never $0.00. */
+function Money({ micro }) {
+  const m = money(micro);
+  return m ? <span className="tabular-nums" title={m.full} data-full={m.full}>{m.text}</span> : <span className="text-axal-faint">Not recorded</span>;
 }
 
 /** The rail: models, the cost receipt and the meter. */
@@ -133,13 +150,13 @@ export function SessionRail({ session, models, receipt }) {
         <h3 className="mb-1 text-[11px] font-bold uppercase text-axal-faint">Cost receipt</h3>
         {receipt === undefined ? <p className="text-axal-faint">Reading…</p>
           : receipt === null ? <p className="text-axal-faint">Unreadable: the receipt could not be read.</p>
-            : receipt.items.length === 0 ? <p className="text-axal-faint">Not recorded</p>
+            : receipt.items.length === 0 ? <p className="text-axal-faint" data-testid="session-receipt-empty">Nothing was charged for this session.</p>
               : (
                 <ul className="space-y-0.5">
                   {receipt.items.map((r, i) => (
                     <li key={i} className="flex justify-between gap-2">
                       <span>{r.kind} · {r.model}{r.fallback_used ? ' (fallback)' : ''}{r.outcome !== 'ok' && r.outcome ? ` · ${r.outcome}` : ''}</span>
-                      <span className="tabular-nums">{usd(r.cost_microusd)}</span>
+                      <Money micro={r.cost_microusd} />
                     </li>
                   ))}
                 </ul>
@@ -149,11 +166,11 @@ export function SessionRail({ session, models, receipt }) {
         <h3 className="mb-1 text-[11px] font-bold uppercase text-axal-faint">Meter</h3>
         {receipt ? (
           <>
-            <p className="flex justify-between"><span>This session</span><span className="tabular-nums">{usd(receipt.total_cost_microusd)}</span></p>
+            <p className="flex justify-between"><span>This session</span><Money micro={receipt.total_cost_microusd} /></p>
             {receipt.budget ? (
               <>
-                {receipt.budget.day_left_microusd != null && <p className="flex justify-between"><span>Left today</span><span className="tabular-nums">{usd(receipt.budget.day_left_microusd)}</span></p>}
-                <p className="flex justify-between"><span>Left this month</span><span className="tabular-nums">{usd(receipt.budget.month_left_microusd)}</span></p>
+                {receipt.budget.day_left_microusd != null && <p className="flex justify-between"><span>Left today</span><Money micro={receipt.budget.day_left_microusd} /></p>}
+                <p className="flex justify-between"><span>Left this month</span><Money micro={receipt.budget.month_left_microusd} /></p>
               </>
             ) : <p className="text-axal-faint" data-testid="meter-unreadable">{receipt.budget_error || 'Unreadable'}</p>}
           </>
@@ -348,6 +365,9 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const [busy, setBusy] = useState(false);
   const [digestBusy, setDigestBusy] = useState(false);
   const [digestError, setDigestError] = useState(null);
+  // D1455 (#3710): the bot read the panel holds, for the one stepper and the one failure panel.
+  const [botRead, setBotRead] = useState(undefined);
+  const [retry, setRetry] = useState({ busy: false, error: null });
   // D771 (#2097): Summarise and Transcribe run a model (Keep and Edit do not), so each names itself to the rail while it runs.
   const [summarising, setSummarising] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -452,6 +472,27 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
 
   const botSession = session.submitted_via === 'meeting_bot';
   const recording = !botSession && ['recording', 'paused'].includes(session.status);
+  // D1455 (REC1, REC2): one status for the bot and the processing, and one failure panel.
+  // A bot session waits for its bot read; an unreadable read is drawn Unreadable, never a guessed step.
+  const bot = botSession && botRead && !botRead.unreadable ? (botRead.bot ?? null) : null;
+  const showLife = botSession ? botRead !== undefined : (imported || recordingOther || !!data.processing?.stage);
+  const life = showLife ? lifecycle({ bot: botSession && botRead?.bot !== null ? (bot || { status: 'unreadable' }) : null, session, processing: data.processing }) : null;
+  const failure = life ? failureView(life, { botFailure: bot ? botView({ bot }).failure : null, processingError: data.processing?.error || null }) : null;
+  const interviewId = interview?.id ?? session.interview_id ?? null;
+  const retryHref = interviewId != null ? `/validate/record?interview=${encodeURIComponent(interviewId)}&project_id=${encodeURIComponent(session.project_id)}` : null;
+  const runAgain = async () => {
+    setRetry({ busy: true, error: null });
+    try { await api.process(session.id); setRetry({ busy: false, error: null }); await load(); loadReceipt(); }
+    catch (e) { setRetry({ busy: false, error: e?.data?.detail || e?.message || 'Processing could not start again.' }); }
+  };
+  const failureDetails = failure ? [
+    ...(bot?.failure_code ? [['Bot', bot.failure_code]] : []),
+    ...(data.processing?.stage ? [['Processing', data.processing.stage]] : []),
+    ...(data.processing?.failed_stage ? [['Failed at', data.processing.failed_stage]] : []),
+    ...(Number.isSafeInteger(bot?.started_at) ? [['Started', new Date(bot.started_at).toISOString()]] : []),
+    ...(Number.isSafeInteger(bot?.ended_at) ? [['Ended', new Date(bot.ended_at).toISOString()]] : []),
+    ['Session', String(session.id)],
+  ] : [];
 
   const reviewFirst = openingStep(session) === 'review';
   // D684: a channel session still waiting for its messages or its call's transcript.
@@ -502,7 +543,9 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
             onDiscard={async () => { await api.remove(session.id); navigate(`/validate/customer-research?project_id=${session.project_id}`, { replace: true }); }} />
         )}
         <ChannelVoiceNotes api={api} session={session} chunks={chunks} consent={data.channel_consent} />
-        {botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} />}
+        {life && <SessionStepper view={life} />}
+        {failure && <SessionFailure failure={failure} details={failureDetails} onRetry={runAgain} retrying={retry.busy} error={retry.error} retryHref={retryHref} />}
+        {botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} onRead={setBotRead} hideFailure />}
         {session.status === 'draft' && !botSession && (waiting
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
           : <StartPanel session={session} error={startError} liveHref={startLive} busy={busy} onStart={start} onConsent={consent} />)}
@@ -524,7 +567,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
             )}
           </section>
         )}
-        {(recordingOther || imported) && (
+        {(recordingOther || imported) && !failure && (
           <section role="status" className="rounded-2xl border border-axal-hairline p-4 text-[13px] dark:border-gray-800" data-testid="processing-here">
             <p className="m-0 font-semibold">
               {data.processing.stage === 'failed' ? 'Processing stopped' : `Processing · ${STAGES[STAGE_KEYS.indexOf(data.processing.stage)] || 'under way'}`}
@@ -543,7 +586,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
             )}
             {/* D668: a session an assistant submitted opens on the review step, above its transcript. */}
             {reviewFirst && review}
-            <TranscriptReview segments={segments} intervieweeName={intervieweeName} onAssign={assign} />
+            <TranscriptReview segments={segments} intervieweeName={intervieweeName} onAssign={assign} empty={failure ? 'No transcript: this session stopped before one was written. Try again above.' : 'No transcript was written for this session.'} />
             {!reviewFirst && review}
             {marks.length > 0 && (
               <ul className="text-[12px] text-axal-muted">{marks.map((m) => <li key={m.id}>Marked at {Math.floor(m.offset_ms / 60000)}:{String(Math.floor((m.offset_ms % 60000) / 1000)).padStart(2, '0')}{m.label ? ` · ${m.label}` : ''}</li>)}</ul>

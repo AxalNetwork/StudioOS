@@ -9,7 +9,9 @@ import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
 import { useRailOption } from '../../ui/railCrumbs';
 import { modelName } from '../../ui/railModels.js';
 import { railPressHeaders } from '../../lib/railPage.js';
-import { RecordActions, RecordActivity, RecordFacts, RecordSection, useRecordPhone } from '../cycles/RecordView';
+import { RecordActivity, RecordFacts, RecordSection, useRecordPhone } from '../cycles/RecordView';
+import { HEADER_BUTTON, HeaderAction, MoreMenu, RecordHeaderRow, useRecordHeader } from '../cycles/RecordHeader.jsx';
+import { PHONE_TABS, RATES, headerRow, sectionTab, tabOf } from '../cycles/recordHeaderModel.js';
 import { declaredActions, pillView, recordActionBody, recordFormFor, toneOf } from '../cycles/recordModel';
 import FormLightbox from '../cycles/FormLightbox';
 import { InterviewEvidenceFields, PainSeverity } from './validatePieces';
@@ -53,6 +55,19 @@ import { useSessionPlayer } from './sessionPlayer.js';
  * THE PLAYER is `useSessionPlayer` (`sessionPlayer.js`): #1692's audio route,
  * one blob per part, played in `seq` order; the session page plays a chat's
  * voice notes with the same hook (D754, #1980).
+ *
+ * D1454 (#3710, `Interview Record Page.dc.html`):
+ *   - IV-D1: the pills and the one action row go to the cycle header
+ *     (`RecordHeaderRow`): Open recording (the read's primary), Ask, Email,
+ *     Edit details, then ⋯ with "Open the session" and Delete.
+ *   - IV-D2: a fact the read leaves null shows its one action when the read
+ *     names one (`fact.action`, #3710 W1).
+ *   - IV-M1 to M4: on a phone, the pills and primary · Ask · ⋯ under the bar,
+ *     At a glance, then Summary · Transcript · Findings · Notes, sticky, kept
+ *     in `?tab=`; a passage plays from its start (`seek`); the player is
+ *     sticky at the foot with 1×, 1.5× and 2×.
+ *   - IV-M7: from 768px the phone page draws both columns and no section
+ *     control (an amendment to D703 decision 1 for this record).
  */
 
 // While the job runs, it writes the summary itself: Summarise is not offered then.
@@ -207,7 +222,11 @@ export default function InterviewRecord({
   // D778 part 8 (#2103): the session open now; a Summarise answers only the one it was pressed on.
   const openSession = useRef(chosenId);
   openSession.current = chosenId;
-  const { player, held, audioError, setAudioError, open: openRecording } = useSessionPlayer(sessions, chosenId);
+  const { player, held, audioError, setAudioError, open: openRecording, seek, rate, setRate } = useSessionPlayer(sessions, chosenId);
+  const [playerShown, setPlayerShown] = useState(false);
+  const header = useRecordHeader();
+  const tab = tabOf(params.get('tab'));
+  const chooseTab = (key) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', key); return n; }, { replace: true });
   const loadDetail = useCallback(() => (chosenId == null ? undefined : sessions.get(chosenId).then(setDetail).catch(() => setDetail(null))), [sessions, chosenId]);
   const loadReceipt = useCallback(() => (chosenId == null ? undefined : sessions.receipt(chosenId).then(setReceipt).catch(() => setReceipt(null))), [sessions, chosenId]);
   useEffect(() => {
@@ -260,7 +279,7 @@ export default function InterviewRecord({
     onLink,
     onForm: (action) => (action.key === 'edit-details' ? openEdit(action) : onForm?.(action)),
     onWrite: (action) => (action.key === 'delete' ? openDelete(action)
-      : action.key === 'open-recording' ? openRecording() : onWrite?.(action)),
+      : action.key === 'open-recording' ? (setPlayerShown(true), openRecording()) : onWrite?.(action)),
     onClient,
   };
   const context = { cycleName, moduleName, declarations, ...handlers };
@@ -291,13 +310,11 @@ export default function InterviewRecord({
                 </label>
               )}
               {detail === null && <p role="alert" className="m-0 text-[13px] text-red-700 dark:text-red-400">Unreadable: this session could not be read.</p>}
-              {detail !== undefined && detail !== null && (
-                <SessionSummary summary={detail.summary || null} segments={segments} canSummarise={reviewable && hasFinal && !RUNNING.has(detail.processing?.stage)}
-                  busy={summarising.busy} error={summarising.error} onSummarise={summarise} />
-              )}
+              {!phone && summaryOf()}
               {detail?.processing?.stage === 'done' && detail.processing.error && <p role="status" className="m-0 text-[13px] font-semibold text-amber-800 dark:text-amber-300" data-testid="processing-note">{detail.processing.error}</p>}
               {detail && hasFinal && (shown.length
-                ? <TranscriptReview segments={shown} intervieweeName={read?.title} onAssign={assign} time />
+                ? <TranscriptReview segments={shown} intervieweeName={read?.title} onAssign={assign} time marks={detail?.marks}
+                  onPlay={parts.recording ? (seg) => { setPlayerShown(true); void seek(seg.start_ms); } : null} />
                 : <p className={MUTED} data-testid="transcript-no-match">No passage holds “{search.trim()}”.</p>)}
               {session && !reviewable && (
                 <div data-testid="interview-session-not-reviewable">
@@ -307,10 +324,24 @@ export default function InterviewRecord({
               )}
             </>
           )}
-      <audio ref={player} controls className={held.current.urls.length ? 'w-full' : 'hidden'} data-testid="record-player" />
+      {/* D1454 (IV-M3): the player and its speeds; sticky at the foot on a phone or tablet. */}
+      <div className={playerShown || held.current.urls.length ? 'flex flex-wrap items-center gap-2 max-lg:sticky max-lg:bottom-0 max-lg:z-20 max-lg:-mx-4 max-lg:border-t max-lg:border-axal-hairline max-lg:bg-white max-lg:px-3 max-lg:py-2 max-lg:dark:border-gray-700 max-lg:dark:bg-gray-900' : 'hidden'} data-testid="record-player-bar">
+        <audio ref={player} controls className="min-w-0 flex-1" data-testid="record-player" />
+        <div role="radiogroup" aria-label="Playback speed" className="flex items-center gap-1" data-testid="record-player-rate">
+          {RATES.map((r) => <button key={r} type="button" role="radio" aria-checked={rate === r} onClick={() => setRate(r)}
+            className={`min-h-[32px] rounded-md px-2 text-[12px] font-bold max-lg:min-h-[44px] ${rate === r ? 'bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`}>{r}×</button>)}
+        </div>
+      </div>
       {audioError && <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-audio-error">{audioError}</p>}
     </Frame>
   );
+  /** The chosen session's summary: inside Transcript on a wide page, its own card under Summary on a phone. */
+  function summaryOf() {
+    return detail !== undefined && detail !== null ? (
+      <SessionSummary summary={detail.summary || null} segments={segments} canSummarise={reviewable && hasFinal && !RUNNING.has(detail.processing?.stage)}
+        busy={summarising.busy} error={summarising.error} onSummarise={summarise} />
+    ) : null;
+  }
   const placementsCard = (section) => (
     <Frame key={section.key || 'placements'} section={section} testid="interview-review-findings">
       {reviewable
@@ -344,27 +375,68 @@ export default function InterviewRecord({
     return <RecordSection key={section.key || section.title} section={section} side={side} {...context} />;
   };
 
-  return (
-    <div className={phone ? "flex min-w-0 flex-col gap-[18px]" : "space-y-3"} data-testid="interview-record" data-phone={phone ? "true" : undefined}>
-      <div className="flex flex-wrap items-center justify-between gap-3.5">
-        <div className="flex flex-wrap items-center gap-2">{(read?.pills ?? []).map((pill, index) => {
-          const view = pillView(pill);
-          return <span key={index} className={`inline-flex rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${PILL[toneOf(view.tone)] || PILL_DEFAULT}`}>{view.text}</span>;
-        })}</div>
-        {!phone && <RecordActions actions={read?.actions} {...handlers} />}
+  const pills = (read?.pills ?? []).length ? <>{read.pills.map((pill, index) => {
+    const view = pillView(pill);
+    return <span key={index} className={`inline-flex rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${PILL[toneOf(view.tone)] || PILL_DEFAULT}`}>{view.text}</span>;
+  })}</> : null;
+  // "Open the session" sits in ⋯ when a session is chosen (IV-D1).
+  const extra = session ? [{ key: 'open-session', label: 'Open the session', href: `/validate/session/${encodeURIComponent(session.id)}` }] : [];
+  const tools = parts.tools ? <InterviewTools key="tools" projectId={projectId} interviewId={id} api={api} onChanged={reload} /> : null;
+  const activityCard = <RecordActivity key="activity" rows={activity ?? read?.activity} total={read?.activity_total} cycleName={cycleName} moduleName={moduleName} onShowAll={onShowAll} />;
+
+  if (phone) {
+    // IV-M1 to M4, M7: one place per part; below 768px only the chosen section shows.
+    const { primary, secondary, menu } = headerRow(read?.actions);
+    const emailItem = header.emailTo ? [{ key: 'email', label: 'Email', href: header.emailTo }] : [];
+    const placed = { summary: [], transcript: [], findings: [], notes: [] };
+    const sideOf = { summary: [], transcript: [], findings: [], notes: [] };
+    if (summaryOf()) placed.summary.push(<section key="summary" className={CARD} data-testid="record-summary"><div className="px-4 py-3">{summaryOf()}</div></section>);
+    for (const section of read?.main ?? []) placed[sectionTab(parts.kind(section), section.title)].push(sectionOf(section, false));
+    for (const section of read?.side ?? []) sideOf[sectionTab(parts.kind(section), section.title)].push(sectionOf(section, true));
+    if (tools) placed.notes.push(tools);
+    sideOf.summary.push(activityCard);
+    // Only the sections this reader has: a partner's read has no Transcript or Findings, so it has no such tab.
+    const tabs = PHONE_TABS.filter((t) => placed[t.key].length || sideOf[t.key].length);
+    const shownTab = tabs.some((t) => t.key === tab) ? tab : (tabs[0]?.key || 'summary');
+    const panel = (key, which, list) => <div key={`${which}-${key}`} className={`min-w-0 space-y-3 ${shownTab === key || tabs.length < 2 ? '' : 'hidden md:block'}`} data-tab={key} data-testid={`record-tab-${which}-${key}`}>{list}</div>;
+    return (
+      <div className="flex min-w-0 flex-col gap-[18px]" data-testid="interview-record" data-phone="true">
+        <div className="flex flex-col gap-3" data-testid="record-phone-head">
+          {pills && <div className="flex flex-wrap items-center gap-2" data-testid="record-pills">{pills}</div>}
+          <div className="flex items-center gap-2" data-testid="record-actions" data-header="true">
+            {primary && <HeaderAction action={primary} handlers={handlers} className={`${HEADER_BUTTON.primary} min-h-[48px] flex-1`} />}
+            {header.ask}
+            <MoreMenu actions={[...secondary, ...menu]} extra={[...emailItem, ...extra]} handlers={handlers} />
+          </div>
+        </div>
+        <RecordFacts facts={read?.facts} declarations={declarations} handlers={handlers} />
+        {tabs.length > 1 && <div role="tablist" aria-label="Sections" className="sticky top-0 z-20 -mx-1 flex gap-1 rounded-2xl border border-axal-hairline bg-white p-1 md:hidden dark:border-gray-700 dark:bg-gray-900" data-testid="record-tabs">
+          {tabs.map((t) => <button key={t.key} type="button" role="tab" aria-selected={shownTab === t.key} onClick={() => chooseTab(t.key)} data-testid={`record-tabs-${t.key}`}
+            className={`min-h-[44px] flex-1 rounded-xl text-[13px] font-bold ${shownTab === t.key ? 'bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'text-axal-ink dark:text-gray-200'}`}>{t.label}</button>)}
+        </div>}
+        <div className="flex min-w-0 flex-col gap-[18px] md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] md:items-start md:gap-3" data-testid="interview-content">
+          <div className="min-w-0 space-y-3">{tabs.map((t) => placed[t.key].length ? panel(t.key, 'main', placed[t.key]) : null)}</div>
+          <div className="min-w-0 space-y-3">{tabs.map((t) => sideOf[t.key].length ? panel(t.key, 'side', sideOf[t.key]) : null)}</div>
+        </div>
       </div>
-      <RecordFacts facts={read?.facts} />
-      <div className={phone ? "flex min-w-0 flex-col gap-[18px] [&>div]:w-full" : "grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]"} data-testid="interview-content">
+    );
+  }
+
+  return (
+    <div className="space-y-3" data-testid="interview-record">
+      <RecordHeaderRow pills={pills} actions={read?.actions} handlers={handlers} extra={extra}
+        inline={(p, row) => <div className="flex flex-wrap items-center justify-between gap-3.5"><div className="flex flex-wrap items-center gap-2">{p}</div>{row}</div>} />
+      <RecordFacts facts={read?.facts} declarations={declarations} handlers={handlers} />
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]" data-testid="interview-content">
         <div className="min-w-0 space-y-3">
           {(read?.main ?? []).map((section) => sectionOf(section, false))}
-          {parts.tools && <InterviewTools projectId={projectId} interviewId={id} api={api} onChanged={reload} />}
+          {tools}
         </div>
         <div className="min-w-0 space-y-3">
           {(read?.side ?? []).map((section) => sectionOf(section, true))}
-          <RecordActivity rows={activity ?? read?.activity} total={read?.activity_total} cycleName={cycleName} moduleName={moduleName} onShowAll={onShowAll} />
+          {activityCard}
         </div>
       </div>
-      {phone && <RecordActions actions={read?.actions} {...handlers} />}
     </div>
   );
 }

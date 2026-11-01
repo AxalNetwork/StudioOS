@@ -111,6 +111,41 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-01 — One interview, and its session (#3710)
+
+The owner's artifacts `CoQEhHr637iFdxgpe2WKx9` (the page, `Interview Record Page.dc.html`)
+and `MyWazkYQH52jTsYgMPdL1E` (the board grid, `Interview Record · Boards.dc.html`) were
+decoded by `scripts/read-canvas.mjs`. The grid imports the page and frames it
+as twenty-one groups:
+- **Page**, the record at 1440 with the Ask panel closed;
+- **IV-D1 to IV-D5**, the desktop header (one action row: primary, Ask with
+  "[3] waiting", Email, Edit details, ⋯), the fact cards with their one action,
+  the Email composer in the right Sheet, 1280, 1024 and dark, and the Ask
+  panel open;
+- **IV-M1 to IV-M7**, the phone: the header, the four sections, the transcript
+  with search, tap-to-play and the sticky player, the findings in thumb reach,
+  Ask as a bottom sheet, the record's states, and the tablet at 768 in two
+  columns;
+- **IV-S1, IV-S2**, the AI states and who is reading;
+- **REC1 to REC6**, the session page: the one lifecycle stepper, one failure
+  panel, the participants timeline, the transcript's states, cost as money,
+  and the session's states (phone and dark among them).
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`. No other value was
+edited.
+
+**Grade: UPGRADE (D1454 for the record, D1455 for the session page; D1456 is
+the Worker part).** Built: one record header for every cycle
+(`frontend/src/pages/cycles/RecordHeader.jsx`), the fact action, the phone
+record's sections, player and tablet columns, the session page's stepper,
+failure panel and money (`frontend/src/pages/founder/SessionLifecycle.jsx`).
+Not built here, each filed: the channel pill, the fact actions' keys,
+"Review findings (n)" and the failed step (#3710 W1 to W3, D1456); the Email
+composer in the Sheet (IV-D3); the participants timeline (REC3); Ask as a
+bottom sheet on the record (IV-M5, after #3706). Two files arrived and none
+left this folder.
+
 ## Landed 2026-11-01 — The Ask panel (#3706)
 
 The owner's artifacts `6228BkjTtjxMY7C5mmMZRu` (the page, `Ask Panel Page.dc.html`)
