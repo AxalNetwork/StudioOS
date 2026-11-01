@@ -540,8 +540,12 @@ test('#3741: generated rows and options cap suggestions and keep demoted choices
     assert.equal(r.models.some((m: any) => 'optional' in m), false);
     assert.equal(new Set([...r.models, ...r.more].map((m: any) => m.id)).size, r.models.length + r.more.length);
   }
-  // Speech and research are the two kinds previously carrying four models.
-  for (const [kind, demoted] of [['speech', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'], ['research', '@cf/baai/bge-reranker-base']]) {
+  // #3936: speech no longer carries four models: its Listen row lists no text model (plan §4.2 item 9),
+  // so it has three suggestions and nothing demoted. Research keeps its demoted reranker.
+  const speech = MATRIX.rows.find((row: any) => row.kind === 'speech');
+  assert.deepEqual(speech.more, []);
+  assert.deepEqual(speech.models.map((m: any) => m.id), ['@cf/openai/whisper-large-v3-turbo', '@cf/deepgram/nova-3', '@cf/deepgram/flux']);
+  for (const [kind, demoted] of [['research', '@cf/baai/bge-reranker-base']]) {
     const r = MATRIX.rows.find((row: any) => row.kind === kind);
     assert.deepEqual(r.more.map((m: any) => m.id), [demoted]);
     const broken = { ...r, models: [...r.models, { ...r.more[0], role: 'Alternative' }], more: [] };

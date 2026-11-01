@@ -48,6 +48,9 @@ export const adminLearningApi = {
   createCourse: (b) => request('/admin/learning/courses', { method: 'POST', body: body(b) }),
   getCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}`),
   updateCourse: (uid, b) => request(`/admin/learning/courses/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
+  // #3935: a course's drawn cover (LE8): one quote for the draw and its checks, then the draw.
+  courseCoverQuote: (uid, prompt) => request(`/admin/learning/courses/${enc(uid)}/cover/quote`, { method: 'POST', body: body({ prompt }) }),
+  courseCoverDraw: (uid, prompt) => request(`/admin/learning/courses/${enc(uid)}/cover/draw`, { method: 'POST', body: body({ prompt }) }),
   publishCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}/publish`, { method: 'POST' }),
   unpublishCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}/unpublish`, { method: 'POST' }),
   archiveCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}/archive`, { method: 'POST' }),

@@ -33,10 +33,10 @@ const ON_STATES = ['selected', 'pending', 'posted', 'failed', 'skipped'];
 
 const NOT_FOUND = { code: 'not_found', message: 'This event could not be found.' };
 
-type Account = { id: number; uid: string; channel: string; owner_kind: string; owner_user_id: number | null; display_name: string; status: string; default_on: number };
+export type Account = { id: number; uid: string; channel: string; owner_kind: string; owner_user_id: number | null; display_name: string; status: string; default_on: number };
 
 /** The event, when the caller manages it; otherwise the 404 every caller without the right gets. */
-async function managed(c: any): Promise<{ user: User; event: Record<string, any> } | Response> {
+export async function managed(c: any): Promise<{ user: User; event: Record<string, any> } | Response> {
   let user: User;
   try { user = await requireAuth(c); } catch { return refuse(c, 401, { code: 'unauthorized', message: 'Sign in to manage this event.' }); }
   const id = Number(c.req.param('id'));
@@ -47,7 +47,7 @@ async function managed(c: any): Promise<{ user: User; event: Record<string, any>
 }
 
 /** The accounts this event may choose: HQ's live ones, and the host's own while HQ allows them. */
-async function accountsFor(env: Env, event: Record<string, any>, settings: SyndicationSettings): Promise<Account[]> {
+export async function accountsFor(env: Env, event: Record<string, any>, settings: SyndicationSettings): Promise<Account[]> {
   const rows = await env.DB.prepare(
     `SELECT id, uid, channel, owner_kind, owner_user_id, display_name, status, default_on FROM event_channel_accounts
       WHERE status != 'disconnected' AND (owner_kind = 'hq' OR (owner_kind = 'host' AND ? = 1 AND owner_user_id = ?))
