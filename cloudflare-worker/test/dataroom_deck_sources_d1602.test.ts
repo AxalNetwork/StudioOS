@@ -242,3 +242,18 @@ test('XLSX reads only numeric cells, keeps a sheet citation, never evaluates a f
   assert.deepEqual(checkedDocumentValues('[{"slot":"dataroom.revenue_plan","value":1200000,"unit":"count","page":1}]', word), []);
   assert.deepEqual(checkedDocumentValues('[{"slot":"dataroom.revenue_plan","value":1200000,"unit":"usd","page":1,"instruction":"publish"}]', word), []);
 });
+
+test('a Word page beyond the input ceiling cannot become a citation', async () => {
+  const f = await fixture('docx', '[{"slot":"dataroom.revenue_plan","value":1200000,"unit":"usd","page":2}]');
+  try {
+    f.objects.set('data-room/p-room/current', office({
+      'word/document.xml': `<w:document><w:body><w:p>${'x'.repeat(16000)}<w:lastRenderedPageBreak/><w:t>Revenue: 1200000</w:t></w:p></w:body></w:document>`,
+      'docProps/app.xml': '<Properties><Pages>2</Pages></Properties>',
+    }));
+    const q = await f.request(); await f.request(1, { enabled: true, confirm_quote: q.body.quote.confirm_quote });
+    await extractDataroomFile(f.env, f.payload());
+    assert.equal(f.calls.length, 1);
+    assert.ok(!f.calls[0].input.messages.find((m: any) => m.role === 'user').content.includes('Revenue: 1200000'));
+    assert.deepEqual(f.values(), []);
+  } finally { f.db.close(); }
+});
