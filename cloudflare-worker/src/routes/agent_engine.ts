@@ -35,6 +35,8 @@ import {
   TASK_STATUSES, depsOf, insertTask, isReady, setDeps, statusWrite, taskByUid, taskCosts, taskWrite, tasksOf, updateTask, type TaskRow,
 } from '../services/agents/tasks';
 import { workBoardRoutes } from './work_board';
+import { memberTimeZone, projectBurnup } from '../services/agents/workBurnup';
+import { WorkRefusal } from '../services/agents/workBoard';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -45,6 +47,25 @@ const router = new Hono<{ Bindings: Env }>();
 // D1614 W1 (#3969): a project's Work board, its moves and its task fields, ahead of E1's
 // handlers. Project scope only; a company task falls through to E1 unchanged.
 router.route('/', workBoardRoutes(agentEngineEnabled));
+
+// D1614 W2 (#3970): a project's burn-up, derived from its events. Projects only: a company
+// has no Kanban and nothing rolls up to it (owner revision, 2026-11-01), so the path names
+// `project` and a company path has no route (404). Declared here, on the router index.ts
+// mounts, so scripts/check-api-drift.mjs resolves it.
+router.get('/project/:id/work/burnup', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project board here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read its Work.' });
+    const q = (k: string) => c.req.query(k) ?? null;
+    return c.json(await projectBurnup(c.env, s, { range: q('range'), from: q('from'), to: q('to'), filter: q('filter') }, await memberTimeZone(c.env, user.id)));
+  } catch (e) {
+    if (e instanceof WorkRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+    return mapError(c, e);
+  }
+});
 
 const say = (c: C, r: Refusal) => refuse(c, r.status, { code: r.code, message: r.message });
 const off = (c: C) => c.json({ error: 'agent_engine_off' }, 404);

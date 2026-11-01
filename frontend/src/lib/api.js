@@ -181,6 +181,7 @@ export * from './api/useOfFunds.js';
 export * from './api/ventureScoreModels.js';
 export * from './api/ventureScores.js';
 export * from './api/verdict.js';
+export * from './api/work.js';
 // api-modules:end
 
 const BASE = '/api';
