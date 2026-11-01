@@ -97,6 +97,7 @@ import mailShares from './routes/mail_shares';
 import mailPeople from './routes/mail_people';
 import { bindMailTools } from './services/mail/mcpTools';
 import dealContext from './routes/deal_context';
+import deckGrants from './routes/deck_grants';
 import dealInsights from './routes/deal_insights';
 import dealWorkroom from './routes/deal_workroom';
 import dealViews from './routes/deal_views';
@@ -990,6 +991,8 @@ app.route('/api/mail', mailDrafts);
 app.route('/api/mail', mailShares);
 app.route('/api/mail', mailPeople);
 app.route('/api/deals', dealViews);
+// D1587 (#3834): the investor's granted deck on their deal page, and the founder's grants. Before dealContext.
+app.route('/api/deals', deckGrants);
 app.route('/api/deals', dealContext);
 app.route('/api/deals', dealInsights);
 // D1153 (#3058): the working tabs' room access, round summary and reasoned withdrawal. Before deals.
