@@ -7,6 +7,7 @@ import { Versions, useDeckChecks } from './DeckVersions';
 import { comparePair } from './compareModel';
 import { APPLY } from './deckV2Model';
 import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from './editorModel';
+import { SLIDE_SIZES, aspectOf, withAspect } from './gridModel';
 
 /**
  * D1604 (#3716, pd13) — the sheets the editor's ⋯ opens, each one v1 surface
@@ -14,6 +15,10 @@ import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from 
  *
  *   ThemeSheet       Theme (from your brand kit, Neutral light, Neutral dark),
  *                    Apply to all cards, and the audience (D898's Design tab)
+ *   SizeSheet        This deck › Slide size: 16:9 (1920 × 1080) or 4:3
+ *                    (1440 × 1080), the theme's `aspect` (D1499). The 12 × 6
+ *                    grid and its margins stay, so every block keeps its
+ *                    cells and none moves to the notes.
  *   StructureSheet   This card › Structure: the layouts on main (`LAYOUTS`
  *                    via `GET /api/decks/model`), each behind the dialog that
  *                    says what leaves the card. The 17 structures are #3749.
@@ -55,7 +60,7 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
         {model.themes.map((k) => (
           <label key={k} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${(theme?.kind || 'brand') === k ? 'border-axal-violet dark:border-violet-500' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
             <input type="radio" name="theme" checked={(theme?.kind || 'brand') === k} disabled={readOnly}
-              onChange={() => onTheme(k === 'brand' && !theme?.background ? null : { kind: k, background: theme?.background ?? null })} data-testid={`pitch-theme-${k}`} />
+              onChange={() => onTheme(withAspect(k === 'brand' && !theme?.background ? null : { kind: k, background: theme?.background ?? null }, theme?.aspect))} data-testid={`pitch-theme-${k}`} />
             <span className="flex flex-col">
               <span className="font-bold">{THEME_LABELS[k]}{k === 'brand' && kitData?.name ? ` · ${kitData.name}` : ''}</span>
               {k === 'brand' && kit.status === 'ok' && !kitData ? <span className={MUTED}>{NO_KIT}</span> : null}
@@ -69,6 +74,31 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
         <option value="">{NOT_RECORDED}</option>
         {model.audiences.map((a) => <option key={a} value={a}>{AUDIENCE_LABELS[a] || a}</option>)}
       </select>
+      <span className={MUTED}>{HELD}</span>
+    </Frame>
+  );
+}
+
+/** The two slide sizes, in the words the sheet shows. */
+export const SIZE_LABELS = Object.freeze({ '16:9': 'Widescreen 16:9', '4:3': 'Standard 4:3' });
+
+export function SizeSheet({ theme, readOnly, onTheme, onClose }) {
+  const now = aspectOf(theme?.aspect);
+  return (
+    <Frame title="Slide size" testId="pitch-sheet-size" onClose={onClose}>
+      <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Slide size">
+        {Object.keys(SLIDE_SIZES).map((k) => (
+          <label key={k} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${now === k ? 'border-axal-violet dark:border-violet-500' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
+            <input type="radio" name="slide-size" checked={now === k} disabled={readOnly}
+              onChange={() => onTheme(withAspect(theme, k))} data-testid={`pitch-size-${k.replace(':', 'x')}`} />
+            <span className="flex flex-col">
+              <span className="font-bold">{SIZE_LABELS[k]}</span>
+              <span className={MUTED}>{SLIDE_SIZES[k].width} × {SLIDE_SIZES[k].height}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      <span className={MUTED}>Every card keeps its 12 × 6 grid and its margins, so each block keeps its cells; only the columns narrow.</span>
       <span className={MUTED}>{HELD}</span>
     </Frame>
   );

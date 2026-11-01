@@ -13,6 +13,7 @@ import { ClosedLink, FigureSources, NdaGate } from './raise/pitch/ShareViewerPar
 import { viewerNote } from './raise/pitch/shareModel';
 import { offersDealPack } from '../lib/shareDeckAudience';
 import { NotesPages, SourcesPage, StudioPrintCard, isStudioSlide } from './raise/pitch/PrintExtras';
+import { SLIDE_SIZES, aspectOf } from './raise/pitch/gridModel';
 
 // Task #25 — public viewer for an investor share link, plus an authenticated
 // preview at /deck/:id/print. Task #6 expanded the advanced (live React
@@ -690,8 +691,10 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
     const wantsNotes = deck.export_options?.notes === true;
     const wantsSources = deck.export_options?.sources === true;
     const slideTotal = (deck.slides || []).length;
+    // D1499 (#3749): a studio deck at 4:3 prints on 1440 × 1080 pages; every other deck stays 1920 × 1080.
+    const pageW = studioDeck ? SLIDE_SIZES[aspectOf(deck.theme?.aspect)].width : INNER_W;
     const fixedStageStyle = {
-      width: INNER_W,
+      width: pageW,
       background: '#ffffff',
       margin: 0,
       padding: 0,
@@ -700,7 +703,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
       display: 'flex',
       flexDirection: 'column',
       gap: 0,
-      width: INNER_W,
+      width: pageW,
     };
     return (
       <div style={{ background: '#ffffff', margin: 0, padding: 0 }}>
@@ -709,7 +712,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           /* Each slide is exactly 1920×1080 inside the template; keep
              page breaks aligned so the headless PDF emits one page per
              slide and no chrome ever appears. */
-          @page { size: 1920px 1080px; margin: 0; }
+          @page { size: ${pageW}px 1080px; margin: 0; }
           [data-slide-frame] { page-break-after: always; break-after: page; }
           [data-slide-frame]:last-child { page-break-after: auto; break-after: auto; }
         `}</style>
@@ -720,8 +723,8 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
               <SourcesPage appendix={deck.sources_appendix} />
             ) : studioDeck ? (
               (singleSlideIdx != null
-                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1).map((s) => <StudioPrintCard key={singleSlideIdx} slide={s} index={singleSlideIdx} />)
-                : (deck.slides || []).map((s, i) => <StudioPrintCard key={i} slide={s} index={i} />))
+                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1).map((s) => <StudioPrintCard key={singleSlideIdx} slide={s} index={singleSlideIdx} aspect={deck.theme?.aspect} />)
+                : (deck.slides || []).map((s, i) => <StudioPrintCard key={i} slide={s} index={i} aspect={deck.theme?.aspect} />))
             ) : isAdvanced ? (
               singleSlideIdx != null ? (
                 <SingleSlideStage Template={Template} data={templateData} slideIdx={singleSlideIdx} />

@@ -4,6 +4,7 @@ import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { usePhoneWidth } from '../../../ui';
 import { BlockGrid } from './BlockGrid';
+import { aspectOf, ratioOf } from './gridModel';
 import { asList, currentVersion, versionLabel } from './pitchStudioModel';
 import {
   AUDIENCE, EMPTY_CARD, ESC_TO_EXIT, NO_CARDS, NO_VERSION, PRESENTER, READ_FAILED, SHOW_SOURCES, SOURCE_NOT_RECORDED,
@@ -79,6 +80,8 @@ export default function PitchPresent() {
   const [seconds, setSeconds] = useState(0);
   const touch = useRef(null);
   const cards = status === 'ok' ? cardsOf(deck) : [];
+  // D1499: the deck's slide size, from its theme; 16:9 unless the theme says 4:3.
+  const aspect = aspectOf(deck?.theme?.aspect);
   const n = cards.length;
   const exit = exitHref(projectId);
 
@@ -139,7 +142,7 @@ export default function PitchPresent() {
       >
         <div className={BAR}><span>{versionLabel(deck)}</span><Link to={exit} className="font-bold text-violet-300">Exit</Link></div>
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-3.5 pb-4">
-          <Card card={card} sources small />
+          <Card card={card} sources small aspect={aspect} />
           {dots}
           <span className="text-center text-[12px] text-gray-400" data-testid="pitch-present-swipe">{swipeLine(i, n)}</span>
         </div>
@@ -162,11 +165,11 @@ export default function PitchPresent() {
       </div>
       {view === 'presenter' ? (
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 pb-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Card card={card} sources={sources} />
+          <Card card={card} sources={sources} aspect={aspect} />
           <div className="flex min-w-0 flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">NEXT</span>
-              {next ? <Card card={next} sources={false} small /> : <span className="text-[12.5px] text-gray-400">This is the last card.</span>}
+              {next ? <Card card={next} sources={false} small aspect={aspect} /> : <span className="text-[12.5px] text-gray-400">This is the last card.</span>}
             </div>
             <div className="flex flex-col gap-1.5 rounded-[10px] bg-[#111827] p-3.5" data-testid="pitch-present-notes">
               <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">NOTES</span>
@@ -176,7 +179,7 @@ export default function PitchPresent() {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 pb-4">
-          <div className="w-full max-w-[min(100%,calc((100vh-120px)*16/9))]"><Card card={card} sources={sources} /></div>
+          <div className="w-full" style={{ maxWidth: `min(100%, calc((100vh - 120px) * ${aspect === '4:3' ? '4 / 3' : '16 / 9'}))` }}><Card card={card} sources={sources} aspect={aspect} /></div>
           {dots}
         </div>
       )}
@@ -184,13 +187,13 @@ export default function PitchPresent() {
   );
 }
 
-function Card({ card, sources, small = false }) {
+function Card({ card, sources, small = false, aspect = '16:9' }) {
   const head = small ? 'text-[15px]' : 'text-[clamp(20px,3vw,40px)]';
   const body = small ? 'text-[12px]' : 'text-[clamp(13px,1.4vw,19px)]';
   if (card.blocks?.length) {
     return (
-      <div className="relative aspect-video w-full overflow-hidden rounded-[12px] bg-[#fbfaf7] text-[#0f2a3d]" style={{ fontFamily: 'Outfit, sans-serif' }} data-testid="pitch-present-card" data-layout="grid">
-        <BlockGrid blocks={card.blocks} colours={FACE_COLOURS} live sources={sources} testId="pitch-present-blocks" />
+      <div className="relative w-full overflow-hidden rounded-[12px] bg-[#fbfaf7] text-[#0f2a3d]" style={{ fontFamily: 'Outfit, sans-serif', aspectRatio: ratioOf(aspect) }} data-testid="pitch-present-card" data-layout="grid">
+        <BlockGrid blocks={card.blocks} colours={FACE_COLOURS} live sources={sources} aspect={aspect} testId="pitch-present-blocks" />
       </div>
     );
   }

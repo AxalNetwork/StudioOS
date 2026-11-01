@@ -25,6 +25,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { placeOf } from '../src/pages/raise/pitch/gridModel.js';
+// D1499: a block's place is `placeOf` (boxOf on the slide), so a range is read back from its box.
+const cols = (st, c1, c2) => st?.left === placeOf({ c1, c2, r1: 1, r2: 1 }).left && st?.width === placeOf({ c1, c2, r1: 1, r2: 1 }).width;
+const rows = (st, r1, r2) => st?.top === placeOf({ c1: 1, c2: 1, r1, r2 }).top && st?.height === placeOf({ c1: 1, c2: 1, r1, r2 }).height;
 import { act } from 'react';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -290,7 +294,7 @@ test('a metric and an upload run no model: free, placed in the area on Accept', 
     assert.match(m.text(chip), /Connector .*Measured/);
     await m.press(node(m, 'pitch-area-result-free:8-4-accept'));
     assert.equal(m.calls.filter((c) => c[0] === 'proposals.decide').length, 0, 'nothing to decide on the Worker');
-    const tile = [...m.walk(m.container)].find((x) => /^pitch-editor-block-/.test(m.pr(x)['data-testid'] || '') && m.pr(x).style?.gridColumn === '8 / 11' && m.pr(x).style?.gridRow === '4 / 7');
+    const tile = [...m.walk(m.container)].find((x) => /^pitch-editor-block-/.test(m.pr(x)['data-testid'] || '') && cols(m.pr(x).style, 8, 10) && rows(m.pr(x).style, 4, 6));
     assert.ok(tile, 'the tile sits in the area');
     assert.match(m.text(tile), /MRR/);
   } finally { await m.close(); }
@@ -395,7 +399,7 @@ test('"Add it here" on an area that holds a block: the area\'s own range, and th
     assert.match(m.text(node(m, 'pitch-editor-add-says')), /Adds a 7 × 5 link button at column 1, row 2\./, 'in the area itself');
     await m.press(node(m, 'pitch-editor-add-run'));
     assert.ok(!m.by('pitch-editor-block-b2'), 'the block that held the area gave way');
-    const placed = [...m.walk(node(m, 'pitch-editor-blocks'))].find((x) => /^pitch-editor-block-/.test(m.pr(x)['data-testid'] || '') && m.pr(x).style?.gridColumn === '1 / 8' && m.pr(x).style?.gridRow === '2 / 7');
+    const placed = [...m.walk(node(m, 'pitch-editor-blocks'))].find((x) => /^pitch-editor-block-/.test(m.pr(x)['data-testid'] || '') && cols(m.pr(x).style, 1, 7) && rows(m.pr(x).style, 2, 6));
     assert.ok(placed, 'the link sits in the area');
   } finally { await m.close(); }
 });

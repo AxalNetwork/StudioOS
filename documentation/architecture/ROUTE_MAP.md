@@ -2066,9 +2066,9 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 | `GET /api/account/people/search?q=&company=<uid>\|&project=<id>` | signed in | `{ people: [{ uid, name, avatar_url, shared: [{ kind: 'company' \| 'connection', name }] }] }`, at most 10, by name, only people reachable from the caller, never the caller. `company` or `project` names the team being built: the caller must belong to it (403 `not_member`) and its members are left out. `avatar_url` is null (users record none). 400 `query_too_short` (under 2 letters) / `query_too_long`. Rate bucket `people_search`, 30 a minute, fail-closed. |
 | `GET /api/company/:uid` · `GET /api/projects/:id/members` | as before | `members[]` carries `email` on the caller's own row only; another member's row has no `email` key (the canvas: "Never show another member's email"). Invitation addresses to editors are unchanged (owner question T3 is open). Company Settings › Members prints no address on another member's row. |
 
-### The Grid v2, part 1 (D1499, #3749)
+### The Grid v2 (D1499, #3749)
 
-`routes/deck_grid.ts`, mounted at `/api/decks` beside `deck_check.ts`. Geometry and catalogue in `services/decks/structures.ts`, mirrored (geometry only) in `frontend/src/pages/raise/pitch/gridModel.js`. Client: `lib/api/deckGrid.js` (`deckGridApi.grid`). No page reads it yet: S1's `deckV2Adapter.grid` swaps to it in part 2, after #3885.
+`routes/deck_grid.ts`, mounted at `/api/decks` beside `deck_check.ts`. Geometry and catalogue in `services/decks/structures.ts`, mirrored (geometry only) in `frontend/src/pages/raise/pitch/gridModel.js`. Client: `lib/api/deckGrid.js` (`deckGridApi.grid`), read through `deckV2Adapter.grid` (part 2, the one `SWAPPED` row of the seam). The editor's stage (`GridStage.jsx`), Present and the print page (`BlockGrid.jsx`) place every area with `gridModel.placeOf`, so they draw this route's boxes; ⋯ › Slide size writes `theme.aspect` with the next version save, so no route is added for it.
 
 | Route | Who | What it answers |
 | --- | --- | --- |
