@@ -281,3 +281,16 @@ test('D1604: Discard releases a generated photo and places nothing; More image o
     assert.ok(n.by('pitch-image-lightbox'), 'D903\'s lightbox, for style, palette and backgrounds');
   } finally { await n.close(); }
 });
+
+test('D1604: deckImagesApi.plan reads GET /api/decks/:id/images/plan, a route on main', async () => {
+  // Mutation checked: point plan at `/decks/:id/images` → the path differs and this fails.
+  const seen = [];
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    seen.push([init.method || 'GET', String(url).replace(/^.*?\/api\//, '/api/').replace(/\?.*$/, '')]);
+    return new Response('{"capability":{"available":true},"cards":[]}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const restore = installDocument();
+  try { await deckImagesApi.plan('12 a'); } finally { globalThis.fetch = orig; restore(); }
+  assert.deepEqual(seen, [['GET', '/api/decks/12%20a/images/plan']]);
+});

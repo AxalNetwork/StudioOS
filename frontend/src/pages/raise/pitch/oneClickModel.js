@@ -40,8 +40,20 @@ export const PROPOSED = 'Proposed';
 export const LEFT_OUT = 'Left out · add data to include';
 export const ACCEPT_ALL_PRESENT = 'Accept all and present';
 export const ACCEPT_LINE = 'Accept saves the ticked cards as the new current version. Your earlier versions stay as they are.';
+/**
+ * When Accept also writes the theme it saves two versions: main's keep-slides
+ * copies the base version's theme and takes none of its own, and the theme is
+ * then saved with `PUT /api/decks/:id`, which writes a version of its own.
+ * The review says so before the press. Keep-slides taking a theme is #3768's
+ * (it owns New deck's routes in `deck_new.ts`); then this collapses to one.
+ */
+export const ACCEPT_THEME_LINE = 'Accept saves the ticked cards as a new version, then saves the theme as one more version on top of it, which becomes current. Your earlier versions stay as they are.';
 export const NOTHING_TICKED = 'Tick at least one card to accept.';
 export const SAVED_LINE = (v) => `Saved as v${v}. It is now the current version.`;
+/** After a theme write: the version the cards went into, and the one the theme added on top. */
+export const SAVED_THEMED_LINE = (cardsV, v) => `Saved as v${v} in the theme you picked. It is now the current version; v${cardsV} holds the same cards in the earlier theme.`;
+/** A card the proposal already kept: keep-slides adds to what is kept, so Accept saves it whatever the box says. */
+export const ALREADY_KEPT = 'Already kept';
 export const THEME_FAILED = 'The cards were saved, but the theme could not be written. Set it in the editor under ⋯ › Theme.';
 export const KIT_UNREAD = 'Your brand kit could not be read, so the deck keeps Neutral light. Change it here or later in the editor.';
 export const LIVE_LATER = 'Live progress per card';
@@ -100,10 +112,28 @@ export function reviewCards(proposal, items = []) {
   });
 }
 
+/**
+ * The cards the proposal has already kept (`proposal.kept`). Main's
+ * keep-slides merges them with whatever indexes Accept sends
+ * (`deck_new.ts`: `kept = keptIndexes([...proposal.kept, ...asked])`), so
+ * they are saved whatever the review's boxes say: the review locks them in.
+ */
+export function keptAlready(proposal) {
+  return new Set((Array.isArray(proposal?.kept) ? proposal.kept : []).filter(Number.isInteger));
+}
+
 /** The cards ticked before anyone touches the review: every card, less those with nothing recorded, plus any already kept. */
 export function defaultTicks(cards, proposal = null) {
-  const kept = new Set(Array.isArray(proposal?.kept) ? proposal.kept : []);
+  const kept = keptAlready(proposal);
   return new Set(cards.filter((c) => !c.emptyOnly || kept.has(c.index)).map((c) => c.index));
+}
+
+/** One box flipped, unless the card is already kept: Accept saves that one anyway, so it cannot be unticked. */
+export function flipTick(ticked, index, locked = new Set()) {
+  if (locked.has(index)) return ticked;
+  const next = new Set(ticked);
+  if (next.has(index)) next.delete(index); else next.add(index);
+  return next;
 }
 
 /**
@@ -117,8 +147,12 @@ export function acceptBody(ticked) {
   return indexes.length ? { indexes, save: true } : null;
 }
 
-/** The cards left out, as the review lists them: the unticked ones, each with what would bring it back. */
-export const leftOut = (cards, ticked) => cards.filter((c) => !ticked.has(c.index));
+/**
+ * The cards left out, as the review lists them: the unticked ones, each with
+ * what would bring it back. A card already kept is never left out, because
+ * Accept saves it.
+ */
+export const leftOut = (cards, ticked, locked = new Set()) => cards.filter((c) => !ticked.has(c.index) && !locked.has(c.index));
 
 /** "Ready to present: 10 cards, 2 left out." */
 export function readyLine(kept, left) {
@@ -140,8 +174,19 @@ export function themePick(baseTheme, kit) {
   return { theme: { kind: 'neutral_light', background: null }, from: kit.status === 'error' ? 'unread' : 'none', line: 'Theme: Neutral light' };
 }
 
-/** The theme choices the review's Change offers: the three kinds main renders. */
+/** The theme kinds main renders. */
 export const THEME_CHOICES = Object.freeze(Object.keys(THEME_LABELS));
+
+/**
+ * The choices the review's Change offers: the two neutral themes always, and
+ * "From your brand kit" only when the venture has a kit read back, or the
+ * base version is already Brand. A venture with no kit, or a kit that could
+ * not be read, is never offered a brand theme with nothing behind it.
+ */
+export function themeChoices(kit, baseTheme = null) {
+  const brand = (kit?.status === 'ok' && Boolean(kit.data?.kit)) || baseTheme?.kind === 'brand';
+  return THEME_CHOICES.filter((k) => k !== 'brand' || brand);
+}
 
 /** Whether Accept must write the theme after saving: only a pick that differs from what the saved version carries. */
 export function themeToWrite(chosen, baseTheme) {

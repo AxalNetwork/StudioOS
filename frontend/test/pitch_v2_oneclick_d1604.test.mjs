@@ -34,8 +34,8 @@ import { deckEditorApi } from '../src/lib/api/deckEditor.js';
 import { deckImagesApi } from '../src/lib/api/deckImages.js';
 import OneClickBuild, { ProposalReview } from '../src/pages/raise/pitch/OneClickBuild.jsx';
 import {
-  ACCEPT_ALL_PRESENT, LEFT_OUT, MISSING_PREFIX, acceptBody, buildingLine, defaultTicks, elapsedLine, freshnessRows, imageAsk, imagesHold, imagesOffer,
-  leftOut, readableOverlay, readyLine, reviewCards, themePick, themeToWrite,
+  ACCEPT_ALL_PRESENT, ACCEPT_LINE, ACCEPT_THEME_LINE, ALREADY_KEPT, LEFT_OUT, MISSING_PREFIX, SAVED_THEMED_LINE, acceptBody, buildingLine, defaultTicks, elapsedLine,
+  flipTick, freshnessRows, imageAsk, imagesHold, imagesOffer, keptAlready, leftOut, readableOverlay, readyLine, reviewCards, themeChoices, themePick, themeToWrite,
 } from '../src/pages/raise/pitch/oneClickModel.js';
 import { CONTRAST_MIN, overlayContrast } from '../src/pages/raise/pitch/imageContrast.js';
 
@@ -80,6 +80,13 @@ test('the missing-data cut: a not-recorded-only card is unticked and left out, w
   assert.equal(acceptBody(new Set()), null, 'nothing ticked, nothing sent');
   // A card the founder already kept stays ticked, even with nothing recorded: keep-slides adds to what is kept.
   assert.deepEqual([...defaultTicks(cards, { kept: [2] })].sort(), [0, 1, 2]);
+  // …and it cannot be unticked or left out: main's keep-slides merges the kept list with what is sent, so Accept saves it anyway.
+  // Mutation checked: drop the lock in flipTick → card 2 unticks and is listed as left out; drop it in leftOut → listed.
+  const locked = keptAlready({ kept: [2] });
+  const kt = flipTick(defaultTicks(cards, { kept: [2] }), 2, locked);
+  assert.ok(kt.has(2), 'an already kept card stays ticked');
+  assert.deepEqual(leftOut(cards, new Set([0, 1]), locked), [], 'and is never left out');
+  assert.deepEqual([...flipTick(new Set([0, 1]), 1)].sort(), [0], 'any other card flips');
   // A chart, a bound line or a recorded tile is content; a heading and a not-recorded line are not.
   const chart = reviewCards({ slides: [{ blocks: [heading('x'), { kind: 'chart' }, { kind: 'text', text: `${MISSING_PREFIX} y.` }] }] });
   assert.equal(chart[0].emptyOnly, false);
@@ -97,6 +104,12 @@ test('the theme is part of the proposal: the version\'s, else the brand kit\'s, 
   assert.deepEqual(themeToWrite({ kind: 'brand' }, null), { kind: 'brand', background: null });
   assert.equal(themeToWrite({ kind: 'brand' }, { kind: 'brand' }), null, 'the same theme is not written again');
   assert.equal(themeToWrite({ kind: 'neutral_light' }, null), null, 'a version with no theme already draws Neutral light');
+  // Change offers "From your brand kit" only when there is a kit behind it, or the version is Brand already.
+  // Mutation checked: offer every kind → brand appears with no kit and this fails.
+  assert.deepEqual(themeChoices({ status: 'ok', data: { kit: { palette: {} } } }, null), ['brand', 'neutral_light', 'neutral_dark']);
+  assert.deepEqual(themeChoices({ status: 'ok', data: { kit: null } }, null), ['neutral_light', 'neutral_dark']);
+  assert.deepEqual(themeChoices({ status: 'error', data: null }, null), ['neutral_light', 'neutral_dark']);
+  assert.deepEqual(themeChoices({ status: 'error', data: null }, { kind: 'brand' }), ['brand', 'neutral_light', 'neutral_dark']);
 });
 
 test('#3877 freshness, the build line and the images plan read as drawn; a partial price is never a price', () => {
@@ -185,7 +198,7 @@ async function mount(element, stubs = {}, url = '/raise/pitch/new?project_id=1')
   };
 }
 
-const CTX = { audiences: [{ id: 'pre_seed_fund', label: 'Pre-seed fund' }], fast_path: { audience: 'pre_seed_fund', length: 'short' },
+const CTX = { audiences: [{ id: 'pre_seed_fund', label: 'Pre-seed fund' }], fast_path: { audience: 'pre_seed_fund', length: 'short' }, round: { uid: 'round-1' },
   standard: { short: [{ card: 'title', title: 'Title' }, { card: 'team', title: 'Team' }] } };
 
 test('the one-click: Build says what it holds, shows the cards it will write while it runs, and lands on the review', async () => {
@@ -198,17 +211,27 @@ test('the one-click: Build says what it holds, shows the cards it will write whi
   try {
     await m.press(m.by('pitch-studio-fast-build'));
     assert.match(m.text(m.by('pitch-studio-fast-hold')), /^Holds up to \$0\.0060 · you pay what it uses$/);
+    // The live region is mounted with the dialog, empty, so the build's start is a change it announces.
+    // Mutation checked: mount it only while busy (or with its text from the start) → this fails.
+    const announce = m.by('pitch-studio-fast-announce');
+    assert.ok(announce, 'the live region exists before the build');
+    assert.deepEqual([m.pr(announce).role, m.pr(announce)['aria-live'], m.text(announce)], ['status', 'polite', '']);
     await m.fire(m.by('pitch-studio-fast-run'));
-    // While the synchronous build runs: what it writes and a polite status; no Stop, no footer to press.
+    assert.equal(m.text(m.by('pitch-studio-fast-announce')), 'Building 2 cards from your records.');
+    // While the synchronous build runs: what it writes and the polite line; no Stop, no footer to press.
     const progress = m.by('pitch-build-progress');
     assert.ok(progress, 'BuildProgress while the build runs');
-    assert.equal(m.pr(m.by('pitch-build-progress-line')).role, 'status');
+    // Mutation checked: put aria-busy back on the section → this fails (a busy ancestor holds the announcement).
+    assert.equal(m.pr(progress)['aria-busy'], undefined, 'nothing holds the announcement back');
+    assert.equal(m.pr(m.by('pitch-build-progress-line')).role, undefined, 'one live region, not two');
     assert.match(m.text(m.by('pitch-build-progress-line')), /^Building 2 cards from your records\.$/);
     assert.match(m.text(m.by('pitch-build-progress-cards')), /01 Title 02 Team/);
     assert.ok(!m.all().some((n) => n.tagName === 'BUTTON' && /\bStop\b/.test(n.textContent || '')), 'no Stop on main');
     assert.match(m.text(m.by('pitch-build-progress-live-later')), /Live progress per card Coming later/);
     const [, body, headers] = m.named('newDeck.build')[0];
-    assert.deepEqual(body, { project_id: 1, audience: 'pre_seed_fund', length: 'short' }, 'the read\'s brief, nothing guessed');
+    // Mutation checked: drop round_ref from the build body → this fails.
+    assert.deepEqual(body, { project_id: 1, audience: 'pre_seed_fund', length: 'short', round_ref: 'round-1' }, 'the read\'s brief and round, nothing guessed');
+    assert.equal(m.named('newDeck.quote')[0][1].round_ref, 'round-1', 'the quote prices the same build');
     assert.equal(headers['X-Rail-Option'], encodeURIComponent('deck:build'));
     await act(async () => { finish({ proposal: { id: 77 } }); });
     await m.settle();
@@ -235,6 +258,9 @@ test('the review: the cut, Left out with its links, the brand theme named and wr
     assert.match(m.text(m.by('pitch-review-blocks-1')), /Not recorded/);
     assert.doesNotMatch(m.text(m.by('pitch-review-blocks-1')), /MRR\s*0\b/);
     assert.deepEqual(m.calls.filter(([k]) => k !== 'editor.brandKit'), [], 'nothing is written before Accept');
+    // The theme write saves one more version, and the review says so before the press.
+    // Mutation checked: keep ACCEPT_LINE when a theme will be written → this fails.
+    assert.equal(m.text(m.by('pitch-review-accept-line')), ACCEPT_THEME_LINE);
     await m.press(m.by('pitch-review-accept-present'));
     // Mutation checked: send every card (or `all: true`) → the kept list is [0, 1, 2] and this fails.
     assert.deepEqual(m.named('newDeck.keepSlides')[0].slice(1), [77, { indexes: [0, 1], save: true }]);
@@ -256,6 +282,9 @@ test('the review: the version\'s own theme is kept and nothing more is written; 
   });
   try {
     assert.match(m.text(m.by('pitch-review-theme')), /^Theme: Neutral dark · as on your current version/);
+    const options = m.all().filter((n) => n.tagName === 'OPTION').map((n) => m.pr(n).value);
+    assert.deepEqual(options, ['neutral_light', 'neutral_dark'], 'no brand kit, so no brand theme is offered');
+    assert.equal(m.text(m.by('pitch-review-accept-line')), ACCEPT_LINE, 'no theme to write: one version');
     await m.tick(m.by('pitch-review-tick-2'));
     assert.match(m.text(m.by('pitch-review-ready')), /^Ready to present: 3 cards\.$/);
     assert.ok(!m.by('pitch-review-left-out'));
@@ -279,6 +308,8 @@ test('pictures after Accept: the plan, one summed hold, each picture a proposal,
     'api.deckUpdate': async (id, b) => ({ id: 14, version: 5, title: b.title, slides: b.slides }),
   });
   try {
+    // Mutation checked: read the plan of the base version while the review is open → a call is recorded here and this fails.
+    assert.equal(m.named('images.plan').length, 0, 'the images plan is read only after Accept');
     await m.press(m.by('pitch-review-accept'));
     assert.deepEqual(m.named('images.plan')[0].slice(1), [12], 'the plan of the version Accept saved');
     assert.match(m.text(m.by('pitch-images-offer')), /Add pictures to 1 card/);
@@ -297,5 +328,43 @@ test('pictures after Accept: the plan, one summed hold, each picture a proposal,
     const saved = m.named('api.deckUpdate')[0][2];
     assert.equal(saved.slides[0].background.image_url, 'https://img.example/1.png');
     assert.match(m.text(m.by('pitch-images-done')), /saved as v5/);
+  } finally { await m.close(); }
+});
+
+test('the review: a card the proposal already kept is locked in, never offered as left out', async () => {
+  const m = await mount(h(ProposalReview, { projectId: 1, q: '?project_id=1', proposal: { ...PROPOSAL, kept: [2] }, items: ITEMS, versions: [{ id: 9, theme: { kind: 'neutral_light' } }] }), {
+    'editor.brandKit': async () => ({ project_id: 1, kit: null }),
+    'newDeck.keepSlides': async (_id, b) => ({ deck: { id: 12, version: 4, title: 'Pitch deck', slides: SLIDES, theme: { kind: 'neutral_light' } } }),
+    'images.plan': async () => ({ capability: { available: true }, cards: [] }),
+  });
+  try {
+    const box = m.by('pitch-review-tick-2');
+    // Mutation checked: drop `disabled={fixed}` → this fails; drop the lock in flipTick → the tick below unticks it and fails.
+    assert.deepEqual([m.pr(box).checked, m.pr(box).disabled], [true, true], 'checked and not togglable');
+    assert.equal(m.text(m.by('pitch-review-kept-2')), ALREADY_KEPT);
+    await m.tick(box);
+    assert.equal(m.pr(m.by('pitch-review-tick-2')).checked, true, 'an untick does not take');
+    assert.ok(!m.by('pitch-review-left-out'), 'not listed under Left out');
+    assert.match(m.text(m.by('pitch-review-ready')), /^Ready to present: 3 cards\.$/);
+    // Any other card still unticks and is listed.
+    await m.tick(m.by('pitch-review-tick-1'));
+    assert.match(m.text(m.by('pitch-review-left-out')), /02 Traction/);
+    assert.doesNotMatch(m.text(m.by('pitch-review-left-out')), /03 Market/);
+  } finally { await m.close(); }
+});
+
+test('the review: a theme write is one more version, and the saved line names both', async () => {
+  const m = await mount(h(ProposalReview, { projectId: 1, q: '?project_id=1', proposal: PROPOSAL, items: ITEMS, versions: [{ id: 9, theme: null }] }), {
+    'editor.brandKit': async () => ({ project_id: 1, kit: { palette: {} } }),
+    'newDeck.keepSlides': async (_id, b) => ({ deck: { id: 12, version: 4, title: 'Pitch deck', slides: b.indexes.map((i) => SLIDES[i]), theme: null } }),
+    'api.deckUpdate': async (id, b) => ({ id: 13, version: 5, title: b.title, slides: b.slides, theme: b.theme }),
+    'images.plan': async () => ({ capability: { available: true }, cards: [] }),
+  });
+  try {
+    await m.press(m.by('pitch-review-accept'));
+    assert.equal(m.named('api.deckUpdate').length, 1);
+    // Mutation checked: SAVED_LINE after a theme write → "Saved as v5. It is now…" and this fails.
+    assert.equal(m.text(m.by('pitch-review-saved-line')), SAVED_THEMED_LINE(4, 5));
+    assert.match(SAVED_THEMED_LINE(4, 5), /v4 holds the same cards in the earlier theme/);
   } finally { await m.close(); }
 });

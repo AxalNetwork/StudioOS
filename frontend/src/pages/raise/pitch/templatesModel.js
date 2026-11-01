@@ -28,6 +28,20 @@ export const SAVE_MINE = 'Save as my template';
 export const SAVE_MINE_LINE = 'Text and figures are removed; structure, theme and decor are kept.';
 export const YOURS_EMPTY = 'No templates of yours yet.';
 export const USE_SENTENCE = 'Eadwyn fills the template from your records as a proposal beside your current version. You review it before anything is saved.';
+/**
+ * The templates `POST /api/decks/apply-method` does not propose: it copies
+ * the Lab's records and runs no model, so it writes a new version at once
+ * (`cloudflare-worker/src/routes/decks.ts`, the `axal_spinout_demoday`
+ * branch, which answers `{ deck }`, never a proposal).
+ */
+export const DIRECT_METHODS = Object.freeze(['axal_spinout_demoday']);
+export const DIRECT_SENTENCE = 'This template copies your Lab records into a new version straight away. No model runs. Your earlier versions stay.';
+/** The Use this template dialog's sentence for this template: what apply-method really does with it. */
+export const templateSentence = (methodId) => (DIRECT_METHODS.includes(methodId) ? DIRECT_SENTENCE : USE_SENTENCE);
+/** New deck's line under a template start. */
+export const templateStartLine = (methodId) => (DIRECT_METHODS.includes(methodId)
+  ? 'This template copies your Lab records; the outline below is not used.'
+  : 'Eadwyn fills the template from your records; the outline below is not used.');
 
 /** The three filter rows, in pd29's order; Audience is New deck's seven. */
 export const FILTERS = Object.freeze([

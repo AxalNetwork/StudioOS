@@ -9,7 +9,7 @@ import { reportError } from '../../../lib/log';
 import { railPressHeaders } from '../../../lib/railPage';
 import { Lightbox } from '../../../ui';
 import { useRailOption } from '../../../ui/railCrumbs';
-import BuildProgress from './BuildProgress';
+import BuildProgress, { BuildAnnouncer } from './BuildProgress';
 import { BlockGrid, gridBlocks } from './BlockGrid';
 import { ACCEPT_ALL, DISCARD, HOLD } from './deckV2Model';
 import { THEME_LABELS, cardColours } from './editorModel';
@@ -18,8 +18,10 @@ import {
   DISCARD_SENTENCE, FAST_TITLE, NEW_PATH, NOT_ON_STUDIOOS, PROPOSAL_LINE, TITLES_ONLY_LINE, aiTokens, buildSentence, fastBrief, fastPathLine, refusalOf,
 } from './newDeckModel';
 import {
-  ACCEPT_ALL_PRESENT, ACCEPT_LINE, FAST_LINE, FAST_UNREAD, KIT_UNREAD, LEFT_OUT, NOTHING_TICKED, PROPOSED, REVIEW_TITLE, SAVED_LINE, THEME_CHOICES, THEME_FAILED,
-  acceptBody, defaultTicks, freshnessRows, imageAsk, imagesHold, imagesOffer, leftOut, readableOverlay, readyLine, reviewCards, themePick, themeToWrite,
+  ACCEPT_ALL_PRESENT, ACCEPT_LINE, ACCEPT_THEME_LINE, ALREADY_KEPT, FAST_LINE, FAST_UNREAD, KIT_UNREAD, LEFT_OUT, NOTHING_TICKED, PROPOSED, REVIEW_TITLE, SAVED_LINE,
+  SAVED_THEMED_LINE, THEME_FAILED,
+  acceptBody, buildingLine, defaultTicks, flipTick, freshnessRows, imageAsk, imagesHold, imagesOffer, keptAlready, leftOut, readableOverlay, readyLine, reviewCards,
+  themeChoices, themePick, themeToWrite,
 } from './oneClickModel';
 import { presentHref } from './presentExportModel';
 import { EDIT_PATH, STUDIO_PATH } from './pitchStudioModel';
@@ -45,7 +47,11 @@ import { EDIT_PATH, STUDIO_PATH } from './pitchStudioModel';
  *                   present, and Discard. Accept keeps the ticked cards as the
  *                   new version in one press (`keep-slides` with `save`), then
  *                   writes the picked theme (`PUT /api/decks/:id`) when it
- *                   differs from the version's. Nothing is saved before Accept.
+ *                   differs from the version's, which saves one more version,
+ *                   and the review says so before the press. A card the
+ *                   proposal already kept is locked in ("Already kept"): main's
+ *                   keep-slides saves it whatever is sent. Nothing is saved
+ *                   before Accept.
  *                   New deck's outline build lands here too.
  *   ImagesOffer     after Accept: the images plan (`GET /api/decks/:id/images/plan`),
  *                   "Add pictures to N cards", one quote per card summed into
@@ -71,7 +77,8 @@ const SELECT = 'rounded-[8px] border border-axal-hairline bg-white px-2 py-1 tex
 /** Where a built proposal is reviewed: New deck, reopened on it. */
 export const reviewHref = (q, id) => `${NEW_PATH}${q}${q ? '&' : '?'}proposal=${encodeURIComponent(id)}`;
 
-function RefusalLine({ refusal, testId }) {
+/** A refusal in the Worker's words, with its plan link ("See plans") and its top-up, as `refusalOf` gives them. */
+export function RefusalLine({ refusal, testId }) {
   if (!refusal) return null;
   return (
     <span role="alert" className="text-[12px] font-semibold text-axal-violet dark:text-violet-300" data-testid={testId}>
@@ -133,6 +140,8 @@ export default function OneClickBuild({
   const ex = Array.isArray(exclude) ? exclude : [];
   const exKey = ex.join(',');
   const busy = startedAt != null;
+  // The venture's round, as New deck's own Build sends it: the brief's when the page gives one, else the read's.
+  const roundRef = brief && brief.round_ref !== undefined ? brief.round_ref : ctx?.round?.uid ?? null;
   useRailOption(busy ? 'deck:build' : null, 'Build deck');
 
   useEffect(() => {
@@ -147,11 +156,11 @@ export default function OneClickBuild({
   useEffect(() => {
     if (!brief) return undefined;
     let live = true;
-    newDeckApi.quote({ project_id: projectId, step: 'build', audience: brief.audience, length: brief.length, ...(ex.length ? { exclude: ex } : {}) })
+    newDeckApi.quote({ project_id: projectId, step: 'build', audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}) })
       .then((qt) => { if (live) setQuote(qt); }, (e) => { if (live) setQuote(null); reportError('pitch-oneclick:quote', e); });
     return () => { live = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, brief?.audience, brief?.length, exKey]);
+  }, [projectId, brief?.audience, brief?.length, roundRef, exKey]);
 
   const titles = useMemo(() => {
     const rows = brief ? ctx?.standard?.[brief.length] : null;
@@ -162,7 +171,7 @@ export default function OneClickBuild({
     if (!brief) return;
     setStartedAt(Date.now()); setRefusal(null);
     try {
-      const r = await newDeckApi.build({ project_id: projectId, audience: brief.audience, length: brief.length, ...(ex.length ? { exclude: ex } : {}) }, railPressHeaders('deck:build'));
+      const r = await newDeckApi.build({ project_id: projectId, audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}) }, railPressHeaders('deck:build'));
       setOpen(false);
       if (onBuilt) onBuilt(r); else navigate(reviewHref(q, r.proposal.id));
     } catch (e) { setRefusal(refusalOf(e)); setOpen(false); reportError('pitch-oneclick:build', e); } finally { setStartedAt(null); }
@@ -193,6 +202,8 @@ export default function OneClickBuild({
               <button type="button" className={PRIMARY} onClick={build} data-testid={`${testId}-run`}>Build deck</button>
             </div>
           )}>
+          {/* Mounted with the dialog and empty until the build starts, so the change is announced. */}
+          <BuildAnnouncer text={busy ? buildingLine(brief?.cards ?? null) : ''} testId={`${testId}-announce`} />
           {busy ? <BuildProgress cards={brief?.cards ?? null} titles={titles} startedAt={startedAt} /> : (
             <div className="flex flex-col gap-2">
               <p className={`m-0 ${MUTED}`}>{buildSentence(quote, brief?.cards ?? null)}</p>
@@ -220,6 +231,7 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
   const [kit, setKit] = useState({ status: 'loading', data: null });
   const [picked, setPicked] = useState(null);
   const cards = useMemo(() => reviewCards(proposal, items), [proposal, items]);
+  const locked = useMemo(() => keptAlready(proposal), [proposal]);
   const [ticks, setTicks] = useState(() => defaultTicks(reviewCards(proposal, []), proposal));
   const [busy, setBusy] = useState(null);
   const [refusal, setRefusal] = useState(null);
@@ -238,14 +250,16 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
   const pick = themePick(baseTheme, kit);
   const theme = picked ? { kind: picked, background: null } : pick?.theme || null;
   const colours = cardColours(theme, kit.data?.kit);
-  const out = leftOut(cards, ticks);
+  const out = leftOut(cards, ticks, locked);
+  const choices = themeChoices(kit, baseTheme);
+  const willWrite = themeToWrite(theme, baseTheme) != null;
   const kept = cards.length - out.length;
   const worded = built?.wording?.by === 'Eadwyn' || (!built && cards.some((c) => {
     const h = (c.slide?.blocks || []).find((b) => b?.kind === 'text' && b.style === 'heading');
     return h?.text && h.text !== c.title;
   }));
 
-  const flip = (i) => setTicks((s) => { const next = new Set(s); if (next.has(i)) next.delete(i); else next.add(i); return next; });
+  const flip = (i) => setTicks((s) => flipTick(s, i, locked));
 
   const accept = async (present) => {
     const body = acceptBody(ticks);
@@ -257,15 +271,18 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
       if (!deck) throw new Error('The cards could not be saved. Nothing was changed.');
       const write = themeToWrite(theme, baseTheme);
       let themeFailed = false;
+      let cardsVersion = null;
       if (write) {
+        // Main's keep-slides takes no theme, so the theme is one more version on top (ACCEPT_THEME_LINE).
+        cardsVersion = deck.version ?? null;
         try {
           const d = await api.deckUpdate(deck.id, { slides: deck.slides, title: deck.title, theme: write });
           deck = d?.deck || d || deck;
-        } catch (e) { themeFailed = true; reportError('pitch-review:theme', e); }
+        } catch (e) { themeFailed = true; cardsVersion = null; reportError('pitch-review:theme', e); }
       }
       onSaved?.(deck);
       if (present && !themeFailed) { navigate(presentHref(projectId, deck.id)); return; }
-      setSaved({ deck, themeFailed });
+      setSaved({ deck, themeFailed, cardsVersion });
     } catch (e) { setRefusal(refusalOf(e)); reportError('pitch-review:accept', e); } finally { setBusy(null); }
   };
 
@@ -277,7 +294,9 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
   if (saved) {
     return (
       <section className={`${CARD} flex flex-col gap-3 p-4`} aria-label={REVIEW_TITLE} data-testid="pitch-review-saved">
-        <span role="status" className={`text-[14px] font-extrabold ${INK}`}>{SAVED_LINE(saved.deck.version ?? '?')}</span>
+        <span role="status" className={`text-[14px] font-extrabold ${INK}`} data-testid="pitch-review-saved-line">
+          {saved.cardsVersion != null ? SAVED_THEMED_LINE(saved.cardsVersion, saved.deck.version ?? '?') : SAVED_LINE(saved.deck.version ?? '?')}
+        </span>
         {saved.themeFailed ? <span role="alert" className={MUTED} data-testid="pitch-review-theme-failed">{THEME_FAILED}</span> : null}
         <span className="flex flex-wrap gap-2">
           <Link to={presentHref(projectId, saved.deck.id)} className={PRIMARY} data-testid="pitch-review-present">Present</Link>
@@ -306,7 +325,7 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
             <label className="flex items-center gap-1.5 text-axal-muted dark:text-gray-400">
               <span>Change</span>
               <select className={SELECT} aria-label="Change the theme" value={theme?.kind || ''} disabled={!pick} onChange={(e) => setPicked(e.target.value || null)} data-testid="pitch-review-theme-change">
-                {THEME_CHOICES.map((k) => <option key={k} value={k}>{THEME_LABELS[k]}</option>)}
+                {choices.map((k) => <option key={k} value={k}>{THEME_LABELS[k]}</option>)}
               </select>
             </label>
           </span>
@@ -323,7 +342,7 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
             </button>
             <button type="button" className={GHOST} onClick={() => setDiscarding(true)} disabled={Boolean(busy)} data-testid="pitch-review-discard">{DISCARD}</button>
           </span>
-          <span className={`${SMALL} max-w-[360px] text-right`}>{kept ? ACCEPT_LINE : NOTHING_TICKED}</span>
+          <span className={`${SMALL} max-w-[360px] text-right`} data-testid="pitch-review-accept-line">{kept ? (willWrite ? ACCEPT_THEME_LINE : ACCEPT_LINE) : NOTHING_TICKED}</span>
         </div>
       </div>
       <RefusalLine refusal={refusal} testId="pitch-review-refusal" />
@@ -332,7 +351,8 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
       ) : null}
       <ol className="m-0 grid list-none items-stretch gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {cards.map((c) => {
-          const on = ticks.has(c.index);
+          const on = ticks.has(c.index) || locked.has(c.index);
+          const fixed = locked.has(c.index);
           const blocks = gridBlocks(c.slide);
           return (
             <li key={c.index} className={`${CARD} flex flex-col gap-2 p-2.5 ${on ? '' : 'opacity-60'}`} data-testid={`pitch-review-card-${c.index}`}>
@@ -342,10 +362,11 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
                 )}
               </div>
               <label className="flex items-start gap-2 text-[12px]">
-                <input type="checkbox" className="mt-0.5 h-4 w-4 accent-axal-violet" checked={on} onChange={() => flip(c.index)}
+                <input type="checkbox" className="mt-0.5 h-4 w-4 accent-axal-violet disabled:opacity-60 dark:disabled:opacity-60" checked={on} disabled={fixed} onChange={() => flip(c.index)}
                   aria-label={`Include card ${c.n} · ${c.title}`} data-testid={`pitch-review-tick-${c.index}`} />
                 <span className="flex min-w-0 flex-col">
                   <span className={`font-semibold ${INK}`}><span className="font-mono text-axal-muted dark:text-gray-400">{c.n}</span> {c.title}</span>
+                  {fixed ? <span className={SMALL} data-testid={`pitch-review-kept-${c.index}`}>{ALREADY_KEPT}</span> : null}
                   {c.emptyOnly ? <span className={SMALL}>Nothing on this card is recorded yet.</span> : null}
                   {c.partial ? <span className={SMALL} data-testid={`pitch-review-partial-${c.index}`}>A figure here is not recorded: it reads {NOT_ON_STUDIOOS}, never 0.</span> : null}
                 </span>

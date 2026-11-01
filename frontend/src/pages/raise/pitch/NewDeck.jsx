@@ -9,7 +9,7 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, WorkerRail } from '../../../ui';
 import { useRailOption } from '../../../ui/railCrumbs';
 import PitchPage from './PitchPage';
-import BuildProgress from './BuildProgress';
+import BuildProgress, { BuildAnnouncer } from './BuildProgress';
 import OneClickBuild, { FreshnessLines, ProposalReview } from './OneClickBuild';
 import { CoverageMeter, SourcesStep, useDeckSources } from './SourcesBoards';
 import { EDIT_PATH, READ_ONLY, STUDIO_PATH, asList, isReadOnly, ventureQuery } from './pitchStudioModel';
@@ -17,7 +17,8 @@ import {
   NOT_ON_STUDIOOS, NO_ROUND, PROPOSED_BY_EADWYN, ROUND_LINK, addRow, aiTokens, buildSentence, chipsFor, editRow, estimateLine,
   fastBrief, moveRow, outlineSentence, refusalOf, removeRow, roundLine, rowWarning, startOptions,
 } from './newDeckModel';
-import { ONE_CLICK_LINE, ONE_CLICK_TITLE, audienceLabel } from './oneClickModel';
+import { ONE_CLICK_LINE, ONE_CLICK_TITLE, audienceLabel, buildingLine } from './oneClickModel';
+import { templateStartLine, templateSentence } from './templatesModel';
 import { availability } from './deckV2Adapter';
 import { HOLD, LATER } from './deckV2Model';
 import { markRecommended } from './studioActionsModel';
@@ -170,7 +171,7 @@ function Refusal({ refusal }) {
 }
 
 /** The dialog every run opens: what it does and holds, then Confirm or Cancel; a build shows its progress while it runs. */
-function Confirm({ title, sentence, action, hold = null, busy, progress = null, onConfirm, onClose }) {
+function Confirm({ title, sentence, action, hold = null, busy, progress = null, announce = null, onConfirm, onClose }) {
   return (
     <Lightbox label={title} title={title} width={540} onClose={() => !busy && onClose()} testId="pitch-new-dialog"
       footer={busy && progress ? null : (
@@ -179,6 +180,8 @@ function Confirm({ title, sentence, action, hold = null, busy, progress = null, 
           <button type="button" className={PRIMARY} onClick={onConfirm} disabled={busy} data-testid="pitch-new-confirm">{busy ? 'Working…' : action}</button>
         </div>
       )}>
+      {/* The build's live region, mounted empty with the dialog and filled when the build starts. */}
+      {announce != null ? <BuildAnnouncer text={busy ? announce : ''} testId="pitch-new-announce" /> : null}
       {busy && progress ? progress : (
         <div className="flex flex-col gap-2">
           <p className={`m-0 ${MUTED}`}>{sentence}</p>
@@ -328,7 +331,7 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
   return (
     <div className="flex flex-col gap-4" data-testid="pitch-new-page">
       <OneClickBuild projectId={projectId} q="" ctx={ctx} as="section" testId="pitch-new-fast" title={ONE_CLICK_TITLE} line={ONE_CLICK_LINE}
-        brief={audience && length ? { audience, length, label, cards: standard.length || null, why: null } : null} exclude={exclude} onBuilt={onLanded}>
+        brief={audience && length ? { audience, length, label, cards: standard.length || null, why: null, round_ref: ctx?.round?.uid ?? null } : null} exclude={exclude} onBuilt={onLanded}>
         {sources.status !== 'idle' ? (
           <div className="max-w-[420px]" data-testid="pitch-new-fast-coverage">
             <CoverageMeter coverage={sources.data?.coverage} status={sources.status} size="S" onRetry={sources.retry} />
@@ -408,9 +411,9 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
           ))}
           {templateStart ? (
             <span className="flex flex-wrap items-center gap-3">
-              <span className={MUTED}>Eadwyn fills the template from your records; the outline below is not used.</span>
+              <span className={MUTED} data-testid="pitch-new-template-line">{templateStartLine(start.id)}</span>
               <button type="button" className={PRIMARY} data-testid="pitch-new-use-template"
-                onClick={() => setDialog({ title: 'Use this template', action: 'Use template', sentence: 'Eadwyn fills the template from your records as a proposal beside your current version. You review it before anything is saved.', go: applyTemplate })}>
+                onClick={() => setDialog({ title: 'Use this template', action: 'Use template', sentence: templateSentence(start.id), go: applyTemplate })}>
                 Use this template
               </button>
             </span>
@@ -485,7 +488,8 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
 
       {dialog ? (
         <Confirm {...dialog} busy={busy} onConfirm={dialog.go} onClose={() => setDialog(null)}
-          progress={dialog.build ? <BuildProgress cards={rows.length} titles={rows.map((r) => r.title)} startedAt={startedAt} /> : null} />
+          progress={dialog.build ? <BuildProgress cards={rows.length} titles={rows.map((r) => r.title)} startedAt={startedAt} /> : null}
+          announce={dialog.build ? buildingLine(rows.length) : null} />
       ) : null}
     </div>
   );

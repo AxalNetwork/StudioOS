@@ -12,11 +12,11 @@ import { availability } from './deckV2Adapter';
 import { LATER } from './deckV2Model';
 import { deckRail } from './deckRailGroups';
 import { refusalOf } from './newDeckModel';
-import { reviewHref } from './OneClickBuild';
+import { RefusalLine, reviewHref } from './OneClickBuild';
 import { EDIT_PATH, READ_ONLY, STUDIO_PATH, asList, isReadOnly, ventureQuery } from './pitchStudioModel';
 import {
-  FILTERS, GALLERY, LOCKED_LINE, METHODS_FAILED, NO_TEMPLATES, RECOMMENDED, SAVE_MINE, SAVE_MINE_LINE, TEMPLATES_TITLE, USE_SENTENCE, USE_TEMPLATE, YOURS,
-  galleryTiles,
+  FILTERS, GALLERY, LOCKED_LINE, METHODS_FAILED, NO_TEMPLATES, RECOMMENDED, SAVE_MINE, SAVE_MINE_LINE, TEMPLATES_TITLE, USE_TEMPLATE, YOURS,
+  galleryTiles, templateSentence,
 } from './templatesModel';
 
 /**
@@ -31,13 +31,19 @@ import {
  *             previews its cards; Use this template fills it from the records
  *             (`POST /api/decks/apply-method`, rail option form:deck-template)
  *             as a proposal and lands on the shared review, so nothing is
- *             saved before Accept.
+ *             saved before Accept. The Spin-Out demo day template is the one
+ *             exception on main: it copies Lab records with no model and
+ *             writes its version at once, and its dialog says so
+ *             (`templateSentence`). A refusal keeps its plan link.
  *   Filters   Stage, Audience (New deck's seven) and Style chips, greyed
  *             "Coming later" from the adapter until #3782's tagged store.
  *   Yours     "Your own templates" and Save as my template, from the adapter
  *             (#3782): "Not switched on yet.", never an empty list.
  *
  * A reader (read-only HQ) browses and gets no Use this template.
+ *
+ * Gallery and Yours are two buttons with `aria-pressed`, as New deck's Length
+ * switcher is, not an ARIA tab list.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold disabled:cursor-not-allowed disabled:opacity-50 dark:disabled:opacity-50';
@@ -87,9 +93,9 @@ export default function TemplatesGallery() {
       <div className="flex flex-col gap-4 pb-24 lg:pb-10">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <h1 className={`m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] ${INK}`}>{TEMPLATES_TITLE}</h1>
-          <div role="tablist" aria-label={TEMPLATES_TITLE} className="flex gap-1 rounded-[9px] bg-axal-ground p-1 dark:bg-gray-800">
+          <div role="group" aria-label={TEMPLATES_TITLE} className="flex gap-1 rounded-[9px] bg-axal-ground p-1 dark:bg-gray-800">
             {[['gallery', GALLERY], ['yours', YOURS]].map(([id, label]) => (
-              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+              <button key={id} type="button" aria-pressed={tab === id} onClick={() => setTab(id)}
                 className={`min-h-[32px] rounded-[7px] px-3 text-[12.5px] font-bold ${tab === id ? 'bg-white text-axal-violet shadow-sm dark:bg-gray-900 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`}
                 data-testid={`pitch-templates-tab-${id}`}>{label}</button>
             ))}
@@ -213,11 +219,7 @@ function Gallery({ projectId, projects, q, readOnly }) {
             </ol>
             {tile.locked ? <span className={SMALL}>{LOCKED_LINE}. <Link to="/pricing" className="font-bold text-axal-violet hover:underline dark:text-violet-300">See plans ›</Link></span> : null}
             {canUse && !tile.locked ? <button type="button" className={PRIMARY} onClick={() => setConfirm(true)} data-testid="pitch-templates-use">{USE_TEMPLATE}</button> : null}
-            {refusal ? (
-              <span role="alert" className="text-[12px] font-semibold text-axal-violet dark:text-violet-300" data-testid="pitch-templates-refusal">
-                {refusal.message} {refusal.topUp ? <a href={refusal.topUp.href} className="underline">{refusal.topUp.text}</a> : null}
-              </span>
-            ) : null}
+            <RefusalLine refusal={refusal} testId="pitch-templates-refusal" />
           </>
         ) : <span className={MUTED}>Select a template to see its cards.</span>}
       </aside>
@@ -229,7 +231,7 @@ function Gallery({ projectId, projects, q, readOnly }) {
               <button type="button" className={PRIMARY} onClick={use} disabled={busy} data-testid="pitch-templates-confirm">{busy ? 'Working…' : USE_TEMPLATE}</button>
             </div>
           )}>
-          <p className={`m-0 ${MUTED}`}>{USE_SENTENCE}</p>
+          <p className={`m-0 ${MUTED}`} data-testid="pitch-templates-dialog-sentence">{templateSentence(tile.id)}</p>
         </Lightbox>
       ) : null}
     </div>

@@ -26,7 +26,7 @@ import { api } from '../src/lib/api.js';
 import TemplatesGallery from '../src/pages/raise/pitch/TemplatesGallery.jsx';
 import { AUDIENCE_LABELS } from '../src/pages/raise/pitch/editorModel.js';
 import { SURFACES } from '../src/pages/raise/pitch/deckV2Adapter.js';
-import { FILTERS, TEMPLATES_PATH, cardCount, galleryTiles } from '../src/pages/raise/pitch/templatesModel.js';
+import { DIRECT_SENTENCE, FILTERS, TEMPLATES_PATH, USE_SENTENCE, cardCount, galleryTiles, templateSentence } from '../src/pages/raise/pitch/templatesModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -72,7 +72,7 @@ async function mount(over = {}) {
   stub('listProjects', async () => [{ id: 1, name: 'Synthetic venture' }]);
   stub('deckMethods', over.methods || (async () => ({ methods: METHODS })));
   stub('deckRecommend', async () => REC);
-  stub('deckApplyMethod', async () => ({ proposal: { id: 55, slides: [{ title: 'Problem' }] }, method_id: 'yc_seed' }));
+  stub('deckApplyMethod', over.apply || (async () => ({ proposal: { id: 55, slides: [{ title: 'Problem' }] }, method_id: 'yc_seed' })));
   const restore = installDocument();
   const make = document.createElement.bind(document);
   document.createElement = (tag) => { const n = make(tag); n.focus = () => { document.activeElement = n; }; return n; };
@@ -111,6 +111,7 @@ test('the Gallery reads the methods; Use this template fills a proposal and land
     assert.match(m.text(m.by('pitch-templates-preview')), /Preview · YC seed A first institutional round 01 Problem 02 Solution Use this template/);
     await m.press(m.by('pitch-templates-use'));
     assert.ok(m.by('pitch-templates-dialog'), 'Use opens a dialog that says what it does');
+    assert.equal(m.text(m.by('pitch-templates-dialog-sentence')), USE_SENTENCE, 'a model-filled template is a proposal');
     assert.equal(m.calls.filter(([n]) => n === 'deckApplyMethod').length, 0, 'nothing runs before Confirm');
     await m.press(m.by('pitch-templates-confirm'));
     const [, projectId, methodId, headers] = m.calls.find(([n]) => n === 'deckApplyMethod');
@@ -162,4 +163,50 @@ test('the route: lazy, behind the studio\'s boundary; the home\'s Browse templat
   assert.match(home, /\{ id: 'templates', label: 'Browse templates ›', line: 'Start from a template, by stage and audience', to: TEMPLATES_PATH \}/);
   // The gallery's own press is listed with its rail option.
   assert.match(read('frontend/src/lib/railOptions/founder.js'), /\[TEMPLATES, 'api\.deckApplyMethod\('\]/);
+});
+
+test('the Spin-Out demo day template says it writes a version at once, in the gallery and on New deck', async () => {
+  // apply-method's axal_spinout_demoday branch copies Lab records, runs no model and answers { deck }, never a proposal.
+  assert.match(read('cloudflare-worker/src/routes/decks.ts'), /if \(methodId === 'axal_spinout_demoday'\) \{[\s\S]*?const id = await insertVersion\(/);
+  // Mutation checked: return USE_SENTENCE for every method → both asserts below fail.
+  assert.equal(templateSentence('axal_spinout_demoday'), DIRECT_SENTENCE);
+  assert.equal(DIRECT_SENTENCE, 'This template copies your Lab records into a new version straight away. No model runs. Your earlier versions stay.');
+  assert.equal(templateSentence('yc_seed'), USE_SENTENCE);
+  const m = await mount({
+    methods: async () => ({ methods: [{ id: 'axal_spinout_demoday', label: 'Spin-Out demo day', slide_count: 14, locked: false, slides: [{ id: 's1', title: 'Cover' }] }] }),
+    apply: async () => ({ deck: { id: 31, version: 6 }, method_id: 'axal_spinout_demoday' }),
+  });
+  try {
+    await m.press(m.by('pitch-templates-tile-axal_spinout_demoday'));
+    await m.press(m.by('pitch-templates-use'));
+    assert.equal(m.text(m.by('pitch-templates-dialog-sentence')), DIRECT_SENTENCE, 'the gallery says what apply-method does');
+    await m.press(m.by('pitch-templates-confirm'));
+    assert.equal(m.text(m.by('landed')), '/raise/pitch/edit?project_id=1', 'the version it wrote, in the editor');
+  } finally { await m.close(); }
+  // New deck's dialog and line say the same, from the same words.
+  // Mutation checked: put the literal proposal sentence back in NewDeck → this fails.
+  const nd = codeOnly(read(`${PITCH}/NewDeck.jsx`));
+  assert.match(nd, /sentence: templateSentence\(start\.id\)/);
+  assert.match(nd, /\{templateStartLine\(start\.id\)\}/);
+  assert.doesNotMatch(nd, /as a proposal beside your current version/, 'no literal sentence that is wrong for one template');
+});
+
+test('the gallery\'s refusal is the shared RefusalLine, and Gallery / Yours are pressed buttons, not an unfinished tab list', async () => {
+  const src = codeOnly(read(`${PITCH}/TemplatesGallery.jsx`));
+  // Mutation checked: render only refusal.message and refusal.topUp again → this fails.
+  assert.match(src, /<RefusalLine refusal=\{refusal\} testId="pitch-templates-refusal" \/>/);
+  assert.match(codeOnly(read(`${PITCH}/OneClickBuild.jsx`)), /export function RefusalLine\(/);
+  // Mutation checked: put role="tab" back → this fails.
+  assert.doesNotMatch(src, /role="tab(list|panel)?"/);
+  const m = await mount({ apply: async () => { const e = new Error('Your balance is too low for this run.'); e.status = 402; e.code = 'insufficient_tokens'; throw e; } });
+  try {
+    assert.equal(m.pr(m.by('pitch-templates-tab-gallery'))['aria-pressed'], true);
+    assert.equal(m.pr(m.by('pitch-templates-tab-yours'))['aria-pressed'], false);
+    await m.press(m.by('pitch-templates-tile-yc_seed'));
+    await m.press(m.by('pitch-templates-use'));
+    await m.press(m.by('pitch-templates-confirm'));
+    assert.match(m.text(m.by('pitch-templates-refusal')), /^Your balance is too low for this run\. Add tokens$/);
+    await m.press(m.by('pitch-templates-tab-yours'));
+    assert.equal(m.pr(m.by('pitch-templates-tab-yours'))['aria-pressed'], true);
+  } finally { await m.close(); }
 });
