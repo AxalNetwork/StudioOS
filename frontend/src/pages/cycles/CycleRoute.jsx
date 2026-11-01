@@ -31,6 +31,7 @@ import RecordView, { RecordPhoneProvider } from './RecordView';
 import { HEADER_BUTTON, RecordHeaderProvider } from './RecordHeader.jsx';
 import { PageAsk } from '../../ui/AskButton.jsx';
 import { EmailAction } from '../email/emailParts.jsx';
+import RecordEmailSheet from '../email/RecordEmailSheet.jsx';
 import { emailHref, personOfRecord } from '../email/emailModel.js';
 import { prototypeLovable } from './lovable/lovableModel';
 import InterviewRecord from '../founder/InterviewReviewPage';
@@ -851,6 +852,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
 
   const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
   const [reload, setReload] = useState(0);
+  // #4017 (#3710 IV-D3): the record's Email composes in the right Sheet over the record.
+  const [emailing, setEmailing] = useState(false);
   // D1454 (#3710, IV-D1): the record header's two slots, filled by the record page's portal.
   const [headerSlots, setHeaderSlots] = useState({ pills: null, actions: null });
   const pillsSlot = useCallback((el) => setHeaderSlots((s) => (s.pills === el ? s : { ...s, pills: el })), []);
@@ -861,7 +864,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // or record closes it.
   const [dialog, setDialog] = useState(null);
   const openDialog = useCallback((element, { page = false } = {}) => setDialog(element ? { element, page } : null), []);
-  useEffect(() => { setDialog(null); }, [cycle, slug, recordId]);
+  useEffect(() => { setDialog(null); setEmailing(false); }, [cycle, slug, recordId]);
+  const openEmail = useCallback(() => setEmailing(true), []);
   const known = !slug || (def?.modules || []).some((m) => m.slug === slug);
   const validRecord = RECORD_ID.test(recordId ?? '') && recordId !== 'new';
   // D906 (#2454): under Investor narrative a record id that is a tab word
@@ -1150,6 +1154,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else if (record) {
     const recordTitle = recordState.data?.title || moduleName;
+    const emailPerson = recordState.data ? personOfRecord(cycle, slug, recordId) : null;
+    const emailFrom = `${recordTitle} · ${moduleName}`;
     body = <div className="space-y-4" data-testid="cycle-record-page">
       {/* D703 step 7: below 1024px the record is a pushed page under
           `CycleBar`, whose Back goes to the module; the loading, refused and
@@ -1165,10 +1171,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       {/* D1344 (EM4): the one Email action, on a record with a person; a record with none draws nothing.
           D1454 (#3710, IV-D1): it sits in the record's one action row, after Ask, never on a row of its own. */}
       <RecordHeaderProvider pills={phone ? null : headerSlots.pills} actions={phone ? null : headerSlots.actions}
-        email={recordState.data && personOfRecord(cycle, slug, recordId)
-          ? <EmailAction person={personOfRecord(cycle, slug, recordId)} from={`${recordTitle} · ${moduleName}`} className={HEADER_BUTTON.default} />
-          : null}
-        emailTo={recordState.data && personOfRecord(cycle, slug, recordId) ? emailHref(personOfRecord(cycle, slug, recordId), `${recordTitle} · ${moduleName}`) : null}
+        email={emailPerson ? <EmailAction person={emailPerson} from={emailFrom} className={HEADER_BUTTON.default} onOpen={openEmail} /> : null}
+        emailTo={emailPerson ? emailHref(emailPerson, emailFrom) : null}
+        onEmail={emailPerson ? openEmail : null}
         ask={<PageAsk label={`${name} · ${recordTitle}`} testId="record-ask" />}>
       {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
         : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
@@ -1179,6 +1184,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
       </RecordHeaderProvider>
       </RecordPhoneProvider>
+      {emailing && emailPerson && <RecordEmailSheet person={emailPerson} from={emailFrom} onClose={() => setEmailing(false)} />}
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {

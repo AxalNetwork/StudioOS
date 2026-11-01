@@ -127,6 +127,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],
   ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],
+  ['frontend/src/pages/email',                'the Email page and its composer (D1344), and a record\'s Email in the right Sheet (#4017)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
