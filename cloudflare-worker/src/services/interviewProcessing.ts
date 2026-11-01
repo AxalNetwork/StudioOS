@@ -453,16 +453,19 @@ export const NO_CONSENT_SENTENCE = 'The interviewee’s consent to be recorded i
 
 /** Stage `failed` with a sentence. The sweeper also uses it, for a stale run it cannot resume. */
 export async function failProcessing(env: Env, session: SessionRow, sentence: string) {
-  const stage = ['uploading', 'transcribing', 'summarising', 'placing'].includes(session.processing_stage ?? '') ? session.processing_stage : null;
+  const observed = await env.DB.prepare('SELECT processing_stage, processing_updated_at, status FROM interview_sessions WHERE id = ?')
+    .bind(session.id).first<Pick<SessionRow, 'processing_stage' | 'processing_updated_at' | 'status'>>();
+  if (!observed) return;
+  const stage = ['uploading', 'transcribing', 'summarising', 'placing'].includes(observed.processing_stage ?? '') ? observed.processing_stage : null;
+  // Match the state read here, as recovery does: a concurrent claim wins over
+  // this failure. Status and failed-step recording move in the same write.
   await env.DB.prepare(
     `UPDATE interview_sessions SET processing_stage = 'failed', processing_failed_stage = COALESCE(?, processing_failed_stage),
        processing_done = NULL, processing_total = NULL, processing_error = ?,
-       processing_updated_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
-  ).bind(stage, sentence, session.id).run();
-  // Back to where a person can act: stopped (retry), or transcribed if the transcript is in.
-  await env.DB.prepare(
-    `UPDATE interview_sessions SET status = 'stopped', updated_at = datetime('now') WHERE id = ? AND status = 'transcribing'`,
-  ).bind(session.id).run();
+       status = CASE WHEN status = 'transcribing' THEN 'stopped' ELSE status END,
+       processing_updated_at = datetime('now'), updated_at = datetime('now')
+     WHERE id = ? AND processing_stage IS ? AND processing_updated_at IS ? AND status = ?`,
+  ).bind(stage, sentence, session.id, observed.processing_stage ?? null, observed.processing_updated_at ?? null, observed.status).run();
 }
 
 /** Transcribe what remains, a bounded batch at a time. Returns true when every chunk is staged. */

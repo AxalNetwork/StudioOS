@@ -680,6 +680,7 @@ const customerResearch: ModuleSpec = {
     },
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
+    if (!isWriter(ctx)) return [];
     const d = await loadInterview(ctx, id);
     const interviewId = Number(d.iv.id);
     const actions: RecordAction[] = [

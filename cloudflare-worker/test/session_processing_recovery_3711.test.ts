@@ -105,11 +105,12 @@ test('D1456 retry clears the recorded failed stage in the process response and a
 test('D1456 failure stores only the recorded stage; an old or never-failed session has no guessed step',async()=>{
   const w=world();
   for (const stage of ['uploading','transcribing','summarising','placing',null,'failed']) {
-    w.db.prepare('UPDATE interview_sessions SET processing_stage=?,processing_failed_stage=NULL WHERE id=?').run(stage,w.id);
+    w.db.prepare("UPDATE interview_sessions SET processing_stage=?,processing_failed_stage=NULL,status='transcribing' WHERE id=?").run(stage,w.id);
     await failProcessing(w.env,(await loadSession(w.env,w.id))!,'Synthetic safe failure');
     const row=(await loadSession(w.env,w.id))!;
     assert.equal(row.processing_failed_stage,['uploading','transcribing','summarising','placing'].includes(stage as string)?stage:null);
     assert.equal(processingOf(row)!.failed_stage,row.processing_failed_stage);
+    assert.equal(row.status,'stopped');
   }
   w.db.prepare("UPDATE interview_sessions SET processing_stage='transcribing',processing_failed_stage=NULL WHERE id=?").run(w.id);
   assert.equal(processingOf((await loadSession(w.env,w.id))!)!.failed_stage,null);
@@ -134,4 +135,42 @@ test('D1456 a repeated failure preserves its recorded step until a successful re
   const row=(await loadSession(w.env,w.id))!;
   assert.equal(row.processing_stage,'failed');
   assert.equal(row.processing_failed_stage,'placing');
+});
+
+
+test('D1456 failure reads the persisted step even when its caller holds an older stage snapshot',async()=>{
+  const w=world();
+  w.db.prepare("UPDATE interview_sessions SET processing_stage='uploading' WHERE id=?").run(w.id);
+  const older=(await loadSession(w.env,w.id))!;
+  w.db.prepare("UPDATE interview_sessions SET processing_stage='transcribing' WHERE id=?").run(w.id);
+  await failProcessing(w.env,older,'Synthetic transcription refusal');
+  assert.equal((await loadSession(w.env,w.id))!.processing_failed_stage,'transcribing');
+});
+
+test('D1456 a state change after the failure read cannot be overwritten by its failure write',async()=>{
+  for(const changed of ['stage','time','status']) {
+    const w=world();
+    w.db.prepare("UPDATE interview_sessions SET processing_stage='placing',processing_updated_at='2026-10-01 00:00:00' WHERE id=?").run(w.id);
+    const snapshot=(await loadSession(w.env,w.id))!;
+    const prepare=w.env.DB.prepare.bind(w.env.DB);
+    w.env.DB.prepare=(sql:string)=>{
+      const stmt=prepare(sql);
+      if(!sql.startsWith('SELECT processing_stage, processing_updated_at, status FROM interview_sessions'))return stmt;
+      return {bind(...args:unknown[]){const bound=stmt.bind(...args);return {async first(){
+        const row=await bound.first();
+        if(changed==='stage')w.db.prepare("UPDATE interview_sessions SET processing_stage='transcribing' WHERE id=?").run(w.id);
+        if(changed==='time')w.db.prepare("UPDATE interview_sessions SET processing_updated_at='2026-11-01 00:00:00' WHERE id=?").run(w.id);
+        if(changed==='status')w.db.prepare("UPDATE interview_sessions SET status='paused' WHERE id=?").run(w.id);
+        return row;
+      }}}};
+    };
+    await failProcessing(w.env,snapshot,'Synthetic old failure');
+    w.env.DB.prepare=prepare;
+    const row=(await loadSession(w.env,w.id))!;
+    assert.equal(row.processing_stage,changed==='stage'?'transcribing':'placing');
+    assert.equal(row.processing_updated_at,changed==='time'?'2026-11-01 00:00:00':'2026-10-01 00:00:00');
+    assert.equal(row.status,changed==='status'?'paused':'stopped');
+    assert.equal(row.processing_failed_stage,null);
+    assert.equal(row.processing_error,null);
+  }
 });

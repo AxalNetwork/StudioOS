@@ -663,6 +663,7 @@ test('D1456 only null facts offer declared writer actions; consent never offers 
   assert.deepEqual(writer.facts.map((f:any)=>f.action??null),[null,null,'judge-fit','judge-need']);
   assert.deepEqual(reader.facts.map((f:any)=>f.action??null),[null,null,null,null]);
   assert.deepEqual(reader.actions,[]);
+  assert.deepEqual(await RECORD_SPECS.validate!['customer-research'].actions({env:{DB:d1Over(db)},projectId:1,project:{id:1,founder_id:1001},user:{id:40,role:'partner'}} as any,'2',reader),[],'the spec itself refuses reader actions');
   assert.equal(writer.actions.find((a:any)=>a.key==='judge-need').href,'/validate/customer-research/2?project=1#interview-tools');
   const fit=writer.actions.find((a:any)=>a.key==='judge-fit');
   assert.equal(fit.kind,'form');
